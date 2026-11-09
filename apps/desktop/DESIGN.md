@@ -476,7 +476,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `detail.padding` | 34 40 48 | `pt-detail-top px-detail pb-detail-bottom` | Detail pane content |
 | `detail.max-width` | 900 | `max-w-detail` |  |
 | `detail.section-gap` | 28 | `gap-detail-section` | Header → banner → agents → files → details/history |
-| `detail.header-gap` | 12 | `gap-detail-header` | Name row → description → actions |
+| `detail.header-gap` | 12 | `gap-detail-header` | Name row (with the action row at its right end) → description |
 | `detail.columns-gap` | 40 | `gap-detail-columns` | Details ↔ History |
 | `detail.kv-gap` | 12 12 | `gap-detail-kv` | Details key/value grid (row, column) |
 | `detail.kv-key-width` | 96 | `w-detail-key` |  |
@@ -698,12 +698,12 @@ Two buttons side by side: `button.gap`, primary on the right.
 
 Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 
-- Update: `pill.update-bg` / `pill.update-text` (clickable).
-- Not published / Adopt: `pill.neutral-bg` / `pill.neutral-text`.
-- Removed from source: `pill.removed-bg` / `pill.removed-text`.
+- Not published (one of your own skills not yet published, on its list row only): `pill.neutral-bg` / `pill.neutral-text`. It is the only status pill a skill row carries.
 - Disabled (plugin): `pill.disabled-bg` / `pill.disabled-text`.
 - Version (plugin): `pill.version-bg` / `pill.version-text`, mono 12.
 - Fork (on the original of a fork made under a new name, in the detail header): `pill.neutral-bg` / `pill.neutral-text`, the 12px fork glyph in the text colour, then the fork's name; hover `pill.neutral-hover`. `title` "Forked as {fork name}"; a click opens the fork. One pill per fork.
+
+A skill row has no other status pill. When the skill's banner (§6 "Banner (detail pane)") has tone `attention` or `danger`, the row shows an alert triangle right after the name and its pill: `AlertTriangleIcon` (an exclamation mark in a triangle; the banner tile keeps the circled `AlertIcon`) at 14px in `tone.attention.fg`, whatever the banner's tone, with `title` and `aria-label` the banner's title, which the row's accessible description also carries. A `primary`, `neutral` or `yours` banner puts no triangle on the row.
 
 ### Switch
 
@@ -730,7 +730,7 @@ Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an ima
 - dot (filled) – a skill of a shared source; `glyph.enabled` when enabled, `glyph.off` when not.
 - pencil – edited locally; `glyph.edited`.
 - fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise. `title` explains the state ("Your skill · Enabled", "Edited locally · Not in any agent client").
-- fork marker (12px, after the pills of a row) – the original of a fork made under a new name, in `text.caption`, one per fork; `title` "Forked as {fork name}". A marker, not a control: the fork is listed once, in YOUR SKILLS.
+- fork marker (12px, after the pill and the alert triangle of a row) – the original of a fork made under a new name, in `text.caption`, one per fork; `title` "Forked as {fork name}". A marker, not a control: the fork is listed once, in YOUR SKILLS.
 
 ### Group header (lists)
 
@@ -739,6 +739,8 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 ### Banner (detail pane)
 
 `banner.radius`, `banner.padding`, `tone.*.bg` + 1px `tone.*.border`; `banner.tile` icon tile in `tone.*.fg`; title 14 / 500 `banner.title`; text 13 `banner.text`; actions on the right.
+
+The header shows no status pills; the banner is the status. A banner can cover the origin text beside the name (`coversOrigin` in `src/screens/skills/banners.ts`): the header leaves it out while that banner shows. Today only "Added by {tool}" covers it, since it says where the skill came from; the origin of a skill of a source ("acme/skills") is not what its banner says, so it stays. A new banner that says where the skill came from sets `coversOrigin`.
 
 ### Agent client card (Agents page)
 
@@ -750,7 +752,7 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 ### Banner actions and dialogs (detail pane)
 
-A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is using its own copy of this skill" banner. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
+A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is not managed by agentx" banner, "It owns a copy of the skill, so your library changes don't reach it." After the amber one, in this order: "Added by {tool}" (`tone.neutral`, the tool's product name, "Skills CLI" or "Skillshare", as the origin text and the Installed by detail also name it), "Adopt to manage it from agentx", with Adopt (`adopt --skill <name>`, toast "Adopted {skill}"); "{owner/repo} was removed" (`tone.danger`), "Add {owner/repo} source to check for updates.", with Add source (`source add <url>`, toast "Added {owner/repo} source"); "No longer in {owner/repo}" (`tone.danger`), "It seems this skill was removed from the source.", with Fork (`skill fork <name>`, toast "Forked {skill}"). Adopt is a banner button only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner: its DETAILS end with an "Adopt" row, "Can't adopt: {reason}" in the CLI's words. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). The action row (`aria-label` "Actions", `button.gap` 6 between its buttons) sits on the title row, pushed to its right end (`margin-left:auto`, centred on the row, wrapping when the row is full), after the name, origin and fork pills. Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
 
 ### Card (Inbox)
 

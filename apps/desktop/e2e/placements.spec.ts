@@ -291,10 +291,10 @@ test.describe("banners", () => {
     await openSkill(cli, page, "release-notes");
     const article = pane(page, "release-notes");
     const banner = article.getByRole("note", {
-      name: "Cursor is using its own copy of this skill",
+      name: "Cursor is not managed by agentx",
     });
     await expect(banner).toContainText(
-      "Changes you make in your library won't reach Cursor until you reconnect it."
+      "It owns a copy of the skill, so your library changes don't reach it."
     );
     const path = "/home/me/.cursor/skills/release-notes";
     cli.register(["skill", "place", "release-notes", "--to", "cursor"], {

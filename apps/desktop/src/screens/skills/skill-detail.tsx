@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
-import { Pill, PillButton } from "#/components/pill.tsx";
+import { PillButton } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -20,7 +20,6 @@ import {
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
-import { pillTones } from "#/screens/skills/skill-row.tsx";
 import { useSettling } from "#/store/settle.ts";
 
 const Caption = ({ children }: { children: string }) => (
@@ -51,11 +50,13 @@ const RemoveButton = ({
 };
 
 /**
- * The right pane: what the CLI reports about one skill. Header, origin, pills and a pill per fork
- * made from it under a new name, which opens that fork; description; the action row (Remove for a
- * library skill; the other actions come with the changes that add them); one banner, with its
- * button; AGENTS, whose chips add and remove placements; FILES; then DETAILS and HISTORY side by
- * side. Every control runs one command and redraws from the inventory that follows.
+ * The right pane: what the CLI reports about one skill. Header: the title row with the name,
+ * origin (unless the banner says where the skill came from), a pill per fork made from it under a
+ * new name, which opens that fork, and at its right end the action row (Remove for a library
+ * skill; the other actions come with the changes that add them); then the description. No status
+ * pill: the banner is the status. One banner, with its button; AGENTS, whose chips add and remove
+ * placements; FILES; then DETAILS and HISTORY side by side. Every control runs one command and
+ * redraws from the inventory that follows.
  */
 export const SkillDetail = ({
   row,
@@ -86,14 +87,12 @@ export const SkillDetail = ({
           <h1 className="type-skill-name text-text-primary m-0 break-all">
             {row.name}
           </h1>
-          <span className="type-technical text-text-caption">
-            {originOf(row)}
-          </span>
-          {row.pills.map((pill) => (
-            <Pill key={pill.kind} tone={pillTones[pill.kind]} size="detail">
-              {pill.label}
-            </Pill>
-          ))}
+          {/* Left out when the banner says where the skill came from. */}
+          {banner?.coversOrigin !== true && (
+            <span className="type-technical text-text-caption">
+              {originOf(row)}
+            </span>
+          )}
           {forks.map((fork) => (
             <PillButton
               key={fork.key}
@@ -118,26 +117,27 @@ export const SkillDetail = ({
               {fork.name}
             </PillButton>
           ))}
+          {/* The action row, at the title row's right end: Fork, Publish and the rest come with
+              the changes that add them. */}
+          <div
+            aria-label="Actions"
+            className="ml-auto flex flex-wrap items-center gap-1.5 empty:hidden"
+          >
+            {row.entry !== undefined && (
+              <RemoveButton
+                row={row}
+                onClick={() => {
+                  setRemoving(true);
+                }}
+              />
+            )}
+          </div>
         </div>
         {row.description !== "" && (
           <p className="type-detail-desc text-text-muted m-0 text-pretty">
             {row.description}
           </p>
         )}
-        {/* The action row: Fork, Publish and the rest come with the changes that add them. */}
-        <div
-          aria-label="Actions"
-          className="flex items-center gap-1.5 empty:hidden"
-        >
-          {row.entry !== undefined && (
-            <RemoveButton
-              row={row}
-              onClick={() => {
-                setRemoving(true);
-              }}
-            />
-          )}
-        </div>
       </header>
       {banner !== undefined && <BannerView row={row} banner={banner} />}
       <section aria-label="Agents" className="flex flex-col gap-3">

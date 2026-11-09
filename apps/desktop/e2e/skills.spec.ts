@@ -1,6 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
+  adoption as statesAdoption,
+  inventory as statesInventory,
+  OLD,
+} from "./fixtures/adoption.ts";
+import {
   adoption,
   configurations,
   fileReads,
@@ -49,6 +54,8 @@ const detail = (page: Page) =>
 const pane = (page: Page, name: string) =>
   detail(page).getByRole("article", { name });
 const filters = (page: Page) => page.getByRole("dialog", { name: "Filters" });
+/** The alert triangles in `where`: a row's triangle carries its banner's title as its label and tooltip. */
+const alertTriangles = (where: Locator) => where.locator("[aria-label][title]");
 
 /** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
 const isLaunchOrLoad = (line: string[]) =>
@@ -83,9 +90,16 @@ const openSkills = async (cli: MockCli, page: Page, path = "/#/skills") => {
 const notFiles = (cli: MockCli) =>
   later(cli).filter((l) => !["files", "diff"].includes(l[1] ?? ""));
 
-test.afterEach(({ cli }) => {
+/** Tags a test whose controls run commands, which it pins itself. */
+const RUNS_COMMANDS = "@runs-commands";
+
+test.afterEach(({ cli }, testInfo) => {
+  if (testInfo.tags.includes(RUNS_COMMANDS)) {
+    return;
+  }
   // Read-only: nothing on this screen runs a command but the reads of a skill's history, files
-  // and edits (e2e/skill-files.spec.ts covers the last two).
+  // and edits (e2e/skill-files.spec.ts covers the last two), and the controls that settle a skill
+  // the tests tagged RUNS_COMMANDS cover.
   for (const line of later(cli)) {
     expect(["skill files", "skill diff", "skill history"]).toContain(
       line.slice(0, 2).join(" ")
@@ -137,7 +151,7 @@ test.describe("the list", () => {
     ]);
   });
 
-  test("each row shows its glyph, pills, agent clients and description", async ({
+  test("each row shows its glyph, its one pill, an alert triangle when its banner warns, agent clients and description", async ({
     cli,
     page,
   }) => {
@@ -145,6 +159,8 @@ test.describe("the list", () => {
     const pdf = row(page, "pdf");
     await expect(pdf).toContainText("Read and convert PDF files");
     await expect(pdf).toHaveAccessibleDescription(/^Skill · Enabled\./u);
+    // A plain row has no alert triangle.
+    await expect(alertTriangles(pdf)).toHaveCount(0);
     expect(await names(pdf.getByRole("img"))).toEqual([
       "Claude Code",
       "Codex",
@@ -156,20 +172,46 @@ test.describe("the list", () => {
       draft.getByText("Not published", { exact: true })
     ).toBeVisible();
     await expect(draft).toHaveAccessibleDescription(
-      "Your skill · Enabled. Not published. A skill you started and never published"
+      "Your skill · Enabled. Not published. Turn a design doc into a task list"
     );
     expect(await names(draft.getByRole("img"))).toEqual([
       "Codex",
       "Gemini CLI",
     ]);
 
+    // A skill whose banner warns has no status pill: an alert triangle after its name carries the
+    // banner's title, and the row's description says it.
+    const gone = row(page, "gone");
+    const goneAlert = alertTriangles(gone);
+    await expect(goneAlert).toBeVisible();
+    await expect(goneAlert).toHaveAttribute(
+      "aria-label",
+      "No longer in zeta/tools"
+    );
+    await expect(goneAlert).toHaveAttribute("title", "No longer in zeta/tools");
+    await expect(gone).toHaveAccessibleDescription(
+      "Skill · Enabled. No longer in zeta/tools. Lint SQL migrations before they run"
+    );
     await expect(
-      row(page, "gone").getByText("Removed from source", { exact: true })
-    ).toBeVisible();
+      gone.getByText("Removed from source", { exact: true })
+    ).toHaveCount(0);
     await expect(row(page, "review")).toHaveAccessibleDescription(
       /^Edited · Enabled\./u
     );
-    await expect(row(page, "release-notes").getByRole("img")).toHaveCount(4);
+    const releaseNotes = row(page, "release-notes");
+    await expect(alertTriangles(releaseNotes)).toHaveAttribute(
+      "title",
+      "Cursor is not managed by agentx"
+    );
+    await expect(
+      releaseNotes.getByLabel("Cursor is not managed by agentx", {
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(releaseNotes.getByRole("img")).toHaveCount(4);
+    await expect(releaseNotes).toHaveAccessibleDescription(
+      /^Edited · Enabled\. Cursor is not managed by agentx\./u
+    );
     await expect(row(page, "commit-helper")).toHaveAccessibleDescription(
       /^Plugin skill · Enabled\./u
     );
@@ -610,8 +652,8 @@ test.describe("the detail pane", () => {
       - article "scratch":
         - text: Unmanaged · Enabled
         - heading "scratch" [level=1]
-        - text: skills CLI
-        - paragraph: Notes the skills CLI installed
+        - paragraph: Summarise a long thread into notes
+        - note "Added by Skills CLI"
         - region "Agents":
           - heading "Agents" [level=2]
           - switch "Claude Code"
@@ -624,12 +666,42 @@ test.describe("the detail pane", () => {
           - term: Found at
           - definition: /home/me/.agents/skills/scratch
           - term: Installed by
-          - definition: skills CLI · https://github.com/vercel/skills
+          - definition: Skills CLI · https://github.com/vercel/skills
         - region "History":
           - heading "History" [level=2]
           - paragraph: History is kept for your own skills
     `);
     expect(notFiles(cli)).toEqual([]);
+  });
+
+  test("the action row sits on the title row, at its right end", async ({
+    cli,
+    page,
+  }) => {
+    await openSkills(cli, page, "/#/skills/gone");
+    const article = pane(page, "gone");
+    const [name, actions, remove, banner] = await Promise.all([
+      article.getByRole("heading", { level: 1, name: "gone" }).boundingBox(),
+      article.getByLabel("Actions").boundingBox(),
+      article.getByRole("button", { name: "Remove" }).boundingBox(),
+      article.getByRole("note").boundingBox(),
+    ]);
+    expect([name, actions, remove, banner]).not.toContain(null);
+    if (
+      name !== null &&
+      actions !== null &&
+      remove !== null &&
+      banner !== null
+    ) {
+      // On the name's line, to its right.
+      expect(remove.x).toBeGreaterThan(name.x + name.width);
+      expect(remove.y).toBeLessThan(name.y + name.height);
+      expect(remove.y + remove.height).toBeGreaterThan(name.y);
+      // Pushed to the right end: it ends where the pane's content (the full-width banner) ends.
+      expect(
+        Math.abs(actions.x + actions.width - (banner.x + banner.width))
+      ).toBeLessThan(2);
+    }
   });
 
   test("an upstream-removed skill shows the banner, and a displaced placement its chip", async ({
@@ -638,10 +710,16 @@ test.describe("the detail pane", () => {
   }) => {
     await openSkills(cli, page, "/#/skills/gone");
     const article = pane(page, "gone");
+    const banner = article.getByRole("note", {
+      name: "No longer in zeta/tools",
+    });
+    await expect(banner).toContainText(
+      "It seems this skill was removed from the source."
+    );
+    // The banner is the status: the title row does not say it again.
     await expect(
-      article.getByRole("note", { name: "Removed from its source" })
-    ).toContainText("It still works but won't get updates.");
-    await expect(article.getByText("Removed from source")).toBeVisible();
+      article.getByText("No longer in zeta/tools", { exact: true })
+    ).toHaveCount(1);
 
     await row(page, "release-notes").click();
     const cursor = pane(page, "release-notes").getByRole("switch", {
@@ -652,8 +730,173 @@ test.describe("the detail pane", () => {
     await expect(cursor).toContainText("displaced");
     await expect(
       pane(page, "release-notes").getByRole("note", {
-        name: "Cursor is using its own copy of this skill",
+        name: "Cursor is not managed by agentx",
       })
+    ).toContainText(
+      "It owns a copy of the skill, so your library changes don't reach it."
+    );
+  });
+
+  test("the title row shows no status pill, the banner is the status; an origin its banner says leaves the title row", async ({
+    cli,
+    page,
+  }) => {
+    // gone also has an update waiting, which no row or title row says with a pill.
+    cli.onServeStart({
+      events: [
+        {
+          ...inventory,
+          library: inventory.library.map((entry) =>
+            entry.name === "gone" ? { ...entry, pending_merge: true } : entry
+          ),
+        },
+      ],
+    });
+    cli.register(["adopt"], { events: adoption });
+    cli.register(["skill", "history", "draft"], { events: [] });
+    for (const name of ["gone", "draft", "scratch"]) {
+      cli.register(["skill", "files", name], { events: filesOf(name) });
+    }
+    await page.goto("/#/skills/gone");
+    const titleRow = pane(page, "gone").locator("header");
+    await expect(
+      pane(page, "gone").getByRole("note", { name: "No longer in zeta/tools" })
     ).toBeVisible();
+    await expect(alertTriangles(row(page, "gone"))).toHaveAttribute(
+      "title",
+      "No longer in zeta/tools"
+    );
+    await expect(
+      row(page, "gone")
+        .or(titleRow)
+        .getByText(/^(?:Removed from source|Source removed|Update waiting)$/u)
+    ).toHaveCount(0);
+    // The title row: name, origin, the action row and the description, and nothing else.
+    await expect(titleRow).toHaveText(
+      /^Skill · Enabledgonezeta\/toolsRemoveLint SQL migrations before they run$/u
+    );
+
+    // The adoption banner says where the skill came from: the title row leaves the origin out.
+    await row(page, "scratch").click();
+    await expect(
+      pane(page, "scratch").getByRole("note", { name: "Added by Skills CLI" })
+    ).toBeVisible();
+    await expect(
+      pane(page, "scratch")
+        .locator("header")
+        .getByText("Skills CLI", { exact: true })
+    ).toHaveCount(0);
+
+    // A skill not yet published has its pill on the row only, even with no banner to say it.
+    await row(page, "draft").click();
+    await expect(pane(page, "draft").getByRole("note")).toHaveCount(0);
+    await expect(
+      row(page, "draft").getByText("Not published", { exact: true })
+    ).toBeVisible();
+    await expect(
+      pane(page, "draft")
+        .locator("header")
+        .getByText("Not published", { exact: true })
+    ).toHaveCount(0);
+  });
+});
+
+const toasts = (page: Page) =>
+  page.getByRole("region", { name: /^Notifications/u });
+
+/** The command lines the controls ran: everything but the launch, the store's and the pane's reads. */
+const ran = (cli: MockCli) =>
+  later(cli).filter(
+    (l) =>
+      !["skill files", "skill diff", "skill history"].includes(
+        l.slice(0, 2).join(" ")
+      )
+  );
+
+/** Opens the Skills screen with `key` selected, on the machine with a skill to adopt, one whose source was removed and one the CLI refuses to adopt. */
+const openStates = async (cli: MockCli, page: Page, key: string) => {
+  cli.onServeStart({ events: [statesInventory] });
+  cli.register(["adopt"], { events: statesAdoption });
+  for (const name of ["scratch", "legacy", "lint", "gone", "notes"]) {
+    cli.register(["skill", "files", name], { events: filesOf(name) });
+  }
+  await page.goto(`/#/skills/${key}`);
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await expect(pane(page, key)).toBeVisible();
+};
+
+test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
+  test("the three banners after the displaced one each run their command", async ({
+    cli,
+    page,
+  }) => {
+    await openStates(cli, page, "scratch");
+    // A banner that warns puts a triangle on its row; the neutral adoption banner does not.
+    await expect(alertTriangles(row(page, "lint"))).toHaveAttribute(
+      "title",
+      "old/skills was removed"
+    );
+    await expect(alertTriangles(row(page, "scratch"))).toHaveCount(0);
+    // Adopt is the banner's button only: no row carries a control of its own.
+    await expect(
+      list(page).getByRole("button", { name: /^Adopt/u })
+    ).toHaveCount(0);
+    cli.register(["adopt", "--skill", "scratch"]);
+    const adoptBanner = pane(page, "scratch").getByRole("note", {
+      name: "Added by Skills CLI",
+    });
+    await expect(adoptBanner).toContainText("Adopt to manage it from agentx");
+    await adoptBanner.getByRole("button", { name: "Adopt" }).click();
+    await expect(toasts(page).getByText("Adopted scratch")).toBeVisible();
+
+    await row(page, "lint").click();
+    cli.register(["source", "add", OLD]);
+    const sourceBanner = pane(page, "lint").getByRole("note", {
+      name: "old/skills was removed",
+    });
+    await expect(sourceBanner).toContainText(
+      "Add old/skills source to check for updates."
+    );
+    await sourceBanner.getByRole("button", { name: "Add source" }).click();
+    await expect(
+      toasts(page).getByText("Added old/skills source")
+    ).toBeVisible();
+
+    await row(page, "gone").click();
+    cli.register(["skill", "fork", "gone"]);
+    const forkBanner = pane(page, "gone").getByRole("note", {
+      name: "No longer in zeta/tools",
+    });
+    await expect(forkBanner).toContainText(
+      "It seems this skill was removed from the source."
+    );
+    await forkBanner.getByRole("button", { name: "Fork" }).click();
+    await expect(
+      toasts(page).getByText("Forked gone", { exact: true })
+    ).toBeVisible();
+    expect(ran(cli)).toEqual([
+      ["adopt", "--skill", "scratch", "--json"],
+      ["source", "add", OLD, "--json"],
+      ["skill", "fork", "gone", "--json"],
+    ]);
+  });
+
+  test("a refused entry has no banner, and Details says why", async ({
+    cli,
+    page,
+  }) => {
+    await openStates(cli, page, "legacy");
+    const article = pane(page, "legacy");
+    await expect(article.getByRole("note")).toHaveCount(0);
+    const details = article.getByRole("region", { name: "Details" });
+    await expect(details.getByRole("term")).toHaveText([
+      "Found at",
+      "Installed by",
+      "Adopt",
+    ]);
+    await expect(details.getByRole("definition").last()).toHaveText(
+      "Can't adopt: legacy is a symlink, not a directory"
+    );
+    expect(ran(cli)).toEqual([]);
   });
 });
