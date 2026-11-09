@@ -16,8 +16,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // readText reads a file the test compares byte for byte.
@@ -43,6 +45,22 @@ func entriesOf(t *testing.T, dir string) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// offline makes every git of the harness that reaches a remote, in the
+// user's environment, refuse to, whatever the URL: a fetch, a probe or a
+// push then fails at once, as on a machine that cannot reach the source,
+// and nothing leaves the test machine.
+func (h *harness) offline() {
+	h.t.Helper()
+	f, err := os.OpenFile(filepath.Join(h.home, ".gitconfig"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString("[protocol]\n\tallow = never\n"); err != nil {
+		h.t.Fatal(err)
+	}
 }
 
 // exportedFrom builds a machine with settings worth restoring and exports
@@ -100,12 +118,16 @@ func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 		t.Fatalf("the access fields are still in\n%s", before)
 	}
 
-	// Installing a skill fetches its source, which records when it did, so
-	// the settings are compared on a snapshot of the settings alone.
+	// Installing a skill fetches its source, which records when it did, and
+	// so does adding a source of the settings, so the settings are compared
+	// on a snapshot of the settings alone, imported where no source can be
+	// reached: each add is taken back, and what is left is the settings write
+	// itself.
 	settingsOnly := editedExport(t, from, file, "settings.json", func(doc map[string]any) { doc["skills"] = []any{} })
 
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
+	to.offline()
 	out := to.run("import", settingsOnly, "--yes")
 	equal(t, "exit", out.exit, 0)
 	if after := readText(t, home.SettingsPath(to.agentx)); after != before {
@@ -1114,29 +1136,30 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 	equal(t, "the settings", readText(t, home.SettingsPath(h.agentx)), before)
 }
 
-// TestImportSaysWhatToRunNext: an import restores the settings entry of a
-// source and nothing of the source itself, no account repo and no remote,
-// so on the machine it made skill add, source fetch and source skills
-// answer that the source was never fetched, with a source add to run. An
-// import fetches the sources its skills come from, and its closing line
-// prints one source add per source of the settings it did not need, and
-// each of those refusals names one, with the pin the settings hold: source
-// add writes the pin its argument names, so a bare URL would unpin the very
-// source the import restored. This is the one test of that hint's text.
-// Running the line keeps the pin, and skill add then installs.
-func TestImportSaysWhatToRunNext(t *testing.T) {
+// TestImportAddsTheSourcesOfTheSettings: an import restores the settings
+// entry of every source, and then adds each one this machine has not
+// added, whether a skill of the snapshot comes from it or not, so that the
+// user never adds one again by hand: here the source the skills come from,
+// a pinned source no skill comes from and the account remote. Each is
+// added at the pin the settings hold, reported by the source event its
+// add emits and a progress event of phase fetch, and a skill of each can
+// be installed at once. A second import of the same snapshot finds every
+// source there and fetched, and reaches no remote.
+func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 	t.Parallel()
-	from, file := exportedFrom(t)
+	from, _ := exportedFrom(t)
+	remote := newAccountRemote(t, from)
+	from.setAccount(remote)
+	file := from.exportSnapshot("with-account")
 	exported, err := home.LoadSettings(from.agentx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	i := slices.IndexFunc(exported.Sources, func(src home.Source) bool { return src.Pin != "" })
-	if i < 0 || !slices.ContainsFunc(exported.Sources, func(src home.Source) bool { return src.Pin == "" }) {
-		t.Fatalf("the exporting machine should have a pinned and an unpinned source: %+v", exported.Sources)
+	if i < 0 || len(exported.Sources) != 3 {
+		t.Fatalf("the exporting machine should have a pinned source among three: %+v", exported.Sources)
 	}
 	pinned := exported.Sources[i]
-	pinnedArg := pinned.URL + "#" + pinned.Pin
 	pins := func(s home.Settings) map[string]string {
 		m := map[string]string{}
 		for _, src := range s.Sources {
@@ -1149,50 +1172,176 @@ func TestImportSaysWhatToRunNext(t *testing.T) {
 	to.build(t, fixture{dirs: []string{".claude"}})
 	// The importing machine reaches the sources the way the exporting one does.
 	writeFile(t, filepath.Join(to.home, ".gitconfig"), readText(t, filepath.Join(from.home, ".gitconfig")))
-	out := to.run("import", file, "--yes")
-	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "  add the other sources of the settings again before you install from them:\n")
-	// The skills of the snapshot come from the unpinned source, which the
-	// import fetched; the pinned one is left to add.
-	if printed, want := printedSourceAdds(t, out.stdout, t.TempDir()), []string{pinnedArg}; !slices.Equal(printed, want) {
-		t.Errorf("the printed source add lines read back as %q, want %q\n%s", printed, want, out.stdout)
+	out := to.mustRun("--json", "import", file, "--yes")
+	events := to.events(out.stdout)
+	equal(t, "the events", strings.Join(to.types(events), " "),
+		"settings source progress source progress source progress import_skill import_skill result")
+	added := map[string]jsonEvent{}
+	for n, e := range to.eventsOfType(out.stdout, "progress") {
+		equal(t, "progress phase", e["phase"], phaseFetch)
+		equal(t, "progress current", e["current"], float64(n+1))
+		equal(t, "progress total", e["total"], float64(3))
 	}
-
-	// hinted checks the argument of the source add each command's refusal
-	// names, as a POSIX shell reads it back.
-	hinted := func(when string) {
-		t.Helper()
-		for _, args := range [][]string{
-			{"skill", "add", pinned.URL, "--all"},
-			{"source", "fetch", pinned.URL},
-			{"source", "skills", pinned.URL},
-		} {
-			out := to.run(append([]string{"--json"}, args...)...)
-			equal(t, when+": "+args[0]+" "+args[1]+" exit", out.exit, 5)
-			hint, _ := lastError(t, to.events(out.stdout))["hint"].(string)
-			word, prefixed := strings.CutPrefix(hint, "run 'agentx source add ")
-			word, suffixed := strings.CutSuffix(word, "' to fetch it")
-			if !prefixed || !suffixed {
-				t.Errorf("%s: %s %s hint = %q, want a source add to fetch it", when, args[0], args[1], hint)
-				continue
-			}
-			if got, want := shellRead(t, word, t.TempDir()), []string{pinnedArg}; !reflect.DeepEqual(got, want) {
-				t.Errorf("%s: %s %s hint names %q, want %q", when, args[0], args[1], got, want)
-			}
-		}
+	for _, e := range to.eventsOfType(out.stdout, "source") {
+		added[e["url"].(string)] = e
 	}
-	hinted("an account repo without the source")
-
-	// Following the hint keeps the pin, and skill add then installs.
-	equal(t, "source add as hinted", to.run("source", "add", pinnedArg).exit, 0)
+	equal(t, "the pinned source's event", added[pinned.URL]["pin"], pinned.Pin)
+	equal(t, "its skills", added[pinned.URL]["skills"], float64(1))
+	equal(t, "the account remote's event", added["file://"+remote]["account"], true)
+	if len(added) != 3 {
+		t.Errorf("the sources added are %v, want the three of the settings", added)
+	}
+	if strings.Contains(out.stderr, "warn") {
+		t.Errorf("an import that added every source warned:\n%s", out.stderr)
+	}
 	restored, err := home.LoadSettings(to.agentx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := pins(restored), pins(exported); !reflect.DeepEqual(got, want) {
-		t.Errorf("pins after the printed source adds = %v, want %v", got, want)
+		t.Errorf("pins after the import = %v, want %v", got, want)
 	}
-	equal(t, "skill add after the hinted source add", to.run("skill", "add", pinned.URL, "--all").exit, 0)
+	if list := to.mustRun("source", "list").stdout; strings.Contains(list, "not fetched") {
+		t.Errorf("a source of the settings is not fetched after the import:\n%s", list)
+	}
+	to.mustRun("skill", "add", pinned.URL, "--all")
+
+	again := to.mustRun("--json", "--verbose", "import", file, "--yes")
+	equal(t, "fetches of the second import", fetches(again.stderr), 0)
+	equal(t, "the second import's events", strings.Join(to.types(to.events(again.stdout)), " "),
+		"settings import_skill import_skill result")
+}
+
+// TestImportGoesOnWhenASourceCannotBeAdded: a source of the settings that
+// cannot be added is a warning with git's reason, and costs no other
+// source and no skill: the import adds the others, installs the skills and
+// exits 0. The add of each is taken back as source add takes it back: the
+// account remote leaves no remote, and a shared source, which the settings
+// name, keeps the remote they want and nothing fetched. The text ends with
+// the source add of each one that could not be added, with its pin, and a
+// second import tries them again, with a warning and a progress event each.
+// This is the one test of the whole text of the sources an import adds.
+func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
+	other := h.newSourceRepo("other", true)
+	other.skill("tools/gamma", "gamma", "The third skill", nil)
+	other.commit("one skill")
+	gone := t.TempDir()
+	shared, account := "file://"+filepath.Join(gone, "gone.git"), "file://"+filepath.Join(gone, "gone-account.git")
+	file := editedExport(t, h, h.exportSnapshot("export"), "unreachable.json", func(doc map[string]any) {
+		settings := doc["settings"].(map[string]any)
+		sources := append(settings["sources"].([]any),
+			map[string]any{"url": other.url, "pin": "main"},
+			map[string]any{"url": shared, "pin": "v1"},
+			map[string]any{"url": account, "account": true})
+		slices.SortFunc(sources, func(a, b any) int {
+			return strings.Compare(a.(map[string]any)["url"].(string), b.(map[string]any)["url"].(string))
+		})
+		settings["sources"] = sources
+	})
+
+	to := newHarness(t)
+	to.build(t, fixture{dirs: []string{".claude"}})
+	writeFile(t, filepath.Join(to.home, ".gitconfig"), readText(t, filepath.Join(h.home, ".gitconfig")))
+	out := to.run("import", file, "--yes")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "\n  added source "+other.url+" pinned to main: 1 skill\n")
+	contains(t, "stdout", out.stdout, "\n  added source "+s.url+": 2 skills\n")
+	contains(t, "stdout", out.stdout, "1 skill in the snapshot: 1 installed\n")
+	if !strings.HasSuffix(out.stdout, "\n  add these sources again before you install from them:\n"+
+		"    agentx source add "+account+" --account\n"+
+		"    agentx source add "+shared+"#v1\n") {
+		t.Errorf("stdout does not end with the source add of each source not added:\n%s", out.stdout)
+	}
+	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: "+shared+": git ")
+	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: cannot reach the account remote "+account+": ")
+	if !lexists(filepath.Join(to.home, ".claude", "skills", "alpha")) {
+		t.Error("alpha is not placed in claude-code")
+	}
+
+	remotes := source.Remotes(context.Background(), gitx.New(to.env, false, func(string, ...any) {}), gitx.AccountRepoPath(to.agentx))
+	if r, ok := remotes[source.ID(account)]; ok {
+		t.Errorf("the account remote that could not be added left a remote: %+v", r)
+	}
+	equal(t, "the remote of the shared source not added", remotes[source.ID(shared)], source.RemoteOf(home.Source{URL: shared, Pin: "v1"}))
+	if refs := to.agentxRefs(); strings.Contains(refs, source.ID(shared)) {
+		t.Errorf("the shared source not added left refs:\n%s", refs)
+	}
+	restored, err := home.LoadSettings(to.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, src := range restored.Sources {
+		if (src.URL == shared || src.URL == account) && (src.LastFetched != "" || src.Access != "") {
+			t.Errorf("the settings record a fetch of %s, which could not be added: %+v", src.URL, src)
+		}
+	}
+
+	again := to.run("--json", "import", file, "--yes")
+	equal(t, "the second import: exit", again.exit, 0)
+	var warned []string
+	for _, line := range strings.Split(strings.TrimSpace(again.stderr), "\n") {
+		var e struct{ Type, Level, Message string }
+		if json.Unmarshal([]byte(line), &e) == nil && e.Type == "log" && e.Level == levelWarn {
+			warned = append(warned, e.Message)
+		}
+	}
+	if len(warned) != 2 || !strings.HasPrefix(warned[0], "could not add a source of the imported settings: ") {
+		t.Errorf("the second import warned %q, want one warning per source not added", warned)
+	}
+	// Each add that ended is a progress event, whether or not it added the
+	// source, so the last one counts up to the total.
+	equal(t, "the second import's events", strings.Join(to.types(to.events(again.stdout)), " "), "settings progress progress import_skill result")
+	last := to.eventsOfType(again.stdout, "progress")[1]
+	equal(t, "the last progress", fmt.Sprint(last["current"], " of ", last["total"]), "2 of 2")
+}
+
+// TestCommandsNameThePinOfASourceNeverFetched: settings can name a source
+// this machine never fetched, as an import stopped before it added it
+// leaves them, with no account repo yet. skill add, source fetch and source
+// skills of it answer that it was never fetched, with a source add to run
+// that names the pin the settings hold: source add writes the pin its
+// argument names, so a bare URL would unpin the very source the settings
+// hold. This is the one test of that hint's text. Running it keeps the pin,
+// and skill add then installs.
+func TestCommandsNameThePinOfASourceNeverFetched(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	other := h.newSourceRepo("other", true)
+	other.skill("tools/gamma", "gamma", "The third skill", nil)
+	other.commit("one skill")
+	editSettings(t, h, func(s *home.Settings) { s.Sources = []home.Source{{URL: other.url, Pin: "main"}} })
+	pinnedArg := other.url + "#main"
+
+	for _, args := range [][]string{
+		{"skill", "add", other.url, "--all"},
+		{"source", "fetch", other.url},
+		{"source", "skills", other.url},
+	} {
+		out := h.run(append([]string{"--json"}, args...)...)
+		equal(t, args[0]+" "+args[1]+" exit", out.exit, 5)
+		hint, _ := lastError(t, h.events(out.stdout))["hint"].(string)
+		word, prefixed := strings.CutPrefix(hint, "run 'agentx source add ")
+		word, suffixed := strings.CutSuffix(word, "' to fetch it")
+		if !prefixed || !suffixed {
+			t.Errorf("%s %s hint = %q, want a source add to fetch it", args[0], args[1], hint)
+			continue
+		}
+		if got, want := shellRead(t, word, t.TempDir()), []string{pinnedArg}; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s %s hint names %q, want %q", args[0], args[1], got, want)
+		}
+	}
+
+	h.mustRun("source", "add", pinnedArg)
+	restored, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equal(t, "the pin after the hinted source add", restored.Sources[0].Pin, "main")
+	h.mustRun("skill", "add", other.url, "--all")
 }
 
 // TestImportWithNoSourceNamesNoSourceAdd: settings with no source have none
@@ -1254,11 +1403,12 @@ func editedExport(t *testing.T, h *harness, file, name string, change func(doc m
 }
 
 // TestImportQuotesTheSourceAddItPrints: the URL and the pin on a source add
-// line come from the export, and a URL and a pin agentx accepts may still
-// hold what a shell acts on: & ends a command, $( ) runs one and a quote
-// opens a string. Pasted as printed, such a line ran a command the export
-// chose and handed source add another pin. The argument is quoted for a
-// POSIX shell, which reads back exactly the URL and the pin.
+// line, printed for a source the import could not add, come from the
+// export, and a URL and a pin agentx accepts may still hold what a shell
+// acts on: & ends a command, $( ) runs one and a quote opens a string.
+// Pasted as printed, such a line ran a command the export chose and handed
+// source add another pin. The argument is quoted for a POSIX shell, which
+// reads back exactly the URL and the pin.
 func TestImportQuotesTheSourceAddItPrints(t *testing.T) {
 	t.Parallel()
 	h, good := plainExport(t)
@@ -1272,6 +1422,7 @@ func TestImportQuotesTheSourceAddItPrints(t *testing.T) {
 
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
+	to.offline()
 	out := to.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "    agentx source add 'https://example.com/o/r#x$(touch${IFS}pwned)'\n")
@@ -1290,44 +1441,60 @@ func TestImportQuotesTheSourceAddItPrints(t *testing.T) {
 	}
 }
 
-// TestImportWithNoSkillsStillNamesTheSourcesToAdd: a machine that added
-// sources and installed nothing exports no skill, so an import fetches
-// nothing, and its sources still have to be added again on the machine an
-// import makes. The source add lines follow the line saying the snapshot
-// lists no skills.
-func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
+// TestImportWithNoSkillsStillAddsTheSources: a machine that added sources
+// and installed nothing exports no skill, and an import of it still adds
+// its sources. Where one cannot be added its source add follows the line
+// saying the snapshot lists no skills, and its settings entry stays as the
+// snapshot holds it but for what the exporting machine found it could do
+// there, which this machine finds out for itself.
+func TestImportWithNoSkillsStillAddsTheSources(t *testing.T) {
 	t.Parallel()
 	h, good := plainExport(t)
+	kept := h.newSourceRepo("kept", true)
+	kept.skill("tools/gamma", "gamma", "The third skill", nil)
+	kept.commit("one skill")
+	gone := t.TempDir()
+	shared, account := "file://"+filepath.Join(gone, "skills.git"), "file://"+filepath.Join(gone, "forks.git")
 	file := editedExport(t, h, good, "sources-only.json", func(doc map[string]any) {
 		doc["skills"] = []any{}
-		doc["settings"].(map[string]any)["sources"] = []any{
-			map[string]any{"url": "https://github.com/example/skills", "pin": "release",
+		sources := []any{
+			map[string]any{"url": kept.url, "pin": "main"},
+			map[string]any{"url": shared, "pin": "release",
 				"access": "writable", "access_checked": "2026-10-02T10:00:00Z", "default_branch": "main"},
-			map[string]any{"url": "https://github.com/me/forks", "account": true,
+			map[string]any{"url": account, "account": true,
 				"access": "read-only", "access_checked": "2026-10-02T10:00:00Z"},
 		}
+		slices.SortFunc(sources, func(a, b any) int {
+			return strings.Compare(a.(map[string]any)["url"].(string), b.(map[string]any)["url"].(string))
+		})
+		doc["settings"].(map[string]any)["sources"] = sources
 	})
 
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
 	out := to.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "  added source "+kept.url+" pinned to main: 1 skill\n")
 	contains(t, "stdout", out.stdout, "No skills in the snapshot.\n"+
-		"  add the other sources of the settings again before you install from them:\n"+
-		"    agentx source add https://github.com/example/skills#release\n"+
-		"    agentx source add https://github.com/me/forks --account\n")
+		"  add these sources again before you install from them:\n"+
+		"    agentx source add "+account+" --account\n"+
+		"    agentx source add "+shared+"#release\n")
 
-	// Every field comes across but what the exporting machine found it could
-	// do there, which this machine finds out for itself.
 	restored, err := home.LoadSettings(to.agentx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []home.Source{
-		{URL: "https://github.com/example/skills", Pin: "release", DefaultBranch: "main"},
-		{URL: "https://github.com/me/forks", Account: true},
+	var notAdded []home.Source
+	for _, src := range restored.Sources {
+		if src.URL != kept.url {
+			notAdded = append(notAdded, src)
+		}
 	}
-	if !reflect.DeepEqual(restored.Sources, want) {
-		t.Errorf("the imported sources are\n %+v\nwant\n %+v", restored.Sources, want)
+	want := []home.Source{
+		{URL: account, Account: true},
+		{URL: shared, Pin: "release", DefaultBranch: "main"},
+	}
+	if !reflect.DeepEqual(notAdded, want) {
+		t.Errorf("the imported sources not added are\n %+v\nwant\n %+v", notAdded, want)
 	}
 }
