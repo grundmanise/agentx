@@ -563,7 +563,7 @@ test.describe("a pending merge", () => {
     expect(later(cli)).toEqual([]);
   });
 
-  test("Abort asks first: Cancel runs nothing, Abort records skill update <name> --abort", async ({
+  test("Abort asks first: Cancel runs nothing, Abort records skill update <name> --abort and keeps the update", async ({
     cli,
     page,
   }) => {
@@ -586,6 +586,7 @@ test.describe("a pending merge", () => {
       events: [
         {
           ...updatesLibrary.find((e) => e.name === "draft"),
+          pending_merge: false,
           type: "library_skill",
         },
         {
@@ -607,6 +608,25 @@ test.describe("a pending merge", () => {
     expect(later(cli)).toEqual([
       ["skill", "update", "draft", "--abort", "--json"],
     ]);
+
+    // The merge is given up, not the update: the inventory that follows offers it again.
+    await cli.serveEmit([
+      {
+        ...updatesInventory,
+        library: updatesLibrary.map((e) =>
+          e.name === "draft" ? { ...e, pending_merge: false } : e
+        ),
+        scan_counter: 2,
+      },
+    ]);
+    await expect(banner(page)).toHaveCount(0);
+    await expectOffered(page, "draft", true);
+    await page.getByRole("button", { name: "Filter" }).click();
+    await expect(
+      page
+        .getByRole("dialog", { name: "Filters" })
+        .getByRole("radio", { name: "Updates 5" })
+    ).toBeVisible();
   });
 
   test("Update tries again: still conflicting, the banner counts the files", async ({
