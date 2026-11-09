@@ -136,6 +136,11 @@ type writer struct {
 	inkMu   sync.Mutex
 	outInk  *ink // decided on first use, once the flags are parsed
 	errInk  *ink
+
+	// caught, when set, is handed every event emit is given, in either
+	// mode, before it is written: a command that runs the work of another
+	// inside it reads what that one reported, see quietlyCatching.
+	caught func(ev any)
 }
 
 // out is the ink for stdout; err the ink for stderr.
@@ -154,6 +159,9 @@ func (w *writer) inkFor(cached **ink, stream io.Writer) ink {
 
 // emit writes one event line in JSON mode.
 func (w *writer) emit(ev any) {
+	if w.caught != nil {
+		w.caught(ev)
+	}
 	if w.json {
 		w.line(w.stdout, ev)
 	}

@@ -324,25 +324,30 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 }
 
 // TestServeWarnsAboutSourcesAnImportBrought runs serve on a machine whose
-// settings name two sources because an import wrote them, and which has
-// fetched nothing, so has no account repo to fetch into until source add
-// creates one. The check at launch fetches nothing, creates no account
-// repo and writes nothing, but warns about each source as not fetched, as
-// source fetch refuses it. skill check-updates, which checks only the
-// sources a managed skill came from, still has nothing to check there.
+// settings name two sources it never fetched, as an import stopped before
+// it added them leaves them, written here as such an import writes them, so
+// that it has no account repo to fetch into until source add creates one.
+// The check at launch fetches nothing, creates no account repo and writes
+// nothing, but warns about each source as not fetched, as source fetch
+// refuses it. skill check-updates, which checks only the sources a managed
+// skill came from, still has nothing to check there.
 func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 	t.Parallel()
 	from := newHarness(t)
 	from.build(t, fixture{dirs: []string{".claude"}})
 	one, two := from.fetchSources(t)
-	file := from.exportSnapshot("export")
+	exported, err := home.LoadSettings(from.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgetAccess(&exported)
 
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
-	h.mustRun("import", file, "--yes")
+	editSettings(t, h, func(s *home.Settings) { *s = exported })
 	account := filepath.Join(h.agentx, "account.git")
 	if _, err := os.Stat(account); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("the import left %s behind, or it cannot be told: %v", account, err)
+		t.Fatalf("the settings write left %s behind, or it cannot be told: %v", account, err)
 	}
 	version := mutationVersion(t, h)
 	calls := countingGit(t, h)
