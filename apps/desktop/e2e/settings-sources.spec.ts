@@ -147,7 +147,7 @@ test("set the account remote: Save runs source add --account, and the row comes 
   ]);
 });
 
-test("set the account remote: exit 3, 1 and 6 show the CLI's message and hint under the field", async ({
+test("set the account remote: exit 3, 1 and 6 show the CLI's message and hint under the field, as one paragraph", async ({
   cli,
   page,
 }) => {
@@ -192,27 +192,23 @@ test("set the account remote: exit 3, 1 and 6 show the CLI's message and hint un
 
   await urlField(page).fill("me/missing");
   await save.click();
-  await expect(alert).toContainText("Couldn't reach me/missing");
-  await expect(alert).toContainText(
-    "check the URL, and that your credential helper can read it"
+  // The message and the hint as one sentence-cased paragraph.
+  await expect(alert).toHaveText(
+    "Couldn't reach me/missing. Check the URL, and that your credential helper can read it."
   );
   // The runner's error toast stays away: the section says what happened.
   await expect(toasts(page).getByRole("listitem")).toHaveCount(0);
 
   await urlField(page).fill("me/account#main");
   await save.click();
-  await expect(alert).toContainText(
-    "me/account#main names a folder or a ref, and the account remote is a whole repository"
+  await expect(alert).toHaveText(
+    "me/account#main names a folder or a ref, and the account remote is a whole repository. Give the repository's URL alone."
   );
-  await expect(alert).toContainText("give the repository's URL alone");
 
   await urlField(page).fill(ACME);
   await save.click();
-  await expect(alert).toContainText(
-    `${ACME} is a shared source, and a repository cannot be both a shared source and the account remote`
-  );
-  await expect(alert).toContainText(
-    `remove the source first with 'agentx source remove ${ACME}', or choose another repository`
+  await expect(alert).toHaveText(
+    `${ACME} is a shared source, and a repository cannot be both a shared source and the account remote. Remove the source first with 'agentx source remove ${ACME}', or choose another repository.`
   );
   await expect(toasts(page).getByRole("listitem")).toHaveCount(0);
   expect(changes(cli)).toEqual([
