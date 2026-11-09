@@ -226,7 +226,8 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
     });
   }
   // The skills an update applied to, which its `library_skill` events name, have no update left.
-  if (command === "skill update") {
+  // An aborted merge emits `library_skill` too, but its update is still offered.
+  if (command === "skill update" && !args.includes("--abort")) {
     const updated = new Set(
       events.filter((e) => e.type === "library_skill").map((e) => e.name)
     );
