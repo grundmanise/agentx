@@ -15,6 +15,7 @@ import { canFork } from "#/screens/skills/fork.ts";
 import { HistorySection } from "#/screens/skills/history.tsx";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
+  filesVersionOf,
   glyphLit,
   glyphOf,
   glyphTitle,
@@ -72,8 +73,20 @@ export const SkillDetail = ({
   configurations: Configuration[];
 }) => {
   const [removing, setRemoving] = useState(false);
+  const sources = useAppStore((s) => s.sources);
+  // How many files `skill diff` found changed, from the FILES read of this version of the skill.
+  const changedFiles = useAppStore((s) => {
+    const read = s.files[row.key];
+    return read?.failed === undefined && read?.version === filesVersionOf(row)
+      ? read.diffs?.length
+      : undefined;
+  });
   const conflicts = useAppStore((s) => s.conflicts);
-  const banner = bannerFor(row, configurations, conflicts);
+  const banner = bannerFor(row, configurations, {
+    changedFiles,
+    conflicts,
+    sources,
+  });
   const details = detailsOf(row, configurations);
   return (
     <article

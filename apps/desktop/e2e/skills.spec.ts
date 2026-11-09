@@ -777,9 +777,11 @@ test.describe("the detail pane", () => {
         .getByText("Skills CLI", { exact: true })
     ).toHaveCount(0);
 
-    // A skill not yet published has its pill on the row only, even with no banner to say it.
+    // A skill not yet published: its pill on the row, its banner in the pane, no pill in the title row.
     await row(page, "draft").click();
-    await expect(pane(page, "draft").getByRole("note")).toHaveCount(0);
+    await expect(
+      pane(page, "draft").getByRole("note", { name: "Not published" })
+    ).toBeVisible();
     await expect(
       row(page, "draft").getByText("Not published", { exact: true })
     ).toBeVisible();

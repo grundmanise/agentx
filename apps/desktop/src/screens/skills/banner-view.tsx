@@ -2,8 +2,10 @@
 // with its button: See changes and Update on the lime banners of an update (See changes opens the
 // What's new sheet), Show folder, Abort and Update on the amber one of a pending merge, Add to
 // agents on the gray "Not in any agent" banner, Reconnect on the amber one of a displaced skill,
-// Adopt, Add source or Fork on the others. The buttons are in src/screens/skills/actions.tsx, but
-// Fork, which opens the Fork dialog (src/screens/skills/fork-dialog.tsx).
+// Adopt, Add source or Fork on the others, Publish or Settings on your own skills' banners, and
+// Fork with Publish to on an edited skill of a source. The buttons are in
+// src/screens/skills/actions.tsx, but Fork, which opens the Fork dialog
+// (src/screens/skills/fork-dialog.tsx), and Publish and Settings (src/screens/skills/publish-dialog.tsx).
 import { cva } from "class-variance-authority";
 
 import { AlertIcon } from "#/components/icons/alert.tsx";
@@ -21,6 +23,10 @@ import {
 import type { Banner } from "#/screens/skills/banners.ts";
 import { ForkButton } from "#/screens/skills/fork-dialog.tsx";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import {
+  OpenSettingsButton,
+  PublishButton,
+} from "#/screens/skills/publish-dialog.tsx";
 
 const bannerVariants = cva(
   "rounded-banner py-banner pr-banner-right pl-banner gap-banner flex items-center border",
@@ -91,6 +97,25 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
     }
     case "fork": {
       return <ForkButton row={row} place="banner" />;
+    }
+    case "publish": {
+      return <PublishButton row={row} label="Publish" />;
+    }
+    case "open-settings": {
+      return <OpenSettingsButton />;
+    }
+    case "edited": {
+      return (
+        <>
+          <ForkButton row={row} place="banner" />
+          {banner.action.publishTo !== undefined && (
+            <PublishButton
+              row={row}
+              label={`Publish to ${banner.action.publishTo}`}
+            />
+          )}
+        </>
+      );
     }
     case undefined: {
       return null;

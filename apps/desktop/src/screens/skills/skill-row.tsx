@@ -6,6 +6,7 @@ import { Pill } from "#/components/pill.tsx";
 import type { PillTone } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
+import type { BannerFacts } from "#/screens/skills/banners.ts";
 import { glyphLit, glyphOf, glyphTitle } from "#/screens/skills/projection.ts";
 import type { PillKind, SkillRow } from "#/screens/skills/projection.ts";
 
@@ -17,8 +18,12 @@ const pillTones: Record<PillKind, PillTone> = {
 };
 
 /** The banner title a row's alert triangle carries: only a banner that warns (attention or danger). */
-const alertOf = (row: SkillRow, configurations: Configuration[]) => {
-  const banner = bannerFor(row, configurations);
+const alertOf = (
+  row: SkillRow,
+  configurations: Configuration[],
+  facts: BannerFacts
+) => {
+  const banner = bannerFor(row, configurations, facts);
   return banner?.tone === "attention" || banner?.tone === "danger"
     ? banner.title
     : undefined;
@@ -34,6 +39,7 @@ export const SkillRowItem = ({
   row,
   forks,
   configurations,
+  facts,
   selected,
   onSelect,
 }: {
@@ -41,6 +47,8 @@ export const SkillRowItem = ({
   /** The forks made from this skill under a new name, each marked on the row. */
   forks: SkillRow[];
   configurations: Configuration[];
+  /** What the row's banner reads besides the row, for its alert triangle (the list has no diff). */
+  facts: BannerFacts;
   selected: boolean;
   onSelect: () => void;
 }) => {
@@ -48,7 +56,7 @@ export const SkillRowItem = ({
     .map((id) => configurations.find((c) => c.id === id))
     .filter((c) => c !== undefined);
   const shown = clients.slice(0, MAX_LOGOS);
-  const alert = alertOf(row, configurations);
+  const alert = alertOf(row, configurations, facts);
   const description = [
     glyphTitle(row),
     ...row.pills.map((pill) => pill.label),

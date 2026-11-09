@@ -4,6 +4,7 @@ import type {
   ConflictEvent,
   Configuration,
   LibraryPlacement,
+  SourceEvent,
 } from "#/cli/events.gen.ts";
 import { displacedPlacement } from "#/screens/skills/placements.ts";
 import {
@@ -41,7 +42,17 @@ export type BannerAction =
   /** `source add <url>`, for a skill whose source was removed. */
   | { kind: "add-source"; source: string }
   /** Fork, which opens the Fork dialog, for a skill its source no longer holds. */
-  | { kind: "fork" };
+  | { kind: "fork" }
+  /** Opens the Publish dialog, which runs `skill publish <name>`. */
+  | { kind: "publish" }
+  /** Goes to Settings, where an account remote is set. */
+  | { kind: "open-settings" }
+  /**
+   * The buttons of an edited skill of a source: Fork, which opens the Fork dialog, and Publish to
+   * {source}, which opens the Publish dialog, when `publishTo` names a source this machine can
+   * write to.
+   */
+  | { kind: "edited"; publishTo?: string };
 
 export interface Banner {
   tone: BannerTone;
@@ -60,14 +71,34 @@ export interface Banner {
 /** The last `conflict` event of each skill, by name, as the store keeps them. */
 type Conflicts = Record<string, ConflictEvent>;
 
+/** What the banners read besides the row: the store's sources, conflicts and the skill's diff. */
+export interface BannerFacts {
+  /** The added sources, from `source list`: the account remote, and each source's access. */
+  sources: SourceEvent[];
+  /** How many files `skill diff <name>` reports changed; undefined until it was read. */
+  changedFiles?: number;
+  /** The store's last `conflict` event of each skill, for the files a pending merge left. */
+  conflicts?: Conflicts;
+}
+
 interface BannerRule {
-  when: (row: SkillRow) => boolean;
+  when: (row: SkillRow, facts: BannerFacts) => boolean;
   banner: (
     row: SkillRow,
     configurations: Configuration[],
-    conflicts: Conflicts
+    facts: BannerFacts
   ) => Banner;
 }
+
+/** The account remote, the one source added with `--account`, when one is set. */
+export const accountRemoteOf = (sources: SourceEvent[]) =>
+  sources.find((s) => s.account === true);
+
+const notPublished = (row: SkillRow) =>
+  row.kind === "yours" &&
+  (row.entry?.drift?.includes("not published") ?? false);
+
+const filesWord = (n: number) => (n === 1 ? "1 file" : `${n} files`);
 
 const agentName = (configurations: Configuration[], id: string) =>
   configurations.find((c) => c.id === id)?.name ?? id;
@@ -102,9 +133,9 @@ const conflictText = (conflict: ConflictEvent | undefined) => {
 
 const table: BannerRule[] = [
   {
-    banner: (row, _configurations, conflicts) => ({
+    banner: (row, _configurations, facts) => ({
       action: { kind: "conflict" },
-      text: conflictText(conflicts[row.name]),
+      text: conflictText(facts.conflicts?.[row.name]),
       title: "Update has conflicts",
       tone: "attention",
     }),
@@ -192,12 +223,63 @@ const table: BannerRule[] = [
     // A library skill with no placement and no universal client to read the library.
     when: (row) => row.entry !== undefined && !row.enabled,
   },
+  {
+    banner: () => ({
+      action: { kind: "publish" },
+      text: "Publish to share your latest version.",
+      title: "Edits not published",
+      tone: "yours",
+    }),
+    when: (row) => row.kind === "yours" && row.modified && row.published,
+  },
+  {
+    banner: () => ({
+      action: { kind: "publish" },
+      text: "Only on this machine. Publish it to your account remote.",
+      title: "Not published",
+      tone: "yours",
+    }),
+    when: (row, facts) =>
+      notPublished(row) && accountRemoteOf(facts.sources) !== undefined,
+  },
+  {
+    banner: () => ({
+      action: { kind: "open-settings" },
+      text: "Set an account remote to publish it.",
+      title: "Not published",
+      tone: "yours",
+    }),
+    when: (row, facts) =>
+      notPublished(row) && accountRemoteOf(facts.sources) === undefined,
+  },
+  {
+    banner: (row, _configurations, facts) => {
+      const source = row.entry?.source ?? "";
+      const writable =
+        facts.sources.find((s) => s.url === source)?.access === "writable";
+      const n = facts.changedFiles;
+      return {
+        action: writable
+          ? { kind: "edited", publishTo: shortSource(source) }
+          : { kind: "edited" },
+        text:
+          n === undefined
+            ? "Updates won't overwrite your edits."
+            : `${filesWord(n)} ${n === 1 ? "differs" : "differ"} from ${shortSource(source)}. Updates won't overwrite them.`,
+        title: "Edited locally",
+        tone: "attention",
+      };
+    },
+    when: (row) => row.kind === "source" && row.modified,
+  },
 ];
 
-/** The banner for `row`, or none. `conflicts` are the store's, for the files a pending merge left. */
+/** The banner for `row`, or none, from what `facts` says besides the row. */
 export const bannerFor = (
   row: SkillRow,
   configurations: Configuration[],
-  conflicts: Conflicts = {}
+  facts: BannerFacts
 ): Banner | undefined =>
-  table.find((rule) => rule.when(row))?.banner(row, configurations, conflicts);
+  table
+    .find((rule) => rule.when(row, facts))
+    ?.banner(row, configurations, facts);
