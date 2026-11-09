@@ -4,7 +4,7 @@ const placeholder = "Search skills or run a command";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
 });
 
 for (const shortcut of ["Meta+K", "Control+K"]) {

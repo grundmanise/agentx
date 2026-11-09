@@ -23,7 +23,7 @@ const activity = (page: Page) =>
 /** Launches the app, waits for the store's reads, and loads the store harness. */
 const launch = async (cli: MockCli, page: Page) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect.poll(() => cli.commands).toEqual([...launchLines, ...loadLines]);
   await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
   await page.waitForFunction(() => "store" in window);
@@ -249,7 +249,13 @@ test("another failure shows the CLI's message, hint and warnings until dismissed
   const toast = toasts(page)
     .getByRole("listitem")
     .filter({ hasText: error.message });
-  await expect(toast).toContainText(error.hint);
+  // The message and the hint as one sentence-cased paragraph.
+  await expect(
+    toast.getByText(
+      "github.com/acme/skills is unreachable. Check that the repository exists and that you can read it.",
+      { exact: true }
+    )
+  ).toBeVisible();
   await expect(toast).toContainText(warning);
   await expect(activity(page)).toHaveText([error.message]);
   await expect(activity(page)).toHaveAttribute("data-tone", "danger");

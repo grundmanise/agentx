@@ -18,6 +18,9 @@
 // when it starts. Once the checks pass the store loads its slices (src/store/loaders.ts), so the
 // mock answers `config list`, `source list`, `adopt` and `machine` too. A test replaces any of them with
 // register() and onServeStart().
+//
+// The mock also answers the native open dialog of Tauri's dialog plugin with the path a test gives
+// answerOpenDialog(), or with null, a Cancel, until one does, and records every Tauri call in `calls`.
 import { once } from "node:events";
 
 import { test as base } from "@playwright/test";
@@ -284,6 +287,10 @@ export class MockCli {
   readonly serveRequests: string[] = [];
   /** The paths of every call to the opener plugin's reveal, in order: what the app showed in Finder. */
   readonly reveals: string[][] = [];
+  /** The options of every native open dialog the app showed (the dialog plugin's open), in order. */
+  readonly openDialogs: unknown[] = [];
+  /** Every Tauri command the page called, in order: the supervisor's and the plugins'. */
+  readonly calls: string[] = [];
   /** The request id of every line written to serve's stdin, in order. */
   get requestIds(): string[] {
     return this.serveRequests.map((written) => {
@@ -310,6 +317,7 @@ export class MockCli {
   private childId = 1;
   private serving = false;
   private serveStart: ServeStart = { events: [firstInventory()] };
+  private openAnswer: string | null = null;
 
   constructor(page: Page) {
     this.page = page;
@@ -341,6 +349,11 @@ export class MockCli {
         await this.handle(command, args)
     );
     await this.page.addInitScript(installInPage);
+  }
+
+  /** What every later native open dialog returns: the path the user picks, or null for Cancel. */
+  answerOpenDialog(path: string | null) {
+    this.openAnswer = path;
   }
 
   /** What the supervisor reports about the CLI. */
@@ -490,6 +503,7 @@ export class MockCli {
   }
 
   private async handle(command: string, args: unknown): Promise<unknown> {
+    this.calls.push(command);
     switch (command) {
       case "cli_resolve": {
         return {
@@ -546,6 +560,10 @@ export class MockCli {
           Array.isArray(paths) ? paths.map(String) : [String(paths)]
         );
         return null;
+      }
+      case "plugin:dialog|open": {
+        this.openDialogs.push(field(args, "options"));
+        return this.openAnswer;
       }
       default: {
         return this.refuse(

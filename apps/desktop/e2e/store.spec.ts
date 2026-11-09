@@ -15,7 +15,7 @@ const staleBar = (page: Page) => page.getByRole("status");
 /** Launches the app, waits for the store's reads, and shows the store. */
 const launch = async (cli: MockCli, page: Page) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect.poll(() => cli.commands).toEqual([...launchLines, ...loadLines]);
   await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
   await page.waitForFunction(() => "store" in window);

@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { SourceEvent } from "#/cli/events.gen.ts";
+import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -26,7 +27,7 @@ const AddSourceForm = ({
   onAdded,
   onClose,
 }: {
-  onAdded: (source: SourceEvent) => void;
+  onAdded?: (source: SourceEvent) => void;
   onClose: () => void;
 }) => {
   const [url, setUrl] = useState("");
@@ -50,7 +51,7 @@ const AddSourceForm = ({
     if (outcome.exitCode === EXIT_CODES.ok) {
       const source = outcome.events.find((e) => e.type === "source");
       if (source !== undefined) {
-        onAdded(source);
+        onAdded?.(source);
       }
       onClose();
       return;
@@ -89,16 +90,7 @@ const AddSourceForm = ({
         <p className="type-secondary text-text-hint m-0">
           Add #branch or #tag to pin it
         </p>
-        {problem !== undefined && (
-          <div role="alert" className="flex flex-col gap-1">
-            <p className="type-notice text-tone-danger-fg m-0">
-              {problem.message}
-            </p>
-            {problem.hint !== undefined && (
-              <p className="type-notice text-text-muted m-0">{problem.hint}</p>
-            )}
-          </div>
-        )}
+        {problem !== undefined && <ProblemText problem={problem} />}
       </div>
       <DialogFooter>
         <DialogClose asChild>
@@ -127,7 +119,7 @@ export const AddSourceDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The source the CLI added, from its `source` event. */
-  onAdded: (source: SourceEvent) => void;
+  onAdded?: (source: SourceEvent) => void;
 }) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent aria-describedby={undefined}>

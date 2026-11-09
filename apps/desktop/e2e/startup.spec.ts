@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { filesOf } from "./fixtures/skills.ts";
 import {
   cliVersion,
   doctorWith,
@@ -23,14 +24,20 @@ const rows = (page: Page) =>
   page.getByRole("list", { name: "Checks" }).getByRole("listitem");
 const row = (page: Page, label: string) =>
   rows(page).filter({ hasText: label });
-const inbox = (page: Page) => page.getByRole("heading", { name: "Inbox" });
+const skills = (page: Page) => page.getByRole("heading", { name: "Skills" });
+
+/** The command lines, but the reads of the skill the Skills screen selects, which e2e/skills.spec.ts covers. */
+const launchCommands = (cli: MockCli) =>
+  cli.commands.filter((l) => l[0] !== "skill");
 
 /**
  * Waits for the launch and the store's reads once the checks pass, which the app runs out of
  * sight, so that the commands a test triggers next come after them.
  */
 const launched = async (cli: MockCli) => {
-  await expect.poll(() => cli.commands).toEqual([...launchLines, ...loadLines]);
+  await expect
+    .poll(() => launchCommands(cli))
+    .toEqual([...launchLines, ...loadLines]);
 };
 
 const oldGit = {
@@ -83,7 +90,7 @@ test.beforeEach(async ({ context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 });
 
-test("a passing launch checks the machine out of sight and opens the Inbox", async ({
+test("a passing launch checks the machine out of sight and opens Skills", async ({
   cli,
   page,
 }) => {
@@ -94,16 +101,16 @@ test("a passing launch checks the machine out of sight and opens the Inbox", asy
   await watchLayer(page);
   await page.goto("/");
   await doctor.started;
-  // While the checks run, the shell shows the Inbox selected, its panel is empty, and no layer shows.
+  // While the checks run, the shell shows Skills selected, its panel is empty, and no layer shows.
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
-  await expect(page.getByRole("link", { name: "Inbox" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Skills" })).toHaveAttribute(
     "aria-current",
     "page"
   );
-  await expect(inbox(page)).toHaveCount(0);
+  await expect(skills(page)).toHaveCount(0);
   doctor.release();
 
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await expect(layerShown(page)).toHaveCount(0);
   await launched(cli);
@@ -143,7 +150,7 @@ test("a launch over 2 seconds says what it checks, and from 5 seconds how much l
   await expect(progress(page)).toContainText("trying for 24s more");
 
   doctor.release();
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await expect(progress(page)).toHaveCount(0);
   await expect(layerShown(page)).toHaveCount(0);
 });
@@ -171,15 +178,18 @@ test("while serve scans, the panel names skills, MCP servers and plugins in turn
   await expect(named("Looking for skills")).toBeVisible();
 
   await cli.serveEmit([firstInventory()]);
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await expect(progress(page)).toHaveCount(0);
   await expect(layerShown(page)).toHaveCount(0);
 });
 
 test("a machine with no skills and no agents passes", async ({ cli, page }) => {
   cli.onServeStart({ events: [firstInventory([])] });
+  // Skills, the first screen, reads the skill it selects.
+  cli.register(["skill", "files", "notes"], { events: filesOf("notes") });
+  cli.register(["skill", "history", "notes"], { events: [] });
   await page.goto("/");
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await launched(cli);
 
   await runChecks(page);
@@ -251,7 +261,7 @@ test("a warning does not block, and manual mode shows it", async ({
   cli.register(["doctor"], { events: doctorWith(lock) });
   await watchLayer(page);
   await page.goto("/");
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await expect(layerShown(page)).toHaveCount(0);
   expect(cli.serveStarts).toBe(1);
   await launched(cli);
@@ -304,7 +314,7 @@ test("Retry runs everything again", async ({ cli, page }) => {
   doctor.release();
 
   // A pass closes the layer at once.
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await expect(layer(page)).toHaveCount(0);
   await expect
     .poll(() => cli.commands)
@@ -318,7 +328,7 @@ test("Enter retries", async ({ cli, page }) => {
   await expect(title(page)).toHaveText("Update git to continue");
   cli.register(["doctor"], { events: doctorWith() });
   await page.keyboard.press("Enter");
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await expect
     .poll(() => cli.commands)
     .toEqual([...launchLines, ...launchLines, ...loadLines]);
@@ -367,8 +377,11 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
       },
     ],
   });
+  // Skills, the first screen, reads the skill it selects.
+  cli.register(["skill", "files", "notes"], { events: filesOf("notes") });
+  cli.register(["skill", "history", "notes"], { events: [] });
   await page.goto("/");
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await launched(cli);
 
   await runChecks(page);
@@ -393,9 +406,19 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   await expect(layer(page)).toBeVisible();
 
   await page.getByRole("button", { name: "Open agentx" }).click();
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  // The serve child already running answered check 5; none was started again.
-  expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Settings" })
+  ).toBeVisible();
+  // The serve child already running answered check 5; none was started again. Settings reads
+  // the sources when it opens.
+  await expect
+    .poll(() => launchCommands(cli))
+    .toEqual([
+      ...launchLines,
+      ...loadLines,
+      ...launchLines,
+      ["source", "list", "--json"],
+    ]);
   expect(cli.serveStarts).toBe(1);
 });
 
@@ -416,7 +439,7 @@ test("a check that passes its deadline fails, and Retry runs it again", async ({
 
   cli.register(["doctor"], { events: doctorWith() });
   await page.getByRole("button", { name: "Retry" }).click();
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
 });
 
 test("a serve child that writes no inventory fails check 5 at the deadline", async ({
@@ -441,7 +464,7 @@ test("a serve child that writes no inventory fails check 5 at the deadline", asy
   // The slow child keeps running; its late inventory answers Retry.
   await cli.serveEmit([firstInventory()]);
   await page.getByRole("button", { name: "Retry" }).click();
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   expect(cli.serveStarts).toBe(1);
 });
 
@@ -450,7 +473,7 @@ test("the layer closes the palette, which stays closed after it", async ({
   page,
 }) => {
   await page.goto("/");
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await page.keyboard.press("Control+K");
   await expect(page.getByRole("dialog")).toBeVisible();
 
@@ -459,7 +482,7 @@ test("the layer closes the palette, which stays closed after it", async ({
   await expect(title(page)).toHaveText("agentx can't open its account repo");
   cli.register(["doctor"], { events: doctorWith() });
   await page.getByRole("button", { name: "Retry" }).click();
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
@@ -468,13 +491,13 @@ test("a serve exit with code 8 after launch brings the checks back", async ({
   page,
 }) => {
   await page.goto("/");
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await launched(cli);
 
   cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
   await cli.serveExit(8, [], null);
   await expect(title(page)).toHaveText("agentx can't open its account repo");
-  await expect(inbox(page)).toHaveCount(0);
+  await expect(skills(page)).toHaveCount(0);
   expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
 });
 
@@ -483,7 +506,7 @@ test("a one-shot exiting with code 8 brings the checks back", async ({
   page,
 }) => {
   await page.goto("/");
-  await expect(inbox(page)).toBeVisible();
+  await expect(skills(page)).toBeVisible();
   await launched(cli);
   await page.addScriptTag({ type: "module", url: "/e2e/harness/transport.ts" });
   await page.waitForFunction(() => "transport" in window);

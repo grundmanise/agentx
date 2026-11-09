@@ -4,13 +4,12 @@ import { expect, test } from "./harness/cli.ts";
 
 const main = (page: Page) => page.getByRole("navigation", { name: "Main" });
 
-test("opens on the Inbox and lists the screens in sidebar order", async ({
+test("opens on Skills and lists the screens in sidebar order", async ({
   page,
 }) => {
   await page.goto("/");
   const nav = main(page);
   await expect(nav.getByRole("link")).toHaveText([
-    "Inbox",
     "Skills",
     "Add",
     "Agents",
@@ -18,15 +17,15 @@ test("opens on the Inbox and lists the screens in sidebar order", async ({
     "Plugins",
     "Settings",
   ]);
-  await expect(nav.getByRole("link", { name: "Inbox" })).toHaveAttribute(
+  await expect(nav.getByRole("link", { name: "Skills" })).toHaveAttribute(
     "aria-current",
     "page"
   );
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
 
   // Each link's icon is an inline SVG, hidden from screen readers and from the tab order.
   const icons = nav.locator("svg");
-  await expect(icons).toHaveCount(7);
+  await expect(icons).toHaveCount(6);
   await expect(nav.getByRole("img")).toHaveCount(0);
   expect(
     await icons.evaluateAll((svgs) =>
