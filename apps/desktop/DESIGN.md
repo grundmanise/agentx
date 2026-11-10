@@ -1,25 +1,25 @@
 # agentx desktop: design system
 
-The visual contract for the desktop app. Code uses the semantic tokens below, never a primitive or a raw value. The tokens live in `src/styles/tokens.css`, which is edited by hand and is the source of truth; this file documents them. When you add or change a token, edit `tokens.css` and the matching table here in the same change. The tables use dotted names, and `tokens.css` names them like this:
+The design decisions of the desktop app, for the people and agents who build it: character, palette and tokens, type, layout, radii, the structure and states of components, iconography and motion. Each entry records a decision and, where it is not obvious, its reason. This file never holds UI copy: the words the app shows live in the code and the specs, and the copy rules in the README's "Rules for components".
+
+Code uses the semantic tokens below, never a primitive or a raw value. The tokens live in `src/styles/tokens.css`, edited by hand, which is the source of truth. When you add or change a token, edit `tokens.css` and its table here in the same change. The tables use dotted names, and `tokens.css` names them like this:
 
 - A colour token `shell.bg` is `--color-shell-bg`, a Tailwind colour (`bg-shell-bg`, `text-text-muted`). Primitives are `--gray-990` and so on, outside the Tailwind theme, so no utility class can name one.
 - A tone `tone.primary` is `--color-tone-primary-fg`, `-bg` and `-border`.
 - A shadow token `overlay.shadow` is `--shadow-overlay` (`shadow-overlay`).
 - A radius token `card.tile-radius` is `--radius-card-tile` (`rounded-card-tile`).
-- A layout token is a Tailwind theme value in the namespace of the utility that uses it, named after the element: `shell.sidebar-width` is `--width-sidebar` (`w-sidebar`), `page.padding` is `--padding-page` and `--padding-page-top` (`pt-page-top px-page pb-page`). §4 lists the class for each token. A token given as a range (`38–40`) is guidance, not a variable; pick the value the component calls for.
+- A layout token `shell.sidebar-width` is `--width-sidebar` (`w-sidebar`). §4 explains the naming and lists the class for each.
 - A type token `type.page-title` is the utility `type-page-title`, which sets the face, size, weight, line height, tracking and case together.
 
-The Tailwind theme holds only these tokens. `tokens.css` resets Tailwind's whole default theme (`--*: initial`), so no default colour, spacing step, radius, shadow, font, font size, weight, line height, tracking, breakpoint or animation exists. Besides the tokens above, the theme has three font weights (`font-normal`, `font-medium`, `font-semibold`) and the spacing steps of §4: a 2px grid in half steps from `0` to `12` (48px), with no base `--spacing`, so `p-13` or `top-28` produce no CSS. `pnpm check` rejects any class Tailwind does not know and any arbitrary value (`text-[13px]`). When a design needs a value no token holds, add the token to `tokens.css` and to the table here; see the README's rules for components.
+The Tailwind theme holds only these tokens. `tokens.css` resets Tailwind's whole default theme (`--*: initial`), so no default colour, spacing step, radius, shadow, font, font size, weight, line height, tracking, breakpoint or animation exists. Besides the tokens, the theme has three font weights (`font-normal`, `font-medium`, `font-semibold`) and the spacing steps of §4. A token given as a range (`38–40`) is guidance with no variable: pick the value the component calls for, or add a token with one value when a component needs it.
 
 ## 1. Character
 
 A dark, quiet desktop tool. One accent (lime) carries the accent and action signals; everything else is near-black and grey. Serif for page titles only; a mono face for anything technical (paths, ids, dates, captions). Surfaces are flat: elevation comes from one shade step and, on floating layers, a soft black shadow. No gradients, no emoji, no icon-per-row decoration.
 
-Copy voice: short, plain, present tense.
-
 ## 2. Color
 
-Two layers. **Primitives** are the raw palette and never appear in component code. **Semantic tokens** name a role and point at one primitive; everything in §3–§8 and in the app's code uses semantic names only. In `tokens.css` a semantic token is a Tailwind theme colour that points at a primitive (`--color-shell-bg: var(--gray-990)`); the names below are the contract.
+Two layers. **Primitives** are the raw palette and never appear in component code. **Semantic tokens** name a role and point at one primitive (`--color-shell-bg: var(--gray-990)`); the rest of this file and the app's code use semantic names only.
 
 ### 2.1 Primitives
 
@@ -71,7 +71,7 @@ Alpha is written as `<primitive>/<percent>` and resolves to `rgba` of that primi
 
 ### 2.2 Semantic tokens
 
-Grouped by element. Each token points at one primitive (or at a meaning token when the value is shared by design). §4–§6 and the app's code use these names only; two elements with a look-alike value still get their own token so one can change without the other.
+Grouped by element. Each token points at one primitive, or at a meaning token when the value is shared by design. Two elements with a look-alike value still get their own token, so one can change without the other.
 
 #### Meaning (accents and tones)
 
@@ -81,11 +81,11 @@ Grouped by element. Each token points at one primitive (or at a meaning token wh
 | `accent.primary-hover` | `lime-300` | Primary button hover |
 | `accent.attention` | `amber-400` | Edited, displaced, needs a look but not broken |
 | `accent.danger` | `red-400` | Removed, unreachable, destructive |
-| `accent.yours` | `violet-400` | Your own skills, "Yours" side of a diff, publish |
-| `accent.theirs` | `blue-400` | "Base version / Update" side of a diff |
+| `accent.yours` | `violet-400` | Your own skills, your side of a diff, publish |
+| `accent.theirs` | `blue-400` | The base version or update side of a diff |
 | `on-accent` | `gray-990` | Text and icons on any accent or inverse fill |
 
-Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
+Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 | Tone             | fg                 | bg             | border          |
 | ---------------- | ------------------ | -------------- | --------------- |
@@ -103,7 +103,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `text.secondary` | `gray-200` | Secondary text, Details values |
 | `text.body` | `gray-150` | Card copy, palette rows |
 | `text.muted` | `gray-300` | Descriptions, banner text |
-| `text.hint` | `gray-400` | Helper copy, Details keys, "+n" counts |
+| `text.hint` | `gray-400` | Helper text, Details keys, overflow counts |
 | `text.caption` | `gray-500` | Uppercase mono captions, chevrons, line counts |
 | `text.disabled` | `gray-600` | Disabled text and glyphs, inactive dots |
 | `text.faint` | `gray-700` | Line numbers, hollow timeline ring |
@@ -155,14 +155,14 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `pill.update-bg` | `accent.primary` | "Update" |
+| `pill.update-bg` | `accent.primary` | Update pill |
 | `pill.update-text` | `on-accent` |  |
-| `pill.neutral-bg` | `gray-860` | "Not published", "Adopt", "Reconnect" |
+| `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, a source's pin |
 | `pill.neutral-hover` | `gray-800` |  |
 | `pill.neutral-text` | `gray-200` |  |
-| `pill.removed-bg` | `red-400/12` | "Removed from source" |
+| `pill.removed-bg` | `red-400/12` | Removed-from-source pill |
 | `pill.removed-text` | `accent.danger` |  |
-| `pill.disabled-bg` | `amber-400/10` | Plugin "Disabled" |
+| `pill.disabled-bg` | `amber-400/10` | Disabled plugin pill |
 | `pill.disabled-text` | `accent.attention` |  |
 | `pill.version-bg` | `gray-880` | Plugin version |
 | `pill.version-text` | `gray-300` |  |
@@ -191,9 +191,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `segmented.track-bg` | `gray-950` | Track (`gray-980` when it sits on a card) |
 | `segmented.track-border` | `gray-870` |  |
 | `segmented.text` | `gray-50` | Unselected segment; `gray-400` once another segment is chosen |
-| `segmented.yours-selected` | `accent.yours` | "Keep yours" (label `on-accent`) |
-| `segmented.theirs-selected` | `accent.theirs` | "Use base version / update" |
-| `segmented.both-selected` | `gray-50` | "Keep both" |
+| `segmented.yours-selected` | `accent.yours` | Your side chosen (label `on-accent`) |
+| `segmented.theirs-selected` | `accent.theirs` | Base version or update side chosen |
+| `segmented.both-selected` | `gray-50` | Both sides kept |
 | `segmented.neutral-selected` | `gray-850` | Filter State segments (label `text.primary`) |
 
 #### Filter row (Skills toolbar)
@@ -223,7 +223,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `row.chip-ring` | `shell.content-bg` | 2px ring behind overlapping agent client logos in rows |
 | `group.label` | `gray-300` | Source group caption |
 | `group.count` | `gray-500` | Count beside the caption |
-| `group.divider-label` | `gray-500` | "NOT IN ANY AGENT CLIENT" sub-divider |
+| `group.divider-label` | `gray-500` | Caption of the sub-group of skills in no agent client |
 | `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows, Settings sources |
 | `table.header-text` | `gray-500` | Column captions |
 
@@ -264,10 +264,10 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `add-card.selected-bg` | `lime-400/6` |  |
 | `add-card.selected-border` | `lime-400/50` |  |
 | `add-card.check-bg` | `accent.primary` | Check tile on a selected card (check `on-accent`) |
-| `add-card.status-added` | `gray-400` | "Added" label |
-| `add-card.status-forked` | `accent.yours` | "Forked" label |
-| `add-card.status-disk` | `accent.attention` | "Already in library" label |
-| `add-card.status-in-use` | `gray-400` | "Name in use" label |
+| `add-card.status-added` | `gray-400` | Card status: already added |
+| `add-card.status-forked` | `accent.yours` | Card status: forked |
+| `add-card.status-disk` | `accent.attention` | Card status: already in the library |
+| `add-card.status-in-use` | `gray-400` | Card status: name in use |
 | `add-card.check-ring` | `gray-700` | Ring of the round check on a card that is not selected |
 | `banner.title` | `gray-50` | Banner title (bg/border/tile from `tone.*`) |
 | `banner.text` | `gray-300` |  |
@@ -287,7 +287,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `overlay.shadow` | `0 40px 100px -20px black/80` | Dialog, palette, sheet |
 | `popover.shadow` | `0 24px 60px -12px black/70` |  |
 | `popover.row-hover` | `gray-880` |  |
-| `popover.caption` | `gray-500` | SHOW / STATE / AGENTS |
+| `popover.caption` | `gray-500` | Group captions |
 | `menu.row-hover` | `gray-880` | Menu row pointed at or focused |
 | `menu.shadow` | `0 24px 60px -12px black/70` | Menu |
 | `palette.row-text` | `gray-150` |  |
@@ -317,14 +317,14 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `file-row.divider` | `gray-890` |  |
 | `file-row.path` | `gray-200` | Path |
 | `file-row.path-open` | `gray-50` | Path of the file whose pane is open |
-| `file-row.meta` | `gray-500` | "{n} lines" |
-| `file-row.edited-label` | `accent.attention` | "edited by you" / "added by you" |
-| `diff.added-bg` | `lime-400/12` | Added line tint (marker "+" `accent.primary`) |
-| `diff.removed-bg` | `red-400/8` | Removed line tint (marker "−" `accent.danger`) |
-| `diff.yours-label` | `accent.yours` | "Yours" label, dot and chosen-pane ring |
-| `diff.yours-bg` | `violet-400/6` | "Yours" pane ground |
-| `diff.theirs-label` | `accent.theirs` | "Base version / Update" label, dot and chosen-pane ring |
-| `diff.theirs-bg` | `blue-400/6` | "Base version / Update" pane ground |
+| `file-row.meta` | `gray-500` | Line count or size at the row's end |
+| `file-row.edited-label` | `accent.attention` | Status of a file the user changed |
+| `diff.added-bg` | `lime-400/12` | Added line tint (marker `accent.primary`) |
+| `diff.removed-bg` | `red-400/8` | Removed line tint (marker `accent.danger`) |
+| `diff.yours-label` | `accent.yours` | Your side's label, dot and chosen-pane ring |
+| `diff.yours-bg` | `violet-400/6` | Your side's pane ground |
+| `diff.theirs-label` | `accent.theirs` | Base version or update side's label, dot and chosen-pane ring |
+| `diff.theirs-bg` | `blue-400/6` | Base version or update side's pane ground |
 | `diff.file-pending` | `accent.attention` | File dot while changes remain |
 | `diff.file-done` | `accent.primary` | File dot when every change is decided |
 | `diff.progress-done` | `accent.primary` | Progress segment, decided |
@@ -332,14 +332,14 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 
 #### Timeline (History)
 
-| Token                  | Primitive        | Element                         |
-| ---------------------- | ---------------- | ------------------------------- |
-| `timeline.dot-install` | `gray-600`       | Added / found / created entries |
-| `timeline.dot-update`  | `accent.primary` | Updated, adopted, put back      |
-| `timeline.dot-yours`   | `accent.yours`   | Published, forked               |
-| `timeline.connector`   | `gray-890`       | 1px line between dots           |
-| `timeline.meta`        | `gray-500`       | Relative time under an entry    |
-| `timeline.more-ring`   | `gray-700`       | Hollow "Show all" dot ring      |
+| Token | Primitive | Element |
+| --- | --- | --- |
+| `timeline.dot-install` | `gray-600` | Added / found / created entries |
+| `timeline.dot-update` | `accent.primary` | Updated, adopted, put back |
+| `timeline.dot-yours` | `accent.yours` | Published, forked |
+| `timeline.connector` | `gray-890` | 1px line between dots |
+| `timeline.meta` | `gray-500` | Relative time under an entry |
+| `timeline.more-ring` | `gray-700` | Hollow dot ring of the item that opens the full history |
 
 #### Startup checks
 
@@ -347,7 +347,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | --- | --- | --- |
 | `check.pass-bg` | `lime-400/12` | ✓ mark tile |
 | `check.pass-mark` | `accent.primary` |  |
-| `check.fail-bg` | `red-400/12` | "!" mark tile |
+| `check.fail-bg` | `red-400/12` | Failure mark tile |
 | `check.fail-mark` | `accent.danger` |  |
 | `check.wait-bg` | `gray-880` | Pending mark tile |
 | `check.wait-mark` | `gray-500` |  |
@@ -362,17 +362,17 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `server.transport-bg` | `gray-880` | Transport pill |
 | `server.transport-text` | `gray-200` |  |
 | `server.command` | `gray-500` | Command / URL under the name |
-| `server.tools` | `gray-200` | "{n} tools" |
-| `server.tools-auth` | `accent.attention` | "needs sign-in" |
-| `server.tools-fail` | `accent.danger` | "unreachable", "timed out", "handshake failed" |
-| `server.tools-none` | `gray-500` | "Not checked" |
-| `server.versions` | `accent.attention` | "{n} versions" when agent configurations disagree |
+| `server.tools` | `gray-200` | Tool count |
+| `server.tools-auth` | `accent.attention` | A server that needs sign-in |
+| `server.tools-fail` | `accent.danger` | A server whose handshake failed |
+| `server.tools-none` | `gray-500` | A server not checked yet |
+| `server.versions` | `accent.attention` | Version count when agent configurations disagree |
 
 ### Contrast rules
 
 Every text colour token reaches at least 4.5:1 (WCAG AA) on the backgrounds it is used on: the shell, page, card, sheet, overlay (palette, dialog, popover, toast), input and code backgrounds, the row and table hover fills, and the button and pill fills. The tightest pairs are `text.caption` (`gray-500`) on `row.hover` at 4.54:1 and `text.muted` (`gray-300`) on `palette.row-active` at 4.69:1.
 
-- Body text is `text.primary`–`text.muted`. `text.hint` and `text.caption` are for helper copy, keys, captions, counts, meta and placeholders.
+- Body text is `text.primary`–`text.muted`. `text.hint` and `text.caption` are for helper text, keys, captions, counts, meta and placeholders.
 - `text.hint` and `text.caption` reach 4.5:1 on the surfaces and hover fills above, not on lighter fills. On `palette.row-active`, a button fill or a pill, use `text.muted` or lighter: a palette row's hint turns `text.muted` while the row is selected.
 - `gray-500` is the darkest grey for text a person needs to read. `text.disabled` and `text.faint` (`gray-600`, `gray-700`) stay below 4.5:1, so use them only for disabled controls, which WCAG exempts, and for line numbers and marks that are not content.
 - Check a new pairing before you use it, and keep it at 4.5:1 or more.
@@ -382,7 +382,7 @@ Every text colour token reaches at least 4.5:1 (WCAG AA) on the backgrounds it i
 
 Fonts (bundled with the app from `@fontsource` packages; the app never loads anything from the network): **Instrument Serif** 400 (titles), **Geist** 400–700 (UI), **Geist Mono** 400–600 (technical).
 
-Each row is a type token: a role with its face, size, weight, line height, tracking and case. A token with one value per column is a `type-*` utility in `tokens.css`; a row with a range (`11–12`) is guidance, not a utility – add a token with one value when a component needs it. Text colour is a separate colour token (§2.2). An empty cell inherits.
+Each row is a type token: a role with its face, size, weight, line height, tracking and case, and a `type-*` utility in `tokens.css`. Text colour is a separate colour token (§2.2). An empty cell inherits.
 
 | Token | Face | Size | Weight | Line height | Tracking | Case | Element |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -423,15 +423,17 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
 | `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
-| `type.agent-card-name` | sans | 16 | 600 |  |  |  | Agent client name on an Agents page card, and "Universal" on the Universal card |
+| `type.agent-card-name` | sans | 16 | 600 |  |  |  | Agent client name on an Agents page card, and the Universal card's title |
 | `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
 | `type.server-name` | sans | 14.5 | 500 |  |  |  | Server name in a server row (`text.primary`) |
 | `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
 | `type.settings-label` | sans | 14 | 500 |  |  |  | Settings section label (`text.primary`); the line under it is `type.secondary` in `text.muted` |
+| `type.plugin-name` | sans | 17 | 600 |  | -0.01em |  | Plugin name on a plugin card |
+| `type.version-pill` | mono | 12 | 500 |  |  |  | A plugin's version pill, a source's pin |
 
-Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
+Text wrapping: `text-wrap:pretty` on multi-line text. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
 ## 4. Layout and spacing
 
@@ -570,7 +572,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-card.padding` | 22 | `p-agent-card` | Agents page cards |
 | `agent-card.gap` | 12 | `gap-agent-card` | Grid gap |
 | `agent-card.logo` | 44 | `size-agent-card-logo` |  |
-| `universal-card.lead-width` | 260 | `w-universal-lead` | Left column of the Universal card: logos, "Universal", the library path |
+| `universal-card.lead-width` | 260 | `w-universal-lead` | Lead column of the Universal card |
 | `plugin-card.padding` | 22 | `p-plugin-card` |  |
 | `plugin-card.row-height` | 36 | `h-plugin-card-row` | Tree rows |
 | `plugin-card.gap` | 12 | `gap-plugin-card` | Between the masonry columns; each card's wrapper adds 12 below |
@@ -629,7 +631,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `timeline.gap` | 12–16 |  | Dot → text |
 | `timeline.dot` | 7 | `size-timeline-dot` |  |
 | `timeline.line` | 20 | `h-timeline-line` | The box the dot is centred in beside a plain entry: the line height of `type.timeline-entry` |
-| `timeline.button-line` | 32 | `h-timeline-button-line` | The box the dot is centred in beside an entry whose first line is a wrapping small button (the expandable entries of the History sheet, the "Show all {n}" row): the button's top padding (6) plus one `timeline.line` |
+| `timeline.button-line` | 32 | `h-timeline-button-line` | The box the dot is centred in beside an entry whose first line is a small wrapping button: the button's top padding (6) plus one `timeline.line` |
 | `timeline.entry-gap` | 16–20 |  | Bottom padding per entry |
 | `check.column-width` | 480 | `w-check-column` | Startup column |
 | `check.block-gap` | 36 | `gap-check-block` | Logo/title → checks → actions |
@@ -688,12 +690,18 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 
 ## 6. Components
 
+Each entry gives a component's structure, tokens and states, and the reason for a choice that is not obvious. What a component says, and which command a control runs, is in its code.
+
+A control that runs a command is pending from the command until the inventory that follows it arrives: `aria-busy`, a `Spinner` in or beside it, and no input. It keeps the state the last inventory reported, so the screen never shows the outcome ahead of the CLI.
+
+Finder in this file means the platform's file manager. `src/lib/reveal.ts` names it for the platform `src/lib/platform.ts` reads; a screen never checks the platform itself.
+
 ### Buttons (height / padding / colours)
 
-- **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert (never a grey fill).
+- **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert, never a grey fill.
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / transparent, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
-- **Small, wrapping** – a small button whose label is a sentence (a commit's subject in the History sheet, "Show all {n}"): at least 34 high, 6 `button.ghost-padding-x`, left-aligned, the label wraps in `timeline.line` lines and the button grows with them; never clipped, never scrolled.
+- **Small, wrapping** – for a label that is a sentence, such as a commit subject in the History sheet: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
 - **Danger** – ghost in `button.danger-text`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, transparent; hover `button.ghost-hover`.
 - **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
@@ -702,211 +710,248 @@ Two buttons side by side: `button.gap`, primary on the right.
 
 ### Pills (status)
 
-Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
+Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version and a source's pin take `type.version-pill`.
 
-- Not published (one of your own skills not yet published, on its list row only): `pill.neutral-bg` / `pill.neutral-text`. It is the only status pill a skill row carries.
-- Disabled (plugin): `pill.disabled-bg` / `pill.disabled-text`.
-- Version (plugin): `pill.version-bg` / `pill.version-text`, mono 12.
-- Fork (on the original of a fork made under a new name, in the detail header): `pill.neutral-bg` / `pill.neutral-text`, the 12px fork glyph in the text colour, then the fork's name; hover `pill.neutral-hover`. `title` "Forked as {fork name}"; a click opens the fork. One pill per fork.
+- Not published: `pill.neutral-*`. The only status pill a skill row carries.
+- Disabled (plugin): `pill.disabled-*`.
+- Version (plugin): `pill.version-*`.
+- Fork: `pill.neutral-*`, hover `pill.neutral-hover`, the 12px fork glyph then the fork's name. In the detail header of the original of a fork made under a new name, one per fork; it opens the fork.
 
-A skill row has no other status pill. When the skill's banner (§6 "Banner (detail pane)") has tone `attention` or `danger`, the row shows an alert triangle right after the name and its pill: `AlertTriangleIcon` (an exclamation mark in a triangle; the banner tile keeps the circled `AlertIcon`) at 14px in `tone.attention.fg`, whatever the banner's tone, with `title` and `aria-label` the banner's title, which the row's accessible description also carries. A `primary`, `neutral` or `yours` banner puts no triangle on the row.
+A skill row whose banner (§6 "Banner (detail pane)") has tone `attention` or `danger` shows an `AlertTriangleIcon` (`xs`) in `tone.attention.fg` after the name and pill, whatever the banner's tone; its accessible name is the banner's title. The banner tile keeps the circled `AlertIcon`. Other banner tones put nothing on the row.
 
 ### Switch
 
-`switch.size`, `switch.padding`, `switch.radius`; knob `switch.knob` round. On: track `switch.on-track`, knob `switch.on-knob`, `justify-content:flex-end`. Off: track `switch.off-track`, knob `switch.off-knob`. `transition: background .18s`. The whole row is the hit target. Compact variant `switch.compact-size` (knob `switch.compact-knob`) inside agent toggle chips. A switch always shows the state the last inventory reported: while its command runs, and until the inventory that follows it arrives, it is pending (`aria-busy`, disabled at 50% opacity, a `Spinner` beside it) and keeps that state; it never shows the outcome ahead of the CLI. Its `title` says what the state means ("Enabled · new skills go here by default" / "Disabled · skipped by default").
+`switch.size`, `switch.padding`, `switch.radius`; round knob `switch.knob`. On: `switch.on-track`, `switch.on-knob`, knob at the end. Off: `switch.off-track`, `switch.off-knob`. Compact variant `switch.compact-size` (knob `switch.compact-knob`) inside agent client toggle chips. In a row with a label, the whole row is the hit target. Pending: disabled at 50% opacity with a `Spinner` beside it.
 
 ### Agent client toggle chip (detail pane AGENTS)
 
-Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`: 28px logo(s) · name 13 / 500 · compact switch. Off: `agent-chip.off-bg` with 1px `agent-chip.off-border`. On: `agent-chip.on-bg` with `agent-chip.on-border`. Hover border `agent-chip.hover-border`. Locked: 45% opacity, `cursor:not-allowed`, `title` holds the reason; a click toasts it. Chips wrap in a row with `agent-chip.wrap-gap`. A click on a direct agent's chip runs one command, and the chip is pending (`aria-busy`, `cursor:wait`, a `Spinner` in place of the compact switch) until the command ends and the next inventory arrives; its `title` reads "Add to {Agent}" / "Remove from {Agent}". A displaced chip shows "displaced" in `tone.attention.fg` under the name and runs nothing: a click toasts "Reconnect it first, then manage it from your library". The Universal chip, on, opens the Remove dialog: a universal client reads the library, so a skill leaves it only by leaving the machine.
+Pill button: `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`; a 28px logo, the name in `type.agent-chip`, a compact switch. Chips wrap with `agent-chip.wrap-gap`.
+
+| State | Look |
+| --- | --- |
+| Off | `agent-chip.off-bg`, 1px `agent-chip.off-border` |
+| On | `agent-chip.on-bg`, 1px `agent-chip.on-border` |
+| Hover | border `agent-chip.hover-border` |
+| Pending | `cursor:wait`, a `Spinner` in place of the switch |
+| Locked | 45% opacity, `cursor:not-allowed`; a click toasts the reason |
+| Displaced | a `type.technical-sm` line in `tone.attention.fg` under the name; a click runs nothing and toasts why |
+
+The Universal chip, on, opens the Remove dialog: a universal client reads the library, so a skill leaves it only by leaving the machine.
 
 ### Checkbox (popover)
 
-16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` check. The same mark inside a dialog (the Remove dialog's "Also delete it from your account remote"), beside its label in `type.body` `text.primary`, with a line of `type.secondary` `text.muted` under it when the choice needs a word of explanation.
+16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark. In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
 
 ### Radio group
 
-One choice among a few (Settings, Editor; `src/components/ui/radio-group.tsx`): a column of rows `gap-2.5` apart, each the round mark of the checkbox (§6 "Checkbox (popover)"), checked on the one chosen, then its label in `type.body` `text.primary`, `gap-2.5` between them; the whole row is the hit target, and the arrow keys move the choice.
+One choice among a few (`src/components/ui/radio-group.tsx`): a column of rows `gap-2.5` apart, each the round mark of §6 "Checkbox (popover)", checked on the one chosen, then the label in `type.body` `text.primary`, `gap-2.5` between them. The whole row is the hit target, and the arrow keys move the choice.
 
 ### Segmented control
 
-Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segmented.padding`, `segmented.gap`. Segments `segmented.height` high, `segmented.radius`, 12–12.5 / 500. Selected segment fills with its meaning colour (`segmented.yours-selected`, `segmented.theirs-selected`, `segmented.both-selected`, `segmented.neutral-selected`) and `on-accent`; others transparent `segmented.text`.
+Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segmented.padding`, `segmented.gap`. Segments `segmented.height`, `segmented.radius`, `type.segment`. The selected segment fills with its meaning colour (`segmented.*-selected`) and `on-accent`; the others are transparent in `segmented.text`.
 
 ### Agent client logo chip
 
-Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`. A logo is never dimmed or greyed: a server row shows only the agents that have the server on, and reads "Turned off" (`type.secondary`, `text.muted`) when every agent turned it off. The bundled logos (`src/assets/logos`, listed in its README) are the clients' official marks as the vendors publish them, never marks drawn for the app; a client without a bundled mark gets the monogram below.
+Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo carries the client's name as its `title`.
 
-### Skill glyph (16px, leading the row)
-
-- dot (filled) – a skill of a shared source; `glyph.enabled` when enabled, `glyph.off` when not.
-- pencil – edited locally; `glyph.edited`.
-- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise. `title` explains the state ("Your skill · Enabled", "Edited locally · Not in any agent client").
-- fork marker (12px, after the pill and the alert triangle of a row) – the original of a fork made under a new name, in `text.caption`, one per fork; `title` "Forked as {fork name}". A marker, not a control: the fork is listed once, in YOUR SKILLS.
-
-### Group header (lists)
-
-Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.count`. `group.padding-first` for the first group, `group.padding` for the rest.
-
-### Banner (detail pane)
-
-`banner.radius`, `banner.padding`, `tone.*.bg` + 1px `tone.*.border`; `banner.tile` icon tile in `tone.*.fg`; title 14 / 500 `banner.title`; text 13 `banner.text`; actions on the right.
-
-The header shows no status pills; the banner is the status. A banner can cover the origin text beside the name (`coversOrigin` in `src/screens/skills/banners.ts`): the header leaves it out while that banner shows. Today only "Added by {tool}" covers it, since it says where the skill came from; the origin of a skill of a source ("acme/skills") is not what its banner says, so it stays. A new banner that says where the skill came from sets `coversOrigin`.
-
-### Agent client card (Agents page)
-
-One card per agent configuration whose client does not read the library, in a 4-column grid with `agent-card.gap`: `card.bg`, 1px `card.border`, `agent-card.radius`, `agent-card.padding`. Top row: the `agent-card.logo` logo at the left and the Enabled switch (§6 "Switch") at the right. Then the client's name in `type.agent-card-name` `card.title`, its configuration path in `type.technical` `text.caption` on one line with an ellipsis, and "{n} skills · {n} servers · {n} plugins" in `type.secondary` `card.text` with the numbers in `text.primary`, 500. Enabled decides only where later installs and creations go when no agent is named; it never changes a placement, so the counts do not move when the switch does.
-
-### Universal card (Agents page)
-
-One full-width card below the grid, the same surface, for every configuration whose client reads the library. Its left column is `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), "Universal" in `type.agent-card-name`, "Read your shared library" in `type.secondary` `card.text`, and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` hairline on its left: name, path and "{n} skills · {n} servers", the skill count being the library's. No switch: a universal client sees every library skill whatever its setting.
-
-### Banner actions and dialogs (detail pane)
-
-A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is not managed by agentx" banner, "It owns a copy of the skill, so your library changes don't reach it." The banners of an update come first, after the one of a pending merge, `tone.primary` with the `RefreshIcon` in the tile and two actions, a small ghost See changes, which opens the What's new sheet (§6 "Sheet (What's new)"), then a small primary Update (`skill update <name>`): "New version from {owner/repo}" for an update with a base, {owner/repo} being the update's source, or for one of your own skills with an upstream, the upstream; and "Published from another machine" for what another of your machines published (an update with no base). The first one's text is the paths of the files the update changes, joined by " · ", then " · Your local edits are kept." when the skill holds edits; the second one's is the paths alone. Toasts: "Updated {skill} skill", "Updated {skill} skill. Merged with your local edits" when it held edits, "Updated {skill} skill. Publish when ready." for one of your own, "{skill} skill is already up to date" when there was nothing to take. A skill with a pending merge shows neither. After the amber one, in this order: "Added by {tool}" (`tone.neutral`, the tool's product name, "Skills CLI" or "Skillshare", as the origin text and the Installed by detail also name it), "Adopt to manage it from agentx", with Adopt (`adopt --skill <name>`, toast "Adopted {skill} skill"); "{owner/repo} was removed" (`tone.danger`), "Add {owner/repo} source to check for updates.", with Add source (`source add <url>`, toast "Added {owner/repo} source"); "No longer in {owner/repo}" (`tone.danger`), "It seems this skill was removed from the source.", with Fork, which opens the Fork dialog (§6 "Fork dialog (detail pane)"). Adopt and Update are banner buttons only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner: its DETAILS end with an "Adopt" row, "Can't adopt: {reason}" in the CLI's words. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). The action row (`aria-label` "Actions", `button.gap` 6 between its buttons) sits on the title row, pushed to its right end (`margin-left:auto`, centred on the row, wrapping when the row is full), after the name, origin and fork pills. Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger); toast "Removed {skill} skill". Every button that runs a command is pending until the command ends and the next inventory arrives.
-
-A skill with a pending merge (`pending_merge` in the inventory) shows "Update has conflicts" before any other banner: `tone.attention` with the `AlertIcon`, and the text "Your edits and the update changed the same lines in {n} files. Resolve them in the merge folder, then update again.", {n} being the files of the last `conflict` event the app saw for the skill (the store keeps it, by skill, from every command the runner runs), or without " in {n} files" when it has seen none, as after a restart. Three buttons: Show folder (small ghost) shows `<agentx home>/merges/<name>/<name>` in Finder, agentx home being the `machine` event's `home`, and runs no command; Abort (small danger ghost) opens a confirm dialog, "Abort the update of {skill}?", "Your resolved files in the merge folder are discarded. The skill and the update stay as they were.", Cancel · Abort (danger), whose Abort runs `skill update <name> --abort` (toast "Aborted the update of {skill}"); and Update (small primary) runs `skill update <name>` again, which applies the merge once every file is resolved. An update that still conflicts (exit 4) says "Conflicts in {skill}. Resolve them to finish the update"; with `--all`, "Updated {k} skills. {m} have conflicts" ("1 has conflicts").
-
-Your own skills and edited skills of a source come last, after "Not in any agent", in this order. "Edits not published" (`tone.yours`), for one of your own skills edited since it was published: "Publish to share your latest version.", with Publish, which opens the Publish dialog. "Not published" (`tone.yours`), for one never published: "Only on this machine. Publish it to your account remote." with Publish when an account remote is set, else "Set an account remote to publish it." with Open Settings. "Edited locally" (`tone.attention`), for an edited skill of a source: "{n} files differ from {owner/repo}. Updates won't overwrite them." once `skill diff <name>` has counted them ("1 file differs" for one), and "Updates won't overwrite your edits." before it answers, with Publish to {owner/repo} when this machine can write to the source, and no button otherwise. It offers no Fork: Fork is in the action row.
-
-### Card (Inbox)
-
-`card.bg`, `card.radius`, `card.border`, `card.padding`. Header grid: `card.tile` icon tile (`tone.*`) · title/tag/text · actions. Resolve animation: `opacity 0; transform: translateX(24px) scale(.985)` over 280ms, then removed.
-
-### Plugin card (Plugins)
-
-`card.bg`, `plugin-card.radius`, 1px `card.border`, in 3 CSS columns with `plugin-card.gap`; a card never breaks across columns. Top, `plugin-card.padding`: a `plugin-card.tile` tile on the left, the plugin's own icon from the inventory's data URL as an `<img>` with the name as its alt, or the name's first letter on `button.secondary-bg` when the inventory carries none; the tile is never dimmed, a disabled plugin says so with its pill. On the right the version pill (`pill.version-bg` / `pill.version-text`, `type.version-pill`), "no version" when empty, after a Disabled pill (`pill.disabled-bg` / `pill.disabled-text`) when the agent client turned the plugin off. Then the name in `type.plugin-name` and "{Agent} · {marketplace}" in `text.muted` ("local" when the marketplace is empty). Contents under a `card.border` hairline: the groups SKILLS, SERVERS, HOOKS, each a caption and `plugin-card.row-height` tree rows with a `plugin.connector` line (the last row's stops at the middle), the group's dot, the name, mono meta (`type.technical-sm`, `text.caption`: a server's transport, a hook's event) and, on a skill or server row, a chevron; those rows open the skill in Skills or the server in MCP servers and hover `plugin.row-hover`. A hook row opens nothing.
-
-### Fork dialog (detail pane)
-
-Fork is a secondary small button in the detail pane's action row, before Remove, for a skill of a source, an unmanaged skill in the library and a plugin's skill; never for one of your own skills. It opens the dialog "Fork {skill}" (`type.dialog-title`), whose subtitle (`type.secondary`, `dialog.subtitle`) says what the fork does for that kind of skill. Below it, the switch row "Use a new name" (`type.body` `text.primary`, with "The fork then sits beside {skill} instead of replacing it." in `type.secondary` `text.muted` except for a plugin's skill, whose fork always sits beside it), the whole row the hit target; with it on, a mono Name field (`Input` `mono`) that takes the focus, and under it, while what is typed breaks the naming rule, "Use 1 to 64 lowercase letters, digits and single hyphens" in `type.secondary` `text.hint`. Cancel · Fork (primary); Enter forks, and Fork is disabled while the switch is on and the name breaks the rule. While the command runs, Fork shows a `Spinner` and the dialog stays. A fork that succeeds closes the dialog, toasts "Forked {skill} skill" and selects the fork. A refusal shows under the field as in the Add source dialog (§6 "Refusal under a field"): the CLI's message then a hint in the dialog's own words, as one sentence-cased paragraph in `type.notice` `tone.danger.fg`. Exit 6 turns the switch on, so the hint names what is left to do with the form as it then stands, never `--name` and never the switch once it is on: "…, or type a new name." when no name is typed yet, nothing more when one is. A change to the switch or the name clears the refusal, as a change to Name clears the Create dialog's. After a plugin's skill is forked, the dialog "What each agent sees" lists each agent the CLI wrote a note for: a 20px logo, its name in `type.body` `text.primary` and the note in `type.secondary` `text.muted`, then Done (primary). The Fork of the "No longer in {owner/repo}" banner (§6 "Banner actions and dialogs") is a small ghost button that opens this same dialog.
-
-### Publish dialog (detail pane)
-
-Publish on the "Edits not published" and "Not published" banners, and Publish to {owner/repo} on an "Edited locally" banner whose source this machine can write to, are small ghost buttons that read the changed files with `skill diff <name>` and open the dialog "Publish {skill}" (`type.dialog-title`). Its subtitle (`type.secondary`, `dialog.subtitle`) says where the publish goes: "To your account remote, {url}" for one of your own skills, "To {owner/repo}, as a change under your own Git name" for a skill of a source. Its blocks sit `dialog.gap` apart. Below the subtitle, the "What changed" field (label `type.secondary` `text.muted`, `input.label-gap` above an `Input` with the placeholder "Leave empty and agentx describes the files"), passed as `--message` only when it holds more than spaces. Then FILES (`type.caption` `text.caption`): one row per changed file, the path in `type.technical` `text.secondary` and its status ("edited by you", "added by you", "removed by you") in `type.technical-sm` `file-row.edited-label`; while the read runs "Reading the files…", and "No changed files" or "The changed files could not be read", each in `type.secondary` `text.hint`. Cancel · Publish (primary); Enter publishes. While `skill publish` runs, Publish shows a `Spinner`, the field is disabled, and the footer's left side says "Publishing {skill}…", or "Fetching {owner/repo}…" while a `progress` event of phase `fetch` names a source, in `type.secondary` `text.hint`. The dialog closes when the command ends. Toasts: "Published {skill}"; "Nothing to publish in {skill}" when it was up to date; "{skill} changed somewhere else first. Update it, then publish." with Update (`skill update <name>`) when the remote moved; "Set an account remote to publish" with Open Settings when no account remote is set. Any other failure keeps the runner's error toast, the CLI's message then its hint as one sentence-cased paragraph (§6 "Refusal under a field").
-
-### Edit (detail pane)
-
-Edit is a secondary small button, the first in the detail pane's action row (before Fork and Remove), for a skill the user may write to: one of your own skills, and a skill of a source that is already edited (`state` `modified`, the "Edited locally" banner). It is left out for an unmodified skill of a source, whose first edit would quietly make it one an update merges with; a plugin's skill, which the plugin overwrites; an unmanaged skill in the library and a skill an agent client holds on its own, which agentx does not track (`canEdit` in `src/screens/skills/edit.ts`). It opens `<library>/<name>/SKILL.md` in the editor chosen in Settings (§6 "Settings", Editor), runs no command and shows no toast; the inventory that follows the edit shows what changed. Create and edit in the Create skill dialog opens the new skill's `SKILL.md` the same way. When the editor cannot be opened, a toast says "Couldn't open SKILL.md in {editor}", {editor} being the editor's name, a custom command's program, or "the default app", with the action Show in Finder ("Show in file manager" on Linux, §9), which shows the file selected there.
-
-### Toast
-
-`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time. A toast for a command that runs (Check tools: "Checking tools" with a Cancel) stays until the command ends, when the toast of its outcome replaces it. Check updates is one too: "Checking for updates" with a Cancel, then "Checking for updates · {n} of {total} sources" as each source is fetched, the text changing in place; then "{n} skills have updates" (with Update all, `skill update --all`, when there are more than one), "1 skill has an update" or "Everything is up to date"; a source it could not reach is an error toast, "Couldn't reach {owner/repo}. Verify that you can reach the source." ("Couldn't reach every source. …" when the CLI names none), the app's own hint in place of the CLI's.
-
-### Attention toast
-
-A command that exited 0 and logged warnings (a placement skipped, a copy that differed): the same shape as the error toast below, with the success text in `type.toast` `toast.text` and each warning in `type.notice` `tone.attention.fg`, the toast's action (Undo) when it has one, and a ghost Dismiss. It goes after 5s. The activity entry it logs is `attention`, not `success`.
-
-### Error toast
-
-A command that fails for a reason the app does not handle itself (`src/store/runner.ts`). Same place, `overlay.bg` and `overlay.border` as the toast, with `popover.shadow`, `toast.detail-radius`, `toast.detail-width` and `toast.detail-padding`. The CLI's message and its hint as one paragraph in sentence case (§6 "Refusal under a field"), in `type.toast`, `toast.text`; the lines that say more about what happened below it, as they are, in `type.notice`, `text.muted`; each warning the CLI logged in `type.notice`, `tone.attention.fg`. A ghost Dismiss on the right. It stays until dismissed when it has a hint, and goes after 5s without one. It replaces the toast shown, like any toast.
-
-### Stale bar
-
-A bar across the top of the main panel while the screens show an inventory that may be out of date (`src/app/stale-bar.tsx`): `stale-bar.height`, `stale-bar.padding`, a 1px bottom border, text in `type.notice`, `text.secondary`. While serve restarts: `tone.attention` bg and border, a `Spinner` and "Reconnecting to agentx…". When a scan fails or serve stops for good: `tone.danger` bg and border, "Couldn't read this machine: " and the reason, and a ghost small Retry on the right. Nothing shows while the inventory is fresh.
-
-### Machine label
-
-The machine's label from the inventory, under the product name in the sidebar: `type.machine-label`, `text.muted`, one line with an ellipsis.
-
-### Timeline (history)
-
-Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote), centred in a box as high as the entry's first line (`timeline.line` beside the subject text, `timeline.button-line` beside a small button), a 1px `timeline.connector` from the bottom of that box to the next entry. Entry: subject `type.timeline-entry` in `text.primary`, meta `type.timeline-meta` in `timeline.meta` ("{date} · {n} files", then "made with Git" or "from the original"). Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}", which opens the History sheet.
-
-### Menu
-
-A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding` around the rows, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius` with `menu.row-hover` when pointed at or focused; its lines stack: a `type.body` line in `text.primary`, then a `type.technical-sm` line in `text.caption` such as a path. Escape or a click outside closes it. No animation.
-
-### Split button
-
-Two ghost buttons that meet with no gap and share one outline, told apart by a 1px `button.split-divider` on the chevron's left edge: the action (rounded at its left end only) and a narrower chevron pointing down that opens the action's menu (rounded at its right end only; `aria-label` names the menu, Enter, Space and ArrowDown open it, Escape closes it and returns the focus to the chevron). The menu is the Menu (§6). Only the action shows when there is nothing to choose. Two sizes (`src/components/split-button.tsx`): an icon action, `button.icon-size` square, as Show in Finder on a file row; and a labelled one, as tall as a small button, as Add in the Skills header (§6 "Skills header").
-
-### Skills header
-
-The top of the Skills list column (`split.header-padding`): the serif "Skills" title with the skill count in `type.technical` `text.caption` on the left; on the right, 4 apart, Check updates (small ghost, the `RefreshIcon` at `sm` then its label) and Add, a small split button (§6 "Split button"). Add goes to Add skills; its chevron, "More add actions", opens a menu with one row, "Create skill", which opens the Create skill dialog (§6 "Create skill dialog"). The column keeps `split.list-width` at every window size, so the header fits as it is from the minimum window up.
-
-### Popover (Filter)
-
-`popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`. SHOW is a row of pills (`type.secondary`, count in `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg` and `text.primary`), STATE a segmented control, AGENTS rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. Reset filters is a ghost button, shown while a filter is applied. A click outside or Escape closes it.
-
-### Sheet (History)
-
-`sheet.width`, inset `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title in `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost Close at the top right. Escape or Close closes it. Its content scrolls down only: a long line wraps, it never clips or scrolls sideways.
-
-Each entry is a small wrapping ghost button with a chevron that expands it, and collapses it again: under the meta line, the files its commit changed, one row each with the status (`type.technical-sm`, `text.caption`) and the path (`type.technical-sm`, `text.secondary`).
-
-### Sheet (What's new)
-
-The History sheet's frame at `sheet.width-wide`, for what an update changes before the user takes it in. Title "What's new", the skill's name under it in `type.technical` `text.caption`, then the base and the newer version in `type.technical-sm` `text.caption`, "{base} → {newer}" (each by its date when the CLI dates it, else by its short id; the newer alone for an update from another machine). Below, the File list (§6) with one row per file `skill diff <name> --update` emits, every one open: the status in `type.technical-sm` (`text.caption`, `deleted` in `accent.danger`), the path in `type.technical` `file-row.path`, and the file's patch in the Code pane with the diff tints, its hunks alone, numbered as in the newer version. A patch with no lines to show says "Binary file" or "No line changes" in `type.secondary` `text.hint` on `code.bg`. While the read runs the sheet says "Reading the changes…"; a failed read says "The changes could not be read" with the CLI's message under it in `type.technical-sm` `text.caption`, and no error toast. An update from another machine cannot be diffed: the sheet says "Changes from another machine can't be shown before you update." in `type.secondary` `text.hint`, then lists the files of the update check in the same card, status and path, with no chevron and nothing to open. Escape or Close closes it.
+- The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
+- A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
 
 ### Agent client logo chip, monogram
 
 A client with no bundled logo shows the first letter of its name in `type.pill`, `on-accent` on `logo.bg`, drawn as an image like every other logo.
 
-### Code pane
+### Skill glyph (16px, leading the row)
 
-`code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
+- dot (filled) – a skill of a shared source; `glyph.enabled` when enabled, `glyph.off` when not.
+- pencil – edited locally; `glyph.edited`.
+- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise.
+- fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
-### File list (detail pane FILES)
+### Group header (lists)
 
-A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per file, `file-row.height` high with `file-row.padding-x`, a 1px `file-row.divider` hairline between rows and `file-row.hover` on hover or focus: a chevron (`rotate(90deg)` in .15s when the row is open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` label for a file the user changed, and "{n} lines", "binary" or "Too large to show ({size})" in `file-row.meta` at the right. SKILL.md comes first and open; the rest follow by path, a file the user removed among them. An open row shows the file in the Code pane below it. A row of a file on disk also has a "Show in Finder" split button, beside the trigger and never inside it, over the meta text at the row's end: while the row is hovered, holds the focus or has its menu open, the meta fades out and the button fades in at that spot, both in .15s, and the row's layout never changes (the meta stays laid out, only its opacity moves); it is in the tab order throughout. A row the edits removed has no button and keeps its meta. The button opens the file at the skill's first place, the library for a skill the library holds, else its first placement in the order the row lists its agents; the chevron's menu lists every other place, one row per placement, "{Agent name}", "{Agent name} ({plugin} plugin)" for a plugin's copy, with the path as the inventory carries it, and opens the file there. A skill with one place has no chevron.
+`type.caption` in `group.label`, then the count in `group.count`. `group.padding-first` for the first group, `group.padding` for the rest.
 
-### Key hint
+### Banner (detail pane)
 
-`esc` in the palette and `⌘K` / `Ctrl K` in the command field (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg` fill, `type.key-hint` in `text.muted`.
+`banner.radius`, `banner.padding`, `tone.*.bg` with a 1px `tone.*.border`; a `banner.tile` icon tile in `tone.*.fg` (the `RefreshIcon` for an update, the `AlertIcon` otherwise); title `type.banner-title` `banner.title`, text `type.secondary` `banner.text`; actions on the right.
 
-### Inputs
+- The detail pane shows one banner, the first that applies in the ordered table in `src/screens/skills/banners.ts`. The header shows no status pills: the banner is the status.
+- A banner that says where the skill came from sets `coversOrigin`, and the header then leaves out the origin text beside the name. Today only the banner of a skill another tool added does.
 
-`input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, 14px; focus `input.border-focus`. Mono for URLs and commands. Search field in lists: `input.search-height`, `input.search-radius`, `input.search-padding`, icon at left, placeholder `input.placeholder`.
+| Banner, by what it reports | Tone |
+| --- | --- |
+| An update that conflicts with local edits | `attention` |
+| An update | `primary` |
+| A client that holds its own copy instead of the library's | `attention` |
+| A skill another tool added | `neutral` |
+| A source that is gone, or a skill gone from its source | `danger` |
+| A skill in no agent | `neutral` |
+| One of your own skills with unpublished edits, or never published | `yours` |
+| A skill of a source edited locally | `attention` |
+
+### Banner actions and dialogs (detail pane)
+
+- A banner's actions are small buttons on its right, one command or one dialog each: ghost by default, primary for the action that applies the update, danger ghost for one that discards work. A destructive action opens a confirm dialog first.
+- Adopt and Update are banner buttons only: a skill row carries no call-to-action pill.
+- The banner of a skill of a source edited locally only informs, with a publish action when this machine can write to the source. It has no fork action: Fork is in the action row. A skill the CLI refuses to adopt has no banner; the reason is a row of its DETAILS.
+- A command refused because the target folder holds another version opens a confirm dialog, with the path in `type.technical` `text.caption` and a danger confirm.
+- The action row sits on the title row, pushed to its right end (`margin-left:auto`), centred on the row and wrapping when it is full, with `button.gap` 6 between its buttons. Remove, last, is a danger ghost button; its dialog lists the agents the skill leaves in `type.body` `text.secondary`, with a danger confirm.
+
+### Dialog
+
+`dialog.width`, `dialog.padding`, `dialog.radius`, `overlay.bg` with 1px `overlay.border` and `overlay.shadow`, over `shell.scrim-strong`; blocks `dialog.gap` apart. Title `type.dialog-title` `dialog.title`, subtitle `type.secondary` `dialog.subtitle`. The footer ends with a ghost cancel and the confirm button (primary, or danger for what cannot be undone); Enter confirms. While its command runs, the confirm shows a `Spinner` and the dialog stays open. A field label is `type.secondary`, `input.label-gap` above the field; a hint under it is `type.secondary` `text.hint`. A refusal of what a field holds shows under the field (§6 "Refusal under a field"), and a change to the form clears it.
+
+### Fork dialog (detail pane)
+
+Fork is a secondary small button in the action row, before Remove, and a small ghost button on the banner of a skill gone from its source. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
+
+### Edit (detail pane)
+
+Edit is a secondary small button, first in the action row, for a skill the user may write to (`canEdit` in `src/screens/skills/edit.ts`). An unmodified skill of a source has none, because its first edit would quietly turn it into one an update has to merge with. Edit opens the skill's `SKILL.md` in the editor chosen in Settings, runs no command and shows no toast; the inventory that follows shows what changed. When the editor cannot be opened, a toast says so, with Show in Finder as its action.
+
+### Publish dialog (detail pane)
+
+Under the subtitle, an optional message field, then FILES (`type.caption` `text.caption`): one row per changed file, the path in `type.technical` `text.secondary` and its status in `type.technical-sm` `file-row.edited-label`. While the files are read, or when there are none or they cannot be read, one line in `type.secondary` `text.hint` takes their place. While the publish runs the field is disabled and the footer's left side shows its progress in `type.secondary` `text.hint`; the dialog closes when the command ends and its outcome is a toast.
 
 ### Create skill dialog
 
-Create skill in the menu of the Skills header's Add and the Add skills header's Create skill open it (`src/screens/skills/create-dialog.tsx`): title "Create skill", subtitle "Creates a skill of your own in your library and adds it to your agents." in `dialog.subtitle`. Two fields, each with its label in `type.secondary` `text.secondary` and a hint under it in `type.secondary` `text.hint`. Name, mono, focused on open, hint "1 to 64 lowercase letters, digits and single hyphens". Description, hint "What it does and when to use it, in one or two sentences. Up to 1024 characters.", counted in characters (the Agent Skills specification gives a description 1 to 1024 characters; `skill new --description` takes one line of at most 1024 bytes). A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and Create and edit is disabled; a name the CLI refuses (exit 6) shows its message and hint under Name in place of the rule. Cancel (ghost) · Create and edit (primary), pending until the inventory that follows lists the new skill, which it then selects and whose `SKILL.md` it opens in the editor chosen in Settings (§6 "Edit (detail pane)"); toast "Created {name} skill". Any other refusal shows under Description. Both are a refusal under a field (below).
+`src/screens/skills/create-dialog.tsx`. Two fields, each with its label in `type.secondary` `text.secondary` and its rule as a hint under it: Name, mono and focused on open, and Description. A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and the confirm is disabled. A name the CLI refuses shows the refusal under Name in place of the rule; any other refusal shows under Description. The dialog stays pending until the inventory that follows lists the new skill; it then selects the skill and opens its `SKILL.md` as Edit does (§6 "Edit (detail pane)").
 
 ### Refusal under a field
 
-When the CLI refuses what a dialog's field holds (Create skill, Add source), its message and its hint show under the field as one paragraph, in sentence case, the message then the hint, in `type.notice` `tone.danger.fg` (`src/components/problem-text.tsx`, an alert): "The account repo already holds release-notes as one of your own skills. Choose another name." The app capitalises the first letter of each and ends each with a full stop, never doubling a full stop, question mark or exclamation mark already there, and changes nothing else: a quoted command stays as the CLI wrote it, and a sentence that starts with a name ("agentx", a URL or path, a hyphenated name such as "release-notes") keeps its case. A skill's name keeps its case even when it is one plain word: each field passes the names it knows (the Fork dialog the skill's name and the new name typed, the Create dialog the name typed, the Add source and Settings fields what was typed), and a sentence that starts with exactly one of them is left as it is, so "scratch is itself a Git repository…" stays lowercase while "scratch" means the skill. The error toast says its message and hint the same way, and keeps the case of the name of any skill in the library or a configuration, and of the skill the command was for (Publish passes it). A hint never names a CLI flag or an `agentx` command: where the CLI's hint does, the dialog or field shows the CLI's message with a hint in its own words that names its own control (`src/lib/app-hint.ts`), such as "Move its .git out of the skill, or type a new name." in the Fork dialog, which names what is left to do with the form as the refusal leaves it.
+A CLI refusal of what a field holds shows under the field as one paragraph, the message then the hint, in `type.notice` `tone.danger.fg`, as an alert (`src/components/problem-text.tsx`). `src/lib/problem-text.ts` sentence-cases each part and ends it with a full stop, and changes nothing else: commands, paths and the skill names the field knows keep the CLI's spelling. When the CLI's hint names a flag or a command, the field shows a hint in the app's own words that names its own control (`src/lib/app-hint.ts`). The error toast says a refusal the same way.
+
+### Agent client card (Agents page)
+
+One card per agent configuration whose client does not read the library, in a 4-column grid with `agent-card.gap`: `card.bg`, 1px `card.border`, `agent-card.radius`, `agent-card.padding`.
+
+- Top row: the `agent-card.logo` logo on the left, the Enabled switch on the right.
+- Then the name in `type.agent-card-name` `card.title`; the configuration path in `type.technical` `text.caption`, one line with an ellipsis; the counts in `type.secondary` `card.text`, numbers in `text.primary` 500.
+- Enabled decides only where later installs and creations go when no agent is named. It never changes a placement, so the counts do not move when the switch does.
+
+### Universal card (Agents page)
+
+One full-width card below the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. No switch: a universal client sees every library skill whatever its setting.
+
+### Plugin card (Plugins)
+
+`card.bg`, `plugin-card.radius`, 1px `card.border`, in 3 CSS columns with `plugin-card.gap`; a card never breaks across columns.
+
+- Top, `plugin-card.padding`: a `plugin-card.tile` tile with the plugin's own icon from the inventory, or the name's first letter on `button.secondary-bg`. The tile is never dimmed; a disabled plugin says so with its pill. On the right the Disabled pill, when the client turned the plugin off, then the version pill.
+- Then the name in `type.plugin-name` and the agent and marketplace in `text.muted`.
+- Contents under a `card.border` hairline: the groups for skills, servers and hooks, each a caption and `plugin-card.row-height` tree rows with a `plugin.connector` line (the last row's stops at the middle), the group's dot, the name and mono meta (`type.technical-sm`, `text.caption`). A skill or server row has a chevron, opens the skill in Skills or the server in MCP servers, and hovers `plugin.row-hover`; a hook row opens nothing.
+
+### Toast
+
+`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text `type.toast` `toast.text`; an optional action in `button.toast-action-text`.
+
+- One toast at a time: a new one replaces the one showing.
+- It goes after 2.6s, or 5s with an action.
+- A toast for a command that runs, with its cancel, stays until the command ends and the toast of its outcome replaces it. Progress changes its text in place.
+
+### Attention toast
+
+A command that exited 0 and logged warnings. The error toast's shape, with the success text in `type.toast` `toast.text` and each warning in `type.notice` `tone.attention.fg`, its action when it has one, and a ghost dismiss. It goes after 5s, and its activity entry is `attention`, not `success`.
+
+### Error toast
+
+A command that fails for a reason the app does not handle itself (`src/store/runner.ts`). The toast's place, `overlay.bg` and `overlay.border`, with `popover.shadow`, `toast.detail-radius`, `toast.detail-width` and `toast.detail-padding`. The CLI's message and hint as one paragraph (§6 "Refusal under a field") in `type.toast` `toast.text`; lines that say more below it, as the CLI wrote them, in `type.notice` `text.muted`; each warning in `type.notice` `tone.attention.fg`. A ghost dismiss on the right. It stays until dismissed when it has a hint, and goes after 5s without one.
+
+### Stale bar
+
+A bar across the top of the main panel while the screens show an inventory that may be out of date (`src/app/stale-bar.tsx`): `stale-bar.height`, `stale-bar.padding`, a 1px bottom border, text `type.notice` `text.secondary`. While serve restarts: `tone.attention` with a `Spinner`. When a scan fails or serve stops for good: `tone.danger`, the reason, and a small ghost retry on the right. Nothing shows while the inventory is fresh.
+
+### Machine label
+
+Under the product name in the sidebar: `type.machine-label`, `text.muted`, one line with an ellipsis.
+
+### Timeline (history)
+
+Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote. The dot is centred in a box as high as the entry's first line (`timeline.line` beside text, `timeline.button-line` beside a small button), with a 1px `timeline.connector` from that box to the next entry. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. When the list is cut short, the last item is a hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button that opens the History sheet.
+
+### Menu
+
+A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape or a click outside closes it. No animation.
+
+### Split button
+
+Two ghost buttons that meet with no gap and share one outline, split by a 1px `button.split-divider` on the chevron's left edge: the action, rounded at its left end, and a narrower chevron, rounded at its right end, that opens the action's menu (§6 "Menu"). The chevron has its own accessible name; Enter, Space and ArrowDown open the menu, Escape closes it and returns the focus to the chevron. Only the action shows when there is nothing to choose. Two sizes (`src/components/split-button.tsx`): an icon action, `button.icon-size` square, as Show in Finder on a file row; and a labelled action as tall as a small button, as Add in the Skills header.
+
+### Skills header
+
+The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates (small ghost) and Add, a small split button whose menu opens the Create skill dialog. One control for adding and creating keeps the header inside `split.list-width` at every window size, down to the minimum window.
+
+### Popover (Filter)
+
+`popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`: a row of choice pills (`type.secondary`, count `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg`, `text.primary`), a segmented control, and agent rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. A ghost reset shows while a filter is applied. A click outside or Escape closes it.
+
+### Sheet (History)
+
+`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a small wrapping ghost button with a chevron that expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`.
+
+### Sheet (What's new)
+
+The History sheet's frame at `sheet.width-wide`, for what an update changes before the user takes it. Under the skill's name, the base and newer version in `type.technical-sm` `text.caption`, each by its date when the CLI dates it, else by its short id. Below, the File list (§6) with every row open: status `type.technical-sm` `text.caption` (`accent.danger` for a deleted file), path `type.technical` `file-row.path`, and the patch in the Code pane with the diff tints, its hunks alone, numbered as in the newer version.
+
+- A patch with no lines to show, a read in progress and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
+- An update from another machine cannot be diffed before it is taken: the sheet lists its files in the same card, status and path, with no chevron.
+
+### Code pane
+
+`code.bg`, `type.code`, grid `code.gutter 1fr`: line number in `code.line-number`, right-aligned · marker · text. Front matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: an added line on `diff.added-bg`, a removed line on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
+
+### File list (detail pane FILES)
+
+A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file-row.height`, `file-row.padding-x`, a 1px `file-row.divider` between rows, `file-row.hover` on hover or focus.
+
+- A row: a chevron (turns 90° when open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` status for a file the user changed, and the meta (line count, binary, or size) in `file-row.meta` at the right. An open row shows the file in the Code pane below it.
+- SKILL.md comes first and open; the rest follow by path, a file the user removed among them.
+- A file on disk has a Show in Finder split button over the meta, beside the trigger, never inside it. While the row is hovered, focused or has its menu open, the meta fades out and the button fades in at the same spot. The meta stays laid out, so the row never shifts, and the button stays in the tab order throughout. A removed file has no button.
+- The button opens the file at the skill's first place: the library when it holds the skill, else the first placement in the row's agent order. The chevron's menu lists every other placement, the path as the inventory carries it. A skill with one place has no chevron.
+
+### Key hint
+
+A key such as `esc` or `⌘K` (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg`, `type.key-hint` `text.muted`.
+
+### Inputs
+
+`input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, `type.input`; focus `input.border-focus`. `type.input-mono` for URLs and commands. List search field: `input.search-height`, `input.search-radius`, `input.search-padding`, icon on the left, placeholder in `input.placeholder`.
 
 ### Settings
 
-The Settings page (`src/screens/settings`): the serif page title, then one section per area, a hairline (`shell.divider`) between two sections and none above the first. A section is a `settings.columns` grid with `settings.column-gap`, `settings.section-padding` above and below: the label column holds the section label in `type.settings-label` `text.primary` and, under it, one line in `type.secondary` `text.muted`; the content column holds the section's rows, `settings.section-gap` apart. Inputs are `input.height`; paths and ids are `type.technical`, ids in `text.hint`. A switch row is the setting's name in `type.body` `text.primary` and its line in `type.secondary` `text.muted`, with the switch (§6 "Switch") at the right; the whole row is the hit target. A failure under a field, the machine label, the Account remote or Export settings, is the CLI's message then its hint as one sentence-cased paragraph in `type.notice` `tone.danger.fg` (§6 "Refusal under a field").
+The Settings page (`src/screens/settings`): the serif page title, then one section per area, a `shell.divider` hairline between sections and none above the first.
 
-The last sections, in this order: Command line, Export settings, Import settings. Export settings ("Saves your settings and the list of your skills to a file. Import it on another machine to transfer them.") holds the file name in a mono input (`aria-label` "File name") and a secondary Export button, with the hint under them, "Saved to your library as {name}.json", or "Enter a file name without an extension or a slash" for a name the CLI would refuse. A file of that name already in the library opens the confirm "Replace {name}.json?", "A file with this name is already in your library.", Cancel · Replace (danger); the toast is "Exported settings to {path}". Import settings ("Replaces the settings on this machine with the ones from an exported file.") holds a secondary Import… button, which opens the native open dialog, then the confirm "Replace settings with {file name}?", "Missing skills will be installed during import, and existing might get updated.", the picked path in `type.technical` `text.caption`, Cancel · Import (danger); the toast is "Imported settings from {file name}". The import then adds, without asking, each source of the imported settings this machine has not downloaded, and Import… stays pending until the last one ends. Under the button, the result, one line each in `type.secondary`: "Installed: {names}" and "Updated: {names}" in `text.secondary`, comma separated, each only when it names a skill; then the warnings in `tone.attention.fg` after the `AlertTriangleIcon` (`xs`): "Skipped: {names}", each name with a dotted underline and the CLI's reason as its tooltip, and "Couldn't reach {url}, {url}" for the sources that could not be added. A skill the import kept, placed or unplaced is not named. When nothing was installed, updated or skipped, the one line is "No skills were installed or updated." in `text.muted`.
-
-Editor, after Comparing edits and before Storage ("The application that opens a skill when you edit it."), is the one section that holds an app preference rather than a machine setting (ADR 0013): it runs no command, and its choice is saved by the app the moment it changes. A radio group (§6 "Radio group", `aria-label` "Editor"): System default, the default; each editor found on this machine by its product name, in the order VS Code, Cursor, Zed, Sublime Text, only those present, and one chosen before that is gone since, so the choice still shows; then Custom command. With Custom command chosen, a mono input (`aria-label` "Custom command", placeholder `code --wait`) under the group, saved on Enter or when it loses focus, and under it in `type.secondary` `text.hint` "The file path is added at the end."
+- A section is a `settings.columns` grid with `settings.column-gap` and `settings.section-padding` above and below. The label column holds the label in `type.settings-label` `text.primary` and one line under it in `type.secondary` `text.muted`; the content column holds the rows, `settings.section-gap` apart.
+- Inputs are `input.height`. Paths and ids are `type.technical`, ids in `text.hint`.
+- A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
+- A failure under a field is a refusal under a field (§6 "Refusal under a field").
+- Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
+- A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
+- The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
 
 ## 7. Iconography
 
-Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 14–18px rendered at the sizes below. Fill only for the "dot" glyph. No icon fonts, no emoji.
+Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps and joins. Fill only for the dot glyph. No icon fonts, no emoji.
 
 An icon is a hand-written React component that takes the text colour; an illustration (such as the agentx mark) is an SVG file in `src/assets` shown as `<img>`.
 
 Sizes: `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
 
-The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radius` in the sidebar (the height of the product name and machine label beside it), 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
+The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-ring` ring: 30px with `shell.logo-radius` in the sidebar (the height of the product name and machine label beside it), 40px with `startup.logo-radius` on the startup layer. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 
 ## 8. Motion
 
-- Hover/background changes: no transition or ≤ .18s.
+Nothing loops forever, and nothing waits on purpose.
+
+- Hover and background changes: no transition, or at most `.18s`.
 - Switches: `.18s` background.
-- Chevrons: `rotate(90deg)` with `.15s`.
-- File row control: the meta text and the Show in Finder button swap by opacity in `.15s` on hover.
-- Floating bar (`animate-floating-bar`): `translateY(24px) → 0`, opacity 0 → 1, `.22s ease`, when it appears.
-- Card resolve: 280ms, see §6.
-- Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease` (`animate-turn-once`: 1s ease, once, while the command runs), then a toast.
-- Startup check running (`animate-check-spin`): the status ring turns once a second, linear, while its check runs, and stops when the check settles.
-- Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass. Nothing waits on purpose: a passing launch shows no startup layer. A launch whose checks run for over 2s shows a `Spinner` and what the checks do (`type.secondary`, `text.muted`) in the middle of the empty panel, faded in the same way, until the checks settle: "Checking this machine" while `version` and `doctor` run, then "Looking for skills", "Looking for MCP servers" and "Looking for plugins" in turn, each for 1.5s and faded in, while serve scans. From 5s into a check, a line below (`type.row-desc`, `text.hint`) counts down to its deadline: "Taking longer than usual · trying for 25s more".
+- Chevrons: `rotate(90deg)` in `.15s`.
+- File row: the meta and the Show in Finder button swap by opacity in `.15s`.
+- Floating bar (`animate-floating-bar`): `translateY(24px) → 0` and opacity 0 → 1, `.22s ease`, when it appears.
+- Check updates and Check tools icons (`animate-turn-once`): one full rotation, 1s ease, while the command runs.
+- Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
+- Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass; a passing launch shows no startup layer.
+- A launch whose checks run over 2s shows a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way, each status for at least 1.5s. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
-- Primary button enable/disable: `opacity .2s`. Nothing loops forever.
-
-## 9. Copy rules
-
-- Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Reconnect, Adopt, Check updates.
-- Copy uses the terms in [`GLOSSARY.md`](../../GLOSSARY.md) and never a word the glossary lists under _Avoid_. Where a glossary term names the thing, use that term, such as "account remote", "account repo", "upstream" or "base version". Where this file and the glossary differ, the glossary wins.
-- Named exception: the "Agents" screen name, its nav label and the "AGENTS" captions stay as they are, although the glossary avoids "agent" for an agent client.
-- For a git word the glossary has no term for, use a plain word: "change", not "hunk".
-- "Your skills" for the user's own skills (forked or created); "its upstream" for where a forked skill came from; "the update" for an update candidate, a newer version from a skill's source. Fork is an action, not a kind of skill.
-- Dates over ids in rows ("Sep 14 → Sep 28"); ids with dates in Details ("3f2a9c1 · Sep 14").
-- Toasts state what happened in past tense ("Commit updated", "Reconnected pdf to Cursor"), and name the undo when one exists.
-- A toast about one skill names it as "{name} skill", and a success toast reads "{Verb} {name} skill": "Created notes skill", "Forked pdf skill", "Updated pdf skill. Merged with your local edits", "pdf skill is already up to date". A toast that also names an agent ("Added pdf to Cursor") or is about several skills ("Updated 3 skills") keeps its own shape.
-- Captions are uppercase mono; everything else sentence case. No trailing periods in titles, pills or buttons.
-- The file manager is named for the platform the app runs on: "Finder" on macOS and "file manager" on Linux, so a control reads "Show in Finder" or "Show in file manager" and a sentence "in Finder" or "in the file manager". Where this file says Finder, Linux says the file manager. `src/lib/reveal.ts` decides it (`FILE_MANAGER`, `IN_FILE_MANAGER`, `showInLabel()`), from the platform `src/lib/platform.ts` reads, as the command field's ⌘K / Ctrl K does; a screen never checks the platform itself.
+- Primary button enable and disable: `opacity .2s`.
