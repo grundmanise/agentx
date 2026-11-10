@@ -34,8 +34,10 @@ const group = (page: Page, name: string) =>
   list(page).getByRole("region", { name });
 const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
+/** The rows' names, in order: the buttons of the group's list, not a control in its header. */
 const rowNames = async (where: Locator) =>
   await where
+    .getByRole("list")
     .getByRole("button")
     .evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label")));
 /** The accessible names of `where`'s elements: an aria-label, an image's alt, or a label's text. */
