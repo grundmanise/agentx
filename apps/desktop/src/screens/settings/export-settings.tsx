@@ -93,7 +93,7 @@ const ExportForm = () => {
           ? `Saved to your library as ${name}.json`
           : "Enter a file name without an extension or a slash"}
       </p>
-      {problem !== undefined && <ProblemText problem={problem} />}
+      {problem !== undefined && <ProblemText problem={problem} keep={[name]} />}
       <Confirm
         open={overwrite}
         onOpenChange={setOverwrite}
