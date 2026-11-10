@@ -360,7 +360,17 @@ test.describe("Adopt all in the Unmanaged header", () => {
       list(page).getByRole("button", { name: "Adopt all" })
     ).toHaveCount(1);
     await expect(column(page).getByText(/added by/u)).toHaveCount(0);
-    await expect(column(page).getByRole("group")).toHaveCount(0);
+    // The header's Add button group is the only group left in the column.
+    await expect(
+      column(page)
+        .getByRole("group")
+        .filter({
+          hasNot: page.getByRole("button", {
+            exact: true,
+            name: "More add actions",
+          }),
+        })
+    ).toHaveCount(0);
   });
 
   test("is absent when no tool has skills to adopt", async ({ cli, page }) => {
