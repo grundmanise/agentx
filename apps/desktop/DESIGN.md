@@ -608,8 +608,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.top` | 112 | `top-palette` | From the window top |
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
-| `toast.height` | 44 | `h-toast` |  |
-| `toast.padding` | 0 18 | `px-toast` (`pl-toast` with an action) | 0 6 0 18 with an action |
+| `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
+| `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
+| `toast.padding` | 10 18 | `py-toast-y pl-toast` | 10 6 10 18: the action sits 6 from the right edge |
 | `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` | From the bottom edge |
 | `toast.detail-width` | 440 | `w-toast-detail` | Error toast |
 | `toast.detail-padding` | 12 6 12 18 | `py-toast-detail pr-1.5 pl-toast` |  |
@@ -851,7 +852,10 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 ### Toast
 
-`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text `type.toast` `toast.text`; an optional action in `button.toast-action-text`.
+`toast.offset` from the bottom, centred on the window; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.min-height`, `toast.padding`; text `type.toast` `toast.text`; an optional action in `button.toast-action-text`.
+
+- As wide as its text, up to `toast.max-width`; past it the text wraps and the toast grows taller. A one-line toast keeps `toast.min-height`, so it looks as it did before toasts wrapped.
+- The action keeps its width on the right of the text and is centred on the toast's height, wrapped or not: the toast is a pill, so its middle is the line the eye follows, and a short action lined up with one line of two would look misplaced on the rounded end.
 
 - One toast at a time: a new one replaces the one showing.
 - It goes after 2.6s, or 5s with an action.
@@ -967,14 +971,14 @@ The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-
 
 Nothing loops forever, and nothing waits on purpose.
 
-- Hover and background changes: no transition, or at most `.18s`.
-- Switches: `.18s` background.
-- Chevrons: `rotate(90deg)` in `.15s`.
+- Hover and background changes: no transition, or at most `.2s`.
+- Switches: the track changes colour in `.2s`; the knob moves with no transition.
+- File list chevron: `rotate(90deg)` in `.15s`. The History sheet's chevron turns with no transition.
 - File row: the meta and the Show in Finder button swap by opacity in `.15s`.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0` and opacity 0 → 1, `.22s ease`, when it appears.
 - Check updates and Check tools icons (`animate-turn-once`): one full rotation, 1s ease, while the command runs.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass; a passing launch shows no startup layer.
-- A launch whose checks run over 2s shows a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way, each status for at least 1.5s. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
+- A launch whose checks run over 2s shows a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way; while serve scans, its status lines turn every 1.5s. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
-- Primary button enable and disable: `opacity .2s`.
+- Button enable and disable, every variant: `opacity .2s`.

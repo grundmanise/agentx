@@ -9,7 +9,9 @@ import { create } from "zustand";
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { LogEvent, PublishEvent } from "#/cli/events.gen.ts";
 import { notify } from "#/components/toast.tsx";
-import type { ToastAction } from "#/components/toast.tsx";
+import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
+import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
+import type { HintRule } from "#/lib/app-hint.ts";
 import { navigateTo } from "#/lib/navigate.ts";
 import {
   accountRemoteOf,
@@ -19,13 +21,95 @@ import { openSkill } from "#/screens/skills/open.ts";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { currentRows } from "#/screens/skills/rows.ts";
-import { updateSkill } from "#/screens/skills/updates.ts";
+import { addSource, updateSkill } from "#/screens/skills/updates.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 
 /** The label of Publish all, which shows as pending while the bare publish runs. */
 export const PUBLISH_ALL = "publish all";
+
+/**
+ * The hints of `skill publish` that name a command, matched whole, and the app's words for each:
+ * those of one skill, which the Publish dialog shows, and those of a bare publish, which Publish
+ * all shows. A hint no rule matches shows as the CLI wrote it.
+ */
+const publishHintRules: HintRule[] = [
+  {
+    app: () => "add the source again, then publish again",
+    cli: /^run 'agentx source add .+' to add it again, then publish again$/u,
+  },
+  {
+    app: () => "publish again to publish it as it is now",
+    cli: /^run 'agentx skill publish .+' again to publish it as it is now$/u,
+  },
+  {
+    app: () =>
+      "use Check updates to record that, or Remove to remove the skill",
+    cli: /^run 'agentx skill check-updates' to record that, or 'agentx skill remove .+' to remove it$/u,
+  },
+  {
+    app: ({ why }) => `update the skill to ${why ?? ""}, then publish again`,
+    cli: /^run 'agentx skill update .+' to (?<why>take the change in|get them), then publish again$/u,
+  },
+  {
+    app: () =>
+      "add the source again with the branch to publish to after a #, then update the skill from it and publish again",
+    cli: /^add the source at the branch to publish to with 'agentx source add .+#<branch>', then update the skill from it and publish again$/u,
+  },
+  {
+    app: () =>
+      "see the state of each skill in Skills, then publish the rest one at a time",
+    cli: /^run 'agentx skill list' to see the state of each skill, then publish the rest one at a time$/u,
+  },
+  {
+    app: ({ first }) =>
+      `${first ?? ""}; the edits were recorded, so publish again once the account remote can be reached`,
+    cli: /^(?<first>.+); the edits were recorded, so run 'agentx skill publish(?: .+)?' again once the account remote can be reached$/u,
+  },
+  {
+    app: ({ what }) => `publish again once ${what ?? ""} takes it`,
+    cli: /^once (?<what>.+) takes it, run 'agentx skill publish(?: .+)?' again$/u,
+  },
+  {
+    app: ({ first }) => `${first ?? ""}, then publish again`,
+    cli: /^(?<first>.+), then run 'agentx skill publish(?: .+)?' again$/u,
+  },
+  {
+    app: ({ rest }) =>
+      rest === undefined ? "publish again" : `publish again; ${rest}`,
+    cli: /^run 'agentx skill publish(?: .+?)?' again(?:; (?<rest>.+))?$/u,
+  },
+  doctorRule,
+  againRule("publish again"),
+];
+
+/**
+ * The error toast of a failed publish whose hint names a command: the CLI's message and its
+ * warnings, the hint in the app's words, and Add source for a skill whose source was removed
+ * (exit 5), `source` being that skill's. Undefined leaves the runner's own toast.
+ */
+export const publishFailure = (
+  outcome: Outcome,
+  source?: string
+): ErrorToast | undefined => {
+  const error = outcome.events.find((e) => e.type === "error");
+  const hint = rewriteHint(error?.hint, publishHintRules);
+  const action =
+    outcome.exitCode === EXIT_CODES.not_found && source !== undefined
+      ? { action: addSource(source) }
+      : {};
+  return error === undefined || hint === error.hint
+    ? undefined
+    : {
+        ...action,
+        hint,
+        message: error.message,
+        warnings: outcome.logs
+          .filter((l) => l.level === "warn")
+          .map((l) => l.message),
+      };
+};
 
 /**
  * The toast of a skill whose newer version is where it publishes to: it needs an update before a
@@ -144,8 +228,7 @@ const reportPublishAll = (outcome: Outcome) => {
     return;
   }
   if (moved !== undefined) {
-    // No count of the skills left out: the toast is one line, and this one is long already.
-    const text = changedElsewhere(moved.name);
+    const text = `${changedElsewhere(moved.name)}${suffix}`;
     notify(text, updateAction(moved.name));
     // A refused publish is in the activity list already, in the CLI's words.
     if (ok) {
@@ -170,6 +253,7 @@ export const publishAll = async () => {
   }
   useProgressStore.setState({ progress: undefined });
   const outcome = await runUntilSettled(["skill", "publish"], {
+    failure: (ended) => publishFailure(ended),
     label: PUBLISH_ALL,
     onProgress: (event) => {
       if (event.phase === "publish") {
