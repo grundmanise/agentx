@@ -13,7 +13,7 @@ import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
 import { refresh } from "#/store/feed.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
-import type { Problem } from "#/store/store.ts";
+import type { Problem, Tone } from "#/store/store.ts";
 
 /** The commands that change nothing: no refresh follows them, and they add no activity entry. */
 const READS = new Set([
@@ -63,10 +63,21 @@ export interface CommandOptions {
    */
   ownFailure?: boolean;
   /**
+   * With `ownFailure`, the activity entry of a failure the control words itself, in the tone and
+   * words of what it shows; undefined leaves the runner's own danger entry.
+   */
+  ownActivity?: (outcome: Outcome) => ActivityText | undefined;
+  /**
    * The error toast for a failure the control words itself, such as a check that could not reach
    * a source, with an action that answers it; undefined leaves the runner's own.
    */
   failure?: (outcome: Outcome) => ErrorToast | undefined;
+}
+
+/** An activity entry's tone and words. */
+export interface ActivityText {
+  tone: Tone;
+  message: string;
 }
 
 export interface Outcome {
@@ -199,6 +210,24 @@ const keepConflicts = (events: CliEvent[]) => {
   });
 };
 
+/**
+ * The activity entry of a failure: the CLI's problem as a danger entry, or the control's own
+ * words for a failure it shows itself (`ownActivity`).
+ */
+const logFailure = (
+  options: CommandOptions,
+  outcome: Outcome,
+  problem: Problem
+) => {
+  const own =
+    options.ownFailure === true ? options.ownActivity?.(outcome) : undefined;
+  if (own === undefined) {
+    addActivity("danger", problem.message);
+  } else {
+    addActivity(own.tone, own.message);
+  }
+};
+
 /** Shows the outcome, by exit code (docs/spec/cli-contract.md, Exit codes). */
 const report = (
   args: readonly string[],
@@ -257,7 +286,7 @@ const report = (
   }
   const problem = problemOf(args, outcome);
   if (log) {
-    addActivity("danger", problem.message);
+    logFailure(options, outcome, problem);
   }
   // Exit 8: the startup layer comes back (src/startup/startup.ts) and says why.
   if (exitCode === EXIT_CODES.account_repo) {

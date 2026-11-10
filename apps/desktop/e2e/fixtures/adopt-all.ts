@@ -148,22 +148,26 @@ const progress = (
   ...(subject === undefined ? {} : { subject }),
 });
 
-/** The three steps of an install per skill, then the rescan: `adopt <tool> --all`'s progress. */
-const progressOf = (names: string[]): InlineEvent[] => {
-  const total = 3 * names.length + 1;
+/**
+ * `adopt <tool> --all`'s progress: the fetch of each source it adds, the three steps of an install
+ * per skill, then the rescan.
+ */
+const progressOf = (sources: string[], names: string[]): InlineEvent[] => {
+  const total = sources.length + 3 * names.length + 1;
   return [
+    ...sources.map((url, i) => progress("fetch", url, i + 1, total)),
     ...names.flatMap((name, i) =>
       (["blobs", "import", "install"] as const).map((phase, step) =>
-        progress(phase, name, 3 * i + step + 1, total)
+        progress(phase, name, sources.length + 3 * i + step + 1, total)
       )
     ),
     progress("rescan", undefined, total, total),
   ];
 };
 
-/** `adopt skillshare --all`, which adopts both of Skillshare's skills and exits 0. */
+/** `adopt skillshare --all`, which adds Skillshare's source, adopts both its skills and exits 0. */
 export const skillshareRun: InlineEvent[] = [
-  ...progressOf(skillshareNames),
+  ...progressOf([TEAM], skillshareNames),
   ...skillshareNames.map((name): InlineEvent => ({
     name,
     type: "library_skill",
@@ -173,11 +177,11 @@ export const skillshareRun: InlineEvent[] = [
 ];
 
 /**
- * `adopt skills-cli --all`, which adopts two of the Skills CLI's three skills: the source no
- * longer holds the third. It covers the record the preview refuses as well, and exits 5.
+ * `adopt skills-cli --all`, which adds the Skills CLI's source and adopts two of its three
+ * skills: the source no longer holds the third. It covers the record the preview refuses as well, and exits 5.
  */
 export const skillsCliRun: InlineEvent[] = [
-  ...progressOf(["deck-outline", "scratch"]),
+  ...progressOf([VERCEL], ["deck-outline", "scratch"]),
   { name: "deck-outline", type: "library_skill" },
   { name: "scratch", type: "library_skill" },
   record("commit-style", "vercel", "refused", movedReason),
@@ -189,6 +193,23 @@ export const skillsCliRun: InlineEvent[] = [
     message: "adopted 2 skills; 2 could not be adopted",
     type: "error",
   },
+];
+
+/**
+ * `adopt skills-cli --all`, which adopts all three of the Skills CLI's skills. It still exits 6,
+ * for the record the preview refuses.
+ */
+export const skillsCliAllRun: InlineEvent[] = [
+  ...progressOf([VERCEL], skillsCliNames),
+  ...skillsCliNames.map((name): InlineEvent => ({
+    name,
+    type: "library_skill",
+  })),
+  record(MOVED, "vercel", "adopted"),
+  record("deck-outline", "vercel", "adopted"),
+  record("legacy", "vercel", "refused", legacyReason),
+  record("scratch", "vercel", "adopted"),
+  { message: "legacy is a symlink, not a directory", type: "error" },
 ];
 
 /** `adopt skills-cli --all` on a machine where the source holds none of the three. */

@@ -10,6 +10,7 @@ import {
   movedReason,
   nothingToAdopt,
   previewWith,
+  skillsCliAllRun,
   skillsCliNames,
   skillsCliNoneRun,
   skillsCliRun,
@@ -72,6 +73,19 @@ const openSkills = async (
   await page.goto(path);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect(row(page, "pdf")).toBeVisible();
+};
+
+/** The activity list's entries, tone and message, read through the store harness. */
+const activity = async (page: Page) => {
+  if (!(await page.evaluate(() => "store" in window))) {
+    await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
+    await page.waitForFunction(() => "store" in window);
+  }
+  return await page.evaluate(() =>
+    window.store
+      .state()
+      .activity.map(({ message, tone }) => ({ message, tone }))
+  );
 };
 
 /** The toast that says `text`. */
@@ -137,6 +151,7 @@ test("Adopt all runs adopt skillshare --all with its progress, and the line goes
   await openSkills(cli, page);
   const run = cli.register(["adopt", "skillshare", "--all"], {
     events: skillshareRun,
+    // The fetch of the source the run adds: no skill has started yet.
     holdAfter: 1,
   });
   await line(page, "2 skills added by Skillshare")
@@ -146,7 +161,7 @@ test("Adopt all runs adopt skillshare --all with its progress, and the line goes
   const running = line(page, "2 skills added by Skillshare").getByRole(
     "button"
   );
-  await expect(running).toHaveText("Adopting 1 of 7");
+  await expect(running).toHaveText("Adopting…");
   await expect(running).toBeDisabled();
   await expect(running).toHaveAttribute("aria-busy", "true");
   // One run at a time: the other line waits.
@@ -161,6 +176,9 @@ test("Adopt all runs adopt skillshare --all with its progress, and the line goes
   await expect(adopted).toBeVisible();
   // Every skill adopted: a plain toast, with nothing to dismiss.
   await expect(adopted.getByRole("button", { name: "Dismiss" })).toHaveCount(0);
+  expect(await activity(page)).toEqual([
+    { message: "Adopted 2 skills", tone: "success" },
+  ]);
   await afterRun(cli, skillshareNames);
   await expect(page.getByText(/added by Skillshare/u)).toHaveCount(0);
   await expect(
@@ -179,7 +197,8 @@ test("a skill the run could not adopt stays adoptable, with the CLI's reason in 
   const run = cli.register(["adopt", "skills-cli", "--all"], {
     events: skillsCliRun,
     exitCode: 5,
-    holdAfter: 0,
+    // The fetch of the source, then the first skill's first step: the fetch is not a skill.
+    holdAfter: 2,
   });
   await line(page, "3 skills added by Skills CLI")
     .getByRole("button", { name: "Adopt all" })
@@ -187,7 +206,7 @@ test("a skill the run could not adopt stays adoptable, with the CLI's reason in 
   await run.started;
   await expect(
     line(page, "3 skills added by Skills CLI").getByRole("button")
-  ).toHaveText("Adopting…");
+  ).toHaveText("Adopting 1 of 3");
   cli.register(["adopt"], {
     events: previewWith(["deck-outline", "scratch"]),
   });
@@ -197,6 +216,10 @@ test("a skill the run could not adopt stays adoptable, with the CLI's reason in 
   const partial = toast(page, "Adopted 2 skills. 1 could not be adopted");
   await expect(partial).toBeVisible();
   await expect(partial.getByRole("button", { name: "Dismiss" })).toBeVisible();
+  // The activity entry says what the toast says, in its tone: not the CLI's error.
+  expect(await activity(page)).toEqual([
+    { message: "Adopted 2 skills. 1 could not be adopted", tone: "attention" },
+  ]);
   await afterRun(cli, ["deck-outline", "scratch"]);
   await expect(line(page, "1 skill added by Skills CLI")).toBeVisible();
   await expect(row(page, MOVED)).toBeVisible();
@@ -223,8 +246,55 @@ test("a run that adopts nothing says so", async ({ cli, page }) => {
   const none = toast(page, "No skills could be adopted");
   await expect(none).toBeVisible();
   await expect(none.getByRole("button", { name: "Dismiss" })).toBeVisible();
+  expect(await activity(page)).toEqual([
+    { message: "No skills could be adopted", tone: "attention" },
+  ]);
   await expect(line(page, "3 skills added by Skills CLI")).toBeVisible();
   expect(ran(cli)).toEqual([["adopt", "skills-cli", "--all", "--json"]]);
+});
+
+test("a run that adopts every skill the line offered is a success, though the CLI refused a record the preview had refused", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page);
+  cli.register(["adopt", "skills-cli", "--all"], {
+    events: skillsCliAllRun,
+    exitCode: 6,
+  });
+  await line(page, "3 skills added by Skills CLI")
+    .getByRole("button", { name: "Adopt all" })
+    .click();
+  const adopted = toast(page, "Adopted 3 skills");
+  await expect(adopted).toBeVisible();
+  await expect(adopted.getByRole("button", { name: "Dismiss" })).toHaveCount(0);
+  expect(await activity(page)).toEqual([
+    { message: "Adopted 3 skills", tone: "success" },
+  ]);
+});
+
+test("a run that fails before it reports any skill shows the CLI's error", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page);
+  cli.register(["adopt", "skillshare", "--all"], {
+    events: [
+      {
+        hint: "fix the file, or move it aside",
+        message: "skillshare's store is not JSON",
+        type: "error",
+      },
+    ],
+    exitCode: 10,
+  });
+  await line(page, "2 skills added by Skillshare")
+    .getByRole("button", { name: "Adopt all" })
+    .click();
+  await expect(toasts(page)).toContainText("store is not JSON");
+  expect(await activity(page)).toEqual([
+    { message: "skillshare's store is not JSON", tone: "danger" },
+  ]);
 });
 
 test("Settings has no adoption section", async ({ cli, page }) => {
