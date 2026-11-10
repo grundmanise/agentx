@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router";
 
 import { App } from "#/app/app.tsx";
+import { TooltipProvider } from "#/components/ui/tooltip.tsx";
 
 import "#/styles/index.css";
 
@@ -14,7 +15,9 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <HashRouter>
-      <App />
+      <TooltipProvider>
+        <App />
+      </TooltipProvider>
     </HashRouter>
   </StrictMode>
 );

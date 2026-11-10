@@ -2,7 +2,7 @@
 // checks it, `skill new` with `--description` only when one is given, the new skill selected under
 // YOUR SKILLS once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
 // Settings, and a refused name's message under Name.
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import {
   createdEvents,
@@ -176,12 +176,21 @@ const openOnSkill = async (cli: MockCli, page: Page, name: string) => {
   await expect(pane(page, name)).toBeVisible();
 };
 
+/** The right edge of `locator`'s box. */
+const rightOf = async (locator: Locator) => {
+  const box = await locator.boundingBox();
+  if (box === null) {
+    throw new Error("no box");
+  }
+  return box.x + box.width;
+};
+
 // The window at 1280x800 and at its minimum size (src-tauri/tauri.conf.json), with a skill open.
 for (const size of [
   { height: 800, width: 1280 },
   { height: 700, width: 1100 },
 ]) {
-  test(`the Skills header at ${size.width}x${size.height}: Check updates and the Add button group, none of them clipped`, async ({
+  test(`the Skills header at ${size.width}x${size.height}: Check updates and the Add button group end where the filter row ends, none of them clipped`, async ({
     cli,
     page,
   }) => {
@@ -191,7 +200,10 @@ for (const size of [
       exact: true,
       name: /^(?:Check updates|Add|More add actions|Create)$/u,
     });
-    await expect(controls).toHaveText(["Check updates", "Add", ""]);
+    // Check updates shows its icon alone; Add its label; the three-dots trigger its icon.
+    await expect(controls.nth(0)).toHaveAccessibleName("Check updates");
+    await expect(controls.nth(2)).toHaveAccessibleName("More add actions");
+    await expect(controls).toHaveText(["", "Add", ""]);
     await expect(moreAddActions(page)).toHaveAttribute("aria-haspopup", "menu");
     // Each control ends inside the list column, and its label fits the control.
     const column = await skillsHeader(page).boundingBox();
@@ -211,6 +223,22 @@ for (const size of [
       })
     );
     expect(fits).toEqual([true, true, true]);
+    // The last control ends on the header's right padding, where the filter row below ends.
+    const filterRow = skillsHeader(page)
+      .getByRole("button", { exact: true, name: "Sort Z to A" })
+      .locator("xpath=..");
+    const [controlsRight, filterRight] = await Promise.all([
+      rightOf(moreAddActions(page)),
+      rightOf(filterRow),
+    ]);
+    expect(Math.abs(controlsRight - filterRight)).toBeLessThanOrEqual(1);
+    // Nothing in the column is wider than the column.
+    const overflow = await skillsHeader(page).evaluate((section) =>
+      [...section.children].map(
+        (child) => child.scrollWidth > child.clientWidth
+      )
+    );
+    expect(overflow).not.toContain(true);
   });
 }
 

@@ -10,6 +10,11 @@ import { SearchField } from "#/components/search-field.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 import { AdoptDialog } from "#/screens/skills/adopt-dialog.tsx";
 import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
 import type { ToolArg } from "#/screens/skills/adopt.ts";
@@ -68,23 +73,31 @@ const AgentFilterChip = ({
   );
 };
 
-/** The ghost Check updates: its icon turns once while the check runs (DESIGN.md §8). */
+/**
+ * The ghost Check updates, an icon button as square as Add's three-dots trigger and named by its
+ * label, which its tooltip shows; its icon turns once while the check runs (DESIGN.md §8).
+ */
 const CheckUpdates = () => {
   const running = useCheckingUpdates();
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      aria-busy={running}
-      onClick={() => {
-        void checkUpdates();
-      }}
-    >
-      <span className={running ? "animate-turn-once flex" : "flex"}>
-        <RefreshIcon size="sm" />
-      </span>
-      Check updates
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Check updates"
+          aria-busy={running}
+          onClick={() => {
+            void checkUpdates();
+          }}
+        >
+          <span className={running ? "animate-turn-once flex" : "flex"}>
+            <RefreshIcon />
+          </span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Check updates</TooltipContent>
+    </Tooltip>
   );
 };
 

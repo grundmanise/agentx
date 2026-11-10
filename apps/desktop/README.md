@@ -38,6 +38,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/components/ui/button-group.tsx`, `src/components/split-button.tsx`, `src/components/icons/more.tsx` | shadcn's Button Group, and `SplitButton`, an action with a menu of related actions built on it: the action's button, the group's separator and a three-dots trigger. Show in Finder on a file row and Add in the Skills header use it |
 | `src/app/command-palette.tsx` | The ⌘K palette: ACTIONS (Update all, Publish all, Add skills, Create skill, Check updates, Rescan this machine, which sends serve one `refresh` request through `rescan()` in `src/store/feed.ts` and waits for its `refresh_complete`), GO TO and SKILLS, every skill with its origin |
 | `src/screens/skills/adopt.ts`, `src/screens/skills/adopt-dialog.tsx`, `src/screens/settings/adopt-skills.tsx` | Adopting every skill another tool installed. `adopt.ts` says which tools have skills to adopt (the adoption preview's candidates), runs `adopt <tool> --all` for each tool in turn, and keeps each skill's state and result from the run's `progress` and `adoption` events; `adopt-dialog.tsx` is the dialog that lists the skills, runs the adoption and shows each result; the Adopt skills section of Settings and the Unmanaged group header of the Skills list open it |
+| `src/components/ui/tooltip.tsx` | shadcn's Tooltip, with its provider around the app in `src/main.tsx`: the name of an icon-only button for the pointer, such as Check updates in the Skills header |
 
 ## Develop
 

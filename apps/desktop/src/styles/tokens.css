@@ -402,6 +402,7 @@
   --radius-check-mark: 50%;
   --radius-check-hint: 8px;
   --radius-startup-logo: 12px;
+  --radius-tooltip: 8px;
 
   /* Font weights, for the few places a variant sets the weight and the type role does not. */
   --font-weight-normal: 400;
@@ -469,7 +470,7 @@
   --padding-page-top: 40px;
   --gap-page-title: 28px;
   --max-width-page: 1200px;
-  --width-split-list: 408px;
+  --width-split-list: 420px;
   --padding-split-header-top: 30px;
   --padding-split-header-right: 20px;
   --padding-split-header-left: 28px;
