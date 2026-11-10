@@ -210,7 +210,7 @@ test.describe("Update", () => {
     await update(page, "review").click();
     await expect(
       toasts(page).getByText(
-        "Conflicts in review. Resolve them to finish the update",
+        "review skill has conflicts. Resolve them to finish the update",
         { exact: true }
       )
     ).toBeVisible();
@@ -603,7 +603,9 @@ test.describe("a pending merge", () => {
       .click();
     await expect(abortDialog(page)).toBeHidden();
     await expect(
-      toasts(page).getByText("Aborted the update of draft", { exact: true })
+      toasts(page).getByText("Aborted the update of draft skill", {
+        exact: true,
+      })
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "update", "draft", "--abort", "--json"],
@@ -656,7 +658,7 @@ test.describe("a pending merge", () => {
     await button(page, "Update").click();
     await expect(
       toasts(page).getByText(
-        "Conflicts in draft. Resolve them to finish the update",
+        "draft skill has conflicts. Resolve them to finish the update",
         { exact: true }
       )
     ).toBeVisible();

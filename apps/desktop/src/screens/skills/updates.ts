@@ -85,7 +85,9 @@ export const updateSkill = async (row: SkillRow) => {
     outcome.exitCode === EXIT_CODES.pending_merge &&
     conflictsIn(outcome.events) > 0
   ) {
-    notify(`Conflicts in ${row.name}. Resolve them to finish the update`);
+    notify(
+      `${row.name} skill has conflicts. Resolve them to finish the update`
+    );
   }
 };
 

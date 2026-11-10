@@ -307,7 +307,7 @@ export const AbortMerge = ({ name }: { name: string }) => {
                 setConfirm(false);
                 void runUntilSettled(["skill", "update", name, "--abort"], {
                   label,
-                  success: `Aborted the update of ${name}`,
+                  success: `Aborted the update of ${name} skill`,
                 });
               }}
             >
