@@ -6,11 +6,12 @@
 // `SettingsSection` (`section.tsx`) with its label, the line under it and its content, or nothing
 // when it has nothing to show; the page draws the hairlines between them. To add a section, write
 // it in its own file in this folder and add it to `sections` at its slot below, in this order:
-// This machine, Account remote, Sources, Comparing edits, Editor, Storage, Command line, Export
-// settings, Import settings. Insert the new entry under its slot's comment and keep the comment.
+// This machine, Account remote, Sources, Adopt skills, Comparing edits, Editor, Storage, Command
+// line, Export settings, Import settings. Insert the new entry under its slot's comment and keep the comment.
 import type { ComponentType } from "react";
 
 import { AccountRemoteSection } from "#/screens/settings/account-remote.tsx";
+import { AdoptSkillsSection } from "#/screens/settings/adopt-skills.tsx";
 import { CommandLineSection } from "#/screens/settings/command-line.tsx";
 import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
 import { EditorSection } from "#/screens/settings/editor.tsx";
@@ -33,6 +34,7 @@ const sections: Section[] = [
   { Section: AccountRemoteSection, id: "account-remote" },
   // Slot: Sources.
   { Section: SourcesSection, id: "sources" },
+  { Section: AdoptSkillsSection, id: "adopt-skills" },
   { Section: ComparingEditsSection, id: "comparing-edits" },
   { Section: EditorSection, id: "editor" },
   { Section: StorageSection, id: "storage" },

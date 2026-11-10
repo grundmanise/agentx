@@ -253,27 +253,6 @@ export const loadUpdateDiff = async (name: string, candidate: string) => {
   updateDiffCandidates.delete(name);
 };
 
-/**
- * Keeps the refusals an `adopt` run reported, by skill: a skill it refused keeps the CLI's reason,
- * and one it reported any other way, adopted or managed, has none left.
- */
-const keepAdoptionRefusals = (events: CliEvent[]) => {
-  const covered = events.filter((e) => e.type === "adoption");
-  if (covered.length === 0) {
-    return;
-  }
-  useAppStore.setState((s) => ({
-    adoptionRefusals: Object.fromEntries([
-      ...Object.entries(s.adoptionRefusals).filter(
-        ([name]) => !covered.some((e) => e.name === name)
-      ),
-      ...covered
-        .filter((e) => e.state === "refused")
-        .map((e) => [e.name, e] as const),
-    ]),
-  }));
-};
-
 /** What to load again after a command that may have changed something. */
 const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   if (read) {
@@ -295,10 +274,6 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
     (command === "adopt" && args.length > 1)
   ) {
     void loadSources();
-  }
-  // The skills an adoption run could not adopt keep its reason.
-  if (command === "adopt" && args.length > 1) {
-    keepAdoptionRefusals(events);
   }
   // A check that could not reach a source (exit 3) still lists what it found elsewhere.
   if (

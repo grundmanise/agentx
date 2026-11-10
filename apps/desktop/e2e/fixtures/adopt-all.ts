@@ -1,7 +1,7 @@
 // The Skills fixture's machine with more skills other tools installed: three the Skills CLI added
 // (the Skills fixture's scratch among them), two Skillshare added, and one the CLI refuses to
-// adopt. Its adoption preview, the `adopt <tool> --all` runs the Adopt all lines are tested
-// against, and the machine as each run leaves it.
+// adopt. Its adoption preview, the `adopt <tool> --all` runs the adopt dialog is tested against,
+// and the machine as each run leaves it.
 import type {
   AdoptionEvent,
   LibraryEntry,

@@ -196,15 +196,6 @@ const errorToastOf = (
 };
 
 /**
- * The error toast the runner shows for a failed `args`: the CLI's problem and warnings. For a
- * control that words some of its failures itself (`ownFailure`) and leaves the others to it.
- */
-export const failureToast = (
-  args: readonly string[],
-  outcome: Outcome
-): ErrorToast => errorToastOf({ label: "" }, problemOf(args, outcome), outcome);
-
-/**
  * Keeps the `conflict` events of a command, by skill: the merge each left pending. A skill the
  * command emitted with no conflict, such as an update that went through or `--abort`, has none.
  */

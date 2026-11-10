@@ -474,8 +474,6 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `split.toolbar-gap` | 12 | `gap-split-toolbar` | Search → filter row |
 | `split.filter-gap` | 6 | `gap-split-filter` | Filter button → chip → sort |
 | `split.list-padding` | 0 12 24 14 | `pt-0 pr-split-list-right pb-split-list-bottom pl-split-list-left` | Scrolling list |
-| `split.adopt-padding` | 0 20 8 28 | `pt-0 pr-split-adopt pb-split-adopt-bottom pl-split-adopt-left` | The Adopt all lines, between the filter row and the list |
-| `split.adopt-height` | 34 | `h-split-adopt` | One Adopt all line |
 | `detail.padding` | 34 40 48 | `pt-detail-top px-detail pb-detail-bottom` | Detail pane content |
 | `detail.max-width` | 900 | `max-w-detail` |  |
 | `detail.section-gap` | 28 | `gap-detail-section` | Header → banner → agents → files → details/history |
@@ -747,12 +745,6 @@ Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an ima
 ### Group header (lists)
 
 Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.count`. `group.padding-first` for the first group, `group.padding` for the rest.
-
-### Adopt all (Skills list)
-
-One line per tool whose skills the adoption preview (`adopt`) offers to adopt, Skills CLI first, then Skillshare, between the filter row and the list (`src/screens/skills/adopt-all.tsx`). The lines sit outside the scrolling list, in `split.adopt-padding`, so they line up with the search field and the filter row and never scroll away. A line is `split.adopt-height` high: on the left, "{n} skills added by {tool}" ("1 skill added by Skills CLI") in `type.secondary` `text.secondary`, cut with an ellipsis rather than wrapped, counting only that tool's candidates; on the right, a small ghost Adopt all, as a banner's action is. It is a list caption, not a banner: no tile, no tone. A line shows only while its tool has a candidate and goes once the preview that follows a run offers none; a skill the preview refuses is not counted.
-
-Adopt all runs `adopt skills-cli --all` or `adopt skillshare --all`. While it runs, its button is pending (`aria-busy`, a `Spinner`) and reads "Adopting {current} of {total}" in skills: {total} is the number of skills the line offered when the run started, and {current} the number of `progress` events of phase `blobs` so far, which each skill the run installs ends once (at most {total}); a `fetch` is a source and does not count. Before the first, while the run fetches sources, it reads "Adopting…"; the other line's Adopt all is disabled, one run at a time. Both stay so until the inventory and the preview that follow the run have arrived. Toasts: "Adopted {n} skills" ("Adopted 1 skill") when the run adopted every skill the line offered; an attention toast "Adopted {n} skills. {k} could not be adopted" when it could not adopt some, and "No skills could be adopted" when it adopted none, {k} counting only the skills the line offered. `adopt --all` also covers the records the preview refuses and exits non-zero for them, so a run that adopted every skill the line offered still gets "Adopted {n} skills". The activity entry says what the toast says, in its tone (`success` or `attention`); a run that fails before it reports any skill gets the runner's error toast and `danger` entry. A skill the run could not adopt stays in the list with its "Added by {tool}" banner and Adopt, and its DETAILS end with the "Adopt" row, "Can't adopt: {reason}" in the CLI's words, until a later `adopt` run reports it otherwise. Settings has no adoption section.
 
 ### Banner (detail pane)
 

@@ -477,10 +477,6 @@
   --padding-split-list-right: 12px;
   --padding-split-list-bottom: 24px;
   --padding-split-list-left: 14px;
-  --height-split-adopt: 34px;
-  --padding-split-adopt: 20px;
-  --padding-split-adopt-bottom: 8px;
-  --padding-split-adopt-left: 28px;
   --padding-detail: 40px;
   --padding-detail-top: 34px;
   --padding-detail-bottom: 48px;
@@ -581,6 +577,7 @@
   --height-palette-input: 60px;
   --inset-palette: 112px;
   --max-height-palette-list: 420px;
+  --max-height-adopt-list: 280px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
   --height-toast: 44px;

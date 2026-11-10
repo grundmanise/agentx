@@ -107,17 +107,6 @@ const diskDetails = (row: SkillRow): Detail[] => {
           ? toolName(row.adoption)
           : `${toolName(row.adoption)} · ${row.adoption.source}`,
     });
-    // The CLI refuses to adopt it, or the last run could not: its reason, in the words the CLI gave.
-    const refusal =
-      row.adoption.state === "refused"
-        ? row.adoption.reason
-        : row.adoptionRefusal;
-    if (refusal !== undefined) {
-      details.push({
-        key: "Adopt",
-        value: `Can't adopt: ${refusal}`,
-      });
-    }
   }
   return details;
 };

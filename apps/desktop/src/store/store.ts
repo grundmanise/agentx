@@ -116,12 +116,6 @@ export interface AppState {
    * pending merge has none.
    */
   conflicts: Record<string, ConflictEvent>;
-  /**
-   * The last refusal of each skill, by name, from the `adopt` runs of this session: why the CLI
-   * could not adopt a skill the preview still offers, such as one whose source no longer holds it.
-   * An `adopt` run that adopts the skill, or reports it otherwise, drops it. Gone on a restart.
-   */
-  adoptionRefusals: Record<string, AdoptionEvent>;
 }
 
 /** One declaration of a server whose handshake failed: the server, where it is declared, and why. */
@@ -167,7 +161,6 @@ export type UpdateDiffRead =
 export const useAppStore = create<AppState>()(() => ({
   activity: [],
   adoption: [],
-  adoptionRefusals: {},
   applied: undefined,
   conflicts: {},
   files: {},

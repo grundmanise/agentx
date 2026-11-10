@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -7,10 +8,12 @@ import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { Button } from "#/components/ui/button.tsx";
-import { AdoptAllLines } from "#/screens/skills/adopt-all.tsx";
+import { AdoptDialog } from "#/screens/skills/adopt-dialog.tsx";
+import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
+import type { ToolArg } from "#/screens/skills/adopt.ts";
 import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
-import { forksOf, UNIVERSAL } from "#/screens/skills/projection.ts";
+import { forksOf, GROUP_DISK, UNIVERSAL } from "#/screens/skills/projection.ts";
 import type {
   Filters,
   Group,
@@ -87,26 +90,49 @@ const GroupHeader = ({
   label,
   count,
   first,
+  action,
 }: {
   label: string;
   count: number;
   first: boolean;
+  /** A control at the header's right end, such as the Unmanaged group's Adopt all. */
+  action?: ReactNode;
 }) => (
   <div
     className={
       first
-        ? "pt-group-first-top px-group pb-group-bottom gap-group flex items-baseline"
-        : "pt-group-top px-group pb-group-bottom gap-group flex items-baseline"
+        ? "pt-group-first-top px-group pb-group-bottom gap-group flex items-center"
+        : "pt-group-top px-group pb-group-bottom gap-group flex items-center"
     }
   >
-    <span className="type-caption text-group-label">{label}</span>
-    <span className="type-technical-sm text-group-count">{count}</span>
+    <span className="gap-group flex min-w-0 flex-1 items-baseline">
+      <span className="type-caption text-group-label">{label}</span>
+      <span className="type-technical-sm text-group-count">{count}</span>
+    </span>
+    {action}
   </div>
 );
 
 /**
+ * Adopt all, at the right end of the Unmanaged group's header while another tool installed skills
+ * agentx can adopt: it opens the adopt dialog for every such tool.
+ */
+const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
+  const adoption = useAppStore((s) => s.adoption);
+  const busy = useAdoptRun((s) => s.run !== undefined);
+  if (toolsToAdopt(adoption).length === 0) {
+    return null;
+  }
+  return (
+    <Button variant="primary" size="sm" disabled={busy} onClick={onOpen}>
+      Adopt all
+    </Button>
+  );
+};
+
+/**
  * The left column of the Skills screen: title and count, Check updates, Add and Create, the search field, the
- * filter row, the Adopt all line of each tool with skills to adopt, and the rows in their groups. A fork made under a new name is one row, in YOUR
+ * filter row, and the rows in their groups. A fork made under a new name is one row, in YOUR
  * SKILLS; its original carries a marker for it.
  */
 export const SkillList = ({
@@ -134,6 +160,10 @@ export const SkillList = ({
 }) => {
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [adopting, setAdopting] = useState(false);
+  // The tools the open adopt dialog covers: every tool with skills to adopt when it opened.
+  const adoption = useAppStore((s) => s.adoption);
+  const [adoptTools, setAdoptTools] = useState<ToolArg[]>([]);
   // What the rows' banners read besides the row, for their alert triangles.
   const sources = useAppStore((s) => s.sources);
   const conflicts = useAppStore((s) => s.conflicts);
@@ -209,7 +239,6 @@ export const SkillList = ({
           />
         </div>
       </div>
-      <AdoptAllLines />
       <nav
         aria-label="Skills"
         className="pr-split-list-right pb-split-list-bottom pl-split-list-left min-h-0 flex-1 overflow-auto pt-0"
@@ -228,6 +257,16 @@ export const SkillList = ({
                 label={group.label}
                 count={group.rows.length}
                 first={i === 0}
+                action={
+                  group.key === GROUP_DISK ? (
+                    <AdoptAll
+                      onOpen={() => {
+                        setAdoptTools(toolsToAdopt(adoption).map((t) => t.arg));
+                        setAdopting(true);
+                      }}
+                    />
+                  ) : undefined
+                }
               />
               <ul className="gap-rows m-0 flex list-none flex-col p-0">
                 {group.rows.map((row) => (
@@ -250,6 +289,11 @@ export const SkillList = ({
         )}
       </nav>
       <CreateSkillDialog open={creating} onOpenChange={setCreating} />
+      <AdoptDialog
+        tools={adoptTools}
+        open={adopting}
+        onOpenChange={setAdopting}
+      />
     </section>
   );
 };

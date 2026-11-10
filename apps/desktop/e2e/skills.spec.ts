@@ -910,7 +910,7 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     ]);
   });
 
-  test("a refused entry has no banner, and Details says why", async ({
+  test("a refused entry has no banner, and its Details hold no adoption reason", async ({
     cli,
     page,
   }) => {
@@ -918,14 +918,11 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     const article = pane(page, "legacy");
     await expect(article.getByRole("note")).toHaveCount(0);
     const details = article.getByRole("region", { name: "Details" });
+    // Why it can't be adopted shows in the adopt dialog, not on the skill.
     await expect(details.getByRole("term")).toHaveText([
       "Found at",
       "Installed by",
-      "Adopt",
     ]);
-    await expect(details.getByRole("definition").last()).toHaveText(
-      "Can't adopt: legacy is a symlink, not a directory"
-    );
     expect(ran(cli)).toEqual([]);
   });
 });
