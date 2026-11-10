@@ -94,6 +94,13 @@ interface BannerRule {
 export const accountRemoteOf = (sources: SourceEvent[]) =>
   sources.find((s) => s.account === true);
 
+/**
+ * One of your own skills edited since it was published: what a bare `skill publish` covers, and
+ * what the title bar's publish status counts.
+ */
+export const hasEditsToPublish = (row: SkillRow) =>
+  row.kind === "yours" && row.modified && row.published;
+
 const notPublished = (row: SkillRow) =>
   row.kind === "yours" &&
   (row.entry?.drift?.includes("not published") ?? false);
@@ -230,7 +237,7 @@ const table: BannerRule[] = [
       title: "Edits not published",
       tone: "yours",
     }),
-    when: (row) => row.kind === "yours" && row.modified && row.published,
+    when: hasEditsToPublish,
   },
   {
     banner: () => ({
