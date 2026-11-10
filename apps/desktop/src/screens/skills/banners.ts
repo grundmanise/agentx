@@ -48,11 +48,10 @@ export type BannerAction =
   /** Goes to Settings, where an account remote is set. */
   | { kind: "open-settings" }
   /**
-   * The buttons of an edited skill of a source: Fork, which opens the Fork dialog, and Publish to
-   * {source}, which opens the Publish dialog, when `publishTo` names a source this machine can
-   * write to.
+   * The button of an edited skill of a source whose source this machine can write to: Publish to
+   * {source}, which opens the Publish dialog. Fork is in the action row, not on the banner.
    */
-  | { kind: "edited"; publishTo?: string };
+  | { kind: "edited"; publishTo: string };
 
 export interface Banner {
   tone: BannerTone;
@@ -261,7 +260,7 @@ const table: BannerRule[] = [
       return {
         action: writable
           ? { kind: "edited", publishTo: shortSource(source) }
-          : { kind: "edited" },
+          : undefined,
         text:
           n === undefined
             ? "Updates won't overwrite your edits."

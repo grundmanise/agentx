@@ -158,20 +158,24 @@ test.describe("banners", () => {
     await expect(note).toContainText(
       "3 files differ from acme/skills. Updates won't overwrite them."
     );
+    // The banner offers no Fork: Fork is in the action row.
     await expect(note.getByRole("button")).toHaveText([
-      "Fork",
       "Publish to acme/skills",
     ]);
     expect(diffReads(cli, "review")).toBe(1);
   });
 
-  test("Fork on the edited skill's banner opens the Fork dialog, whose Fork runs skill fork <name>", async ({
+  test("an edited skill of a source forks from the action row, whose Fork runs skill fork <name>", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "review");
-    await banner(pane(page, "review"))
-      .getByRole("button", { name: "Fork" })
+    await expect(
+      banner(pane(page, "review")).getByRole("button", { name: "Fork" })
+    ).toHaveCount(0);
+    await pane(page, "review")
+      .getByLabel("Actions", { exact: true })
+      .getByRole("button", { exact: true, name: "Fork" })
       .click();
     const fork = page.getByRole("dialog", { name: "Fork review" });
     await expect(fork).toBeVisible();
@@ -185,7 +189,7 @@ test.describe("banners", () => {
     expect(later(cli).at(-1)).toEqual(["skill", "fork", "review", "--json"]);
   });
 
-  test("an edited skill of a read-only source: Fork, and no Publish to its source", async ({
+  test("an edited skill of a read-only source: a banner with no button", async ({
     cli,
     page,
   }) => {
@@ -195,7 +199,7 @@ test.describe("banners", () => {
     await expect(note).toContainText(
       "1 file differs from zeta/tools. Updates won't overwrite them."
     );
-    await expect(note.getByRole("button")).toHaveText(["Fork"]);
+    await expect(note.getByRole("button")).toHaveCount(0);
   });
 
   test("an edited skill of a source, before skill diff answers: the banner without a count", async ({
@@ -208,7 +212,6 @@ test.describe("banners", () => {
     await expect(note).toContainText("Updates won't overwrite your edits.");
     await expect(note).not.toContainText("differ");
     await expect(note.getByRole("button")).toHaveText([
-      "Fork",
       "Publish to acme/skills",
     ]);
   });
