@@ -5,14 +5,13 @@
 // until it ends. The toast follows the `publish` event's outcome and the exit code; a failure the
 // toast does not name keeps the runner's error toast, the CLI's message then its hint as one
 // sentence-cased paragraph, the skill's name keeping its case, and the hint in the app's words
-// where the CLI's names a command (`publishFailure`).
+// where the CLI's names a command (`publishFailure` in publish.ts).
 import { useId, useRef, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { DiffEvent, ProgressEvent } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { notify } from "#/components/toast.tsx";
-import type { ErrorToast } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Dialog,
@@ -24,8 +23,6 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
-import { doctorRule, againRule, rewriteHint } from "#/lib/app-hint.ts";
-import type { HintRule } from "#/lib/app-hint.ts";
 import { navigateTo } from "#/lib/navigate.ts";
 import { accountRemoteOf } from "#/screens/skills/banners.ts";
 import { fileStatusLabels } from "#/screens/skills/files.tsx";
@@ -35,9 +32,9 @@ import {
   alreadyPublished,
   changedElsewhere,
   notifyNoAccountRemote,
+  publishFailure,
   refusedForAccountRemote,
 } from "#/screens/skills/publish.ts";
-import { addSource } from "#/screens/skills/updates.ts";
 import { runCommand } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
@@ -54,66 +51,6 @@ const update = (name: string) => {
     label: updateLabel(name),
     success: `Updated ${name} skill`,
   });
-};
-
-/** The hints of `skill publish` that name a command, matched whole, and the app's words for each. */
-const publishHintRules: HintRule[] = [
-  {
-    app: () => "add the source again, then publish again",
-    cli: /^run 'agentx source add .+' to add it again, then publish again$/u,
-  },
-  {
-    app: () => "publish again to publish it as it is now",
-    cli: /^run 'agentx skill publish .+' again to publish it as it is now$/u,
-  },
-  {
-    app: () =>
-      "use Check updates to record that, or Remove to remove the skill",
-    cli: /^run 'agentx skill check-updates' to record that, or 'agentx skill remove .+' to remove it$/u,
-  },
-  {
-    app: ({ why }) => `update the skill to ${why ?? ""}, then publish again`,
-    cli: /^run 'agentx skill update .+' to (?<why>take the change in|get them), then publish again$/u,
-  },
-  {
-    app: () =>
-      "add the source again with the branch to publish to after a #, then update the skill from it and publish again",
-    cli: /^add the source at the branch to publish to with 'agentx source add .+#<branch>', then update the skill from it and publish again$/u,
-  },
-  {
-    app: ({ first }) => `${first ?? ""}, then publish again`,
-    cli: /^(?<first>.+), then run 'agentx skill publish .+' again$/u,
-  },
-  doctorRule,
-  againRule("publish again"),
-];
-
-/**
- * The error toast of a failed publish whose hint names a command: the CLI's message and its
- * warnings, the hint in the app's words, and Add source for a skill whose source was removed
- * (exit 5). Undefined leaves the runner's own toast.
- */
-const publishFailure = (
-  row: SkillRow,
-  outcome: Outcome
-): ErrorToast | undefined => {
-  const error = outcome.events.find((e) => e.type === "error");
-  const hint = rewriteHint(error?.hint, publishHintRules);
-  const source = row.entry?.source;
-  const action =
-    outcome.exitCode === EXIT_CODES.not_found && source !== undefined
-      ? { action: addSource(source) }
-      : {};
-  return error === undefined || hint === error.hint
-    ? undefined
-    : {
-        ...action,
-        hint,
-        message: error.message,
-        warnings: outcome.logs
-          .filter((l) => l.level === "warn")
-          .map((l) => l.message),
-      };
 };
 
 /** The command line of a publish: `--message` only when What changed holds more than spaces. */
@@ -259,7 +196,7 @@ const PublishForm = ({
     setRunning(true);
     setProgress(undefined);
     const outcome = await runUntilSettled(publishArgs(name, message), {
-      failure: (ended) => publishFailure(row, ended),
+      failure: (ended) => publishFailure(ended, row.entry?.source),
       keep: [name],
       label: publishLabel(name),
       onProgress: setProgress,

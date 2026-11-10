@@ -17,8 +17,11 @@ const classNames = {
   ),
   detailContent: cn("min-w-0 flex-1"),
   title: cn("pr-3"),
+  // As wide as its text, up to `toast.max-width`, then the text wraps; centred on the window,
+  // which Sonner's narrower toaster box does not do for a wider toast. The action keeps its
+  // width beside the text, centred on the pill like a one-line toast's.
   toast: cn(
-    "rounded-toast border-overlay-border bg-overlay-bg type-toast text-toast-text shadow-popover h-toast pl-toast flex items-center gap-3 border pr-1.5 whitespace-nowrap"
+    "rounded-toast border-overlay-border bg-overlay-bg type-toast text-toast-text shadow-popover min-h-toast max-w-toast py-toast-y pl-toast left-1/2 flex w-max -translate-x-1/2 items-center gap-3 border pr-1.5 [&_[data-button]]:flex-none"
   ),
 };
 

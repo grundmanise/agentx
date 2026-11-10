@@ -582,8 +582,10 @@
   --max-height-palette-list: 420px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
-  --height-toast: 44px;
+  --min-height-toast: 44px;
+  --max-width-toast: 640px;
   --padding-toast: 18px;
+  --padding-toast-y: 10px;
   --width-toast-detail: 440px;
   --padding-toast-detail: 12px;
   --height-stale-bar: 36px;

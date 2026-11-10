@@ -477,7 +477,7 @@ test.describe("outcomes", () => {
       "refused",
       "the account remote declined skills/changelog: protected branch",
       "once the account remote takes it, run 'agentx skill publish changelog' again",
-      "The account remote declined skills/changelog: protected branch. Once the account remote takes it, run 'agentx skill publish changelog' again.",
+      "The account remote declined skills/changelog: protected branch. Publish again once the account remote takes it.",
     ],
     [
       "denied",
@@ -488,7 +488,7 @@ test.describe("outcomes", () => {
       `The account remote ${ACCOUNT} did not let this machine push skills/changelog: permission denied. Check that the git credential helper or SSH key used for it may push there.`,
     ],
   ] as const) {
-    test(`${outcome} (exit ${exitCode}): the CLI's message and hint`, async ({
+    test(`${outcome} (exit ${exitCode}): the CLI's message, and its hint in the app's words`, async ({
       cli,
       page,
     }) => {
