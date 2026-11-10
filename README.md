@@ -18,7 +18,7 @@
 
 ## Quick look
 
-![The Skills page of the agentx app: skills grouped by source, with one selected and its agents, details and history](docs/help-center/images/skills-list.png)
+![The Skills page of the agentx app: skills grouped by source, with one selected and its agents, files, details and history](docs/help-center/images/skills-list.png)
 
 ## Install
 
