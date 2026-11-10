@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import {
   breaksSkillNameRule,
   isSkillName,
@@ -71,18 +72,21 @@ const createArgs = (name: string, description: string) =>
     ? ["skill", "new", name]
     : ["skill", "new", name, "--description", description];
 
-/** What went wrong with the skill `name`, in the CLI's words. */
+/**
+ * What went wrong with the skill `name`, in the CLI's words, a hint that names a command put in
+ * the app's words.
+ */
 const refusalOf = (outcome: Outcome, name: string): Refusal => {
   const error = outcome.events.find((e) => e.type === "error");
   const message =
     error?.message ??
     outcome.startError ??
     `agentx skill new exited with code ${outcome.exitCode ?? "none"}`;
+  const hint = rewriteHint(error?.hint, [doctorRule]);
   return {
     field: outcome.exitCode === EXIT_CODES.refused ? "name" : "form",
     name,
-    problem:
-      error?.hint === undefined ? { message } : { hint: error.hint, message },
+    problem: hint === undefined ? { message } : { hint, message },
   };
 };
 

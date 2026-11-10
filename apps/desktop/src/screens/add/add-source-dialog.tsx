@@ -14,10 +14,23 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
-import { count } from "#/screens/add/projection.ts";
+import { rewriteHint } from "#/lib/app-hint.ts";
+import type { HintRule } from "#/lib/app-hint.ts";
+import { count, YOUR_SKILLS_LABEL } from "#/screens/add/projection.ts";
 import { runCommand, usePending } from "#/store/runner.ts";
 import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";
+
+/**
+ * The hints of `source add` that name a command, in the app's words: the account remote's skills
+ * are the ones under Your skills.
+ */
+const addSourceHintRules: HintRule[] = [
+  {
+    app: () => `see and install its skills under ${YOUR_SKILLS_LABEL}`,
+    cli: /^run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one$/u,
+  },
+];
 
 /** The pending label of `source add` from this dialog. */
 export const ADD_SOURCE_LABEL = "add source";
@@ -65,9 +78,8 @@ const AddSourceForm = ({
         : (error?.message ??
           outcome.startError ??
           `agentx source add exited with code ${outcome.exitCode ?? "none"}`);
-    setProblem(
-      error?.hint === undefined ? { message } : { hint: error.hint, message }
-    );
+    const hint = rewriteHint(error?.hint, addSourceHintRules);
+    setProblem(hint === undefined ? { message } : { hint, message });
     setRefused(typed);
   };
 

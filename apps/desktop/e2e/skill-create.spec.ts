@@ -269,6 +269,29 @@ test("a refusal that starts with the typed name keeps its case", async ({
   );
 });
 
+test("a failure whose hint names agentx doctor names Run checks in Settings instead", async ({
+  cli,
+  page,
+}) => {
+  await openDialog(cli, page);
+  await nameField(page).fill("notes");
+  cli.register(["skill", "new", "notes"], {
+    events: [
+      {
+        code: "internal",
+        hint: "run 'agentx doctor' and check the library it names",
+        message: "the library holds no notes after creating it",
+        type: "error",
+      },
+    ],
+    exitCode: 10,
+  });
+  await createButton(page).click();
+  await expect(dialog(page).getByRole("alert")).toHaveText(
+    "The library holds no notes after creating it. Use Run checks in Settings to check the library."
+  );
+});
+
 test("the name is checked as the CLI checks it before Create runs anything", async ({
   cli,
   page,

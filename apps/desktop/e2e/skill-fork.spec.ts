@@ -221,9 +221,10 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
 
   await dialog.getByRole("button", { name: "Fork" }).click();
   const alert = dialog.getByRole("alert");
-  // The message and the hint as one sentence-cased paragraph; the skill's name keeps its case.
+  // The CLI's message and the dialog's own hint, which names the switch rather than a flag, as
+  // one sentence-cased paragraph; the skill's name keeps its case.
   await expect(alert).toHaveText(
-    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill, or fork it beside the skill with --name <new>."
+    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill, or turn on Use a new name."
   );
   await expect(
     dialog.getByRole("switch", { name: "Use a new name" })
@@ -246,6 +247,29 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
   expect(forks(cli)).toEqual([
     ["skill", "fork", "scratch", "--json"],
     ["skill", "fork", "scratch", "--name", "my-scratch", "--json"],
+  ]);
+});
+
+test("refused in place with Use a new name on: the hint leaves the switch out", async ({
+  cli,
+  page,
+}) => {
+  await openSkill(cli, page, "scratch");
+  await actions(page, "scratch").getByRole("button", { name: "Fork" }).click();
+  const dialog = forkDialog(page, "scratch");
+  await dialog.getByRole("switch", { name: "Use a new name" }).click();
+  // The skill's own name forks it in its place, which the CLI refuses as without the switch.
+  await dialog.getByRole("textbox", { name: "Name" }).fill("scratch");
+  cli.register(["skill", "fork", "scratch", "--name", "scratch"], {
+    events: [refusedInPlace],
+    exitCode: 6,
+  });
+  await dialog.getByRole("button", { name: "Fork" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill."
+  );
+  expect(forks(cli)).toEqual([
+    ["skill", "fork", "scratch", "--name", "scratch", "--json"],
   ]);
 });
 

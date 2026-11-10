@@ -3,8 +3,8 @@
 // many of your skills it holds and when it was fetched, whether you can write to it, and Change…
 // (a new URL, after the replace warning) and Detach (`source remove <url>`, after its warning).
 // What it shows is the Sources slice, which `source list` fills again after each command; a
-// failure of Save shows under the field, in the CLI's words as one sentence-cased paragraph
-// (docs/help-center/cli/source.mdx).
+// failure of Save shows under the field, in the CLI's words as one sentence-cased paragraph, a
+// hint that names a command put in the app's words (docs/help-center/cli/source.mdx).
 import { useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -21,6 +21,8 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { rewriteHint } from "#/lib/app-hint.ts";
+import type { HintRule } from "#/lib/app-hint.ts";
 import { useNow } from "#/screens/settings/clock.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import {
@@ -80,6 +82,14 @@ const Confirm = ({
   </Dialog>
 );
 
+/** The hints of `source add --account` that name a command, in the app's words. */
+const saveHintRules: HintRule[] = [
+  {
+    app: () => "remove it under Sources first, or choose another repository",
+    cli: /^remove the source first with 'agentx source remove .+', or choose another repository$/u,
+  },
+];
+
 /** What went wrong with Save, as the CLI said it; undefined when the runner shows it itself. */
 const saveProblem = (
   typed: string,
@@ -100,9 +110,8 @@ const saveProblem = (
       : (error?.message ??
         outcome.startError ??
         `agentx source add exited with code ${outcome.exitCode ?? "none"}`);
-  return error?.hint === undefined
-    ? { message }
-    : { hint: error.hint, message };
+  const hint = rewriteHint(error?.hint, saveHintRules);
+  return hint === undefined ? { message } : { hint, message };
 };
 
 /**
