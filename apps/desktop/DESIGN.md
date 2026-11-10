@@ -607,8 +607,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.top` | 112 | `top-palette` | From the window top |
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
-| `toast.height` | 44 | `h-toast` |  |
-| `toast.padding` | 0 18 | `px-toast` (`pl-toast` with an action) | 0 6 0 18 with an action |
+| `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
+| `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
+| `toast.padding` | 10 18 | `py-toast-y pl-toast` | 10 6 10 18: the action sits 6 from the right edge |
 | `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` | From the bottom edge |
 | `toast.detail-width` | 440 | `w-toast-detail` | Error toast |
 | `toast.detail-padding` | 12 6 12 18 | `py-toast-detail pr-1.5 pl-toast` |  |
@@ -847,7 +848,10 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 ### Toast
 
-`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text `type.toast` `toast.text`; an optional action in `button.toast-action-text`.
+`toast.offset` from the bottom, centred on the window; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.min-height`, `toast.padding`; text `type.toast` `toast.text`; an optional action in `button.toast-action-text`.
+
+- As wide as its text, up to `toast.max-width`; past it the text wraps and the toast grows taller. A one-line toast keeps `toast.min-height`, so it looks as it did before toasts wrapped.
+- The action keeps its width on the right of the text and is centred on the toast's height, wrapped or not: the toast is a pill, so its middle is the line the eye follows, and a short action lined up with one line of two would look misplaced on the rounded end.
 
 - One toast at a time: a new one replaces the one showing.
 - It goes after 2.6s, or 5s with an action.

@@ -101,7 +101,7 @@ test.describe("states", () => {
 });
 
 test.describe("publish", () => {
-  test("a click runs a bare skill publish, shows its progress, then names the skill with a newer version on the account remote, with Update", async ({
+  test("a click runs a bare skill publish, shows its progress, then names the skill with a newer version on the account remote, with Update and the skills not published", async ({
     cli,
     page,
   }) => {
@@ -135,9 +135,8 @@ test.describe("publish", () => {
 
     const toast = toasts(page);
     await expect(toast).toContainText(
-      "There is a newer version of notes skill on the account remote. Update it first, then publish your changes."
+      "There is a newer version of notes skill on the account remote. Update it first, then publish your changes. · 1 not published yet"
     );
-    await expect(toast).not.toContainText("not published yet");
     expect(ran(cli, ["skill", "publish"])).toBe(true);
     await answerRefreshes(cli);
     await expect(status(page)).toHaveText("2 to publish");
@@ -206,6 +205,84 @@ test.describe("publish, nothing sent", () => {
     await expect(toast.getByRole("button", { name: "Show" })).toBeVisible();
     expect(ran(cli, ["skill", "publish"])).toBe(true);
   });
+});
+
+test.describe("publish, refused: the hint in the app's words", () => {
+  const cases: {
+    name: string;
+    outcomes: ["changelog" | "notes", "declined" | "denied"][];
+    exitCode: number;
+    message: string;
+    hint: string;
+    shown: string;
+  }[] = [
+    {
+      exitCode: 6,
+      hint: "once the account remote takes it, run 'agentx skill publish' again",
+      message: "the account remote declined skills/notes: protected branch",
+      name: "declined",
+      outcomes: [["notes", "declined"]],
+      shown:
+        "The account remote declined skills/notes: protected branch. Publish again once the account remote takes it.",
+    },
+    {
+      exitCode: 3,
+      hint: "check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then run 'agentx skill publish' again",
+      message: `the account remote ${ACCOUNT} did not let this machine push skills/notes: permission denied`,
+      name: "denied",
+      outcomes: [["notes", "denied"]],
+      shown: `The account remote ${ACCOUNT} did not let this machine push skills/notes: permission denied. Check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then publish again.`,
+    },
+    {
+      exitCode: 6,
+      hint: "run 'agentx skill list' to see the state of each skill, then publish the rest one at a time",
+      message:
+        "2 of 2 skills could not be published: the account remote declined skills/changelog: protected branch; notes: the account remote did not let this machine push skills/notes: permission denied",
+      name: "several causes",
+      outcomes: [
+        ["changelog", "declined"],
+        ["notes", "denied"],
+      ],
+      shown:
+        "2 of 2 skills could not be published: the account remote declined skills/changelog: protected branch; notes: the account remote did not let this machine push skills/notes: permission denied. See the state of each skill in Skills, then publish the rest one at a time.",
+    },
+    {
+      exitCode: 3,
+      hint: "check your network; the edits were recorded, so run 'agentx skill publish' again once the account remote can be reached",
+      message: `cannot reach ${ACCOUNT}: connection refused`,
+      name: "the account remote cannot be reached",
+      outcomes: [],
+      shown: `Cannot reach ${ACCOUNT}: connection refused. Check your network; the edits were recorded, so publish again once the account remote can be reached.`,
+    },
+  ];
+  for (const c of cases) {
+    test(c.name, async ({ cli, page }) => {
+      launch(cli);
+      cli.register(["skill", "publish"], {
+        events: [
+          ...c.outcomes.map(([name, outcome]): InlineEvent => ({
+            name,
+            outcome,
+            source: ACCOUNT,
+            type: "publish",
+          })),
+          {
+            code: c.exitCode === 3 ? "source" : "refused",
+            hint: c.hint,
+            message: c.message,
+            type: "error",
+          },
+        ],
+        exitCode: c.exitCode,
+      });
+      await page.goto("/");
+      await status(page).click();
+      const toast = toasts(page).getByRole("listitem");
+      await expect(toast.getByText(c.shown, { exact: true })).toBeVisible();
+      await expect(toast).not.toContainText("agentx");
+      expect(ran(cli, ["skill", "publish"])).toBe(true);
+    });
+  }
 });
 
 test.describe("check", () => {
