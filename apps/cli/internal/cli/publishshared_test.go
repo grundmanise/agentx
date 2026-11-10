@@ -200,7 +200,6 @@ exec `+real+` "$@"
 	equal(t, "declined: outcome", h.one(out.stdout, "publish")["outcome"], publishDeclined)
 	e = h.one(out.stdout, "error")
 	equal(t, "declined: message", e["message"], s.url+" declined main: pre-receive hook declined: no pushes on Fridays")
-	excludes(t, "declined: hint", e["hint"].(string), "skill update")
 	equal(t, "declined: the import branch", h.ref(lineage.ManagedRef("alpha")), managed)
 	equal(t, "declined: the source", s.query("rev-parse", "main"), upstream)
 

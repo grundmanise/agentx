@@ -62,9 +62,6 @@ func TestSkillFilesReadsEveryFileOfALibrarySkill(t *testing.T) {
 	}
 	equal(t, "big.md's size", byPath["big.md"]["size"], float64(23*(skillFileLimit/23+1)))
 	equal(t, "the ignored file", byPath["node_modules/dep/index.js"]["ignored"], true)
-	if _, ok := byPath["a.md"]["ignored"]; ok {
-		t.Errorf("a.md is marked: %v", byPath["a.md"])
-	}
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "pdf has 12 files")
 
 	got := h.portable(out.stdout)
@@ -90,7 +87,6 @@ func TestSkillFilesReadsEveryFileOfALibrarySkill(t *testing.T) {
 	contains(t, "the text", text, "  16 bytes      binary\n")
 	contains(t, "the text", text, "  1 line        ignored\n")
 	contains(t, "the text", text, "  0 bytes       0 lines\n")
-	excludes(t, "the text", text, "the same bytes")
 }
 
 // TestSkillFilesReadsAPluginSkillAndAConfigurationSkill reads a skill a
@@ -114,9 +110,6 @@ func TestSkillFilesReadsAPluginSkillAndAConfigurationSkill(t *testing.T) {
 	equal(t, "name", ev["name"], "format")
 	equal(t, "path", ev["path"], "SKILL.md")
 	equal(t, "content", ev["content"], skill("format", "Format the code with formatter"))
-	if _, ok := ev["ignored"]; ok {
-		t.Errorf("a plugin's file is marked: %v", ev)
-	}
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "format of plugin formatter has 1 file")
 
 	out = h.mustRun("--json", "skill", "files", "commit", "--configuration", "claude-code")

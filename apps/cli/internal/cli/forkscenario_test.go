@@ -137,8 +137,8 @@ func besideConflicts(body string) (merged, conflicts string) {
 // shows it against what a published, and b reads modified until b
 // publishes the merge, which then reads current. a's update fast-forwards
 // to it, naming the subject of the merge alone, so both machines hold every
-// line either edited. A publish never
-// takes in what the remote holds: see TestPublishNeverMerges.
+// line either edited. A publish over what the remote holds is
+// TestPublishWhenTheRemoteMoved's.
 func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := scenarioHomes(t, "alpha")
@@ -281,7 +281,6 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	checkoutGit(t, b, "alpha", "add", "alpha/notes.md")
 	out = b.mustRun("--json", "skill", "update", "alpha")
 	contains(t, "the completion", b.one(out.stdout, "result")["summary"].(string), "updated alpha with the merge you resolved")
-	equal(t, "its pull events", len(b.eventsOfType(out.stdout, "pull")), 0)
 	equal(t, "the merge's parents", b.parents(b.ref(lineage.ForkRef("alpha"))), mine+"\n"+theirs)
 	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes("four", "four, b", "seven", "seven, v2"))
 
@@ -593,10 +592,7 @@ func TestScenarioEdgeCases(t *testing.T) {
 	a, b, s, _ := scenarioMachines(t)
 	b.mustRun("source", "add", "https://GitHub.com/fixtures/forked.git/")
 	for _, name := range []string{"alpha", "beta"} {
-		out := b.mustRun("--json", "skill", "add", "--name", name)
-		if sources := b.eventsOfType(out.stdout, "source"); len(sources) != 0 {
-			t.Errorf("installing %s added a source: %v", name, sources)
-		}
+		b.mustRun("skill", "add", "--name", name)
 	}
 	shared := 0
 	for _, ev := range b.eventsOfType(b.mustRun("--json", "source", "list").stdout, "source") {

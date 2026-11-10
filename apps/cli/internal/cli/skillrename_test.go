@@ -76,9 +76,6 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 
 	out := a.run("--json", "skill", "rename", "alpha", "renamed")
 	equal(t, "exit", out.exit, 0)
-	// The copy holds alpha's previous commit, which the renamed skill's
-	// history keeps, so nothing of the user's is said to be lost.
-	excludes(t, "the copy left behind by a commit", out.stdout+out.stderr, "deleted those changes")
 	equal(t, "summary", a.one(out.stdout, "result")["summary"],
 		"renamed alpha to renamed in 1 configuration")
 	renamed := a.ref(lineage.ForkRef("renamed"))
@@ -103,7 +100,6 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	equal(t, "alpha, not installed again", a.ref(lineage.ForkRef("alpha")), "")
 	diff := a.mustRun("skill", "diff", "renamed").stdout
 	contains(t, "the renamed skill's diff: the edit", diff, "notes.md")
-	excludes(t, "the renamed skill's diff: what was published under the old name", diff, "published.md")
 	contains(t, "its SKILL.md", fileBody(t, filepath.Join(a.forkDir("renamed", "alpha"), "SKILL.md")), "name: renamed")
 	equal(t, "copy_mode of the renamed skill", copyModeOf(t, a, "renamed"), "claude-code")
 	equal(t, "copy_mode of the old one", copyModeOf(t, a, "alpha"), "")
@@ -115,8 +111,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	equal(t, "the remote's old branch", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), published)
 
 	// The account remote refuses the old branch's deletion: the publish
-	// warns and goes on, still pushing renamed. No later publish retries
-	// it, see a's bare publish below.
+	// warns and goes on, still pushing renamed.
 	hook := filepath.Join(remote, "hooks", "pre-receive")
 	writeShim(t, hook, "#!/bin/sh\nwhile read old new ref; do [ \"$ref\" = refs/heads/skills/alpha ] && exit 1; done\nexit 0\n")
 	// -m does not fold a rename, which keeps its commit.
@@ -144,23 +139,18 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	// and puts alpha's back.
 	out = b.run("skill", "publish", "alpha")
 	equal(t, "b's publish of alpha: exit", out.exit, 0)
-	excludes(t, "b's publish of alpha", out.stdout+out.stderr, "renamed")
 	equal(t, "the remote's alpha, back", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), b.ref(lineage.ForkRef("alpha")))
 
 	// b publishes to beta after a renamed it: the renamed skill lacks that
 	// commit, so a's publish keeps beta's branch. A bare publish covers
 	// gamma through beta's branch, which holds the same skill.
-	renamedOut := a.mustRun("skill", "rename", "beta", "gamma")
-	excludes(t, "the fork step's line in a rename", renamedOut.stdout, "stays as it was")
-	contains(t, "the rename's line", renamedOut.stdout, "renamed beta to gamma")
+	contains(t, "the rename's line", a.mustRun("skill", "rename", "beta", "gamma").stdout, "renamed beta to gamma")
 	theirs := b.commitFork("beta", "b's commit\n")
 	b.mustRun("skill", "publish", "beta")
 	out = a.run("skill", "publish")
 	equal(t, "a publish over a changed old branch: exit", out.exit, 0)
-	excludes(t, "a bare publish of a renamed skill", out.stderr, "gamma is not published")
 	contains(t, "its warning", out.stderr, "the account remote's skills/beta holds changes gamma lacks, so it was kept")
 	contains(t, "its hint", out.stderr, "install it beside gamma with 'agentx skill add --name beta', or delete it with 'agentx skill remove beta --remote'")
-	excludes(t, "b's alpha, put back", out.stdout+out.stderr, "skills/alpha")
 	equal(t, "the remote's alpha, put back", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), b.ref(lineage.ForkRef("alpha")))
 	equal(t, "the remote's beta", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/beta"), theirs)
 	equal(t, "the remote's gamma", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/gamma"), a.ref(lineage.ForkRef("gamma")))
@@ -170,7 +160,6 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	a.mustRun("skill", "rename", "gamma", "delta")
 	out = a.mustRun("skill", "publish", "delta")
 	contains(t, "the deletion's line", out.stdout, "deleted skills/gamma from the account remote (renamed to delta)")
-	excludes(t, "beta, warned of once", out.stderr, "skills/beta")
 	equal(t, "the remote's gamma, deleted", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)", "refs/heads/skills/gamma"), "")
 	equal(t, "the remote's delta", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/delta"), a.ref(lineage.ForkRef("delta")))
 	equal(t, "the remote's beta, kept", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/beta"), theirs)

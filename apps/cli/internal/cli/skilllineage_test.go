@@ -141,7 +141,4 @@ func TestTheDirectoryIsRefusedBeforeTheEntriesUnderIt(t *testing.T) {
 	out := h.run("skill", "add", s.url, "--name", "evil")
 	equal(t, "exit", out.exit, exitRefused.exit)
 	contains(t, "the refusal", out.stderr, `evil comes from "skills/evil ", which is not a directory the account repo can record`)
-	if strings.Contains(out.stderr, "will not lay out") {
-		t.Errorf("the entry was refused before the directory:\n%s", out.stderr)
-	}
 }

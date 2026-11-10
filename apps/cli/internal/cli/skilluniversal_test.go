@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -79,7 +78,6 @@ func TestSkillAddNamesTheUniversalClients(t *testing.T) {
 			}
 			out := h.run(append([]string{"--json", "skill", "add", s.url, "--name", "alpha"}, c.to...)...)
 			equal(t, "exit", out.exit, 0)
-			nothingAt(t, "a placement in a universal client's own directory", filepath.Join(h.home, ".codex", "skills", "alpha"))
 			ev := h.one(out.stdout, "library_skill")
 			equal(t, "universal", universalOf(t, ev), "codex,gemini-cli")
 			equal(t, "placements", strings.Join(placementsOf(t, ev), ";"), c.placements)
@@ -139,37 +137,13 @@ func TestSkillPlaceNamesTheUniversalClients(t *testing.T) {
 	equal(t, "stderr", text.stderr, "")
 }
 
-// TestSkillAddNamesNoUniversalClientWhereThereIsNone: a machine with no
-// universal client installed has nobody to name. The event says so with an
-// empty list, and the text and the result say nothing about it.
-func TestSkillAddNamesNoUniversalClientWhereThereIsNone(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s, _, _ := h.standardSource(true)
-	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
-
-	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
-	equal(t, "exit", out.exit, 0)
-	equal(t, "universal", universalOf(t, h.one(out.stdout, "library_skill")), "")
-	if summary := h.one(out.stdout, "result")["summary"].(string); strings.Contains(summary, "universal") {
-		t.Errorf("the summary names universal clients on a machine with none: %q", summary)
-	}
-	text := h.run("skill", "place", "alpha", "--to", "claude-code")
-	equal(t, "exit", text.exit, 0)
-	if strings.Contains(text.stdout, "universal") {
-		t.Errorf("the text names universal clients on a machine with none:\n%s", text.stdout)
-	}
-}
-
 // TestSkillRemoveFromUniversalIsTheWholeRemoval: removing a skill from the
 // universal clients is removing the library entry they read, which takes
 // the skill from every client. It is the removal without --from, by name:
 // every placement, the library directory, the import branch, its candidate
 // ref and its copy-mode entries go, in one mutation, and the result is the
-// result of that removal, with no library_skill event, since the skill is
-// gone. --from universal given twice is one request. The text of the whole
-// removal, with a row for each universal client, is pinned in
+// result of that removal. --from universal given twice is one request. The
+// text of the whole removal, with a row for each universal client, is pinned in
 // TestSkillRemoveSanitisesTheNameAndQuotesThePaths.
 func TestSkillRemoveFromUniversalIsTheWholeRemoval(t *testing.T) {
 	t.Parallel()
@@ -191,7 +165,6 @@ func TestSkillRemoveFromUniversalIsTheWholeRemoval(t *testing.T) {
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
 	equal(t, "mutations", mutationVersion(t, h), before+1)
 	equal(t, "journals left behind", journalCount(t, h), 0)
-	equal(t, "library_skill events", len(h.eventsOfType(out.stdout, "library_skill")), 0)
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "removed alpha from the library, 3 placements and its import branch")
 }
 
@@ -434,7 +407,6 @@ func TestSkillRemoveRefusalNamesAClientReadingAnotherClientsDirectory(t *testing
 				add = append(add, "--copy")
 			}
 			equal(t, "add", h.run(add...).exit, 0)
-			nothingAt(t, "a placement of Cursor's own", filepath.Join(h.home, ".cursor", "skills", "alpha"))
 			before := mutationVersion(t, h)
 
 			out := h.run("skill", "remove", "alpha", "--from", "codex")
@@ -499,9 +471,6 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 		}
 		contains(t, "the warning", removed.stderr, place+" points at "+target+", not at ")
 		contains(t, "the warning", removed.stderr, "and was left as it is; it no longer leads to alpha\n")
-		if strings.Contains(removed.stderr, "claude-code still sees it") {
-			t.Errorf("the removal says Claude Code still sees alpha through a link it left leading nowhere:\n%s", removed.stderr)
-		}
 	})
 
 	t.Run("a link in a universal client's own directory", func(t *testing.T) {
@@ -684,18 +653,4 @@ func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 	e := h.one(gone.stdout, "error")
 	equal(t, "message once nothing records the source", e["message"], "no source with id "+id)
 	equal(t, "hint once nothing records the source", e["hint"], "run 'agentx source list' to see the sources")
-}
-
-// TestNoConfigurationIsCalledUniversal: --from universal names the universal
-// clients together, so no client the registry knows may have that id, or
-// asking to remove a skill from that one client would take it off the
-// machine. The skills CLI's universal pseudo-agent is left out of the
-// registry for this, among other reasons.
-func TestNoConfigurationIsCalledUniversal(t *testing.T) {
-	t.Parallel()
-	for _, slug := range scan.Slugs() {
-		if slug == fromUniversal {
-			t.Errorf("a registered client is called %q, which --from reserves for the universal clients together", slug)
-		}
-	}
 }

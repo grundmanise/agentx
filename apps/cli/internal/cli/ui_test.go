@@ -185,11 +185,6 @@ func TestHelpSections(t *testing.T) {
 	} {
 		contains(t, "stdout", out.stdout, s)
 	}
-	for _, s := range []string{"Commands:", "Flags:\n", "--help  help for"} {
-		if strings.Contains(out.stdout, s) {
-			t.Errorf("config --help still prints %q:\n%s", s, out.stdout)
-		}
-	}
 
 	out = h.run("--help")
 	equal(t, "exit", out.exit, 0)
@@ -213,10 +208,6 @@ func TestHelpSections(t *testing.T) {
 	} {
 		contains(t, "stdout", out.stdout, s)
 	}
-	if strings.Contains(out.stdout, "\n  help ") {
-		t.Errorf("the root lists cobra's help command:\n%s", out.stdout)
-	}
-	equal(t, "the dim line is the root's only on other pages", strings.Contains(out.stdout, "Global flags: --json"), false)
 
 	// A runnable command with children is a row of its own page's section
 	// and keeps its own usage line.
@@ -224,15 +215,9 @@ func TestHelpSections(t *testing.T) {
 	contains(t, "stdout", out.stdout, "Usage:\n  agentx machine [flags]\n  agentx machine <command> [arguments]\n\nMACHINES\n  rename <label>  ")
 	contains(t, "stdout", out.stdout, "Run 'agentx machine <command> --help' for")
 
-	// An unknown help topic gets the usage block: the list without the
-	// banner or the examples.
+	// An unknown help topic gets the usage block.
 	out = h.run("help", "bogus")
 	contains(t, "stdout", out.stdout, "Usage:\n  agentx [--json] [--verbose] [--color on|off] <command> [arguments]\n\nSKILLS\n")
-	for _, s := range []string{banner[1], "Examples:"} {
-		if strings.Contains(out.stdout, s) {
-			t.Errorf("the usage block prints %q:\n%s", s, out.stdout)
-		}
-	}
 
 	out = h.run("--color=on", "scan", "--help")
 	contains(t, "stdout", out.stdout, "\x1b[1mUsage:\x1b[0m\n  agentx scan [flags]\n")

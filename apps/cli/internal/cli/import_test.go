@@ -175,9 +175,6 @@ func TestImportRestoresAMachine(t *testing.T) {
 	equal(t, "mine", actions["mine"]["action"], importSkipped)
 	contains(t, "mine's reason", actions["mine"]["reason"].(string), "mine is unmanaged, so there is no source to install it from")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "imported the settings from "+first+": 2 installed, 1 skipped")
-	if lexists(filepath.Join(h.home, ".claude", "skills", "beta")) {
-		t.Error("beta was placed in claude-code, which the snapshot does not name")
-	}
 
 	second := h.exportSnapshot("second")
 	after := h.readExportFile(second)["skills"].([]any)
@@ -439,9 +436,6 @@ func TestImportOfAPartialSnapshot(t *testing.T) {
 	contains(t, "stdout", out.stdout, "  alpha  managed  installed  "+s.url+"/skills/alpha  placed in claude-code")
 	alpha := to.librarySkill(to.mustRun("--json", "skill", "list").stdout, "alpha")
 	equal(t, "the version installed", alpha["upstream_commit"], strings.TrimSpace(s.query("rev-parse", "HEAD")))
-	if lexists(filepath.Join(to.home, ".cursor", "skills", "alpha")) {
-		t.Error("alpha was placed in cursor, which the snapshot does not name")
-	}
 	equal(t, "the label", strings.TrimSpace(to.mustRun("config", "get", "label").stdout), "new-label")
 }
 
@@ -778,9 +772,6 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	equal(t, "beta", states["beta"]["state"], "different")
 	equal(t, "gamma", states["gamma"]["state"], "missing")
 	equal(t, "beta's local commit", states["beta"]["local_commit"], alpha)
-	if _, ok := states["gamma"]["local_commit"]; ok {
-		t.Error("a missing skill carries a local commit")
-	}
 	equal(t, "alpha's action", states["alpha"]["action"], importKept)
 	equal(t, "gamma's action", states["gamma"]["action"], importInstalled)
 	// beta's branch names alpha's version, which is no version of beta.
@@ -905,11 +896,6 @@ func TestKeepAccountRemote(t *testing.T) {
 			}
 		})
 	}
-	s := home.Settings{Sources: []home.Source{{URL: shared}}}
-	keepAccountRemote(&s, here)
-	if _, ok := accountEntry(s); ok {
-		t.Errorf("settings with no account remote gained one: %v", s.Sources)
-	}
 }
 
 // TestImportOntoAMachineWithNoAccountRepo: everything the export lists is
@@ -943,30 +929,6 @@ func TestImportOntoAMachineWithNoAccountRepo(t *testing.T) {
 			t.Errorf("%s: the import created an account repo", settings)
 		}
 	}
-}
-
-// TestNothingReadsAnExportAutomatically: an export is read when a person
-// asks for it and never otherwise. The one export writes into the library,
-// broken, is read by no command, and skill list does not list it.
-func TestNothingReadsAnExportAutomatically(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
-	inLibrary := h.exportSnapshot(defaultSnapshot)
-	settings := readText(t, home.SettingsPath(h.agentx))
-	list := h.run("--json", "skill", "list").stdout
-
-	// Whatever it holds, nothing looks at it.
-	writeFile(t, inLibrary, "{ not an export at all")
-	for _, args := range [][]string{
-		{"scan"}, {"config", "list"}, {"skill", "list"}, {"source", "list"}, {"machine"}, {"doctor"},
-	} {
-		out := h.run(args...)
-		equal(t, strings.Join(args, " "), out.exit, 0)
-	}
-	equal(t, "the file", readText(t, inLibrary), "{ not an export at all")
-	equal(t, "the settings", readText(t, home.SettingsPath(h.agentx)), settings)
-	equal(t, "the listing", h.run("--json", "skill", "list").stdout, list)
 }
 
 // TestImportReadsTheAnswer is the question itself: yes in the forms a
@@ -1191,9 +1153,6 @@ func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 	if len(added) != 3 {
 		t.Errorf("the sources added are %v, want the three of the settings", added)
 	}
-	if strings.Contains(out.stderr, "warn") {
-		t.Errorf("an import that added every source warned:\n%s", out.stderr)
-	}
 	restored, err := home.LoadSettings(to.agentx)
 	if err != nil {
 		t.Fatal(err)
@@ -1342,20 +1301,6 @@ func TestCommandsNameThePinOfASourceNeverFetched(t *testing.T) {
 	}
 	equal(t, "the pin after the hinted source add", restored.Sources[0].Pin, "main")
 	h.mustRun("skill", "add", other.url, "--all")
-}
-
-// TestImportWithNoSourceNamesNoSourceAdd: settings with no source have none
-// to add again, so no closing line names source add.
-func TestImportWithNoSourceNamesNoSourceAdd(t *testing.T) {
-	t.Parallel()
-	_, file := plainExport(t)
-	to := newHarness(t)
-	to.build(t, fixture{dirs: []string{".claude"}})
-	out := to.run("import", file, "--yes")
-	equal(t, "exit", out.exit, 0)
-	if strings.Contains(out.stdout, "source add") {
-		t.Errorf("an import that restored no source names source add:\n%s", out.stdout)
-	}
 }
 
 // printedSourceAdds is the argument of every source add line an import

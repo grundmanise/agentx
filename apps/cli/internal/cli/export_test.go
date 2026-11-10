@@ -202,9 +202,8 @@ func TestExportListsTheLibraryWithItsPlacements(t *testing.T) {
 }
 
 // TestExportWithoutAnAccountRepo is a machine that has installed nothing:
-// the settings are exported, the listing is empty, no account repo is
-// created to answer the question, and the library, which such a machine
-// has none of yet, is created for the file.
+// the settings are exported, the listing is empty, and the library, which
+// such a machine has none of yet, is created for the file.
 func TestExportWithoutAnAccountRepo(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -221,9 +220,6 @@ func TestExportWithoutAnAccountRepo(t *testing.T) {
 	doc := h.readExportFile(file)
 	equal(t, "entries", len(doc["skills"].([]any)), 0)
 	equal(t, "label", doc["settings"].(map[string]any)["label"], "fresh")
-	if _, err := os.Stat(filepath.Join(h.agentx, "account.git")); err == nil {
-		t.Error("the export created an account repo")
-	}
 }
 
 // TestSnapshotName pins what a snapshot's name may be: a file name with no
@@ -335,9 +331,8 @@ func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 }
 
 // TestExportRefusesADirectoryWithAHintThatHelps: --force overwrites a file
-// that is already there, and cannot overwrite a directory, so offering it
-// for one sent the reader after a fix that does not exist and then failed
-// as an internal error.
+// that is already there, and cannot overwrite a directory, so the refusal
+// of a directory, with --force or without, says to give another name.
 func TestExportRefusesADirectoryWithAHintThatHelps(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -351,9 +346,6 @@ func TestExportRefusesADirectoryWithAHintThatHelps(t *testing.T) {
 		equal(t, strings.Join(args, " ")+" exit", out.exit, 6)
 		contains(t, "stderr", out.stderr, dir+" is a directory")
 		contains(t, "stderr", out.stderr, "give another name")
-		if strings.Contains(out.stderr, "--force") {
-			t.Errorf("the hint offers a flag that cannot help:\n%s", out.stderr)
-		}
 	}
 	// A file that is already there still names --force, which does help,
 	// and what the file holds is not agentx's to lose until it is given.

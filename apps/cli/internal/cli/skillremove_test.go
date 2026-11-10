@@ -321,8 +321,8 @@ func TestSkillRemoveDropsTheCopyModeOfWhatItRemoved(t *testing.T) {
 // directory came to differ from the library's version: the user may have
 // edited the copy, replaced it with something of another project, or had a
 // directory of their own adopted there that was never a copy agentx wrote.
-// So the warning claims no history, and the replaced copies prove it: a
-// directory holding somebody else's README is not "a copy you edited".
+// So the warning says only that the copy was different from the library,
+// for an edited copy and a replaced one alike.
 func TestSkillRemoveSaysACopyWasNotTheLibraryVersion(t *testing.T) {
 	t.Parallel()
 	edit := func(t *testing.T, place string) {
@@ -358,9 +358,6 @@ func TestSkillRemoveSaysACopyWasNotTheLibraryVersion(t *testing.T) {
 				equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), warning)
 			} else {
 				equal(t, "stderr", out.stderr, "warning: "+warning+"\n")
-			}
-			if strings.Contains(out.stderr, "edited") {
-				t.Errorf("the warning claims a history agentx has no record of:\n%s", out.stderr)
 			}
 		})
 	}

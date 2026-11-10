@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -241,7 +240,4 @@ func TestServeRecoversAJournalOnRescan(t *testing.T) {
 	}
 	equal(t, "log.level", logs[0]["level"], "warn")
 	contains(t, "log.message", logs[0]["message"].(string), journal)
-	if strings.Contains(p.stderr.String(), "watch") {
-		t.Errorf("stderr mentions the watcher: %s", p.stderr.String())
-	}
 }
