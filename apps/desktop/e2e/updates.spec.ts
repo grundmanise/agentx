@@ -169,7 +169,7 @@ test.describe("Update", () => {
         },
       ],
       name: "pdf",
-      toast: "pdf is already up to date",
+      toast: "pdf skill is already up to date",
     },
   ];
   for (const c of cases) {

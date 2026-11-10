@@ -50,7 +50,7 @@ const addSource = (source: string): ToastAction => ({
 const updatedText = (row: SkillRow, events: CliEvent[]) => {
   const updated = updatedIn(events).find((e) => e.name === row.name);
   if (updated === undefined) {
-    return `${row.name} is already up to date`;
+    return `${row.name} skill is already up to date`;
   }
   if (row.kind === "yours") {
     return `Updated ${row.name} skill. Publish when ready.`;
