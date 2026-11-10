@@ -939,14 +939,14 @@ The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-
 
 Nothing loops forever, and nothing waits on purpose.
 
-- Hover and background changes: no transition, or at most `.18s`.
-- Switches: `.18s` background.
-- Chevrons: `rotate(90deg)` in `.15s`.
+- Hover and background changes: no transition, or at most `.2s`.
+- Switches: the track changes colour in `.2s`; the knob moves with no transition.
+- File list chevron: `rotate(90deg)` in `.15s`. The History sheet's chevron turns with no transition.
 - File row: the meta and the Show in Finder button swap by opacity in `.15s`.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0` and opacity 0 → 1, `.22s ease`, when it appears.
 - Check updates and Check tools icons (`animate-turn-once`): one full rotation, 1s ease, while the command runs.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass; a passing launch shows no startup layer.
-- A launch whose checks run over 2s shows a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way, each status for at least 1.5s. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
+- A launch whose checks run over 2s shows a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way; while serve scans, its status lines turn every 1.5s. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
-- Primary button enable and disable: `opacity .2s`.
+- Button enable and disable, every variant: `opacity .2s`.
