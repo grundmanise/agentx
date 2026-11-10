@@ -137,7 +137,7 @@ latest_release() {
 	esac
 }
 
-# Releases come newest first; nightlies are the prereleases tagged vX.Y.Z-nightly.YYYYMMDD.
+# Releases come newest first; nightlies are the prereleases tagged vX.Y.Z-nightly.YYYYMMDD.N.
 newest_nightly() {
 	api="https://api.github.com/repos/$repo/releases?per_page=50"
 	if [ -n "${GITHUB_TOKEN:-}" ]; then
