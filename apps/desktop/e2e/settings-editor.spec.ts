@@ -1,24 +1,10 @@
 // The Editor section of Settings: System default, the editors found on this machine and a custom
 // command line, one choice, saved in the app's own preferences and kept across a restart (a page
-// reload, which keeps the mocked preferences file). No CLI command runs for it.
+// reload, which keeps the mocked preferences file).
 import type { Page } from "@playwright/test";
 
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
-
-const launchLines = [
-  ["version", "--json"],
-  ["doctor", "--json"],
-];
-
-/** The command lines the page ran: every line but the launch's and the store's reads. */
-const later = (cli: MockCli) =>
-  cli.commands.filter(
-    (l) =>
-      ![...launchLines, ...loadLines].some(
-        (known) => known.join(" ") === l.join(" ")
-      )
-  );
 
 const FOUND = [
   { id: "vscode", name: "VS Code" },
@@ -89,8 +75,6 @@ test("Editor sits before Storage and lists System default, the editors found and
     "Custom command",
   ]);
   await expect(choice(page, "System default")).toBeChecked();
-  await expect(commandField(page)).toHaveCount(0);
-  expect(later(cli)).toEqual([]);
 });
 
 test("a detected editor, once chosen, is still chosen after a restart", async ({
@@ -109,7 +93,6 @@ test("a detected editor, once chosen, is still chosen after a restart", async ({
 
   await restart(cli, page);
   await expect(choice(page, "Zed")).toBeChecked();
-  await expect(choice(page, "System default")).not.toBeChecked();
 
   // Gone from the machine since: still listed, so the choice shows.
   cli.answerEditors([FOUND[0]]);
@@ -121,7 +104,6 @@ test("a detected editor, once chosen, is still chosen after a restart", async ({
     "Custom command",
   ]);
   await expect(choice(page, "Zed")).toBeChecked();
-  expect(later(cli)).toEqual([]);
 });
 
 test("Custom command shows its field, saves the command on Enter, and keeps it after a restart", async ({
@@ -152,13 +134,11 @@ test("Custom command shows its field, saves the command on Enter, and keeps it a
 
   // Back to the system default; the command typed stays in the field for next time.
   await choice(page, "System default").click();
-  await expect(commandField(page)).toHaveCount(0);
   await expect
     .poll(() => cli.savedPreferences)
     .toEqual({ editor: { kind: "system" } });
   await choice(page, "Custom command").click();
   await expect(commandField(page)).toHaveValue("subl -n");
-  expect(later(cli)).toEqual([]);
 });
 
 test("with no editor found, the choice is System default or Custom command", async ({

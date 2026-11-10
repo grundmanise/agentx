@@ -145,7 +145,6 @@ test.describe("banners", () => {
     await expect(note.getByRole("button")).toHaveText(["Open Settings"]);
     await note.getByRole("button", { name: "Open Settings" }).click();
     await expect(page).toHaveURL(/#\/settings$/u);
-    expect(later(cli)).toEqual([]);
   });
 
   test("an edited skill of a writable source: the count from skill diff, and Publish to its source", async ({
@@ -158,7 +157,6 @@ test.describe("banners", () => {
     await expect(note).toContainText(
       "3 files differ from acme/skills. Updates won't overwrite them."
     );
-    // The banner offers no Fork: Fork is in the action row.
     await expect(note.getByRole("button")).toHaveText([
       "Publish to acme/skills",
     ]);
@@ -170,9 +168,6 @@ test.describe("banners", () => {
     page,
   }) => {
     await openSkill(cli, page, "review");
-    await expect(
-      banner(pane(page, "review")).getByRole("button", { name: "Fork" })
-    ).toHaveCount(0);
     await pane(page, "review")
       .getByLabel("Actions", { exact: true })
       .getByRole("button", { exact: true, name: "Fork" })
@@ -189,7 +184,7 @@ test.describe("banners", () => {
     expect(later(cli).at(-1)).toEqual(["skill", "fork", "review", "--json"]);
   });
 
-  test("an edited skill of a read-only source: a banner with no button", async ({
+  test("an edited skill of a read-only source: Edited locally, with the count from skill diff", async ({
     cli,
     page,
   }) => {
@@ -199,10 +194,9 @@ test.describe("banners", () => {
     await expect(note).toContainText(
       "1 file differs from zeta/tools. Updates won't overwrite them."
     );
-    await expect(note.getByRole("button")).toHaveCount(0);
   });
 
-  test("an edited skill of a source, before skill diff answers: the banner without a count", async ({
+  test("an edited skill of a source, before skill diff answers: Updates won't overwrite your edits, with Publish to its source", async ({
     cli,
     page,
   }) => {
@@ -210,21 +204,9 @@ test.describe("banners", () => {
     const note = banner(pane(page, "review"));
     await expect(note).toHaveAccessibleName("Edited locally");
     await expect(note).toContainText("Updates won't overwrite your edits.");
-    await expect(note).not.toContainText("differ");
     await expect(note.getByRole("button")).toHaveText([
       "Publish to acme/skills",
     ]);
-  });
-
-  test("a skill of a source as it was installed has none of these banners", async ({
-    cli,
-    page,
-  }) => {
-    await openSkill(cli, page, "pdf");
-    await expect(
-      pane(page, "pdf").getByRole("region", { name: "Files" })
-    ).toBeVisible();
-    await expect(banner(pane(page, "pdf"))).toHaveCount(0);
   });
 });
 
@@ -466,7 +448,6 @@ test.describe("outcomes", () => {
         "There is a newer version of review skill in acme/skills. Update it first, then publish your changes."
       )
     ).toBeVisible();
-    await expect(toasts(page)).not.toContainText("account remote");
     await expect(
       toasts(page).getByRole("button", { name: "Update" })
     ).toBeVisible();

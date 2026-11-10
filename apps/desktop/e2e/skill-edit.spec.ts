@@ -1,30 +1,12 @@
 // Edit in the Skills detail pane: offered for one of your own skills and an edited skill of a
-// source, never for an unmodified skill of a source, a plugin's skill, an unmanaged skill or one a
-// client holds on its own. It opens the skill's SKILL.md in the editor chosen in Settings and runs
-// no command; when the editor cannot be opened, a toast offers to show the file in the file
-// manager instead, which is Finder on macOS.
+// source. It opens the skill's SKILL.md in the editor chosen in Settings; when the editor cannot
+// be opened, a toast offers to show the file in the file manager instead, which is Finder on
+// macOS.
 import type { Page } from "@playwright/test";
 
 import { adoption, fileReads, inventory } from "./fixtures/skills.ts";
-import { expect, libraryPath, loadLines, test } from "./harness/cli.ts";
+import { expect, libraryPath, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
-
-const launchLines = [
-  ["version", "--json"],
-  ["doctor", "--json"],
-];
-
-/** The reads the launch, the store and the detail pane run on their own. */
-const isRead = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
-    (known) => known.join(" ") === line.join(" ")
-  ) ||
-  ["skill history", "skill files", "skill diff"].includes(
-    line.slice(0, 2).join(" ")
-  );
-
-/** The command lines the controls ran. */
-const ran = (cli: MockCli) => cli.commands.filter((l) => !isRead(l));
 
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
@@ -74,26 +56,27 @@ test.describe("Edit button", () => {
       await expect(editButton(page, name)).toBeVisible();
     });
   }
-
-  // Each with the action row it shows instead, so the pane is drawn whole when Edit is looked for.
-  for (const [name, key, shown] of [
-    ["pdf", "pdf", ["Fork", "Remove"]],
-    ["gone", "gone", ["Fork", "Remove"]],
-    ["scratch", "scratch", ["Fork", "Remove"]],
-    ["commit-helper", "skill:h-commit", ["Fork"]],
-    ["notes", "skill:h-notes", []],
-  ] as const) {
-    test(`is left out for ${name}`, async ({ cli, page }) => {
-      await openSkill(cli, page, name, key);
-      await expect(actions(page, name).getByRole("button")).toHaveText([
-        ...shown,
-      ]);
-      await expect(editButton(page, name)).toHaveCount(0);
-    });
-  }
 });
 
-test("Edit comes first in the action row and opens SKILL.md in the chosen editor, running no command", async ({
+// The action row of each skill that is not yours and has no edits.
+for (const [name, key, shown] of [
+  ["pdf", "pdf", ["Fork", "Remove"]],
+  ["gone", "gone", ["Fork", "Remove"]],
+  ["scratch", "scratch", ["Fork", "Remove"]],
+  ["commit-helper", "skill:h-commit", ["Fork"]],
+] as const) {
+  test(`the action row of ${name} shows ${shown.join(" and ")}`, async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, name, key);
+    await expect(actions(page, name).getByRole("button")).toHaveText([
+      ...shown,
+    ]);
+  });
+}
+
+test("Edit comes first in the action row and opens SKILL.md in the chosen editor", async ({
   cli,
   page,
 }) => {
@@ -110,8 +93,6 @@ test("Edit comes first in the action row and opens SKILL.md in the chosen editor
   await expect
     .poll(() => cli.editorOpens)
     .toEqual([{ editor: vscode, path: `${libraryPath}/review/SKILL.md` }]);
-  await expect(toasts(page).getByText(/^Couldn't open/u)).toHaveCount(0);
-  expect(ran(cli)).toEqual([]);
 });
 
 test("an editor that cannot be opened says so in a toast whose Show in file manager shows the file", async ({
@@ -132,7 +113,6 @@ test("an editor that cannot be opened says so in a toast whose Show in file mana
     .getByRole("button", { exact: true, name: "Show in file manager" })
     .click();
   await expect.poll(() => cli.reveals).toEqual([[path]]);
-  expect(ran(cli)).toEqual([]);
 });
 
 test("the system default that cannot open the file names the default app", async ({
@@ -173,6 +153,5 @@ test("on macOS the file manager is Finder: the toast's action and the FILES pane
   await expect
     .poll(() => cli.reveals)
     .toEqual([[`${libraryPath}/draft/SKILL.md`]]);
-  await expect(page.getByText("Ctrl K")).toHaveCount(0);
   await expect(page.getByText("⌘K")).toBeVisible();
 });

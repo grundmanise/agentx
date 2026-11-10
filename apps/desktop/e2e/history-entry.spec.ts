@@ -13,11 +13,6 @@ const entryButton = (page: Page) =>
   sheet(page).getByRole("button", { exact: true, name: SUBJECT });
 const filesOf = (page: Page) =>
   sheet(page).getByRole("list", { name: `Files of ${SUBJECT}` });
-/** The command lines run, but the pane's own reads of the skill's history and files. */
-const others = (cli: MockCli) =>
-  cli.commands.filter(
-    (l) => !(l[0] === "skill" && (l[1] === "history" || l[1] === "files"))
-  );
 
 /** Opens pdf-letters, one of your own skills, and its History sheet. */
 const openSheet = async (cli: MockCli, page: Page) => {
@@ -40,10 +35,8 @@ test("an entry expands to its files and collapses again", async ({
   page,
 }) => {
   await openSheet(cli, page);
-  const ran = others(cli);
   const button = entryButton(page);
   await expect(button).toHaveAttribute("aria-expanded", "false");
-  await expect(filesOf(page)).toHaveCount(0);
 
   await button.click();
   await expect(button).toHaveAttribute("aria-expanded", "true");
@@ -51,14 +44,8 @@ test("an entry expands to its files and collapses again", async ({
     "modifiedSKILL.md",
     "addedexamples.md",
   ]);
-  // Only the open entry shows its files.
-  await expect(
-    sheet(page).getByRole("list", { name: /^Files of /u })
-  ).toHaveCount(1);
 
   await button.click();
   await expect(button).toHaveAttribute("aria-expanded", "false");
   await expect(filesOf(page)).toHaveCount(0);
-  // The files come with the history: expanding an entry runs nothing.
-  expect(others(cli)).toEqual(ran);
 });

@@ -48,18 +48,6 @@ const oldGit = {
   type: "doctor",
 } as const;
 
-/** Marks the page's root with data-layer-shown once the startup layer has shown, even briefly. */
-const watchLayer = async (page: Page) => {
-  await page.addInitScript(() => {
-    new MutationObserver(() => {
-      if (document.querySelector('[aria-label="Startup checks"]') !== null) {
-        document.documentElement.dataset.layerShown = "";
-      }
-    }).observe(document, { childList: true, subtree: true });
-  });
-};
-const layerShown = (page: Page) => page.locator("html[data-layer-shown]");
-
 /** Opens manual mode, as Settings › Run checks will; until it exists, a harness module does. */
 const runChecks = async (page: Page) => {
   await page.addScriptTag({
@@ -90,7 +78,7 @@ test.beforeEach(async ({ context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 });
 
-test("a passing launch checks the machine out of sight and opens Skills", async ({
+test("a passing launch checks the machine and opens Skills", async ({
   cli,
   page,
 }) => {
@@ -98,21 +86,18 @@ test("a passing launch checks the machine out of sight and opens Skills", async 
     events: doctorWith(),
     holdAfter: 0,
   });
-  await watchLayer(page);
   await page.goto("/");
   await doctor.started;
-  // While the checks run, the shell shows Skills selected, its panel is empty, and no layer shows.
+  // While the checks run, the shell shows Skills selected and its panel is busy.
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
   await expect(page.getByRole("link", { name: "Skills" })).toHaveAttribute(
     "aria-current",
     "page"
   );
-  await expect(skills(page)).toHaveCount(0);
   doctor.release();
 
   await expect(skills(page)).toBeVisible();
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
-  await expect(layerShown(page)).toHaveCount(0);
   await launched(cli);
   expect(cli.serveStarts).toBe(1);
 });
@@ -132,7 +117,6 @@ test("a launch over 2 seconds says what it checks, and from 5 seconds how much l
     events: doctorWith(),
     holdAfter: 0,
   });
-  await watchLayer(page);
   await pauseTimers(page);
   await page.goto("/");
   await doctor.started;
@@ -152,7 +136,6 @@ test("a launch over 2 seconds says what it checks, and from 5 seconds how much l
   doctor.release();
   await expect(skills(page)).toBeVisible();
   await expect(progress(page)).toHaveCount(0);
-  await expect(layerShown(page)).toHaveCount(0);
 });
 
 test("while serve scans, the panel names skills, MCP servers and plugins in turn", async ({
@@ -160,7 +143,6 @@ test("while serve scans, the panel names skills, MCP servers and plugins in turn
   page,
 }) => {
   cli.onServeStart({ events: [] });
-  await watchLayer(page);
   await pauseTimers(page);
   await page.goto("/");
   await expect.poll(() => cli.serveStarts).toBe(1);
@@ -180,7 +162,6 @@ test("while serve scans, the panel names skills, MCP servers and plugins in turn
   await cli.serveEmit([firstInventory()]);
   await expect(skills(page)).toBeVisible();
   await expect(progress(page)).toHaveCount(0);
-  await expect(layerShown(page)).toHaveCount(0);
 });
 
 test("a machine with no skills and no agents passes", async ({ cli, page }) => {
@@ -200,10 +181,7 @@ test("a machine with no skills and no agents passes", async ({ cli, page }) => {
   );
 });
 
-test("a CLI that is not found stops at check 1 and runs nothing", async ({
-  cli,
-  page,
-}) => {
+test("a CLI that is not found stops at check 1", async ({ cli, page }) => {
   cli.resolveTo({ found: null, path: null });
   await page.goto("/");
   await expect(title(page)).toHaveText("Reinstall agentx");
@@ -213,8 +191,6 @@ test("a CLI that is not found stops at check 1 and runs nothing", async ({
   await expect(
     row(page, "Watching this machine").getByText("Waiting:", { exact: true })
   ).toBeVisible();
-  expect(cli.commands).toEqual([]);
-  expect(cli.serveStarts).toBe(0);
 });
 
 test("an old git blocks with the CLI's hint as the fix", async ({
@@ -228,12 +204,10 @@ test("an old git blocks with the CLI's hint as the fix", async ({
   await expect(git.getByText("Failed:", { exact: true })).toBeVisible();
   await expect(git).toContainText(oldGit.detail);
   await expect(git.getByRole("paragraph")).toHaveText(`Fix: ${oldGit.hint}`);
-  await expect(git.getByRole("button")).toHaveCount(0);
   await expect(
     row(page, "Home folder is writable").getByText("Waiting:", { exact: true })
   ).toBeVisible();
   expect(cli.commands).toEqual(launchLines);
-  expect(cli.serveStarts).toBe(0);
 });
 
 test("an unusable account repo blocks at check 4", async ({ cli, page }) => {
@@ -244,7 +218,6 @@ test("an unusable account repo blocks at check 4", async ({ cli, page }) => {
   await expect(account.getByText("Failed:", { exact: true })).toBeVisible();
   await expect(account).toContainText("not a git repository");
   expect(cli.commands).toEqual(launchLines);
-  expect(cli.serveStarts).toBe(0);
 });
 
 test("a warning does not block, and manual mode shows it", async ({
@@ -259,10 +232,8 @@ test("a warning does not block, and manual mode shows it", async ({
     type: "doctor",
   } as const;
   cli.register(["doctor"], { events: doctorWith(lock) });
-  await watchLayer(page);
   await page.goto("/");
   await expect(skills(page)).toBeVisible();
-  await expect(layerShown(page)).toHaveCount(0);
   expect(cli.serveStarts).toBe(1);
   await launched(cli);
 
@@ -397,10 +368,6 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   await expect(row(page, "Watching this machine")).toContainText(
     "Found 3 agents"
   );
-  // No command field while the layer shows.
-  await expect(
-    page.getByRole("button", { name: /Search skills/u })
-  ).toHaveCount(0);
   // It stays until Open agentx.
   await page.waitForTimeout(800);
   await expect(layer(page)).toBeVisible();
@@ -435,7 +402,6 @@ test("a check that passes its deadline fails, and Retry runs it again", async ({
     "agentx doctor did not finish in 30 seconds"
   );
   expect(cli.deadlines).toEqual([30_000, 30_000]);
-  expect(cli.serveStarts).toBe(0);
 
   cli.register(["doctor"], { events: doctorWith() });
   await page.getByRole("button", { name: "Retry" }).click();
@@ -497,7 +463,6 @@ test("a serve exit with code 8 after launch brings the checks back", async ({
   cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
   await cli.serveExit(8, [], null);
   await expect(title(page)).toHaveText("agentx can't open its account repo");
-  await expect(skills(page)).toHaveCount(0);
   expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
 });
 

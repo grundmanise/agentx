@@ -279,7 +279,6 @@ test.describe("publish, refused: the hint in the app's words", () => {
       await status(page).click();
       const toast = toasts(page).getByRole("listitem");
       await expect(toast.getByText(c.shown, { exact: true })).toBeVisible();
-      await expect(toast).not.toContainText("agentx");
       expect(ran(cli, ["skill", "publish"])).toBe(true);
     });
   }

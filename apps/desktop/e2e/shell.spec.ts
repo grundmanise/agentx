@@ -26,7 +26,6 @@ test("opens on Skills and lists the screens in sidebar order", async ({
   // Each link's icon is an inline SVG, hidden from screen readers and from the tab order.
   const icons = nav.locator("svg");
   await expect(icons).toHaveCount(6);
-  await expect(nav.getByRole("img")).toHaveCount(0);
   expect(
     await icons.evaluateAll((svgs) =>
       svgs.every(

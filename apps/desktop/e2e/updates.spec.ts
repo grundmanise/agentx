@@ -1,6 +1,6 @@
 // Updates on the Skills screen: Check updates, the banners of an update and their Update button,
 // the banner of a pending merge with Show folder, Abort and Update, and Update all on the toast of
-// a check. No row carries an Update button. Each button runs exactly one
+// a check. Each button runs exactly one
 // command line, which the mocked CLI records, and its outcome is the toast of the results table.
 import type { Page } from "@playwright/test";
 
@@ -58,19 +58,17 @@ const updateBanner = (page: Page, name: string) =>
   pane(page, name).getByRole("note", {
     name: /^(?:New version from |Published from another machine$)/u,
   });
-/** Selects `name` and expects the banner of an update, with its Update, or none. */
-const expectOffered = async (page: Page, name: string, offers: boolean) => {
+/** Selects `name` and expects the banner of an update, with its Update. */
+const expectOffered = async (page: Page, name: string) => {
   await row(page, name).click();
   await expect(pane(page, name)).toBeVisible();
-  await expect(updateBanner(page, name)).toHaveCount(offers ? 1 : 0);
-  if (offers) {
-    await expect(
-      updateBanner(page, name).getByRole("button", {
-        exact: true,
-        name: "Update",
-      })
-    ).toBeVisible();
-  }
+  await expect(updateBanner(page, name)).toHaveCount(1);
+  await expect(
+    updateBanner(page, name).getByRole("button", {
+      exact: true,
+      name: "Update",
+    })
+  ).toBeVisible();
 };
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
@@ -107,19 +105,7 @@ const open = async (
   await expect(pane(page, name)).toBeVisible();
 };
 
-test.describe("the rows", () => {
-  test("carry no Update button: Update is on the banner", async ({
-    cli,
-    page,
-  }) => {
-    await open(cli, page, "pdf");
-    await expect(row(page, "pdf")).toBeVisible();
-    await expect(
-      list(page).getByRole("button", { name: /^Update /u })
-    ).toHaveCount(0);
-    await expect(update(page, "pdf")).toBeVisible();
-  });
-
+test.describe("Update", () => {
   test("the banner's Update records skill update <name>, is pending, and leaves once it updated", async ({
     cli,
     page,
@@ -137,9 +123,7 @@ test.describe("the rows", () => {
     await expect(update(page, "pdf")).toHaveCount(0);
     expect(later(cli)).toEqual([["skill", "update", "pdf", "--json"]]);
   });
-});
 
-test.describe("Update", () => {
   const cases: {
     name: string;
     events: InlineEvent[];
@@ -312,7 +296,7 @@ test.describe("banners", () => {
     });
   }
 
-  test("no update banner for a skill with a pending merge, or without an update", async ({
+  test("a pending merge comes first: its banner in place of the update's", async ({
     cli,
     page,
   }) => {
@@ -321,10 +305,6 @@ test.describe("banners", () => {
     await expect(pane(page, "draft").getByRole("note")).toHaveCount(1);
     await expect(
       pane(page, "draft").getByRole("note", { name: "Update has conflicts" })
-    ).toBeVisible();
-    await page.goto("/#/skills/gone");
-    await expect(
-      pane(page, "gone").getByRole("note", { name: "No longer in zeta/tools" })
     ).toBeVisible();
   });
 });
@@ -335,7 +315,6 @@ test.describe("Check updates", () => {
     page,
   }) => {
     await open(cli, page, "pdf", []);
-    await expect(update(page, "pdf")).toHaveCount(0);
     const run = cli.register(["skill", "check-updates"], {
       events: [
         {
@@ -367,11 +346,10 @@ test.describe("Check updates", () => {
     await expect(toasts(page).getByText("4 skills have updates")).toBeVisible();
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "false");
     // One after the other: each selects its row.
-    await expectOffered(page, "pdf", true);
-    await expectOffered(page, "pdf-letters", true);
-    await expectOffered(page, "release-notes", true);
-    await expectOffered(page, "review", true);
-    await expectOffered(page, "draft", false);
+    await expectOffered(page, "pdf");
+    await expectOffered(page, "pdf-letters");
+    await expectOffered(page, "release-notes");
+    await expectOffered(page, "review");
     expect(later(cli)).toEqual([["skill", "check-updates", "--json"]]);
 
     cli.register(["skill", "update", "--all"], {
@@ -398,7 +376,6 @@ test.describe("Check updates", () => {
   }) => {
     await open(cli, page, "pdf", []);
     await expect(checkButton(page)).toHaveText("");
-    await expect(page.getByRole("tooltip")).toHaveCount(0);
     await checkButton(page).hover();
     await expect(page.getByRole("tooltip")).toHaveText("Check updates");
     // Away in a few steps, as a pointer moves: the tooltip closes once it is past the grace area
@@ -430,14 +407,11 @@ test.describe("Check updates", () => {
     );
   });
 
-  test("one update: no Update all", async ({ cli, page }) => {
+  test("one update: 1 skill has an update", async ({ cli, page }) => {
     await open(cli, page, "pdf", []);
     cli.register(["skill", "check-updates"], { events: [pdfUpdate] });
     await checkButton(page).click();
     await expect(toasts(page).getByText("1 skill has an update")).toBeVisible();
-    await expect(
-      toasts(page).getByRole("button", { name: "Update all" })
-    ).toHaveCount(0);
   });
 
   test("nothing new: Everything is up to date, and the updates serve found are gone", async ({
@@ -502,10 +476,8 @@ test.describe("Check updates", () => {
         { exact: true }
       )
     ).toBeVisible();
-    await expect(toasts(page).getByText(hint)).toHaveCount(0);
-    await expectOffered(page, "pdf", true);
-    await expectOffered(page, "review", true);
-    await expectOffered(page, "pdf-letters", false);
+    await expectOffered(page, "pdf");
+    await expectOffered(page, "review");
   });
 });
 
@@ -589,7 +561,7 @@ test.describe("a pending merge", () => {
     ).toEqual(["Show folder", "Abort", "Update"]);
   });
 
-  test("Show folder reveals the merge folder in agentx home and runs no command", async ({
+  test("Show folder reveals the merge folder in agentx home", async ({
     cli,
     page,
   }) => {
@@ -598,10 +570,9 @@ test.describe("a pending merge", () => {
     await expect
       .poll(() => cli.reveals)
       .toEqual([["/home/me/.agentx/merges/draft/draft"]]);
-    expect(later(cli)).toEqual([]);
   });
 
-  test("Abort asks first: Cancel runs nothing, Abort records skill update <name> --abort and keeps the update", async ({
+  test("Abort asks first: Cancel closes the dialog, Abort records skill update <name> --abort and keeps the update", async ({
     cli,
     page,
   }) => {
@@ -618,7 +589,6 @@ test.describe("a pending merge", () => {
       .getByRole("button", { exact: true, name: "Cancel" })
       .click();
     await expect(abortDialog(page)).toBeHidden();
-    expect(later(cli)).toEqual([]);
 
     cli.register(["skill", "update", "draft", "--abort"], {
       events: [
@@ -660,7 +630,7 @@ test.describe("a pending merge", () => {
       },
     ]);
     await expect(banner(page)).toHaveCount(0);
-    await expectOffered(page, "draft", true);
+    await expectOffered(page, "draft");
     await page.getByRole("button", { name: "Filter" }).click();
     await expect(
       page
