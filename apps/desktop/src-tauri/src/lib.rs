@@ -77,7 +77,9 @@ fn preferences_read(app: tauri::AppHandle) -> Result<preferences::Preferences, S
     Ok(preferences::read(&preferences_file(&app)?))
 }
 
-/// Saves the app's preferences, replacing what was saved.
+/// Saves the app's preferences, replacing what was saved. A custom command saved here is a
+/// program the app will run, with a skill's file as its last argument, when `editor_open` is
+/// called.
 #[tauri::command(rename_all = "snake_case")]
 fn preferences_write(
     app: tauri::AppHandle,
@@ -104,10 +106,11 @@ fn detected(env: &HashMap<String, String>) -> Vec<editor::Detected> {
 }
 
 /// Opens the file at `path` with the editor saved in the app's preferences, an editor the app
-/// found or a command line; the system's default application is the opener plugin's. The webview
-/// names only the file: the program comes from the preferences, never from the call. `path` must
-/// be a file inside the library or agentx home, as the CLI resolves them from the login shell's
-/// environment.
+/// found or a command line; the system's default application is the opener plugin's. The call
+/// names only the file, which must be inside the library or agentx home, as the CLI resolves them
+/// from the login shell's environment. The program comes from the saved preference, which the
+/// webview writes through `preferences_write` when the user picks an editor or types a command, so
+/// the editor command is as trusted as the webview itself.
 #[tauri::command(rename_all = "snake_case")]
 async fn editor_open(app: tauri::AppHandle, sup: Sup<'_>, path: String) -> Result<(), String> {
     let env = sup.login_env().await;
