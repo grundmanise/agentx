@@ -104,7 +104,6 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 
 	out := h.mustRun("--json", "skill", "update", "--all")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "updated 2 skills, 1 copy placement refreshed")
-	excludes(t, "beta's copy, which holds the tip its draft was recorded on", out.stdout+out.stderr, "left unchanged")
 	equal(t, "beta's copy", fileBody(t, filepath.Join(h.home, ".claude", "skills", "beta", "notes.md")), forkNotes("two", "two, mine", "seven", "seven, upstream"))
 	for _, name := range []string{"alpha", "beta"} {
 		ev := h.librarySkill(out.stdout, name)

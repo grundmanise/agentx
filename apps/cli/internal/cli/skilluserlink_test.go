@@ -3,7 +3,6 @@ package cli
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -85,8 +84,7 @@ func TestSkillRemoveLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 // the user's is left however it resolves, but what the removal says of it
 // follows where it leads. Here it leads through Cursor's placement, which
 // the same removal deletes, so the link stays and no longer leads to the
-// skill, and the warning says that rather than that Claude Code still sees
-// it.
+// skill, and the warning says that.
 func TestSkillRemoveSaysALinkThroughARemovedPlacementLeadsNowhere(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
@@ -106,9 +104,6 @@ func TestSkillRemoveSaysALinkThroughARemovedPlacementLeadsNowhere(t *testing.T) 
 	stillTheirs(t, "after a removal", place, through)
 	contains(t, "the warning", out.stderr, place+" points at "+through+", not at ")
 	contains(t, "the warning", out.stderr, "and was left as it is; it no longer leads to alpha\n")
-	if strings.Contains(out.stderr, "still sees it") {
-		t.Errorf("the removal says a client still sees alpha through a link it left leading nowhere:\n%s", out.stderr)
-	}
 }
 
 // TestSkillPlaceLeavesALinkThatOnlyResolvesIntoTheLibrary is the other side

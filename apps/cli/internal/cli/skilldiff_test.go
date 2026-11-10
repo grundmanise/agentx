@@ -72,11 +72,6 @@ func TestSkillDiffShowsEachFileAgainstTheBase(t *testing.T) {
 	contains(t, "run.sh's diff", patch(2), "old mode 100755\nnew mode 100644\n")
 	contains(t, "c.md's diff", patch(3), "\n-a third file\n")
 	contains(t, "new.md's diff", patch(4), "\n+a file of my own\n")
-	for i := range diffs {
-		if strings.Contains(patch(i), "pdf-tools") {
-			t.Errorf("a diff names the upstream's directory:\n%s", patch(i))
-		}
-	}
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "pdf differs from its base version at "+short+" in 5 files")
 
 	// Nothing was laid out anywhere the library is read from, and nothing

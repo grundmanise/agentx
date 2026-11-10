@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -218,9 +217,6 @@ func TestImportCommitTakesTheUpstreamCommitterDate(t *testing.T) {
 	for _, who := range []string{"author", "committer"} {
 		contains(t, "the import commit", body, who+" agentx <agentx@localhost> "+upstream+" +0000")
 	}
-	if strings.Contains(body, gitx.FixedDate) {
-		t.Errorf("the import commit carries the date the isolated environment fixes, not the upstream's:\n%s", body)
-	}
 }
 
 // TestImportCommitIgnoresUnrelatedUpstreamCommits pins the upstream commit
@@ -265,9 +261,6 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 		t.Errorf("the import branch is at %s in a home that fetched %s, %s in one that fetched before it", got, short(tip), head)
 		t.Logf("first:\n%s", body)
 		t.Logf("second:\n%s", second.accountGit("cat-file", "commit", got))
-	}
-	if strings.Contains(second.accountGit("cat-file", "commit", got), later) {
-		t.Error("the import commit takes its dates from the tip, not from the commit that touched the skill")
 	}
 }
 

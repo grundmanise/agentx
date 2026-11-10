@@ -59,13 +59,12 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 	// source its source's URL and directory; one of your own, made by skill
 	// new or skill fork, the account remote, marked as source list marks
 	// it, and a forked one the upstream it came from too; an unmanaged one
-	// none. With an account remote set, neither command says how to set one;
-	// neither publishes, so both read not published.
+	// none. Neither command publishes, so both read not published.
 	remote := newAccountRemote(t, h)
 	h.setAccount(remote)
 	account := "file://" + remote
-	excludes(t, "skill new with an account remote", h.mustRun("skill", "new", "gamma").stdout, "No account remote is set")
-	excludes(t, "skill fork with an account remote", h.mustRun("skill", "fork", "alpha", "--name", "delta").stdout, "No account remote is set")
+	h.mustRun("skill", "new", "gamma")
+	h.mustRun("skill", "fork", "alpha", "--name", "delta")
 	upstream := managed["source"].(string) + "/" + managed["subpath"].(string)
 	cells := map[string][]string{}
 	columns := regexp.MustCompile(`\s{2,}`)

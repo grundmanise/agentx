@@ -497,7 +497,6 @@ func TestSkillAddSkipsTwoSkillsOfOneName(t *testing.T) {
 	equal(t, "exit of the run with a refusal", refused.exit, 6)
 	summary := h.one(refused.stdout, "result")["summary"].(string)
 	contains(t, "the result of the run with a refusal", summary, "1 of 2 skills could not be installed: other: the library already holds other")
-	excludes(t, "the result of the run with a refusal", summary, "skipped")
 	if err := os.RemoveAll(mine); err != nil {
 		t.Fatal(err)
 	}

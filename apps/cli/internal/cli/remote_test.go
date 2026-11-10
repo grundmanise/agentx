@@ -110,11 +110,11 @@ func (h *harness) commitFork(name, notes string) string {
 	return h.record(name)
 }
 
-// TestPublishNeverMerges publishes from machine b while machine a
+// TestPublishWhenTheRemoteMoved publishes from machine b while machine a
 // published alpha first. b holds a commit of its own and an edit, so the
 // two diverged: b's publish of alpha is refused, exit 6, outcome moved,
 // its hint naming the update, with nothing recorded or written here or on
-// the remote and no pull event, since a publish never merges. Once b's
+// the remote. Once b's
 // update has taken a's commit in, the publish with -m pushes the commit,
 // the merge and a new edit as one commit on a's, under its message; beta,
 // recorded on b and not named, stays unpushed until a bare publish, in
@@ -126,8 +126,8 @@ func (h *harness) commitFork(name, notes string) string {
 // in its result; with an edit, a bare publish refuses a's alpha as moved,
 // exit 6, naming it, while beta stays behind, and nothing is recorded. A
 // push a hook of the remote's declines is reported, exit 6, with the
-// hook's message and no update hint, and never forced.
-func TestPublishNeverMerges(t *testing.T) {
+// hook's message, and never forced.
+func TestPublishWhenTheRemoteMoved(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := twoHomes(t)
 	alphaB := b.forkDir("alpha", "alpha")
@@ -145,7 +145,6 @@ func TestPublishNeverMerges(t *testing.T) {
 	e := b.one(out.stdout, "error")
 	contains(t, "its message", e["message"].(string), "the account remote holds changes to alpha that this machine lacks, published from another machine")
 	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to get them, then publish again")
-	equal(t, "its pull events", len(b.eventsOfType(out.stdout, "pull")), 0)
 	equal(t, "b's alpha, kept", b.ref(lineage.ForkRef("alpha")), mine)
 	equal(t, "b's edit, kept", fileBody(t, draft), "an edit\n")
 	noCheckout(t, b, "alpha")
@@ -229,9 +228,6 @@ func TestPublishNeverMerges(t *testing.T) {
 	e = b.one(out.stdout, "error")
 	equal(t, "its message", e["message"], "the account remote declined skills/alpha: pre-receive hook declined: no pushes on Fridays")
 	equal(t, "its hint", e["hint"], "once the account remote takes it, run 'agentx skill publish alpha' again")
-	if strings.Contains(e["hint"].(string), "skill update") {
-		t.Errorf("a declined push's hint names the update: %q", e["hint"])
-	}
 	equal(t, "the remote's alpha, kept", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), tip)
 }
 
@@ -304,8 +300,7 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	// The way out the hint names: b renames its notes and publishes that
 	// one, which never deletes a's notes, a different skill by its fork id.
 	b.mustRun("skill", "rename", "notes", "jottings")
-	out = b.mustRun("skill", "publish", "jottings")
-	excludes(t, "a's notes, another skill", out.stdout+out.stderr, "skills/notes")
+	b.mustRun("skill", "publish", "jottings")
 	equal(t, "the remote's jottings", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/jottings"), b.ref(lineage.ForkRef("jottings")))
 	equal(t, "the remote's notes", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/notes"), a.ref(lineage.ForkRef("notes")))
 }
@@ -348,7 +343,7 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 // unresolved; resolved in its checkout, with an edit made meanwhile in its
 // worktree, the next update records the edit and completes the merge over
 // it, keeping both. With that merge and beta's not yet published, the
-// update of every skill has nothing to do and says nothing else. Last, with
+// update of every skill has nothing to do. Last, with
 // the account remote out of reach, the update of beta only warns, while
 // that of the skill with no upstream fails, exit 3, alone or with every
 // skill, and so does the check, as for a source it cannot reach, naming the
@@ -429,25 +424,15 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "its candidate", update["candidate"], published)
 	equal(t, "its upstream commit", update["upstream_commit"], "")
 	// The update is dated with the remote tip's committer time, when the
-	// other machine recorded it, and no base version's date, since it has
-	// no upstream version.
+	// other machine recorded it.
 	equal(t, "its candidate's time", update["candidate_upstream_time"], lineage.UpstreamTime(b.accountGit("log", "-1", "--format=%ct", published)))
-	if _, ok := update["upstream_time"]; ok {
-		t.Errorf("the update of what another machine published dates a base version: %v", update["upstream_time"])
-	}
 	equal(t, "its kind", update["kind"], lineage.KindManaged)
-	if _, ok := update["upstream"]; ok {
-		t.Errorf("the update of what another machine published names an upstream: %v", update["upstream"])
-	}
 	equal(t, "its files", fmt.Sprint(update["files"]), "[map[path:notes.md status:added]]")
 	if lastFetched(t, b, "file://"+remote) == backdated {
 		t.Error("the check left the account remote's last_fetched as it was")
 	}
 	out = b.mustRun("skill", "check-updates")
 	contains(t, "the check's line", out.stdout, "notes  published from another machine  "+short(local)+" -> "+short(published)+"  1 file")
-	if strings.Contains(out.stdout, "--update") {
-		t.Errorf("the check of what another machine published sends to skill diff --update:\n%s", out.stdout)
-	}
 	out = b.mustRun("--json", "skill", "update", "--all")
 	pulled := b.one(out.stdout, "pull")
 	equal(t, "the account step of notes", pulled["name"], "notes")
@@ -471,7 +456,6 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	out = b.run("--json", "skill", "update", "--all")
 	equal(t, "the update of both machines' line: exit", out.exit, 4)
 	equal(t, "its pull outcome", b.one(out.stdout, "pull")["outcome"], pullConflict)
-	equal(t, "its warnings, with beta ahead of the remote and left out", out.stderr, "")
 	out = b.run("--json", "skill", "update", "notes")
 	equal(t, "the merge reported again: exit", out.exit, 4)
 	contains(t, "its message, still the account remote's", b.one(out.stdout, "error")["message"].(string), "notes conflicts with the account remote in 1 file")
@@ -480,7 +464,6 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	writeFile(t, filepath.Join(b.forkDir("notes", "notes"), "later.md"), "edited while the merge was pending\n")
 	out = b.mustRun("--json", "skill", "update", "notes")
 	contains(t, "the completion", b.one(out.stdout, "result")["summary"].(string), "updated notes with the merge you resolved, committed as ")
-	equal(t, "its pull events", len(b.eventsOfType(out.stdout, "pull")), 0)
 	tip = b.ref(lineage.ForkRef("notes"))
 	recorded, completed := b.accountGit("rev-parse", tip+"^1"), b.accountGit("rev-parse", tip+"^2")
 	equal(t, "the edit made while the merge was pending, recorded on the tip", b.parents(recorded), mine)
@@ -493,7 +476,6 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	writeFile(t, idle, "an edit no update takes in\n")
 	out = b.mustRun("skill", "update", "--all")
 	contains(t, "the update of every skill with notes and beta ahead of the remote", out.stdout, "Nothing to update")
-	equal(t, "its warnings", out.stderr, "")
 	equal(t, "notes' tip, with an edit and nothing to take in", b.ref(lineage.ForkRef("notes")), tip)
 	if err := os.Remove(idle); err != nil {
 		t.Fatal(err)

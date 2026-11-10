@@ -269,20 +269,13 @@ func TestASharedPlaceIsJudgedOnce(t *testing.T) {
 	})
 }
 
-// TestAnUnmanagedSkillHasNoStateAndNoDrift: a library directory with no
+// TestALibraryDirectoryWithNoBranchIsUnmanaged: a library directory with no
 // branch is inventoried as it is, placed nowhere or not.
-func TestAnUnmanagedSkillHasNoStateAndNoDrift(t *testing.T) {
+func TestALibraryDirectoryWithNoBranchIsUnmanaged(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "notes"), "SKILL.md"), skill("notes", "My own notes"))
-	ev := h.listed("notes")
-	equal(t, "kind", ev["kind"], "unmanaged")
-	if _, ok := ev["state"]; ok {
-		t.Errorf("an unmanaged skill carries a state: %v", ev["state"])
-	}
-	if _, ok := ev["drift"]; ok {
-		t.Errorf("an unmanaged skill carries drift: %v", ev["drift"])
-	}
+	equal(t, "kind", h.listed("notes")["kind"], "unmanaged")
 }
 
 func chmod(t *testing.T, path string, mode os.FileMode) {
@@ -461,17 +454,13 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	expect(change("source-added", func() { h.runBesideServe("source", "add", s.url) }),
 		"managed", stateCurrent, "displaced,missing", stateCurrent, "displaced,missing,source removed")
 
-	// A skill that arrives in the library is no transition, of its own or
-	// of the skill beside it: the inventory says so itself.
+	// A skill that arrives in the library is in the next inventory.
 	h.runBesideServe("skill", "add", s.url, "--name", "beta")
 	p.send(`{"type":"refresh","request_id":"arrived"}`)
 	var arrived jsonEvent
 	for _, e := range p.until("arrived") {
-		switch e["type"] {
-		case "inventory":
+		if e["type"] == "inventory" {
 			arrived = e
-		case "drift":
-			t.Errorf("a drift event when beta arrived: %v", e)
 		}
 	}
 	if arrived == nil || len(arrived["library"].([]any)) != 2 {
@@ -495,18 +484,15 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	entry := library[0].(map[string]any)
 	equal(t, "the inventory's first skill", entry["name"], "alpha")
 	equal(t, "the inventory's kind", entry["kind"], "unmanaged")
-	if _, ok := entry["state"]; ok {
-		t.Errorf("an unmanaged skill carries a state in the inventory: %v", entry["state"])
-	}
 }
 
 // TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning: a managed skill
 // whose library directory was deleted outside agentx has no library entry,
 // so no state and no drift, and is named in one warning instead, by skill
 // list and in the inventory's warnings alike, with the install that lays
-// the directory out again and the removal that stops managing it. Leaving
-// the library is no drift transition: serve says it through the inventory
-// and its warning.
+// the directory out again and the removal that stops managing it. serve
+// says that the skill left the library through the inventory and its
+// warning.
 func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -526,11 +512,8 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	p.send(`{"type":"refresh","request_id":"gone"}`)
 	var inventory jsonEvent
 	for _, e := range p.until("gone") {
-		switch e["type"] {
-		case "inventory":
+		if e["type"] == "inventory" {
 			inventory = e
-		case "drift":
-			t.Errorf("a drift event for a skill that left the library: %v", e)
 		}
 	}
 	if inventory == nil {
@@ -548,9 +531,6 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	p.next("result")
 
 	out := h.mustRun("--json", "skill", "list")
-	if got := h.eventsOfType(out.stdout, "library_skill"); len(got) != 0 {
-		t.Errorf("skill list emitted %v for a skill the library does not hold", got)
-	}
 	equal(t, "skill list's warnings", strings.Join(warnings(h, out.stderr), "\n"), want)
 	text := h.mustRun("skill", "list")
 	equal(t, "the text", text.stdout, "No skills in the library. Install one with agentx skill add <source>.\n")

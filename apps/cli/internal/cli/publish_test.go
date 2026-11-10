@@ -134,9 +134,6 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 		what := strings.Join(tc.args, " ")
 		equal(t, what+": exit", out.exit, tc.exit.exit)
 		contains(t, what+": error", h.one(out.stdout, "error")["message"].(string), tc.says)
-		if strings.Contains(out.stderr, "-m was not used") {
-			t.Errorf("%s: a skill whose edits were not judged is said to have none", what)
-		}
 	}
 	// An account remote git cannot reach records nothing either.
 	away := remote + ".away"

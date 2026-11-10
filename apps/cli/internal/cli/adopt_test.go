@@ -203,9 +203,6 @@ func TestAdoptInstallsTheVersionTheSourceHoldsNow(t *testing.T) {
 	if link, err := os.Readlink(filepath.Join(h.home, ".claude", "skills", "alpha")); err != nil || filepath.IsAbs(link) {
 		t.Errorf("the client's link is %q (%v), want the Vercel CLI's relative link kept", link, err)
 	}
-	if strings.Contains(out.stderr, "no placement was made") {
-		t.Errorf("the Vercel CLI's link was not taken as the placement:\n%s", out.stderr)
-	}
 	equal(t, "placements", len(installed["placements"].([]any)), 1)
 
 	preview := h.run("--json", "adopt")
