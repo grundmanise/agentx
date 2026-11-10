@@ -53,11 +53,11 @@ const updatedText = (row: SkillRow, events: CliEvent[]) => {
     return `${row.name} is already up to date`;
   }
   if (row.kind === "yours") {
-    return `Updated ${row.name}. Publish when ready.`;
+    return `Updated ${row.name} skill. Publish when ready.`;
   }
   return updated.state === "modified"
-    ? `Updated ${row.name}. Merged with your local edits`
-    : `Updated ${row.name}`;
+    ? `Updated ${row.name} skill. Merged with your local edits`
+    : `Updated ${row.name} skill`;
 };
 
 /**

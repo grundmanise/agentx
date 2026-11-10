@@ -45,7 +45,7 @@ const abortLabel = (name: string) => `abort update ${name}`;
 const adopt = async (name: string) =>
   await runUntilSettled(["adopt", "--skill", name], {
     label: adoptLabel(name),
-    success: `Adopted ${name}`,
+    success: `Adopted ${name} skill`,
   });
 
 /** A small ghost button that runs a command, pending while the command and its inventory come. */

@@ -133,7 +133,7 @@ test.describe("the rows", () => {
     await run.started;
     await expect(update(page, "pdf")).toHaveAttribute("aria-busy", "true");
     run.release();
-    await expect(toasts(page).getByText("Updated pdf")).toBeVisible();
+    await expect(toasts(page).getByText("Updated pdf skill")).toBeVisible();
     await expect(update(page, "pdf")).toHaveCount(0);
     expect(later(cli)).toEqual([["skill", "update", "pdf", "--json"]]);
   });
@@ -148,17 +148,17 @@ test.describe("Update", () => {
     {
       events: [updated("pdf", "current")],
       name: "pdf",
-      toast: "Updated pdf",
+      toast: "Updated pdf skill",
     },
     {
       events: [updated("review", "modified")],
       name: "review",
-      toast: "Updated review. Merged with your local edits",
+      toast: "Updated review skill. Merged with your local edits",
     },
     {
       events: [updated("pdf-letters", "modified")],
       name: "pdf-letters",
-      toast: "Updated pdf-letters. Publish when ready.",
+      toast: "Updated pdf-letters skill. Publish when ready.",
     },
     {
       events: [
