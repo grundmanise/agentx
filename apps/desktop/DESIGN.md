@@ -593,6 +593,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.min-width` | 240 | `min-w-menu` | Menu |
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
+| `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
 | `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
@@ -663,6 +664,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `popover.row-radius` | 10 | Popover rows, Reset button |
 | `menu.radius` | 12 | Menu |
 | `menu.row-radius` | 8 | Menu rows |
+| `tooltip.radius` | 8 | Tooltip |
 | `card.radius` | 18 | Inbox cards, review file cards |
 | `card.tile-radius` | 10 | Icon tile |
 | `file-card.radius` | 16 | File tree card |
@@ -811,6 +813,14 @@ A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.
 ### Split button
 
 Two ghost icon buttons that meet with no gap and share one outline, told apart by a 1px `button.split-divider` on the chevron's left edge: the action (`button.icon-size` square, rounded at its left end only) and a narrower chevron pointing down that opens the action's menu (rounded at its right end only). Only the action shows when there is nothing to choose. Show in Finder on a file row is one.
+
+### Skills header
+
+The top of the Skills list column (`split.header-padding`): the serif "Skills" title with the skill count in `type.technical` `text.caption` on the left; on the right, 4 apart, Check updates (small ghost, the `RefreshIcon` at `sm` then its label), Add (small ghost, opens Add skills) and Create, a ghost icon button (`button.icon-size` 32) holding the `PlusIcon`, whose accessible name is "Create" and whose tooltip (§6 "Tooltip") reads "Create skill". Create opens the Create skill dialog (§6 "Create skill dialog"). The column keeps `split.list-width` at every window size, so the header fits as it is from the minimum window up.
+
+### Tooltip
+
+The name of an icon button that shows no text, on hover and on keyboard focus (`src/components/ui/tooltip.tsx`): `overlay.bg` with a 1px `overlay.border`, `tooltip.radius`, padding 4 10, `type.secondary` in `text.primary`, `tooltip.offset` below its trigger (above when there is no room). It shows at once, holds a few words, and adds to the button's own accessible name, which stays its `aria-label`.
 
 ### Popover (Filter)
 
