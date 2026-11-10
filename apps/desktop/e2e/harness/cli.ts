@@ -293,7 +293,7 @@ export class MockCli {
   readonly calls: string[] = [];
   /**
    * Every file the app opened in an editor, in order, with the editor: `{ kind: "system" }` for
-   * the opener plugin's open, else the editor `editor_open` was given.
+   * the opener plugin's open, else the editor the saved preferences held when `editor_open` ran.
    */
   readonly editorOpens: { path: string; editor: unknown }[] = [];
   /** The request id of every line written to serve's stdin, in order. */
@@ -606,10 +606,14 @@ export class MockCli {
       case "plugin:opener|open_path":
       case "editor_open": {
         const path = String(field(args, "path"));
+        if (command === "editor_open" && field(args, "editor") !== undefined) {
+          return this.refuse("editor_open takes the path alone");
+        }
         this.editorOpens.push({
+          // The Rust side opens with the editor the preferences hold; the call names only the file.
           editor:
             command === "editor_open"
-              ? field(args, "editor")
+              ? field(this.preferences, "editor")
               : { kind: "system" },
           path,
         });

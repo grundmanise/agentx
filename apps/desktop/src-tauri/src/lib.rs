@@ -103,16 +103,21 @@ fn detected(env: &HashMap<String, String>) -> Vec<editor::Detected> {
     )
 }
 
-/// Opens the file at `path` with `editor`, an editor the app found or a command line; the system's
-/// default application is the opener plugin's. `path` must be an absolute path to a file that
-/// exists.
+/// Opens the file at `path` with the editor saved in the app's preferences, an editor the app
+/// found or a command line; the system's default application is the opener plugin's. The webview
+/// names only the file: the program comes from the preferences, never from the call. `path` must
+/// be a file inside the library or agentx home, as the CLI resolves them from the login shell's
+/// environment.
 #[tauri::command(rename_all = "snake_case")]
-async fn editor_open(sup: Sup<'_>, path: String, editor: editor::Editor) -> Result<(), String> {
-    let file = PathBuf::from(&path);
-    if !file.is_absolute() || !file.is_file() {
-        return Err(format!("{path} is not a file"));
-    }
+async fn editor_open(app: tauri::AppHandle, sup: Sup<'_>, path: String) -> Result<(), String> {
     let env = sup.login_env().await;
+    let file = PathBuf::from(&path);
+    if !file.is_file() || !editor::in_scope(&file, &editor::scope_roots(&env)) {
+        return Err(format!(
+            "{path} is not a file in the library or agentx home"
+        ));
+    }
+    let editor = preferences::read(&preferences_file(&app)?).editor;
     let words = editor::command_for(editor::Platform::current(), &editor, &detected(&env), &file)?;
     editor::launch(&words, &env).await
 }

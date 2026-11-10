@@ -2,7 +2,8 @@
 // preference, lists the editors found on this machine, and opens a skill's file. The system's
 // default application is the opener plugin's open, scoped to the library and agentx home; an
 // editor the app found and a command line the user typed are the Rust side's `editor_open`, which
-// runs no shell. The preference is the app's own, in its config directory, never a machine
+// takes only the file, opens it with the editor the preferences hold, refuses a file outside the
+// library and agentx home, and runs no shell. The preference is the app's own, in its config directory, never a machine
 // setting. Screens call this and never the plugin, and the tests' mocked CLI answers every call.
 import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
@@ -93,7 +94,7 @@ export const openInEditor = async (absolutePath: string) => {
   try {
     await (editor.kind === "system"
       ? openPath(absolutePath)
-      : invoke("editor_open", { editor, path: absolutePath }));
+      : invoke("editor_open", { path: absolutePath }));
   } catch {
     notify(`Couldn't open ${fileName(absolutePath)} in ${editorName(editor)}`, {
       label: `Show in ${FILE_MANAGER}`,

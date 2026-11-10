@@ -249,6 +249,33 @@ pub fn command_for(
     }
 }
 
+/// Where a skill's file may be opened from: the library and agentx home, as the CLI resolves them
+/// from `env` (docs/spec/cli-contract.md): `AGENTX_LIBRARY`, else `$HOME/.agents/skills`, and
+/// `AGENTX_HOME`, else `$HOME/.agentx`. An empty variable counts as unset; none without `HOME`.
+pub fn scope_roots(env: &HashMap<String, String>) -> Vec<PathBuf> {
+    let Some(home) = env.get("HOME").filter(|h| !h.is_empty()).map(PathBuf::from) else {
+        return Vec::new();
+    };
+    let var = |name: &str| env.get(name).filter(|v| !v.is_empty()).map(PathBuf::from);
+    vec![
+        var("AGENTX_LIBRARY").unwrap_or_else(|| home.join(".agents/skills")),
+        var("AGENTX_HOME").unwrap_or_else(|| home.join(".agentx")),
+    ]
+}
+
+/// Whether `file` lies inside one of `roots`, both compared as their canonical paths, so that
+/// neither `..` nor a symlink leads out of them: a fork's library entry, a symlink into its
+/// worktree in agentx home, stays inside. A file or root that cannot be resolved is outside.
+pub fn in_scope(file: &Path, roots: &[PathBuf]) -> bool {
+    let Ok(file) = file.canonicalize() else {
+        return false;
+    };
+    roots
+        .iter()
+        .filter_map(|root| root.canonicalize().ok())
+        .any(|root| file != root && file.starts_with(&root))
+}
+
 /// How long a started editor is watched: one that exits within it with a failure did not open the
 /// file. A launcher that hands the file to a running editor exits at once with success, and one
 /// that keeps running, such as `code --wait`, is left to run.
@@ -424,6 +451,72 @@ mod tests {
         };
         assert!(command_for(Platform::Linux, &empty, &[], file).is_err());
         assert!(command_for(Platform::Linux, &Editor::System, &[], file).is_err());
+    }
+
+    #[test]
+    fn scope_roots_follow_the_variables_the_cli_reads() {
+        let env = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
+            pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                .collect()
+        };
+        assert_eq!(
+            scope_roots(&env(&[("HOME", "/home/me")])),
+            [
+                PathBuf::from("/home/me/.agents/skills"),
+                PathBuf::from("/home/me/.agentx")
+            ]
+        );
+        assert_eq!(
+            scope_roots(&env(&[
+                ("HOME", "/home/me"),
+                ("AGENTX_LIBRARY", "/data/skills"),
+                ("AGENTX_HOME", "")
+            ])),
+            [
+                PathBuf::from("/data/skills"),
+                PathBuf::from("/home/me/.agentx")
+            ]
+        );
+        assert!(scope_roots(&env(&[("AGENTX_HOME", "/x")])).is_empty());
+    }
+
+    #[test]
+    fn in_scope_compares_canonical_paths() {
+        let dir = std::env::temp_dir().join(format!("agentx-scope-{}", std::process::id()));
+        let library = dir.join("library");
+        let home = dir.join("home");
+        let outside = dir.join("outside");
+        for d in [
+            library.join("mine"),
+            home.join("worktrees/fork/fork"),
+            outside.clone(),
+        ] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        for f in [
+            library.join("mine/SKILL.md"),
+            home.join("worktrees/fork/fork/SKILL.md"),
+            outside.join("SKILL.md"),
+        ] {
+            std::fs::write(f, "x").unwrap();
+        }
+        // A fork's library entry leads into agentx home; another leads out of both.
+        std::os::unix::fs::symlink(home.join("worktrees/fork/fork"), library.join("fork")).unwrap();
+        std::os::unix::fs::symlink(&outside, library.join("away")).unwrap();
+        let roots = [library.clone(), home.clone()];
+
+        assert!(in_scope(&library.join("mine/SKILL.md"), &roots));
+        assert!(in_scope(&library.join("fork/SKILL.md"), &roots));
+        assert!(!in_scope(&outside.join("SKILL.md"), &roots));
+        assert!(!in_scope(&library.join("../outside/SKILL.md"), &roots));
+        assert!(!in_scope(&library.join("away/SKILL.md"), &roots));
+        assert!(!in_scope(&library.join("missing/SKILL.md"), &roots));
+        assert!(!in_scope(&library, &roots));
+        assert!(!in_scope(&library.join("mine/SKILL.md"), &[]));
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[tokio::test]
