@@ -512,7 +512,12 @@ test("a skill two clients hold is read and shown from the same copy, by its dire
   await expect(
     section
       .getByRole("group")
-      .filter({ has: reveal(section, "SKILL.md") })
+      .filter({
+        has: page.getByRole("button", {
+          exact: true,
+          name: "Show SKILL.md in file manager",
+        }),
+      })
       .getByRole("button")
   ).toHaveCount(2);
   // The other copy is in the menu, with its path, and opens there.
