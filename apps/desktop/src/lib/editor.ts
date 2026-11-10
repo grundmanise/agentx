@@ -9,7 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 
 import { notify } from "#/components/toast.tsx";
-import { FILE_MANAGER, revealInFinder } from "#/lib/reveal.ts";
+import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 
 /** The editor a skill opens in, as the app's preferences keep it. */
 export type EditorChoice =
@@ -87,7 +87,7 @@ const fileName = (path: string) => path.split("/").at(-1) ?? path;
 
 /**
  * Opens the file at `absolutePath` in the editor the user chose. When it cannot be opened, a
- * toast says so and offers to show the file in Finder instead.
+ * toast says so and offers to show the file in Finder, or the file manager, instead.
  */
 export const openInEditor = async (absolutePath: string) => {
   const editor = await readEditor();
@@ -97,7 +97,7 @@ export const openInEditor = async (absolutePath: string) => {
       : invoke("editor_open", { path: absolutePath }));
   } catch {
     notify(`Couldn't open ${fileName(absolutePath)} in ${editorName(editor)}`, {
-      label: `Show in ${FILE_MANAGER}`,
+      label: showInLabel(),
       onClick: () => {
         void revealInFinder(absolutePath);
       },

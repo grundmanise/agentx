@@ -370,6 +370,16 @@ export class MockCli {
     this.editors = editors;
   }
 
+  /**
+   * Runs the app as on macOS: the webview reports a Mac platform from the next page load, which
+   * `src/lib/platform.ts` reads. The suite runs as Linux otherwise.
+   */
+  async runAsMac() {
+    await this.page.addInitScript(() => {
+      Object.defineProperty(navigator, "platform", { get: () => "MacIntel" });
+    });
+  }
+
   /** Whether every later open in an editor fails, as when the editor cannot start. */
   failEditorOpens(fail = true) {
     this.failingOpens = fail;

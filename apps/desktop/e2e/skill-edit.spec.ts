@@ -1,7 +1,8 @@
 // Edit in the Skills detail pane: offered for one of your own skills and an edited skill of a
 // source, never for an unmodified skill of a source, a plugin's skill, an unmanaged skill or one a
 // client holds on its own. It opens the skill's SKILL.md in the editor chosen in Settings and runs
-// no command; when the editor cannot be opened, a toast offers Show in Finder instead.
+// no command; when the editor cannot be opened, a toast offers to show the file in the file
+// manager instead, which is Finder on macOS.
 import type { Page } from "@playwright/test";
 
 import { adoption, fileReads, inventory } from "./fixtures/skills.ts";
@@ -113,7 +114,7 @@ test("Edit comes first in the action row and opens SKILL.md in the chosen editor
   expect(ran(cli)).toEqual([]);
 });
 
-test("an editor that cannot be opened says so in a toast whose Show in Finder shows the file", async ({
+test("an editor that cannot be opened says so in a toast whose Show in file manager shows the file", async ({
   cli,
   page,
 }) => {
@@ -128,7 +129,7 @@ test("an editor that cannot be opened says so in a toast whose Show in Finder sh
   const toast = toasts(page).getByText("Couldn't open SKILL.md in subl");
   await expect(toast).toBeVisible();
   await toasts(page)
-    .getByRole("button", { exact: true, name: "Show in Finder" })
+    .getByRole("button", { exact: true, name: "Show in file manager" })
     .click();
   await expect.poll(() => cli.reveals).toEqual([[path]]);
   expect(ran(cli)).toEqual([]);
@@ -145,6 +146,33 @@ test("the system default that cannot open the file names the default app", async
     toasts(page).getByText("Couldn't open SKILL.md in the default app")
   ).toBeVisible();
   await expect(
-    toasts(page).getByRole("button", { exact: true, name: "Show in Finder" })
+    toasts(page).getByRole("button", {
+      exact: true,
+      name: "Show in file manager",
+    })
   ).toBeVisible();
+});
+
+test("on macOS the file manager is Finder: the toast's action and the FILES pane's button say so", async ({
+  cli,
+  page,
+}) => {
+  await cli.runAsMac();
+  cli.failEditorOpens();
+  await openSkill(cli, page, "draft");
+  await expect(
+    pane(page, "draft").getByRole("button", {
+      exact: true,
+      name: "Show SKILL.md in Finder",
+    })
+  ).toHaveAttribute("title", "Show in Finder");
+  await editButton(page, "draft").click();
+  await toasts(page)
+    .getByRole("button", { exact: true, name: "Show in Finder" })
+    .click();
+  await expect
+    .poll(() => cli.reveals)
+    .toEqual([[`${libraryPath}/draft/SKILL.md`]]);
+  await expect(page.getByText("Ctrl K")).toHaveCount(0);
+  await expect(page.getByText("⌘K")).toBeVisible();
 });

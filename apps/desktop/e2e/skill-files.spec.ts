@@ -53,9 +53,12 @@ const fileRow = (where: Locator, path: string) =>
 /** The open pane of one file. */
 const content = (where: Locator, path: string) =>
   where.getByRole("region", { exact: true, name: path });
-/** The "Show in Finder" button of one file's row. */
+/** The "Show in file manager" button of one file's row (the suite runs as Linux). */
 const reveal = (where: Locator, path: string) =>
-  where.getByRole("button", { exact: true, name: `Show ${path} in Finder` });
+  where.getByRole("button", {
+    exact: true,
+    name: `Show ${path} in file manager`,
+  });
 /** How the button shows: its wrapper fades it in while the row is hovered or holds the focus. */
 const opacity = async (locator: Locator) =>
   await locator.evaluate((el) => {
@@ -297,7 +300,7 @@ test("files that cannot be read say so, and are read again on the next selection
   );
 });
 
-test("each file on disk can be shown in Finder from its row", async ({
+test("each file on disk can be shown in the file manager from its row", async ({
   cli,
   page,
 }) => {
@@ -305,7 +308,7 @@ test("each file on disk can be shown in Finder from its row", async ({
   const section = files(page, "pdf");
   // The button is there, in the tab order, and shows while the row is hovered or holds the focus.
   const button = reveal(section, "SKILL.md");
-  await expect(button).toHaveAttribute("title", "Show in Finder");
+  await expect(button).toHaveAttribute("title", "Show in file manager");
   expect(await opacity(button)).toBe("0");
   // The button takes the meta text's place: the meta fades out as the button fades in, and
   // nothing moves.
@@ -507,11 +510,11 @@ test("a skill two clients hold is read and shown from the same copy, by its dire
   ]);
   // The other copy is in the menu, with its path, and opens there.
   await section
-    .getByRole("button", { name: "Show SKILL.md in Finder elsewhere" })
+    .getByRole("button", { name: "Show SKILL.md in file manager elsewhere" })
     .click();
   // The menu is named by its trigger.
   const menu = page.getByRole("menu", {
-    name: "Show SKILL.md in Finder elsewhere",
+    name: "Show SKILL.md in file manager elsewhere",
   });
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Cursor/home/me/.cursor/skills/meeting-notes",
@@ -523,17 +526,17 @@ test("a skill two clients hold is read and shown from the same copy, by its dire
   ]);
 });
 
-test("the menu beside Show in Finder lists a skill's other places; one place has no menu", async ({
+test("the menu beside Show in file manager lists a skill's other places; one place has no menu", async ({
   cli,
   page,
 }) => {
   await openSkills(cli, page, "/#/skills/pdf");
   const section = files(page, "pdf");
   await section
-    .getByRole("button", { name: "Show SKILL.md in Finder elsewhere" })
+    .getByRole("button", { name: "Show SKILL.md in file manager elsewhere" })
     .click();
   const menu = page.getByRole("menu", {
-    name: "Show SKILL.md in Finder elsewhere",
+    name: "Show SKILL.md in file manager elsewhere",
   });
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Claude Code/home/me/.claude-code/skills/pdf",
@@ -551,6 +554,8 @@ test("the menu beside Show in Finder lists a skill's other places; one place has
   const notes = files(page, "notes");
   await expect(reveal(notes, "SKILL.md")).toBeAttached();
   await expect(
-    notes.getByRole("button", { name: "Show SKILL.md in Finder elsewhere" })
+    notes.getByRole("button", {
+      name: "Show SKILL.md in file manager elsewhere",
+    })
   ).toHaveCount(0);
 });
