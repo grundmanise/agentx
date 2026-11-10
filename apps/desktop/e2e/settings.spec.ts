@@ -171,7 +171,7 @@ test("losing focus with a changed label saves it, and with none runs nothing", a
   expect(later(cli)).toEqual([["config", "set", "label", "studio", "--json"]]);
 });
 
-test("a label the CLI refuses shows its message under the field", async ({
+test("a label the CLI refuses shows its message under the field, sentence-cased", async ({
   cli,
   page,
 }) => {
@@ -185,7 +185,9 @@ test("a label the CLI refuses shows its message under the field", async ({
   await labelField(page).fill(" ");
   await labelField(page).press("Enter");
   const thisMachine = section(page, "This machine");
-  await expect(thisMachine.getByRole("alert")).toHaveText(message);
+  await expect(thisMachine.getByRole("alert")).toHaveText(
+    "The label must be one non-empty line with no control character in it."
+  );
   await expect(labelField(page)).toHaveAttribute("aria-invalid", "true");
   // The field keeps what was typed, and no error toast repeats the message.
   await expect(labelField(page)).toHaveValue(" ");
@@ -203,6 +205,33 @@ test("a label the CLI refuses shows its message under the field", async ({
   await labelField(page).press("Enter");
   await expect(toasts(page).getByText("Label saved")).toBeVisible();
   await expect(thisMachine.getByRole("alert")).toHaveCount(0);
+});
+
+test("a label refusal with a hint shows the message then the hint as one paragraph, the label keeping its case", async ({
+  cli,
+  page,
+}) => {
+  await openSettings(cli, page);
+  cli.register(["config", "set", "label", "studio"], {
+    events: [
+      {
+        code: "internal",
+        hint: "check that you can write to agentx home",
+        message: "studio could not be saved: settings.json is read-only",
+        type: "error",
+      },
+    ],
+    exitCode: 10,
+  });
+  await labelField(page).fill("studio");
+  await labelField(page).press("Enter");
+  const alert = section(page, "This machine").getByRole("alert");
+  // One paragraph in one colour: the message, then the hint.
+  await expect(alert).toHaveText(
+    "studio could not be saved: settings.json is read-only. Check that you can write to agentx home."
+  );
+  await expect(alert).toHaveJSProperty("tagName", "P");
+  await expect(alert.locator("p")).toHaveCount(0);
 });
 
 test("the switch runs config set ignore_system_files true, then false, each with its toast", async ({
