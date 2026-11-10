@@ -474,7 +474,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `page.title-gap` | 28 | `gap-page-title` | Title block → first section |
 | `page.section-gap` | 28–40 |  | Between sections |
 | `page.max-width` | 1200 | `max-w-page` | Inbox |
-| `split.list-width` | 408 | `w-split-list` | Skills left column |
+| `split.list-width` | 420 | `w-split-list` | Skills left column |
 | `split.header-padding` | 30 20 0 28 | `pt-split-header-top pr-split-header-right pb-0 pl-split-header-left` | Skills list header |
 | `split.toolbar-padding` | 20 20 12 28 | `pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left` | Search + filter row block |
 | `split.toolbar-gap` | 12 | `gap-split-toolbar` | Search → filter row |
