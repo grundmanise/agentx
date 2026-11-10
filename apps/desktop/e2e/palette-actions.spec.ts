@@ -1,5 +1,6 @@
-// The palette's ACTIONS beside GO TO: which actions show when, the command line each one runs as
-// the mocked CLI recorded it, and Rescan's one refresh line on serve's stdin.
+// The palette's ACTIONS and SKILLS beside GO TO: which actions show when, the command line each
+// one runs as the mocked CLI recorded it, Rescan's one refresh line on serve's stdin, and the
+// skills with their origin.
 import type { Page } from "@playwright/test";
 
 import { launch } from "./fixtures/palette-publish.ts";
@@ -39,13 +40,14 @@ const refreshes = (cli: MockCli) =>
     );
   });
 
-test("the groups read ACTIONS, GO TO", async ({ cli, page }) => {
+test("the groups read ACTIONS, GO TO, SKILLS", async ({ cli, page }) => {
   launch(cli);
   await openPalette(page);
   const groups = palette(page).getByRole("group");
-  await expect(groups).toHaveCount(2);
+  await expect(groups).toHaveCount(3);
   await expect(groups.nth(0)).toHaveAccessibleName("ACTIONS");
   await expect(groups.nth(1)).toHaveAccessibleName("GO TO");
+  await expect(groups.nth(2)).toHaveAccessibleName("SKILLS");
 });
 
 test.describe("ACTIONS", () => {
@@ -182,5 +184,42 @@ test.describe("Rescan this machine", () => {
     await expect(toasts(page)).toContainText(
       "Cannot read /home/me/.agents/skills: permission denied."
     );
+  });
+});
+
+test.describe("SKILLS", () => {
+  test("with nothing typed, the first four skills with their origin", async ({
+    cli,
+    page,
+  }) => {
+    launch(cli);
+    await openPalette(page);
+    const rows = group(page, "SKILLS").getByRole("option");
+    await expect(rows).toHaveText([
+      "changelogyour skill",
+      "draftyour skill",
+      "notesyour skill",
+      "pdfacme/skills",
+    ]);
+  });
+
+  test("a query filters them, and Enter selects the skill in Skills", async ({
+    cli,
+    page,
+  }) => {
+    launch(cli);
+    await openPalette(page);
+    await page.keyboard.type("rev");
+    await expect(palette(page).getByRole("option")).toHaveText([
+      "reviewacme/skills",
+    ]);
+    await page.keyboard.press("Enter");
+    await expect(palette(page)).toBeHidden();
+    await expect(page).toHaveURL(/#\/skills\/review$/u);
+    await expect(
+      page
+        .getByRole("region", { name: "Skill details" })
+        .getByRole("article", { name: "review" })
+    ).toBeVisible();
   });
 });

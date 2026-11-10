@@ -10,6 +10,7 @@ import { FolderIcon } from "#/components/icons/folder.tsx";
 import type { IconComponent } from "#/components/icons/icon-props.ts";
 import { PencilIcon } from "#/components/icons/pencil.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
+import { SkillsIcon } from "#/components/icons/skills.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
 import {
   CommandDialog,
@@ -21,6 +22,9 @@ import {
   CommandShortcut,
 } from "#/components/ui/command.tsx";
 import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
+import { openSkill } from "#/screens/skills/open.ts";
+import { groupRows, originOf } from "#/screens/skills/projection.ts";
+import type { SkillRow } from "#/screens/skills/projection.ts";
 import { publishAll } from "#/screens/skills/publish.ts";
 import { useSkillRows } from "#/screens/skills/rows.ts";
 import { checkUpdates, updateAll } from "#/screens/skills/updates.ts";
@@ -29,7 +33,7 @@ import { rescan } from "#/store/feed.ts";
 export interface PaletteItem {
   /** Names the row among all others: two skills can share a name. */
   id: string;
-  group: "ACTIONS" | "GO TO";
+  group: "ACTIONS" | "GO TO" | "SKILLS";
   label: string;
   hint?: string;
   icon: IconComponent;
@@ -37,7 +41,10 @@ export interface PaletteItem {
 }
 
 /** The groups, top to bottom. */
-const groupOrder: PaletteItem["group"][] = ["ACTIONS", "GO TO"];
+const groupOrder: PaletteItem["group"][] = ["ACTIONS", "GO TO", "SKILLS"];
+
+/** How many skills SKILLS lists while nothing is typed. */
+const SKILLS_UNFILTERED = 4;
 
 // A case-insensitive substring match on the label, which each row passes as its one keyword.
 const filter = (value: string, search: string, keywords?: string[]) =>
@@ -61,9 +68,25 @@ const rescanMachine = async () => {
   }
 };
 
+/** SKILLS: every skill as the Skills list orders it, its origin as the hint. */
+const skillItems = (rows: SkillRow[]): PaletteItem[] =>
+  groupRows(rows, "asc")
+    .flatMap((g) => g.rows)
+    .map((row) => ({
+      group: "SKILLS",
+      hint: originOf(row),
+      icon: SkillsIcon,
+      id: `skill:${row.key}`,
+      label: row.name,
+      run: () => {
+        openSkill(row.key);
+      },
+    }));
+
 /**
- * The ⌘K palette: ACTIONS and GO TO. Update all shows while the store holds an update, Publish
- * all while the title bar says there are skills to publish.
+ * The ⌘K palette: ACTIONS, GO TO and SKILLS. Update all shows while the store holds an update,
+ * Publish all while the title bar says there are skills to publish. With nothing typed, SKILLS
+ * lists the first four skills.
  */
 export const CommandPalette = ({
   open,
@@ -73,7 +96,14 @@ export const CommandPalette = ({
   onOpenChange: (open: boolean) => void;
 }) => {
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  // The palette opens empty: what was typed goes when it closes, however it closes.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    setSearch("");
+  }
   const rows = useSkillRows();
   const publishState = usePublishState();
   const updates = rows.filter((r) => r.update !== undefined).length;
@@ -150,7 +180,12 @@ export const CommandPalette = ({
       void navigate(s.path);
     },
   }));
-  const items = [...actions, ...goTo];
+  const skills = skillItems(rows);
+  const items = [
+    ...actions,
+    ...goTo,
+    ...(search === "" ? skills.slice(0, SKILLS_UNFILTERED) : skills),
+  ];
 
   return (
     <>
@@ -164,6 +199,8 @@ export const CommandPalette = ({
           autoFocus
           placeholder="Search skills or run a command"
           escapeHint
+          value={search}
+          onValueChange={setSearch}
         />
         <CommandList>
           <CommandEmpty>No matches</CommandEmpty>

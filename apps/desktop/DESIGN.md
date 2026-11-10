@@ -880,10 +880,11 @@ While the check runs, a `Spinner` takes the dot's place; it is the same check as
 
 ### Command palette
 
-The ⌘K palette (`src/app/command-palette.tsx`) lists two groups, in this order, each under its caption: ACTIONS, GO TO. A row is the icon in `palette.icon`, the label in `type.body`, and a hint at its end in `type.palette-hint`. Typing keeps the rows whose label holds the text, case-insensitively; "No matches" when none does. Enter or a click runs the row and closes the palette.
+The ⌘K palette (`src/app/command-palette.tsx`) lists three groups, in this order, each under its caption: ACTIONS, GO TO, SKILLS. A row is the icon in `palette.icon`, the label in `type.body`, and a hint at its end in `type.palette-hint`. Typing keeps the rows whose label holds the text, case-insensitively; "No matches" when none does. Enter or a click runs the row and closes the palette.
 
 - **ACTIONS**: Update all, "{n} skills" (`skill update --all`), while the Skills screen offers an update for at least one skill; Publish all, "{n} skills" (Publish all, as the publish status runs it), while the publish status reads "{n} to publish"; Add skills (goes to Add skills); Create skill (opens the Create skill dialog); Check updates (`skill check-updates`, with its toasts); Rescan this machine, which asks serve to scan again with one `refresh` request and toasts "Rescanned" when its `refresh_complete` arrives, or the scan's error as an error toast.
 - **GO TO**: every screen, in the sidebar's order.
+- **SKILLS**: every skill in the Skills list's order, its origin as the detail header says it ("your skill", "acme/skills", "{plugin} plugin") as the hint; the first four while nothing is typed. A row selects the skill on the Skills screen.
 
 ## 7. Iconography
 
