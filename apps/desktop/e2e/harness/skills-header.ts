@@ -1,12 +1,12 @@
-// The Skills header's controls, for specs that start from them: Add is a split button whose
-// chevron, "More add actions", opens a menu with Create skill.
+// The Skills header's controls, for specs that start from them: Add is a button group whose
+// three-dots trigger, "More add actions", opens a menu with Create skill.
 import type { Page } from "@playwright/test";
 
 /** The header of the Skills list column. */
 export const skillsHeader = (page: Page) =>
   page.getByRole("region", { name: "Skills list" });
 
-/** The chevron of Add, which opens its menu. */
+/** The three-dots trigger of Add, which opens its menu. */
 export const moreAddActions = (page: Page) =>
   skillsHeader(page).getByRole("button", {
     exact: true,

@@ -1,8 +1,13 @@
-// A split button (DESIGN.md §6 "Split button"): an action and, joined to it, a chevron that opens
-// a menu of related actions. Show in Finder on a file row and Add in the Skills header are two.
+// An action with a menu of related actions (DESIGN.md §6 "Button group"), as shadcn's Button Group
+// documents it: the action's button, the group's separator, then a three-dots icon button that
+// opens the menu. Show in Finder on a file row and Add in the Skills header are two.
 import type { ReactNode } from "react";
 
-import { ChevronIcon } from "#/components/icons/chevron.tsx";
+import { MoreIcon } from "#/components/icons/more.tsx";
+import {
+  ButtonGroup,
+  ButtonGroupSeparator,
+} from "#/components/ui/button-group.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -11,9 +16,9 @@ import {
 } from "#/components/ui/dropdown-menu.tsx";
 
 /**
- * Two ghost buttons that meet with no gap: the action, then the chevron, which opens `menu`
- * (`DropdownMenuItem`s). `size` is `icon` for an action that shows an icon, named by `label`, and
- * `sm` for one that shows its label.
+ * The action, then the menu's trigger, in one ghost button group. `size` is `icon` for an action
+ * that shows an icon, named by `label`, and `sm` for one that shows its label; the trigger is
+ * square, as tall as the action.
  */
 export const SplitButton = ({
   size,
@@ -33,36 +38,36 @@ export const SplitButton = ({
   label?: string;
   title?: string;
   onClick: () => void;
-  /** The chevron's accessible name. */
+  /** The trigger's accessible name. */
   menuLabel: string;
   menuTitle?: string;
   onOpenChange?: (open: boolean) => void;
+  /** The menu's `DropdownMenuItem`s. */
   menu: ReactNode;
 }) => (
-  <span className="inline-flex">
+  <ButtonGroup>
     <Button
       variant="ghost"
-      size={size === "icon" ? "icon-split-main" : "sm-split-main"}
+      size={size}
       aria-label={label}
       title={title}
       onClick={onClick}
     >
       {children}
     </Button>
+    <ButtonGroupSeparator />
     <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          size={size === "icon" ? "icon-split-menu" : "sm-split-menu"}
+          size={size === "icon" ? "icon" : "icon-sm"}
           aria-label={menuLabel}
           title={menuTitle}
         >
-          <span className="flex rotate-90">
-            <ChevronIcon size="xs" />
-          </span>
+          <MoreIcon />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>{menu}</DropdownMenuContent>
     </DropdownMenu>
-  </span>
+  </ButtonGroup>
 );

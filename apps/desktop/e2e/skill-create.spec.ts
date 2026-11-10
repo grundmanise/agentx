@@ -181,7 +181,7 @@ for (const size of [
   { height: 800, width: 1280 },
   { height: 700, width: 1100 },
 ]) {
-  test(`the Skills header at ${size.width}x${size.height}: Check updates and the Add split button, none of them clipped`, async ({
+  test(`the Skills header at ${size.width}x${size.height}: Check updates and the Add button group, none of them clipped`, async ({
     cli,
     page,
   }) => {
@@ -223,7 +223,7 @@ test("Add in the Skills header goes to Add skills", async ({ cli, page }) => {
   await expect(page).toHaveURL(/#\/add$/u);
 });
 
-test("Add's chevron opens a menu with Create skill, from the pointer and the keyboard; Escape closes it", async ({
+test("Add's three-dots button opens a menu with Create skill, from the pointer and the keyboard; Escape closes it", async ({
   cli,
   page,
 }) => {
@@ -238,7 +238,7 @@ test("Add's chevron opens a menu with Create skill, from the pointer and the key
   await expect(menu).toBeHidden();
   await expect(moreAddActions(page)).toBeFocused();
 
-  // The chevron keeps the focus: Enter, Space and ArrowDown open the menu.
+  // The trigger keeps the focus: Enter, Space and ArrowDown open the menu.
   const opensWith = async (key: string) => {
     await page.keyboard.press(key);
     await expect(create).toBeVisible();

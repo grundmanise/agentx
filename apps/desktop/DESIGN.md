@@ -152,7 +152,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
 | `source-pill.active-text` | `on-accent` |  |
 | `button.toast-action-text` | `accent.primary` | Action inside a toast |
-| `button.split-divider` | `gray-800` | The 1px line between the two halves of a split button |
+| `button.split-divider` | `gray-800` | The 1px separator between the buttons of a button group |
 
 #### Status pills
 
@@ -881,13 +881,13 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.do
 
 A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape or a click outside closes it. No animation.
 
-### Split button
+### Button group
 
-Two ghost buttons that meet with no gap and read as one filled shape, split by a 1px `button.split-divider` on the chevron's left edge: the action, rounded at its left end, and a narrower chevron, rounded at its right end, that opens the action's menu (§6 "Menu"). The chevron has its own accessible name; Enter, Space and ArrowDown open the menu, Escape closes it and returns the focus to the chevron. Only the action shows when there is nothing to choose. Two sizes (`src/components/split-button.tsx`): an icon action, `button.icon-size` square, as Show in Finder on a file row; and a labelled action as tall as a small button, as Add in the Skills header.
+shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side by side with no gap, read as one filled shape rounded on its outer corners only, with a 1px `button.split-divider` separator between them. An action with a menu of related actions (`src/components/split-button.tsx`) is the action's button, the separator, then a square icon button with the `MoreIcon` that opens the menu (§6 "Menu"); the trigger has its own accessible name, Enter, Space and ArrowDown open the menu, and Escape closes it and returns the focus to the trigger. The buttons keep their own sizes, as shadcn's do: a labelled action is a small button (`sm`) with a square `icon-sm` trigger, as Add in the Skills header; an icon action is an `icon` button with an `icon` trigger, as Show in Finder on a file row. Only the action shows when there is nothing to choose.
 
 ### Skills header
 
-The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates (small ghost) and Add, a small split button whose menu opens the Create skill dialog. One control for adding and creating keeps the header inside `split.list-width` at every window size, down to the minimum window.
+The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates (small ghost) and Add, a button group whose menu opens the Create skill dialog (§6 "Button group"). One control for adding and creating keeps the header inside `split.list-width` at every window size, down to the minimum window.
 
 ### Popover (Filter)
 
@@ -914,7 +914,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file
 
 - A row: a chevron (turns 90° when open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` status for a file the user changed, and the meta (line count, binary, or size) in `file-row.meta` at the right. An open row shows the file in the Code pane below it.
 - SKILL.md comes first and open; the rest follow by path, a file the user removed among them.
-- A file on disk has a Show in Finder split button over the meta, beside the trigger, never inside it. While the row is hovered, focused or has its menu open, the meta fades out and the button fades in at the same spot. The meta stays laid out, so the row never shifts, and the button stays in the tab order throughout. A removed file has no button.
+- A file on disk has a Show in Finder button group (§6 "Button group") over the meta, beside the trigger, never inside it. While the row is hovered, focused or has its menu open, the meta fades out and the button fades in at the same spot. The meta stays laid out, so the row never shifts, and the button stays in the tab order throughout. A removed file has no button.
 - The button opens the file at the skill's first place: the library when it holds the skill, else the first placement in the row's agent order. The chevron's menu lists every other placement, the path as the inventory carries it. A skill with one place has no chevron.
 
 ### Key hint

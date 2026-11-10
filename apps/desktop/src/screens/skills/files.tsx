@@ -168,7 +168,7 @@ const Pane = ({ row }: { row: FileRow }) => {
 
 /**
  * Show in Finder for one file: the button opens the file at the skill's first place, the library
- * for a skill the library holds; when the skill is elsewhere too, a chevron beside it opens a
+ * for a skill the library holds; when the skill is elsewhere too, a three-dots button beside it opens a
  * menu of those places, each named by its agent client with its path, which opens the file there.
  */
 const Reveal = ({

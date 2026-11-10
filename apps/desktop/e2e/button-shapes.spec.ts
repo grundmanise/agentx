@@ -1,6 +1,6 @@
 // Every button has a resting shape: a ghost button, a danger button and the title bar's publish
-// status have a fill before any hover, and the two halves of a split button make one shape,
-// rounded on its outer corners only.
+// status have a fill before any hover, and a button group with a menu makes one shape, rounded
+// on its outer corners only.
 import type { Locator } from "@playwright/test";
 
 import {
@@ -43,7 +43,7 @@ const shapeOf = async (control: Locator) => {
   };
 };
 
-test("ghost and danger buttons have a resting fill; the split button's halves make one shape", async ({
+test("ghost and danger buttons have a resting fill; a button group makes one shape", async ({
   cli,
   page,
 }) => {
@@ -95,11 +95,13 @@ test("ghost and danger buttons have a resting fill; the split button's halves ma
     shapeOf(action),
     shapeOf(moreAddActions(page)),
   ]);
-  // One fill, one height, no gap between the halves.
+  // One fill, one height, only the group's 1px separator between the two buttons.
   expect(main.background).toBe(ghostShape.background);
   expect(menu.background).toBe(main.background);
   expect(menu.height).toBe(main.height);
-  expect(menu.left).toBeCloseTo(main.right, 0);
+  // The trigger is square.
+  expect(menu.right - menu.left).toBeCloseTo(menu.height, 0);
+  expect(menu.left - main.right).toBeCloseTo(1, 0);
   // Rounded on the outer corners only.
   expect(main.topLeft).toBeGreaterThan(0);
   expect(main.bottomLeft).toBeGreaterThan(0);
