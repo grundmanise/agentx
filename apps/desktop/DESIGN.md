@@ -762,8 +762,6 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 - fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise.
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
-Each glyph's `title` says the state it shows.
-
 ### Group header (lists)
 
 `type.caption` in `group.label`, then the count in `group.count`. `group.padding-first` for the first group, `group.padding` for the rest.
