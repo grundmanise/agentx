@@ -60,6 +60,11 @@ export interface SkillRow {
   plugin?: Plugin;
   /** The one adoption entry that names it, for an unmanaged skill another tool installed. */
   adoption?: AdoptionEvent;
+  /**
+   * Why the last `adopt` run of this session could not adopt it, in the CLI's words, for a skill
+   * the preview still offers to adopt.
+   */
+  adoptionRefusal?: string;
   /** The name of the skill this one was forked from, when that skill is in the library too. */
   forkedFrom?: string;
 }
@@ -225,6 +230,8 @@ export interface ProjectionInput {
   inventory: InventoryEvent;
   updates: Record<string, UpdateAvailableEvent>;
   adoption: AdoptionEvent[];
+  /** The last refusal of each skill from the `adopt` runs of this session, by name. */
+  adoptionRefusals?: Record<string, AdoptionEvent>;
 }
 
 interface Context extends ProjectionInput {
@@ -233,6 +240,14 @@ interface Context extends ProjectionInput {
   /** Configuration ids in inventory order. */
   order: string[];
 }
+
+/** Adds the reason the last `adopt` run gave for not adopting a skill the preview still offers. */
+const withRefusal = (row: SkillRow, c: Context) => {
+  const refusal = c.adoptionRefusals?.[row.name];
+  if (row.adoption?.state === "candidate" && refusal?.reason !== undefined) {
+    row.adoptionRefusal = refusal.reason;
+  }
+};
 
 const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
   const kind = kindOf(entry);
@@ -272,6 +287,7 @@ const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
   const adopted = c.adoption.find((a) => a.name === entry.name);
   if (kind === "disk" && adopted !== undefined) {
     row.adoption = adopted;
+    withRefusal(row, c);
   }
   const original =
     kind === "yours" ? originalOf(entry, c.inventory.library) : undefined;
@@ -318,6 +334,7 @@ const nodeRow = (node: SkillNode, c: Context): SkillRow => {
     : c.adoption.find((a) => a.name === node.name);
   if (adopted !== undefined) {
     row.adoption = adopted;
+    withRefusal(row, c);
   }
   return row;
 };

@@ -49,6 +49,7 @@ export const SkillsScreen = () => {
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
+  const adoptionRefusals = useAppStore((s) => s.adoptionRefusals);
   const [filters, setFilters] = useState<Filters>(noFilters);
   const [order, setOrder] = useState<SortOrder>("asc");
 
@@ -56,8 +57,8 @@ export const SkillsScreen = () => {
     () =>
       inventory === undefined
         ? none
-        : projectRows({ adoption, inventory, updates }),
-    [inventory, updates, adoption]
+        : projectRows({ adoption, adoptionRefusals, inventory, updates }),
+    [inventory, updates, adoption, adoptionRefusals]
   );
   const groups = useMemo(
     () => groupRows(filterRows(rows, filters), order),
