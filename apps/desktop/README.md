@@ -6,7 +6,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 
 | Path | What it holds |
 | --- | --- |
-| [`DESIGN.md`](DESIGN.md) | The design system: colour, type, spacing and radius tokens, components, motion and copy rules |
+| [`DESIGN.md`](DESIGN.md) | The design system: the design decisions and the colour, type, spacing and radius tokens, components, iconography and motion. It never holds UI copy, which lives in the code |
 | `src/styles/tokens.css` | The tokens as Tailwind theme values and `type-*` utilities, edited by hand. It also resets Tailwind's default theme, so only these tokens exist |
 | `src/styles/index.css` | The CSS entry: Tailwind, the fonts, the tokens and the base styles |
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette, and the startup layer |
@@ -125,9 +125,24 @@ These rules are for anyone writing a component, people and coding agents alike.
 - UI primitives come from [shadcn/ui](https://ui.shadcn.com). A primitive shadcn offers (a dialog, sheet, popover, command list, switch, checkbox, badge, input, tooltip, and so on) is added with `pnpm dlx shadcn@latest add <name>` into `src/components/ui/`. It keeps shadcn's compound parts (`Dialog`, `DialogContent`, `DialogTitle`, …) and their `data-slot` attributes, and is then adapted to these rules before it is committed: its classes mapped to tokens, `className` and `style` removed from its props (`OwnProps` in `src/lib/utils.ts`), a free value such as a padding or a placement turned into a `cva()` variant, its lucide icons swapped for `src/components/icons`, and its animation classes dropped (the theme has none; `DESIGN.md` §8 says what moves). `lucide-react` is not installed on purpose: an icon left unswapped fails the type check.
 - A component in `src/components/` is allowed only when shadcn has no equivalent (the agent client logo, the skill glyph, a list row). Never write a wrapper directly on `radix-ui` or `cmdk`: only `src/components/ui` imports them.
 - Import from `src` with the `#/` prefix and the file's extension: `import { SearchIcon } from "#/components/icons/search.tsx"`. `#/` is a Node subpath import declared in `package.json` (`"imports"`), so TypeScript, Vite and the lint resolve it the same way, and like Node they need the extension.
-- Follow the copy rules in `DESIGN.md` §9 and the vocabulary in [`GLOSSARY.md`](../../GLOSSARY.md).
 - Show only what the CLI reports. A screen never predicts the result of a command.
 - Read CLI data from `useAppStore` (`src/store/store.ts`) with a selector, and run a command with `runCommand` (`src/store/runner.ts`), never with the transport directly. The screen redraws from the inventory that follows the command.
+
+### Copy
+
+The words the app shows live in the code. `DESIGN.md` records design decisions and tokens and never holds UI copy.
+
+- Use plain verbs: Add, Remove, Update, Fork, Publish, Reconnect, Adopt, Check updates.
+- Use the terms in [`GLOSSARY.md`](../../GLOSSARY.md) and never a word it lists under _Avoid_. Where a glossary term names the thing, use it; the glossary wins.
+- One exception: the Agents screen name, its nav label and the AGENTS captions keep "Agents", although the glossary avoids "agent" for an agent client.
+- Keep copy short and plain, in the present tense except in toasts.
+- In rows, show dates over ids; in Details, ids with dates.
+- A toast says what happened, in the past tense, and offers Undo when there is one.
+- A toast about one skill names it as "{name} skill".
+- A toast that follows an action which did nothing says that it did not happen, and why.
+- A hint never names a CLI flag or an `agentx` command; it names the app's own control.
+- Captions are uppercase mono; everything else is sentence case. No trailing period in titles, pills or buttons.
+- Name the file manager for the platform: Finder on macOS, the file manager on Linux. `src/lib/reveal.ts` words it; a screen never checks the platform itself.
 
 ### What the checks catch
 
