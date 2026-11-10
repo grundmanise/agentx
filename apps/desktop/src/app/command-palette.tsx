@@ -1,7 +1,16 @@
+import { useState } from "react";
 import { useNavigate } from "react-router";
 
+import { usePublishState } from "#/app/publish-status.tsx";
 import { screens } from "#/app/screens.ts";
+import { AddIcon } from "#/components/icons/add.tsx";
+import { ArrowDownIcon } from "#/components/icons/arrow-down.tsx";
+import { ArrowUpIcon } from "#/components/icons/arrow-up.tsx";
+import { FolderIcon } from "#/components/icons/folder.tsx";
 import type { IconComponent } from "#/components/icons/icon-props.ts";
+import { PencilIcon } from "#/components/icons/pencil.tsx";
+import { RefreshIcon } from "#/components/icons/refresh.tsx";
+import { notify, notifyError } from "#/components/toast.tsx";
 import {
   CommandDialog,
   CommandEmpty,
@@ -11,22 +20,50 @@ import {
   CommandList,
   CommandShortcut,
 } from "#/components/ui/command.tsx";
+import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
+import { publishAll } from "#/screens/skills/publish.ts";
+import { useSkillRows } from "#/screens/skills/rows.ts";
+import { checkUpdates, updateAll } from "#/screens/skills/updates.ts";
+import { rescan } from "#/store/feed.ts";
 
 export interface PaletteItem {
-  group: "ACTIONS" | "GO TO" | "SKILLS";
+  /** Names the row among all others: two skills can share a name. */
+  id: string;
+  group: "ACTIONS" | "GO TO";
   label: string;
   hint?: string;
   icon: IconComponent;
   run: () => void;
 }
 
-// A case-insensitive substring match on the label.
-const filter = (value: string, search: string) =>
-  value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+/** The groups, top to bottom. */
+const groupOrder: PaletteItem["group"][] = ["ACTIONS", "GO TO"];
+
+// A case-insensitive substring match on the label, which each row passes as its one keyword.
+const filter = (value: string, search: string, keywords?: string[]) =>
+  (keywords?.[0] ?? value).toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+
+const skillsWord = (n: number) => (n === 1 ? "1 skill" : `${n} skills`);
 
 /**
- * The ⌘K palette. This change wires GO TO only; ACTIONS and SKILLS come with the screens and
- * CLI commands they run.
+ * Rescan this machine: one refresh request to the serve child, then "Rescanned" once it answers,
+ * or the error the scan failed with.
+ */
+const rescanMachine = async () => {
+  const done = await rescan();
+  if (done === undefined) {
+    return;
+  }
+  if (done.ok) {
+    notify("Rescanned");
+  } else {
+    notifyError({ message: done.error ?? "the scan failed" });
+  }
+};
+
+/**
+ * The ⌘K palette: ACTIONS and GO TO. Update all shows while the store holds an update, Publish
+ * all while the title bar says there are skills to publish.
  */
 export const CommandPalette = ({
   open,
@@ -36,59 +73,141 @@ export const CommandPalette = ({
   onOpenChange: (open: boolean) => void;
 }) => {
   const navigate = useNavigate();
-  const items: PaletteItem[] = screens.map((s) => ({
+  const [creating, setCreating] = useState(false);
+  const rows = useSkillRows();
+  const publishState = usePublishState();
+  const updates = rows.filter((r) => r.update !== undefined).length;
+
+  const actions: PaletteItem[] = [];
+  if (updates > 0) {
+    actions.push({
+      group: "ACTIONS",
+      hint: skillsWord(updates),
+      icon: ArrowDownIcon,
+      id: "action:update-all",
+      label: "Update all",
+      run: () => {
+        void updateAll();
+      },
+    });
+  }
+  if (publishState?.kind === "to-publish") {
+    actions.push({
+      group: "ACTIONS",
+      hint: skillsWord(publishState.count),
+      icon: ArrowUpIcon,
+      id: "action:publish-all",
+      label: "Publish all",
+      run: () => {
+        void publishAll();
+      },
+    });
+  }
+  actions.push(
+    {
+      group: "ACTIONS",
+      icon: AddIcon,
+      id: "action:add-skills",
+      label: "Add skills",
+      run: () => {
+        void navigate("/add");
+      },
+    },
+    {
+      group: "ACTIONS",
+      icon: PencilIcon,
+      id: "action:create-skill",
+      label: "Create skill",
+      run: () => {
+        setCreating(true);
+      },
+    },
+    {
+      group: "ACTIONS",
+      icon: RefreshIcon,
+      id: "action:check-updates",
+      label: "Check updates",
+      run: () => {
+        void checkUpdates();
+      },
+    },
+    {
+      group: "ACTIONS",
+      icon: FolderIcon,
+      id: "action:rescan",
+      label: "Rescan this machine",
+      run: () => {
+        void rescanMachine();
+      },
+    }
+  );
+  const goTo: PaletteItem[] = screens.map((s) => ({
     group: "GO TO",
     icon: s.icon,
+    id: `go:${s.path}`,
     label: s.label,
     run: () => {
       void navigate(s.path);
     },
   }));
-  const groups = [...new Set(items.map((i) => i.group))];
+  const items = [...actions, ...goTo];
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} filter={filter} loop>
-      <CommandInput
-        autoFocus
-        placeholder="Search skills or run a command"
-        escapeHint
-      />
-      <CommandList>
-        <CommandEmpty>No matches</CommandEmpty>
-        {groups.map((g) => (
-          <CommandGroup key={g} heading={g}>
-            {items
-              .filter((i) => i.group === g)
-              .map(({ icon: RowIcon, ...i }) => (
-                <CommandItem
-                  key={i.label}
-                  value={i.label}
-                  onSelect={() => {
-                    onOpenChange(false);
-                    i.run();
-                  }}
-                >
-                  {/* The row icon turns to the accent while its row is selected. */}
-                  <span className="text-palette-icon group-data-[selected=true]:text-palette-icon-active flex">
-                    <RowIcon size="sm" />
-                  </span>
-                  <span className="type-body flex-1">{i.label}</span>
-                  {i.hint !== undefined && (
-                    <CommandShortcut>{i.hint}</CommandShortcut>
-                  )}
-                </CommandItem>
-              ))}
-          </CommandGroup>
-        ))}
-      </CommandList>
-      <div className="border-card-border type-palette-footer text-text-muted flex gap-4.5 border-t px-5 py-3">
-        <span>
-          <span className="type-palette-hint text-text-muted">↑↓</span> move
-        </span>
-        <span>
-          <span className="type-palette-hint text-text-muted">↵</span> run
-        </span>
-      </div>
-    </CommandDialog>
+    <>
+      <CommandDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        filter={filter}
+        loop
+      >
+        <CommandInput
+          autoFocus
+          placeholder="Search skills or run a command"
+          escapeHint
+        />
+        <CommandList>
+          <CommandEmpty>No matches</CommandEmpty>
+          {groupOrder
+            .filter((g) => items.some((i) => i.group === g))
+            .map((g) => (
+              <CommandGroup key={g} heading={g}>
+                {items
+                  .filter((i) => i.group === g)
+                  .map(({ icon: RowIcon, ...i }) => (
+                    <CommandItem
+                      key={i.id}
+                      value={i.id}
+                      keywords={[i.label]}
+                      onSelect={() => {
+                        onOpenChange(false);
+                        i.run();
+                      }}
+                    >
+                      {/* The row icon turns to the accent while its row is selected. */}
+                      <span className="text-palette-icon group-data-[selected=true]:text-palette-icon-active flex">
+                        <RowIcon size="sm" />
+                      </span>
+                      <span className="type-body flex-1 truncate">
+                        {i.label}
+                      </span>
+                      {i.hint !== undefined && (
+                        <CommandShortcut>{i.hint}</CommandShortcut>
+                      )}
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            ))}
+        </CommandList>
+        <div className="border-card-border type-palette-footer text-text-muted flex gap-4.5 border-t px-5 py-3">
+          <span>
+            <span className="type-palette-hint text-text-muted">↑↓</span> move
+          </span>
+          <span>
+            <span className="type-palette-hint text-text-muted">↵</span> run
+          </span>
+        </div>
+      </CommandDialog>
+      <CreateSkillDialog open={creating} onOpenChange={setCreating} />
+    </>
   );
 };

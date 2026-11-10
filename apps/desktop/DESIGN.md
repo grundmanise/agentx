@@ -878,6 +878,13 @@ A skill never published is not counted: a bare publish leaves it out, and its ow
 
 While the check runs, a `Spinner` takes the dot's place; it is the same check as Check updates on the Skills screen and runs only once at a time, whichever starts it. Its toast: "{n} skills changed on your other machines" ("1 skill"), counting the updates with an empty `base_hash`, with ", {m} updates from sources" when the check also found those, and Review, which selects the first skill another machine changed on the Skills screen; "Nothing new from your other machines" when it found none. A source it could not reach is the error toast of Check updates.
 
+### Command palette
+
+The ⌘K palette (`src/app/command-palette.tsx`) lists two groups, in this order, each under its caption: ACTIONS, GO TO. A row is the icon in `palette.icon`, the label in `type.body`, and a hint at its end in `type.palette-hint`. Typing keeps the rows whose label holds the text, case-insensitively; "No matches" when none does. Enter or a click runs the row and closes the palette.
+
+- **ACTIONS**: Update all, "{n} skills" (`skill update --all`), while the Skills screen offers an update for at least one skill; Publish all, "{n} skills" (Publish all, as the publish status runs it), while the publish status reads "{n} to publish"; Add skills (goes to Add skills); Create skill (opens the Create skill dialog); Check updates (`skill check-updates`, with its toasts); Rescan this machine, which asks serve to scan again with one `refresh` request and toasts "Rescanned" when its `refresh_complete` arrives, or the scan's error as an error toast.
+- **GO TO**: every screen, in the sidebar's order.
+
 ## 7. Iconography
 
 Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 14–18px rendered at the sizes below. Fill only for the "dot" glyph. No icon fonts, no emoji.
