@@ -42,6 +42,20 @@ export const refresh = async () => {
   await send(crypto.randomUUID());
 };
 
+/** Who waits for the answer to a refresh request, by request id: Rescan this machine. */
+const rescans = new Map<string, (event: RefreshCompleteEvent) => void>();
+
+/** Sends again, with a new id, a request an earlier child did not answer; its waiter waits on. */
+const resend = async (requestId: string) => {
+  const next = crypto.randomUUID();
+  const waiter = rescans.get(requestId);
+  if (waiter !== undefined) {
+    rescans.delete(requestId);
+    rescans.set(next, waiter);
+  }
+  await send(next);
+};
+
 /** What a search resolves with: the results, or undefined when it was not answered. */
 type Answer = SearchResult[] | undefined;
 
@@ -49,29 +63,42 @@ type Answer = SearchResult[] | undefined;
  * One answer handed from an event to whoever waits for it, as the transport hands a run its end:
  * a stream of one chunk, read once.
  */
-const slot = () => {
-  let controller: ReadableStreamDefaultController<Answer> | undefined;
-  const stream = new ReadableStream<Answer>({
+const slot = <T>() => {
+  let controller: ReadableStreamDefaultController<T | undefined> | undefined;
+  const stream = new ReadableStream<T | undefined>({
     start: (c) => {
       controller = c;
     },
   });
   return {
-    put: (value?: SearchResult[]) => {
+    put: (value?: T) => {
       controller?.enqueue(value);
       controller?.close();
       controller = undefined;
     },
-    take: async (): Promise<Answer> => {
+    take: async (): Promise<T | undefined> => {
       const read = await stream.getReader().read();
       return read.value;
     },
   };
 };
 
+/**
+ * Rescan this machine: one refresh request, which resolves with its `refresh_complete`, ok or
+ * with the error the scan failed with. A request the serve child does not answer goes to the next
+ * child, as every refresh does.
+ */
+export const rescan = async (): Promise<RefreshCompleteEvent | undefined> => {
+  const requestId = crypto.randomUUID();
+  const answer = slot<RefreshCompleteEvent>();
+  rescans.set(requestId, answer.put);
+  await send(requestId);
+  return await answer.take();
+};
+
 /** The search request last sent and not answered yet: the one whose answer counts. */
 let latestSearch:
-  | { requestId: string; answer: ReturnType<typeof slot> }
+  | { requestId: string; answer: ReturnType<typeof slot<SearchResult[]>> }
   | undefined;
 
 /** Gives up on the search request waiting, if any: its answer, should it come, is dropped. */
@@ -89,7 +116,7 @@ const dropSearch = () => {
 export const search = async (query: string): Promise<Answer> => {
   dropSearch();
   const requestId = crypto.randomUUID();
-  const answer = slot();
+  const answer = slot<SearchResult[]>();
   latestSearch = { answer, requestId };
   try {
     await serve.request({ query, request_id: requestId, type: "search" });
@@ -134,7 +161,7 @@ const activate = (childId: number) => {
     ),
     updates: {},
   });
-  void Promise.all(unanswered.map(refresh));
+  void Promise.all(unanswered.map(resend));
 };
 
 /** Starts the serve child unless one runs, and makes it the active one. */
@@ -183,6 +210,8 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
 
 /** Clears an answered request, even when the inventory did not change. */
 const acknowledge = (event: RefreshCompleteEvent) => {
+  rescans.get(event.request_id)?.(event);
+  rescans.delete(event.request_id);
   const { refreshes } = useAppStore.getState();
   if (!Object.hasOwn(refreshes, event.request_id)) {
     return;

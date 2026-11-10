@@ -124,7 +124,9 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `shell.topbar-hover` | `gray-920` | Account remote status hover (the command field changes only its border and text on hover) |
 | `shell.topbar-text` | `gray-300` | Command field placeholder and icon (`text.secondary` on hover), account remote status label |
 | `shell.status-published` | `accent.primary` | Account remote status dot, nothing to publish (halo `lime-400/15`) |
-| `shell.status-pending` | `accent.yours` | Account remote status dot, versions to publish (halo `violet-400/18`) |
+| `shell.status-pending` | `accent.yours` | Account remote status dot, skills to publish (halo `violet-400/18`) |
+| `shell.status-published-halo` | `0 0 0 3px lime-400/15` | The halo around the published dot (`shadow-status-published`) |
+| `shell.status-pending-halo` | `0 0 0 3px violet-400/18` | The halo around the to-publish dot (`shadow-status-pending`) |
 | `shell.logo-mark` | `accent.primary` | The X in the product mark |
 | `shell.logo-bg` | `gray-990` | Product mark tile |
 | `shell.logo-ring` | `gray-860` | 1px ring around the product mark |
@@ -415,6 +417,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.nav` | sans | 14 | 500 |  |  |  | Nav item |
 | `type.command-field` | sans | 13 | 400 |  |  |  | Command field placeholder |
 | `type.key-hint` | mono | 11 | 400 |  |  |  | Key hint (`esc`, `⌘K`) |
+| `type.status` | sans | 13 | 500 |  |  |  | Publish status label in the title bar (`shell.topbar-text`) |
 | `type.palette-input` | sans | 17 | 400 |  |  |  | Palette search input |
 | `type.palette-hint` | mono | 12 | 400 |  |  |  | Hint at the end of a palette row, keys in the palette footer |
 | `type.palette-footer` | sans | 12 | 400 |  |  |  | Palette footer (`text.hint`) |
@@ -656,6 +659,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
 | `shell.status-radius` | 9999 | Account remote status |
+| `shell.status-dot-radius` | 50% | The publish status dot (`rounded-shell-status-dot`) |
 | `shell.command-radius` | 9999 | Command field |
 | `shell.panel-radius` | 14 | Main panel |
 | `input.radius` | 12 | Inputs, textareas |
@@ -924,6 +928,22 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
+
+### Publish status (title bar)
+
+At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/components/status-button.tsx`): a pill `shell.status-height` high, `shell.status-radius`, transparent, hover `shell.topbar-hover` with the label in `text.secondary`. An 8px dot (`shell.status-dot-radius`) in a 16px box, then the label in `type.status` `shell.topbar-text`.
+
+- Three states, from the inventory's library and the Sources slice: no account remote (dot `text.hint`; goes to Settings), skills to publish (`shell.status-pending` with `shell.status-pending-halo`; publishes them all), and everything published (`shell.status-published` with `shell.status-published-halo`; checks for updates).
+- It counts your own skills edited since they were published, with the predicate the Skills screen's banner uses (`hasEditsToPublish` in `src/screens/skills/banners.ts`), so the title bar and the Skills screen never disagree. A skill never published is not counted: a bare publish leaves it out, and its own banner publishes it.
+- While the publish runs, and until the inventory that follows arrives, the label counts its progress and the pill is `aria-busy`. While the check runs, a `Spinner` takes the dot's place; it is the Skills screen's check, so only one runs at a time.
+- Hidden while the startup layer shows, and until the inventory and the sources are read, so it never guesses a state.
+
+### Command palette
+
+The ⌘K palette (`src/app/command-palette.tsx`): ACTIONS, GO TO, SKILLS, in that order, each under its caption. A row is its icon in `palette.icon`, its label in `type.body` and an optional hint in `type.palette-hint`; typing keeps the rows whose label holds the text.
+
+- ACTIONS shows an action only when it has something to act on: Update all while an update is offered, Publish all while the publish status counts skills to publish.
+- SKILLS lists every skill in the Skills list's order, its origin as the hint; while nothing is typed, only the first four, so the actions and screens stay in view.
 
 ## 7. Iconography
 
