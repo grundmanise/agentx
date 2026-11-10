@@ -155,18 +155,17 @@ const namesOf = (tools: readonly { name: string }[]) =>
 const Description = ({ tools }: { tools: readonly ToolSummary[] }) => {
   const offered = tools.reduce((n, t) => n + t.offered, 0);
   const refused = tools.reduce((n, t) => n + t.refused, 0);
-  const both = tools.length > 1;
+  const what =
+    offered === 1
+      ? "this skill and manage it"
+      : `these ${plural(offered, "skill")} and manage them`;
+  const keeps = tools.length > 1 ? "keep their" : "keeps its";
   return (
-    <>
-      <DialogDescription>
-        {`agentx installs ${plural(offered, "skill")} again from their sources into your library and manages them from now on: updates, agents and history.`}
-      </DialogDescription>
-      <p className="type-secondary text-dialog-subtitle m-0">
-        {`${namesOf(tools)} ${both ? "keep their" : "keeps its"} own records and files: agentx only reads them. What ${both ? "they" : "it"} left in your library under each name is replaced, so edits made there are not kept.`}
-        {refused > 0 &&
-          ` ${refused} ${refused === 1 ? "skill can't be adopted and is" : "skills can't be adopted and are"} left out.`}
-      </p>
-    </>
+    <DialogDescription>
+      {`agentx will import ${what} from now on. ${namesOf(tools)} ${keeps} own files. Edits you made to the copies in your library are not kept.`}
+      {refused > 0 &&
+        ` ${refused} ${refused === 1 ? "skill can't be adopted and is" : "skills can't be adopted and are"} left out.`}
+    </DialogDescription>
   );
 };
 
