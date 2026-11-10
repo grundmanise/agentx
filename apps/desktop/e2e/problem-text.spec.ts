@@ -55,3 +55,59 @@ for (const [problem, want] of table) {
     expect(problemSentence(problem)).toBe(want);
   });
 }
+
+// With names to keep: a known name that starts the message or the hint keeps its case, and the
+// same word is capitalised where it is not one of them.
+const keepTable: [Problem, readonly string[], string][] = [
+  [
+    {
+      hint: "move its .git out of the skill, or fork it beside the skill with --name <new>",
+      message:
+        "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git",
+    },
+    ["scratch"],
+    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill, or fork it beside the skill with --name <new>.",
+  ],
+  [
+    {
+      hint: "scratch is the name to fork it under",
+      message: "the library entry is a symlink",
+    },
+    ["scratch"],
+    "The library entry is a symlink. scratch is the name to fork it under.",
+  ],
+  [
+    { hint: "scratch it and try again", message: "scratch is taken" },
+    [],
+    "Scratch is taken. Scratch it and try again.",
+  ],
+  [{ message: "scratch is taken" }, ["notes"], "Scratch is taken."],
+  [{ message: "scratches are taken" }, ["scratch"], "Scratches are taken."],
+  [{ message: "Scratch is taken" }, ["scratch"], "Scratch is taken."],
+  [
+    { hint: "stop it first", message: "agentx serve is already running" },
+    ["scratch"],
+    "agentx serve is already running. Stop it first.",
+  ],
+  [
+    { message: "github.com/acme/skills is unreachable" },
+    ["scratch"],
+    "github.com/acme/skills is unreachable.",
+  ],
+  [
+    { message: "~/.agents/skills/scratch is not a directory" },
+    ["scratch"],
+    "~/.agents/skills/scratch is not a directory.",
+  ],
+  [
+    { hint: "choose another name", message: "release-notes is taken" },
+    ["scratch"],
+    "release-notes is taken. Choose another name.",
+  ],
+];
+
+for (const [problem, keep, want] of keepTable) {
+  test(`problemSentence(${JSON.stringify(problem)}, { keep: ${JSON.stringify(keep)} })`, () => {
+    expect(problemSentence(problem, { keep })).toBe(want);
+  });
+}

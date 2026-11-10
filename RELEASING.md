@@ -12,12 +12,15 @@ arm64 as `agentx_desktop_linux_<arch>.deb` and `agentx_desktop_linux_<arch>.AppI
 the CLI archives, the app packages and their checksums to
 [GitHub Releases](https://github.com/grundmanise/agentx/releases).
 
-- **Nightly**: once a day, the workflow releases the head of `main` as a prerelease, such
-  as `v0.3.0-nightly.20261001`, when `apps/cli` or `apps/desktop` changed since the last nightly and CI
-  passed on it. The version is the next release the commits call for: a breaking change bumps the
+- **Nightly**: the workflow releases the head of `main` as a prerelease, such as
+  `v0.3.0-nightly.20261001.42`, where `42` is the run number, when `apps/cli` or `apps/desktop` changed
+  since the last nightly, CI passed on it and the last nightly was published 6 or more hours ago. It
+  is scheduled to check every 30 minutes, at :08 and :38, so when GitHub starts a check late or drops
+  it, the next check can publish the nightly. A nightly run by hand, with `channel: nightly`, skips the 6-hour gap and the change
+  check. The version is the next release the commits call for: a breaking change bumps the
   minor version (the major from 1.0 on), a `feat` or `change` the minor, anything else the patch. The
-  14 newest nightlies are kept. The run is scheduled for 03:17 UTC, but GitHub starts scheduled runs
-  late when it is busy, often by several hours.
+  14 newest nightlies are kept. Nightlies run one at a time, and stable releases one at a time; every
+  run that waits stays in the queue.
 - **Stable**: run the Release workflow by hand, from the Actions tab, once a nightly has proved good
   enough to promote. By default it promotes the newest nightly: it tags that nightly's commit, such as
   `v0.3.0`, and builds it again, so `agentx version` prints the release version. It also updates the

@@ -36,7 +36,7 @@ var (
 	thisExecutable = os.Executable
 )
 
-// The channel a version belongs to: a nightly is vX.Y.Z-nightly.YYYYMMDD,
+// The channel a version belongs to: a nightly is vX.Y.Z-nightly.YYYYMMDD.N,
 // anything else is a release.
 const (
 	channelStable  = "stable"
@@ -325,7 +325,7 @@ func (u *updater) latestRelease(ctx context.Context) (string, error) {
 }
 
 // newestNightly is the version of the newest nightly prerelease: GitHub
-// lists releases newest first, and a nightly is tagged vX.Y.Z-nightly.YYYYMMDD.
+// lists releases newest first, and a nightly is tagged vX.Y.Z-nightly.YYYYMMDD.N.
 func (u *updater) newestNightly(ctx context.Context) (string, error) {
 	resp, err := u.get(ctx, releaseAPI+"/repos/"+releaseRepo+"/releases?per_page=50", "application/vnd.github+json", false)
 	if err != nil {
