@@ -30,6 +30,16 @@ export const PUBLISH_ALL = "publish all";
 export const changedElsewhere = (name: string) =>
   `${name} changed somewhere else first. Update it, then publish.`;
 
+/** The toast of a publish that sent nothing: the skill already matches what is published. */
+export const alreadyPublished = (name: string) =>
+  `${name} skill was not published. It already matches the published version.`;
+
+/** A Publish all that pushed no skill: none was published, and why, when it judged some. */
+const nonePublished = (judged: number) =>
+  judged === 0
+    ? "No skills were published"
+    : "No skills were published. They already match the published versions.";
+
 /**
  * Whether a publish was refused for want of an account remote: refused before any skill was
  * judged, with none set or with the CLI saying so.
@@ -138,10 +148,10 @@ const reportPublishAll = (outcome: Outcome) => {
     return;
   }
   const pushed = results.filter((e) => e.outcome === "pushed").length;
-  const text = `${pushed === 0 ? "Nothing to publish" : `Published ${plural(pushed, "skill", "skills")}`}${suffix}`;
+  const text = `${pushed === 0 ? nonePublished(results.length) : `Published ${plural(pushed, "skill", "skills")}`}${suffix}`;
   const [first] = skipped;
   notify(text, first === undefined ? undefined : showAction(first));
-  addActivity("success", text);
+  addActivity(pushed === 0 ? "attention" : "success", text);
 };
 
 /**

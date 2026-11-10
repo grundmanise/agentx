@@ -367,7 +367,10 @@ test.describe("the Publish dialog", () => {
 });
 
 test.describe("outcomes", () => {
-  test("up to date: Nothing to publish", async ({ cli, page }) => {
+  test("up to date: not published, as it already matches the published version", async ({
+    cli,
+    page,
+  }) => {
     await openSkill(cli, page, "changelog");
     const shown = await openDialog(page, "changelog");
     cli.register(
@@ -376,7 +379,9 @@ test.describe("outcomes", () => {
     );
     await shown.getByRole("button", { name: "Publish" }).click();
     await expect(
-      toasts(page).getByText("Nothing to publish in changelog skill")
+      toasts(page).getByText(
+        "changelog skill was not published. It already matches the published version."
+      )
     ).toBeVisible();
   });
 

@@ -28,6 +28,7 @@ import { fileStatusLabels } from "#/screens/skills/files.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import {
+  alreadyPublished,
   changedElsewhere,
   notifyNoAccountRemote,
   refusedForAccountRemote,
@@ -85,11 +86,15 @@ const reportPublish = (
     }
     return;
   }
+  // Nothing was sent: the skill already matches the published version, which is not a success.
+  if (outcome.exitCode === EXIT_CODES.ok && result === "up to date") {
+    const text = alreadyPublished(name);
+    notify(text);
+    addActivity("attention", text);
+    return;
+  }
   if (outcome.exitCode === EXIT_CODES.ok) {
-    const text =
-      result === "up to date"
-        ? `Nothing to publish in ${name} skill`
-        : `Published ${name} skill`;
+    const text = `Published ${name} skill`;
     notify(text);
     addActivity("success", text);
     return;

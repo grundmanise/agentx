@@ -171,6 +171,42 @@ test.describe("publish", () => {
   });
 });
 
+test.describe("publish, nothing sent", () => {
+  test("every skill already matches: no skills were published, and why", async ({
+    cli,
+    page,
+  }) => {
+    launch(cli);
+    cli.register(["skill", "publish"], {
+      events: [
+        progress(1, "changelog"),
+        {
+          name: "changelog",
+          outcome: "up to date",
+          source: ACCOUNT,
+          type: "publish",
+        },
+        progress(2, "notes"),
+        {
+          name: "notes",
+          outcome: "up to date",
+          source: ACCOUNT,
+          type: "publish",
+        },
+      ],
+      logs: [draftNotPublished],
+    });
+    await page.goto("/");
+    await status(page).click();
+    const toast = toasts(page);
+    await expect(toast).toContainText(
+      "No skills were published. They already match the published versions. · 1 not published yet"
+    );
+    await expect(toast.getByRole("button", { name: "Show" })).toBeVisible();
+    expect(ran(cli, ["skill", "publish"])).toBe(true);
+  });
+});
+
 test.describe("check", () => {
   test("Published runs skill check-updates and counts what your other machines published, with Review", async ({
     cli,
