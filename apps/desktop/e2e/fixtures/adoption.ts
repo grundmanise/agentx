@@ -1,6 +1,6 @@
 // The Skills fixture's machine with two more library skills, one whose source was removed and one
 // the CLI refuses to adopt, and the adoption preview that names them: what the banners that settle
-// a skill and the "Can't adopt" detail are tested against.
+// a skill and a refused entry are tested against.
 import type {
   AdoptionEvent,
   LibraryEntry,

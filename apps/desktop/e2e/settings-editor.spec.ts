@@ -71,6 +71,7 @@ test("Editor sits before Storage and lists System default, the editors found and
     /^This machine/u,
     /^Account remote/u,
     /^Sources/u,
+    /^Adopt skills/u,
     /^Comparing edits/u,
     /^Editor/u,
     /^Storage/u,

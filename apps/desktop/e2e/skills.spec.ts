@@ -34,8 +34,10 @@ const group = (page: Page, name: string) =>
   list(page).getByRole("region", { name });
 const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
+/** The rows' names, in order: the buttons of the group's list, not a control in its header. */
 const rowNames = async (where: Locator) =>
   await where
+    .getByRole("list")
     .getByRole("button")
     .evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label")));
 /** The accessible names of `where`'s elements: an aria-label, an image's alt, or a label's text. */
@@ -910,7 +912,7 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     ]);
   });
 
-  test("a refused entry has no banner, and Details says why", async ({
+  test("a refused entry has no banner, and its Details hold no adoption reason", async ({
     cli,
     page,
   }) => {
@@ -918,14 +920,11 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     const article = pane(page, "legacy");
     await expect(article.getByRole("note")).toHaveCount(0);
     const details = article.getByRole("region", { name: "Details" });
+    // Why it can't be adopted shows in the adopt dialog, not on the skill.
     await expect(details.getByRole("term")).toHaveText([
       "Found at",
       "Installed by",
-      "Adopt",
     ]);
-    await expect(details.getByRole("definition").last()).toHaveText(
-      "Can't adopt: legacy is a symlink, not a directory"
-    );
     expect(ran(cli)).toEqual([]);
   });
 });

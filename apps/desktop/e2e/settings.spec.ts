@@ -69,6 +69,7 @@ test("each section shows what the store holds, and nothing runs on its own", asy
     /^This machine/u,
     /^Account remote/u,
     /^Sources/u,
+    /^Adopt skills/u,
     /^Comparing edits/u,
     /^Editor/u,
     /^Storage/u,
