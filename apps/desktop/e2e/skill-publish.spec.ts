@@ -12,7 +12,7 @@ import {
   sources,
   sourcesWithoutAccount,
 } from "./fixtures/publish.ts";
-import { ACCOUNT } from "./fixtures/skills.ts";
+import { ACCOUNT, ACME } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli, Reply } from "./harness/cli.ts";
 
@@ -462,6 +462,97 @@ test.describe("outcomes", () => {
       ).toBeVisible();
     });
   }
+
+  test("a failure whose message and hint start with skills' names keeps their case", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "changelog");
+    const shown = await openDialog(page, "changelog");
+    cli.register(
+      ["skill", "publish", "changelog"],
+      publishReply("changelog", undefined, {
+        error: {
+          code: "internal",
+          // "draft" is another skill in the library: the error toast keeps any skill's name.
+          hint: "draft went out in the same push; publish changelog again",
+          message: "changelog could not be published: the push was cut off",
+          type: "error",
+        },
+        exitCode: 10,
+      })
+    );
+    await shown.getByRole("button", { name: "Publish" }).click();
+    await expect(
+      toasts(page).getByText(
+        "changelog could not be published: the push was cut off. draft went out in the same push; publish changelog again.",
+        { exact: true }
+      )
+    ).toBeVisible();
+  });
+
+  test("a hint that names a command shows the app's words: exit 5, with Add source", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "review");
+    const shown = await openDialog(page, "review", "Publish to acme/skills");
+    cli.register(
+      ["skill", "publish", "review"],
+      publishReply("review", undefined, {
+        error: {
+          code: "not_found",
+          hint: `run 'agentx source add ${ACME}' to add it again, then publish again`,
+          message: `review was installed from ${ACME}, which was removed from this machine, so it cannot be published`,
+          type: "error",
+        },
+        exitCode: 5,
+      })
+    );
+    await shown.getByRole("button", { name: "Publish" }).click();
+    const toast = toasts(page).getByRole("listitem");
+    await expect(
+      toast.getByText(
+        `review was installed from ${ACME}, which was removed from this machine, so it cannot be published. Add the source again, then publish again.`,
+        { exact: true }
+      )
+    ).toBeVisible();
+    cli.register(["source", "add", ACME], {
+      events: [{ type: "source", url: ACME }],
+    });
+    await toast.getByRole("button", { name: "Add source" }).click();
+    await expect
+      .poll(() => later(cli).at(-1))
+      .toEqual(["source", "add", ACME, "--json"]);
+  });
+
+  test("a hint that ends by naming skill publish ends with publish again", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "review");
+    const shown = await openDialog(page, "review", "Publish to acme/skills");
+    cli.register(
+      ["skill", "publish", "review"],
+      publishReply("review", undefined, {
+        error: {
+          code: "refused",
+          hint: "move it out of the skill, then run 'agentx skill publish review' again",
+          message:
+            ".DS_Store cannot be published: agentx installs skills without it, so review was not published",
+          type: "error",
+        },
+        exitCode: 6,
+      })
+    );
+    await shown.getByRole("button", { name: "Publish" }).click();
+    await expect(
+      toasts(page).getByText(
+        ".DS_Store cannot be published: agentx installs skills without it, so review was not published. Move it out of the skill, then publish again.",
+        { exact: true }
+      )
+    ).toBeVisible();
+  });
 
   test("exit 6 with no account remote: Set an account remote, with Open Settings", async ({
     cli,

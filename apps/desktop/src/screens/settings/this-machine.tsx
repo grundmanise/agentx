@@ -1,11 +1,13 @@
 // This machine: the machine's label, which `config set label <value>` changes on Enter or when the
 // field loses focus with a changed value, and the machine id. Both come from the `machine` event,
-// which the store reads again after the label changes (src/store/loaders.ts).
+// which the store reads again after the label changes (src/store/loaders.ts). A refusal shows
+// under the field as one sentence-cased paragraph (`ProblemText`), the label sent keeping its case.
 import { useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
+import { ProblemText } from "#/components/problem-text.tsx";
 import { Input } from "#/components/ui/input.tsx";
-import { FieldProblem, SettingsSection } from "#/screens/settings/section.tsx";
+import { SettingsSection } from "#/screens/settings/section.tsx";
 import { runCommand, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -90,7 +92,10 @@ const LabelField = ({ label }: { label: string }) => {
         }}
       />
       {problem !== undefined && (
-        <FieldProblem message={problem.message} hint={problem.hint} />
+        <ProblemText
+          problem={problem}
+          keep={sent === undefined ? [] : [sent]}
+        />
       )}
     </div>
   );

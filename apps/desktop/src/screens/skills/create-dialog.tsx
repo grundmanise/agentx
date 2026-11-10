@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import {
   breaksSkillNameRule,
   isSkillName,
@@ -61,6 +62,8 @@ const overDescriptionLimit = (description: string) => {
 interface Refusal {
   field: "name" | "form";
   problem: Problem;
+  /** The name typed when it was refused: it keeps its case when it starts the CLI's words. */
+  name: string;
 }
 
 /** The `skill new` command line: the description only when one is given. */
@@ -69,17 +72,21 @@ const createArgs = (name: string, description: string) =>
     ? ["skill", "new", name]
     : ["skill", "new", name, "--description", description];
 
-/** What went wrong, in the CLI's words. */
-const refusalOf = (outcome: Outcome): Refusal => {
+/**
+ * What went wrong with the skill `name`, in the CLI's words, a hint that names a command put in
+ * the app's words.
+ */
+const refusalOf = (outcome: Outcome, name: string): Refusal => {
   const error = outcome.events.find((e) => e.type === "error");
   const message =
     error?.message ??
     outcome.startError ??
     `agentx skill new exited with code ${outcome.exitCode ?? "none"}`;
+  const hint = rewriteHint(error?.hint, [doctorRule]);
   return {
     field: outcome.exitCode === EXIT_CODES.refused ? "name" : "form",
-    problem:
-      error?.hint === undefined ? { message } : { hint: error.hint, message },
+    name,
+    problem: hint === undefined ? { message } : { hint, message },
   };
 };
 
@@ -126,7 +133,7 @@ const CreateSkillForm = ({
     if (outcome.exitCode !== EXIT_CODES.ok) {
       // Another command holding the lock is the runner's toast, with its Retry.
       if (outcome.exitCode !== EXIT_CODES.locked && !outcome.cancelled) {
-        setRefusal(refusalOf(outcome));
+        setRefusal(refusalOf(outcome, name));
       }
       return;
     }
@@ -170,7 +177,7 @@ const CreateSkillForm = ({
         />
         <div id={nameHintId}>
           {nameRefused ? (
-            <ProblemText problem={refusal.problem} />
+            <ProblemText problem={refusal.problem} keep={[refusal.name]} />
           ) : (
             <p
               className={
@@ -211,7 +218,9 @@ const CreateSkillForm = ({
         >
           {DESCRIPTION_HINT}
         </p>
-        {refusal?.field === "form" && <ProblemText problem={refusal.problem} />}
+        {refusal?.field === "form" && (
+          <ProblemText problem={refusal.problem} keep={[refusal.name]} />
+        )}
       </div>
       <DialogFooter>
         <DialogClose asChild>

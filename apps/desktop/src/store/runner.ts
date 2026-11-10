@@ -11,6 +11,7 @@ import type { RunLine } from "#/cli/transport.ts";
 import { notify, notifyAttention, notifyError } from "#/components/toast.tsx";
 import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
+import { skillNamesOf } from "#/lib/problem-text.ts";
 import { refresh } from "#/store/feed.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
@@ -67,6 +68,11 @@ export interface CommandOptions {
    * a source, with an action that answers it; undefined leaves the runner's own.
    */
   failure?: (outcome: Outcome) => ErrorToast | undefined;
+  /**
+   * Names the error toast keeps the case of when one starts the CLI's message or hint, such as
+   * the skill the command is for; the name of every skill the inventory holds is kept anyway.
+   */
+  keep?: readonly string[];
 }
 
 export interface Outcome {
@@ -152,18 +158,31 @@ const problemOf = (args: readonly string[], outcome: Outcome): Problem => {
   };
 };
 
-/** The error toast of a failure: the control's own wording, or the CLI's problem and warnings. */
+/**
+ * The error toast of a failure: the control's own wording, or the CLI's problem and warnings. A
+ * skill's name that starts the message or the hint keeps its case: the names the control gave,
+ * and the name of every skill the inventory holds.
+ */
 const errorToastOf = (
   options: CommandOptions,
   problem: Problem,
   outcome: Outcome
-): ErrorToast =>
-  options.failure?.(outcome) ?? {
+): ErrorToast => {
+  const toast = options.failure?.(outcome) ?? {
     ...problem,
     warnings: outcome.logs
       .filter((l) => l.level === "warn")
       .map((l) => l.message),
   };
+  return {
+    ...toast,
+    keep: [
+      ...(toast.keep ?? []),
+      ...(options.keep ?? []),
+      ...skillNamesOf(useAppStore.getState().inventory),
+    ],
+  };
+};
 
 /**
  * Keeps the `conflict` events of a command, by skill: the merge each left pending. A skill the

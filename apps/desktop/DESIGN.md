@@ -795,7 +795,7 @@ Each glyph's `title` says the state it shows.
 
 ### Dialog
 
-`dialog.width`, `dialog.padding`, `dialog.radius`, `overlay.bg` with 1px `overlay.border` and `overlay.shadow`, over `shell.scrim-strong`; blocks `dialog.gap` apart. Title `type.dialog-title` `dialog.title`, subtitle `type.secondary` `dialog.subtitle`. The footer ends with a ghost cancel and the confirm button (primary, or danger for what cannot be undone); Enter confirms. While its command runs, the confirm shows a `Spinner` and the dialog stays open. A field label is `type.secondary`, `input.label-gap` above the field; a hint under it is `type.secondary` `text.hint`. A refusal of what a field holds shows under the field (§6 "Refusal under a field").
+`dialog.width`, `dialog.padding`, `dialog.radius`, `overlay.bg` with 1px `overlay.border` and `overlay.shadow`, over `shell.scrim-strong`; blocks `dialog.gap` apart. Title `type.dialog-title` `dialog.title`, subtitle `type.secondary` `dialog.subtitle`. The footer ends with a ghost cancel and the confirm button (primary, or danger for what cannot be undone); Enter confirms. While its command runs, the confirm shows a `Spinner` and the dialog stays open. A field label is `type.secondary`, `input.label-gap` above the field; a hint under it is `type.secondary` `text.hint`. A refusal of what a field holds shows under the field (§6 "Refusal under a field"), and a change to the form clears it.
 
 ### Fork dialog (detail pane)
 
@@ -811,7 +811,7 @@ Opened from the Skills and Add skills headers (`src/screens/skills/create-dialog
 
 ### Refusal under a field
 
-A CLI refusal of what a field holds shows under the field as one paragraph, the message then the hint, in `type.notice` `tone.danger.fg`, as an alert (`src/components/problem-text.tsx`). `src/lib/problem-text.ts` sentence-cases each part and ends it with a full stop, and changes nothing else, so commands, names and paths keep the CLI's spelling. The error toast says a refusal the same way.
+A CLI refusal of what a field holds shows under the field as one paragraph, the message then the hint, in `type.notice` `tone.danger.fg`, as an alert (`src/components/problem-text.tsx`). `src/lib/problem-text.ts` sentence-cases each part and ends it with a full stop, and changes nothing else: commands, paths and the skill names the field knows keep the CLI's spelling. When the CLI's hint names a flag or a command, the field shows a hint in the app's own words that names its own control (`src/lib/app-hint.ts`). The error toast says a refusal the same way.
 
 ### Agent client card (Agents page)
 
@@ -912,7 +912,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - A section is a `settings.columns` grid with `settings.column-gap` and `settings.section-padding` above and below. The label column holds the label in `type.settings-label` `text.primary` and one line under it in `type.secondary` `text.muted`; the content column holds the rows, `settings.section-gap` apart.
 - Inputs are `input.height`. Paths and ids are `type.technical`, ids in `text.hint`.
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
-- A failure under a field is the CLI's message in `type.notice` `tone.danger.fg` with its hint under it in `text.muted`; the Account remote and Export settings fields use §6 "Refusal under a field".
+- A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
 
