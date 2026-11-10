@@ -18,7 +18,7 @@ import {
 } from "#/components/ui/accordion.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
-import { revealInFinder } from "#/lib/reveal.ts";
+import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import {
   filesRequestOf,
   filesVersionOf,
@@ -194,8 +194,8 @@ const Reveal = ({
       <Button
         variant="ghost"
         size="icon"
-        aria-label={`Show ${path} in Finder`}
-        title="Show in Finder"
+        aria-label={showInLabel(path)}
+        title={showInLabel()}
         onClick={show}
       >
         <FolderIcon />
@@ -205,11 +205,11 @@ const Reveal = ({
   return (
     <SplitButton
       size="icon"
-      label={`Show ${path} in Finder`}
-      title="Show in Finder"
+      label={showInLabel(path)}
+      title={showInLabel()}
       onClick={show}
-      menuLabel={`Show ${path} in Finder elsewhere`}
-      menuTitle="Show in Finder elsewhere"
+      menuLabel={`${showInLabel(path)} elsewhere`}
+      menuTitle={`${showInLabel()} elsewhere`}
       onOpenChange={onOpenChange}
       menu={others.map((location) => (
         <DropdownMenuItem
