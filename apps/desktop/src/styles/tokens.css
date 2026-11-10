@@ -477,6 +477,10 @@
   --padding-split-list-right: 12px;
   --padding-split-list-bottom: 24px;
   --padding-split-list-left: 14px;
+  --height-split-adopt: 34px;
+  --padding-split-adopt: 20px;
+  --padding-split-adopt-bottom: 8px;
+  --padding-split-adopt-left: 28px;
   --padding-detail: 40px;
   --padding-detail-top: 34px;
   --padding-detail-bottom: 48px;

@@ -7,6 +7,7 @@ import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { AdoptAllLines } from "#/screens/skills/adopt-all.tsx";
 import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
 import { forksOf, UNIVERSAL } from "#/screens/skills/projection.ts";
@@ -105,7 +106,7 @@ const GroupHeader = ({
 
 /**
  * The left column of the Skills screen: title and count, Check updates, Add and Create, the search field, the
- * filter row, and the rows in their groups. A fork made under a new name is one row, in YOUR
+ * filter row, the Adopt all line of each tool with skills to adopt, and the rows in their groups. A fork made under a new name is one row, in YOUR
  * SKILLS; its original carries a marker for it.
  */
 export const SkillList = ({
@@ -208,6 +209,7 @@ export const SkillList = ({
           />
         </div>
       </div>
+      <AdoptAllLines />
       <nav
         aria-label="Skills"
         className="pr-split-list-right pb-split-list-bottom pl-split-list-left min-h-0 flex-1 overflow-auto pt-0"
