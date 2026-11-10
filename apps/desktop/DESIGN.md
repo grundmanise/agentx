@@ -593,7 +593,6 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.min-width` | 240 | `min-w-menu` | Menu |
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
-| `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
 | `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
@@ -664,7 +663,6 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `popover.row-radius` | 10 | Popover rows, Reset button |
 | `menu.radius` | 12 | Menu |
 | `menu.row-radius` | 8 | Menu rows |
-| `tooltip.radius` | 8 | Tooltip |
 | `card.radius` | 18 | Inbox cards, review file cards |
 | `card.tile-radius` | 10 | Icon tile |
 | `file-card.radius` | 16 | File tree card |
@@ -812,15 +810,11 @@ A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.
 
 ### Split button
 
-Two ghost icon buttons that meet with no gap and share one outline, told apart by a 1px `button.split-divider` on the chevron's left edge: the action (`button.icon-size` square, rounded at its left end only) and a narrower chevron pointing down that opens the action's menu (rounded at its right end only). Only the action shows when there is nothing to choose. Show in Finder on a file row is one.
+Two ghost buttons that meet with no gap and share one outline, told apart by a 1px `button.split-divider` on the chevron's left edge: the action (rounded at its left end only) and a narrower chevron pointing down that opens the action's menu (rounded at its right end only; `aria-label` names the menu, Enter, Space and ArrowDown open it, Escape closes it and returns the focus to the chevron). The menu is the Menu (§6). Only the action shows when there is nothing to choose. Two sizes (`src/components/split-button.tsx`): an icon action, `button.icon-size` square, as Show in Finder on a file row; and a labelled one, as tall as a small button, as Add in the Skills header (§6 "Skills header").
 
 ### Skills header
 
-The top of the Skills list column (`split.header-padding`): the serif "Skills" title with the skill count in `type.technical` `text.caption` on the left; on the right, 4 apart, Check updates (small ghost, the `RefreshIcon` at `sm` then its label), Add (small ghost, opens Add skills) and Create, a ghost icon button (`button.icon-size` 32) holding the `PlusIcon`, whose accessible name is "Create" and whose tooltip (§6 "Tooltip") reads "Create skill". Create opens the Create skill dialog (§6 "Create skill dialog"). The column keeps `split.list-width` at every window size, so the header fits as it is from the minimum window up.
-
-### Tooltip
-
-The name of an icon button that shows no text, on hover and on keyboard focus (`src/components/ui/tooltip.tsx`): `overlay.bg` with a 1px `overlay.border`, `tooltip.radius`, padding 4 10, `type.secondary` in `text.primary`, `tooltip.offset` below its trigger (above when there is no room). It shows at once, holds a few words, and adds to the button's own accessible name, which stays its `aria-label`.
+The top of the Skills list column (`split.header-padding`): the serif "Skills" title with the skill count in `type.technical` `text.caption` on the left; on the right, 4 apart, Check updates (small ghost, the `RefreshIcon` at `sm` then its label) and Add, a small split button (§6 "Split button"). Add goes to Add skills; its chevron, "More add actions", opens a menu with one row, "Create skill", which opens the Create skill dialog (§6 "Create skill dialog"). The column keeps `split.list-width` at every window size, so the header fits as it is from the minimum window up.
 
 ### Popover (Filter)
 
@@ -858,7 +852,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per fil
 
 ### Create skill dialog
 
-The Skills header's Create and the Add skills header's Create skill open it (`src/screens/skills/create-dialog.tsx`): title "Create skill", subtitle "Creates a skill of your own in your library and adds it to your agents." in `dialog.subtitle`. Two fields, each with its label in `type.secondary` `text.secondary` and a hint under it in `type.secondary` `text.hint`. Name, mono, focused on open, hint "1 to 64 lowercase letters, digits and single hyphens". Description, hint "What it does and when to use it, in one or two sentences. Up to 1024 characters.", counted in characters (the Agent Skills specification gives a description 1 to 1024 characters; `skill new --description` takes one line of at most 1024 bytes). A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and Create is disabled; a name the CLI refuses (exit 6) shows its message and hint under Name in place of the rule. Cancel (ghost) · Create (primary), pending until the inventory that follows lists the new skill; toast "Created {name} skill". Any other refusal shows under Description. Both are a refusal under a field (below).
+Create skill in the menu of the Skills header's Add and the Add skills header's Create skill open it (`src/screens/skills/create-dialog.tsx`): title "Create skill", subtitle "Creates a skill of your own in your library and adds it to your agents." in `dialog.subtitle`. Two fields, each with its label in `type.secondary` `text.secondary` and a hint under it in `type.secondary` `text.hint`. Name, mono, focused on open, hint "1 to 64 lowercase letters, digits and single hyphens". Description, hint "What it does and when to use it, in one or two sentences. Up to 1024 characters.", counted in characters (the Agent Skills specification gives a description 1 to 1024 characters; `skill new --description` takes one line of at most 1024 bytes). A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and Create is disabled; a name the CLI refuses (exit 6) shows its message and hint under Name in place of the rule. Cancel (ghost) · Create (primary), pending until the inventory that follows lists the new skill; toast "Created {name} skill". Any other refusal shows under Description. Both are a refusal under a field (below).
 
 ### Refusal under a field
 

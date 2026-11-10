@@ -4,15 +4,11 @@ import { useNavigate } from "react-router";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
-import { PlusIcon } from "#/components/icons/plus.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchField } from "#/components/search-field.tsx";
+import { SplitButton } from "#/components/split-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "#/components/ui/tooltip.tsx";
+import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
 import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
 import { forksOf, UNIVERSAL } from "#/screens/skills/projection.ts";
@@ -160,30 +156,26 @@ export const SkillList = ({
         </div>
         <div className="flex items-center gap-1">
           <CheckUpdates />
-          <Button
-            variant="ghost"
+          <SplitButton
             size="sm"
             onClick={() => {
               void navigate("/add");
             }}
-          >
-            Add
-          </Button>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Create"
-                onClick={() => {
+            menuLabel="More add actions"
+            menu={
+              <DropdownMenuItem
+                onSelect={() => {
                   setCreating(true);
                 }}
               >
-                <PlusIcon />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Create skill</TooltipContent>
-          </Tooltip>
+                <span className="type-body text-text-primary">
+                  Create skill
+                </span>
+              </DropdownMenuItem>
+            }
+          >
+            Add
+          </SplitButton>
         </div>
       </div>
       <div className="pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left gap-split-toolbar flex flex-col">

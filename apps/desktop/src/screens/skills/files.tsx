@@ -8,8 +8,8 @@ import type {
   SkillFileEvent,
 } from "#/cli/events.gen.ts";
 import { CodePane, codeLines } from "#/components/code-pane.tsx";
-import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
+import { SplitButton } from "#/components/split-button.tsx";
 import {
   Accordion,
   AccordionContent,
@@ -17,12 +17,7 @@ import {
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
 import { Button } from "#/components/ui/button.tsx";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu.tsx";
+import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
 import { revealInFinder } from "#/lib/reveal.ts";
 import {
   filesRequestOf,
@@ -191,53 +186,47 @@ const Reveal = ({
   if (first === undefined) {
     return null;
   }
-  return (
-    <span className="inline-flex">
+  const show = () => {
+    void revealInFinder(`${first.directory}/${path}`);
+  };
+  if (others.length === 0) {
+    return (
       <Button
         variant="ghost"
-        size={others.length === 0 ? "icon" : "icon-split-main"}
+        size="icon"
         aria-label={`Show ${path} in Finder`}
         title="Show in Finder"
-        onClick={() => {
-          void revealInFinder(`${first.directory}/${path}`);
-        }}
+        onClick={show}
       >
         <FolderIcon />
       </Button>
-      {others.length > 0 && (
-        <DropdownMenu onOpenChange={onOpenChange}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-split-menu"
-              aria-label={`Show ${path} in Finder elsewhere`}
-              title="Show in Finder elsewhere"
-            >
-              <span className="flex rotate-90">
-                <ChevronIcon size="xs" />
-              </span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            {others.map((location) => (
-              <DropdownMenuItem
-                key={location.key}
-                onSelect={() => {
-                  void revealInFinder(`${location.directory}/${path}`);
-                }}
-              >
-                <span className="type-body text-text-primary">
-                  {location.label}
-                </span>
-                <span className="type-technical-sm text-text-caption break-all">
-                  {location.path}
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </span>
+    );
+  }
+  return (
+    <SplitButton
+      size="icon"
+      label={`Show ${path} in Finder`}
+      title="Show in Finder"
+      onClick={show}
+      menuLabel={`Show ${path} in Finder elsewhere`}
+      menuTitle="Show in Finder elsewhere"
+      onOpenChange={onOpenChange}
+      menu={others.map((location) => (
+        <DropdownMenuItem
+          key={location.key}
+          onSelect={() => {
+            void revealInFinder(`${location.directory}/${path}`);
+          }}
+        >
+          <span className="type-body text-text-primary">{location.label}</span>
+          <span className="type-technical-sm text-text-caption break-all">
+            {location.path}
+          </span>
+        </DropdownMenuItem>
+      ))}
+    >
+      <FolderIcon />
+    </SplitButton>
   );
 };
 

@@ -20,6 +20,11 @@ import {
 } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
+import {
+  moreAddActions,
+  openCreateSkillDialog,
+  skillsHeader,
+} from "./harness/skills-header.ts";
 
 const launchLines = [
   ["version", "--json"],
@@ -88,7 +93,7 @@ const openSkills = async (cli: MockCli, page: Page) => {
 /** Opens the Create skill dialog from the Skills header. */
 const openDialog = async (cli: MockCli, page: Page) => {
   await openSkills(cli, page);
-  await page.getByRole("button", { exact: true, name: "Create" }).click();
+  await openCreateSkillDialog(page);
   await expect(dialog(page)).toBeVisible();
 };
 
@@ -163,54 +168,93 @@ test("Create in the Skills header runs skill new with the description and select
   ]);
 });
 
-test("Create in the Skills header is a plus icon button named Create, with the tooltip Create skill", async ({
+/** Opens the Skills screen on `name`, a skill whose reads `registerReads` answers. */
+const openOnSkill = async (cli: MockCli, page: Page, name: string) => {
+  registerReads(cli);
+  await page.goto(`/#/skills/${name}`);
+  await expect(pane(page, name)).toBeVisible();
+};
+
+// The window at 1280x800 and at its minimum size (src-tauri/tauri.conf.json), with a skill open.
+for (const size of [
+  { height: 800, width: 1280 },
+  { height: 700, width: 1100 },
+]) {
+  test(`the Skills header at ${size.width}x${size.height}: Check updates and the Add split button, none of them clipped`, async ({
+    cli,
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    await openOnSkill(cli, page, "release-notes");
+    const controls = skillsHeader(page).getByRole("button", {
+      exact: true,
+      name: /^(?:Check updates|Add|More add actions|Create)$/u,
+    });
+    await expect(controls).toHaveText(["Check updates", "Add", ""]);
+    await expect(moreAddActions(page)).toHaveAttribute("aria-haspopup", "menu");
+    // Each control ends inside the list column, and its label fits the control.
+    const column = await skillsHeader(page).boundingBox();
+    const buttons = await controls.all();
+    const fits = await Promise.all(
+      buttons.map(async (button) => {
+        const box = await button.boundingBox();
+        const whole = await button.evaluate(
+          (b) => b.scrollWidth <= b.clientWidth
+        );
+        return (
+          whole &&
+          box !== null &&
+          column !== null &&
+          box.x + box.width <= column.x + column.width
+        );
+      })
+    );
+    expect(fits).toEqual([true, true, true]);
+  });
+}
+
+test("Add in the Skills header goes to Add skills", async ({ cli, page }) => {
+  await openOnSkill(cli, page, "release-notes");
+  await skillsHeader(page)
+    .getByRole("button", { exact: true, name: "Add" })
+    .click();
+  await expect(page.getByRole("heading", { name: "Add skills" })).toBeVisible();
+  await expect(page).toHaveURL(/#\/add$/u);
+});
+
+test("Add's chevron opens a menu with Create skill, from the pointer and the keyboard; Escape closes it", async ({
   cli,
   page,
 }) => {
-  // The window's minimum size (src-tauri/tauri.conf.json), with a skill open.
-  await page.setViewportSize({ height: 700, width: 1100 });
-  registerReads(cli);
-  await page.goto("/#/skills/release-notes");
-  await expect(pane(page, "release-notes")).toBeVisible();
-  const header = page
-    .getByRole("region", { name: "Skills list" })
-    .getByRole("button", {
-      exact: true,
-      name: /^(?:Check updates|Add|Create)$/u,
-    });
-  await expect(header).toHaveCount(3);
-  const create = page.getByRole("button", { exact: true, name: "Create" });
-  await expect(create).toHaveText("");
-  await expect(create.locator("svg")).toHaveCount(1);
-  // Nothing in the header is clipped: each button ends inside the list column, and its label
-  // fits the button.
-  const column = await page
-    .getByRole("region", { name: "Skills list" })
-    .boundingBox();
-  const buttons = await header.all();
-  const fits = await Promise.all(
-    buttons.map(async (button) => {
-      const box = await button.boundingBox();
-      const whole = await button.evaluate(
-        (b) => b.scrollWidth <= b.clientWidth
-      );
-      return (
-        whole &&
-        box !== null &&
-        column !== null &&
-        box.x + box.width <= column.x + column.width
-      );
-    })
-  );
-  expect(fits).toEqual([true, true, true]);
+  await openOnSkill(cli, page, "release-notes");
+  const menu = page.getByRole("menu");
+  const create = page.getByRole("menuitem", { name: "Create skill" });
 
-  await create.hover();
-  await expect(
-    page.getByRole("tooltip", { name: "Create skill" })
-  ).toBeVisible();
-  await expect(create).toHaveAccessibleDescription("Create skill");
+  await moreAddActions(page).click();
+  await expect(menu).toBeVisible();
+  await expect(page.getByRole("menuitem")).toHaveText(["Create skill"]);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(moreAddActions(page)).toBeFocused();
+
+  // The chevron keeps the focus: Enter, Space and ArrowDown open the menu.
+  const opensWith = async (key: string) => {
+    await page.keyboard.press(key);
+    await expect(create).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(moreAddActions(page)).toBeFocused();
+  };
+  await opensWith("Enter");
+  await opensWith("Space");
+  await opensWith("ArrowDown");
+
+  await moreAddActions(page).click();
   await create.click();
+  await expect(menu).toBeHidden();
   await expect(dialog(page)).toBeVisible();
+  await expect(nameField(page)).toBeFocused();
+  expect(later(cli)).toEqual([]);
 });
 
 test("Create skill in the Add skills header runs skill new without --description when it is empty", async ({

@@ -26,6 +26,12 @@ const buttonVariants = cva(
         "icon-split-menu":
           "type-button border-button-split-divider h-8 w-5 items-center justify-center rounded-l-none border-l p-0 whitespace-nowrap",
         sm: "type-button-sm h-8.5 items-center justify-center px-3.5 whitespace-nowrap",
+        // The two halves of a small split button whose action is a label (Add in the Skills
+        // header), as tall as a small button.
+        "sm-split-main":
+          "type-button-sm h-8.5 items-center justify-center rounded-r-none pr-2.5 pl-3.5 whitespace-nowrap",
+        "sm-split-menu":
+          "type-button-sm border-button-split-divider h-8.5 w-5 items-center justify-center rounded-l-none border-l p-0 whitespace-nowrap",
         "sm-wrap":
           "type-button-sm min-h-8.5 items-start justify-start px-3.5 py-1.5 text-left whitespace-normal",
       },
