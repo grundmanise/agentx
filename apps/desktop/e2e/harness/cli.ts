@@ -291,6 +291,11 @@ export class MockCli {
   readonly openDialogs: unknown[] = [];
   /** Every Tauri command the page called, in order: the supervisor's and the plugins'. */
   readonly calls: string[] = [];
+  /**
+   * Every file the app opened in an editor, in order, with the editor: `{ kind: "system" }` for
+   * the opener plugin's open, else the editor the saved preferences held when `editor_open` ran.
+   */
+  readonly editorOpens: { path: string; editor: unknown }[] = [];
   /** The request id of every line written to serve's stdin, in order. */
   get requestIds(): string[] {
     return this.serveRequests.map((written) => {
@@ -318,6 +323,10 @@ export class MockCli {
   private serving = false;
   private serveStart: ServeStart = { events: [firstInventory()] };
   private openAnswer: string | null = null;
+  private editors: { id: string; name: string }[] = [];
+  private failingOpens = false;
+  // The app's preferences file, which outlives a page reload as the file outlives a restart.
+  private preferences: unknown = { editor: { kind: "system" } };
 
   constructor(page: Page) {
     this.page = page;
@@ -354,6 +363,36 @@ export class MockCli {
   /** What every later native open dialog returns: the path the user picks, or null for Cancel. */
   answerOpenDialog(path: string | null) {
     this.openAnswer = path;
+  }
+
+  /** The editors every later detection finds on the machine, in the order the app lists them. */
+  answerEditors(editors: { id: string; name: string }[]) {
+    this.editors = editors;
+  }
+
+  /**
+   * Runs the app as on macOS: the webview reports a Mac platform from the next page load, which
+   * `src/lib/platform.ts` reads. The suite runs as Linux otherwise.
+   */
+  async runAsMac() {
+    await this.page.addInitScript(() => {
+      Object.defineProperty(navigator, "platform", { get: () => "MacIntel" });
+    });
+  }
+
+  /** Whether every later open in an editor fails, as when the editor cannot start. */
+  failEditorOpens(fail = true) {
+    this.failingOpens = fail;
+  }
+
+  /** The app's preferences as last saved, or as the test set them with `savePreferences`. */
+  get savedPreferences(): unknown {
+    return this.preferences;
+  }
+
+  /** Sets the app's preferences file, as an earlier run of the app would have left it. */
+  savePreferences(preferences: unknown) {
+    this.preferences = preferences;
   }
 
   /** What the supervisor reports about the CLI. */
@@ -564,6 +603,44 @@ export class MockCli {
       case "plugin:dialog|open": {
         this.openDialogs.push(field(args, "options"));
         return this.openAnswer;
+      }
+      default: {
+        return this.handleShell(command, args);
+      }
+    }
+  }
+
+  /** The Rust shell's own commands beside the supervisor's: the editor and the app's preferences. */
+  private handleShell(command: string, args: unknown): unknown {
+    switch (command) {
+      case "plugin:opener|open_path":
+      case "editor_open": {
+        const path = String(field(args, "path"));
+        if (command === "editor_open" && field(args, "editor") !== undefined) {
+          return this.refuse("editor_open takes the path alone");
+        }
+        this.editorOpens.push({
+          // The Rust side opens with the editor the preferences hold; the call names only the file.
+          editor:
+            command === "editor_open"
+              ? field(this.preferences, "editor")
+              : { kind: "system" },
+          path,
+        });
+        if (this.failingOpens) {
+          throw new Error(`couldn't open ${path}`);
+        }
+        return null;
+      }
+      case "editor_detect": {
+        return this.editors;
+      }
+      case "preferences_read": {
+        return this.preferences;
+      }
+      case "preferences_write": {
+        this.preferences = field(args, "preferences");
+        return null;
       }
       default: {
         return this.refuse(

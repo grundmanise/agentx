@@ -1,7 +1,8 @@
 // The Create skill dialog: a name and a one-line description, which `skill new` turns into a
 // skill of your own, placed in every enabled agent (docs/help-center/cli/fork.mdx). The Skills and
-// Add skills headers open it. The new skill is selected once the inventory that follows lists it;
-// a name the CLI refuses (exit 6: taken, or outside the grammar) shows its message under Name.
+// Add skills headers open it. Its Create and edit selects the new skill once the inventory that
+// follows lists it, and opens its SKILL.md in the editor the user chose (Settings, Editor); a name
+// the CLI refuses (exit 6: taken, or outside the grammar) shows its message under Name.
 import { useId, useRef, useState } from "react";
 import type { RefObject } from "react";
 
@@ -20,11 +21,13 @@ import {
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { doctorRule, rewriteHint } from "#/lib/app-hint.ts";
+import { openInEditor } from "#/lib/editor.ts";
 import {
   breaksSkillNameRule,
   isSkillName,
   SKILL_NAME_RULE,
 } from "#/lib/skill-name.ts";
+import { skillFile } from "#/screens/skills/edit.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runCommand, usePending } from "#/store/runner.ts";
@@ -139,11 +142,16 @@ const CreateSkillForm = ({
     }
     const created =
       outcome.events.find((e) => e.type === "library_skill")?.name ?? name;
-    // The skill is selected from the inventory that follows, never from the command's result.
+    // The skill is selected from the inventory that follows, never from the command's result, and
+    // its SKILL.md opens then, where the library says it is.
     setSelecting(true);
     afterSettled(() => {
       onClose();
       openSkill(created);
+      const library = useAppStore.getState().machine?.library;
+      if (library !== undefined) {
+        void openInEditor(skillFile(library, created));
+      }
     });
   };
 
@@ -233,7 +241,7 @@ const CreateSkillForm = ({
           aria-busy={pending ? true : undefined}
         >
           {pending && <Spinner />}
-          Create
+          Create and edit
         </Button>
       </DialogFooter>
     </form>

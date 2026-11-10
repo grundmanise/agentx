@@ -694,6 +694,8 @@ Each entry gives a component's structure, tokens and states, and the reason for 
 
 A control that runs a command is pending from the command until the inventory that follows it arrives: `aria-busy`, a `Spinner` in or beside it, and no input. It keeps the state the last inventory reported, so the screen never shows the outcome ahead of the CLI.
 
+Finder in this file means the platform's file manager. `src/lib/reveal.ts` names it for the platform `src/lib/platform.ts` reads; a screen never checks the platform itself.
+
 ### Buttons (height / padding / colours)
 
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert, never a grey fill.
@@ -739,6 +741,10 @@ The Universal chip, on, opens the Remove dialog: a universal client reads the li
 ### Checkbox (popover)
 
 16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark. In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
+
+### Radio group
+
+One choice among a few (`src/components/ui/radio-group.tsx`): a column of rows `gap-2.5` apart, each the round mark of §6 "Checkbox (popover)", checked on the one chosen, then the label in `type.body` `text.primary`, `gap-2.5` between them. The whole row is the hit target, and the arrow keys move the choice.
 
 ### Segmented control
 
@@ -799,13 +805,17 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 Fork is a secondary small button in the action row, before Remove, and a small ghost button on the banner of a skill gone from its source. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
 
+### Edit (detail pane)
+
+Edit is a secondary small button, first in the action row, for a skill the user may write to (`canEdit` in `src/screens/skills/edit.ts`). An unmodified skill of a source has none, because its first edit would quietly turn it into one an update has to merge with. Edit opens the skill's `SKILL.md` in the editor chosen in Settings, runs no command and shows no toast; the inventory that follows shows what changed. When the editor cannot be opened, a toast says so, with Show in Finder as its action.
+
 ### Publish dialog (detail pane)
 
 Under the subtitle, an optional message field, then FILES (`type.caption` `text.caption`): one row per changed file, the path in `type.technical` `text.secondary` and its status in `type.technical-sm` `file-row.edited-label`. While the files are read, or when there are none or they cannot be read, one line in `type.secondary` `text.hint` takes their place. While the publish runs the field is disabled and the footer's left side shows its progress in `type.secondary` `text.hint`; the dialog closes when the command ends and its outcome is a toast.
 
 ### Create skill dialog
 
-`src/screens/skills/create-dialog.tsx`. Two fields, each with its label in `type.secondary` `text.secondary` and its rule as a hint under it: Name, mono and focused on open, and Description. A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and the confirm is disabled. A name the CLI refuses shows the refusal under Name in place of the rule; any other refusal shows under Description. The dialog stays pending until the inventory that follows lists the new skill.
+`src/screens/skills/create-dialog.tsx`. Two fields, each with its label in `type.secondary` `text.secondary` and its rule as a hint under it: Name, mono and focused on open, and Description. A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and the confirm is disabled. A name the CLI refuses shows the refusal under Name in place of the rule; any other refusal shows under Description. The dialog stays pending until the inventory that follows lists the new skill; it then selects the skill and opens its `SKILL.md` as Edit does (§6 "Edit (detail pane)").
 
 ### Refusal under a field
 
@@ -911,6 +921,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - Inputs are `input.height`. Paths and ids are `type.technical`, ids in `text.hint`.
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
+- Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
 
