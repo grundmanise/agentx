@@ -1,6 +1,7 @@
 // The Create skill dialog, from the Skills and the Add skills headers: the name checked as the CLI
 // checks it, `skill new` with `--description` only when one is given, the new skill selected under
-// YOUR SKILLS once the inventory that follows lists it, and a refused name's message under Name.
+// YOUR SKILLS once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
+// Settings, and a refused name's message under Name.
 import type { Page } from "@playwright/test";
 
 import {
@@ -18,7 +19,7 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, libraryPath, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -56,7 +57,7 @@ const nameField = (page: Page) =>
 const descriptionField = (page: Page) =>
   dialog(page).getByRole("textbox", { name: "Description" });
 const createButton = (page: Page) =>
-  dialog(page).getByRole("button", { exact: true, name: "Create" });
+  dialog(page).getByRole("button", { exact: true, name: "Create and edit" });
 
 /** Registers the reads of the fixture machine and of the new skill once it is selected. */
 const registerReads = (cli: MockCli) => {
@@ -372,4 +373,54 @@ test("the description hint turns red and Create is disabled past 1024 characters
     .click();
   await expect(dialog(page)).toBeHidden();
   expect(later(cli)).toEqual([]);
+});
+
+test("Create and edit opens the new skill's SKILL.md in the chosen editor once it is selected", async ({
+  cli,
+  page,
+}) => {
+  const zed = { id: "zed", kind: "app", name: "Zed" };
+  cli.answerEditors([{ id: "zed", name: "Zed" }]);
+  cli.savePreferences({ editor: zed });
+  await openDialog(cli, page);
+  await nameField(page).fill(NEW_SKILL);
+  cli.register(["skill", "new", NEW_SKILL], { events: createdEvents });
+  await createButton(page).click();
+  await expect(
+    toasts(page).getByText(`Created ${NEW_SKILL} skill`)
+  ).toBeVisible();
+  // Nothing opens before the inventory lists the skill.
+  expect(cli.editorOpens).toEqual([]);
+
+  await answerRefresh(cli);
+  await expect(
+    yours(page).getByRole("button", { exact: true, name: NEW_SKILL })
+  ).toHaveAttribute("aria-current", "true");
+  await expect
+    .poll(() => cli.editorOpens)
+    .toEqual([{ editor: zed, path: `${libraryPath}/${NEW_SKILL}/SKILL.md` }]);
+  await expect(
+    toasts(page).getByText(`Created ${NEW_SKILL} skill`)
+  ).toBeVisible();
+  expect(later(cli)).toEqual([["skill", "new", NEW_SKILL, "--json"]]);
+});
+
+test("with the system default, Create and edit opens SKILL.md through the opener", async ({
+  cli,
+  page,
+}) => {
+  await openDialog(cli, page);
+  await nameField(page).fill(NEW_SKILL);
+  cli.register(["skill", "new", NEW_SKILL], { events: createdEvents });
+  await createButton(page).click();
+  await answerRefresh(cli);
+  await expect
+    .poll(() => cli.editorOpens)
+    .toEqual([
+      {
+        editor: { kind: "system" },
+        path: `${libraryPath}/${NEW_SKILL}/SKILL.md`,
+      },
+    ]);
+  expect(cli.calls).toContain("plugin:opener|open_path");
 });

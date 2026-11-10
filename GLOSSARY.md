@@ -206,6 +206,10 @@ The ~/.agentx directory holding the account repo clone with its worktrees, the m
 The one file in agentx home holding what only this machine decides: its label, enabled configurations, sources and their pins, and copy modes. Leaves the machine only inside a snapshot.
 _Avoid_: config, preferences, local state
 
+**App preference**:
+A choice the desktop app alone makes on this machine, such as the editor a skill opens in. The app keeps it in its own config directory; it is never a machine setting, the CLI never reads it, and an export does not carry it.
+_Avoid_: app setting, machine setting
+
 **Enabled configuration**:
 An agent configuration selected by default for explicit placements. This choice does not disable an agent client's own discovery of the universal library.
 _Avoid_: active, target, selected

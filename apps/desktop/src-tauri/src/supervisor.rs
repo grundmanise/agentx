@@ -239,6 +239,12 @@ impl Supervisor {
         Shell { env, cli }
     }
 
+    /// The login shell's environment, which every CLI child gets: an editor the app starts gets
+    /// it too, so that it finds what the user's terminal finds.
+    pub async fn login_env(&self) -> HashMap<String, String> {
+        self.shell().await.env.clone()
+    }
+
     /// Where the CLI is, and how it was found.
     pub async fn resolution(&self) -> Resolution {
         let shell = self.shell().await;
