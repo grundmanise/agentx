@@ -37,7 +37,7 @@ export const StatusButton = ({
     type="button"
     aria-busy={busy ? true : undefined}
     onClick={onClick}
-    className="rounded-shell-status type-status text-shell-topbar-text hover:bg-shell-topbar-hover hover:text-text-secondary h-status flex flex-none items-center gap-2 px-3"
+    className="rounded-shell-status type-status text-shell-topbar-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-secondary h-status flex flex-none items-center gap-2 px-3"
   >
     <span className="text-shell-topbar-text flex size-4 items-center justify-center">
       {turning ? <Spinner /> : <span className={dot({ tone })} />}

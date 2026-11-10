@@ -121,7 +121,6 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `shell.nav-active-bg` | `gray-910` | Active nav item |
 | `shell.nav-active-text` | `gray-50` | Active nav item label |
 | `shell.nav-badge-bg` | `accent.primary` | Inbox count badge (digits `on-accent`) |
-| `shell.topbar-hover` | `gray-920` | Account remote status hover (the command field changes only its border and text on hover) |
 | `shell.topbar-text` | `gray-300` | Command field placeholder and icon (`text.secondary` on hover), account remote status label |
 | `shell.status-published` | `accent.primary` | Account remote status dot, nothing to publish (halo `lime-400/15`) |
 | `shell.status-pending` | `accent.yours` | Account remote status dot, skills to publish (halo `violet-400/18`) |
@@ -144,7 +143,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `button.secondary-hover` | `gray-850` |  |
 | `button.secondary-text` | `gray-50` |  |
 | `button.ghost-text` | `gray-200` | Ghost button label (or `text.muted` in quiet spots) |
-| `button.ghost-bg` | `gray-50/3.5` | Ghost and icon button at rest, toast action, sort toggle |
+| `button.ghost-bg` | `gray-50/3.5` | Ghost and icon button at rest, toast action, sort toggle, publish status |
 | `button.ghost-hover` | `gray-50/7.5` | Ghost / icon button hover |
 | `button.danger-text` | `accent.danger` | Danger ghost (Remove, Cancel, Restore base version) |
 | `button.danger-bg` | `red-400/10` | Danger button at rest |
@@ -940,7 +939,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 
 ### Publish status (title bar)
 
-At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/components/status-button.tsx`): a pill `shell.status-height` high, `shell.status-radius`, transparent, hover `shell.topbar-hover` with the label in `text.secondary`. An 8px dot (`shell.status-dot-radius`) in a 16px box, then the label in `type.status` `shell.topbar-text`.
+At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/components/status-button.tsx`): a pill `shell.status-height` high, `shell.status-radius`, with the ghost button's fill (`button.ghost-bg`, hover `button.ghost-hover` with the label in `text.secondary`), since it is a button and every button has a resting shape. An 8px dot (`shell.status-dot-radius`) in a 16px box, then the label in `type.status` `shell.topbar-text`.
 
 - Three states, from the inventory's library and the Sources slice: no account remote (dot `text.hint`; goes to Settings), skills to publish (`shell.status-pending` with `shell.status-pending-halo`; publishes them all), and everything published (`shell.status-published` with `shell.status-published-halo`; checks for updates).
 - It counts your own skills edited since they were published, with the predicate the Skills screen's banner uses (`hasEditsToPublish` in `src/screens/skills/banners.ts`), so the title bar and the Skills screen never disagree. A skill never published is not counted: a bare publish leaves it out, and its own banner publishes it.

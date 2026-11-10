@@ -1,5 +1,6 @@
-// Every button has a resting shape: a ghost and a danger button have a fill before any hover, and
-// the two halves of a split button make one shape, rounded on its outer corners only.
+// Every button has a resting shape: a ghost button, a danger button and the title bar's publish
+// status have a fill before any hover, and the two halves of a split button make one shape,
+// rounded on its outer corners only.
 import type { Locator } from "@playwright/test";
 
 import {
@@ -77,6 +78,14 @@ test("ghost and danger buttons have a resting fill; the split button's halves ma
   expect(ghostShape.background).not.toBe(TRANSPARENT);
   expect(dangerShape.background).not.toBe(TRANSPARENT);
   expect(dangerShape.background).not.toBe(ghostShape.background);
+
+  // The publish status in the title bar is a button too: the ghost fill at rest.
+  const status = page
+    .getByRole("banner")
+    .getByRole("button", { name: /publish|remote/iu });
+  await expect(status).toBeVisible();
+  const statusShape = await shapeOf(status);
+  expect(statusShape.background).toBe(ghostShape.background);
 
   const action = skillsHeader(page).getByRole("button", {
     exact: true,
