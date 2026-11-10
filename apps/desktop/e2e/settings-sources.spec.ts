@@ -209,8 +209,9 @@ test("set the account remote: exit 3, 1 and 6 show the CLI's message and hint un
 
   await urlField(page).fill(ACME);
   await save.click();
+  // The hint names the control in Settings, not the command the CLI names.
   await expect(alert).toHaveText(
-    `${ACME} is a shared source, and a repository cannot be both a shared source and the account remote. Remove the source first with 'agentx source remove ${ACME}', or choose another repository.`
+    `${ACME} is a shared source, and a repository cannot be both a shared source and the account remote. Remove it under Sources first, or choose another repository.`
   );
   await expect(toasts(page).getByRole("listitem")).toHaveCount(0);
   expect(changes(cli)).toEqual([

@@ -1,7 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
-  ACCOUNT,
   ACME,
   ACME_ID,
   acmeSkills,
@@ -505,8 +504,9 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
     events: [
       {
         code: "refused",
-        hint: "list its skills with 'agentx skill list --remote'",
-        message: `https://github.com/me/account is the account remote ${ACCOUNT}`,
+        hint: "run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one",
+        message:
+          "https://github.com/me/account is the account remote: it holds one branch per skill rather than skills on one branch",
         type: "error",
       },
     ],
@@ -525,8 +525,9 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
 
   await urlField(page).fill("me/account");
   await dialog(page).getByRole("button", { name: "Add" }).click();
+  // The CLI's hint names commands: the dialog names the place in the app instead.
   await expect(alert).toHaveText(
-    `https://github.com/me/account is the account remote ${ACCOUNT}. List its skills with 'agentx skill list --remote'.`
+    "https://github.com/me/account is the account remote: it holds one branch per skill rather than skills on one branch. See and install its skills under Your skills."
   );
   await expect(dialog(page)).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([

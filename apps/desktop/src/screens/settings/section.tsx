@@ -38,19 +38,3 @@ export const SettingsSection = ({
     </section>
   );
 };
-
-/** A failure under a field: the CLI's message, and its hint under it. */
-export const FieldProblem = ({
-  message,
-  hint,
-}: {
-  message: string;
-  hint?: string;
-}) => (
-  <div role="alert" className="flex flex-col gap-1">
-    <p className="type-notice text-tone-danger-fg m-0">{message}</p>
-    {hint !== undefined && (
-      <p className="type-notice text-text-muted m-0">{hint}</p>
-    )}
-  </div>
-);

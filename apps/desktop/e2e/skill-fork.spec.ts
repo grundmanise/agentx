@@ -221,13 +221,16 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
 
   await dialog.getByRole("button", { name: "Fork" }).click();
   const alert = dialog.getByRole("alert");
-  // The message and the hint as one sentence-cased paragraph.
+  // The CLI's message and the dialog's own hint, as one sentence-cased paragraph; the skill's
+  // name keeps its case. Exit 6 turns the switch on, so the hint names what is left to do with
+  // the form as it now stands, never the switch that is already on, nor a flag.
   await expect(alert).toHaveText(
-    "Scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill, or fork it beside the skill with --name <new>."
+    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill, or type a new name."
   );
   await expect(
     dialog.getByRole("switch", { name: "Use a new name" })
   ).toBeChecked();
+  await expect(dialog.getByText("turn on Use a new name")).toHaveCount(0);
   const field = dialog.getByRole("textbox", { name: "Name" });
   await expect(field).toBeFocused();
   // The dialog says why; no error toast repeats it.
@@ -246,6 +249,62 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
   expect(forks(cli)).toEqual([
     ["skill", "fork", "scratch", "--json"],
     ["skill", "fork", "scratch", "--name", "my-scratch", "--json"],
+  ]);
+});
+
+test("a refusal clears when the switch or the name changes, so it never sits under a form it was not about", async ({
+  cli,
+  page,
+}) => {
+  await openSkill(cli, page, "scratch");
+  await actions(page, "scratch").getByRole("button", { name: "Fork" }).click();
+  const dialog = forkDialog(page, "scratch");
+  const toggle = dialog.getByRole("switch", { name: "Use a new name" });
+  const alert = dialog.getByRole("alert");
+  cli.register(["skill", "fork", "scratch"], {
+    events: [refusedInPlace],
+    exitCode: 6,
+  });
+
+  await dialog.getByRole("button", { name: "Fork" }).click();
+  await expect(alert).toContainText("or type a new name.");
+  // Turning the switch off, then on again, clears it.
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await expect(alert).toHaveCount(0);
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(alert).toHaveCount(0);
+  await expect(dialog.getByText("turn on Use a new name")).toHaveCount(0);
+
+  // Typing a name clears it too.
+  await toggle.click();
+  await dialog.getByRole("button", { name: "Fork" }).click();
+  await expect(alert).toContainText("or type a new name.");
+  await dialog.getByRole("textbox", { name: "Name" }).fill("my-scratch");
+  await expect(alert).toHaveCount(0);
+});
+
+test("refused in place with Use a new name on: the hint leaves the switch out", async ({
+  cli,
+  page,
+}) => {
+  await openSkill(cli, page, "scratch");
+  await actions(page, "scratch").getByRole("button", { name: "Fork" }).click();
+  const dialog = forkDialog(page, "scratch");
+  await dialog.getByRole("switch", { name: "Use a new name" }).click();
+  // The skill's own name forks it in its place, which the CLI refuses as without the switch.
+  await dialog.getByRole("textbox", { name: "Name" }).fill("scratch");
+  cli.register(["skill", "fork", "scratch", "--name", "scratch"], {
+    events: [refusedInPlace],
+    exitCode: 6,
+  });
+  await dialog.getByRole("button", { name: "Fork" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill."
+  );
+  expect(forks(cli)).toEqual([
+    ["skill", "fork", "scratch", "--name", "scratch", "--json"],
   ]);
 });
 
