@@ -62,14 +62,14 @@ export const addSource = (source: string): ToastAction => ({
 const updatedText = (row: SkillRow, events: CliEvent[]) => {
   const updated = updatedIn(events).find((e) => e.name === row.name);
   if (updated === undefined) {
-    return `${row.name} is already up to date`;
+    return `${row.name} skill is already up to date`;
   }
   if (row.kind === "yours") {
-    return `Updated ${row.name}. Publish when ready.`;
+    return `Updated ${row.name} skill. Publish when ready.`;
   }
   return updated.state === "modified"
-    ? `Updated ${row.name}. Merged with your local edits`
-    : `Updated ${row.name}`;
+    ? `Updated ${row.name} skill. Merged with your local edits`
+    : `Updated ${row.name} skill`;
 };
 
 /**
@@ -96,7 +96,9 @@ export const updateSkill = async (row: SkillRow) => {
     outcome.exitCode === EXIT_CODES.pending_merge &&
     conflictsIn(outcome.events) > 0
   ) {
-    notify(`Conflicts in ${row.name}. Resolve them to finish the update`);
+    notify(
+      `${row.name} skill has conflicts. Resolve them to finish the update`
+    );
   }
 };
 

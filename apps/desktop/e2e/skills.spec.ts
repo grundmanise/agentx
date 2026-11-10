@@ -873,7 +873,7 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     });
     await expect(adoptBanner).toContainText("Adopt to manage it from agentx");
     await adoptBanner.getByRole("button", { name: "Adopt" }).click();
-    await expect(toasts(page).getByText("Adopted scratch")).toBeVisible();
+    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
 
     await row(page, "lint").click();
     cli.register(["source", "add", OLD]);
@@ -903,7 +903,7 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
       .getByRole("button", { name: "Fork" })
       .click();
     await expect(
-      toasts(page).getByText("Forked gone", { exact: true })
+      toasts(page).getByText("Forked gone skill", { exact: true })
     ).toBeVisible();
     expect(ran(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],

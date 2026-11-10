@@ -7,7 +7,9 @@ import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchField } from "#/components/search-field.tsx";
+import { SplitButton } from "#/components/split-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
 import { AdoptDialog } from "#/screens/skills/adopt-dialog.tsx";
 import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
 import type { ToolArg } from "#/screens/skills/adopt.ts";
@@ -183,26 +185,28 @@ export const SkillList = ({
             {rows.length}
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="gap-button flex items-center">
           <CheckUpdates />
-          <Button
-            variant="ghost"
+          <SplitButton
             size="sm"
             onClick={() => {
               void navigate("/add");
             }}
+            menuLabel="More add actions"
+            menu={
+              <DropdownMenuItem
+                onSelect={() => {
+                  setCreating(true);
+                }}
+              >
+                <span className="type-body text-text-primary">
+                  Create skill
+                </span>
+              </DropdownMenuItem>
+            }
           >
             Add
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setCreating(true);
-            }}
-          >
-            Create
-          </Button>
+          </SplitButton>
         </div>
       </div>
       <div className="pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left gap-split-toolbar flex flex-col">

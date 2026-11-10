@@ -508,6 +508,18 @@ test("a skill two clients hold is read and shown from the same copy, by its dire
   expect(cli.reveals).toEqual([
     ["/home/me/.claude-code/skills/meeting-notes/SKILL.md"],
   ]);
+  // The action and its menu's trigger are one button group.
+  await expect(
+    section
+      .getByRole("group")
+      .filter({
+        has: page.getByRole("button", {
+          exact: true,
+          name: "Show SKILL.md in file manager",
+        }),
+      })
+      .getByRole("button")
+  ).toHaveCount(2);
   // The other copy is in the menu, with its path, and opens there.
   await section
     .getByRole("button", { name: "Show SKILL.md in file manager elsewhere" })

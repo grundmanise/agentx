@@ -144,7 +144,7 @@ test("a skill of a source: Fork runs skill fork <name> and the pane redraws from
   fork.release();
   await expect(dialog).toHaveCount(0);
   await expect(
-    toasts(page).getByText("Forked pdf", { exact: true })
+    toasts(page).getByText("Forked pdf skill", { exact: true })
   ).toBeVisible();
   // Nothing predicted: pdf is still the skill of a source until serve reports the fork.
   await expect(pane(page, "pdf")).toContainText("acme/skills");
@@ -187,7 +187,7 @@ test("Use a new name: Fork runs skill fork <name> --name <new> and selects the f
   await field.press("Enter");
   await expect(dialog).toHaveCount(0);
   await expect(
-    toasts(page).getByText("Forked pdf", { exact: true })
+    toasts(page).getByText("Forked pdf skill", { exact: true })
   ).toBeVisible();
   await expect(page).toHaveURL(/#\/skills\/my-pdf$/u);
   await expect(pane(page, "my-pdf")).toHaveCount(0);
@@ -243,7 +243,7 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
   await dialog.getByRole("button", { name: "Fork" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(
-    toasts(page).getByText("Forked scratch", { exact: true })
+    toasts(page).getByText("Forked scratch skill", { exact: true })
   ).toBeVisible();
   await expect(page).toHaveURL(/#\/skills\/my-scratch$/u);
   expect(forks(cli)).toEqual([
@@ -327,7 +327,7 @@ test("a plugin's skill: Fork runs skill fork <skill> and shows what each agent s
   await dialog.getByRole("button", { name: "Fork" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(
-    toasts(page).getByText("Forked commit-helper", { exact: true })
+    toasts(page).getByText("Forked commit-helper skill", { exact: true })
   ).toBeVisible();
   const notes = page.getByRole("dialog", { name: "What each agent sees" });
   const rows = notes.getByRole("listitem");

@@ -121,7 +121,6 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `shell.nav-active-bg` | `gray-910` | Active nav item |
 | `shell.nav-active-text` | `gray-50` | Active nav item label |
 | `shell.nav-badge-bg` | `accent.primary` | Inbox count badge (digits `on-accent`) |
-| `shell.topbar-hover` | `gray-920` | Account remote status hover (the command field changes only its border and text on hover) |
 | `shell.topbar-text` | `gray-300` | Command field placeholder and icon (`text.secondary` on hover), account remote status label |
 | `shell.status-published` | `accent.primary` | Account remote status dot, nothing to publish (halo `lime-400/15`) |
 | `shell.status-pending` | `accent.yours` | Account remote status dot, skills to publish (halo `violet-400/18`) |
@@ -144,14 +143,16 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `button.secondary-hover` | `gray-850` |  |
 | `button.secondary-text` | `gray-50` |  |
 | `button.ghost-text` | `gray-200` | Ghost button label (or `text.muted` in quiet spots) |
-| `button.ghost-hover` | `gray-880` | Ghost / icon button hover |
+| `button.ghost-bg` | `gray-50/3.5` | Ghost and icon button at rest, toast action, sort toggle, publish status |
+| `button.ghost-hover` | `gray-50/7.5` | Ghost / icon button hover |
 | `button.danger-text` | `accent.danger` | Danger ghost (Remove, Cancel, Restore base version) |
-| `button.danger-hover` | `red-400/10` |  |
+| `button.danger-bg` | `red-400/10` | Danger button at rest |
+| `button.danger-hover` | `red-400/17` |  |
 | `source-pill.bg` | `gray-910` | Source pill in Add, inactive (label `text.secondary`) |
 | `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
 | `source-pill.active-text` | `on-accent` |  |
 | `button.toast-action-text` | `accent.primary` | Action inside a toast |
-| `button.split-divider` | `gray-800` | The 1px line between the two halves of a split button |
+| `button.split-divider` | `gray-800` | The 1px separator between the buttons of a button group |
 
 #### Status pills
 
@@ -706,11 +707,13 @@ Finder in this file means the platform's file manager. `src/lib/reveal.ts` names
 
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert, never a grey fill.
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
-- **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / transparent, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
+- **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / `button.ghost-bg`, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
 - **Small, wrapping** – for a label that is a sentence, such as a commit subject in the History sheet: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
-- **Danger** – ghost in `button.danger-text`; hover `button.danger-hover`.
-- **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, transparent; hover `button.ghost-hover`.
+- **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
+- **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
 - **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
+
+Every button has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
 
 Two buttons side by side: `button.gap`, primary on the right.
 
@@ -800,6 +803,7 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 - A banner's actions are small buttons on its right, one command or one dialog each: ghost by default, primary for the action that applies the update, danger ghost for one that discards work. A destructive action opens a confirm dialog first.
 - Adopt and Update are banner buttons only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner; the reason is a row of its DETAILS.
+- The banner of a skill of a source edited locally only informs, with a publish action when this machine can write to the source. It has no fork action: Fork is in the action row.
 - A command refused because the target folder holds another version opens a confirm dialog, with the path in `type.technical` `text.caption` and a danger confirm.
 - The action row sits on the title row, pushed to its right end (`margin-left:auto`), centred on the row and wrapping when it is full, with `button.gap` 6 between its buttons. Remove, last, is a danger ghost button; its dialog lists the agents the skill leaves in `type.body` `text.secondary`, with a danger confirm.
 
@@ -888,9 +892,13 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.do
 
 A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape or a click outside closes it. No animation.
 
-### Split button
+### Button group
 
-Two ghost icon buttons that meet with no gap and share one outline, split by a 1px `button.split-divider` on the chevron's left edge: the action (`button.icon-size` square, rounded at its left end) and a narrower chevron that opens the action's menu (rounded at its right end). Only the action shows when there is nothing to choose. Show in Finder on a file row is one.
+shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side by side with no gap, read as one filled shape rounded on its outer corners only, with a 1px `button.split-divider` separator between them. An action with a menu of related actions (`src/components/split-button.tsx`) is the action's button, the separator, then a square icon button with the `MoreIcon` that opens the menu (§6 "Menu"); the trigger has its own accessible name, Enter, Space and ArrowDown open the menu, and Escape closes it and returns the focus to the trigger. The buttons keep their own sizes, as shadcn's do: a labelled action is a small button (`sm`) with a square `icon-sm` trigger, as Add in the Skills header; an icon action is an `icon` button with an `icon` trigger, as Show in Finder on a file row. Only the action shows when there is nothing to choose.
+
+### Skills header
+
+The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates (small ghost) and Add, a button group whose menu opens the Create skill dialog (§6 "Button group"). One control for adding and creating keeps the header inside `split.list-width` at every window size, down to the minimum window.
 
 ### Popover (Filter)
 
@@ -917,7 +925,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file
 
 - A row: a chevron (turns 90° when open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` status for a file the user changed, and the meta (line count, binary, or size) in `file-row.meta` at the right. An open row shows the file in the Code pane below it.
 - SKILL.md comes first and open; the rest follow by path, a file the user removed among them.
-- A file on disk has a Show in Finder split button over the meta, beside the trigger, never inside it. While the row is hovered, focused or has its menu open, the meta fades out and the button fades in at the same spot. The meta stays laid out, so the row never shifts, and the button stays in the tab order throughout. A removed file has no button.
+- A file on disk has a Show in Finder button group (§6 "Button group") over the meta, beside the trigger, never inside it. While the row is hovered, focused or has its menu open, the meta fades out and the button fades in at the same spot. The meta stays laid out, so the row never shifts, and the button stays in the tab order throughout. A removed file has no button.
 - The button opens the file at the skill's first place: the library when it holds the skill, else the first placement in the row's agent order. The chevron's menu lists every other placement, the path as the inventory carries it. A skill with one place has no chevron.
 
 ### Key hint
@@ -943,7 +951,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 
 ### Publish status (title bar)
 
-At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/components/status-button.tsx`): a pill `shell.status-height` high, `shell.status-radius`, transparent, hover `shell.topbar-hover` with the label in `text.secondary`. An 8px dot (`shell.status-dot-radius`) in a 16px box, then the label in `type.status` `shell.topbar-text`.
+At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/components/status-button.tsx`): a pill `shell.status-height` high, `shell.status-radius`, with the ghost button's fill (`button.ghost-bg`, hover `button.ghost-hover` with the label in `text.secondary`), since it is a button and every button has a resting shape. An 8px dot (`shell.status-dot-radius`) in a 16px box, then the label in `type.status` `shell.topbar-text`.
 
 - Three states, from the inventory's library and the Sources slice: no account remote (dot `text.hint`; goes to Settings), skills to publish (`shell.status-pending` with `shell.status-pending-halo`; publishes them all), and everything published (`shell.status-published` with `shell.status-published-halo`; checks for updates).
 - It counts your own skills edited since they were published, with the predicate the Skills screen's banner uses (`hasEditsToPublish` in `src/screens/skills/banners.ts`), so the title bar and the Skills screen never disagree. A skill never published is not counted: a bare publish leaves it out, and its own banner publishes it.

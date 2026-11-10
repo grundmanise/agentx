@@ -133,7 +133,7 @@ test.describe("the rows", () => {
     await run.started;
     await expect(update(page, "pdf")).toHaveAttribute("aria-busy", "true");
     run.release();
-    await expect(toasts(page).getByText("Updated pdf")).toBeVisible();
+    await expect(toasts(page).getByText("Updated pdf skill")).toBeVisible();
     await expect(update(page, "pdf")).toHaveCount(0);
     expect(later(cli)).toEqual([["skill", "update", "pdf", "--json"]]);
   });
@@ -148,17 +148,17 @@ test.describe("Update", () => {
     {
       events: [updated("pdf", "current")],
       name: "pdf",
-      toast: "Updated pdf",
+      toast: "Updated pdf skill",
     },
     {
       events: [updated("review", "modified")],
       name: "review",
-      toast: "Updated review. Merged with your local edits",
+      toast: "Updated review skill. Merged with your local edits",
     },
     {
       events: [updated("pdf-letters", "modified")],
       name: "pdf-letters",
-      toast: "Updated pdf-letters. Publish when ready.",
+      toast: "Updated pdf-letters skill. Publish when ready.",
     },
     {
       events: [
@@ -169,7 +169,7 @@ test.describe("Update", () => {
         },
       ],
       name: "pdf",
-      toast: "pdf is already up to date",
+      toast: "pdf skill is already up to date",
     },
   ];
   for (const c of cases) {
@@ -210,7 +210,7 @@ test.describe("Update", () => {
     await update(page, "review").click();
     await expect(
       toasts(page).getByText(
-        "Conflicts in review. Resolve them to finish the update",
+        "review skill has conflicts. Resolve them to finish the update",
         { exact: true }
       )
     ).toBeVisible();
@@ -603,7 +603,9 @@ test.describe("a pending merge", () => {
       .click();
     await expect(abortDialog(page)).toBeHidden();
     await expect(
-      toasts(page).getByText("Aborted the update of draft", { exact: true })
+      toasts(page).getByText("Aborted the update of draft skill", {
+        exact: true,
+      })
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "update", "draft", "--abort", "--json"],
@@ -656,7 +658,7 @@ test.describe("a pending merge", () => {
     await button(page, "Update").click();
     await expect(
       toasts(page).getByText(
-        "Conflicts in draft. Resolve them to finish the update",
+        "draft skill has conflicts. Resolve them to finish the update",
         { exact: true }
       )
     ).toBeVisible();

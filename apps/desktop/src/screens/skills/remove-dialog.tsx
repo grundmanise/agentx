@@ -77,7 +77,7 @@ export const RemoveDialog = ({
       offersRemote && remote ? [...args, "--remote"] : args,
       {
         label: removeLabel(row),
-        success: `Removed ${row.name}`,
+        success: `Removed ${row.name} skill`,
       }
     );
     close();

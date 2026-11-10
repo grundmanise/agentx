@@ -407,7 +407,7 @@ test.describe("Remove", () => {
     await expect(dialog).toBeHidden();
     const toast = toasts(page)
       .getByRole("listitem")
-      .filter({ hasText: "Removed pdf-letters" });
+      .filter({ hasText: "Removed pdf-letters skill" });
     await expect(toast).toBeVisible();
     await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
     expect(later(cli)).toEqual([
@@ -441,7 +441,9 @@ test.describe("Remove", () => {
     await article.getByRole("button", { name: "Remove" }).click();
     await expect(remote).not.toBeChecked();
     await dialog.getByRole("button", { name: "Remove" }).click();
-    await expect(toasts(page).getByText("Removed pdf-letters")).toBeVisible();
+    await expect(
+      toasts(page).getByText("Removed pdf-letters skill")
+    ).toBeVisible();
     expect(later(cli)).toEqual([["skill", "remove", "pdf-letters", "--json"]]);
   });
 
@@ -455,7 +457,7 @@ test.describe("Remove", () => {
     const dialog = page.getByRole("dialog", { name: "Remove draft?" });
     await expect(dialog.getByRole("checkbox")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Remove" }).click();
-    await expect(toasts(page).getByText("Removed draft")).toBeVisible();
+    await expect(toasts(page).getByText("Removed draft skill")).toBeVisible();
     expect(later(cli)).toEqual([["skill", "remove", "draft", "--json"]]);
   });
 
