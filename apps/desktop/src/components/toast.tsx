@@ -193,6 +193,8 @@ export interface ErrorToast {
   warnings?: string[];
   /** A way out, such as Add source, before Dismiss. */
   action?: ToastAction;
+  /** Names that keep their case when one starts the message or the hint, such as the skills the app holds. */
+  keep?: readonly string[];
 }
 
 /**
@@ -206,13 +208,15 @@ export const notifyError = ({
   details = [],
   warnings = [],
   action,
+  keep,
 }: ErrorToast) =>
   notifyDetail({
     action,
     details,
     duration: hint === undefined ? 5000 : Number.POSITIVE_INFINITY,
     message: problemSentence(
-      hint === undefined ? { message } : { hint, message }
+      hint === undefined ? { message } : { hint, message },
+      { keep }
     ),
     warnings,
   });

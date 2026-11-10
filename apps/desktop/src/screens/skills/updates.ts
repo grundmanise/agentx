@@ -47,7 +47,8 @@ const conflictsIn = (events: CliEvent[]) =>
 export const useCheckingUpdates = () => usePending(CHECK_UPDATES);
 
 /** Add source: `source add <url>`, so that the skill can be updated from it again. */
-const addSource = (source: string): ToastAction => ({
+/** Add source on a toast: `source add <source>`, for a skill whose source was removed. */
+export const addSource = (source: string): ToastAction => ({
   label: "Add source",
   onClick: () => {
     void runUntilSettled(["source", "add", source], {
