@@ -15,8 +15,8 @@ the CLI archives, the app packages and their checksums to
 - **Nightly**: the workflow releases the head of `main` as a prerelease, such as
   `v0.3.0-nightly.20261001.42`, where `42` is the run number, when `apps/cli` or `apps/desktop` changed
   since the last nightly, CI passed on it and the last nightly was published 6 or more hours ago. It
-  checks every 30 minutes, at :08 and :38, so a scheduled run that GitHub starts late or drops costs
-  30 minutes. A nightly run by hand, with `channel: nightly`, skips the 6-hour gap and the change
+  is scheduled to check every 30 minutes, at :08 and :38, so when GitHub starts a check late or drops
+  it, the next check can publish the nightly. A nightly run by hand, with `channel: nightly`, skips the 6-hour gap and the change
   check. The version is the next release the commits call for: a breaking change bumps the
   minor version (the major from 1.0 on), a `feat` or `change` the minor, anything else the patch. The
   14 newest nightlies are kept. Nightlies run one at a time, and stable releases one at a time; every

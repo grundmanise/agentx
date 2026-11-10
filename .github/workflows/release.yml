@@ -1,8 +1,8 @@
 name: Release
 
 # Nightly: a prerelease of main when the CLI or the app changed since the last nightly, at most
-# every 6 hours. A check runs every 30 minutes, so a scheduled run GitHub starts late or drops costs
-# 30 minutes, not a day.
+# every 6 hours. A check is scheduled every 30 minutes, so when GitHub starts one late or drops it,
+# the next check can publish the nightly instead of the next day's run.
 # Every release carries the CLI for Linux and macOS, the macOS app as a disk image and the Linux
 # app as a .deb and an AppImage, each app with the CLI of the release inside it.
 # Stable: run by hand from the Actions tab. It promotes a nightly, or another commit on
@@ -115,6 +115,11 @@ jobs:
           if [ "$CHANNEL" = nightly ]; then
             sha=$(git rev-parse origin/main)
             short=$(git rev-parse --short "$sha")
+            # A re-run of an old run checks out the commit main was at then: never publish a commit
+            # older than the last nightly.
+            if [ -n "$latest_nightly" ] && ! git merge-base --is-ancestor "$latest_nightly" "$sha"; then
+              skip "$short is older than $latest_nightly"
+            fi
             # A nightly started by hand skips the gap and the change checks.
             if [ "$GITHUB_EVENT_NAME" = schedule ] && [ -n "$latest_nightly" ]; then
               age=$(( $(date -u +%s) - $(date -u -d "$latest_nightly_published" +%s) ))

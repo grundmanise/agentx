@@ -9,7 +9,7 @@ The CLI needs binaries people can install, a nightly channel for early testers a
 
 Amended 2026-10-30: the release builds the desktop app, Homebrew gets a cask of the app under the product's name and the source formula becomes `agentx-cli`.
 
-Amended 2026-11-10: a nightly is checked for every 30 minutes and published at most every 6 hours, tagged `vX.Y.Z-nightly.YYYYMMDD.N` with the run number `N`, since GitHub started the one daily scheduled run hours late.
+Amended 2026-11-10: a nightly is checked for every 30 minutes and a scheduled one is published at most every 6 hours, while one run by hand skips that gap and the change check, tagged `vX.Y.Z-nightly.YYYYMMDD.N` with the run number `N`, since GitHub started the one daily scheduled run hours late.
 
 ## Decision
 
