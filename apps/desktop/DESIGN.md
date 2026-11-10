@@ -606,6 +606,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.input-height` | 60 | `h-palette-input` |  |
 | `palette.top` | 112 | `top-palette` | From the window top |
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
+| `adopt.list-max-height` | 280 | `max-h-adopt-list` | The adopt dialog's list of skills; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
 | `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
@@ -775,7 +776,7 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### Group header (lists)
 
-`type.caption` in `group.label`, then the count in `group.count`. `group.padding-first` for the first group, `group.padding` for the rest.
+`type.caption` in `group.label`, then the count in `group.count`. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
 
 ### Banner (detail pane)
 
@@ -817,6 +818,12 @@ Edit is a secondary small button, first in the action row, for a skill the user 
 ### Publish dialog (detail pane)
 
 Under the subtitle, an optional message field, then FILES (`type.caption` `text.caption`): one row per changed file, the path in `type.technical` `text.secondary` and its status in `type.technical-sm` `file-row.edited-label`. While the files are read, or when there are none or they cannot be read, one line in `type.secondary` `text.hint` takes their place. While the publish runs the field is disabled and the footer's left side shows its progress in `type.secondary` `text.hint`; the dialog closes when the command ends and its outcome is a toast.
+
+### Adopt dialog
+
+A bulk adopt confirms in a dialog that lists the skills by name, grouped by tool under a `type.caption` caption when it covers two (`src/screens/skills/adopt-dialog.tsx`). A record the preview refuses is in the list from the start, marked as not adoptable with the CLI's reason. The list scrolls past `adopt.list-max-height`.
+
+The run stays in the dialog. Each row shows its state: nothing while waiting, a `Spinner` once a step of the run names it, a check in `text.hint` once it is installed; then its result, a check in `tone.primary.fg` or a cross in `tone.danger.fg` with the reason under the name in `type.notice` `tone.danger.fg`. The footer's left side counts the skills started, from the run's `blobs` steps, then sums the result. The dialog cannot be dismissed while it runs, and one primary button closes it afterwards. It shows the result, so no toast does; the activity list still logs each run. A run that fails as a whole is a refusal paragraph (§6 "Refusal under a field") above the footer.
 
 ### Create skill dialog
 
@@ -930,6 +937,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
+- Adopt skills sits after Sources, since adopting adds the sources the skills come from: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
 
