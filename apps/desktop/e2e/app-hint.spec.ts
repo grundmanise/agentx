@@ -4,7 +4,8 @@ import { expect, test } from "@playwright/test";
 
 import type { ErrorEvent } from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
-import { forkHint } from "#/screens/skills/fork.ts";
+import { forkHint, formAfter } from "#/screens/skills/fork.ts";
+import type { ForkFields } from "#/screens/skills/fork.ts";
 
 const refused = (message: string, hint: string): ErrorEvent => ({
   code: "refused",
@@ -17,62 +18,56 @@ const refused = (message: string, hint: string): ErrorEvent => ({
 const beside =
   "fork it beside the skill with 'agentx skill fork scratch --name <new>'";
 
-// [the CLI's error, Use a new name on, the hint the dialog shows]
-const forkTable: [ErrorEvent, boolean, string | undefined][] = [
-  [
-    refused(
-      "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork",
-      `move its .git out of the skill, then run 'agentx skill fork scratch' again, or ${beside}`
-    ),
-    false,
-    "move its .git out of the skill, or turn on Use a new name",
-  ],
-  [
-    refused(
-      "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git",
-      `move its .git out of the skill, then run 'agentx skill fork scratch' again, or ${beside}`
-    ),
-    true,
-    "move its .git out of the skill",
-  ],
+const gitRepo = refused(
+  "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork",
+  `move its .git out of the skill, then run 'agentx skill fork scratch' again, or ${beside}`
+);
+
+// [the CLI's error, the form as the refusal leaves it, the hint the dialog shows]
+const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
+  // Fork ran with the switch off: exit 6 turns it on, and no name is typed yet.
+  [gitRepo, "on", "move its .git out of the skill, or type a new name"],
+  // Fork ran with the switch on and the skill's own name typed.
+  [gitRepo, "named", "move its .git out of the skill"],
+  [gitRepo, "off", "move its .git out of the skill, or turn on Use a new name"],
   [
     refused(
       "/home/me/.agents/skills/scratch is a symlink to /home/me/work/scratch; forking scratch in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to",
       `replace the link with the directory it points to, then run 'agentx skill fork scratch' again, or ${beside}`
     ),
-    false,
-    "replace the link with the directory it points to, then fork again, or turn on Use a new name",
+    "on",
+    "replace the link with the directory it points to, then fork again, or type a new name",
   ],
   [
     refused(
       "the library and agentx home are on different file systems, so scratch cannot be moved into its fork's worktree",
       `keep AGENTX_HOME and AGENTX_LIBRARY on one file system, or ${beside}`
     ),
-    false,
-    "keep the library and agentx home on one file system, or turn on Use a new name",
+    "on",
+    "keep the library and agentx home on one file system, or type a new name",
   ],
   [
     refused(
       "scratch is already one of your own skills",
       "fork it under a new name with 'agentx skill fork scratch --name <new>'"
     ),
-    false,
-    "turn on Use a new name",
+    "on",
+    "type a new name",
   ],
   [
     refused(
       "Scratch is not a valid skill name",
       "fork it under a valid name with 'agentx skill fork Scratch --name <new>'"
     ),
-    false,
-    "turn on Use a new name and give it a valid name",
+    "on",
+    "type a valid new name",
   ],
   [
     refused(
       "the account repo already holds notes as one of your own skills",
       "choose another name with --name <new>"
     ),
-    true,
+    "named",
     "choose another name",
   ],
   [
@@ -80,15 +75,15 @@ const forkTable: [ErrorEvent, boolean, string | undefined][] = [
       "the account repo already holds scratch as one of your own skills",
       "choose another name with --name <new>"
     ),
-    false,
-    "turn on Use a new name and choose another name",
+    "on",
+    "type a new name",
   ],
   [
     refused(
       "/home/me/.agentx/worktrees/scratch already exists",
       "move it aside, then run 'agentx skill fork scratch' again"
     ),
-    false,
+    "on",
     "move it aside, then fork again",
   ],
   [
@@ -96,7 +91,7 @@ const forkTable: [ErrorEvent, boolean, string | undefined][] = [
       "the import branch refs/heads/managed/scratch records no version agentx can read",
       "run 'agentx doctor' and check the account repo it names"
     ),
-    false,
+    "on",
     "use Run checks in Settings to check the account repo",
   ],
   [
@@ -104,7 +99,7 @@ const forkTable: [ErrorEvent, boolean, string | undefined][] = [
       "scratch changed while it was being forked, so nothing was changed",
       "run the command again"
     ),
-    false,
+    "on",
     "fork again",
   ],
   // A hint with no flag or command is shown as the CLI wrote it.
@@ -113,14 +108,29 @@ const forkTable: [ErrorEvent, boolean, string | undefined][] = [
       "a skill name is at most 64 characters",
       "choose a name such as my-skill"
     ),
-    false,
+    "on",
     "choose a name such as my-skill",
   ],
 ];
 
-for (const [error, renaming, want] of forkTable) {
-  test(`forkHint(${JSON.stringify(error.hint)}, renaming ${renaming})`, () => {
-    expect(forkHint(error, 6, "scratch", renaming)).toBe(want);
+for (const [error, form, want] of forkTable) {
+  test(`forkHint(${JSON.stringify(error.hint)}, form ${form})`, () => {
+    expect(forkHint(error, 6, "scratch", form)).toBe(want);
+  });
+}
+
+// [exit code, switch on when Fork ran, name typed, the form the refusal leaves]
+const formTable: [number | null, boolean, string, ForkFields][] = [
+  [6, false, "", "on"],
+  [6, true, "scratch", "named"],
+  [6, true, "", "on"],
+  [10, false, "", "off"],
+  [null, false, "", "off"],
+];
+
+for (const [exitCode, renaming, name, want] of formTable) {
+  test(`formAfter(${exitCode}, ${renaming}, ${JSON.stringify(name)})`, () => {
+    expect(formAfter(exitCode, renaming, name)).toBe(want);
   });
 }
 
@@ -132,7 +142,7 @@ test("forkHint tells a refusal by exit 6 and the code refused, not by the messag
     ),
     code: "internal",
   } as const;
-  expect(forkHint(error, 10, "scratch", false)).toBe(
+  expect(forkHint(error, 10, "scratch", "off")).toBe(
     "move its .git out of the skill"
   );
 });

@@ -7,7 +7,8 @@
 // a library entry that is a symlink, keeps the dialog open with the CLI's message and a hint in
 // the dialog's own words (`forkHint`), as one sentence-cased paragraph (`ProblemText`), the
 // skill's name and the new one keeping their case, and turns Use a new name on, since forking
-// beside the skill is the way out the CLI names.
+// beside the skill is the way out the CLI names; the hint names what the form then leaves to do.
+// A change to the switch or the name clears the refusal, which was about the form as it was.
 import { useEffect, useId, useRef, useState } from "react";
 import { create } from "zustand";
 
@@ -38,7 +39,9 @@ import {
   forkHint,
   forkTarget,
   forkText,
+  formAfter,
 } from "#/screens/skills/fork.ts";
+import type { ForkFields } from "#/screens/skills/fork.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { usePending } from "#/store/runner.ts";
@@ -56,12 +59,12 @@ interface Refusal {
 
 /**
  * The refusal of a fork of `target` that failed: the CLI's message, and its hint in the dialog's
- * words (`forkHint`). `renaming` is whether Use a new name was on.
+ * words (`forkHint`), for the form as the refusal leaves it.
  */
 const refusalOf = (
   outcome: Outcome,
   target: string,
-  renaming: boolean,
+  form: ForkFields,
   keep: string[]
 ): Refusal => {
   const error = outcome.events.find((e) => e.type === "error");
@@ -72,7 +75,7 @@ const refusalOf = (
   const hint =
     error === undefined
       ? undefined
-      : forkHint(error, outcome.exitCode, target, renaming);
+      : forkHint(error, outcome.exitCode, target, form);
   return {
     keep,
     problem: hint === undefined ? { message } : { hint, message },
@@ -184,7 +187,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       refusalOf(
         outcome,
         target,
-        renaming,
+        formAfter(outcome.exitCode, renaming, name),
         renaming ? [row.name, name] : [row.name]
       )
     );
@@ -216,7 +219,10 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
             aria-label="Use a new name"
             checked={renaming}
             disabled={pending}
-            onCheckedChange={setRenaming}
+            onCheckedChange={(on) => {
+              setRenaming(on);
+              setRefusal(undefined);
+            }}
           />
         </label>
         {renaming && (
@@ -231,6 +237,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
               disabled={pending}
               onChange={(e) => {
                 setName(e.target.value);
+                setRefusal(undefined);
               }}
             />
             {breaksSkillNameRule(name) && (

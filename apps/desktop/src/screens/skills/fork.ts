@@ -66,51 +66,93 @@ export const forkText = (row: SkillRow): string => {
   }
 };
 
-/** The switch that forks beside the skill, as a hint names it. */
-const USE_A_NEW_NAME = "turn on Use a new name";
+/**
+ * The Use a new name switch and the name field as they stand once a refusal shows: off; on with
+ * no name typed, as exit 6 leaves them when Fork ran with the switch off, since the dialog then
+ * turns it on; or on with a name typed.
+ */
+export type ForkFields = "off" | "on" | "named";
+
+/**
+ * The form a refusal of a fork leaves: exit 6 turns the switch on. `renaming` and `name` are the
+ * switch and the name field when Fork ran.
+ */
+export const formAfter = (
+  exitCode: number | null,
+  renaming: boolean,
+  name: string
+): ForkFields => {
+  if (renaming) {
+    return name === "" ? "on" : "named";
+  }
+  return exitCode === EXIT_CODES.refused ? "on" : "off";
+};
+
+/** What is left to do to fork beside the skill, as the form stands, or nothing once a name is typed. */
+const besideWays: Record<ForkFields, string | undefined> = {
+  named: undefined,
+  off: "turn on Use a new name",
+  on: "type a new name",
+};
+
+/** `hint`, then `, or <the way beside>` when the form leaves one. */
+const orBeside = (hint: string, form: ForkFields) => {
+  const way = besideWays[form];
+  return way === undefined ? hint : `${hint}, or ${way}`;
+};
 
 /**
  * The hint of a fork in place that the CLI refused, in the dialog's words. The contract gives
  * these refusals exit 6 and the code `refused` and no field of their own, so each is told by the
  * start of its message, as the contract words it. The way out the CLI names, forking beside the
- * skill with `--name <new>`, is the Use a new name switch, and is left out when it is already on.
+ * skill with `--name <new>`, is the switch and the name field, named as the form stands.
  */
 const inPlaceHint = (
   message: string,
   target: string,
-  renaming: boolean
+  form: ForkFields
 ): string | undefined => {
-  const beside = renaming ? "" : `, or ${USE_A_NEW_NAME}`;
   if (message.startsWith(`${target} is itself a Git repository, at `)) {
-    return `move its .git out of the skill${beside}`;
+    return orBeside("move its .git out of the skill", form);
   }
   if (/^.+ is a symlink to .+; forking .+ in its place /u.test(message)) {
-    return `replace the link with the directory it points to, then fork again${beside}`;
+    return orBeside(
+      "replace the link with the directory it points to, then fork again",
+      form
+    );
   }
   if (
     message.startsWith(
       "the library and agentx home are on different file systems"
     )
   ) {
-    return `keep the library and agentx home on one file system${beside}`;
+    return orBeside(
+      "keep the library and agentx home on one file system",
+      form
+    );
   }
   if (message === `${target} is already one of your own skills`) {
-    return USE_A_NEW_NAME;
+    return besideWays[form] ?? "choose another name";
   }
   return undefined;
 };
 
 /** The other hints of `skill fork` that name a flag or a command, matched whole. */
-const forkHintRules = (renaming: boolean): HintRule[] => [
+const forkHintRules = (form: ForkFields): HintRule[] => [
   {
-    app: () => `${USE_A_NEW_NAME} and give it a valid name`,
+    app: () =>
+      form === "off"
+        ? "turn on Use a new name and give it a valid name"
+        : "type a valid new name",
     cli: /^fork it under a valid name with '.+'$/u,
   },
   {
-    app: () =>
-      renaming
-        ? "choose another name"
-        : `${USE_A_NEW_NAME} and choose another name`,
+    app: () => {
+      if (form === "off") {
+        return "turn on Use a new name and choose another name";
+      }
+      return form === "on" ? "type a new name" : "choose another name";
+    },
     cli: /^choose another name with --name <new>$/u,
   },
   {
@@ -123,14 +165,14 @@ const forkHintRules = (renaming: boolean): HintRule[] => [
 
 /**
  * The hint the Fork dialog shows for `error`: the CLI's, but in the dialog's words where it names
- * a flag or a command. `renaming` is whether Use a new name was on when Fork ran.
+ * a flag or a command. `form` is the switch and the name field as the refusal leaves them.
  */
 export const forkHint = (
   error: ErrorEvent,
   exitCode: number | null,
   target: string,
-  renaming: boolean
+  form: ForkFields
 ): string | undefined =>
   (exitCode === EXIT_CODES.refused && error.code === "refused"
-    ? inPlaceHint(error.message, target, renaming)
-    : undefined) ?? rewriteHint(error.hint, forkHintRules(renaming));
+    ? inPlaceHint(error.message, target, form)
+    : undefined) ?? rewriteHint(error.hint, forkHintRules(form));
