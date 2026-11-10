@@ -1,6 +1,8 @@
 name: Release
 
-# Nightly: every night, a prerelease of main, when the CLI or the app changed since the last nightly.
+# Nightly: a prerelease of main when the CLI or the app changed since the last nightly, at most
+# every 6 hours. A check runs every 30 minutes, so a scheduled run GitHub starts late or drops costs
+# 30 minutes, not a day.
 # Every release carries the CLI for Linux and macOS, the macOS app as a disk image and the Linux
 # app as a .deb and an AppImage, each app with the CLI of the release inside it.
 # Stable: run by hand from the Actions tab. It promotes a nightly, or another commit on
@@ -8,7 +10,8 @@ name: Release
 # See RELEASING.md.
 on:
   schedule:
-    - cron: "17 3 * * *"
+    # Not on minute zero, when GitHub's scheduled runs are busiest.
+    - cron: "8,38 * * * *"
   workflow_dispatch:
     inputs:
       channel:
@@ -23,9 +26,14 @@ on:
         description: "Stable only: the version, such as 0.2.0. Empty: the version the commits call for"
         required: false
 
+# One run at a time per channel, so two nightlies never build or publish together. A nightly
+# never blocks a stable release. queue: max keeps every waiting run, where the default keeps only
+# the newest, so a check every 30 minutes never cancels a waiting release. A scheduled run checks
+# the gap since the last nightly only when it starts, after the nightly before it published.
 concurrency:
-  group: release
+  group: release-${{ (github.event_name == 'schedule' || inputs.channel == 'nightly') && 'nightly' || 'stable' }}
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -71,6 +79,7 @@ jobs:
           CHANNEL: ${{ inputs.channel || 'nightly' }}
           REF: ${{ inputs.ref }}
           VERSION: ${{ inputs.version }}
+          NIGHTLY_GAP_HOURS: 6
         run: |
           skip() { echo "::notice title=Nothing released::$1"; echo "publish=false" >> "$GITHUB_OUTPUT"; exit 0; }
           fail() { echo "::error title=Release refused::$1"; exit 1; }
@@ -80,7 +89,11 @@ jobs:
           }
 
           latest_stable=$(git tag --list 'v*' --sort=-v:refname | stable_tag | sed -n 1p)
-          latest_nightly=$(git tag --list 'v*-nightly.*' --sort=-v:refname | sed -n 1p)
+          # The nightly published last, and when.
+          nightly=$(gh release list --limit 100 --json tagName,publishedAt,isDraft \
+            --jq '[.[] | select((.isDraft | not) and (.tagName | contains("-nightly.")))] | sort_by(.publishedAt) | last // empty | "\(.tagName) \(.publishedAt)"')
+          latest_nightly=${nightly% *}
+          latest_nightly_published=${nightly#* }
 
           # The version after the latest stable release, from the types of the CLI and app
           # commits up to $1: a breaking change bumps the major version (the minor before 1.0),
@@ -102,16 +115,23 @@ jobs:
           if [ "$CHANNEL" = nightly ]; then
             sha=$(git rev-parse origin/main)
             short=$(git rev-parse --short "$sha")
-            if [ -n "$latest_nightly" ] && git diff --quiet "$latest_nightly" "$sha" -- apps/cli apps/desktop; then
-              skip "the CLI and the app have not changed since $latest_nightly"
+            # A nightly started by hand skips the gap and the change checks.
+            if [ "$GITHUB_EVENT_NAME" = schedule ] && [ -n "$latest_nightly" ]; then
+              age=$(( $(date -u +%s) - $(date -u -d "$latest_nightly_published" +%s) ))
+              [ "$age" -ge $(( NIGHTLY_GAP_HOURS * 3600 )) ] ||
+                skip "$latest_nightly was published less than $NIGHTLY_GAP_HOURS hours ago"
+              if git diff --quiet "$latest_nightly" "$sha" -- apps/cli apps/desktop; then
+                skip "the CLI and the app have not changed since $latest_nightly"
+              fi
             fi
             released=$(git tag --points-at "$sha" | stable_tag)
             [ -z "$released" ] || skip "$short is already released as $released"
             ci_passed "$sha" || skip "CI has not passed on $short, the head of main"
-            version=$(next_version "$sha")-nightly.$(date -u +%Y%m%d)
+            # The run number keeps two nightlies of one day apart; a re-run of this run finds its tag.
+            version=$(next_version "$sha")-nightly.$(date -u +%Y%m%d).$GITHUB_RUN_NUMBER
             tag=v$version
             if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
-              skip "$tag already exists, the next nightly runs tomorrow"
+              skip "$tag already exists"
             fi
             previous=${latest_nightly:-$latest_stable}
           else

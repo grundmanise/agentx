@@ -9,11 +9,13 @@ The CLI needs binaries people can install, a nightly channel for early testers a
 
 Amended 2026-10-30: the release builds the desktop app, Homebrew gets a cask of the app under the product's name and the source formula becomes `agentx-cli`.
 
+Amended 2026-11-10: a nightly is checked for every 30 minutes and published at most every 6 hours, tagged `vX.Y.Z-nightly.YYYYMMDD.N` with the run number `N`, since GitHub started the one daily scheduled run hours late.
+
 ## Decision
 
 | Concern | Choice | Why |
 |---|---|---|
-| Channels | A nightly prerelease of `main`, `vX.Y.Z-nightly.YYYYMMDD`, and stable releases `vX.Y.Z`, all in this repository's GitHub releases | Prereleases never become GitHub's latest release, so `releases/latest` is always the stable one. The nightly version is the release the commits lead up to, so a nightly sorts below that release and above the one before. The desktop app has the same version and the same tags: one release carries the CLI and the app. |
+| Channels | A nightly prerelease of `main`, `vX.Y.Z-nightly.YYYYMMDD.N`, and stable releases `vX.Y.Z`, all in this repository's GitHub releases | Prereleases never become GitHub's latest release, so `releases/latest` is always the stable one. The nightly version is the release the commits lead up to, so a nightly sorts below that release and above the one before. The desktop app has the same version and the same tags: one release carries the CLI and the app. |
 | Promotion | Tag the nightly's commit `vX.Y.Z` and build it again | The version is compiled into the binary, so reusing the nightly's files would print the nightly version. Rebuilding the same commit with the Go version `go.mod` pins gives the code nightly users ran. |
 | Version | Computed in the workflow from the types of the commits that change `apps/cli` or `apps/desktop` since the last stable tag | git-cliff's own bump ignores a tag whose commit is outside its path filter, and release tags often sit on such commits. Ten lines of shell are easier to check than that interaction. |
 | Release notes | [git-cliff](https://git-cliff.org), configured in `cliff.toml` | It groups conventional commits into sections, limits them to `apps/cli` and `apps/desktop` and runs without an account or a service. The notes are deterministic; an AI summary was considered and deferred until the plain notes prove too coarse. |
