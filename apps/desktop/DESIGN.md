@@ -285,7 +285,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `overlay.bg` | `gray-940` | Dialog, popover, palette, toast, floating bar |
+| `overlay.bg` | `gray-940` | Dialog, popover, palette, toast, floating bar, tooltip |
 | `overlay.border` | `gray-800` |  |
 | `overlay.shadow` | `0 40px 100px -20px black/80` | Dialog, palette, sheet |
 | `popover.shadow` | `0 24px 60px -12px black/70` |  |
@@ -599,6 +599,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.min-width` | 240 | `min-w-menu` | Menu |
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
+| `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
 | `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
@@ -694,6 +695,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `check.mark-radius` | 50% | Startup status circle |
 | `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
 | `startup.logo-radius` | 12 | Product mark on the startup layer |
+| `tooltip.radius` | 8 | Tooltip |
 
 ## 6. Components
 
@@ -898,7 +900,11 @@ shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side
 
 ### Skills header
 
-The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates (small ghost) and Add, a button group whose menu opens the Create skill dialog (§6 "Button group"). One control for adding and creating keeps the header inside `split.list-width` at every window size, down to the minimum window.
+The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose menu opens the Create skill dialog (§6 "Button group"). Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is `aria-busy` and its icon turns once. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
+
+### Tooltip
+
+shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs.
 
 ### Popover (Filter)
 

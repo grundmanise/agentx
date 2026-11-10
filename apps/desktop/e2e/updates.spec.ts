@@ -392,6 +392,44 @@ test.describe("Check updates", () => {
     ]);
   });
 
+  test("is an icon button that shows its name in a tooltip, and stays busy while the check runs", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf", []);
+    await expect(checkButton(page)).toHaveText("");
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await checkButton(page).hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Check updates");
+    // Away in a few steps, as a pointer moves: the tooltip closes once it is past the grace area
+    // between the button and the tooltip.
+    await page.mouse.move(1, 1, { steps: 5 });
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+
+    // From the keyboard too: the focus shows the tooltip.
+    await checkButton(page).focus();
+    await expect(page.getByRole("tooltip")).toHaveText("Check updates");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+
+    const run = cli.register(["skill", "check-updates"], { holdAfter: 0 });
+    await checkButton(page).click();
+    await run.started;
+    // Still named Check updates while it runs; busy, its icon turning.
+    await expect(checkButton(page)).toHaveAttribute("aria-busy", "true");
+    await expect(checkButton(page).locator(".animate-turn-once")).toHaveCount(
+      1
+    );
+    run.release();
+    await expect(
+      toasts(page).getByText("Everything is up to date")
+    ).toBeVisible();
+    await expect(checkButton(page)).toHaveAttribute("aria-busy", "false");
+    await expect(checkButton(page).locator(".animate-turn-once")).toHaveCount(
+      0
+    );
+  });
+
   test("one update: no Update all", async ({ cli, page }) => {
     await open(cli, page, "pdf", []);
     cli.register(["skill", "check-updates"], { events: [pdfUpdate] });
