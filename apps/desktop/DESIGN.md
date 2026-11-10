@@ -332,14 +332,14 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 #### Timeline (History)
 
-| Token                  | Primitive        | Element                         |
-| ---------------------- | ---------------- | ------------------------------- |
-| `timeline.dot-install` | `gray-600`       | Added / found / created entries |
-| `timeline.dot-update`  | `accent.primary` | Updated, adopted, put back      |
-| `timeline.dot-yours`   | `accent.yours`   | Published, forked               |
-| `timeline.connector`   | `gray-890`       | 1px line between dots           |
-| `timeline.meta`        | `gray-500`       | Relative time under an entry    |
-| `timeline.more-ring`   | `gray-700`       | Hollow dot ring of the item that opens the full history |
+| Token | Primitive | Element |
+| --- | --- | --- |
+| `timeline.dot-install` | `gray-600` | Added / found / created entries |
+| `timeline.dot-update` | `accent.primary` | Updated, adopted, put back |
+| `timeline.dot-yours` | `accent.yours` | Published, forked |
+| `timeline.connector` | `gray-890` | 1px line between dots |
+| `timeline.meta` | `gray-500` | Relative time under an entry |
+| `timeline.more-ring` | `gray-700` | Hollow dot ring of the item that opens the full history |
 
 #### Startup checks
 
@@ -803,11 +803,11 @@ Fork is a secondary small button in the action row, before Remove, and a small g
 
 ### Publish dialog (detail pane)
 
-Opened by Publish on the banners of your own skills, and on an edited skill's banner when this machine can write to its source. The subtitle names where the publish goes. Then an optional message field, and FILES (`type.caption` `text.caption`): one row per changed file, the path in `type.technical` `text.secondary` and its status in `type.technical-sm` `file-row.edited-label`. While the files are read, or when there are none or they cannot be read, one line in `type.secondary` `text.hint` takes their place. While the publish runs the field is disabled and the footer's left side shows its progress in `type.secondary` `text.hint`; the dialog closes when the command ends and its outcome is a toast.
+Under the subtitle, an optional message field, then FILES (`type.caption` `text.caption`): one row per changed file, the path in `type.technical` `text.secondary` and its status in `type.technical-sm` `file-row.edited-label`. While the files are read, or when there are none or they cannot be read, one line in `type.secondary` `text.hint` takes their place. While the publish runs the field is disabled and the footer's left side shows its progress in `type.secondary` `text.hint`; the dialog closes when the command ends and its outcome is a toast.
 
 ### Create skill dialog
 
-Opened from the Skills and Add skills headers (`src/screens/skills/create-dialog.tsx`). Two fields, each with its label in `type.secondary` `text.secondary` and its rule as a hint under it: Name, mono and focused on open, and Description. A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and the confirm is disabled. A name the CLI refuses shows the refusal under Name in place of the rule; any other refusal shows under Description. The dialog stays pending until the inventory that follows lists the new skill.
+`src/screens/skills/create-dialog.tsx`. Two fields, each with its label in `type.secondary` `text.secondary` and its rule as a hint under it: Name, mono and focused on open, and Description. A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and the confirm is disabled. A name the CLI refuses shows the refusal under Name in place of the rule; any other refusal shows under Description. The dialog stays pending until the inventory that follows lists the new skill.
 
 ### Refusal under a field
 
