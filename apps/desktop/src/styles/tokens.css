@@ -141,9 +141,11 @@
   --color-button-secondary-hover: var(--gray-850);
   --color-button-secondary-text: var(--gray-50);
   --color-button-ghost-text: var(--gray-200);
-  --color-button-ghost-hover: var(--gray-880);
+  --color-button-ghost-bg: rgb(237 237 239 / 0.035);
+  --color-button-ghost-hover: rgb(237 237 239 / 0.075);
   --color-button-danger-text: var(--color-accent-danger);
-  --color-button-danger-hover: rgb(255 123 114 / 0.1);
+  --color-button-danger-bg: rgb(255 123 114 / 0.1);
+  --color-button-danger-hover: rgb(255 123 114 / 0.17);
   --color-source-pill-bg: var(--gray-910);
   --color-source-pill-active-bg: var(--gray-50);
   --color-source-pill-active-text: var(--color-on-accent);

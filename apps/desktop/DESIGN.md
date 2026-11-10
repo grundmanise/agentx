@@ -142,9 +142,11 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `button.secondary-hover` | `gray-850` |  |
 | `button.secondary-text` | `gray-50` |  |
 | `button.ghost-text` | `gray-200` | Ghost button label (or `text.muted` in quiet spots) |
-| `button.ghost-hover` | `gray-880` | Ghost / icon button hover |
+| `button.ghost-bg` | `gray-50/3.5` | Ghost and icon button at rest, toast action, sort toggle |
+| `button.ghost-hover` | `gray-50/7.5` | Ghost / icon button hover |
 | `button.danger-text` | `accent.danger` | Danger ghost (Remove, Cancel, Restore base version) |
-| `button.danger-hover` | `red-400/10` |  |
+| `button.danger-bg` | `red-400/10` | Danger button at rest |
+| `button.danger-hover` | `red-400/17` |  |
 | `source-pill.bg` | `gray-910` | Source pill in Add, inactive (label `text.secondary`) |
 | `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
 | `source-pill.active-text` | `on-accent` |  |
@@ -700,11 +702,13 @@ Finder in this file means the platform's file manager. `src/lib/reveal.ts` names
 
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert, never a grey fill.
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
-- **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / transparent, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
+- **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / `button.ghost-bg`, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
 - **Small, wrapping** – for a label that is a sentence, such as a commit subject in the History sheet: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
-- **Danger** – ghost in `button.danger-text`; hover `button.danger-hover`.
-- **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, transparent; hover `button.ghost-hover`.
+- **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
+- **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
 - **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
+
+Every button has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
 
 Two buttons side by side: `button.gap`, primary on the right.
 
@@ -793,8 +797,8 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 ### Banner actions and dialogs (detail pane)
 
 - A banner's actions are small buttons on its right, one command or one dialog each: ghost by default, primary for the action that applies the update, danger ghost for one that discards work. A destructive action opens a confirm dialog first.
-- Adopt and Update are banner buttons only: a skill row carries no call-to-action pill.
-- The banner of a skill of a source edited locally only informs, with a publish action when this machine can write to the source. It has no fork action: Fork is in the action row. A skill the CLI refuses to adopt has no banner; the reason is a row of its DETAILS.
+- Adopt and Update are banner buttons only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner; the reason is a row of its DETAILS.
+- The banner of a skill of a source edited locally only informs, with a publish action when this machine can write to the source. It has no fork action: Fork is in the action row.
 - A command refused because the target folder holds another version opens a confirm dialog, with the path in `type.technical` `text.caption` and a danger confirm.
 - The action row sits on the title row, pushed to its right end (`margin-left:auto`), centred on the row and wrapping when it is full, with `button.gap` 6 between its buttons. Remove, last, is a danger ghost button; its dialog lists the agents the skill leaves in `type.body` `text.secondary`, with a danger confirm.
 
@@ -876,7 +880,7 @@ A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.
 
 ### Split button
 
-Two ghost buttons that meet with no gap and share one outline, split by a 1px `button.split-divider` on the chevron's left edge: the action, rounded at its left end, and a narrower chevron, rounded at its right end, that opens the action's menu (§6 "Menu"). The chevron has its own accessible name; Enter, Space and ArrowDown open the menu, Escape closes it and returns the focus to the chevron. Only the action shows when there is nothing to choose. Two sizes (`src/components/split-button.tsx`): an icon action, `button.icon-size` square, as Show in Finder on a file row; and a labelled action as tall as a small button, as Add in the Skills header.
+Two ghost buttons that meet with no gap and read as one filled shape, split by a 1px `button.split-divider` on the chevron's left edge: the action, rounded at its left end, and a narrower chevron, rounded at its right end, that opens the action's menu (§6 "Menu"). The chevron has its own accessible name; Enter, Space and ArrowDown open the menu, Escape closes it and returns the focus to the chevron. Only the action shows when there is nothing to choose. Two sizes (`src/components/split-button.tsx`): an icon action, `button.icon-size` square, as Show in Finder on a file row; and a labelled action as tall as a small button, as Add in the Skills header.
 
 ### Skills header
 

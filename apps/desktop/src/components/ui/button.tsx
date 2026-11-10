@@ -37,9 +37,9 @@ const buttonVariants = cva(
       },
       variant: {
         danger:
-          "text-button-danger-text hover:bg-button-danger-hover bg-transparent font-medium",
+          "text-button-danger-text bg-button-danger-bg hover:bg-button-danger-hover font-medium",
         ghost:
-          "text-button-ghost-text hover:bg-button-ghost-hover hover:text-text-primary bg-transparent font-medium",
+          "text-button-ghost-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary font-medium",
         primary:
           "bg-button-primary-bg text-button-primary-text hover:bg-button-primary-hover font-semibold",
         secondary:

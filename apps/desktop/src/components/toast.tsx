@@ -10,7 +10,7 @@ let shown: string | number | undefined;
 // Wrapped in cn() so the design-system lint reads these strings as classes.
 const classNames = {
   actionButton: cn(
-    "rounded-button type-toast-action text-button-toast-action-text hover:bg-button-ghost-hover h-7.5 px-3.5"
+    "rounded-button type-toast-action text-button-toast-action-text bg-button-ghost-bg hover:bg-button-ghost-hover h-7.5 px-3.5"
   ),
   detail: cn(
     "rounded-toast-detail border-overlay-border bg-overlay-bg shadow-popover w-toast-detail py-toast-detail pl-toast flex border pr-1.5"

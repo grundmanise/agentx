@@ -154,7 +154,7 @@ export const SkillList = ({
             {rows.length}
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="gap-button flex items-center">
           <CheckUpdates />
           <SplitButton
             size="sm"

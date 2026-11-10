@@ -79,7 +79,7 @@ export const FilterChip = ({
 );
 
 const sortVariants = cva(
-  "rounded-button type-button-sm text-filter-sort-text hover:bg-button-ghost-hover hover:text-text-primary inline-flex h-7 items-center gap-1 px-2 font-medium",
+  "rounded-button type-button-sm text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary inline-flex h-7 items-center gap-1 px-2 font-medium",
   {
     variants: {
       descending: {
