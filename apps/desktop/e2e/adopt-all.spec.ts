@@ -175,12 +175,10 @@ test.describe("the Adopt skills section of Settings", () => {
       .click();
     const open = dialog(page);
     await expect(open).toHaveAccessibleName("Adopt Skills CLI skills");
-    await expect(open).toContainText(
-      "agentx installs 3 skills again from their sources into your library and manages them from now on: updates, agents and history."
-    );
-    await expect(open).toContainText(
-      "Skills CLI keeps its own records and files: agentx only reads them. What it left in your library under each name is replaced, so edits made there are not kept. 1 skill can't be adopted and is left out."
-    );
+    await expect(open.getByRole("paragraph")).toHaveText([
+      "agentx will import these 3 skills and manage them from now on. Skills CLI keeps its own files. Edits you made to the copies in your library are not kept. 1 skill can't be adopted and is left out.",
+      "legacy is a symlink, not a directory.",
+    ]);
     // One tool: no caption over its list.
     await expect(open.getByRole("heading", { level: 3 })).toHaveCount(0);
     await expect(rows(open, "Skills CLI")).toHaveText([
@@ -191,6 +189,25 @@ test.describe("the Adopt skills section of Settings", () => {
     ]);
     await open.getByRole("button", { name: "Cancel" }).click();
     await expect(open).toHaveCount(0);
+    expect(ran(cli)).toEqual([]);
+  });
+
+  test("the dialog for one skill says so, and has no left-out sentence when nothing is refused", async ({
+    cli,
+    page,
+  }) => {
+    await openSettings(cli, page, previewWith(["api-docs"]));
+    await settingsSection(page)
+      .getByRole("button", { name: "Adopt Skillshare skills" })
+      .click();
+    const open = dialog(page);
+    await expect(open).toHaveAccessibleDescription(
+      "agentx will import this skill and manage it from now on. Skillshare keeps its own files. Edits you made to the copies in your library are not kept."
+    );
+    await expect(rows(open, "Skillshare")).toHaveText([
+      "Waiting: frontend__ui",
+    ]);
+    await open.getByRole("button", { name: "Cancel" }).click();
     expect(ran(cli)).toEqual([]);
   });
 
@@ -429,11 +446,8 @@ test.describe("Adopt all in the Unmanaged header", () => {
     await expect(open).toHaveAccessibleName(
       "Adopt skills from Skills CLI and Skillshare"
     );
-    await expect(open).toContainText(
-      "agentx installs 5 skills again from their sources"
-    );
-    await expect(open).toContainText(
-      "Skills CLI and Skillshare keep their own records and files"
+    await expect(open).toHaveAccessibleDescription(
+      "agentx will import these 5 skills and manage them from now on. Skills CLI and Skillshare keep their own files. Edits you made to the copies in your library are not kept. 1 skill can't be adopted and is left out."
     );
     await expect(open.getByRole("heading", { level: 3 })).toHaveText([
       "Skills CLI",
