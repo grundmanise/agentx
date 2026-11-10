@@ -23,7 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu.tsx";
-import { revealInFinder } from "#/lib/reveal.ts";
+import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import {
   filesRequestOf,
   filesVersionOf,
@@ -196,8 +196,8 @@ const Reveal = ({
       <Button
         variant="ghost"
         size={others.length === 0 ? "icon" : "icon-split-main"}
-        aria-label={`Show ${path} in Finder`}
-        title="Show in Finder"
+        aria-label={showInLabel(path)}
+        title={showInLabel()}
         onClick={() => {
           void revealInFinder(`${first.directory}/${path}`);
         }}
@@ -210,8 +210,8 @@ const Reveal = ({
             <Button
               variant="ghost"
               size="icon-split-menu"
-              aria-label={`Show ${path} in Finder elsewhere`}
-              title="Show in Finder elsewhere"
+              aria-label={`${showInLabel(path)} elsewhere`}
+              title={`${showInLabel()} elsewhere`}
             >
               <span className="flex rotate-90">
                 <ChevronIcon size="xs" />

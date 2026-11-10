@@ -70,6 +70,7 @@ test("each section shows what the store holds, and nothing runs on its own", asy
     /^Account remote/u,
     /^Sources/u,
     /^Comparing edits/u,
+    /^Editor/u,
     /^Storage/u,
     /^Command line/u,
     /^Export settings/u,
