@@ -27,6 +27,11 @@ import { accountRemoteOf } from "#/screens/skills/banners.ts";
 import { fileStatusLabels } from "#/screens/skills/files.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import {
+  changedElsewhere,
+  notifyNoAccountRemote,
+  refusedForAccountRemote,
+} from "#/screens/skills/publish.ts";
 import { runCommand } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
@@ -67,7 +72,7 @@ const reportPublish = (
   );
   const result = event?.type === "publish" ? event.outcome : undefined;
   if (result === "behind" || result === "moved") {
-    const text = `${name} changed somewhere else first. Update it, then publish.`;
+    const text = changedElsewhere(name);
     notify(text, {
       label: "Update",
       onClick: () => {
@@ -89,19 +94,8 @@ const reportPublish = (
     addActivity("success", text);
     return;
   }
-  const error = outcome.events.find((e) => e.type === "error");
-  if (
-    outcome.exitCode === EXIT_CODES.refused &&
-    event === undefined &&
-    (!accountRemoteSet ||
-      (error?.type === "error" && error.message === "no account remote is set"))
-  ) {
-    notify("Set an account remote to publish", {
-      label: "Open Settings",
-      onClick: () => {
-        navigateTo("/settings");
-      },
-    });
+  if (refusedForAccountRemote(outcome, accountRemoteSet)) {
+    notifyNoAccountRemote();
   }
 };
 

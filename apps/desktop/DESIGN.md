@@ -124,7 +124,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `shell.topbar-hover` | `gray-920` | Account remote status hover (the command field changes only its border and text on hover) |
 | `shell.topbar-text` | `gray-300` | Command field placeholder and icon (`text.secondary` on hover), account remote status label |
 | `shell.status-published` | `accent.primary` | Account remote status dot, nothing to publish (halo `lime-400/15`) |
-| `shell.status-pending` | `accent.yours` | Account remote status dot, versions to publish (halo `violet-400/18`) |
+| `shell.status-pending` | `accent.yours` | Account remote status dot, skills to publish (halo `violet-400/18`) |
+| `shell.status-published-halo` | `0 0 0 3px lime-400/15` | The halo around the Published dot (`shadow-status-published`) |
+| `shell.status-pending-halo` | `0 0 0 3px violet-400/18` | The halo around the "{n} to publish" dot (`shadow-status-pending`) |
 | `shell.logo-mark` | `accent.primary` | The X in the product mark |
 | `shell.logo-bg` | `gray-990` | Product mark tile |
 | `shell.logo-ring` | `gray-860` | 1px ring around the product mark |
@@ -415,6 +417,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.nav` | sans | 14 | 500 |  |  |  | Nav item |
 | `type.command-field` | sans | 13 | 400 |  |  |  | Command field placeholder |
 | `type.key-hint` | mono | 11 | 400 |  |  |  | Key hint (`esc`, `⌘K`) |
+| `type.status` | sans | 13 | 500 |  |  |  | Publish status label in the title bar (`shell.topbar-text`) |
 | `type.palette-input` | sans | 17 | 400 |  |  |  | Palette search input |
 | `type.palette-hint` | mono | 12 | 400 |  |  |  | Hint at the end of a palette row, keys in the palette footer |
 | `type.palette-footer` | sans | 12 | 400 |  |  |  | Palette footer (`text.hint`) |
@@ -654,6 +657,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
 | `shell.status-radius` | 9999 | Account remote status |
+| `shell.status-dot-radius` | 50% | The publish status dot (`rounded-shell-status-dot`) |
 | `shell.command-radius` | 9999 | Command field |
 | `shell.panel-radius` | 14 | Main panel |
 | `input.radius` | 12 | Inputs, textareas |
@@ -859,6 +863,20 @@ When the CLI refuses what a dialog's field holds (Create skill, Add source), its
 The Settings page (`src/screens/settings`): the serif page title, then one section per area, a hairline (`shell.divider`) between two sections and none above the first. A section is a `settings.columns` grid with `settings.column-gap`, `settings.section-padding` above and below: the label column holds the section label in `type.settings-label` `text.primary` and, under it, one line in `type.secondary` `text.muted`; the content column holds the section's rows, `settings.section-gap` apart. Inputs are `input.height`; paths and ids are `type.technical`, ids in `text.hint`. A switch row is the setting's name in `type.body` `text.primary` and its line in `type.secondary` `text.muted`, with the switch (§6 "Switch") at the right; the whole row is the hit target. A failure under a field is the CLI's message in `type.notice` `tone.danger.fg`, its hint under it in `text.muted`; under the Account remote and Export settings fields, the message then the hint as one sentence-cased paragraph (§6 "Refusal under a field").
 
 The last sections, in this order: Command line, Export settings, Import settings. Export settings ("Saves your settings and the list of your skills to a file. Import it on another machine to transfer them.") holds the file name in a mono input (`aria-label` "File name") and a secondary Export button, with the hint under them, "Saved to your library as {name}.json", or "Enter a file name without an extension or a slash" for a name the CLI would refuse. A file of that name already in the library opens the confirm "Replace {name}.json?", "A file with this name is already in your library.", Cancel · Replace (danger); the toast is "Exported settings to {path}". Import settings ("Replaces the settings on this machine with the ones from an exported file.") holds a secondary Import… button, which opens the native open dialog, then the confirm "Replace settings with {file name}?", "Missing skills will be installed during import, and existing might get updated.", the picked path in `type.technical` `text.caption`, Cancel · Import (danger); the toast is "Imported settings from {file name}". The import then adds, without asking, each source of the imported settings this machine has not downloaded, and Import… stays pending until the last one ends. Under the button, the result, one line each in `type.secondary`: "Installed: {names}" and "Updated: {names}" in `text.secondary`, comma separated, each only when it names a skill; then the warnings in `tone.attention.fg` after the `AlertTriangleIcon` (`xs`): "Skipped: {names}", each name with a dotted underline and the CLI's reason as its tooltip, and "Couldn't reach {url}, {url}" for the sources that could not be added. A skill the import kept, placed or unplaced is not named. When nothing was installed, updated or skipped, the one line is "No skills were installed or updated." in `text.muted`.
+
+### Publish status (title bar)
+
+At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/components/status-button.tsx`): a pill `shell.status-height` high, `shell.status-radius`, 0 12px padding, transparent, hover `shell.topbar-hover` with the label in `text.secondary`. An 8px dot (`shell.status-dot-radius`) in a 16px box, then the label in `type.status` `shell.topbar-text`, 8px apart. It reads the inventory's library and the Sources slice, and is hidden while the startup layer shows and until both are read. Three states:
+
+| State | When | Dot | Label | Click |
+| --- | --- | --- | --- | --- |
+| No account remote | no source is the account remote | `text.hint` | "No account remote" | goes to Settings, where the Account remote section is |
+| To publish | {n} of your own skills edited since they were published, the skills whose banner is "Edits not published" | `shell.status-pending` with `shell.status-pending-halo` | "{n} to publish" | Publish all: a bare `skill publish` |
+| Published | otherwise | `shell.status-published` with `shell.status-published-halo` | "Published" | `skill check-updates` |
+
+A skill never published is not counted: a bare publish leaves it out, and its own banner publishes it. While Publish all runs, and until the inventory that follows it arrives, the label reads "Publishing {current} of {total}" from its `progress` events of phase `publish` ("Publishing…" before the first) and the pill is `aria-busy`. Then one toast, in the words of the Publish dialog: "{skill} changed somewhere else first. Update it, then publish." with Update (`skill update <name>`) for a skill another machine published to first (`moved` or `behind`); else "Published {n} skills" ("Published 1 skill", "Nothing to publish" when none was pushed). A skill the account remote declined, or one this machine may not push, keeps the runner's error toast, in the CLI's words. Each skill the publish left out as not published adds " · {k} not published yet", and when no other action is on the toast, Show, which selects the first of them on the Skills screen. With no account remote set after all, "Set an account remote to publish" with Open Settings.
+
+While the check runs, a `Spinner` takes the dot's place; it is the same check as Check updates on the Skills screen and runs only once at a time, whichever starts it. Its toast: "{n} skills changed on your other machines" ("1 skill"), counting the updates with an empty `base_hash`, with ", {m} updates from sources" when the check also found those, and Review, which selects the first skill another machine changed on the Skills screen; "Nothing new from your other machines" when it found none. A source it could not reach is the error toast of Check updates.
 
 ## 7. Iconography
 
