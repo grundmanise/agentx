@@ -31,6 +31,12 @@ import { accountRemoteOf } from "#/screens/skills/banners.ts";
 import { fileStatusLabels } from "#/screens/skills/files.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import {
+  alreadyPublished,
+  changedElsewhere,
+  notifyNoAccountRemote,
+  refusedForAccountRemote,
+} from "#/screens/skills/publish.ts";
 import { addSource } from "#/screens/skills/updates.ts";
 import { runCommand } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
@@ -46,7 +52,7 @@ const updateLabel = (name: string) => `update ${name}`;
 const update = (name: string) => {
   void runUntilSettled(["skill", "update", name], {
     label: updateLabel(name),
-    success: `Updated ${name}`,
+    success: `Updated ${name} skill`,
   });
 };
 
@@ -123,16 +129,21 @@ export const publishArgs = (name: string, message: string) => {
  * keeps the toast the runner showed. `accountRemoteSet` is whether the store knows of one.
  */
 const reportPublish = (
-  name: string,
+  row: SkillRow,
   outcome: Outcome,
   accountRemoteSet: boolean
 ) => {
+  const { name } = row;
   const event = outcome.events.find(
     (e) => e.type === "publish" && e.name === name
   );
   const result = event?.type === "publish" ? event.outcome : undefined;
   if (result === "behind" || result === "moved") {
-    const text = `${name} changed somewhere else first. Update it, then publish.`;
+    // A skill of a source is published to its source, which holds the newer version.
+    const text = changedElsewhere(
+      name,
+      row.kind === "source" ? row.entry?.source : undefined
+    );
     notify(text, {
       label: "Update",
       onClick: () => {
@@ -145,28 +156,21 @@ const reportPublish = (
     }
     return;
   }
+  // Nothing was sent: the skill already matches the published version, which is not a success.
+  if (outcome.exitCode === EXIT_CODES.ok && result === "up to date") {
+    const text = alreadyPublished(name);
+    notify(text);
+    addActivity("attention", text);
+    return;
+  }
   if (outcome.exitCode === EXIT_CODES.ok) {
-    const text =
-      result === "up to date"
-        ? `Nothing to publish in ${name}`
-        : `Published ${name}`;
+    const text = `Published ${name} skill`;
     notify(text);
     addActivity("success", text);
     return;
   }
-  const error = outcome.events.find((e) => e.type === "error");
-  if (
-    outcome.exitCode === EXIT_CODES.refused &&
-    event === undefined &&
-    (!accountRemoteSet ||
-      (error?.type === "error" && error.message === "no account remote is set"))
-  ) {
-    notify("Set an account remote to publish", {
-      label: "Open Settings",
-      onClick: () => {
-        navigateTo("/settings");
-      },
-    });
+  if (refusedForAccountRemote(outcome, accountRemoteSet)) {
+    notifyNoAccountRemote();
   }
 };
 
@@ -261,7 +265,7 @@ const PublishForm = ({
       onProgress: setProgress,
     });
     reportPublish(
-      name,
+      row,
       outcome,
       accountRemoteOf(useAppStore.getState().sources) !== undefined
     );

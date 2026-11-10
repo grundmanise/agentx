@@ -357,6 +357,8 @@
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
   --shadow-popover: 0 24px 60px -12px rgb(0 0 0 / 0.7);
   --shadow-menu: 0 24px 60px -12px rgb(0 0 0 / 0.7);
+  --shadow-status-published: 0 0 0 3px rgb(212 255 79 / 0.15);
+  --shadow-status-pending: 0 0 0 3px rgb(182 156 255 / 0.18);
 
   /* Radii (DESIGN.md §5): `rounded-card`. */
   --radius-button: 9999px;
@@ -369,6 +371,7 @@
   --radius-shell-nav: 10px;
   --radius-shell-logo: 8px;
   --radius-shell-status: 9999px;
+  --radius-shell-status-dot: 50%;
   --radius-shell-command: 9999px;
   --radius-shell-panel: 14px;
   --radius-input: 12px;
@@ -752,6 +755,11 @@
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 400;
+}
+@utility type-status {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
 }
 @utility type-key-hint {
   font-family: var(--font-mono);
