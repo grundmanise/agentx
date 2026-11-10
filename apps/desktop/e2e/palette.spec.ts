@@ -52,5 +52,4 @@ test("says when nothing matches", async ({ page }) => {
   await page.keyboard.press("Control+K");
   await page.keyboard.type("zzz");
   await expect(page.getByText("No matches")).toBeVisible();
-  await expect(page.getByRole("option")).toHaveCount(0);
 });

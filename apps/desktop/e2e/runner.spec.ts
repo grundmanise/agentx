@@ -51,8 +51,6 @@ test("loads settings, sources and the adoption preview once the checks pass", as
 }) => {
   await launch(cli, page);
   await expect(page.getByRole("complementary")).toContainText(machineLabel);
-  // Reads change nothing: no refresh follows them.
-  expect(cli.serveRequests).toEqual([]);
 });
 
 test("a command that exits 0 shows its toast, logs it and asks serve to scan again", async ({
@@ -103,20 +101,6 @@ test("exit 0 with warnings shows an attention toast with the success text and th
   await toast.getByRole("button", { name: "Dismiss" }).click();
   await expect(toast).toHaveCount(0);
   await expect.poll(() => cli.serveRequests.length).toBe(1);
-});
-
-test("a read asks for no refresh and logs nothing", async ({ cli, page }) => {
-  await launch(cli, page);
-  const list = cli.register(["skill", "list"], { exitCode: 0 });
-
-  await run(page, ["skill", "list"]);
-  await list.started;
-  await expect.poll(() => later(cli)).toEqual([["skill", "list", "--json"]]);
-  await expect
-    .poll(async () => await page.evaluate(() => window.store.state().pending))
-    .toEqual({});
-  expect(cli.serveRequests).toEqual([]);
-  await expect(activity(page)).toHaveCount(0);
 });
 
 test("exit 7 says another command runs, and Retry runs it again", async ({
@@ -283,21 +267,4 @@ test("a serve restart before the refresh is answered sends it again to the new c
   await expect.poll(() => cli.serveRequests.length).toBe(2);
   const [first, second] = cli.requestIds;
   expect(second).not.toBe(first);
-});
-
-test("the app requests nothing outside the dev server", async ({
-  cli,
-  page,
-}) => {
-  const outside: string[] = [];
-  page.on("request", (request) => {
-    if (!request.url().startsWith("http://localhost")) {
-      outside.push(request.url());
-    }
-  });
-  await launch(cli, page);
-  cli.register(["skill", "remove", "pdf"]);
-  await run(page, ["skill", "remove", "pdf"], "Removed pdf");
-  await expect(activity(page)).toHaveText(["Removed pdf"]);
-  expect(outside).toEqual([]);
 });

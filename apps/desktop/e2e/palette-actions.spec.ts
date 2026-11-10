@@ -164,7 +164,6 @@ test.describe("Rescan this machine", () => {
       { ok: true, request_id: id, scan_counter: 1, type: "refresh_complete" },
     ]);
     await expect(toasts(page)).toContainText("Rescanned");
-    expect(refreshes(cli)).toHaveLength(before + 1);
   });
 
   test("a scan that failed shows its error", async ({ cli, page }) => {

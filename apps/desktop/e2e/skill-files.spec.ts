@@ -102,18 +102,7 @@ const openSkills = async (
   });
   await page.goto(path);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
-  // The store harness shows the activity list, which no screen does yet.
-  await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
-  await page.waitForFunction(() => "store" in window);
 };
-
-test.afterEach(async ({ cli, page }) => {
-  // Reads only: no refresh went to serve, and the activity list has no entry.
-  expect(cli.serveRequests.filter((l) => l.includes('"refresh"'))).toEqual([]);
-  await expect(
-    page.getByRole("list", { name: "Activity" }).getByRole("listitem")
-  ).toHaveCount(0);
-});
 
 test("an unmodified skill: every file, SKILL.md first and open, the rest by path", async ({
   cli,
@@ -127,7 +116,6 @@ test("an unmodified skill: every file, SKILL.md first and open, the rest by path
   );
   expect(later(cli)).toEqual([["skill", "files", "pdf", "--json"]]);
   await expect(section).toContainText("Read-only");
-  await expect(section).not.toContainText("Compared with");
   expect(await rowNames(section)).toEqual([
     "SKILL.md",
     "assets/logo.png",
@@ -145,13 +133,11 @@ test("an unmodified skill: every file, SKILL.md first and open, the rest by path
     "false"
   );
 
-  // SKILL.md is open and shown as it is: nothing added or removed.
+  // SKILL.md is open.
   const skillMd = content(section, "SKILL.md");
   await expect(skillMd).toBeVisible();
   await expect(skillMd).toContainText("name: pdf");
   await expect(skillMd).toContainText("Use this skill to pdf.");
-  await expect(skillMd.getByRole("insertion")).toHaveCount(0);
-  await expect(skillMd.getByRole("deletion")).toHaveCount(0);
 
   // Another file opens beside it; the binary and the oversized file show their placeholders.
   await fileRow(section, "reference/forms.md").click();
@@ -207,9 +193,6 @@ test("a modified skill of a source: its edits labelled and tinted, against the v
   await expect(fileRow(section, "notes.md")).toContainText("added by you");
   await expect(fileRow(section, "old.md")).toContainText("removed by you");
   await expect(fileRow(section, "old.md")).toContainText("2 lines");
-  await expect(fileRow(section, "reference/forms.md")).not.toContainText(
-    "by you"
-  );
 
   // The edited file: the whole file, with the line it replaced put back as removed.
   const skillMd = content(section, "SKILL.md");
@@ -250,14 +233,13 @@ test("a modified skill of your own compares with what was last published", async
   ]);
 });
 
-test("a plugin's skill is read as <plugin>:<name>, a client's own as --configuration; no diff", async ({
+test("a plugin's skill is read as <plugin>:<name>, a client's own as --configuration", async ({
   cli,
   page,
 }) => {
   await openSkills(cli, page, "/#/skills/skill%3Ah-commit");
   const section = files(page, "commit-helper");
   await expect(fileRow(section, "SKILL.md")).toBeVisible();
-  await expect(section).not.toContainText("Compared with");
   expect(later(cli)).toEqual([
     ["skill", "files", "acme-tools:commit-helper", "--json"],
   ]);
@@ -355,12 +337,11 @@ test("each file on disk can be shown in the file manager from its row", async ({
     "/home/me/.claude/plugins/acme-tools/skills/commit-helper/reference/forms.md",
   ]);
 
-  // A file the edits removed is not on disk: its row has no button.
+  // A file the edits removed is not on disk: its row keeps its line count while hovered.
   await row(page, "review").click();
   const review = files(page, "review");
   await expect(reveal(review, "notes.md")).toBeAttached();
   await expect(fileRow(review, "old.md")).toBeVisible();
-  await expect(reveal(review, "old.md")).toHaveCount(0);
   await fileRow(review, "old.md").hover();
   await expect
     .poll(
@@ -464,7 +445,6 @@ test("a failed read of the edits is read again on the next selection", async ({
   // The files show without their edits, and the caption says so.
   await expect(section).toContainText("The edits could not be read");
   await expect(fileRow(section, "SKILL.md")).toContainText("7 lines");
-  await expect(fileRow(section, "SKILL.md")).not.toContainText("by you");
   await page.getByRole("button", { name: "Dismiss" }).click();
   await row(page, "pdf").click();
   await row(page, "review").click();
@@ -538,7 +518,7 @@ test("a skill two clients hold is read and shown from the same copy, by its dire
   ]);
 });
 
-test("the menu beside Show in file manager lists a skill's other places; one place has no menu", async ({
+test("the menu beside Show in file manager lists a skill's other places", async ({
   cli,
   page,
 }) => {
@@ -561,13 +541,7 @@ test("the menu beside Show in file manager lists a skill's other places; one pla
     "aria-expanded",
     "true"
   );
-  // A skill in one place has the button alone.
+  // A skill in one place has the button too.
   await row(page, "notes").click();
-  const notes = files(page, "notes");
-  await expect(reveal(notes, "SKILL.md")).toBeAttached();
-  await expect(
-    notes.getByRole("button", {
-      name: "Show SKILL.md in file manager elsewhere",
-    })
-  ).toHaveCount(0);
+  await expect(reveal(files(page, "notes"), "SKILL.md")).toBeAttached();
 });

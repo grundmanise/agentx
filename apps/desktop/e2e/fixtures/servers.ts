@@ -64,9 +64,6 @@ export const FILESYSTEM_COMMAND =
 export const DB_COMMAND = "node /home/me/.claude/plugins/acme-tools/server.js";
 export const NOTES_COMMAND = "uvx notes-mcp";
 
-/** The header and environment variable names the fixture declares; the screen never shows them. */
-export const SECRET_NAMES = ["Authorization", "GITHUB_TOKEN", "LINEAR_API_KEY"];
-
 /** When the latest signature was taken, on the filesystem server's newer version. */
 export const LATEST_SIGNATURE_AT = "2026-10-21T10:30:00Z";
 

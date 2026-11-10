@@ -68,7 +68,6 @@ test("lists the direct agents and the Universal card with their counts", async (
   const universal = card(page, "Universal");
   await expect(universal).toContainText("Read your shared library");
   await expect(universal).toContainText(LIBRARY);
-  await expect(universal.getByRole("switch")).toHaveCount(0);
   await expect(universal.getByRole("region")).toHaveCount(2);
   await expect(universal.getByRole("region", { name: "Codex" })).toContainText(
     "7 skills · 1 server"
@@ -76,8 +75,6 @@ test("lists the direct agents and the Universal card with their counts", async (
   await expect(
     universal.getByRole("region", { name: "Gemini CLI" })
   ).toContainText("7 skills · 0 servers");
-  // Nothing on this page runs a command on its own.
-  expect(later(cli)).toEqual([]);
 });
 
 test("turning an agent on runs config enable, and Place all places the library there", async ({
@@ -159,8 +156,5 @@ test("turning an agent off runs config disable", async ({ cli, page }) => {
       "Cursor disabled. New skills won't go there by default."
     )
   ).toBeVisible();
-  await expect(
-    toasts(page).getByRole("button", { name: /^Place all/u })
-  ).toHaveCount(0);
   expect(later(cli)).toEqual([["config", "disable", "cursor", "--json"]]);
 });

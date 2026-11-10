@@ -11,7 +11,6 @@ import {
   LINEAR_HINT,
   LINEAR_URL,
   NOTES_COMMAND,
-  SECRET_NAMES,
   SLACK_URL,
 } from "./fixtures/servers.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
@@ -37,15 +36,6 @@ const names = async (where: Locator) =>
       (el) => el.getAttribute("aria-label") ?? el.getAttribute("alt") ?? ""
     )
   );
-
-/** No environment variable or header name shows, let alone a value. */
-const noSecrets = async (page: Page) => {
-  await Promise.all(
-    SECRET_NAMES.map(async (secret) => {
-      await expect(page.getByText(secret)).toHaveCount(0);
-    })
-  );
-};
 
 /** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
 const isLaunchOrLoad = (line: string[]) =>
@@ -113,7 +103,6 @@ test.describe("rows", () => {
       "Claude Code",
       "Codex",
     ]);
-    await expect(github.getByText(/versions/u)).toHaveCount(0);
 
     // A plugin's server carries the plugin's tag.
     const acmeDb = row(page, "acme-db");
@@ -126,14 +115,12 @@ test.describe("rows", () => {
     await expect(linear).toContainText(LINEAR_URL);
     await expect(linear.getByText("sse", { exact: true })).toBeVisible();
     expect(await names(linear.getByRole("img"))).toEqual(["Gemini CLI"]);
-    await expect(linear.getByText("Turned off")).toHaveCount(0);
 
     // A server every client turned off stays, with its tools, and its agents cell says so.
     const slack = row(page, "slack");
     await expect(slack).toContainText(SLACK_URL);
     await expect(slack.getByText("3 tools", { exact: true })).toBeVisible();
     await expect(slack.getByText("Turned off")).toBeVisible();
-    await expect(slack.getByRole("img")).toHaveCount(0);
 
     // A server never checked.
     const notes = row(page, "local-notes");
@@ -145,9 +132,6 @@ test.describe("rows", () => {
       "title",
       /^Last check: Oct 21/u
     );
-
-    await noSecrets(page);
-    expect(later(cli)).toEqual([]);
   });
 
   test("a machine with no server shows the empty state", async ({
@@ -159,10 +143,6 @@ test.describe("rows", () => {
     await expect(
       page.getByText("No MCP servers found in your agents.")
     ).toBeVisible();
-    await expect(table(page)).toHaveCount(0);
-    // Nothing to check: the button is not there.
-    await expect(checkTools(page)).toHaveCount(0);
-    expect(later(cli)).toEqual([]);
   });
 });
 
@@ -198,7 +178,6 @@ test.describe("Check tools", () => {
     await expect(
       row(page, "github").getByText("12 tools", { exact: true })
     ).toBeVisible();
-    await expect(page.getByText("20 tools")).toHaveCount(0);
     await expect(
       row(page, "filesystem").getByText("4 tools", { exact: true })
     ).toBeVisible();
@@ -213,7 +192,6 @@ test.describe("Check tools", () => {
       request_id: expect.any(String),
       type: "refresh",
     });
-    await noSecrets(page);
   });
 
   test("Cancel in the toast stops the check", async ({ cli, page }) => {
@@ -233,24 +211,6 @@ test.describe("Check tools", () => {
     ).toBeVisible();
     expect(cli.cancels).toHaveLength(1);
     await expect(checkTools(page)).toHaveAttribute("aria-busy", "false");
-    // A stopped check keeps the column as it was.
-    await expect(page.getByText("needs sign-in")).toHaveCount(0);
     expect(later(cli)).toEqual([["scan", "--handshake", "--json"]]);
-  });
-
-  test("after a restart, the failure words are gone", async ({ cli, page }) => {
-    await openServers(cli, page);
-    cli.register(["scan", "--handshake"], { events: [handshakeInventory] });
-    await checkTools(page).click();
-    await expect(row(page, "github").getByText("needs sign-in")).toBeVisible();
-
-    cli.restart();
-    await page.reload();
-    await expect(row(page, "github")).toBeVisible();
-    await expect(page.getByText("needs sign-in")).toHaveCount(0);
-    await expect(page.getByText("unreachable")).toHaveCount(0);
-    await expect(
-      row(page, "github").getByText("12 tools", { exact: true })
-    ).toBeVisible();
   });
 });

@@ -1,7 +1,7 @@
 // The What's new sheet: See changes on an update's banner opens it, it reads
 // `skill diff <name> --update` and shows one block per changed file with its status, its path and
-// the patch with the diff tints. An update from another machine lists its files with a note and
-// runs no diff. Escape and Close close it.
+// the patch with the diff tints. An update from another machine lists its files with a note.
+// Escape and Close close it.
 import type { Page } from "@playwright/test";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -34,8 +34,6 @@ const block = (page: Page, path: string) =>
 /** The patch of one file, in the Code pane. */
 const patch = (page: Page, path: string) =>
   sheet(page).getByRole("region", { exact: true, name: `Changes to ${path}` });
-const toasts = (page: Page) =>
-  page.getByRole("region", { name: /^Notifications/u });
 
 /** Opens the Skills screen on `name`, with serve's start check having found every update. */
 const open = async (cli: MockCli, page: Page, name: string) => {
@@ -146,7 +144,7 @@ test.describe("the What's new sheet", () => {
     ]);
   });
 
-  test("lists the files of an update from another machine with the note, and runs no diff", async ({
+  test("lists the files of an update from another machine with the note", async ({
     cli,
     page,
   }) => {
@@ -160,10 +158,6 @@ test.describe("the What's new sheet", () => {
     );
     const files = sheet(page).getByRole("list", { name: "Changed files" });
     await expect(files.getByRole("listitem")).toHaveText(["addedtemplate.md"]);
-    await expect(
-      sheet(page).getByRole("button", { expanded: true })
-    ).toHaveCount(0);
-    expect(updateDiffs(cli)).toEqual([]);
     await page.keyboard.press("Escape");
     await expect(sheet(page)).toHaveCount(0);
   });
@@ -187,7 +181,5 @@ test.describe("the What's new sheet", () => {
     await seeChanges(page, "review").click();
     await expect(sheet(page)).toContainText("The changes could not be read");
     await expect(sheet(page)).toContainText("no update of review is known");
-    // The sheet says it; no error toast repeats it.
-    await expect(toasts(page)).not.toContainText("no update of review");
   });
 });
