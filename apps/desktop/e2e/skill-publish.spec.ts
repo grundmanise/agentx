@@ -254,7 +254,9 @@ test.describe("the Publish dialog", () => {
       publishReply("changelog", "pushed")
     );
     await shown.getByRole("button", { name: "Publish" }).click();
-    await expect(toasts(page).getByText("Published changelog")).toBeVisible();
+    await expect(
+      toasts(page).getByText("Published changelog skill")
+    ).toBeVisible();
     await expect(shown).toBeHidden();
     expect(later(cli)).toEqual([
       ["skill", "diff", "changelog", "--json"],
@@ -276,7 +278,9 @@ test.describe("the Publish dialog", () => {
     const field = shown.getByRole("textbox", { name: "What changed" });
     await field.fill("  Tighten the wording ");
     await field.press("Enter");
-    await expect(toasts(page).getByText("Published changelog")).toBeVisible();
+    await expect(
+      toasts(page).getByText("Published changelog skill")
+    ).toBeVisible();
     expect(later(cli).at(-1)).toEqual([
       "skill",
       "publish",
@@ -313,7 +317,9 @@ test.describe("the Publish dialog", () => {
     await expect(shown.getByRole("status")).toHaveText("Fetching me/account…");
     await expect(shown.getByRole("button", { name: "Publish" })).toBeDisabled();
     run.release();
-    await expect(toasts(page).getByText("Published changelog")).toBeVisible();
+    await expect(
+      toasts(page).getByText("Published changelog skill")
+    ).toBeVisible();
   });
 
   test("your skill never published: Publish from its banner", async ({
@@ -331,7 +337,7 @@ test.describe("the Publish dialog", () => {
       publishReply("draft", "pushed")
     );
     await shown.getByRole("button", { name: "Publish" }).click();
-    await expect(toasts(page).getByText("Published draft")).toBeVisible();
+    await expect(toasts(page).getByText("Published draft skill")).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "diff", "draft", "--json"],
       ["skill", "publish", "draft", "--json"],
@@ -353,7 +359,9 @@ test.describe("the Publish dialog", () => {
       publishReply("review", "pushed")
     );
     await shown.getByRole("button", { name: "Publish" }).click();
-    await expect(toasts(page).getByText("Published review")).toBeVisible();
+    await expect(
+      toasts(page).getByText("Published review skill")
+    ).toBeVisible();
     expect(later(cli).at(-1)).toEqual(["skill", "publish", "review", "--json"]);
   });
 });
@@ -368,7 +376,7 @@ test.describe("outcomes", () => {
     );
     await shown.getByRole("button", { name: "Publish" }).click();
     await expect(
-      toasts(page).getByText("Nothing to publish in changelog")
+      toasts(page).getByText("Nothing to publish in changelog skill")
     ).toBeVisible();
   });
 
@@ -416,7 +424,9 @@ test.describe("outcomes", () => {
         events: [{ ok: true, type: "result" }],
       });
       await toasts(page).getByRole("button", { name: "Update" }).click();
-      await expect(toasts(page).getByText("Updated changelog")).toBeVisible();
+      await expect(
+        toasts(page).getByText("Updated changelog skill")
+      ).toBeVisible();
       expect(later(cli).slice(-2)).toEqual([
         ["skill", "publish", "changelog", "--json"],
         ["skill", "update", "changelog", "--json"],

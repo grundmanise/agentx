@@ -46,7 +46,7 @@ const updateLabel = (name: string) => `update ${name}`;
 const update = (name: string) => {
   void runUntilSettled(["skill", "update", name], {
     label: updateLabel(name),
-    success: `Updated ${name}`,
+    success: `Updated ${name} skill`,
   });
 };
 
@@ -88,8 +88,8 @@ const reportPublish = (
   if (outcome.exitCode === EXIT_CODES.ok) {
     const text =
       result === "up to date"
-        ? `Nothing to publish in ${name}`
-        : `Published ${name}`;
+        ? `Nothing to publish in ${name} skill`
+        : `Published ${name} skill`;
     notify(text);
     addActivity("success", text);
     return;
