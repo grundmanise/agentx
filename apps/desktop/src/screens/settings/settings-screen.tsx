@@ -1,18 +1,19 @@
 // The Settings page (DESIGN.md §6 "Settings"): every machine setting on one page. Each row reads
 // a store slice and writes only through the CLI command named beside it; the app writes no file
-// and keeps no setting of its own.
+// of the CLI's. The one setting the app keeps itself is Editor, an app preference (ADR 0013).
 //
 // The page is the title and the list of sections below. A section is a component that renders
 // `SettingsSection` (`section.tsx`) with its label, the line under it and its content, or nothing
 // when it has nothing to show; the page draws the hairlines between them. To add a section, write
 // it in its own file in this folder and add it to `sections` at its slot below, in this order:
-// This machine, Account remote, Sources, Comparing edits, Storage, Command line, Export settings,
-// Import settings. Insert the new entry under its slot's comment and keep the comment.
+// This machine, Account remote, Sources, Comparing edits, Editor, Storage, Command line, Export
+// settings, Import settings. Insert the new entry under its slot's comment and keep the comment.
 import type { ComponentType } from "react";
 
 import { AccountRemoteSection } from "#/screens/settings/account-remote.tsx";
 import { CommandLineSection } from "#/screens/settings/command-line.tsx";
 import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
+import { EditorSection } from "#/screens/settings/editor.tsx";
 import { ExportSettingsSection } from "#/screens/settings/export-settings.tsx";
 import { ImportSettingsSection } from "#/screens/settings/import-settings.tsx";
 import { SourcesSection } from "#/screens/settings/sources.tsx";
@@ -33,6 +34,7 @@ const sections: Section[] = [
   // Slot: Sources.
   { Section: SourcesSection, id: "sources" },
   { Section: ComparingEditsSection, id: "comparing-edits" },
+  { Section: EditorSection, id: "editor" },
   { Section: StorageSection, id: "storage" },
   { Section: CommandLineSection, id: "command-line" },
   // Slot: Export settings, Import settings.

@@ -1,8 +1,6 @@
 import { SearchIcon } from "#/components/icons/search.tsx";
 import { KeyHint } from "#/components/key-hint.tsx";
-
-const isMac =
-  typeof navigator !== "undefined" && navigator.platform.includes("Mac");
+import { isMac } from "#/lib/platform.ts";
 
 /** The command field in the title bar: looks like a search input and opens the palette. */
 export const CommandField = ({ onOpen }: { onOpen: () => void }) => (
