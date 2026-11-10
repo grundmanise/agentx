@@ -64,16 +64,21 @@ export const publishArgs = (name: string, message: string) => {
  * keeps the toast the runner showed. `accountRemoteSet` is whether the store knows of one.
  */
 const reportPublish = (
-  name: string,
+  row: SkillRow,
   outcome: Outcome,
   accountRemoteSet: boolean
 ) => {
+  const { name } = row;
   const event = outcome.events.find(
     (e) => e.type === "publish" && e.name === name
   );
   const result = event?.type === "publish" ? event.outcome : undefined;
   if (result === "behind" || result === "moved") {
-    const text = changedElsewhere(name);
+    // A skill of a source is published to its source, which holds the newer version.
+    const text = changedElsewhere(
+      name,
+      row.kind === "source" ? row.entry?.source : undefined
+    );
     notify(text, {
       label: "Update",
       onClick: () => {
@@ -193,7 +198,7 @@ const PublishForm = ({
       onProgress: setProgress,
     });
     reportPublish(
-      name,
+      row,
       outcome,
       accountRemoteOf(useAppStore.getState().sources) !== undefined
     );

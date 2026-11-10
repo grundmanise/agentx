@@ -16,6 +16,7 @@ import {
   hasEditsToPublish,
 } from "#/screens/skills/banners.ts";
 import { openSkill } from "#/screens/skills/open.ts";
+import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { currentRows } from "#/screens/skills/rows.ts";
 import { updateSkill } from "#/screens/skills/updates.ts";
@@ -26,9 +27,13 @@ import { addActivity, useAppStore } from "#/store/store.ts";
 /** The label of Publish all, which shows as pending while the bare publish runs. */
 export const PUBLISH_ALL = "publish all";
 
-/** The toast of a skill another machine published to first: it needs an update before a publish. */
-export const changedElsewhere = (name: string) =>
-  `${name} changed somewhere else first. Update it, then publish.`;
+/**
+ * The toast of a skill whose newer version is where it publishes to: it needs an update before a
+ * publish. For one of your own skills that is the account remote; for a skill of a source, the
+ * source, which `source` names by its URL.
+ */
+export const changedElsewhere = (name: string, source?: string) =>
+  `There is a newer version of ${name} skill ${source === undefined ? "on the account remote" : `in ${shortSource(source)}`}. Update it first, then publish your changes.`;
 
 /** The toast of a publish that sent nothing: the skill already matches what is published. */
 export const alreadyPublished = (name: string) =>
@@ -139,7 +144,8 @@ const reportPublishAll = (outcome: Outcome) => {
     return;
   }
   if (moved !== undefined) {
-    const text = `${changedElsewhere(moved.name)}${suffix}`;
+    // No count of the skills left out: the toast is one line, and this one is long already.
+    const text = changedElsewhere(moved.name);
     notify(text, updateAction(moved.name));
     // A refused publish is in the activity list already, in the CLI's words.
     if (ok) {

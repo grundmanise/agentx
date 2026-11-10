@@ -12,7 +12,7 @@ import {
   sources,
   sourcesWithoutAccount,
 } from "./fixtures/publish.ts";
-import { ACCOUNT } from "./fixtures/skills.ts";
+import { ACCOUNT, ACME } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli, Reply } from "./harness/cli.ts";
 
@@ -389,7 +389,7 @@ test.describe("outcomes", () => {
     ["behind", 0],
     ["moved", 6],
   ] as const) {
-    test(`${outcome}: changed somewhere else first, and Update runs skill update <name>`, async ({
+    test(`${outcome}: a newer version on the account remote, and Update runs skill update <name>`, async ({
       cli,
       page,
     }) => {
@@ -422,7 +422,7 @@ test.describe("outcomes", () => {
       );
       await shown.getByRole("button", { name: "Publish" }).click();
       const toast = toasts(page).getByText(
-        "changelog changed somewhere else first. Update it, then publish."
+        "There is a newer version of changelog skill on the account remote. Update it first, then publish your changes."
       );
       await expect(toast).toBeVisible();
       cli.register(["skill", "update", "changelog"], {
@@ -438,6 +438,37 @@ test.describe("outcomes", () => {
       ]);
     });
   }
+
+  test("moved, for a skill of a source: a newer version in the source, with Update", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "review");
+    const shown = await openDialog(page, "review", "Publish to acme/skills");
+    cli.register(
+      ["skill", "publish", "review"],
+      publishReply("review", "moved", {
+        error: {
+          code: "refused",
+          hint: "run 'agentx skill update review' to take the change in, then publish again",
+          message: `${ACME} changed review since it was installed, so it was not published`,
+          type: "error",
+        },
+        exitCode: 6,
+      })
+    );
+    await shown.getByRole("button", { name: "Publish" }).click();
+    await expect(
+      toasts(page).getByText(
+        "There is a newer version of review skill in acme/skills. Update it first, then publish your changes."
+      )
+    ).toBeVisible();
+    await expect(toasts(page)).not.toContainText("account remote");
+    await expect(
+      toasts(page).getByRole("button", { name: "Update" })
+    ).toBeVisible();
+    expect(later(cli).at(-1)).toEqual(["skill", "publish", "review", "--json"]);
+  });
 
   for (const [outcome, exitCode, code, message, hint, sentence] of [
     [

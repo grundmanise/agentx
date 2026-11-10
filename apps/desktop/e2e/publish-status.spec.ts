@@ -101,7 +101,7 @@ test.describe("states", () => {
 });
 
 test.describe("publish", () => {
-  test("a click runs a bare skill publish, shows its progress, then names the skill another machine changed, with Update and the skills not published", async ({
+  test("a click runs a bare skill publish, shows its progress, then names the skill with a newer version on the account remote, with Update", async ({
     cli,
     page,
   }) => {
@@ -135,8 +135,9 @@ test.describe("publish", () => {
 
     const toast = toasts(page);
     await expect(toast).toContainText(
-      "notes changed somewhere else first. Update it, then publish. · 1 not published yet"
+      "There is a newer version of notes skill on the account remote. Update it first, then publish your changes."
     );
+    await expect(toast).not.toContainText("not published yet");
     expect(ran(cli, ["skill", "publish"])).toBe(true);
     await answerRefreshes(cli);
     await expect(status(page)).toHaveText("2 to publish");
