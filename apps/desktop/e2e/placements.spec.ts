@@ -3,7 +3,7 @@
 // and shows pending until the command ends and serve answers the refresh that follows.
 import type { Locator, Page } from "@playwright/test";
 
-import { inventory, sources } from "./fixtures/agents.ts";
+import { inventory, manyAgentsInventory, sources } from "./fixtures/agents.ts";
 import {
   adoption,
   fileReads,
@@ -12,7 +12,7 @@ import {
   reviewDiffs,
 } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
-import type { MockCli } from "./harness/cli.ts";
+import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
 const launchLines = [
   ["version", "--json"],
@@ -50,9 +50,10 @@ const openSkill = async (
   cli: MockCli,
   page: Page,
   name: string,
-  key = name
+  key = name,
+  machine: InlineEvent = inventory
 ) => {
-  cli.onServeStart({ events: [inventory] });
+  cli.onServeStart({ events: [machine] });
   cli.register(["adopt"], { events: adoption });
   cli.register(["source", "list"], { events: sources });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
@@ -230,6 +231,87 @@ test.describe("chips", () => {
         "Reconnect it first, then manage it from your library"
       )
     ).toBeVisible();
+  });
+});
+
+/** The names of the chips in view, in order, and how many rows they and the button take. */
+const chipsInView = async (article: Locator) => {
+  const agents = article.getByRole("region", { name: "Agents" });
+  const chips = await agents.getByRole("switch").all();
+  const boxes = await Promise.all(
+    [...chips, agents.getByRole("button")].map(
+      async (el) => await el.boundingBox()
+    )
+  );
+  const names = await Promise.all(
+    chips.map(async (el) => await el.getAttribute("aria-label"))
+  );
+  // A row's chips share a middle line; the button, which is lower than a chip, sits on it too.
+  const middles = boxes.map((box) =>
+    Math.round((box?.y ?? 0) + (box?.height ?? 0) / 2)
+  );
+  return { names, rows: new Set(middles).size };
+};
+
+test.describe("many agents", () => {
+  test("the chips that are on, then the most used clients, in two rows until the rest is shown", async ({
+    cli,
+    page,
+  }) => {
+    await page.setViewportSize({ height: 800, width: 1440 });
+    await openSkill(cli, page, "pdf", "pdf", manyAgentsInventory());
+    const article = pane(page, "pdf");
+    const agents = article.getByRole("region", { name: "Agents" });
+    const more = agents.getByRole("button", { name: /^Show \d+ more$/u });
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+
+    const collapsed = await chipsInView(article);
+    expect(collapsed.rows).toBe(2);
+    // On first: Claude Code and Universal. Then by popularity, whatever the inventory's order.
+    expect(collapsed.names.slice(0, 5)).toEqual([
+      "Claude Code",
+      "Universal",
+      "Cursor",
+      "GitHub Copilot",
+      "Windsurf",
+    ]);
+    await expect(more).toHaveText(`Show ${27 - collapsed.names.length} more`);
+
+    // A narrower pane fits fewer chips, still in two rows.
+    await page.setViewportSize({ height: 800, width: 1150 });
+    await expect(agents.getByRole("switch")).not.toHaveCount(
+      collapsed.names.length
+    );
+    const narrow = await chipsInView(article);
+    expect(narrow.rows).toBe(2);
+    expect(narrow.names).toEqual(collapsed.names.slice(0, narrow.names.length));
+    await page.setViewportSize({ height: 800, width: 1440 });
+    await expect(agents.getByRole("switch")).toHaveCount(
+      collapsed.names.length
+    );
+
+    await more.click();
+    await expect(agents.getByRole("switch")).toHaveCount(27);
+    const expanded = await chipsInView(article);
+    // The clients with no rank follow by name.
+    expect(expanded.names.slice(-3)).toEqual([
+      "IBM Bob",
+      "Zencoder",
+      "Zenflow",
+    ]);
+
+    // A chip turned on stays where it is, and stays in view once the rest is hidden again.
+    await cli.serveEmit([
+      { ...manyAgentsInventory(["zenflow"]), scan_counter: 2 },
+    ]);
+    await expect(chip(article, "Zenflow")).toBeChecked();
+    const afterToggle = await chipsInView(article);
+    expect(afterToggle.names).toEqual(expanded.names);
+    await agents.getByRole("button", { name: "Show fewer" }).click();
+    await expect(more).toBeVisible();
+    const again = await chipsInView(article);
+    expect(again.rows).toBe(2);
+    expect(again.names.at(-1)).toBe("Zenflow");
   });
 });
 
