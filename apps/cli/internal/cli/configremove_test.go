@@ -287,6 +287,19 @@ func TestRemovalJudgment(t *testing.T) {
 			files: map[string]string{".adal/skills/pdf/SKILL.md": pdf, ".agents/skills/pdf/SKILL.md": pdf},
 			links: map[string]string{".bob/skills/pdf": ".adal/skills/pdf"},
 			ids:   []string{"adal"}, want: map[string]string{"adal": "IBM Bob's skill pdf, which is a link into this directory"}},
+		{name: "a library skill that is a link through the directory to a skill elsewhere",
+			files: map[string]string{".adal/skills/pdf/SKILL.md": pdf, ".augment/skills/pdf/SKILL.md": pdf},
+			links: map[string]string{".bob/skills/pdf": ".adal/skills/pdf", ".agents/skills/pdf": ".bob/skills/pdf"},
+			ids:   []string{"bob"}, want: map[string]string{"bob": "the library's skill pdf, which is a link into this directory"}},
+		{name: "a library skill that is a link through a skills directory that is itself a link",
+			files: map[string]string{"elsewhere/pdf/SKILL.md": pdf},
+			links: map[string]string{".bob/skills": "elsewhere", ".agents/skills/pdf": ".bob/skills/pdf"},
+			ids:   []string{"bob"}, want: map[string]string{"bob": "the library's skill pdf, which is a link into this directory"}},
+		{name: "a link in a skills directory outside its client's configuration directory",
+			files: map[string]string{".adal/skills/pdf/SKILL.md": pdf, ".agents/skills/pdf/SKILL.md": pdf},
+			dirs:  []string{".config/amp"},
+			links: map[string]string{".config/agents/skills/pdf": ".adal/skills/pdf"},
+			ids:   []string{"adal"}, want: map[string]string{"adal": "Amp's skill pdf, which is a link into this directory"}},
 		{name: "a file of a copy that cannot be read", unreadable: ".adal/skills/pdf/private.key",
 			files: map[string]string{".adal/skills/pdf/SKILL.md": pdf, ".bob/skills/pdf/SKILL.md": pdf, ".bob/skills/pdf/private.key": "k", ".adal/skills/pdf/private.key": "k"},
 			ids:   []string{"adal"}, want: map[string]string{"adal": "skills/pdf/private.key, which cannot be read"}},
@@ -332,6 +345,9 @@ func TestRemovalJudgment(t *testing.T) {
 					t.Skip("this user reads every file")
 				}
 			}
+			// Under HOME, where the fixture's paths are, so that a case can
+			// build a client kept in the XDG config home.
+			h.env["XDG_CONFIG_HOME"] = filepath.Join(h.home, ".config")
 			d, err := home.Resolve(h.env)
 			if err != nil {
 				t.Fatal(err)
