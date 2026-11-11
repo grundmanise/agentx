@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,6 +22,15 @@ const (
 	removalRemoved   = "removed"   // the run deleted it
 	removalKept      = "kept"      // it holds something a removal would lose, and stays
 )
+
+// osMetadata are the files an operating system's file manager writes into
+// a directory on its own, by their exact names. They are the only files a
+// removal passes over, while ignore_system_files is on: the patterns that
+// setting also covers (editor backups and swap files, the leftovers of a
+// network or FUSE file system, AppleDouble files) match names a person or
+// a program can give a file that matters, so those hold a configuration
+// back like any other file.
+var osMetadata = []string{".DS_Store", "Thumbs.db", "ehthumbs.db", "desktop.ini"}
 
 // holdsLimit bounds what one configuration is said to hold: a client in
 // use holds hundreds of files, and the first few say why it stays.
@@ -108,7 +119,7 @@ func removalScopeOf(c scan.Client, d home.Dirs, clients []scan.Client) removalSc
 		{d.Library, "the library"}, {d.Home, "agentx home"}, {d.Config, "the configuration home of other programs"}, {d.User, "your home directory"},
 	} {
 		if beneath(filepath.Clean(p.path), s.dir) {
-			s.protected = "the directory holds " + p.what
+			s.protected = p.what
 			break
 		}
 	}
@@ -167,7 +178,7 @@ func registeredClients() []scan.Client {
 // holds anything a removal would lose.
 type removalJudge struct {
 	d        home.Dirs
-	system   bool                   // system files do not count, as ignore_system_files says
+	system   bool                   // ignore_system_files: the files of osMetadata do not count
 	detected map[string]scan.Client // by slug
 	named    map[string]bool        // the configurations this run covers
 	// gone are the configuration directories this run has already found
@@ -254,13 +265,58 @@ func (j *removalJudge) judge(s removalScope) []string {
 		// the user's, kept somewhere they chose.
 		return []string{"the directory is a symlink, which agentx leaves alone"}
 	}
+	// The same rule as the scope's, on the paths as they really are: a
+	// library that is a symlink into the directory is spelled outside it.
+	dir := realPath(s.dir)
+	for _, p := range []struct{ path, what string }{
+		{j.d.Library, "the library"}, {j.d.Home, "agentx home"}, {j.d.Config, "the configuration home of other programs"}, {j.d.User, "your home directory"},
+	} {
+		if beneath(realPath(p.path), dir) {
+			return []string{p.what}
+		}
+	}
 	var holds []string
 	for _, id := range s.with {
 		if c, ok := j.detected[id]; ok && !j.named[id] {
 			holds = append(holds, "the configuration of "+c.Name()+" ("+id+"), which is not named")
 		}
 	}
-	return append(holds, j.walk(s, s.dir)...)
+	holds = append(holds, j.walk(s, s.dir)...)
+	if len(holds) == 0 {
+		// A removal captures the whole directory before it moves it, so a
+		// file it cannot read stops the run: the judgment says so first.
+		if _, err := home.Fingerprint(s.dir); err != nil {
+			var at *fs.PathError
+			if errors.As(err, &at) {
+				return []string{j.rel(s, at.Path) + ", which cannot be read"}
+			}
+			return []string{"the directory, which cannot be read: " + err.Error()}
+		}
+	}
+	return holds
+}
+
+// realPath is path made absolute with every symlink on it resolved, as far
+// as it exists: the part that does not exist yet is kept as it is spelled.
+func realPath(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = filepath.Clean(path)
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real
+	}
+	parent := filepath.Dir(abs)
+	if parent == abs {
+		return abs
+	}
+	return filepath.Join(realPath(parent), filepath.Base(abs))
+}
+
+// passedOver reports whether a file of this name does not count: one of
+// osMetadata, while ignore_system_files is on.
+func (j *removalJudge) passedOver(name string) bool {
+	return j.system && slices.Contains(osMetadata, name)
 }
 
 // leaving reports whether path is, or lies in, a configuration directory
@@ -298,7 +354,7 @@ func (j *removalJudge) walk(s removalScope, dir string) []string {
 		case real && s.leadsTo(path):
 			holds = append(holds, j.walk(s, path)...)
 		case real && j.holdsNothing(path):
-		case !real && j.system && home.IsSystemFile(e.Name()):
+		case e.Type().IsRegular() && j.passedOver(e.Name()):
 		default:
 			holds = append(holds, j.label(s, path))
 		}
@@ -348,7 +404,8 @@ func (j *removalJudge) label(s removalScope, path string) string {
 }
 
 // holdsNothing reports whether the directory at path holds no file at any
-// depth: directories alone, and system files while they do not count.
+// depth: directories alone, and the files of osMetadata while they do not
+// count.
 func (j *removalJudge) holdsNothing(path string) bool {
 	entries, err := os.ReadDir(path)
 	if err != nil {
@@ -360,7 +417,7 @@ func (j *removalJudge) holdsNothing(path string) bool {
 			if !j.holdsNothing(filepath.Join(path, e.Name())) {
 				return false
 			}
-		case j.system && home.IsSystemFile(e.Name()):
+		case e.Type().IsRegular() && j.passedOver(e.Name()):
 		default:
 			return false
 		}
@@ -404,7 +461,7 @@ func (j *removalJudge) skills(s removalScope, dir string) []string {
 			default:
 				holds = append(holds, "the skill "+sanitised(e.Name())+", which nothing that stays on the machine holds")
 			}
-		case j.system && home.IsSystemFile(e.Name()):
+		case e.Type().IsRegular() && j.passedOver(e.Name()):
 		default:
 			holds = append(holds, j.rel(s, path))
 		}
@@ -558,7 +615,15 @@ func (inv *invocation) configRemove(cmd *cobra.Command, ids []string) error {
 			m.Discard()
 			return err
 		}
+		// A run stopped part way is taken back, never finished: what lets
+		// a directory go is what the rest of the machine holds, which the
+		// journal does not capture.
+		m.TakeBackUnfinished()
 		if err := m.Apply(inv.refs(ctx)); err != nil {
+			if errors.Is(err, home.ErrTakenBack) {
+				return fail(exitRefused, "nothing was removed: "+strings.TrimPrefix(err.Error(), home.ErrTakenBack.Error()+": "),
+					"run the command again")
+			}
 			return err
 		}
 		settings = edit.settings()
