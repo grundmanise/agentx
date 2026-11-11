@@ -17,6 +17,7 @@ import {
 } from "#/components/ui/popover.tsx";
 import {
   filterCount,
+  groupChoices,
   noFilters,
   showCounts,
   UNIVERSAL,
@@ -31,8 +32,6 @@ import type {
 const shows: { value: Show; label: string }[] = [
   { label: "All skills", value: "all" },
   { label: "Updates", value: "updates" },
-  { label: "Yours", value: "yours" },
-  { label: "Unmanaged", value: "unmanaged" },
 ];
 
 const states: { value: State; label: string }[] = [
@@ -46,8 +45,9 @@ export const universalNames = (universal: Configuration[]) =>
   universal.map((c) => c.name).join(", ");
 
 /**
- * The Filter button and its popover: SHOW (one of), STATE (one of), AGENTS (any of, Universal
- * standing for every client that reads the library), and Reset filters while any is applied.
+ * The Filter button and its popover: SHOW (one of), GROUPS (any of the list's groups, none
+ * standing for all), STATE (one of), AGENTS (any of, Universal standing for every client that
+ * reads the library), and Reset filters while any is applied.
  */
 export const FilterPopover = ({
   rows,
@@ -55,7 +55,7 @@ export const FilterPopover = ({
   filters,
   onChange,
 }: {
-  /** Every row, before the filters: the SHOW counts come from them. */
+  /** Every row, before the filters: the SHOW and GROUPS counts come from them. */
   rows: SkillRow[];
   configurations: Configuration[];
   filters: Filters;
@@ -64,6 +64,7 @@ export const FilterPopover = ({
   const [open, setOpen] = useState(false);
   const id = useId();
   const counts = showCounts(rows, filters);
+  const groups = groupChoices(rows, filters);
   const count = filterCount(filters);
   const direct = configurations.filter((c) => !c.reads_library);
   const universal = configurations.filter((c) => c.reads_library);
@@ -96,6 +97,29 @@ export const FilterPopover = ({
                 }}
               >
                 {s.label}
+              </ChoicePill>
+            ))}
+          </div>
+        </ChoiceGroup>
+        <ChoiceGroup caption="Groups">
+          <div className="flex flex-wrap gap-1">
+            {groups.map((g) => (
+              <ChoicePill
+                key={g.key}
+                group={`${id}-groups`}
+                many
+                active={filters.groups.includes(g.key)}
+                count={g.count}
+                onSelect={() => {
+                  onChange({
+                    ...filters,
+                    groups: filters.groups.includes(g.key)
+                      ? filters.groups.filter((k) => k !== g.key)
+                      : [...filters.groups, g.key],
+                  });
+                }}
+              >
+                {g.name}
               </ChoicePill>
             ))}
           </div>

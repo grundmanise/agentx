@@ -127,7 +127,7 @@ export const ChoiceGroup = ({
 );
 
 const choiceVariants = cva(
-  "rounded-pill type-secondary has-focus-visible:outline-shell-focus-ring relative inline-flex h-7.5 cursor-pointer items-center gap-2 px-3 has-focus-visible:outline-2 has-focus-visible:outline-offset-2",
+  "rounded-pill type-secondary has-focus-visible:outline-shell-focus-ring relative inline-flex h-7.5 max-w-full min-w-0 cursor-pointer items-center gap-2 px-3 has-focus-visible:outline-2 has-focus-visible:outline-offset-2",
   {
     variants: {
       active: {
@@ -139,16 +139,21 @@ const choiceVariants = cva(
   }
 );
 
-/** One choice of a one-of group in the popover (SHOW), with its count. */
+/**
+ * One choice of a group of pills in the popover, with its count: a radio of a one-of group
+ * (SHOW), or with `many` a checkbox of an any-of group (GROUPS), which `onSelect` toggles.
+ */
 export const ChoicePill = ({
   group,
+  many = false,
   active,
   count,
   children,
   onSelect,
 }: {
-  /** The name shared by the radios of the group. */
+  /** The name shared by the inputs of the group. */
   group: string;
+  many?: boolean;
   active: boolean;
   count: number;
   children: string;
@@ -156,13 +161,13 @@ export const ChoicePill = ({
 }) => (
   <label className={choiceVariants({ active })}>
     <input
-      type="radio"
+      type={many ? "checkbox" : "radio"}
       name={group}
       checked={active}
       onChange={onSelect}
       className="absolute inset-0 size-full cursor-pointer opacity-0"
     />
-    <span>{children}</span>
+    <span className="truncate">{children}</span>
     <span
       className={
         active

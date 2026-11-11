@@ -257,7 +257,7 @@ test.describe("filters", () => {
     await expect(list(page).getByText("No skills match")).toBeVisible();
   });
 
-  test("SHOW keeps one kind of skill, and Reset filters clears it", async ({
+  test("SHOW keeps the skills with an update, GROUPS the chosen groups, and Reset filters clears both", async ({
     cli,
     page,
   }) => {
@@ -268,17 +268,37 @@ test.describe("filters", () => {
     ).toBeChecked();
     await filters(page).getByRole("radio", { name: "Updates 1" }).check();
     expect(await rowNames(list(page))).toEqual(["review"]);
-    await filters(page).getByRole("radio", { name: "Yours 3" }).check();
+    // Each group counts its skills with the other filters as they are.
+    const groups = filters(page).getByRole("group", { name: "Groups" });
+    await expect(groups).toMatchAriaSnapshot(`
+      - group "Groups":
+        - checkbox "Your skills 0"
+        - checkbox "acme/skills 1"
+        - checkbox "zeta/tools 0"
+        - checkbox "Plugins 0"
+        - checkbox "Unmanaged 0"
+    `);
+    await filters(page).getByRole("radio", { name: "All skills 9" }).check();
+    await groups.getByRole("checkbox", { name: "Your skills 3" }).check();
     expect(await rowNames(list(page))).toEqual([
       "draft",
       "pdf-letters",
       "release-notes",
     ]);
-    await filters(page).getByRole("radio", { name: "Unmanaged 2" }).check();
-    expect(await rowNames(list(page))).toEqual(["notes", "scratch"]);
+    // SHOW counts within the chosen groups; a group's count is what choosing it shows.
+    await expect(
+      filters(page).getByRole("radio", { name: "All skills 3" })
+    ).toBeChecked();
+    await groups.getByRole("checkbox", { name: "Unmanaged 2" }).check();
+    expect(await names(list(page).getByRole("region"))).toEqual([
+      "YOUR SKILLS (3)",
+      "UNMANAGED (2)",
+    ]);
     await expect(
       page.getByRole("button", { name: "Filter 1 applied" })
     ).toBeVisible();
+    await groups.getByRole("checkbox", { name: "Your skills 3" }).uncheck();
+    expect(await rowNames(list(page))).toEqual(["notes", "scratch"]);
 
     await filters(page).getByRole("button", { name: "Reset filters" }).click();
     await expect(page.getByLabel("9 skills")).toBeVisible();
