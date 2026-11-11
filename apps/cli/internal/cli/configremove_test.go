@@ -222,7 +222,7 @@ func TestRemovalScopeDeletesOnlyTheConfigurationDirectory(t *testing.T) {
 	adal, _ := scan.Lookup("adal")
 	moved := d
 	moved.Library = "/u/.adal/skills"
-	equal(t, "protected", removalScopeOf(adal, moved, clients).protected, "the directory holds the library")
+	equal(t, "protected", removalScopeOf(adal, moved, clients).protected, "the library")
 }
 
 // TestRemovalJudgment is what holds a configuration back, case by case,
@@ -237,7 +237,10 @@ func TestRemovalJudgment(t *testing.T) {
 		dirs   []string
 		ids    []string
 		system bool
-		want   map[string]string // id to "" when removable, else a part of what it holds
+		// unreadable is a file made unreadable; the case is skipped for a
+		// user who reads every file, as root does.
+		unreadable string
+		want       map[string]string // id to "" when removable, else a part of what it holds
 	}{
 		{name: "a skill that is only there",
 			files: map[string]string{".adal/skills/pdf/SKILL.md": pdf},
@@ -263,12 +266,22 @@ func TestRemovalJudgment(t *testing.T) {
 			files: map[string]string{".adal/history.jsonl": "{}\n"},
 			dirs:  []string{".adal/skills", ".adal/cache/empty"},
 			ids:   []string{"adal"}, want: map[string]string{"adal": "history.jsonl"}},
-		{name: "a system file counts while they are not ignored",
+		{name: "a file the operating system writes counts while system files are not ignored",
 			files: map[string]string{".adal/.DS_Store": "finder"},
 			ids:   []string{"adal"}, want: map[string]string{"adal": ".DS_Store"}},
-		{name: "a system file does not count while they are ignored",
-			files: map[string]string{".adal/.DS_Store": "finder"}, system: true,
+		{name: "a file the operating system writes does not count while they are ignored",
+			files: map[string]string{".adal/.DS_Store": "finder", ".adal/sub/Thumbs.db": "explorer"}, system: true,
 			ids: []string{"adal"}, want: map[string]string{"adal": ""}},
+		{name: "a file that only matches a system file pattern always counts",
+			files: map[string]string{".adal/settings.json~": "{}", ".adal/.nfsmount.conf": "x", ".adal/sub/._secrets": "x", ".adal/sub/.config.json.swp": "x"}, system: true,
+			ids: []string{"adal"}, want: map[string]string{"adal": ".nfsmount.conf; settings.json~; sub"}},
+		{name: "a library that is a symlink into the directory",
+			files: map[string]string{".adal/skills/pdf/SKILL.md": pdf, ".bob/skills/pdf/SKILL.md": pdf},
+			links: map[string]string{".agents/skills": ".adal/skills"},
+			ids:   []string{"adal"}, want: map[string]string{"adal": "the library"}},
+		{name: "a file of a copy that cannot be read", unreadable: ".adal/skills/pdf/private.key",
+			files: map[string]string{".adal/skills/pdf/SKILL.md": pdf, ".bob/skills/pdf/SKILL.md": pdf, ".bob/skills/pdf/private.key": "k", ".adal/skills/pdf/private.key": "k"},
+			ids:   []string{"adal"}, want: map[string]string{"adal": "skills/pdf/private.key, which cannot be read"}},
 		{name: "MCP server declarations",
 			files: map[string]string{".cursor/mcp.json": "{}\n"},
 			ids:   []string{"cursor"}, want: map[string]string{"cursor": "MCP server declarations in mcp.json"}},
@@ -301,6 +314,16 @@ func TestRemovalJudgment(t *testing.T) {
 			t.Parallel()
 			h := newHarness(t)
 			h.build(t, fixture{files: c.files, links: c.links, dirs: c.dirs})
+			if c.unreadable != "" {
+				path := filepath.Join(h.home, c.unreadable)
+				if err := os.Chmod(path, 0); err != nil {
+					t.Fatal(err)
+				}
+				if f, err := os.Open(path); err == nil {
+					f.Close()
+					t.Skip("this user reads every file")
+				}
+			}
 			d, err := home.Resolve(h.env)
 			if err != nil {
 				t.Fatal(err)

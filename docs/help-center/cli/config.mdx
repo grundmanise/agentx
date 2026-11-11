@@ -184,7 +184,9 @@ agentx removes a configuration only when you lose nothing. Its directory may hol
 - Symlinks in its skills directory.
 - Copies of skills that your library or another client's skills directory also holds, with the same content.
 - Empty directories.
-- Files your operating system or editor leaves, while `ignore_system_files` is on.
+- `.DS_Store`, `Thumbs.db`, `ehthumbs.db` and `desktop.ini` files, while `ignore_system_files` is on.
+
+Every other file keeps the configuration, including editor backups and swap files such as `settings.json~`.
 
 Anything else keeps the configuration: a skill that is only there, a copy that differs from the library, MCP server declarations, plugins, settings, history, or any other file. agentx then removes nothing, of any configuration you named, and exits with code 6:
 
@@ -197,7 +199,9 @@ To remove such a configuration, move or delete what it holds, then run the comma
 
 Some clients share a directory. Zencoder and Zenflow keep one configuration directory, and Antigravity's directory is inside Gemini CLI's. To remove the shared or outer directory, name every client in it. Removing Antigravity alone leaves `~/.gemini` as it is.
 
-If the run stops part way, the next agentx command finishes it.
+agentx compares skills by their content. A copy that differs from your library only in a file's executable bit counts as the same skill.
+
+If the run cannot finish, or stops part way, agentx puts every directory back and removes nothing. Run the command again.
 
 ## Fix a broken file
 
