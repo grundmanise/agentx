@@ -146,6 +146,38 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
 };
 
 /**
+ * Add, a button group whose menu opens the Create skill dialog. The dialog's open state lives
+ * here, so opening or closing it draws this group again and no row of the list.
+ */
+const AddSkills = () => {
+  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
+  return (
+    <>
+      <SplitButton
+        size="sm"
+        onClick={() => {
+          void navigate("/add");
+        }}
+        menuLabel="More add actions"
+        menu={
+          <DropdownMenuItem
+            onSelect={() => {
+              setCreating(true);
+            }}
+          >
+            <span className="type-body text-text-primary">Create skill</span>
+          </DropdownMenuItem>
+        }
+      >
+        Add
+      </SplitButton>
+      <CreateSkillDialog open={creating} onOpenChange={setCreating} />
+    </>
+  );
+};
+
+/**
  * The left column of the Skills screen: title and count, Check updates, Add and Create, the search field, the
  * filter row, and the rows in their groups. A fork made under a new name is one row, in YOUR
  * SKILLS; its original carries a marker for it.
@@ -173,8 +205,6 @@ export const SkillList = ({
   selectedKey: string | undefined;
   onSelect: (row: SkillRow) => void;
 }) => {
-  const navigate = useNavigate();
-  const [creating, setCreating] = useState(false);
   const [adopting, setAdopting] = useState(false);
   // The tools the open adopt dialog covers: every tool with skills to adopt when it opened.
   const adoption = useAppStore((s) => s.adoption);
@@ -200,26 +230,7 @@ export const SkillList = ({
         </div>
         <div className="gap-button flex items-center">
           <CheckUpdates />
-          <SplitButton
-            size="sm"
-            onClick={() => {
-              void navigate("/add");
-            }}
-            menuLabel="More add actions"
-            menu={
-              <DropdownMenuItem
-                onSelect={() => {
-                  setCreating(true);
-                }}
-              >
-                <span className="type-body text-text-primary">
-                  Create skill
-                </span>
-              </DropdownMenuItem>
-            }
-          >
-            Add
-          </SplitButton>
+          <AddSkills />
         </div>
       </div>
       <div className="pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left gap-split-toolbar flex flex-col">
@@ -305,7 +316,6 @@ export const SkillList = ({
           ))
         )}
       </nav>
-      <CreateSkillDialog open={creating} onOpenChange={setCreating} />
       <AdoptDialog
         tools={adoptTools}
         open={adopting}

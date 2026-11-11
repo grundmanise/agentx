@@ -892,7 +892,7 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.do
 
 ### Menu
 
-A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape or a click outside closes it. No animation.
+A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape, its trigger or a click outside closes it. The menu is not modal: the page under it stays live, so a click outside also acts on what it hits, as with a popover. A modal menu makes the whole page inert while it is open, which costs a style recalculation of every element when it opens and again when it closes, so it lags on a long list. No animation.
 
 ### Button group
 

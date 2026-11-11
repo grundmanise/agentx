@@ -7,10 +7,19 @@ import type { ReactNode } from "react";
 
 import type { OwnProps } from "#/lib/utils.ts";
 
+/**
+ * Not modal (DESIGN.md §6 "Menu"): the page under the menu stays live, so opening and closing it
+ * costs the same on a page of any size. Radix's modal menu makes the rest of the page inert, which
+ * restyles every element when it opens and again when it closes.
+ */
 const DropdownMenu = ({
   ...props
 }: OwnProps<typeof DropdownMenuPrimitive.Root>) => (
-  <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
+  <DropdownMenuPrimitive.Root
+    data-slot="dropdown-menu"
+    modal={false}
+    {...props}
+  />
 );
 
 const DropdownMenuPortal = ({
