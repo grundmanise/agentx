@@ -81,7 +81,6 @@ const Lines = ({ caption, output }: { caption: string; output: Output }) => {
         className="rounded-log-output border-code-border bg-code-bg type-technical-sm text-text-secondary max-h-log-output m-0 overflow-auto border px-3 py-2.5 break-all whitespace-pre-wrap"
       >
         {output.lines.join("\n")}
-        {output.dropped > 0 && `\n… ${output.dropped} more lines`}
       </pre>
     </div>
   );

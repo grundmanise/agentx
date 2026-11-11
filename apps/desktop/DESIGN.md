@@ -940,7 +940,7 @@ The History sheet's frame at `sheet.width-wide` (`src/app/activity-log.tsx`): ev
 - Under the header, a switch row (§6 "Switch") that makes later commands log at debug level. Off by default: debug lines cost an event per git call, so the user turns them on to look into one action.
 - An entry is a small wrapping ghost button, as in the History sheet: a chevron, a `log.dot` dot in the entry's tone, then the command line in `type.technical` `text.primary`, or for a serve report its words in `type.secondary` `text.primary`. Under it one `type.technical-sm` `text.caption` line: the start time, the duration and how it ended. The ending is `tone.danger.fg` for a failure and `tone.attention.fg` for a cancel, a held lock or a warning, so a failed entry stands out by its dot and its words.
 - An open entry shows its output under `type.caption` captions, one block per stream: `code.bg` with 1px `code.border`, `log.output-radius`, `type.technical-sm` `text.secondary`, lines wrapped, scrolling past `log.output-max-height`. Then a small ghost button that copies the entry as plain text.
-- The log shows text made safe when it is recorded: a URL's credentials replaced, an inventory as counts, long values and outputs cut.
+- The log shows text made safe when it is recorded: a URL's credentials replaced, an inventory as counts, a file's content left out, long values and lines cut. An output over 200 lines keeps its first and its last lines, with one line between them that counts the rest: the last lines say how the run ended.
 
 ### Code pane
 

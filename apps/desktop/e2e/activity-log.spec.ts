@@ -55,7 +55,7 @@ test("a check that succeeds and one that fails are entries with their outcome, o
         code: "source",
         hint: "check your network",
         message:
-          "cannot fetch https://me:s3cret-token@git.example.com/acme/skills",
+          "cannot fetch https://me:s3cret-token@git.example.com/acme/skills?access_token=s3cret-token",
         type: "error",
       },
       { ok: false, type: "result" },
@@ -92,7 +92,7 @@ test("a check that succeeds and one that fails are entries with their outcome, o
   await checks.nth(0).click();
   const failed = entry(page, "agentx skill check-updates");
   await expect(failed).toContainText(
-    "cannot fetch https://***@git.example.com/acme/skills"
+    "cannot fetch https://***@git.example.com/acme/skills?access_token=***"
   );
   await expect(failed).toContainText(
     "warn: the fetch of acme/skills timed out"

@@ -2,8 +2,10 @@
 // newest first, kept in memory only. The transport (src/cli/transport.ts) records each one-shot
 // run, whoever started it: a control, the startup checks or a loader. The feed (src/store/feed.ts)
 // records what serve reported. An entry holds text made ready to show when it is recorded:
-// credentials in a URL are replaced as the CLI replaces them, an inventory is counted rather than
-// kept, and long values and long outputs are cut, so the log never holds a secret and stays small.
+// credentials in a URL are replaced, its user and password as the CLI replaces them and the values
+// of its query parameters that name a credential, an inventory is counted rather than kept, a
+// file's content and a patch are left out, and long values, long lines and long outputs are cut,
+// so the log never holds a secret and stays small.
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -13,12 +15,19 @@ import type { CliEvent, LogEvent } from "#/cli/events.gen.ts";
 export const LOG_LIMIT = 300;
 /** How many lines of each stream an entry keeps; `dropped` counts the rest. */
 const LINE_LIMIT = 200;
+/** How many of those are the stream's first lines; the others are its last, which say how it ended. */
+const HEAD_LINES = 50;
+/** How long a line may be before it is cut. */
+const LINE_CHARS = 2000;
 /** How long a string value of an event may be before it is cut. */
 const VALUE_LIMIT = 240;
 
 export type LogTone = "success" | "neutral" | "attention" | "danger";
 
-/** The lines of one stream, and how many more the entry left out. */
+/**
+ * The lines of one stream. A stream longer than LINE_LIMIT keeps its first and its last lines,
+ * with one line between them that says how many were left out, which `dropped` counts.
+ */
 export interface Output {
   lines: string[];
   dropped: number;
@@ -34,6 +43,8 @@ export interface Ending {
   timedOut: boolean;
   /** Why the CLI could not start; absent when it ran. */
   startError?: string;
+  /** Whether it logged a warning, on any line of its stderr, kept or left out. */
+  warned: boolean;
   /** The events on stdout, one line each. */
   events: Output;
   /** What it wrote to stderr: its log events as "level: message", and lines that are no event. */
@@ -90,21 +101,53 @@ export const setDebugLines = (debug: boolean) => {
   useActivityLog.setState({ debug });
 };
 
+/** The user and password of a URL: everything from the scheme to the last `@` before the path. */
+const USERINFO = /(?<scheme>[a-z][a-z0-9+.-]*:\/\/)[^\s/"']*@/giu;
+
 /**
- * `text` with the user and password of every URL in it replaced by `***`, as the CLI does before
- * it prints a URL (`redact` in its `internal/source/url.go`): a token someone put in a remote's
- * URL never reaches the log. Everything up to the last `@` before the path goes, as there.
+ * A query parameter whose name says it holds a credential, with its value: a name that contains
+ * token, password, passwd, pwd, secret, key, auth, signature, sig, credential or session, such as
+ * `access_token`, `api_key`, `private_token`, `X-Amz-Signature` or `auth`.
+ */
+const SECRET_PARAMETER =
+  /(?<name>[?&;][\w.%-]*(?:token|passw(?:or)?d|pwd|secret|key|auth|signature|sig|credential|session)[\w.%-]*=)[^&;#\s"']*/giu;
+
+/**
+ * `text` with the credentials of every URL in it replaced by `***`, so that a token someone put in
+ * a remote's URL never reaches the log. The user and password go as the CLI drops them before it
+ * prints a URL (`redact` in its `internal/source/url.go`), everything up to the last `@` before
+ * the path. The CLI leaves a query string as it is; the log is stricter, and also replaces the
+ * value of each query parameter whose name says it holds a credential.
  */
 export const redact = (text: string) =>
-  text.replaceAll(/(?<scheme>[a-z][a-z0-9+.-]*:\/\/)[^\s/"']*@/giu, "$1***@");
+  text.replaceAll(USERINFO, "$1***@").replaceAll(SECRET_PARAMETER, "$1***");
 
-/** One argument as a shell takes it: quoted when it holds anything a shell would read. */
+/**
+ * `text` cut at `limit` characters, with how many were left out. It is called on text whose
+ * credentials are replaced already, so a cut never leaves part of one behind.
+ */
+const clip = (text: string, limit = LINE_CHARS) =>
+  text.length > limit
+    ? `${text.slice(0, limit)}… (${text.length - limit} more characters)`
+    : text;
+
+/**
+ * One argument as a shell takes it: quoted unless every character is one no shell reads. `~` and
+ * `#` are quoted too: a shell expands the first and starts a comment at the second.
+ */
 const quote = (arg: string) =>
-  /^[\w./:=@%+,#~-]+$/u.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`;
+  /^[\w./:=@%+,-]+$/u.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`;
 
 /** The command line of `args`, credentials replaced. */
 export const commandLine = (args: readonly string[]) =>
-  ["agentx", ...args.map((arg) => quote(redact(arg)))].join(" ");
+  clip(["agentx", ...args.map((arg) => quote(redact(arg)))].join(" "));
+
+/**
+ * The fields of an event that carry what a file on disk holds: a skill file's `content`
+ * (`skill_file`) and a file's `patch` (`diff`). The log keeps their length only, since a file may
+ * hold a secret anywhere, its first characters included.
+ */
+const FILE_FIELDS = new Set(["content", "patch"]);
 
 /**
  * A value of an event as the log keeps it: strings without credentials and cut at VALUE_LIMIT.
@@ -113,10 +156,7 @@ export const commandLine = (args: readonly string[]) =>
  */
 const kept = (value: unknown, countLists: boolean): unknown => {
   if (typeof value === "string") {
-    const text = redact(value);
-    return text.length > VALUE_LIMIT
-      ? `${text.slice(0, VALUE_LIMIT)}… (${text.length - VALUE_LIMIT} more characters)`
-      : text;
+    return clip(redact(value), VALUE_LIMIT);
   }
   if (Array.isArray(value)) {
     return countLists
@@ -125,7 +165,12 @@ const kept = (value: unknown, countLists: boolean): unknown => {
   }
   if (typeof value === "object" && value !== null) {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, kept(item, countLists)])
+      Object.entries(value).map(([key, item]) => [
+        key,
+        FILE_FIELDS.has(key) && typeof item === "string"
+          ? `${item.length} characters left out`
+          : kept(item, countLists),
+      ])
     );
   }
   return value;
@@ -148,10 +193,26 @@ export const eventLine = (event: CliEvent): string => {
 export const logLine = (event: LogEvent) =>
   `${event.level}: ${redact(event.message)}`;
 
-const output = (lines: string[]): Output => ({
-  dropped: Math.max(0, lines.length - LINE_LIMIT),
-  lines: lines.slice(0, LINE_LIMIT),
-});
+/**
+ * The lines of a stream as an entry keeps them, each cut at LINE_CHARS. A stream longer than
+ * LINE_LIMIT keeps its first HEAD_LINES lines and its last ones, which say how the run ended,
+ * with a line between them that counts the lines left out.
+ */
+const output = (all: string[]): Output => {
+  const lines = all.map((line) => clip(line));
+  if (lines.length <= LINE_LIMIT) {
+    return { dropped: 0, lines };
+  }
+  const dropped = lines.length - LINE_LIMIT;
+  return {
+    dropped,
+    lines: [
+      ...lines.slice(0, HEAD_LINES),
+      `… ${dropped} lines left out …`,
+      ...lines.slice(HEAD_LINES - LINE_LIMIT),
+    ],
+  };
+};
 
 let nextId = 1;
 
@@ -201,12 +262,14 @@ export const logCommandEnd = (id: number, ended: Ended) => {
               startError:
                 ended.startError === undefined
                   ? undefined
-                  : redact(ended.startError),
+                  : clip(redact(ended.startError)),
               stderr: output([
                 ...ended.logs.map(logLine),
                 ...invalid("stderr"),
               ]),
               timedOut: ended.timedOut,
+              // From every log event, before the stream is cut.
+              warned: ended.logs.some((l) => l.level === "warn"),
             },
           }
         : entry
@@ -224,10 +287,10 @@ export const logServe = (
   nextId += 1;
   add({
     at: Date.now(),
-    details: details.slice(0, LINE_LIMIT).map(redact),
+    details: output(details.map(redact)).lines,
     id,
     kind: "serve",
-    title: redact(title),
+    title: clip(redact(title), VALUE_LIMIT),
     tone,
   });
 };
@@ -280,8 +343,7 @@ export const statusOf = (entry: LogEntry): { tone: LogTone; text: string } => {
       : `Exit ${ending.exitCode}, ${meaning}`;
   if (ending.exitCode === EXIT_CODES.ok) {
     // A command that succeeded and warned asks for a look.
-    const warned = ending.stderr.lines.some((l) => l.startsWith("warn: "));
-    return { text, tone: warned ? "attention" : "success" };
+    return { text, tone: ending.warned ? "attention" : "success" };
   }
   const soft =
     ending.exitCode === EXIT_CODES.locked ||
@@ -301,15 +363,8 @@ export const formatDuration = (ms: number) => {
   return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
 };
 
-const block = (title: string, { lines, dropped }: Output) =>
-  lines.length === 0
-    ? []
-    : [
-        "",
-        `${title}:`,
-        ...lines,
-        ...(dropped > 0 ? [`… ${dropped} more lines`] : []),
-      ];
+const block = (title: string, { lines }: Output) =>
+  lines.length === 0 ? [] : ["", `${title}:`, ...lines];
 
 /** An entry as plain text, to paste into an issue. */
 export const entryText = (entry: LogEntry): string => {
