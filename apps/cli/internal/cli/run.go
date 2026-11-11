@@ -272,6 +272,12 @@ func knownFailure(dir string, err error) (*failure, bool) {
 		f = &failure{status: exitRefused, message: err.Error() + ", so nothing was changed", hint: "run the command again"}
 	case errors.Is(err, home.ErrRecovery):
 		f = &failure{status: exitRefused, message: err.Error(), hint: "restore the file to let the change finish, or move the journal aside to keep the file as it is"}
+		// A removal taken back part way names the directories still kept
+		// aside, which only its journal knows of.
+		var stranded *home.StrandedError
+		if errors.As(err, &stranded) {
+			f.hint = stranded.Hint()
+		}
 	case errors.Is(err, gitx.ErrAccountRepo):
 		// A journal's ref step reaches the account repo long after the
 		// command that wrote the journal is gone, so any command can be the
