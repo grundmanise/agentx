@@ -990,9 +990,8 @@ Nothing loops forever, and nothing waits on purpose. The one loop is the `Spinne
 - File list chevron: `rotate(90deg)` in `.15s`. The History sheet's chevron turns with no transition.
 - File row: the meta and the Show in Finder button swap by opacity in `.15s`.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0` and opacity 0 → 1, `.22s ease`, when it appears.
-- Check tools icon (`animate-turn-once`): one full rotation, 1s ease, while the command runs.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
-- Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; an icon-only control such as Check updates shows it in its icon's place, so a long check reads as busy past its first second.
+- Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; a control with a leading icon, such as Check updates or Check tools, shows it in the icon's place, so a long check reads as busy past its first second.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass; a passing launch shows no startup layer.
 - A launch whose checks run over 2s shows a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way; while serve scans, its status lines turn every 1.5s. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.

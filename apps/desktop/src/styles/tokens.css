@@ -345,12 +345,6 @@
       transform: translateY(24px);
     }
   }
-  --animate-turn-once: turn-once 1s ease;
-  @keyframes turn-once {
-    to {
-      transform: rotate(360deg);
-    }
-  }
 
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
