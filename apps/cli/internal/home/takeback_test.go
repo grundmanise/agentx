@@ -47,7 +47,7 @@ func newTwoRemovals(t *testing.T) (twoRemovals, *Mutation) {
 	if err := m.ReplaceFile(r.settings, []byte(newSettings)); err != nil {
 		t.Fatal(err)
 	}
-	m.TakeBackUnfinished()
+	m.TakeBackUnfinished("check one and two")
 	return r, m
 }
 
@@ -217,8 +217,8 @@ func TestTakeBackLeavesSettingsItCannotRestore(t *testing.T) {
 			if b, _ := os.ReadFile(r.settings); string(b) != want {
 				t.Errorf("the settings hold %q, want them left as %q", b, want)
 			}
-			if len(messages) != 1 || !strings.Contains(messages[0], r.settings) {
-				t.Errorf("warnings = %q, want one naming the settings", messages)
+			if len(messages) != 1 || !strings.Contains(messages[0], r.settings) || !strings.HasSuffix(messages[0], "; check one and two") {
+				t.Errorf("warnings = %q, want one naming the settings and ending with the command's note", messages)
 			}
 			if left, _ := Journals(r.dir); len(left) > 0 {
 				t.Errorf("the journal is still there: %v", left)

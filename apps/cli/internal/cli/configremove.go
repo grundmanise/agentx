@@ -308,84 +308,134 @@ func unreadable(dir string) string {
 	return dir
 }
 
-// skillLink is one symlink of a skills directory that stays: the entry, or
-// the directory itself with name "", and where it really leads.
+// skillLink is one symlink of a skills directory: the entry, or the
+// directory itself with name "", where it is, and every path following it
+// passes through.
 type skillLink struct {
-	owner string // "the library", or the client's name
-	id    string // the client's slug, "" for the library
+	owner string // "the library's", or "<client>'s"
 	name  string
-	real  string
+	at    string   // the directory the link is in, as it really is
+	hops  []string // every path the link leads through, the last being where it ends
 }
 
-// links are the symlinks in the library and in the skills directories of
-// the detected clients, each resolved once however many configurations are
-// judged.
+// linkHopLimit bounds how far a link is followed, as the kernel bounds it:
+// a loop of links ends there.
+const linkHopLimit = 255
+
+// linkHops follows the entry name of the real directory dir one path
+// component at a time and returns every path it passes through, as each
+// really is: the entry itself, each directory on the way and each link's
+// own place, so that a link that only passes through a directory is seen
+// there, wherever it ends. What does not exist is followed as spelled.
+func linkHops(dir, name string) []string {
+	cur := dir
+	queue := []string{name}
+	var hops []string
+	for links := 0; len(queue) > 0; {
+		part := queue[0]
+		queue = queue[1:]
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			cur = filepath.Dir(cur)
+			continue
+		}
+		next := filepath.Join(cur, part)
+		hops = append(hops, next)
+		info, err := os.Lstat(next)
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			cur = next
+			continue
+		}
+		target, err := os.Readlink(next)
+		if links++; err != nil || links > linkHopLimit {
+			break
+		}
+		if filepath.IsAbs(target) {
+			cur = string(filepath.Separator)
+		}
+		queue = append(strings.Split(filepath.ToSlash(target), "/"), queue...)
+	}
+	return hops
+}
+
+// allLinks are the symlinks in the library and in every skills directory a
+// detected client reads, wherever the directory lies, each directory read
+// once and each link followed once however many configurations are judged.
+// A directory is named after the library, then after the client whose
+// configuration directory holds it, then after the first client that reads
+// it, as Amp reads one under the XDG config home that no client keeps.
 func (j *removalJudge) allLinks() []skillLink {
 	if j.links != nil {
 		return j.links
 	}
 	j.links = []skillLink{}
 	seen := map[string]bool{}
-	add := func(owner, id, dir string) {
+	add := func(owner, dir string) {
 		dir = filepath.Clean(dir)
 		if seen[dir] {
 			return
 		}
 		seen[dir] = true
-		if info, err := os.Lstat(dir); err != nil {
+		info, err := os.Lstat(dir)
+		if err != nil {
 			return
-		} else if info.Mode()&os.ModeSymlink != 0 {
-			if real, err := filepath.EvalSymlinks(dir); err == nil {
-				j.links = append(j.links, skillLink{owner: owner, id: id, real: real})
-			}
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			at := realPath(filepath.Dir(dir))
+			j.links = append(j.links, skillLink{owner: owner, at: at, hops: linkHops(at, filepath.Base(dir))})
 		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return
 		}
+		at := realPath(dir)
 		for _, e := range entries {
 			if e.Type()&os.ModeSymlink == 0 {
 				continue
 			}
-			if real, err := filepath.EvalSymlinks(filepath.Join(dir, e.Name())); err == nil {
-				j.links = append(j.links, skillLink{owner: owner, id: id, name: e.Name(), real: real})
+			// A link that leads nowhere already has nothing to lose.
+			if _, err := os.Stat(filepath.Join(at, e.Name())); err == nil {
+				j.links = append(j.links, skillLink{owner: owner, name: e.Name(), at: at, hops: linkHops(at, e.Name())})
 			}
 		}
 	}
-	add("the library's", "", j.d.Library)
+	add("the library's", j.d.Library)
 	ids := make([]string, 0, len(j.detected))
 	for id := range j.detected {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	for _, id := range ids {
-		c := j.detected[id]
-		for _, dir := range c.SkillsDirs(j.d) {
-			if !beneath(filepath.Clean(dir), filepath.Clean(c.ConfigDir(j.d))) {
-				continue // the library, or another client's directory, listed under its owner
+	for _, own := range []bool{true, false} {
+		for _, id := range ids {
+			c := j.detected[id]
+			for _, dir := range c.SkillsDirs(j.d) {
+				if beneath(filepath.Clean(dir), filepath.Clean(c.ConfigDir(j.d))) == own {
+					add(c.Name()+"'s", dir)
+				}
 			}
-			add(c.Name()+"'s", id, dir)
 		}
 	}
 	return j.links
 }
 
-// linksInto are the skills that stay on the machine only as a link into
-// the directory dir of s, as it really is: an entry of the library, or of
-// the skills directory of a client that stays, that resolves into it.
-// Deleting the directory would leave the link dangling, and the library,
-// or that client, without the skill, whatever copy of it stays elsewhere.
+// linksInto are the skills that stay on the machine only as a link into,
+// or through, the directory dir of s, as it really is: an entry of the
+// library, or of a skills directory a client that stays reads, that passes
+// through it on the way to where it ends. Deleting the directory would
+// leave the link dangling, and the library, or that client, without the
+// skill, whatever copy of it stays elsewhere. A link that lies in the
+// directory itself, or in one this run has already found removable, goes
+// with it and holds nothing.
 func (j *removalJudge) linksInto(s removalScope, dir string) []string {
 	var holds []string
 	for _, l := range j.allLinks() {
-		if l.id != "" {
-			c := j.detected[l.id]
-			own := filepath.Clean(c.ConfigDir(j.d))
-			if l.id == s.id || beneath(own, s.dir) || j.leaving(own) {
-				continue // it goes with this directory, or went before it
-			}
+		if beneath(l.at, dir) || slices.ContainsFunc(j.gone, func(gone string) bool { return beneath(l.at, realPath(gone)) }) {
+			continue
 		}
-		if !beneath(l.real, dir) {
+		// The first hop is the link's own place, which is outside.
+		if !slices.ContainsFunc(l.hops[1:], func(hop string) bool { return beneath(hop, dir) }) {
 			continue
 		}
 		if l.name == "" {
@@ -716,8 +766,11 @@ func (inv *invocation) configRemove(cmd *cobra.Command, ids []string) error {
 			return fail(exitRefused, "a configuration directory changed while it was being removed, so nothing was removed",
 				"run the command again")
 		}
+		var lost []string
 		for _, ev := range events {
-			edit.dropConfiguration(ev.ID)
+			if edit.dropConfiguration(ev.ID) {
+				lost = append(lost, ev.ID)
+			}
 		}
 		if err := edit.stage(m, inv.dirs.Home); err != nil {
 			m.Discard()
@@ -726,7 +779,11 @@ func (inv *invocation) configRemove(cmd *cobra.Command, ids []string) error {
 		// A run stopped part way is taken back, never finished: what lets
 		// a directory go is what the rest of the machine holds, which the
 		// journal does not capture.
-		m.TakeBackUnfinished()
+		note := ""
+		if len(lost) > 0 {
+			note = "it may no longer hold what it held of " + andList(lost) + ", whether each was disabled and which skills it holds as copies: check 'agentx config list', and run 'agentx config disable <id>' for one that was disabled"
+		}
+		m.TakeBackUnfinished(note)
 		if err := m.Apply(inv.refs(ctx)); err != nil {
 			if errors.Is(err, home.ErrTakenBack) {
 				return fail(exitRefused, "nothing was removed: "+strings.TrimPrefix(err.Error(), home.ErrTakenBack.Error()+": "),

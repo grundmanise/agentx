@@ -70,6 +70,10 @@ type journal struct {
 	// TakeBack marks a mutation that is taken back, never finished, when
 	// it stops before it is applied: see TakeBackUnfinished.
 	TakeBack bool `json:"take_back,omitempty"`
+	// Note is what the command adds to the warning for a file a take-back
+	// could not restore: what the file may have lost, in the command's
+	// own terms, and how to check it.
+	Note string `json:"note,omitempty"`
 }
 
 // replacement is one live file the mutation replaces: Old and New are the
@@ -359,9 +363,11 @@ func (m *Mutation) Ref(gitDir, ref, old, newValue string) {
 // taking it back loses nothing and leaves the command to be run again.
 // Only remove steps of directories can be taken back, so Apply refuses a
 // mutation that records anything else beside its file replacements. Call
-// it once everything is staged.
-func (m *Mutation) TakeBackUnfinished() {
-	m.j.TakeBack = true
+// it once everything is staged. note is added to the warning for a file
+// that could not be put back as it was, which is then left as it is: what
+// it may have lost and how to check, "" for none.
+func (m *Mutation) TakeBackUnfinished(note string) {
+	m.j.TakeBack, m.j.Note = true, note
 	for i := range m.j.Replace {
 		m.j.Replace[i].Backup = m.j.Replace[i].Staged + ".old"
 	}
@@ -577,15 +583,15 @@ func takeBack(journalPath string, j journal, u RefUpdater) error {
 		live, err := hashFile(r.Path)
 		switch {
 		case err != nil:
-			warn(u, r.Path+" could not be read while a change was taken back and is left as it is: "+err.Error())
+			warn(u, r.Path+" could not be read while a change was taken back and is left as it is: "+err.Error()+noted(j))
 		case live == r.Old:
 		case live != r.New:
-			warn(u, r.Path+" changed while a change was taken back and is left as it is")
+			warn(u, r.Path+" changed while a change was taken back and is left as it is"+noted(j))
 		case r.Old == absent:
 			err = os.Remove(r.Path)
 		default:
 			if kept, herr := hashFile(r.Backup); herr != nil || kept != r.Old {
-				warn(u, "what "+r.Path+" held before a change that was taken back is missing, so the file keeps what the change wrote")
+				warn(u, "what "+r.Path+" held before a change that was taken back is missing, so the file keeps what the change wrote"+noted(j))
 				continue
 			}
 			err = renameSynced(r.Backup, r.Path)
@@ -602,6 +608,14 @@ func takeBack(journalPath string, j journal, u RefUpdater) error {
 		os.Remove(r.Backup)
 	}
 	return os.Remove(journalPath)
+}
+
+// noted is the journal's note as the end of a warning, "" when it has none.
+func noted(j journal) string {
+	if j.Note == "" {
+		return ""
+	}
+	return "; " + j.Note
 }
 
 // Stranded is one directory a mutation that was taken back could not put
