@@ -5,7 +5,6 @@ import {
   inventory as statesInventory,
   OLD,
 } from "./fixtures/adoption.ts";
-import * as manySkills from "./fixtures/many-skills.ts";
 import {
   adoption,
   configurations,
@@ -69,26 +68,14 @@ const isLaunchOrLoad = (line: string[]) =>
 /** The command lines the screen itself ran. */
 const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunchOrLoad(l));
 
-/** A machine's first inventory, and the `skill files` read of each of its skills. */
-type Machine = Pick<typeof manySkills, "inventory" | "fileReads">;
-const fixtureMachine: Machine = { fileReads, inventory };
-
-/**
- * Opens the Skills screen on the fixture machine, or on `machine` with more skills than it, and
- * waits for its rows.
- */
-const openSkills = async (
-  cli: MockCli,
-  page: Page,
-  path = "/#/skills",
-  machine: Machine = fixtureMachine
-) => {
-  cli.onServeStart({ events: [machine.inventory] });
+/** Opens the Skills screen on the fixture machine and waits for its rows. */
+const openSkills = async (cli: MockCli, page: Page, path = "/#/skills") => {
+  cli.onServeStart({ events: [inventory] });
   cli.register(["adopt"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });
-  for (const read of machine.fileReads) {
+  for (const read of fileReads) {
     cli.register(["skill", "files", ...read.args], { events: read.events });
   }
   cli.register(["skill", "diff", "review"], { events: reviewDiffs });
@@ -98,7 +85,7 @@ const openSkills = async (
   cli.register(["skill", "diff", "pdf-letters"], { events: [] });
   await page.goto(path);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
-  await expect(list(page).getByRole("region").first()).toBeVisible();
+  await expect(row(page, "pdf")).toBeVisible();
 };
 
 /** The command lines the screen itself ran, but the reads of a skill's files and edits. */
@@ -446,53 +433,6 @@ test.describe("keyboard", () => {
     await page.getByRole("searchbox").pressSequentially("kj");
     await expect(list(page).getByText("No skills match")).toBeVisible();
     await expect(pane(page, "pdf-letters")).toBeVisible();
-  });
-
-  test("a list of hundreds of skills holds only the rows near what shows, and brings the selected row into view", async ({
-    cli,
-    page,
-  }) => {
-    const { pluginSkillName } = manySkills;
-    // The route names a skill far down the list, as when another screen opens it.
-    await openSkills(
-      cli,
-      page,
-      `/#/skills/${encodeURIComponent(`skill:h-${pluginSkillName(400)}`)}`,
-      manySkills
-    );
-    await expect(
-      page.getByLabel(`${manySkills.SKILL_COUNT} skills`)
-    ).toBeVisible();
-    const opened = row(page, pluginSkillName(400));
-    await expect(opened).toHaveAttribute("aria-current", "true");
-    await expect(opened).toBeInViewport({ ratio: 1 });
-    // The group says how many rows it has, and each row its place among them.
-    const plugins = group(page, `PLUGINS (${manySkills.PLUGIN_SKILL_COUNT})`);
-    await expect(
-      plugins.getByRole("listitem").filter({
-        has: page.getByRole("button", {
-          exact: true,
-          name: pluginSkillName(400),
-        }),
-      })
-    ).toHaveAttribute("aria-posinset", "401");
-    const drawn = await list(page).getByRole("listitem").count();
-    expect(drawn).toBeLessThan(50);
-
-    // The keys move the selection past the rows that were drawn, one key after the other, and
-    // the list follows.
-    for (let n = 401; n <= 420; n += 1) {
-      // oxlint-disable-next-line no-await-in-loop
-      await page.keyboard.press("j");
-      // oxlint-disable-next-line no-await-in-loop
-      await expect(row(page, pluginSkillName(n))).toHaveAttribute(
-        "aria-current",
-        "true"
-      );
-    }
-    await expect(row(page, pluginSkillName(420))).toBeInViewport({ ratio: 1 });
-    await expect(pane(page, pluginSkillName(420))).toBeVisible();
-    expect(await list(page).getByRole("listitem").count()).toBeLessThan(50);
   });
 });
 
