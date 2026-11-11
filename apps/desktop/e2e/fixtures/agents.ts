@@ -117,6 +117,19 @@ export const inventory = {
   mcp_servers: servers,
 } satisfies InlineEvent;
 
+/** The library's path on this machine, as its occurrences show it. */
+export const LIBRARY = "/home/me/.agents/skills";
+
+/** What `source list` answers: one shared source and the account remote. */
+export const sources: InlineEvent[] = [
+  {
+    id: "1111111111111111",
+    type: "source",
+    url: "https://github.com/acme/skills",
+  },
+  { account: true, id: "2222222222222222", type: "source", url: ACCOUNT },
+];
+
 /**
  * What the preview of `config remove` answers for these configurations: GitHub Copilot and
  * Windsurf are leftovers that can be removed, and the others hold something of their own.
@@ -143,16 +156,3 @@ export const removals: InlineEvent[] = configurations.map((c) => {
     with: [],
   };
 });
-
-/** The library's path on this machine, as its occurrences show it. */
-export const LIBRARY = "/home/me/.agents/skills";
-
-/** What `source list` answers: one shared source and the account remote. */
-export const sources: InlineEvent[] = [
-  {
-    id: "1111111111111111",
-    type: "source",
-    url: "https://github.com/acme/skills",
-  },
-  { account: true, id: "2222222222222222", type: "source", url: ACCOUNT },
-];
