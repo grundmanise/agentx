@@ -239,7 +239,7 @@ test.describe("the list", () => {
     await expect(logos.first()).toHaveAttribute("src", /^data:image\/svg/u);
     expect(
       await names(page.getByRole("region", { name: "Agents" }).getByRole("img"))
-    ).toEqual(["Claude Code", "Zed"]);
+    ).toEqual(["Zed", "Claude Code"]);
   });
 });
 
@@ -453,8 +453,8 @@ test.describe("the detail pane", () => {
         - region "Agents":
           - heading "Agents" [level=2]
           - switch "Claude Code" [checked]
-          - switch "Cursor"
           - switch "Universal" [checked]
+          - switch "Cursor"
         - region "Files":
           - heading "Files" [level=2]
         - region "Details":
@@ -497,8 +497,8 @@ test.describe("the detail pane", () => {
         - region "Agents":
           - heading "Agents" [level=2]
           - switch "Claude Code" [checked]
-          - switch "Cursor"
           - switch "Universal" [checked]
+          - switch "Cursor"
         - region "Files":
           - heading "Files" [level=2]
         - region "Details":
@@ -623,9 +623,9 @@ test.describe("the detail pane", () => {
         - note "Added by Skills CLI"
         - region "Agents":
           - heading "Agents" [level=2]
+          - switch "Universal" [checked]
           - switch "Claude Code"
           - switch "Cursor"
-          - switch "Universal" [checked]
         - region "Files":
           - heading "Files" [level=2]
         - region "Details":

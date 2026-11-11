@@ -117,6 +117,72 @@ export const inventory = {
   mcp_servers: servers,
 } satisfies InlineEvent;
 
+const many: [id: string, name: string, readsLibrary?: boolean][] = [
+  ["adal", "AdaL"],
+  ["augment", "Augment"],
+  ["bob", "IBM Bob"],
+  ["claude-code", "Claude Code"],
+  ["cline", "Cline", true],
+  ["codebuddy", "CodeBuddy"],
+  ["codex", "Codex", true],
+  ["command-code", "Command Code"],
+  ["continue", "Continue"],
+  ["cortex", "Cortex Code"],
+  ["crush", "Crush"],
+  ["cursor", "Cursor"],
+  ["droid", "Droid"],
+  ["gemini-cli", "Gemini CLI", true],
+  ["github-copilot", "GitHub Copilot"],
+  ["goose", "Goose"],
+  ["junie", "Junie"],
+  ["kilo", "Kilo Code"],
+  ["kiro-cli", "Kiro CLI"],
+  ["opencode", "OpenCode"],
+  ["openhands", "OpenHands"],
+  ["pi", "Pi"],
+  ["qoder", "Qoder"],
+  ["qwen-code", "Qwen Code"],
+  ["roo", "Roo Code"],
+  ["trae", "Trae"],
+  ["warp", "Warp", true],
+  ["windsurf", "Windsurf"],
+  ["zed", "Zed", true],
+  ["zencoder", "Zencoder"],
+  ["zenflow", "Zenflow"],
+];
+
+/**
+ * A machine where other tools left skills in many agent clients: 26 configurations that place
+ * skills in their own directories and five that read the library, sorted by id.
+ */
+export const manyConfigurations: Configuration[] = many.map(
+  ([id, name, readsLibrary = false]) =>
+    configuration(id, { name, reads_library: readsLibrary })
+);
+
+/** The inventory of that machine, with the pdf skill also placed in `pdfIn`. */
+export const manyAgentsInventory = (pdfIn: string[] = []) =>
+  ({
+    ...inventory,
+    configurations: manyConfigurations,
+    library: inventory.library.map((entry) =>
+      entry.name === "pdf"
+        ? {
+            ...entry,
+            placements: [
+              ...entry.placements,
+              ...pdfIn.map((id) => ({
+                configuration: id,
+                kind: "symlink" as const,
+                mode: "symlink" as const,
+                path: `/home/me/.${id}/skills/pdf`,
+              })),
+            ],
+          }
+        : entry
+    ),
+  }) satisfies InlineEvent;
+
 /** The library's path on this machine, as its occurrences show it. */
 export const LIBRARY = "/home/me/.agents/skills";
 
