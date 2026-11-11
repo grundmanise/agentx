@@ -1,0 +1,45 @@
+---
+title: "Activity log"
+description: "See every command the desktop app ran, how each one ended and what it wrote."
+---
+
+The desktop app does its work by running `agentx` commands. The activity log lists each command the app ran since it opened, so you can check what an action did after its toast is gone.
+
+## Open the log
+
+- Open **Settings** and select **Show activity log**.
+- Or press `⌘K` (`Ctrl+K` on Linux) and run **Show activity log**.
+
+## Read an entry
+
+The newest entry comes first. The log lists the commands you started with a click and the ones the app ran by itself: the startup checks, the reads that fill each screen and the update checks.
+
+Each command shows:
+
+- The command line. Run it in a terminal to repeat it. The app adds `--json`.
+- The time it started and how long it took.
+- How it ended: the [exit code](/cli/output#exit-codes) and what it means, **Cancelled**, **Stopped at its deadline** or **Could not start**.
+
+A red dot marks a command that failed. An amber dot marks one that was cancelled, found another agentx command running or ended with a warning.
+
+Select an entry to open it:
+
+- **Events** lists what the command reported, one event per line.
+- **Stderr** lists its warnings.
+
+Entries marked **agentx serve** show what the background scan reported: a new inventory, a finished scan, a warning, or that it stopped and restarted.
+
+## Record debug lines
+
+Turn on **Debug lines** at the top of the log, then repeat the action. Commands that run from then on also record what agentx logs at debug level, such as each `git` call and its result. The switch turns off when you quit the app.
+
+## Copy an entry
+
+Open an entry and select **Copy**. Paste the text into an [issue](https://github.com/grundmanise/agentx/issues) when you report a problem.
+
+## What the log keeps
+
+- The log keeps the last 300 entries in memory and is empty again when you restart the app.
+- A user name, password or token in a URL shows as `***`.
+- An inventory shows as counts. The log leaves out its content, which lists the command line and headers of each MCP server.
+- A long value and a long output are cut.

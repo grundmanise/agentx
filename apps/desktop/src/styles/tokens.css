@@ -303,6 +303,10 @@
   --color-timeline-connector: var(--gray-890);
   --color-timeline-meta: var(--gray-500);
   --color-timeline-more-ring: var(--gray-700);
+  --color-log-dot-success: var(--color-accent-primary);
+  --color-log-dot-neutral: var(--gray-600);
+  --color-log-dot-attention: var(--color-accent-attention);
+  --color-log-dot-danger: var(--color-accent-danger);
 
   /* Startup checks */
   --color-check-pass-bg: rgb(212 255 79 / 0.12);
@@ -383,6 +387,7 @@
   --radius-diff-segment: 4px;
   --radius-dialog: 24px;
   --radius-sheet: 20px;
+  --radius-log-output: 10px;
   --radius-palette: 20px;
   --radius-palette-row: 12px;
   --radius-popover: 16px;
@@ -608,6 +613,8 @@
   --gap-diff-segment: 4px;
   --grid-template-columns-timeline: 12px 1fr;
   --size-timeline-dot: 7px;
+  --size-log-dot: 7px;
+  --max-height-log-output: 340px;
   --height-timeline-line: 20px;
   --height-timeline-button-line: 32px;
   --width-check-column: 480px;

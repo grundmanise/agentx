@@ -64,6 +64,7 @@ test.describe("ACTIONS", () => {
       "Create skill",
       "Check updates",
       "Rescan this machine",
+      "Show activity log",
     ]);
     await expect(option(page, "Update all")).toContainText("1 skill");
     await expect(option(page, "Publish all")).toContainText("2 skills");
@@ -80,6 +81,7 @@ test.describe("ACTIONS", () => {
       "Create skill",
       "Check updates",
       "Rescan this machine",
+      "Show activity log",
     ]);
   });
 

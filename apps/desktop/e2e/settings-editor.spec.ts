@@ -62,6 +62,7 @@ test("Editor sits before Storage and lists System default, the editors found and
     /^Editor/u,
     /^Storage/u,
     /^Command line/u,
+    /^Activity log/u,
     /^Export settings/u,
     /^Import settings/u,
   ]);

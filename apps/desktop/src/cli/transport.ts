@@ -8,6 +8,11 @@ import { listen } from "@tauri-apps/api/event";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import type { CliEvent, LogEvent, ServeRequest } from "#/cli/events.gen.ts";
+import {
+  logCommandEnd,
+  logCommandStart,
+  useActivityLog,
+} from "#/store/activity-log.ts";
 
 /** A line a child wrote that is not a JSON object. */
 export interface InvalidLine {
@@ -143,8 +148,29 @@ export const resolveCli = async (): Promise<Resolution> => {
 /** Each run's subscription to its events, until it ends. The run is sent once it is in place. */
 const subscribed = new Map<string, Promise<UnlistenFn[]>>();
 
-/** Runs `agentx <args> --json`. The supervisor adds `--json`. */
-export const run = (args: readonly string[], options: RunOptions = {}): Run => {
+/**
+ * The arguments as they are sent: with `--verbose`, before a `--` that ends the flags, while the
+ * activity log records debug lines.
+ */
+const sentArgs = (args: readonly string[]): readonly string[] => {
+  if (!useActivityLog.getState().debug || args.includes("--verbose")) {
+    return args;
+  }
+  const end = args.indexOf("--");
+  const at = end === -1 ? args.length : end;
+  return [...args.slice(0, at), "--verbose", ...args.slice(at)];
+};
+
+/**
+ * Runs `agentx <args> --json`. The supervisor adds `--json`. Every run is an entry of the
+ * activity log (src/store/activity-log.ts), from its start to how it ended.
+ */
+export const run = (
+  given: readonly string[],
+  options: RunOptions = {}
+): Run => {
+  const args = sentArgs(given);
+  const entry = logCommandStart(args);
   const runId = crypto.randomUUID();
   const lines = channel<RunLine>();
   const ends = channel<WireRunEnd>();
@@ -175,7 +201,7 @@ export const run = (args: readonly string[], options: RunOptions = {}): Run => {
       if (end === undefined) {
         throw new Error(`run ${runId} ended without its end event`);
       }
-      return {
+      const result = {
         cancelled: end.cancelled,
         events: end.events,
         exitCode: end.exit_code,
@@ -183,6 +209,19 @@ export const run = (args: readonly string[], options: RunOptions = {}): Run => {
         logs: end.logs,
         timedOut: end.timed_out,
       };
+      logCommandEnd(entry, result);
+      return result;
+    } catch (error) {
+      logCommandEnd(entry, {
+        cancelled: false,
+        events: [],
+        exitCode: null,
+        invalid: [],
+        logs: [],
+        startError: String(error),
+        timedOut: false,
+      });
+      throw error;
     } finally {
       subscribed.delete(runId);
       for (const stop of unlisten) {

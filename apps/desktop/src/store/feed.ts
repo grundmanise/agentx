@@ -3,7 +3,9 @@
 // the events of a child that ended or was replaced are dropped. Within one serve instance an
 // inventory applies only when its scan counter goes up; a new instance applies whatever it sends
 // first, since counters are never compared across instances. What serve notices goes to the
-// activity list: its drift, reconcile and update events, and the warnings it logs on stderr.
+// activity list: its drift, reconcile and update events, and the warnings it logs on stderr. The
+// activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
+// exit of the active child.
 import type {
   CliEvent,
   DriftEvent,
@@ -15,6 +17,7 @@ import type {
 } from "#/cli/events.gen.ts";
 import { serve } from "#/cli/transport.ts";
 import type { ServeExit, ServeLine } from "#/cli/transport.ts";
+import { eventLine, logLine, logServe } from "#/store/activity-log.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
@@ -148,6 +151,7 @@ const activate = (childId: number) => {
     return;
   }
   active = childId;
+  logServe("neutral", "Serve started", [`child ${childId}`]);
   // A search the child before did not answer is never answered: the new child's index is asked anew.
   dropSearch();
   const { refreshes } = useAppStore.getState();
@@ -206,12 +210,18 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
     freshness: { kind: "fresh" },
     inventory: event,
   });
+  logServe("neutral", "Inventory arrived", [eventLine(event)]);
 };
 
 /** Clears an answered request, even when the inventory did not change. */
 const acknowledge = (event: RefreshCompleteEvent) => {
   rescans.get(event.request_id)?.(event);
   rescans.delete(event.request_id);
+  logServe(
+    event.ok ? "neutral" : "danger",
+    event.ok ? "Scan finished" : "Scan failed",
+    [eventLine(event)]
+  );
   const { refreshes } = useAppStore.getState();
   if (!Object.hasOwn(refreshes, event.request_id)) {
     return;
@@ -234,18 +244,26 @@ const apply = (childId: number, event: CliEvent) => {
     answerSearch(event);
   } else if (event.type === "reconcile") {
     set((s) => ({ reconciles: [...s.reconciles, event] }));
+    const tone = event.outcome === "repaired" ? "success" : "attention";
     if (event.outcome !== "restored") {
-      addActivity(
-        event.outcome === "repaired" ? "success" : "attention",
-        `${event.name}: ${event.outcome}`
-      );
+      addActivity(tone, `${event.name}: ${event.outcome}`);
     }
+    logServe(
+      event.outcome === "restored" ? "neutral" : tone,
+      `${event.name}: ${event.outcome}`,
+      [eventLine(event)]
+    );
   } else if (event.type === "update_available") {
     set((s) => ({ updates: { ...s.updates, [event.name]: event } }));
     addActivity("success", `Update available for ${event.name}`);
+    logServe("neutral", `Update available for ${event.name}`, [
+      eventLine(event),
+    ]);
   } else if (event.type === "drift") {
     addActivity("attention", driftText(event));
+    logServe("attention", driftText(event), [eventLine(event)]);
   } else if (event.type === "error") {
+    logServe("danger", event.message, [eventLine(event)]);
     errors.set(
       childId,
       event.hint === undefined
@@ -264,6 +282,9 @@ const applyLog = (event: LogEvent) => {
   if (event.level === "warn") {
     addActivity("attention", event.message);
   }
+  logServe(event.level === "warn" ? "attention" : "neutral", event.message, [
+    logLine(event),
+  ]);
 };
 
 const onLine = (line: ServeLine) => {
@@ -285,6 +306,16 @@ const onExit = (exit: ServeExit) => {
     message: exit.stderr.at(-1) ?? `agentx serve stopped with ${code}`,
   };
   errors.delete(exit.childId);
+  logServe(
+    exit.restarting ? "attention" : "danger",
+    `Serve stopped with ${code}`,
+    [
+      ...exit.stderr,
+      exit.restarting
+        ? `restarts in ${exit.restartInMs ?? 0} ms`
+        : "does not restart",
+    ]
+  );
   set({
     serveEnd: {
       childId: exit.childId,
