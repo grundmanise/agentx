@@ -873,3 +873,10 @@
   font-size: 14px;
   font-weight: 500;
 }
+
+/* 6. Sizes a library measures (DESIGN.md §4 "Overlays"). A theme value cannot hold them: the
+   variable exists only on the element the library sets it on. */
+/* popover.max-height: the room between the popover's anchor and the window's edge. */
+@utility max-h-popover {
+  max-height: var(--radix-popover-content-available-height);
+}
