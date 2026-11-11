@@ -36,6 +36,7 @@ var eventTypes = []struct {
 	{"version", versionEvent{}},
 	{"update", updateEvent{}},
 	{"settings", settingsEvent{}},
+	{"config_removal", configRemovalEvent{}},
 	{"machine", machineEvent{}},
 	{"source", sourceEvent{}},
 	{"source_skill", sourceSkillEvent{}},
@@ -184,6 +185,9 @@ var valueLists = []valueList{
 	}},
 	{name: "AdoptionState", values: []string{adoptCandidate, adoptAdopted, adoptManaged, adoptRefused}, fields: []fieldRef{
 		{adoptionEvent{}, "State"},
+	}},
+	{name: "ConfigRemovalState", values: []string{removalRemovable, removalRemoved, removalKept}, fields: []fieldRef{
+		{configRemovalEvent{}, "State"},
 	}},
 	{name: "ImportState", values: []string{restorePresent, restoreMissing, restoreDifferent}, fields: []fieldRef{
 		{importSkillEvent{}, "State"},

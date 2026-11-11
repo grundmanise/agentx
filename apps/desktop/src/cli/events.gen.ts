@@ -70,6 +70,7 @@ export type ReconcileOutcome =
   | "installable"
   | "unmanaged";
 export type AdoptionState = "candidate" | "adopted" | "managed" | "refused";
+export type ConfigRemovalState = "removable" | "removed" | "kept";
 export type ImportState = "present" | "missing" | "different";
 export type ImportAction =
   | "installed"
@@ -325,6 +326,17 @@ export interface SettingsEvent {
   type: "settings";
   schema_version: number;
   settings: Settings;
+}
+
+export interface ConfigRemovalEvent {
+  type: "config_removal";
+  schema_version: number;
+  id: string;
+  name: string;
+  path: string;
+  state: ConfigRemovalState;
+  holds: string[];
+  with: string[];
 }
 
 export interface MachineEvent {
@@ -626,6 +638,7 @@ export type CliEvent =
   | VersionEvent
   | UpdateEvent
   | SettingsEvent
+  | ConfigRemovalEvent
   | MachineEvent
   | SourceEvent
   | SourceSkillEvent

@@ -1,6 +1,6 @@
 ---
 title: "agentx config"
-description: "List, get and set the settings of one machine."
+description: "List, get and set the settings of one machine, and remove leftover configurations."
 ---
 
 Machine settings live in `settings.json` in agentx home, `~/.agentx` by default. agentx does not sync them. To copy them to another machine, use [`agentx export`](/cli/export).
@@ -138,6 +138,67 @@ warning: cursor's copy of pdf is different from the library, so it was left unch
 
 See [A copy that differs from the library](/cli/skill#a-copy-that-differs-from-the-library).
 
+## Remove a leftover configuration
+
+A tool that installs skills into every client it knows, such as the Vercel skills CLI, leaves a configuration directory for each client, including the ones you do not use. agentx then lists each of them as a configuration. Remove the leftovers to clean up the list.
+
+### See what can be removed
+
+```sh
+agentx config remove
+```
+
+```text
+Can be removed (2)
+  adal     /home/me/.adal
+  augment  /home/me/.augment
+
+Cannot be removed (1)
+  claude-code  /home/me/.claude  holds settings.json, 2 plugins in plugins and the skill notes, which nothing that stays on the machine holds
+
+Run agentx config remove adal augment to remove them.
+```
+
+With no id, the command only shows what it found. It changes nothing.
+
+### Remove configurations
+
+```sh
+agentx config remove adal augment
+```
+
+```text
+✓ removed 2 configurations
+  adal     /home/me/.adal
+  augment  /home/me/.augment
+```
+
+agentx deletes the configuration directory of each client you name and takes the client out of `disabled_configurations` and `copy_mode`. `agentx scan` no longer detects it.
+
+agentx deletes only the configuration directory. Your library stays as it is, and so does a skills directory outside the configuration directory, such as the one Amp reads in `~/.config/agents/skills`.
+
+### What agentx removes
+
+agentx removes a configuration only when you lose nothing. Its directory may hold:
+
+- Symlinks in its skills directory.
+- Copies of skills that your library or another client's skills directory also holds, with the same content.
+- Empty directories.
+- Files your operating system or editor leaves, while `ignore_system_files` is on.
+
+Anything else keeps the configuration: a skill that is only there, a copy that differs from the library, MCP server declarations, plugins, settings, history, or any other file. agentx then removes nothing, of any configuration you named, and exits with code 6:
+
+```text
+error: nothing was removed: claude-code holds settings.json
+hint: 'agentx config remove adal' removes the others
+```
+
+To remove such a configuration, move or delete what it holds, then run the command again. `agentx config remove` has no flag to skip this check.
+
+Some clients share a directory. Zencoder and Zenflow keep one configuration directory, and Antigravity's directory is inside Gemini CLI's. To remove the shared or outer directory, name every client in it. Removing Antigravity alone leaves `~/.gemini` as it is.
+
+If the run stops part way, the next agentx command finishes it.
+
 ## Fix a broken file
 
 If agentx cannot parse `settings.json`, every command that reads it exits with code 10 and names the file. Fix the JSON, or delete the file to start again from defaults.
@@ -149,6 +210,7 @@ If a later version of agentx wrote `settings.json`, every command that reads it 
 For what each code means, see [Exit codes](/cli/output#exit-codes). These causes are special to `agentx config`:
 
 - `1`: an invalid value, an unknown key, or a key you cannot set.
-- `5`: `config enable` or `config disable` names a configuration `agentx scan` does not detect.
-- `7`: another agentx command is running. `set`, `enable` and `disable` stop at once.
+- `5`: `config enable`, `config disable` or `config remove` names a configuration `agentx scan` does not detect.
+- `6`: `config remove` names a configuration that holds something you would lose. See [What agentx removes](#what-agentx-removes).
+- `7`: another agentx command is running. `set`, `enable`, `disable` and `remove` stop at once.
 - `10`: agentx cannot parse `settings.json`, or a later version of agentx wrote it. See [Fix a broken file](#fix-a-broken-file).
