@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import type { Configuration } from "#/cli/events.gen.ts";
 import { LogoStack } from "#/components/agent-logo.tsx";
 import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
@@ -33,9 +35,10 @@ const alertOf = (
  * One skill in the list: glyph, name, its one possible pill, an amber alert triangle when its
  * banner warns, a small fork marker for each fork made from it under a new name, and the logos
  * of the agent clients that see it, then its description. Selecting it shows the skill in the
- * detail pane, where the banner says what the alert triangle stands for.
+ * detail pane, where the banner says what the alert triangle stands for. It draws again only when
+ * one of its props changes, so the list passes it the same values from one render to the next.
  */
-export const SkillRowItem = ({
+const SkillRowView = ({
   row,
   forks,
   configurations,
@@ -50,7 +53,7 @@ export const SkillRowItem = ({
   /** What the row's banner reads besides the row, for its alert triangle (the list has no diff). */
   facts: BannerFacts;
   selected: boolean;
-  onSelect: () => void;
+  onSelect: (row: SkillRow) => void;
 }) => {
   const clients = row.agents
     .map((id) => configurations.find((c) => c.id === id))
@@ -71,7 +74,9 @@ export const SkillRowItem = ({
       label={row.name}
       description={description}
       selected={selected}
-      onSelect={onSelect}
+      onSelect={() => {
+        onSelect(row);
+      }}
     >
       <span className="w-row-glyph flex h-5 flex-none items-center justify-center">
         <SkillGlyph
@@ -133,3 +138,5 @@ export const SkillRowItem = ({
     </ListRow>
   );
 };
+
+export const SkillRowItem = memo(SkillRowView);

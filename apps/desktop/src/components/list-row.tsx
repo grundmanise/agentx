@@ -1,5 +1,5 @@
 import { cva } from "class-variance-authority";
-import { useEffect, useId, useRef } from "react";
+import { useId } from "react";
 import type { ReactNode } from "react";
 
 const rowVariants = cva(
@@ -16,9 +16,9 @@ const rowVariants = cva(
 
 /**
  * A row of a split list (DESIGN.md §4 "Lists and rows"): `row.padding`, `row.radius`, `row.hover`;
- * the selected row has `row.selected-bg` and a `row.selected-bar` at its left edge, and comes into
- * view when it is selected from elsewhere. Selecting a row is a click, or Enter on the row. The
- * row is named by `label` alone; what else it shows is read as its description.
+ * the selected row has `row.selected-bg` and a `row.selected-bar` at its left edge, and its list
+ * brings it into view. Selecting a row is a click, or Enter on the row. The row is named by `label`
+ * alone; what else it shows is read as its description.
  */
 export const ListRow = ({
   label,
@@ -35,16 +35,9 @@ export const ListRow = ({
   onSelect: () => void;
   children: ReactNode;
 }) => {
-  const ref = useRef<HTMLButtonElement>(null);
   const descriptionId = useId();
-  useEffect(() => {
-    if (selected) {
-      ref.current?.scrollIntoView({ block: "nearest" });
-    }
-  }, [selected]);
   return (
     <button
-      ref={ref}
       type="button"
       aria-label={label}
       aria-describedby={description === undefined ? undefined : descriptionId}
