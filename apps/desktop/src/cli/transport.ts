@@ -79,6 +79,14 @@ export interface ServeExit {
   restartInMs: number | null;
 }
 
+/** The end of the serve log file, which holds everything serve wrote to stderr. */
+export interface ServeLog {
+  /** The file being written, which may not exist yet. */
+  path: string;
+  /** Its last lines, oldest first, as serve wrote them. */
+  lines: string[];
+}
+
 // What the supervisor sends, as Rust names it.
 type WireRunLine = RunLine & { run_id: string };
 interface WireRunEnd {
@@ -282,9 +290,20 @@ const requestServe = async (request: ServeRequest): Promise<void> => {
   await invoke("serve_request", { line: JSON.stringify(request) });
 };
 
+/** Reads the end of the serve log file. */
+const readServeLog = async (): Promise<ServeLog> =>
+  await invoke<ServeLog>("serve_log");
+
+/** Whether serve logs at debug level; a change restarts the serve child. */
+const setServeVerbose = async (on: boolean): Promise<void> => {
+  await invoke("serve_verbose", { on });
+};
+
 export const serve = {
+  log: readServeLog,
   onEvent: onServeLine,
   onExit: onServeExit,
   request: requestServe,
   start: startServe,
+  verbose: setServeVerbose,
 };

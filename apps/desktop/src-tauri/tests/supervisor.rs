@@ -34,7 +34,7 @@ env)
   ;;
 serve)
   mode=$(cat "$STUB_DIR/serve-mode")
-  printf '{"type":"inventory","profile":"%s"}\n' "$AGENTX_STUB_PROFILE"
+  printf '{"type":"inventory","profile":"%s","args":"%s"}\n' "$AGENTX_STUB_PROFILE" "$*"
   echo '{"type":"log","schema_version":1,"level":"debug","message":"serve started"}' >&2
   case "$mode" in
   echo)
@@ -433,6 +433,34 @@ async fn serve_is_restarted_with_backoff_and_a_fresh_environment() {
         lines.iter().find(|(_, l)| l["child_id"] == 3).unwrap().1["event"]["profile"],
         "after-restart"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn serve_verbose_restarts_serve_with_the_flag_and_the_log_is_read_back() {
+    let f = Fixture::new("verbose");
+    f.serve_mode("echo");
+    f.sup.serve_start().await.unwrap();
+    let first = f.wait_for_serve("event", 1).await;
+    assert_eq!(first[0].1["event"]["args"], "serve --json");
+
+    f.sup.serve_verbose(true).await;
+    let exits = f.wait_for(SERVE_EXIT, 1).await;
+    assert_eq!(exits[0].1["restarting"], true);
+    let lines = f.wait_for_serve("event", 2).await;
+    assert_eq!(lines[1].1["child_id"], 2);
+    assert_eq!(lines[1].1["event"]["args"], "serve --verbose --json");
+    // The same setting again changes nothing: the child keeps running.
+    f.sup.serve_verbose(true).await;
+
+    // What both children wrote to stderr is in the log, oldest first.
+    f.wait_for_serve("log", 2).await;
+    let log = f.sup.serve_log();
+    assert_eq!(log.path, f.dir.join("logs/serve.log"));
+    let line = r#"{"type":"log","schema_version":1,"level":"debug","message":"serve started"}"#;
+    assert_eq!(log.lines, [line, line]);
+
+    f.sup.shutdown().await;
+    assert_eq!(f.emitted(SERVE_EXIT).len(), 2, "one exit per child");
 }
 
 #[tokio::test(flavor = "multi_thread")]

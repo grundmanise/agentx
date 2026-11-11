@@ -17,7 +17,13 @@ import type {
 } from "#/cli/events.gen.ts";
 import { serve } from "#/cli/transport.ts";
 import type { ServeExit, ServeLine } from "#/cli/transport.ts";
-import { eventLine, logLine, logServe } from "#/store/activity-log.ts";
+import {
+  eventLine,
+  lastStderr,
+  logLine,
+  logServe,
+  serveLogLine,
+} from "#/store/activity-log.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
@@ -282,9 +288,13 @@ const applyLog = (event: LogEvent) => {
   if (event.level === "warn") {
     addActivity("attention", event.message);
   }
-  logServe(event.level === "warn" ? "attention" : "neutral", event.message, [
-    logLine(event),
-  ]);
+  // Debug lines come by the hundred while serve logs at debug level: the serve log file holds
+  // them, which the activity log reads when asked (readServeLog).
+  if (event.level !== "debug") {
+    logServe(event.level === "warn" ? "attention" : "neutral", event.message, [
+      logLine(event),
+    ]);
+  }
 };
 
 const onLine = (line: ServeLine) => {
@@ -303,14 +313,14 @@ const onExit = (exit: ServeExit) => {
   ended = Math.max(ended, exit.childId);
   const code = exit.exitCode === null ? "a signal" : `code ${exit.exitCode}`;
   const problem = errors.get(exit.childId) ?? {
-    message: exit.stderr.at(-1) ?? `agentx serve stopped with ${code}`,
+    message: lastStderr(exit.stderr) ?? `agentx serve stopped with ${code}`,
   };
   errors.delete(exit.childId);
   logServe(
     exit.restarting ? "attention" : "danger",
     `Serve stopped with ${code}`,
     [
-      ...exit.stderr,
+      ...exit.stderr.map(serveLogLine),
       exit.restarting
         ? `restarts in ${exit.restartInMs ?? 0} ms`
         : "does not restart",
@@ -332,6 +342,33 @@ const onExit = (exit: ServeExit) => {
         ? { kind: "stale" }
         : { error: problem.message, kind: "failed" },
     });
+  }
+};
+
+/**
+ * The end of the serve log file, each line as the activity log shows it, and the file's path.
+ * Undefined when it could not be read.
+ */
+export const readServeLog = async (): Promise<
+  { path: string; lines: string[] } | undefined
+> => {
+  try {
+    const { path, lines } = await serve.log();
+    return { lines: lines.map(serveLogLine), path };
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Whether serve logs at debug level, for its log file. The supervisor restarts the serve child
+ * on a change, which shows as any restart does.
+ */
+export const setServeDebug = async (on: boolean) => {
+  try {
+    await serve.verbose(on);
+  } catch {
+    // The switch still decides how the one-shot commands run.
   }
 };
 

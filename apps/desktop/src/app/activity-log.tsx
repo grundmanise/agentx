@@ -2,7 +2,7 @@
 // session and what the serve child reported, newest first, from src/store/activity-log.ts. An
 // entry opens to its output and copies as plain text. Settings and the palette open it.
 import { cva } from "class-variance-authority";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { notify } from "#/components/toast.tsx";
@@ -15,6 +15,7 @@ import {
   SheetTitle,
 } from "#/components/ui/sheet.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
+import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import {
   entryText,
   formatDuration,
@@ -24,6 +25,7 @@ import {
   useActivityLog,
 } from "#/store/activity-log.ts";
 import type { LogEntry, Output } from "#/store/activity-log.ts";
+import { readServeLog, setServeDebug } from "#/store/feed.ts";
 
 const dotVariants = cva("size-log-dot rounded-pill block flex-none", {
   variants: {
@@ -56,10 +58,10 @@ const timeOf = (at: number) =>
     second: "2-digit",
   });
 
-const copy = async (entry: LogEntry) => {
+const copy = async (text: string, toast: string) => {
   try {
-    await navigator.clipboard.writeText(entryText(entry));
-    notify("Copied the entry");
+    await navigator.clipboard.writeText(text);
+    notify(toast);
   } catch {
     notify("Couldn't copy to the clipboard");
   }
@@ -123,7 +125,7 @@ const Details = ({ entry }: { entry: LogEntry }) => {
           variant="ghost"
           size="sm"
           onClick={() => {
-            void copy(entry);
+            void copy(entryText(entry), "Copied the entry");
           }}
         >
           Copy
@@ -181,7 +183,111 @@ const Entry = ({ entry }: { entry: LogEntry }) => {
   );
 };
 
-/** The switch that makes the commands run from now on log at debug level. */
+type ServeLogRead =
+  | { kind: "reading" }
+  | { kind: "failed" }
+  | { kind: "read"; path: string; lines: string[] };
+
+/** The end of the serve log file, read when this mounts: its path, its lines, Copy and Show in Finder. */
+const ServeLogDetails = () => {
+  const [read, setRead] = useState<ServeLogRead>({ kind: "reading" });
+  useEffect(() => {
+    let current = true;
+    const load = async () => {
+      const log = await readServeLog();
+      if (current) {
+        setRead(
+          log === undefined ? { kind: "failed" } : { kind: "read", ...log }
+        );
+      }
+    };
+    void load();
+    return () => {
+      current = false;
+    };
+  }, []);
+  if (read.kind !== "read") {
+    return (
+      <p className="type-secondary text-text-hint m-0 pt-1 pb-3 pl-3.5">
+        {read.kind === "reading"
+          ? "Reading the serve log…"
+          : "The serve log could not be read"}
+      </p>
+    );
+  }
+  const { path, lines } = read;
+  return (
+    <div className="flex flex-col gap-3 pt-1 pb-3 pl-3.5">
+      <span className="type-technical-sm text-text-caption break-all">
+        {path}
+      </span>
+      {lines.length === 0 ? (
+        <p className="type-secondary text-text-hint m-0">
+          The serve log is empty
+        </p>
+      ) : (
+        <Lines caption="Last lines" output={{ dropped: 0, lines }} />
+      )}
+      <div className="gap-button flex">
+        {lines.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              void copy(lines.join("\n"), "Copied the serve log");
+            }}
+          >
+            Copy
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            void revealInFinder(path);
+          }}
+        >
+          {showInLabel()}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * The serve log file, above the entries: everything `agentx serve` wrote to stderr, this session
+ * and the ones before it. It is read each time it is opened.
+ */
+const ServeLogFile = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col">
+      <Button
+        variant="ghost"
+        size="sm-wrap"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((o) => !o);
+        }}
+      >
+        <span className="flex h-5 flex-none items-center">
+          <span className={open ? "flex rotate-90" : "flex"}>
+            <ChevronIcon size="xs" />
+          </span>
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="type-secondary text-text-primary">Serve log</span>
+          <span className="type-technical-sm text-text-caption">
+            What agentx serve wrote to its log file
+          </span>
+        </span>
+      </Button>
+      {open && <ServeLogDetails />}
+    </div>
+  );
+};
+
+/** The switch that makes the commands run from now on, and serve, log at debug level. */
 const DebugLines = () => {
   const id = useId();
   const debug = useActivityLog((s) => s.debug);
@@ -190,15 +296,18 @@ const DebugLines = () => {
       <label htmlFor={id} className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="type-body text-text-primary">Debug lines</span>
         <span id={`${id}-line`} className="type-secondary text-text-muted">
-          Commands that run from now on also record what agentx logs at debug
-          level
+          Commands that run from now on record what agentx logs at debug level,
+          and agentx serve restarts to write it to the serve log
         </span>
       </label>
       <Switch
         id={id}
         aria-describedby={`${id}-line`}
         checked={debug}
-        onCheckedChange={setDebugLines}
+        onCheckedChange={(on) => {
+          setDebugLines(on);
+          void setServeDebug(on);
+        }}
       />
     </div>
   );
@@ -216,7 +325,8 @@ export const ActivityLogSheet = () => {
           <SheetDescription>This session, newest first</SheetDescription>
         </SheetHeader>
         <DebugLines />
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
+          <ServeLogFile />
           {entries.length === 0 ? (
             <p className="type-secondary text-text-hint m-0">Nothing ran yet</p>
           ) : (

@@ -145,8 +145,48 @@ export const eventLine = (event: CliEvent): string => {
 };
 
 /** One log event as a line: "warn: the message". */
-export const logLine = (event: LogEvent) =>
+export const logLine = (event: { level: string; message: string }) =>
   `${event.level}: ${redact(event.message)}`;
+
+/** A stderr line as JSON, when it is a log event. */
+const logEventOf = (
+  line: string
+): { level: string; message: string } | undefined => {
+  try {
+    const parsed: unknown = JSON.parse(line);
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      "type" in parsed &&
+      parsed.type === "log" &&
+      "level" in parsed &&
+      typeof parsed.level === "string" &&
+      "message" in parsed &&
+      typeof parsed.message === "string"
+      ? { level: parsed.level, message: parsed.message }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * One line of the serve log file as the log shows it: a log event as "level: message", anything
+ * else as it was written, credentials replaced either way.
+ */
+export const serveLogLine = (line: string) => {
+  const event = logEventOf(line);
+  return event === undefined ? redact(line) : logLine(event);
+};
+
+/**
+ * Why serve stopped, from its last stderr lines: the last one that is no debug line, a log
+ * event's message or the line as it was written. Undefined when there is none.
+ */
+export const lastStderr = (lines: readonly string[]): string | undefined => {
+  const read = lines.map((line) => ({ event: logEventOf(line), line }));
+  const [last] = read.filter(({ event }) => event?.level !== "debug").slice(-1);
+  return last === undefined ? undefined : (last.event?.message ?? last.line);
+};
 
 const output = (lines: string[]): Output => ({
   dropped: Math.max(0, lines.length - LINE_LIMIT),

@@ -2,7 +2,7 @@
 // each ended and what it wrote, and what the serve child reported. The palette and Settings open it.
 import type { Page } from "@playwright/test";
 
-import { expect, test } from "./harness/cli.ts";
+import { expect, serveLogPath, test } from "./harness/cli.ts";
 
 const log = (page: Page) => page.getByRole("dialog", { name: "Activity log" });
 const entries = (page: Page) =>
@@ -110,7 +110,7 @@ test("a check that succeeds and one that fails are entries with their outcome, o
   expect(copied).not.toContain("s3cret-token");
 });
 
-test("Settings opens the log, and Debug lines runs later commands with --verbose", async ({
+test("Settings opens the log, and Debug lines runs later commands and serve with --verbose", async ({
   cli,
   page,
 }) => {
@@ -121,6 +121,8 @@ test("Settings opens the log, and Debug lines runs later commands with --verbose
     .click();
   await expect(log(page)).toBeVisible();
   await log(page).getByRole("switch", { name: "Debug lines" }).click();
+  // Serve follows the switch: the supervisor restarts it to log at debug level.
+  expect(cli.serveVerbose).toEqual([true]);
   await page.keyboard.press("Escape");
   await expect(log(page)).toBeHidden();
 
@@ -141,4 +143,36 @@ test("Settings opens the log, and Debug lines runs later commands with --verbose
   await expect(check).toContainText(
     "debug: git fetch --quiet src-1: exit status 0"
   );
+});
+
+test("Serve log shows the end of serve's log file, and shows the file in the file manager", async ({
+  cli,
+  page,
+}) => {
+  cli.answerServeLog([
+    '{"type":"log","schema_version":2,"level":"debug","message":"fetching https://me:s3cret-token@host.example.com/acme/skills"}',
+    '{"type":"log","schema_version":2,"level":"warn","message":"cannot fetch acme/skills"}',
+    "panic: runtime error",
+  ]);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await openFromPalette(page);
+  await log(page)
+    .getByRole("button", { name: /^Serve log/u })
+    .click();
+
+  // The file's path, then its lines: a log event as its level and message, any other line as written.
+  await expect(log(page).getByText(serveLogPath)).toBeVisible();
+  await expect(
+    log(page).getByText(
+      [
+        "debug: fetching https://***@host.example.com/acme/skills",
+        "warn: cannot fetch acme/skills",
+        "panic: runtime error",
+      ].join("\n")
+    )
+  ).toBeVisible();
+
+  await log(page).getByRole("button", { name: "Show in file manager" }).click();
+  expect(cli.reveals).toEqual([[serveLogPath]]);
 });

@@ -1,8 +1,9 @@
 // A log file that rotates by size: `<name>` is written, and when the next line would take it over
-// the limit it becomes `<name>.1`, the older ones move up one and the oldest is removed.
+// the limit it becomes `<name>.1`, the older ones move up one and the oldest is removed. Its end
+// can be read back, across the files, for the app to show.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 pub struct RotatingLog {
@@ -45,6 +46,33 @@ impl RotatingLog {
         }
     }
 
+    /// The file being written.
+    pub fn current(&self) -> PathBuf {
+        self.path(0)
+    }
+
+    /// The last lines of the log, oldest first: at most `max_lines` lines from at most `max_bytes`
+    /// bytes, read from the file being written back through the rotated ones. A line the byte
+    /// limit cuts is left out, so every line returned is whole.
+    pub fn tail(&self, max_bytes: u64, max_lines: usize) -> Vec<String> {
+        let mut newest_first = Vec::new();
+        let mut left = max_bytes;
+        for n in 0..self.files {
+            if newest_first.len() >= max_lines || left == 0 {
+                break;
+            }
+            let Some(text) = read_end(&self.path(n), left) else {
+                // No file yet, or one just rotated away: the older ones may still be there.
+                continue;
+            };
+            left = left.saturating_sub(text.len() as u64);
+            let room = max_lines - newest_first.len();
+            newest_first.extend(text.lines().rev().take(room).map(str::to_owned));
+        }
+        newest_first.reverse();
+        newest_first
+    }
+
     fn path(&self, n: usize) -> PathBuf {
         if n == 0 {
             self.dir.join(&self.name)
@@ -76,6 +104,25 @@ impl RotatingLog {
     }
 }
 
+/// The last `max` bytes of the file as text, from the start of a line: when the file is longer,
+/// the line the cut falls in is dropped. Bytes that are not UTF-8 become U+FFFD.
+fn read_end(path: &Path, max: u64) -> Option<String> {
+    let mut file = File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let start = len.saturating_sub(max);
+    file.seek(SeekFrom::Start(start)).ok()?;
+    let mut bytes = Vec::new();
+    file.take(max).read_to_end(&mut bytes).ok()?;
+    let text = String::from_utf8_lossy(&bytes);
+    if start == 0 {
+        return Some(text.into_owned());
+    }
+    Some(
+        text.split_once('\n')
+            .map_or_else(String::new, |(_, rest)| rest.to_owned()),
+    )
+}
+
 fn append(path: &Path) -> Option<File> {
     OpenOptions::new().create(true).append(true).open(path).ok()
 }
@@ -97,6 +144,29 @@ mod tests {
         assert_eq!(read("serve.log.1"), "cccc\ndddd\n");
         assert_eq!(read("serve.log.2"), "aaaa\nbbbb\n");
         assert!(!dir.join("serve.log.3").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn tail_reads_the_newest_lines_across_the_rotated_files() {
+        let dir = std::env::temp_dir().join(format!("agentx-logtail-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut log = RotatingLog::new(dir.clone(), "serve.log", 10, 3);
+        assert!(log.tail(100, 100).is_empty(), "no file yet");
+        for line in ["aaaa", "bbbb", "cccc", "dddd", "eeee"] {
+            log.write_line(line);
+        }
+        // Everything, oldest first, from serve.log.2, serve.log.1 and serve.log.
+        assert_eq!(log.tail(100, 100), ["aaaa", "bbbb", "cccc", "dddd", "eeee"]);
+        // The line limit keeps the newest lines.
+        assert_eq!(log.tail(100, 2), ["dddd", "eeee"]);
+        // The byte limit too: 5 bytes of serve.log, then 7 of serve.log.1, whose cut line goes.
+        assert_eq!(log.tail(12, 100), ["dddd", "eeee"]);
+        // A limit inside the newest line leaves nothing rather than half a line.
+        assert!(log.tail(3, 100).is_empty());
+        // A file that is not UTF-8 is still read.
+        fs::write(dir.join("serve.log"), b"ok\n\xff\n").unwrap();
+        assert_eq!(log.tail(5, 100), ["ok", "\u{fffd}"]);
         fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -59,6 +59,9 @@ const STDERR_TAIL: usize = 20;
 const LOG_NAME: &str = "serve.log";
 const LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 const LOG_FILES: usize = 5;
+/// How much of the serve log the app reads back to show: its last 1000 lines, from at most 256 kB.
+const LOG_TAIL_BYTES: u64 = 256 * 1024;
+const LOG_TAIL_LINES: usize = 1000;
 
 pub struct Config {
     /// The directory of the app's executable, where a release build puts the CLI.
@@ -122,6 +125,15 @@ pub struct RunEnd {
     pub timed_out: bool,
 }
 
+/// The end of the serve log, for the app to show.
+#[derive(Clone, Debug, Serialize)]
+pub struct ServeLog {
+    /// The file being written, which may not exist yet.
+    pub path: PathBuf,
+    /// Its last lines, oldest first, as serve wrote them.
+    pub lines: Vec<String>,
+}
+
 /// How a serve child ended.
 #[derive(Clone, Debug, Serialize)]
 pub struct ServeExit {
@@ -178,6 +190,8 @@ pub struct Supervisor {
     serve_running: watch::Sender<bool>,
     serve_stop: Notify,
     next_child: AtomicU64,
+    /// Whether serve children run with `--verbose`.
+    serve_verbose: AtomicBool,
     log: Mutex<RotatingLog>,
 }
 
@@ -193,6 +207,7 @@ impl Supervisor {
             serve_running: watch::Sender::new(false),
             serve_stop: Notify::new(),
             next_child: AtomicU64::new(1),
+            serve_verbose: AtomicBool::new(false),
             log: Mutex::new(log),
         })
     }
@@ -416,9 +431,37 @@ impl Supervisor {
         Ok(state.child_id)
     }
 
+    /// Whether serve logs at debug level (`--verbose`), which its log file then holds. A change
+    /// stops the child that runs, and the supervisor starts the next one with the new setting, as
+    /// after any exit.
+    pub async fn serve_verbose(&self, on: bool) {
+        if self.serve_verbose.swap(on, Ordering::SeqCst) == on {
+            return;
+        }
+        let state = self.serve.lock().await;
+        if state.running && !state.stopping {
+            if let Some(pid) = state.pid {
+                signal_group(pid, libc::SIGTERM);
+            }
+        }
+    }
+
+    /// The end of the serve log and where it is.
+    pub fn serve_log(&self) -> ServeLog {
+        let log = self.log.lock().unwrap();
+        ServeLog {
+            path: log.current(),
+            lines: log.tail(LOG_TAIL_BYTES, LOG_TAIL_LINES),
+        }
+    }
+
     fn spawn_serve(&self, shell: &Shell, state: &mut ServeState) -> Result<Child, String> {
+        let mut args = vec!["serve".to_owned()];
+        if self.serve_verbose.load(Ordering::SeqCst) {
+            args.push("--verbose".to_owned());
+        }
         let mut child = self
-            .command(shell, &["serve".to_owned()])?
+            .command(shell, &args)?
             .stdin(Stdio::piped())
             .spawn()
             .map_err(|err| format!("agentx: {err}"))?;
