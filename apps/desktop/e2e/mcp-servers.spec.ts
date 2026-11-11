@@ -137,6 +137,27 @@ test.describe("rows", () => {
     );
   });
 
+  test("the header sticks to the top of the page when the rows scroll, with no gap above it", async ({
+    cli,
+    page,
+  }) => {
+    await page.setViewportSize({ height: 420, width: 1100 });
+    await openServers(cli, page);
+    const scroller = page
+      .locator("div.overflow-auto")
+      .filter({ has: table(page) });
+    const tops = await scroller.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+      return {
+        head: el.querySelector("thead")?.getBoundingClientRect().top,
+        scrolled: el.scrollTop,
+        scroller: el.getBoundingClientRect().top,
+      };
+    });
+    expect(tops.scrolled).toBeGreaterThan(0);
+    expect(tops.head).toBe(tops.scroller);
+  });
+
   test("a machine with no server shows the empty state", async ({
     cli,
     page,
