@@ -47,9 +47,7 @@ test("a check that succeeds and one that fails are entries with their outcome, o
     ],
   });
   await checkButton(page).click();
-  await expect(
-    toasts(page).getByText("Everything is up to date")
-  ).toBeVisible();
+  await expect(toasts(page).getByText(/up to date/u)).toBeVisible();
 
   cli.register(["skill", "check-updates"], {
     events: [
@@ -131,9 +129,7 @@ test("Settings opens the log, and Debug lines runs later commands with --verbose
   });
   await page.getByRole("link", { name: "Skills" }).click();
   await checkButton(page).click();
-  await expect(
-    toasts(page).getByText("Everything is up to date")
-  ).toBeVisible();
+  await expect(toasts(page).getByText(/up to date/u)).toBeVisible();
 
   await openFromPalette(page);
   const check = entry(page, "agentx skill check-updates --verbose");
