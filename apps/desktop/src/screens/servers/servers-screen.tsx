@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
+import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { formatDate } from "#/lib/dates.ts";
 import { useRouteKey } from "#/lib/route-key.ts";
@@ -15,7 +16,8 @@ const none: ServerRow[] = [];
 const columns = ["SERVER", "TRANSPORT", "TOOLS", "AGENTS"];
 
 /**
- * The ghost Check tools: its icon turns once while the check runs (DESIGN.md §8). Its title says
+ * The ghost Check tools. While the check runs it is pending (DESIGN.md §6): a `Spinner` takes the
+ * refresh icon's place, before the label, until the check ends. Its title says
  * when the last check was, the latest `signature_at` over every server, or that none ran yet.
  */
 const CheckTools = ({ rows }: { rows: ServerRow[] }) => {
@@ -33,9 +35,7 @@ const CheckTools = ({ rows }: { rows: ServerRow[] }) => {
         void checkTools();
       }}
     >
-      <span className={checking ? "animate-turn-once flex" : "flex"}>
-        <RefreshIcon size="sm" />
-      </span>
+      {checking ? <Spinner /> : <RefreshIcon size="sm" />}
       Check tools
     </Button>
   );

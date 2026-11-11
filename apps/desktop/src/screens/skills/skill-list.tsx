@@ -7,6 +7,7 @@ import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchField } from "#/components/search-field.tsx";
+import { Spinner } from "#/components/spinner.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
@@ -75,7 +76,8 @@ const AgentFilterChip = ({
 
 /**
  * The ghost Check updates, an icon button as square as Add's three-dots trigger and named by its
- * label, which its tooltip shows; its icon turns once while the check runs (DESIGN.md §8).
+ * label, which its tooltip shows. While the check runs it is pending (DESIGN.md §6): a `Spinner`
+ * takes the refresh icon's place until the check ends.
  */
 const CheckUpdates = () => {
   const running = useCheckingUpdates();
@@ -91,9 +93,7 @@ const CheckUpdates = () => {
             void checkUpdates();
           }}
         >
-          <span className={running ? "animate-turn-once flex" : "flex"}>
-            <RefreshIcon />
-          </span>
+          {running ? <Spinner /> : <RefreshIcon />}
         </Button>
       </TooltipTrigger>
       <TooltipContent>Check updates</TooltipContent>
