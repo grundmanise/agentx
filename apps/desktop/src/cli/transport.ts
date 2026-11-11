@@ -182,23 +182,40 @@ export const run = (
   const runId = crypto.randomUUID();
   const lines = channel<RunLine>();
   const ends = channel<WireRunEnd>();
-  const subscription = Promise.all([
-    listen<WireRunLine>("cli-run", ({ payload }) => {
-      if (payload.run_id === runId) {
-        const { run_id: _, ...line } = payload;
-        lines.push(line);
+  const subscribe = async (): Promise<UnlistenFn[]> => {
+    const settled = await Promise.allSettled([
+      listen<WireRunLine>("cli-run", ({ payload }) => {
+        if (payload.run_id === runId) {
+          const { run_id: _, ...line } = payload;
+          lines.push(line);
+        }
+      }),
+      listen<WireRunEnd>("cli-run-end", ({ payload }) => {
+        if (payload.run_id === runId) {
+          ends.push(payload);
+        }
+      }),
+    ]);
+    const stops = settled.flatMap((s) =>
+      s.status === "fulfilled" ? [s.value] : []
+    );
+    const failed = settled.find((s) => s.status === "rejected");
+    if (failed !== undefined) {
+      // One listener may be in place while the other failed: it goes with the run.
+      for (const stop of stops) {
+        stop();
       }
-    }),
-    listen<WireRunEnd>("cli-run-end", ({ payload }) => {
-      if (payload.run_id === runId) {
-        ends.push(payload);
-      }
-    }),
-  ]);
+      throw new Error(`cannot listen to the run: ${String(failed.reason)}`);
+    }
+    return stops;
+  };
+  const subscription = subscribe();
   subscribed.set(runId, subscription);
   const start = async (): Promise<RunResult> => {
-    const unlisten = await subscription;
+    let unlisten: UnlistenFn[] = [];
     try {
+      // Inside the try: a run that cannot be listened to ends its entry as one that did not start.
+      unlisten = await subscription;
       await invoke("cli_run", {
         args,
         deadline_ms: options.deadlineMs ?? null,

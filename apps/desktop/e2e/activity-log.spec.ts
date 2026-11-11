@@ -55,7 +55,7 @@ test("a check that succeeds and one that fails are entries with their outcome, o
         code: "source",
         hint: "check your network",
         message:
-          "cannot fetch https://me:s3cret-token@git.example.com/acme/skills",
+          "cannot fetch https://me:s3cret-token@git.example.com/acme/skills?access_token=s3cret-token",
         type: "error",
       },
       { ok: false, type: "result" },
@@ -92,7 +92,7 @@ test("a check that succeeds and one that fails are entries with their outcome, o
   await checks.nth(0).click();
   const failed = entry(page, "agentx skill check-updates");
   await expect(failed).toContainText(
-    "cannot fetch https://***@git.example.com/acme/skills"
+    "cannot fetch https://***@git.example.com/acme/skills?access_token=***"
   );
   await expect(failed).toContainText(
     "warn: the fetch of acme/skills timed out"
@@ -146,7 +146,7 @@ test("Serve log shows the end of serve's log file, and shows the file in the fil
   page,
 }) => {
   cli.answerServeLog([
-    '{"type":"log","schema_version":2,"level":"debug","message":"fetching https://me:s3cret-token@host.example.com/acme/skills"}',
+    '{"type":"log","schema_version":2,"level":"debug","message":"fetching https://me:s3cret-token@host.example.com/acme/skills?token=s3cret-token"}',
     '{"type":"log","schema_version":2,"level":"warn","message":"cannot fetch acme/skills"}',
     "panic: runtime error",
   ]);
@@ -162,7 +162,7 @@ test("Serve log shows the end of serve's log file, and shows the file in the fil
   await expect(
     log(page).getByText(
       [
-        "debug: fetching https://***@host.example.com/acme/skills",
+        "debug: fetching https://***@host.example.com/acme/skills?token=***",
         "warn: cannot fetch acme/skills",
         "panic: runtime error",
       ].join("\n")
