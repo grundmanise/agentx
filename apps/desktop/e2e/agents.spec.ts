@@ -1,16 +1,17 @@
 // The Agents page: every configuration the scan detected, with its counts from the inventory's
-// edges, and the Enabled switch, which runs `config enable|disable <id>` and offers Place all.
+// edges, the Enabled switch, which runs `config enable|disable <id>` and offers Place all, and
+// removing leftover configurations: from a card's menu and from Clean up, by `config remove`.
 import type { Page } from "@playwright/test";
 
-import { inventory, LIBRARY, sources } from "./fixtures/agents.ts";
+import { inventory, LIBRARY, removals, sources } from "./fixtures/agents.ts";
 import { adoption } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
-const launchLines = [
-  ["version", "--json"],
-  ["doctor", "--json"],
-];
+// The page's own read: which configurations can be removed.
+const preview = ["config", "remove", "--json"];
+
+const launchLines = [["version", "--json"], ["doctor", "--json"], preview];
 
 const isLaunchOrLoad = (line: string[]) =>
   [...launchLines, ...loadLines].some(
@@ -29,6 +30,7 @@ const openAgents = async (cli: MockCli, page: Page) => {
   cli.onServeStart({ events: [inventory] });
   cli.register(["adopt"], { events: adoption });
   cli.register(["source", "list"], { events: sources });
+  cli.register(["config", "remove"], { events: removals });
   await page.goto("/#/agents");
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
   await expect(card(page, "Claude Code")).toBeVisible();
@@ -157,4 +159,154 @@ test("turning an agent off runs config disable", async ({ cli, page }) => {
     )
   ).toBeVisible();
   expect(later(cli)).toEqual([["config", "disable", "cursor", "--json"]]);
+});
+
+/** The inventory once the configurations `ids` are gone, with the answer to the last refresh. */
+const without = (cli: MockCli, ids: string[]) => [
+  {
+    ...inventory,
+    configurations: inventory.configurations.filter((c) => !ids.includes(c.id)),
+    scan_counter: 2,
+  },
+  {
+    ok: true,
+    request_id: cli.requestIds.at(-1) ?? "",
+    scan_counter: 2,
+    type: "refresh_complete" as const,
+  },
+];
+
+const removed = (id: string) => ({
+  ...removals.find((e) => e.type === "config_removal" && e.id === id),
+  state: "removed" as const,
+  type: "config_removal" as const,
+});
+
+test("Remove on a card names the directory and runs config remove", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  cli.register(["config", "remove", "github-copilot"], {
+    events: [removed("github-copilot"), { type: "settings" }],
+  });
+  await card(page, "GitHub Copilot")
+    .getByRole("button", { name: "More actions for GitHub Copilot" })
+    .click();
+  await page.getByRole("menuitem", { name: "Remove" }).click();
+  const dialog = page.getByRole("dialog", { name: "Remove GitHub Copilot?" });
+  await expect(dialog).toContainText(
+    "Its configuration directory is deleted from this machine:"
+  );
+  await expect(dialog).toContainText("/home/me/.github-copilot");
+
+  await dialog.getByRole("button", { name: "Remove" }).click();
+  await expect(toasts(page).getByText("Removed GitHub Copilot")).toBeVisible();
+  expect(later(cli)).toEqual([
+    ["config", "remove", "github-copilot", "--json"],
+  ]);
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit(without(cli, ["github-copilot"]));
+  await expect(card(page, "GitHub Copilot")).toHaveCount(0);
+});
+
+test("Remove on a configuration that holds something says what it holds", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  await card(page, "Claude Code")
+    .getByRole("button", { name: "More actions for Claude Code" })
+    .click();
+  await page.getByRole("menuitem", { name: "Remove" }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Claude Code can't be removed",
+  });
+  await expect(dialog).toContainText("/home/me/.claude-code");
+  await expect(dialog.getByRole("list", { name: "What it holds" }))
+    .toMatchAriaSnapshot(`
+    - list "What it holds":
+      - listitem: settings.json
+      - listitem: 1 plugin in plugins
+      - listitem: the skill notes, which nothing that stays on the machine holds
+  `);
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toBeHidden();
+  expect(later(cli)).toEqual([]);
+});
+
+test("Clean up lists the configurations that can be removed and removes the chosen ones", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  cli.register(["config", "remove", "github-copilot", "windsurf"], {
+    events: [
+      removed("github-copilot"),
+      removed("windsurf"),
+      { type: "settings" },
+    ],
+  });
+  await page.getByRole("button", { name: "Clean up" }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Remove leftover configurations",
+  });
+  await expect(dialog).toMatchAriaSnapshot(`
+    - dialog "Remove leftover configurations":
+      - heading "Remove leftover configurations" [level=2]
+      - paragraph: These agent configurations hold only links and copies of skills that stay on this machine. Removing one deletes its directory.
+      - list "Configurations that can be removed":
+        - listitem:
+          - checkbox "GitHub Copilot /home/me/.github-copilot" [checked]
+          - text: GitHub Copilot /home/me/.github-copilot
+        - listitem:
+          - checkbox "Windsurf /home/me/.windsurf" [checked]
+          - text: Windsurf /home/me/.windsurf
+      - paragraph: 4 other agent configurations hold something of their own and stay.
+      - button "Cancel"
+      - button "Remove 2"
+  `);
+
+  const windsurf = dialog.getByRole("checkbox", { name: /^Windsurf/u });
+  await windsurf.click();
+  await expect(dialog.getByRole("button", { name: "Remove 1" })).toBeVisible();
+  await windsurf.click();
+  await dialog.getByRole("button", { name: "Remove 2" }).click();
+  await expect(
+    toasts(page).getByText("Removed 2 agent configurations")
+  ).toBeVisible();
+  expect(later(cli)).toEqual([
+    ["config", "remove", "github-copilot", "windsurf", "--json"],
+  ]);
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit(without(cli, ["github-copilot", "windsurf"]));
+  await expect(
+    page.getByRole("region", { name: "Direct agents" }).getByRole("article")
+  ).toHaveCount(2);
+});
+
+test("a removal the CLI refuses says what holds the configuration, in the app's words", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  cli.register(["config", "remove", "github-copilot", "windsurf"], {
+    events: [
+      {
+        code: "refused",
+        hint: "'agentx config remove github-copilot' removes the others",
+        message: "nothing was removed: windsurf holds notes.md",
+        type: "error",
+      },
+    ],
+    exitCode: 6,
+  });
+  await page.getByRole("button", { name: "Clean up" }).click();
+  await page
+    .getByRole("dialog", { name: "Remove leftover configurations" })
+    .getByRole("button", { name: "Remove 2" })
+    .click();
+  await expect(toasts(page).getByRole("listitem")).toContainText(
+    "Nothing was removed: windsurf holds notes.md. Open Clean up again to remove the others."
+  );
 });

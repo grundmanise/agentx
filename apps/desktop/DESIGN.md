@@ -609,6 +609,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.top` | 112 | `top-palette` | From the window top |
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
 | `adopt.list-max-height` | 280 | `max-h-adopt-list` | The adopt dialog's list of skills; it scrolls past it |
+| `cleanup.list-max-height` | 320 | `max-h-cleanup-list` | The Clean up dialog's list of agent configurations; it scrolls past it |
+| `cleanup.list-max-height` | 320 | `max-h-cleanup-list` | The Clean up dialog's list of agent configurations; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
 | `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
@@ -846,6 +848,24 @@ One card per agent configuration whose client does not read the library, in a 4-
 - Top row: the `agent-card.logo` logo on the left, the Enabled switch on the right.
 - Then the name in `type.agent-card-name` `card.title`; the configuration path in `type.technical` `text.caption`, one line with an ellipsis; the counts in `type.secondary` `card.text`, numbers in `text.primary` 500.
 - Enabled decides only where later installs and creations go when no agent is named. It never changes a placement, so the counts do not move when the switch does.
+
+### Removing an agent configuration (Agents page)
+
+The CLI's preview says, for every detected configuration, whether it can be removed and what holds it back. The page reads it when it opens, when the detected configurations change and when a dialog that removes opens; until it has, the controls below are absent.
+
+- Every card, and every column of the Universal card, has a ghost icon button with the `MoreIcon`, after the switch, that opens a menu (§6 "Menu") with Remove.
+- Remove on a configuration that can go opens a confirm dialog: the directory that is deleted in `type.technical` `text.caption`, what it holds and the configurations kept in the same directory in `type.body` `text.secondary`, a ghost cancel and a danger confirm. The dialog closes at once; the card goes with the inventory that follows.
+- Remove on a configuration the CLI keeps opens a dialog that names the directory and lists what it still holds, in the CLI's words, in `type.body` `text.secondary`, with one primary button that closes it. The app never offers a removal the CLI would refuse.
+- Clean up, a small secondary button at the right of the page title, shows while at least one configuration can be removed. Its dialog lists only those, each a checkbox row with a 20px logo, the name in `type.body` `text.primary` and the path in `type.technical-sm` `text.caption`, all ticked, in a list that scrolls past `cleanup.list-max-height`; a line in `type.secondary` `text.hint` counts the configurations that stay. The danger confirm carries the count and removes the ticked ones in one command. Configurations kept in one directory are ticked and unticked together.
+
+### Removing an agent configuration (Agents page)
+
+The CLI's preview says, for every detected configuration, whether it can be removed and what holds it back. The page reads it when it opens, when the detected configurations change and when a dialog that removes opens; until it has, the controls below are absent.
+
+- Every card, and every column of the Universal card, has a ghost icon button with the `MoreIcon`, after the switch, that opens a menu (§6 "Menu") with Remove.
+- Remove on a configuration that can go opens a confirm dialog: the directory that is deleted in `type.technical` `text.caption`, what it holds and the configurations kept in the same directory in `type.body` `text.secondary`, a ghost cancel and a danger confirm. The dialog closes at once; the card goes with the inventory that follows.
+- Remove on a configuration the CLI keeps opens a dialog that names the directory and lists what it still holds, in the CLI's words, in `type.body` `text.secondary`, with one primary button that closes it. The app never offers a removal the CLI would refuse.
+- Clean up, a small secondary button at the right of the page title, shows while at least one configuration can be removed. Its dialog lists only those, each a checkbox row with a 20px logo, the name in `type.body` `text.primary` and the path in `type.technical-sm` `text.caption`, all ticked, in a list that scrolls past `cleanup.list-max-height`; a line in `type.secondary` `text.hint` counts the configurations that stay. The danger confirm carries the count and removes the ticked ones in one command. Configurations kept in one directory are ticked and unticked together.
 
 ### Universal card (Agents page)
 

@@ -3,10 +3,21 @@
 // installs and creations go when no agent is named: `config enable <id>` and `config disable
 // <id>`, with Place all (`config enable <id> --place-all`) offered on the toast. The clients that
 // read the library share the Universal card and have no switch: they see the library whatever
-// their setting.
+// their setting. A card's menu removes a leftover configuration, and Clean up removes many at once
+// (`config remove <id>...`), both behind a dialog and only for what the CLI's preview lets go.
+import { useEffect, useState } from "react";
+
 import type { Configuration, InventoryEvent } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
+import { MoreIcon } from "#/components/icons/more.tsx";
 import { Spinner } from "#/components/spinner.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { plural } from "#/lib/plural.ts";
 import {
@@ -14,6 +25,16 @@ import {
   libraryPathOf,
   unplacedCount,
 } from "#/screens/agents/counts.ts";
+import {
+  loadRemovals,
+  REMOVE_LABEL,
+  useRemoval,
+  useRemovalEvents,
+} from "#/screens/agents/removal.ts";
+import {
+  CleanUpDialog,
+  RemoveAgentDialog,
+} from "#/screens/agents/remove-dialogs.tsx";
 import { placedAllText } from "#/screens/skills/placements.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -34,6 +55,48 @@ const placeAll = (c: Configuration) => {
     label: switchLabel(c),
     success: (events) => placedAllText(events, c.name),
   });
+};
+
+/**
+ * The menu of a configuration's other actions: Remove, which opens the dialog that confirms the
+ * removal or says what the configuration still holds. Absent until the preview has judged it.
+ */
+const AgentMenu = ({ c }: { c: Configuration }) => {
+  const removal = useRemoval(c.id);
+  const [removing, setRemoving] = useState(false);
+  if (removal === undefined) {
+    return null;
+  }
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`More actions for ${c.name}`}
+          >
+            <MoreIcon />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem
+            onSelect={() => {
+              void loadRemovals();
+              setRemoving(true);
+            }}
+          >
+            <span className="type-body text-text-primary">Remove</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <RemoveAgentDialog
+        removal={removal}
+        open={removing}
+        onOpenChange={setRemoving}
+      />
+    </>
+  );
 };
 
 const AgentCard = ({
@@ -93,6 +156,7 @@ const AgentCard = ({
             aria-busy={pending ? true : undefined}
             onCheckedChange={onToggle}
           />
+          <AgentMenu c={c} />
         </span>
       </div>
       <div className="flex min-w-0 flex-col gap-1">
@@ -155,9 +219,12 @@ const UniversalCard = ({
             aria-label={c.name}
             className="border-shell-divider ml-5 flex min-w-0 flex-1 flex-col gap-1 border-l pl-5"
           >
-            <h3 className="type-agent-card-name text-card-title m-0">
-              {c.name}
-            </h3>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="type-agent-card-name text-card-title m-0">
+                {c.name}
+              </h3>
+              <AgentMenu c={c} />
+            </div>
             <span
               className="type-technical text-text-caption truncate"
               title={c.path}
@@ -181,9 +248,44 @@ export const AgentsScreen = () => {
   const configurations = inventory?.configurations ?? [];
   const direct = configurations.filter((c) => !c.reads_library);
   const universal = configurations.filter((c) => c.reads_library);
+  // The preview is read for the configurations detected: again when one appears or goes.
+  const detected =
+    inventory === undefined
+      ? undefined
+      : configurations.map((c) => c.id).join(" ");
+  useEffect(() => {
+    if (detected !== undefined) {
+      void loadRemovals();
+    }
+  }, [detected]);
+  const removable = useRemovalEvents().filter((e) => e.state === "removable");
+  const removing = useSettling(REMOVE_LABEL);
+  const [cleaning, setCleaning] = useState(false);
   return (
     <div className="pt-page-top px-page pb-page gap-page-title flex h-full flex-col overflow-auto">
-      <h1 className="type-page-title text-text-primary m-0">Agents</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="type-page-title text-text-primary m-0">Agents</h1>
+        {removable.length > 0 && (
+          <span className="flex items-center gap-2">
+            {removing && (
+              <span className="text-text-hint flex">
+                <Spinner />
+              </span>
+            )}
+            <Button
+              size="sm"
+              disabled={removing}
+              onClick={() => {
+                void loadRemovals();
+                setCleaning(true);
+              }}
+            >
+              Clean up
+            </Button>
+          </span>
+        )}
+      </div>
+      <CleanUpDialog open={cleaning} onOpenChange={setCleaning} />
       {inventory !== undefined && (
         <div className="flex flex-col gap-7">
           {direct.length > 0 && (

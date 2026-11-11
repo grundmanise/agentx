@@ -577,6 +577,8 @@
   --inset-palette: 112px;
   --max-height-palette-list: 420px;
   --max-height-adopt-list: 280px;
+  --max-height-cleanup-list: 320px;
+  --max-height-cleanup-list: 320px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
   --min-height-toast: 44px;

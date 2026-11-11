@@ -117,6 +117,33 @@ export const inventory = {
   mcp_servers: servers,
 } satisfies InlineEvent;
 
+/**
+ * What the preview of `config remove` answers for these configurations: GitHub Copilot and
+ * Windsurf are leftovers that can be removed, and the others hold something of their own.
+ */
+export const removals: InlineEvent[] = configurations.map((c) => {
+  const holds: Record<string, string[]> = {
+    "claude-code": [
+      "settings.json",
+      "1 plugin in plugins",
+      "the skill notes, which nothing that stays on the machine holds",
+    ],
+    codex: ["MCP server declarations in config.toml"],
+    cursor: ["MCP server declarations in mcp.json"],
+    "gemini-cli": ["settings.json"],
+  };
+  const held = holds[c.id] ?? [];
+  return {
+    holds: held,
+    id: c.id,
+    name: c.name,
+    path: c.path,
+    state: held.length > 0 ? "kept" : "removable",
+    type: "config_removal",
+    with: [],
+  };
+});
+
 /** The library's path on this machine, as its occurrences show it. */
 export const LIBRARY = "/home/me/.agents/skills";
 
