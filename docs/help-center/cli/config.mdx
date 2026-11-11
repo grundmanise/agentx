@@ -188,6 +188,8 @@ agentx removes a configuration only when you lose nothing. Its directory may hol
 
 Every other file keeps the configuration, including editor backups and swap files such as `settings.json~`.
 
+A skill in your library, or in a client you keep, that is a link into the directory also keeps the configuration: removing it would break the link.
+
 Anything else keeps the configuration: a skill that is only there, a copy that differs from the library, MCP server declarations, plugins, settings, history, or any other file. agentx then removes nothing, of any configuration you named, and exits with code 6:
 
 ```text

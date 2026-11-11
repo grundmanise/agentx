@@ -138,11 +138,14 @@ func TestRecoveryTakesBackFromEveryBoundary(t *testing.T) {
 
 // TestRecoveryKeepsBothWhenThePathWasMadeAgain is a directory something
 // made again while the one that was there sat retained: recovery cannot
-// put it back, so it keeps both and names where the retained one is.
+// put it back, so it keeps both, names where the retained one is and says
+// what to do with it, which is never to move the journal aside. The other
+// directory, whose path is free, goes back all the same, and once the
+// retained one is dealt with the next recovery ends the journal.
 func TestRecoveryKeepsBothWhenThePathWasMadeAgain(t *testing.T) {
 	t.Parallel()
 	r, m := newTwoRemovals(t)
-	if err := m.stopAfter(1, refs{}); err != nil {
+	if err := m.stopAfter(2, refs{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(r.dirs[0], 0o755); err != nil {
@@ -150,10 +153,125 @@ func TestRecoveryKeepsBothWhenThePathWasMadeAgain(t *testing.T) {
 	}
 	retained := m.j.Steps[0].Retained
 	err := recoverJournals(r.dir, refs{})
-	if !errors.Is(err, ErrRecovery) || !strings.Contains(err.Error(), retained) {
+	var stranded *StrandedError
+	if !errors.Is(err, ErrRecovery) || !errors.As(err, &stranded) || !strings.Contains(err.Error(), retained) {
 		t.Fatalf("recovery = %v, want a recovery naming %s", err, retained)
+	}
+	if hint := stranded.Hint(); !strings.Contains(hint, "delete the kept directory") || strings.Contains(hint, "aside") {
+		t.Errorf("hint = %q", hint)
 	}
 	if _, err := os.Stat(filepath.Join(retained, "skills", "f")); err != nil {
 		t.Errorf("the retained directory lost its content: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(r.dirs[1], "skills", "f")); err != nil {
+		t.Errorf("the directory whose path was free did not go back: %v", err)
+	}
+	if err := os.Rename(retained, filepath.Join(r.dirs[0], "kept")); err != nil {
+		t.Fatal(err)
+	}
+	if err := recoverJournals(r.dir, refs{}); err != nil {
+		t.Errorf("recovery once the retained directory was dealt with: %v", err)
+	}
+	if left, _ := Journals(r.dir); len(left) > 0 {
+		t.Errorf("the journal is still there: %v", left)
+	}
+}
+
+// TestTakeBackLeavesSettingsItCannotRestore is the settings file edited
+// by hand, or its backup deleted, while the mutation was unfinished: the
+// directories go back all the same, the file is left as it is and named,
+// and no journal is left to hold later commands up.
+func TestTakeBackLeavesSettingsItCannotRestore(t *testing.T) {
+	t.Parallel()
+	for name, spoil := range map[string]func(t *testing.T, r twoRemovals, m *Mutation) string{
+		"edited by hand": func(t *testing.T, r twoRemovals, _ *Mutation) string {
+			if err := os.WriteFile(r.settings, []byte("{}\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return "{}\n"
+		},
+		"backup deleted": func(t *testing.T, r twoRemovals, m *Mutation) string {
+			rep := m.j.Replace[0]
+			if err := os.Rename(rep.Staged, rep.Path); err != nil {
+				t.Fatal(err)
+			}
+			return newSettings
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r, m := newTwoRemovals(t)
+			if err := m.stopAfter(2, refs{}); err != nil {
+				t.Fatal(err)
+			}
+			want := spoil(t, r, m)
+			var messages []string
+			if err := recoverJournals(r.dir, warned{refs{}, &messages}); err != nil {
+				t.Fatalf("recovery: %v", err)
+			}
+			for _, dir := range r.dirs {
+				if _, err := os.Stat(filepath.Join(dir, "skills", "f")); err != nil {
+					t.Errorf("%s did not go back: %v", dir, err)
+				}
+			}
+			if b, _ := os.ReadFile(r.settings); string(b) != want {
+				t.Errorf("the settings hold %q, want them left as %q", b, want)
+			}
+			if len(messages) != 1 || !strings.Contains(messages[0], r.settings) {
+				t.Errorf("warnings = %q, want one naming the settings", messages)
+			}
+			if left, _ := Journals(r.dir); len(left) > 0 {
+				t.Errorf("the journal is still there: %v", left)
+			}
+		})
+	}
+}
+
+// TestRecoveryOfAnAppliedTakeBackOnlyCleansUp is a process killed while it
+// was discarding what it had removed: the journal says applied, one
+// retained directory is partly deleted, and the other directory's path
+// holds, again, exactly what the removal captured there, as an installer
+// that ran since would leave it. Recovery deletes what is retained, all
+// of it, and never touches the paths again.
+func TestRecoveryOfAnAppliedTakeBackOnlyCleansUp(t *testing.T) {
+	t.Parallel()
+	r, m := newTwoRemovals(t)
+	if err := m.stopAfter(2, refs{}); err != nil {
+		t.Fatal(err)
+	}
+	rep := m.j.Replace[0]
+	if err := os.Rename(rep.Staged, rep.Path); err != nil {
+		t.Fatal(err)
+	}
+	m.j.Progress = "applied"
+	if err := writeJournal(m.journalPath(), m.j); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(m.j.Steps[1].Retained, "skills", "f")); err != nil {
+		t.Fatal(err)
+	}
+	again := filepath.Join(r.dirs[0], "skills", "f")
+	if err := os.MkdirAll(filepath.Dir(again), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(again, []byte(r.dirs[0]), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := recoverJournals(r.dir, refs{}); err != nil {
+		t.Fatalf("recovery: %v", err)
+	}
+	if _, err := os.Stat(again); err != nil {
+		t.Errorf("recovery removed the directory that was made again: %v", err)
+	}
+	for _, s := range m.j.Steps {
+		if _, err := os.Lstat(s.Retained); !os.IsNotExist(err) {
+			t.Errorf("%s is left behind: %v", s.Retained, err)
+		}
+	}
+	if b, _ := os.ReadFile(r.settings); string(b) != newSettings {
+		t.Errorf("the settings hold %q", b)
+	}
+	if left, _ := Journals(r.dir); len(left) > 0 {
+		t.Errorf("the journal is still there: %v", left)
 	}
 }

@@ -186,6 +186,7 @@ type removalJudge struct {
 	gone    []string
 	plugins map[string][]scan.InstalledPlugin // by slug, read once
 	hashes  map[string]string                 // content hashes by path, each read once
+	links   []skillLink                       // see allLinks, read once
 }
 
 // hash is contentHashAt, read once per path: the library's copy of a skill
@@ -281,16 +282,116 @@ func (j *removalJudge) judge(s removalScope) []string {
 			holds = append(holds, "the configuration of "+c.Name()+" ("+id+"), which is not named")
 		}
 	}
+	holds = append(holds, j.linksInto(s, dir)...)
 	holds = append(holds, j.walk(s, s.dir)...)
 	if len(holds) == 0 {
 		// A removal captures the whole directory before it moves it, so a
 		// file it cannot read stops the run: the judgment says so first.
-		if _, err := home.Fingerprint(s.dir); err != nil {
-			var at *fs.PathError
-			if errors.As(err, &at) {
-				return []string{j.rel(s, at.Path) + ", which cannot be read"}
+		if at := unreadable(s.dir); at != "" {
+			return []string{j.rel(s, at) + ", which cannot be read"}
+		}
+	}
+	return holds
+}
+
+// unreadable is the first path in the directory dir that cannot be read as
+// a removal reads it, to capture what it moves, and "" when all of it can.
+func unreadable(dir string) string {
+	_, err := home.Fingerprint(dir)
+	if err == nil {
+		return ""
+	}
+	var at *fs.PathError
+	if errors.As(err, &at) {
+		return at.Path
+	}
+	return dir
+}
+
+// skillLink is one symlink of a skills directory that stays: the entry, or
+// the directory itself with name "", and where it really leads.
+type skillLink struct {
+	owner string // "the library", or the client's name
+	id    string // the client's slug, "" for the library
+	name  string
+	real  string
+}
+
+// links are the symlinks in the library and in the skills directories of
+// the detected clients, each resolved once however many configurations are
+// judged.
+func (j *removalJudge) allLinks() []skillLink {
+	if j.links != nil {
+		return j.links
+	}
+	j.links = []skillLink{}
+	seen := map[string]bool{}
+	add := func(owner, id, dir string) {
+		dir = filepath.Clean(dir)
+		if seen[dir] {
+			return
+		}
+		seen[dir] = true
+		if info, err := os.Lstat(dir); err != nil {
+			return
+		} else if info.Mode()&os.ModeSymlink != 0 {
+			if real, err := filepath.EvalSymlinks(dir); err == nil {
+				j.links = append(j.links, skillLink{owner: owner, id: id, real: real})
 			}
-			return []string{"the directory, which cannot be read: " + err.Error()}
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if e.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			if real, err := filepath.EvalSymlinks(filepath.Join(dir, e.Name())); err == nil {
+				j.links = append(j.links, skillLink{owner: owner, id: id, name: e.Name(), real: real})
+			}
+		}
+	}
+	add("the library's", "", j.d.Library)
+	ids := make([]string, 0, len(j.detected))
+	for id := range j.detected {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		c := j.detected[id]
+		for _, dir := range c.SkillsDirs(j.d) {
+			if !beneath(filepath.Clean(dir), filepath.Clean(c.ConfigDir(j.d))) {
+				continue // the library, or another client's directory, listed under its owner
+			}
+			add(c.Name()+"'s", id, dir)
+		}
+	}
+	return j.links
+}
+
+// linksInto are the skills that stay on the machine only as a link into
+// the directory dir of s, as it really is: an entry of the library, or of
+// the skills directory of a client that stays, that resolves into it.
+// Deleting the directory would leave the link dangling, and the library,
+// or that client, without the skill, whatever copy of it stays elsewhere.
+func (j *removalJudge) linksInto(s removalScope, dir string) []string {
+	var holds []string
+	for _, l := range j.allLinks() {
+		if l.id != "" {
+			c := j.detected[l.id]
+			own := filepath.Clean(c.ConfigDir(j.d))
+			if l.id == s.id || beneath(own, s.dir) || j.leaving(own) {
+				continue // it goes with this directory, or went before it
+			}
+		}
+		if !beneath(l.real, dir) {
+			continue
+		}
+		if l.name == "" {
+			holds = append(holds, l.owner+" skills directory, which is a link into this directory")
+		} else {
+			holds = append(holds, l.owner+" skill "+sanitised(l.name)+", which is a link into this directory")
 		}
 	}
 	return holds
@@ -451,6 +552,13 @@ func (j *removalJudge) skills(s removalScope, dir string) []string {
 		case e.Type()&os.ModeSymlink != 0:
 		case e.IsDir() && j.holdsNothing(path):
 		case e.IsDir():
+			// Read before it is compared: a copy with a file that cannot be
+			// read hashes as though the file were not there, which would
+			// name the wrong reason, or none.
+			if at := unreadable(path); at != "" {
+				holds = append(holds, j.rel(s, at)+", which cannot be read")
+				continue
+			}
 			hash := j.hash(path)
 			switch {
 			case hash == "":
