@@ -8,6 +8,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // TestSkillRenameIsAForkAndARemoval renames a skill of the account remote
@@ -113,7 +114,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	// The account remote refuses the old branch's deletion: the publish
 	// warns and goes on, still pushing renamed.
 	hook := filepath.Join(remote, "hooks", "pre-receive")
-	writeShim(t, hook, "#!/bin/sh\nwhile read old new ref; do [ \"$ref\" = refs/heads/skills/alpha ] && exit 1; done\nexit 0\n")
+	testshim.Write(t, hook, "#!/bin/sh\nwhile read old new ref; do [ \"$ref\" = refs/heads/skills/alpha ] && exit 1; done\nexit 0\n")
 	// -m does not fold a rename, which keeps its commit.
 	out = a.run("skill", "publish", "renamed", "-m", "Rename alpha")
 	equal(t, "a refused deletion: exit", out.exit, 0)

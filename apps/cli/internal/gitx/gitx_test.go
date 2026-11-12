@@ -7,13 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // stubGit puts a git script on a fresh PATH that prints its arguments on the
@@ -22,9 +23,7 @@ func stubGit(t *testing.T) map[string]string {
 	t.Helper()
 	dir := t.TempDir()
 	script := "#!/bin/sh\necho \"$@\"\n/usr/bin/env\n"
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testshim.Write(t, filepath.Join(dir, "git"), script)
 	return map[string]string{
 		"PATH":            dir,
 		"HOME":            "/home/someone",
@@ -123,9 +122,7 @@ func TestVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.out, func(t *testing.T) {
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "git"), []byte("#!/bin/sh\necho '"+tt.out+"'\n"), 0o755); err != nil {
-				t.Fatal(err)
-			}
+			testshim.Write(t, filepath.Join(dir, "git"), "#!/bin/sh\necho '"+tt.out+"'\n")
 			r := New(map[string]string{"PATH": dir}, false, func(string, ...any) {})
 			v, err := r.Version(context.Background())
 			if (err != nil) != tt.err {
@@ -224,9 +221,7 @@ func TestIsolatedReadsNoAttributesOfTheUsers(t *testing.T) {
 func TestIsolatedStatusAnswersWithTheExitStatus(t *testing.T) {
 	dir := t.TempDir()
 	script := "#!/bin/sh\nfor last; do :; done\necho written\nif [ \"$last\" = kill ]; then kill -9 $$; fi\nexit $last\n"
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testshim.Write(t, filepath.Join(dir, "git"), script)
 	r := New(map[string]string{"PATH": dir}, false, func(string, ...any) {})
 	ctx := context.Background()
 	for _, c := range []struct {
@@ -325,7 +320,7 @@ func TestCancellingAnUnattendedGitStopsItsTransport(t *testing.T) {
 	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	writeShim(t, filepath.Join(dir, "git"), "#!/bin/sh\n[ \"$1\" = --version ] && exit 0\n"+
+	testshim.Write(t, filepath.Join(dir, "git"), "#!/bin/sh\n"+
 		sleeper+" 300 > "+fifo+" &\necho $! > "+ready+"\nwait\n")
 	r := New(map[string]string{"PATH": dir, "HOME": dir}, false, func(string, ...any) {})
 
@@ -432,25 +427,6 @@ func checkoutRepo(t *testing.T) (*Runner, string, string) {
 		t.Fatal(err)
 	}
 	return r, gitDir, commit
-}
-
-// writeShim writes a git shell script a parallel test is about to run and
-// waits until it can be run. The suite forks in parallel with itself and a
-// fork duplicates the write descriptor of a file being written, so running
-// the script can fail with ETXTBSY until the child that inherited that
-// descriptor execs; it is run with --version until it starts, which every
-// script given answers at once.
-func writeShim(t *testing.T, path, script string) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for {
-		if err := exec.Command(path, "--version").Run(); !errors.Is(err, syscall.ETXTBSY) {
-			return
-		}
-		runtime.Gosched()
-	}
 }
 
 // TestChildEnv checks what one git process is given: the variables that

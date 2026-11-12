@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
@@ -138,7 +139,7 @@ func TestRepairWorktreesNamesItsPaths(t *testing.T) {
 		"*--version*) echo \"git version $VER\" ;;\n" +
 		"*\"config --type=bool --get worktree.useRelativePaths\"*) [ -n \"$REL\" ] && echo true && exit 0; exit 1 ;;\n" +
 		"*) echo \"$*\" >> \"$LOG\" ;;\nesac\n"
-	writeShim(t, filepath.Join(dir, "git"), script)
+	testshim.Write(t, filepath.Join(dir, "git"), script)
 	ctx := context.Background()
 	for _, tc := range []struct {
 		version, relative string

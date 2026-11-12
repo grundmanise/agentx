@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
@@ -229,9 +230,7 @@ func TestPushBranchNeverForces(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "seen")
 	script := "#!/bin/sh\n{ echo \"$@\"; /usr/bin/env; } > \"$SEEN\"\n"
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testshim.Write(t, filepath.Join(dir, "git"), script)
 	r := New(map[string]string{"PATH": dir, "HOME": "/home/someone", "SEEN": out}, false, func(string, ...any) {})
 	_, found, _, exit, err := r.PushBranch(context.Background(), "/srv/account.git", "src-abc", "c0ffee", "main", "beef")
 	if err != nil || found || exit != 0 {

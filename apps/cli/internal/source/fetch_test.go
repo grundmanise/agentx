@@ -10,6 +10,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // TestAFetchWritesNoConfig: a fetch runs outside agentx's lock, so it never
@@ -109,7 +110,7 @@ func TestConfigureWritesTheRemoteOfEachKind(t *testing.T) {
 		t.Fatal(err)
 	}
 	bin := t.TempDir()
-	source.WriteShim(t, filepath.Join(bin, "git"), "#!/bin/sh\ncase \"$*\" in *--unset-all*) exit 4;; esac\nexec '"+gitPath+"' \"$@\"\n")
+	testshim.Write(t, filepath.Join(bin, "git"), "#!/bin/sh\ncase \"$*\" in *--unset-all*) exit 4;; esac\nexec '"+gitPath+"' \"$@\"\n")
 	failing := gitx.New(map[string]string{"PATH": bin, "HOME": t.TempDir()}, false, func(string, ...any) {})
 	if err := source.Configure(ctx, failing, gitDir, account); err == nil {
 		t.Error("Configure succeeded although git could not unset the promisor settings")

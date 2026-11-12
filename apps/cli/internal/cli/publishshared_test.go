@@ -13,6 +13,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // sharedPublishHarness is a home that installed every skill of a shared
@@ -193,7 +194,7 @@ exec `+real+` "$@"
 	equal(t, "moved: the source", s.query("rev-parse", "main"), upstream)
 
 	h.mustRun("skill", "update", "alpha")
-	writeShim(t, mkdirs(t, filepath.Join(s.gitDir, "hooks"), "pre-receive"), "#!/bin/sh\necho 'no pushes on Fridays' >&2\nexit 1\n")
+	testshim.Write(t, mkdirs(t, filepath.Join(s.gitDir, "hooks"), "pre-receive"), "#!/bin/sh\necho 'no pushes on Fridays' >&2\nexit 1\n")
 	managed = h.ref(lineage.ManagedRef("alpha"))
 	out = h.run("--json", "skill", "publish", "alpha")
 	equal(t, "declined: exit", out.exit, exitRefused.exit)

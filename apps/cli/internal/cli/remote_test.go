@@ -13,6 +13,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // newAccountRemote is an empty bare repository under the test's own
@@ -220,7 +221,7 @@ func TestPublishWhenTheRemoteMoved(t *testing.T) {
 	contains(t, "alpha's refusal", out.stderr, "the account remote holds changes to alpha that this machine lacks")
 	equal(t, "a's alpha, kept", a.ref(lineage.ForkRef("alpha")), behindTip)
 
-	writeShim(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\necho 'no pushes on Fridays' >&2\nexit 1\n")
+	testshim.Write(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\necho 'no pushes on Fridays' >&2\nexit 1\n")
 	b.commitFork("alpha", forkNotes("nine", "nine, b"))
 	out = b.run("--json", "skill", "publish", "alpha")
 	equal(t, "a declined push: exit", out.exit, 6)

@@ -15,6 +15,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // machineSnapshot is what the branch of the machine id on the bare
@@ -107,7 +108,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	b.rewrite(s)
 	b.reachAs(remote, overHTTPS)
 	b.setAccount(overHTTPS)
-	writeShim(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\necho 'read only' >&2\nexit 1\n")
+	testshim.Write(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\necho 'read only' >&2\nexit 1\n")
 	out = b.run("--json", "import", "--machine", "cloud", "--yes")
 	equal(t, "import --machine: exit", out.exit, 0)
 	equal(t, "the label imported", b.one(out.stdout, "settings")["settings"].(map[string]any)["label"], "first-laptop")
@@ -289,7 +290,7 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 		t.Skip("git not on PATH")
 	}
 	bin := t.TempDir()
-	writeShim(t, filepath.Join(bin, "git"), "#!/bin/sh\ncase \" $* \" in *\" push \"*machines/cloud*) "+
+	testshim.Write(t, filepath.Join(bin, "git"), "#!/bin/sh\ncase \" $* \" in *\" push \"*machines/cloud*) "+
 		real+" --git-dir="+remote+" update-ref refs/heads/machines/cloud "+other+" ;; esac\nexec "+real+" \"$@\"\n")
 	h.env["PATH"] = bin + string(os.PathListSeparator) + os.Getenv("PATH")
 	moved := h.run("skill", "place", "alpha", "--machine", "cloud", "--to", "claude-code")
