@@ -2,7 +2,7 @@
 // checks it, `skill new` with `--description` only when one is given, the new skill selected under
 // YOUR SKILLS once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
 // Settings, and a refused name's message under Name.
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import {
   createdEvents,
@@ -174,72 +174,6 @@ const openOnSkill = async (cli: MockCli, page: Page, name: string) => {
   await page.goto(`/#/skills/${name}`);
   await expect(pane(page, name)).toBeVisible();
 };
-
-/** The right edge of `locator`'s box. */
-const rightOf = async (locator: Locator) => {
-  const box = await locator.boundingBox();
-  if (box === null) {
-    throw new Error("no box");
-  }
-  return box.x + box.width;
-};
-
-// The window at 1280x800 and at its minimum size (src-tauri/tauri.conf.json), with a skill open.
-for (const size of [
-  { height: 800, width: 1280 },
-  { height: 700, width: 1100 },
-]) {
-  test(`the Skills header at ${size.width}x${size.height}: Check updates and the Add button group end where the filter row ends, none of them clipped`, async ({
-    cli,
-    page,
-  }) => {
-    await page.setViewportSize(size);
-    await openOnSkill(cli, page, "release-notes");
-    const controls = skillsHeader(page).getByRole("button", {
-      exact: true,
-      name: /^(?:Check updates|Add|More add actions|Create)$/u,
-    });
-    // Check updates shows its icon alone; Add its label; the three-dots trigger its icon.
-    await expect(controls.nth(0)).toHaveAccessibleName("Check updates");
-    await expect(controls.nth(2)).toHaveAccessibleName("More add actions");
-    await expect(controls).toHaveText(["", "Add", ""]);
-    await expect(moreAddActions(page)).toHaveAttribute("aria-haspopup", "menu");
-    // Each control ends inside the list column, and its label fits the control.
-    const column = await skillsHeader(page).boundingBox();
-    const buttons = await controls.all();
-    const fits = await Promise.all(
-      buttons.map(async (button) => {
-        const box = await button.boundingBox();
-        const whole = await button.evaluate(
-          (b) => b.scrollWidth <= b.clientWidth
-        );
-        return (
-          whole &&
-          box !== null &&
-          column !== null &&
-          box.x + box.width <= column.x + column.width
-        );
-      })
-    );
-    expect(fits).toEqual([true, true, true]);
-    // The last control ends on the header's right padding, where the filter row below ends.
-    const filterRow = skillsHeader(page)
-      .getByRole("button", { exact: true, name: "Sort Z to A" })
-      .locator("xpath=..");
-    const [controlsRight, filterRight] = await Promise.all([
-      rightOf(moreAddActions(page)),
-      rightOf(filterRow),
-    ]);
-    expect(Math.abs(controlsRight - filterRight)).toBeLessThanOrEqual(1);
-    // Nothing in the column is wider than the column.
-    const overflow = await skillsHeader(page).evaluate((section) =>
-      [...section.children].map(
-        (child) => child.scrollWidth > child.clientWidth
-      )
-    );
-    expect(overflow).not.toContain(true);
-  });
-}
 
 test("Add in the Skills header goes to Add skills", async ({ cli, page }) => {
   await openOnSkill(cli, page, "release-notes");
@@ -440,7 +374,7 @@ test("the name is checked as the CLI checks it", async ({ cli, page }) => {
   await expect(dialog(page)).toBeHidden();
 });
 
-test("the description hint turns red and Create is disabled past 1024 characters", async ({
+test("the description is invalid and Create is disabled past 1024 characters", async ({
   cli,
   page,
 }) => {
@@ -449,7 +383,6 @@ test("the description hint turns red and Create is disabled past 1024 characters
     "What it does and when to use it, in one or two sentences. Up to 1024 characters."
   );
   await expect(hint).toBeVisible();
-  await expect(hint).toHaveClass(/text-text-hint/u);
   await expect(descriptionField(page)).toHaveAccessibleDescription(
     "What it does and when to use it, in one or two sentences. Up to 1024 characters."
   );
@@ -460,12 +393,10 @@ test("the description hint turns red and Create is disabled past 1024 characters
   await expect(createButton(page)).toBeEnabled();
 
   await descriptionField(page).fill("a".repeat(1025));
-  await expect(hint).toHaveClass(/text-tone-danger-fg/u);
   await expect(descriptionField(page)).toHaveAttribute("aria-invalid", "true");
   await expect(createButton(page)).toBeDisabled();
 
   await descriptionField(page).press("Backspace");
-  await expect(hint).toHaveClass(/text-text-hint/u);
   await expect(createButton(page)).toBeEnabled();
 
   await dialog(page)

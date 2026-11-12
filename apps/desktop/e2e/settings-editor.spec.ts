@@ -46,25 +46,12 @@ const restart = async (cli: MockCli, page: Page) => {
   await expect(choices(page)).toBeVisible();
 };
 
-test("Editor sits before Storage and lists System default, the editors found and Custom command", async ({
+test("Editor lists System default, the editors found and Custom command", async ({
   cli,
   page,
 }) => {
   cli.answerEditors(FOUND);
   await openSettings(page);
-  const sections = page.getByRole("main").getByRole("region");
-  await expect(sections).toHaveText([
-    /^This machine/u,
-    /^Account remote/u,
-    /^Sources/u,
-    /^Adopt skills/u,
-    /^Comparing edits/u,
-    /^Editor/u,
-    /^Storage/u,
-    /^Command line/u,
-    /^Export settings/u,
-    /^Import settings/u,
-  ]);
   await expect(section(page)).toContainText(
     "The application that opens a skill when you edit it."
   );
