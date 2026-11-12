@@ -159,15 +159,18 @@ export const GROUP_PLUGINS = "plugins";
 export const GROUP_DISK = "disk";
 const SOURCE_PREFIX = "source:";
 
-const labels: Record<string, string> = {
-  [GROUP_DISK]: "UNMANAGED",
-  [GROUP_PLUGINS]: "PLUGINS",
-  [GROUP_YOURS]: "YOUR SKILLS",
+const groupNames: Record<string, string> = {
+  [GROUP_DISK]: "Unmanaged",
+  [GROUP_PLUGINS]: "Plugins",
+  [GROUP_YOURS]: "Your skills",
 };
 
-/** The caption of a group: a source's short form, uppercase like every caption, or the fixed ones. */
-export const groupLabel = (key: string) =>
-  labels[key] ?? shortSource(key.slice(SOURCE_PREFIX.length)).toUpperCase();
+/** The name of a group: a source's short form, or the fixed ones, which SHOW offers as choices. */
+export const groupName = (key: string) =>
+  groupNames[key] ?? shortSource(key.slice(SOURCE_PREFIX.length));
+
+/** The caption of a group: its name, uppercase like every caption. */
+export const groupLabel = (key: string) => groupName(key).toUpperCase();
 
 const kindOf = (entry: LibraryEntry): SkillKindName => {
   if (entry.kind === "unmanaged") {
@@ -384,7 +387,7 @@ export const forksOf = (row: Pick<SkillRow, "name">, rows: SkillRow[]) =>
     compareNames
   );
 
-export type Show = "all" | "updates" | "yours" | "unmanaged";
+export type Show = "all" | "yours" | "plugins" | "unmanaged" | "updates";
 export type State = "all" | "enabled" | "disabled";
 /** The id of the Universal choice among the agent filters. */
 export const UNIVERSAL = "universal";
@@ -411,24 +414,21 @@ export const filterCount = (f: Filters) =>
   (f.state === "all" ? 0 : 1) +
   (f.agents.length > 0 ? 1 : 0);
 
+/** The group each SHOW choice keeps, for the choices that keep one group. */
+const showGroups: Partial<Record<Show, string>> = {
+  plugins: GROUP_PLUGINS,
+  unmanaged: GROUP_DISK,
+  yours: GROUP_YOURS,
+};
+
 const matchesShow = (row: SkillRow, show: Show) => {
-  switch (show) {
-    case "all": {
-      return true;
-    }
-    case "updates": {
-      return row.hasUpdate;
-    }
-    case "yours": {
-      return row.kind === "yours";
-    }
-    case "unmanaged": {
-      return row.kind === "disk";
-    }
-    default: {
-      return true;
-    }
+  if (show === "all") {
+    return true;
   }
+  if (show === "updates") {
+    return row.hasUpdate;
+  }
+  return row.group === showGroups[show];
 };
 
 const matchesState = (row: SkillRow, state: State) => {
@@ -474,6 +474,7 @@ export const showCounts = (
   const count = (show: Show) => filterRows(rows, { ...f, show }).length;
   return {
     all: count("all"),
+    plugins: count("plugins"),
     unmanaged: count("unmanaged"),
     updates: count("updates"),
     yours: count("yours"),

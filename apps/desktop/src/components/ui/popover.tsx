@@ -24,9 +24,10 @@ const PopoverAnchor = ({
   <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />
 );
 
-// `popover.width`, `popover.radius`, `overlay.bg` with `overlay.border` and `popover.shadow`.
+// `popover.width`, `popover.radius`, `overlay.bg` with `overlay.border` and `popover.shadow`. No
+// taller than `popover.max-height`, the room the window has for it: past that it scrolls.
 const popoverContentVariants = cva(
-  "rounded-popover border-overlay-border bg-overlay-bg shadow-popover w-popover z-40 flex flex-col border outline-none",
+  "rounded-popover border-overlay-border bg-overlay-bg shadow-popover w-popover max-h-popover z-40 flex flex-col overflow-y-auto border outline-none",
   {
     defaultVariants: { padding: "groups" },
     variants: {
@@ -40,12 +41,14 @@ const popoverContentVariants = cva(
   }
 );
 
-/** Below its anchor, aligned to its start, `popover.offset` away. */
+/** Below its anchor, aligned to its start, `popover.offset` away, `popover.window-inset` from the window's edges. */
 const PopoverContent = ({
   padding,
   align = "start",
   // popover.offset
   sideOffset = 8,
+  // popover.window-inset
+  collisionPadding = 10,
   ...props
 }: OwnProps<typeof PopoverPrimitive.Content> &
   VariantProps<typeof popoverContentVariants>) => (
@@ -54,6 +57,7 @@ const PopoverContent = ({
       data-slot="popover-content"
       align={align}
       sideOffset={sideOffset}
+      collisionPadding={collisionPadding}
       className={popoverContentVariants({ padding })}
       {...props}
     />
