@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router";
 
+import { ActivityLogSheet } from "#/app/activity-log.tsx";
 import { CommandPalette } from "#/app/command-palette.tsx";
 import { LaunchProgress } from "#/app/launch-progress.tsx";
 import { screens, titles } from "#/app/screens.ts";
@@ -121,6 +122,7 @@ export const App = () => {
         </div>
       )}
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <ActivityLogSheet />
       <Toaster />
     </div>
   );

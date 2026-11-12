@@ -3,7 +3,9 @@
 // the events of a child that ended or was replaced are dropped. Within one serve instance an
 // inventory applies only when its scan counter goes up; a new instance applies whatever it sends
 // first, since counters are never compared across instances. What serve notices goes to the
-// activity list: its drift, reconcile and update events, and the warnings it logs on stderr.
+// activity list: its drift, reconcile and update events, and the warnings it logs on stderr. The
+// activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
+// exit of the active child.
 import type {
   CliEvent,
   DriftEvent,
@@ -15,6 +17,14 @@ import type {
 } from "#/cli/events.gen.ts";
 import { serve } from "#/cli/transport.ts";
 import type { ServeExit, ServeLine } from "#/cli/transport.ts";
+import { plural } from "#/lib/plural.ts";
+import {
+  formatDuration,
+  lastStderr,
+  logBackground,
+  logLine,
+  serveLogLine,
+} from "#/store/activity-log.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
@@ -148,6 +158,7 @@ const activate = (childId: number) => {
     return;
   }
   active = childId;
+  logBackground("background scan started");
   // A search the child before did not answer is never answered: the new child's index is asked anew.
   dropSearch();
   const { refreshes } = useAppStore.getState();
@@ -206,12 +217,27 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
     freshness: { kind: "fresh" },
     inventory: event,
   });
+  logBackground(
+    `inventory updated: ${[
+      plural(event.skills.length, "skill"),
+      plural(event.mcp_servers.length, "MCP server"),
+      plural(event.plugins.length, "plugin"),
+    ].join(", ")}`
+  );
 };
 
 /** Clears an answered request, even when the inventory did not change. */
 const acknowledge = (event: RefreshCompleteEvent) => {
   rescans.get(event.request_id)?.(event);
   rescans.delete(event.request_id);
+  if (event.ok) {
+    logBackground("scan finished");
+  } else {
+    logBackground("scan failed", {
+      failed: true,
+      output: event.error === undefined ? [] : [event.error],
+    });
+  }
   const { refreshes } = useAppStore.getState();
   if (!Object.hasOwn(refreshes, event.request_id)) {
     return;
@@ -234,18 +260,23 @@ const apply = (childId: number, event: CliEvent) => {
     answerSearch(event);
   } else if (event.type === "reconcile") {
     set((s) => ({ reconciles: [...s.reconciles, event] }));
+    const tone = event.outcome === "repaired" ? "success" : "attention";
     if (event.outcome !== "restored") {
-      addActivity(
-        event.outcome === "repaired" ? "success" : "attention",
-        `${event.name}: ${event.outcome}`
-      );
+      addActivity(tone, `${event.name}: ${event.outcome}`);
     }
+    logBackground(`${event.name}: ${event.outcome}`);
   } else if (event.type === "update_available") {
     set((s) => ({ updates: { ...s.updates, [event.name]: event } }));
     addActivity("success", `Update available for ${event.name}`);
+    logBackground(`update available for ${event.name}`);
   } else if (event.type === "drift") {
     addActivity("attention", driftText(event));
+    logBackground(driftText(event));
   } else if (event.type === "error") {
+    logBackground(event.message, {
+      failed: true,
+      output: event.hint === undefined ? [] : [event.hint],
+    });
     errors.set(
       childId,
       event.hint === undefined
@@ -263,6 +294,11 @@ const apply = (childId: number, event: CliEvent) => {
 const applyLog = (event: LogEvent) => {
   if (event.level === "warn") {
     addActivity("attention", event.message);
+  }
+  // Debug lines come by the hundred while serve logs at debug level: the serve log file holds
+  // them, which the activity log shows in the file manager.
+  if (event.level !== "debug") {
+    logBackground(logLine(event));
   }
 };
 
@@ -282,9 +318,24 @@ const onExit = (exit: ServeExit) => {
   ended = Math.max(ended, exit.childId);
   const code = exit.exitCode === null ? "a signal" : `code ${exit.exitCode}`;
   const problem = errors.get(exit.childId) ?? {
-    message: exit.stderr.at(-1) ?? `agentx serve stopped with ${code}`,
+    message: lastStderr(exit.stderr) ?? `agentx serve stopped with ${code}`,
   };
   errors.delete(exit.childId);
+  logBackground(
+    exit.exitCode === null
+      ? "background scan stopped by the system"
+      : `background scan stopped · exit ${exit.exitCode}`,
+    {
+      // A scan the app restarts on purpose, as the Debug output switch does, is no failure: it
+      // ends on a signal or exits 0, and comes back.
+      failed:
+        !exit.restarting || (exit.exitCode !== null && exit.exitCode !== 0),
+      note: exit.restarting
+        ? `restarts in ${formatDuration(exit.restartInMs ?? 0)}`
+        : "restart agentx to scan again",
+      output: exit.stderr.map(serveLogLine),
+    }
+  );
   set({
     serveEnd: {
       childId: exit.childId,
@@ -301,6 +352,30 @@ const onExit = (exit: ServeExit) => {
         ? { kind: "stale" }
         : { error: problem.message, kind: "failed" },
     });
+  }
+};
+
+/**
+ * Where the serve log file is: everything serve wrote to stderr, this session and the ones before
+ * it. Undefined when the supervisor does not answer.
+ */
+export const serveLogPath = async (): Promise<string | undefined> => {
+  try {
+    return await serve.logPath();
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Whether serve logs at debug level, for its log file. The supervisor restarts the serve child
+ * on a change, which shows as any restart does.
+ */
+export const setServeDebug = async (on: boolean) => {
+  try {
+    await serve.verbose(on);
+  } catch {
+    // The switch still decides how the one-shot commands run.
   }
 };
 

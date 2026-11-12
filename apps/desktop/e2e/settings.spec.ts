@@ -71,6 +71,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
     /^Editor/u,
     /^Storage/u,
     /^Command line/u,
+    /^Activity log/u,
     /^Export settings/u,
     /^Import settings/u,
   ]);

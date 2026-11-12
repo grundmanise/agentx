@@ -383,6 +383,7 @@
   --radius-diff-segment: 4px;
   --radius-dialog: 24px;
   --radius-sheet: 20px;
+  --radius-log-output: 10px;
   --radius-palette: 20px;
   --radius-palette-row: 12px;
   --radius-popover: 16px;
@@ -570,6 +571,7 @@
   --padding-menu: 6px;
   --width-sheet: 420px;
   --width-sheet-wide: 560px;
+  --width-log-time: 8ch;
   --inset-sheet: 10px;
   --padding-sheet: 32px;
   --padding-sheet-y: 28px;
