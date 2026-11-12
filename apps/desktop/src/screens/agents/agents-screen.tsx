@@ -3,11 +3,16 @@
 // installs and creations go when no agent is named: `config enable <id>` and `config disable
 // <id>`, with Place all (`config enable <id> --place-all`) offered on the toast. The clients that
 // read the library share the Universal card and have no switch: they see the library whatever
-// their setting. A card's menu removes a leftover configuration, and Clean up removes many at once
-// (`config remove <id>...`), both behind a dialog and only for what the CLI's preview lets go.
-import { useEffect, useState } from "react";
+// their setting. Remove, in the menu of a card and of a Universal column, deletes the
+// configuration's directory after one confirm dialog (`config remove <id> --yes`): the user
+// decides what goes, and the cards follow the inventory that comes after the command.
+import { useState } from "react";
 
-import type { Configuration, InventoryEvent } from "#/cli/events.gen.ts";
+import type {
+  CliEvent,
+  Configuration,
+  InventoryEvent,
+} from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { MoreIcon } from "#/components/icons/more.tsx";
 import { Spinner } from "#/components/spinner.tsx";
@@ -19,23 +24,16 @@ import {
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
+import { againRule, withAppHint } from "#/lib/app-hint.ts";
 import { plural } from "#/lib/plural.ts";
 import {
   countsOf,
   libraryPathOf,
   unplacedCount,
 } from "#/screens/agents/counts.ts";
-import {
-  loadRemovals,
-  REMOVE_LABEL,
-  useRemoval,
-  useRemovalEvents,
-} from "#/screens/agents/removal.ts";
-import {
-  CleanUpDialog,
-  RemoveAgentDialog,
-} from "#/screens/agents/remove-dialogs.tsx";
+import { Confirm } from "#/screens/settings/confirm.tsx";
 import { placedAllText } from "#/screens/skills/placements.ts";
+import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -57,16 +55,48 @@ const placeAll = (c: Configuration) => {
   });
 };
 
+/** The label of a configuration's Remove: the runner's name for it. */
+const removeLabel = (c: Configuration) => `remove ${c.id}`;
+
 /**
- * The menu of a configuration's other actions: Remove, which opens the dialog that confirms the
- * removal or says what the configuration still holds. Absent until the preview has judged it.
+ * "Removed Antigravity", or "Removed Antigravity and Antigravity CLI" when the deleted directory
+ * held another configuration: the names the CLI says it removed.
+ */
+const removedText = (events: CliEvent[]) => {
+  const names = events
+    .filter((e) => e.type === "config_removal")
+    .map((e) => e.name);
+  return `Removed ${names.join(", ").replace(/, (?=[^,]*$)/u, " and ")}`;
+};
+
+/** A failed removal in the app's words: the CLI's message, and a hint that names Remove. */
+const removeFailure = ({ events }: Outcome) => {
+  const error = events.find((e) => e.type === "error");
+  return error === undefined
+    ? undefined
+    : withAppHint(
+        error.hint === undefined
+          ? { message: error.message }
+          : { hint: error.hint, message: error.message },
+        [againRule("remove it again")]
+      );
+};
+
+const remove = (c: Configuration) => {
+  void runUntilSettled(["config", "remove", c.id, "--yes"], {
+    failure: removeFailure,
+    label: removeLabel(c),
+    success: removedText,
+  });
+};
+
+/**
+ * The menu of a configuration's other actions: Remove, behind a dialog that names the directory
+ * that is deleted.
  */
 const AgentMenu = ({ c }: { c: Configuration }) => {
-  const removal = useRemoval(c.id);
-  const [removing, setRemoving] = useState(false);
-  if (removal === undefined) {
-    return null;
-  }
+  const [confirming, setConfirming] = useState(false);
+  const pending = useSettling(removeLabel(c));
   return (
     <>
       <DropdownMenu>
@@ -75,6 +105,7 @@ const AgentMenu = ({ c }: { c: Configuration }) => {
             variant="ghost"
             size="icon"
             aria-label={`More actions for ${c.name}`}
+            disabled={pending}
           >
             <MoreIcon />
           </Button>
@@ -82,18 +113,24 @@ const AgentMenu = ({ c }: { c: Configuration }) => {
         <DropdownMenuContent>
           <DropdownMenuItem
             onSelect={() => {
-              void loadRemovals();
-              setRemoving(true);
+              setConfirming(true);
             }}
           >
             <span className="type-body text-text-primary">Remove</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <RemoveAgentDialog
-        removal={removal}
-        open={removing}
-        onOpenChange={setRemoving}
+      <Confirm
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Remove ${c.name}?`}
+        description="Its configuration directory is deleted from this machine, with everything in it."
+        detail={c.path}
+        action="Remove"
+        onConfirm={() => {
+          setConfirming(false);
+          remove(c);
+        }}
       />
     </>
   );
@@ -248,44 +285,9 @@ export const AgentsScreen = () => {
   const configurations = inventory?.configurations ?? [];
   const direct = configurations.filter((c) => !c.reads_library);
   const universal = configurations.filter((c) => c.reads_library);
-  // The preview is read for the configurations detected: again when one appears or goes.
-  const detected =
-    inventory === undefined
-      ? undefined
-      : configurations.map((c) => c.id).join(" ");
-  useEffect(() => {
-    if (detected !== undefined) {
-      void loadRemovals();
-    }
-  }, [detected]);
-  const removable = useRemovalEvents().filter((e) => e.state === "removable");
-  const removing = useSettling(REMOVE_LABEL);
-  const [cleaning, setCleaning] = useState(false);
   return (
     <div className="pt-page-top px-page pb-page gap-page-title flex h-full flex-col overflow-auto">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="type-page-title text-text-primary m-0">Agents</h1>
-        {removable.length > 0 && (
-          <span className="flex items-center gap-2">
-            {removing && (
-              <span className="text-text-hint flex">
-                <Spinner />
-              </span>
-            )}
-            <Button
-              size="sm"
-              disabled={removing}
-              onClick={() => {
-                void loadRemovals();
-                setCleaning(true);
-              }}
-            >
-              Clean up
-            </Button>
-          </span>
-        )}
-      </div>
-      <CleanUpDialog open={cleaning} onOpenChange={setCleaning} />
+      <h1 className="type-page-title text-text-primary m-0">Agents</h1>
       {inventory !== undefined && (
         <div className="flex flex-col gap-7">
           {direct.length > 0 && (

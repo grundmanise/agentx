@@ -70,7 +70,6 @@ export type ReconcileOutcome =
   | "installable"
   | "unmanaged";
 export type AdoptionState = "candidate" | "adopted" | "managed" | "refused";
-export type ConfigRemovalState = "removable" | "removed" | "kept";
 export type ImportState = "present" | "missing" | "different";
 export type ImportAction =
   | "installed"
@@ -334,9 +333,6 @@ export interface ConfigRemovalEvent {
   id: string;
   name: string;
   path: string;
-  state: ConfigRemovalState;
-  holds: string[];
-  with: string[];
 }
 
 export interface MachineEvent {

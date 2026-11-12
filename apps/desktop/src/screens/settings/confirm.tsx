@@ -1,5 +1,5 @@
-// The confirm dialog of the Export settings and Import settings sections: a title, a line, an
-// optional path, and Cancel beside one danger button that runs the command.
+// The confirm dialog of the Settings sections and of removing an agent on the Agents page: a
+// title, a line, an optional path, and Cancel beside one danger button that runs the command.
 import { Button } from "#/components/ui/button.tsx";
 import {
   Dialog,

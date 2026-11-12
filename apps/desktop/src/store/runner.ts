@@ -41,17 +41,10 @@ export const commandOf = (args: readonly string[]): string => {
   return name ?? words[0] ?? "";
 };
 
-/**
- * Whether `args` change nothing. `adopt` with no flag and `config remove` with no configuration
- * are previews, which write nothing.
- */
+/** Whether `args` change nothing. `adopt` with no flag is a preview, which writes nothing. */
 export const isRead = (args: readonly string[]) => {
   const command = commandOf(args);
-  return (
-    READS.has(command) ||
-    (command === "adopt" && args.length === 1) ||
-    (command === "config remove" && args.length === 2)
-  );
+  return READS.has(command) || (command === "adopt" && args.length === 1);
 };
 
 export interface CommandOptions {
