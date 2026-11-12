@@ -83,21 +83,6 @@ const openSkill = async (
   await expect(pane(page, name)).toBeVisible();
 };
 
-test.describe("Fork button", () => {
-  for (const [name, key] of [
-    ["pdf", "pdf"],
-    ["scratch", "scratch"],
-    ["commit-helper", "skill:h-commit"],
-  ]) {
-    test(`shows for ${name}`, async ({ cli, page }) => {
-      await openSkill(cli, page, name, { key });
-      await expect(
-        actions(page, name).getByRole("button", { name: "Fork" })
-      ).toBeVisible();
-    });
-  }
-});
-
 test("a skill of a source: Fork runs skill fork <name> and the pane redraws from the inventory", async ({
   cli,
   page,

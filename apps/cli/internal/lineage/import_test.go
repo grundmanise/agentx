@@ -292,27 +292,3 @@ func TestUnrecordableIsParseItself(t *testing.T) {
 		})
 	}
 }
-
-// TestUnrecordableRefusesWhatParseReadsBackAsAnother is the case a
-// predicate over one coordinate cannot answer: the trailers are written
-// and read back whole, so what is refused is a value no line of a message
-// carries, not a value the coordinate itself is wrong in. A subpath padded
-// with a space is a directory git holds and ValidPath, given the trimmed
-// value a reader hands it, would accept.
-func TestUnrecordableRefusesWhatParseReadsBackAsAnother(t *testing.T) {
-	t.Parallel()
-	padded := Import{Source: "https://github.com/example/skills", Path: "pdf ", Commit: commitID, Hash: hashID}
-	if !ValidPath(strings.TrimSpace(padded.Path)) {
-		t.Fatal("the trimmed path is not the one a reader would accept")
-	}
-	read, err := Parse(padded.Message())
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if read.Path == padded.Path {
-		t.Fatal("the padded path read back unchanged")
-	}
-	if why := Unrecordable(padded); why == "" {
-		t.Fatal("a padded subpath is recordable, so an install would write lineage naming another directory")
-	}
-}

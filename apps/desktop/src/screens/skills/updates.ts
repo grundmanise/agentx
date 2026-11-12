@@ -212,7 +212,7 @@ export const checkUpdates = async () => {
     success: (events) => {
       const n = offered(events);
       if (n === 0) {
-        return "Everything is up to date";
+        return "All skills are up to date";
       }
       return n === 1 ? "1 skill has an update" : `${n} skills have updates`;
     },

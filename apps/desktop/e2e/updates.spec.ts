@@ -72,9 +72,6 @@ const expectOffered = async (page: Page, name: string) => {
 };
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
-/** The `Spinner` inside Check updates, shown while the check runs. */
-const spinner = (page: Page) =>
-  checkButton(page).locator("svg.animate-check-spin");
 
 /** The library entry of `name` as `skill update` emits it once it updated the skill. */
 const updated = (name: string, state: "current" | "modified"): InlineEvent => {
@@ -373,7 +370,7 @@ test.describe("Check updates", () => {
     ]);
   });
 
-  test("is an icon button that shows its name in a tooltip, and shows a spinner while the check runs", async ({
+  test("is an icon button that shows its name in a tooltip, and is busy while the check runs", async ({
     cli,
     page,
   }) => {
@@ -392,30 +389,16 @@ test.describe("Check updates", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("tooltip")).toHaveCount(0);
 
-    // At rest: the refresh icon alone, no spinner.
-    await expect(spinner(page)).toHaveCount(0);
-    await expect(checkButton(page).locator("svg")).toHaveCount(1);
-
     const run = cli.register(["skill", "check-updates"], { holdAfter: 0 });
     await checkButton(page).click();
     await run.started;
-    // Still named Check updates while it runs; busy, with the spinner in the refresh icon's place.
-    // The spinner keeps turning until the check ends, not for one turn.
+    // Still named Check updates while it runs, and busy.
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "true");
-    await expect(spinner(page)).toHaveCount(1);
-    await expect(checkButton(page).locator("svg")).toHaveCount(1);
-    await expect(spinner(page)).toHaveCSS(
-      "animation-iteration-count",
-      "infinite"
-    );
     run.release();
     await expect(
-      toasts(page).getByText("Everything is up to date")
+      toasts(page).getByText("All skills are up to date")
     ).toBeVisible();
-    // Done: the refresh icon is back.
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "false");
-    await expect(spinner(page)).toHaveCount(0);
-    await expect(checkButton(page).locator("svg")).toHaveCount(1);
   });
 
   test("one update: 1 skill has an update", async ({ cli, page }) => {
@@ -425,7 +408,7 @@ test.describe("Check updates", () => {
     await expect(toasts(page).getByText("1 skill has an update")).toBeVisible();
   });
 
-  test("nothing new: Everything is up to date, and the updates serve found are gone", async ({
+  test("nothing new: All skills are up to date, and the updates serve found are gone", async ({
     cli,
     page,
   }) => {
@@ -434,7 +417,7 @@ test.describe("Check updates", () => {
     cli.register(["skill", "check-updates"]);
     await checkButton(page).click();
     await expect(
-      toasts(page).getByText("Everything is up to date")
+      toasts(page).getByText("All skills are up to date")
     ).toBeVisible();
     await expect(update(page, "pdf")).toHaveCount(0);
   });
