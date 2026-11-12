@@ -60,9 +60,6 @@ const STDERR_TAIL: usize = 20;
 const LOG_NAME: &str = "serve.log";
 const LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 const LOG_FILES: usize = 5;
-/// How much of the serve log the app reads back to show: its last 1000 lines, from at most 256 kB.
-const LOG_TAIL_BYTES: u64 = 256 * 1024;
-const LOG_TAIL_LINES: usize = 1000;
 
 pub struct Config {
     /// The directory of the app's executable, where a release build puts the CLI.
@@ -124,15 +121,6 @@ pub struct RunEnd {
     pub invalid: Vec<Invalid>,
     pub cancelled: bool,
     pub timed_out: bool,
-}
-
-/// The end of the serve log, for the app to show.
-#[derive(Clone, Debug, Serialize)]
-pub struct ServeLog {
-    /// The file being written, which may not exist yet.
-    pub path: PathBuf,
-    /// Its last lines, oldest first, as serve wrote them.
-    pub lines: Vec<String>,
 }
 
 /// How a serve child ended.
@@ -447,13 +435,9 @@ impl Supervisor {
         }
     }
 
-    /// The end of the serve log and where it is.
-    pub fn serve_log(&self) -> ServeLog {
-        let log = self.log.lock().unwrap();
-        ServeLog {
-            path: log.current(),
-            lines: log.tail(LOG_TAIL_BYTES, LOG_TAIL_LINES),
-        }
+    /// The serve log file being written, which may not exist yet.
+    pub fn serve_log_path(&self) -> PathBuf {
+        self.log.lock().unwrap().current()
     }
 
     fn spawn_serve(&self, shell: &Shell, state: &mut ServeState) -> Result<Child, String> {

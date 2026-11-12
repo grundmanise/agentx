@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use tauri::{Emitter, Manager, RunEvent, State};
 
-use supervisor::{Config, Resolution, RunEnd, ServeLog, Supervisor};
+use supervisor::{Config, Resolution, RunEnd, Supervisor};
 
 type Sup<'a> = State<'a, Arc<Supervisor>>;
 
@@ -63,10 +63,10 @@ async fn serve_request(sup: Sup<'_>, line: String) -> Result<(), String> {
     sup.serve_request(&line).await
 }
 
-/// The end of the serve log, which holds everything serve wrote to stderr, and the file's path.
+/// The path of the serve log file, which holds everything serve wrote to stderr.
 #[tauri::command(rename_all = "snake_case")]
-async fn serve_log(sup: Sup<'_>) -> Result<ServeLog, String> {
-    Ok(sup.serve_log())
+async fn serve_log_path(sup: Sup<'_>) -> Result<PathBuf, String> {
+    Ok(sup.serve_log_path())
 }
 
 /// Whether serve logs at debug level. A change restarts the serve child.
@@ -188,7 +188,7 @@ pub fn run() {
             cli_cancel,
             serve_start,
             serve_request,
-            serve_log,
+            serve_log_path,
             serve_verbose,
             preferences_read,
             preferences_write,

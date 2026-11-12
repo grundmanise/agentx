@@ -1,84 +1,51 @@
-// The activity log: every command the app ran this session and what the serve child reported,
-// newest first, kept in memory only. The transport (src/cli/transport.ts) records each one-shot
-// run, whoever started it: a control, the startup checks or a loader. The feed (src/store/feed.ts)
-// records what serve reported. An entry holds text made ready to show when it is recorded:
-// credentials in a URL are replaced, its user and password as the CLI replaces them and the values
-// of its query parameters that name a credential, an inventory is counted rather than kept, a
-// file's content and a patch are left out, and long values, long lines and long outputs are cut,
-// so the log never holds a secret and stays small.
+// The activity log: the last lines of what the app ran and what the background scan (`agentx
+// serve`) reported, oldest first, kept in memory only. It holds at most LINE_LIMIT lines, and a
+// line beyond that removes the oldest one, so it takes the same memory after a week as after an
+// hour. The transport (src/cli/transport.ts) records each one-shot run, whoever started it: a
+// control, the startup checks or a loader. The feed (src/store/feed.ts) records what serve
+// reported. A command is one line. Only a command that failed keeps output, its last
+// FAILURE_LINES lines. A line holds text made ready to show when it is recorded: credentials in a
+// URL are replaced, its user and password as the CLI replaces them and the values of its query
+// parameters that name a credential, an inventory is counted rather than kept, a file's content
+// and a patch are left out, and long values and long lines are cut, so the log never holds a secret.
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LogEvent } from "#/cli/events.gen.ts";
 
-/** How many entries the log keeps; older ones drop off. */
-export const LOG_LIMIT = 300;
-/** How many lines of each stream an entry keeps; `dropped` counts the rest. */
-const LINE_LIMIT = 200;
-/** How many of those are the stream's first lines; the others are its last, which say how it ended. */
-const HEAD_LINES = 50;
+/** How many lines the log keeps; a line beyond that removes the oldest one. */
+export const LINE_LIMIT = 500;
+/** How many of its last lines a command that failed keeps, and a background scan that stopped. */
+const FAILURE_LINES = 5;
+/** How many of its last debug lines a command keeps, which it writes while Debug output is on. */
+const DEBUG_LINES = 50;
 /** How long a line may be before it is cut. */
-const LINE_CHARS = 2000;
+const LINE_CHARS = 300;
 /** How long a string value of an event may be before it is cut. */
 const VALUE_LIMIT = 240;
 
-export type LogTone = "success" | "neutral" | "attention" | "danger";
-
 /**
- * The lines of one stream. A stream longer than LINE_LIMIT keeps its first and its last lines,
- * with one line between them that says how many were left out, which `dropped` counts.
+ * How a line shows: "failed" in red, "quiet" muted, which is what the background scan reported
+ * and a command's debug lines.
  */
-export interface Output {
-  lines: string[];
-  dropped: number;
-}
+export type LineTone = "plain" | "failed" | "quiet";
 
-/** How a command ended. */
-export interface Ending {
-  /** How long it ran, in milliseconds. */
-  ms: number;
-  /** null when a signal ended the CLI or it could not start. */
-  exitCode: number | null;
-  cancelled: boolean;
-  timedOut: boolean;
-  /** Why the CLI could not start; absent when it ran. */
-  startError?: string;
-  /** Whether it logged a warning, on any line of its stderr, kept or left out. */
-  warned: boolean;
-  /** The events on stdout, one line each. */
-  events: Output;
-  /** What it wrote to stderr: its log events as "level: message", and lines that are no event. */
-  stderr: Output;
-}
-
-/** One run of `agentx`. */
-export interface CommandEntry {
-  kind: "command";
+export interface LogLine {
   id: number;
-  /** When it started, as Date.now(). */
-  at: number;
-  /** The command line as a terminal takes it, without the `--json` the app adds. */
-  line: string;
-  /** Absent while it runs. */
-  ending?: Ending;
+  /** When it happened, as Date.now(). Absent on a line of output, which belongs to the line above it. */
+  at?: number;
+  /** A command line, what the background scan reported, or one line of output. */
+  text: string;
+  /** At the right: how long a command ran and how it ended, or what a stopped scan does next. */
+  note: string;
+  tone: LineTone;
 }
-
-/** Something the serve child reported. */
-export interface ServeEntry {
-  kind: "serve";
-  id: number;
-  at: number;
-  tone: LogTone;
-  title: string;
-  /** What it reported, one line each. */
-  details: string[];
-}
-
-export type LogEntry = CommandEntry | ServeEntry;
 
 interface ActivityLog {
-  /** Newest first, at most LOG_LIMIT entries. */
-  entries: LogEntry[];
+  /** Oldest first, at most LINE_LIMIT lines. */
+  lines: LogLine[];
+  /** How many lines the limit removed since the app opened. */
+  dropped: number;
   /** Whether the commands run from now on also log at debug level (`--verbose`). */
   debug: boolean;
   /** Whether the log's sheet shows. */
@@ -87,7 +54,8 @@ interface ActivityLog {
 
 export const useActivityLog = create<ActivityLog>()(() => ({
   debug: false,
-  entries: [],
+  dropped: 0,
+  lines: [],
   open: false,
 }));
 
@@ -96,8 +64,8 @@ export const openActivityLog = (open = true) => {
   useActivityLog.setState({ open });
 };
 
-/** Turns debug lines on or off for the commands run from now on. */
-export const setDebugLines = (debug: boolean) => {
+/** Turns debug output on or off for the commands run from now on. */
+export const setDebugOutput = (debug: boolean) => {
   useActivityLog.setState({ debug });
 };
 
@@ -235,40 +203,58 @@ export const lastStderr = (lines: readonly string[]): string | undefined => {
     : clip(redact(last.event?.message ?? last.line));
 };
 
-/**
- * The lines of a stream as an entry keeps them, each cut at LINE_CHARS. A stream longer than
- * LINE_LIMIT keeps its first HEAD_LINES lines and its last ones, which say how the run ended,
- * with a line between them that counts the lines left out.
- */
-const output = (all: string[]): Output => {
-  const lines = all.map((line) => clip(line));
-  if (lines.length <= LINE_LIMIT) {
-    return { dropped: 0, lines };
+/** How long a command ran: "412 ms", "1.8 s", "2 min 5 s". */
+export const formatDuration = (ms: number) => {
+  if (ms < 1000) {
+    return `${Math.round(ms)} ms`;
   }
-  const dropped = lines.length - LINE_LIMIT;
-  return {
-    dropped,
-    lines: [
-      ...lines.slice(0, HEAD_LINES),
-      `… ${dropped} lines left out …`,
-      ...lines.slice(HEAD_LINES - LINE_LIMIT),
-    ],
-  };
+  if (ms < 60_000) {
+    return `${(ms / 1000).toFixed(1)} s`;
+  }
+  const seconds = Math.round(ms / 1000);
+  return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
 };
 
 let nextId = 1;
 
-const add = (entry: LogEntry) => {
-  useActivityLog.setState((s) => ({
-    entries: [entry, ...s.entries].slice(0, LOG_LIMIT),
-  }));
-};
-
-/** Records a command as it starts, and returns its entry's id. */
-export const logCommandStart = (args: readonly string[]): number => {
+const take = () => {
   const id = nextId;
   nextId += 1;
-  add({ at: Date.now(), id, kind: "command", line: commandLine(args) });
+  return id;
+};
+
+/** Lines of output, which go under the line they belong to. */
+const under = (texts: readonly string[], tone: LineTone): LogLine[] =>
+  texts.map((text) => ({ id: take(), note: "", text: clip(text), tone }));
+
+/**
+ * Adds `added` at the end of the log, or in place of line `inPlaceOf` when the log still holds
+ * it. The oldest lines beyond LINE_LIMIT go.
+ */
+const put = (added: LogLine[], inPlaceOf?: number) => {
+  useActivityLog.setState((s) => {
+    const index =
+      inPlaceOf === undefined
+        ? -1
+        : s.lines.findIndex((line) => line.id === inPlaceOf);
+    const lines =
+      index === -1
+        ? [...s.lines, ...added]
+        : [...s.lines.slice(0, index), ...added, ...s.lines.slice(index + 1)];
+    const over = Math.max(0, lines.length - LINE_LIMIT);
+    return { dropped: s.dropped + over, lines: lines.slice(over) };
+  });
+};
+
+/** The commands that run: when each started and its command line, by the id of its line. */
+const running = new Map<number, { at: number; text: string }>();
+
+/** Records a command as it starts, and returns the id of its line. */
+export const logCommandStart = (args: readonly string[]): number => {
+  const id = take();
+  const start = { at: Date.now(), text: commandLine(args) };
+  running.set(id, start);
+  put([{ ...start, id, note: "running", tone: "plain" }]);
   return id;
 };
 
@@ -284,148 +270,138 @@ export interface Ended {
   invalid: { stream: "stdout" | "stderr"; line: string }[];
 }
 
-/** Records how the command of entry `id` ended. An entry that dropped off the log stays gone. */
-export const logCommandEnd = (id: number, ended: Ended) => {
-  const invalid = (stream: "stdout" | "stderr") =>
-    ended.invalid.filter((l) => l.stream === stream).map((l) => redact(l.line));
-  useActivityLog.setState((s) => ({
-    entries: s.entries.map((entry) =>
-      entry.kind === "command" && entry.id === id
-        ? {
-            ...entry,
-            ending: {
-              cancelled: ended.cancelled,
-              events: output([
-                ...ended.events.map(eventLine),
-                ...invalid("stdout"),
-              ]),
-              exitCode: ended.exitCode,
-              ms: Date.now() - entry.at,
-              startError:
-                ended.startError === undefined
-                  ? undefined
-                  : clip(redact(ended.startError)),
-              stderr: output([
-                ...ended.logs.map(logLine),
-                ...invalid("stderr"),
-              ]),
-              timedOut: ended.timedOut,
-              // From every log event, before the stream is cut.
-              warned: ended.logs.some((l) => l.level === "warn"),
-            },
-          }
-        : entry
-    ),
-  }));
+/**
+ * How a command failed, in words. Undefined when it did not fail: it exited 0, or the user
+ * cancelled it.
+ */
+const failureOf = (ended: Ended): string | undefined => {
+  if (ended.startError !== undefined) {
+    return "couldn't start";
+  }
+  if (ended.timedOut) {
+    return "timed out";
+  }
+  if (ended.cancelled) {
+    return undefined;
+  }
+  if (ended.exitCode === null) {
+    return "stopped by the system";
+  }
+  return ended.exitCode === EXIT_CODES.ok
+    ? undefined
+    : `exit ${ended.exitCode}`;
 };
-
-/** Records something the serve child reported. */
-export const logServe = (
-  tone: LogTone,
-  title: string,
-  details: string[] = []
-) => {
-  const id = nextId;
-  nextId += 1;
-  add({
-    at: Date.now(),
-    details: output(details.map(redact)).lines,
-    id,
-    kind: "serve",
-    title: clip(redact(title), VALUE_LIMIT),
-    tone,
-  });
-};
-
-/** What each exit code means (docs/spec/cli-contract.md, Exit codes). */
-const MEANINGS: Record<string, string | undefined> = {
-  account_repo: "The account repo is unusable",
-  git: "Git is missing or too old",
-  internal: "Internal error",
-  interrupted: "Interrupted",
-  locked: "Another agentx command was running",
-  not_found: "Not found",
-  ok: "Succeeded",
-  pending_merge: "A pending merge blocks it, or was left by it",
-  refused: "Refused",
-  source: "A source or the account remote was unreachable or denied access",
-  usage: "Usage error",
-} satisfies Record<keyof typeof EXIT_CODES, string>;
-
-const meaningOf = (exitCode: number) =>
-  Object.entries(EXIT_CODES)
-    .filter(([, code]) => code === exitCode)
-    .map(([name]) => MEANINGS[name])[0];
 
 /**
- * How an entry ended, in words, and the tone that goes with it: what happened first, then the exit
- * code. The sheet shows no words for the success tone, whose dot and duration say it.
+ * An event of a failed command as the lines that say why it failed: an error as its message, and
+ * its hint when it has one, as a terminal shows them. The result, which only repeats that the
+ * command failed, gives no line.
  */
-export const statusOf = (entry: LogEntry): { tone: LogTone; text: string } => {
-  if (entry.kind === "serve") {
-    return { text: "Background", tone: entry.tone };
+const failureEvent = (event: CliEvent): string[] => {
+  if (event.type === "result") {
+    return [];
   }
-  const { ending } = entry;
-  if (ending === undefined) {
-    return { text: "Running…", tone: "neutral" };
-  }
-  if (ending.startError !== undefined) {
-    return { text: "Couldn't start", tone: "danger" };
-  }
-  if (ending.timedOut) {
-    return { text: "Timed out", tone: "danger" };
-  }
-  if (ending.cancelled) {
-    return { text: "Cancelled", tone: "attention" };
-  }
-  if (ending.exitCode === null) {
-    return { text: "Stopped by the system", tone: "danger" };
-  }
-  if (ending.exitCode === EXIT_CODES.ok) {
-    // A command that succeeded and warned asks for a look.
-    return ending.warned
-      ? { text: "Succeeded with warnings", tone: "attention" }
-      : { text: "Succeeded", tone: "success" };
-  }
-  const text = `${meaningOf(ending.exitCode) ?? "Failed"} · exit ${ending.exitCode}`;
-  const soft =
-    ending.exitCode === EXIT_CODES.locked ||
-    ending.exitCode === EXIT_CODES.interrupted;
-  return { text, tone: soft ? "attention" : "danger" };
-};
-
-/** How long a command ran: "412 ms", "1.8 s", "2 min 5 s". */
-export const formatDuration = (ms: number) => {
-  if (ms < 1000) {
-    return `${Math.round(ms)} ms`;
-  }
-  if (ms < 60_000) {
-    return `${(ms / 1000).toFixed(1)} s`;
-  }
-  const seconds = Math.round(ms / 1000);
-  return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
-};
-
-const block = (title: string, { lines }: Output) =>
-  lines.length === 0 ? [] : ["", `${title}:`, ...lines];
-
-/** An entry as plain text, to paste into an issue. */
-export const entryText = (entry: LogEntry): string => {
-  const at = new Date(entry.at).toISOString();
-  if (entry.kind === "serve") {
-    return [`${at}  agentx serve: ${entry.title}`, ...entry.details].join("\n");
-  }
-  const { ending } = entry;
-  const head = [`$ ${entry.line}`, `Started: ${at} (the app adds --json)`];
-  if (ending === undefined) {
-    return [...head, "Still running"].join("\n");
+  if (event.type !== "error") {
+    return [eventLine(event)];
   }
   return [
-    ...head,
-    `Took: ${formatDuration(ending.ms)}`,
-    `Ended: ${statusOf(entry).text}`,
-    ...(ending.startError === undefined ? [] : [ending.startError]),
-    ...block("Output (stdout)", ending.events),
-    ...block("Log (stderr)", ending.stderr),
-  ].join("\n");
+    `error: ${redact(event.message)}`,
+    ...(event.hint === undefined ? [] : [`hint: ${redact(event.hint)}`]),
+  ];
 };
+
+/**
+ * The last lines a failed command wrote, which say why: its warnings and whatever else it wrote
+ * to stderr, then its events on stdout, the error among them. For a command that could not start,
+ * the reason.
+ */
+const failureLines = (ended: Ended): string[] => {
+  if (ended.startError !== undefined) {
+    return [redact(ended.startError)];
+  }
+  const invalid = (stream: "stdout" | "stderr") =>
+    ended.invalid.filter((l) => l.stream === stream).map((l) => redact(l.line));
+  return [
+    ...ended.logs.filter((l) => l.level !== "debug").map(logLine),
+    ...invalid("stderr"),
+    ...ended.events.flatMap(failureEvent),
+    ...invalid("stdout"),
+  ].slice(-FAILURE_LINES);
+};
+
+/**
+ * Records how the command of line `id` ended: its line says how long it ran, and for a failure
+ * how it failed, with its last lines under it. Its debug lines, which it writes while Debug
+ * output is on, go under it too. A command whose line the limit removed stays gone, unless it
+ * failed: a failure is added again at the end.
+ */
+export const logCommandEnd = (id: number, ended: Ended) => {
+  const start = running.get(id);
+  if (start === undefined) {
+    return;
+  }
+  running.delete(id);
+  const took = formatDuration(Date.now() - start.at);
+  const failure = failureOf(ended);
+  const shown = useActivityLog.getState().lines.some((line) => line.id === id);
+  if (failure === undefined && !shown) {
+    return;
+  }
+  const ending = ended.cancelled && failure === undefined ? "cancelled" : "";
+  const note =
+    failure === undefined
+      ? [ending, took].filter((part) => part !== "").join(" · ")
+      : [
+          `FAILED ${failure}`,
+          ...(ended.startError === undefined ? [took] : []),
+        ].join(" · ");
+  const debug = ended.logs
+    .filter((l) => l.level === "debug")
+    .map(logLine)
+    .slice(-DEBUG_LINES);
+  put(
+    [
+      { ...start, id, note, tone: failure === undefined ? "plain" : "failed" },
+      ...under(debug, "quiet"),
+      ...(failure === undefined ? [] : under(failureLines(ended), "failed")),
+    ],
+    id
+  );
+};
+
+/**
+ * Records something the background scan reported, as one quiet line. A failure is red, and keeps
+ * the last FAILURE_LINES lines of `output` under it.
+ */
+export const logBackground = (
+  text: string,
+  {
+    failed = false,
+    note = "",
+    output = [],
+  }: {
+    failed?: boolean;
+    note?: string;
+    output?: readonly string[];
+  } = {}
+) => {
+  const tone = failed ? "failed" : "quiet";
+  put([
+    { at: Date.now(), id: take(), note, text: clip(redact(text)), tone },
+    ...under(output.slice(-FAILURE_LINES).map(redact), tone),
+  ]);
+};
+
+/** The log as plain text, to paste into an issue: a line of output is indented under its line. */
+export const logText = (lines: readonly LogLine[]): string =>
+  lines
+    .map((line) =>
+      line.at === undefined
+        ? `    ${line.text}`
+        : [
+            new Date(line.at).toISOString(),
+            line.text,
+            ...(line.note === "" ? [] : [line.note]),
+          ].join("  ")
+    )
+    .join("\n");

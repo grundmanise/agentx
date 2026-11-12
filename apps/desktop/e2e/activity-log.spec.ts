@@ -1,15 +1,17 @@
-// The activity log: every command the app ran this session, a click's and the app's own, with how
-// each ended and what it wrote, and what the serve child reported. The palette and Settings open it.
+// The activity log: the last lines of what the app ran, a click's commands and the app's own, and
+// of what the background scan reported. A failure keeps its last lines. The palette and Settings
+// open it.
 import type { Page } from "@playwright/test";
 
 import { expect, serveLogPath, test } from "./harness/cli.ts";
 
 const log = (page: Page) => page.getByRole("dialog", { name: "Activity log" });
-const entries = (page: Page) =>
-  log(page).getByRole("list", { name: "Activity log entries" });
-/** The entry whose first line is `line`: a command line, or what serve reported. */
-const entry = (page: Page, line: string) =>
-  entries(page).getByRole("listitem").filter({ hasText: line }).first();
+/** The lines of the log whose text holds `text`, oldest first. */
+const lines = (page: Page, text: string) =>
+  log(page)
+    .getByRole("list", { name: "Activity log lines" })
+    .getByRole("listitem")
+    .filter({ hasText: text });
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
 const toasts = (page: Page) =>
@@ -25,7 +27,7 @@ const openFromPalette = async (page: Page) => {
   await expect(log(page)).toBeVisible();
 };
 
-test("a check that succeeds and one that fails are entries with their outcome, output and copy", async ({
+test("a check that succeeds is one line, and one that fails keeps its last lines, which Copy copies", async ({
   cli,
   context,
   page,
@@ -67,43 +69,34 @@ test("a check that succeeds and one that fails are entries with their outcome, o
   await expect(toasts(page).getByText(/^Couldn't reach/u)).toBeVisible();
 
   await openFromPalette(page);
-  // Newest first: the failed check, the check that passed, then what the launch ran by itself.
-  const checks = entries(page)
-    .getByRole("button")
-    .filter({ hasText: "agentx skill check-updates" });
+  // Oldest first: what the launch ran by itself, the check that passed, then the failed one.
+  await expect(lines(page, "agentx doctor")).toHaveCount(1);
+  await expect(lines(page, "background scan started")).toHaveCount(1);
+  await expect(lines(page, "inventory updated: ")).toHaveCount(1);
+  const checks = lines(page, "agentx skill check-updates");
   await expect(checks).toHaveCount(2);
-  await expect(checks.nth(0)).toContainText(
-    "A source or the account remote was unreachable or denied access · exit 3"
-  );
-  await expect(entry(page, "agentx doctor")).toBeVisible();
-  await expect(entry(page, "Inventory updated")).toContainText("Background");
+  await expect(checks.nth(1)).toContainText("FAILED exit 3");
+  await expect(log(page).getByText("1 failed")).toBeVisible();
 
-  // The passing check opens to the events it emitted.
-  await checks.nth(1).click();
+  // Under the failed check, its warning and its error, with the credentials of a URL replaced.
   await expect(
-    log(page).getByText('progress {"current":1,"phase":"fetch"', {
-      exact: false,
-    })
-  ).toBeVisible();
-  await checks.nth(1).click();
+    lines(page, "warn: the fetch of acme/skills timed out")
+  ).toHaveCount(1);
+  await expect(
+    lines(
+      page,
+      "cannot fetch https://***@git.example.com/acme/skills?access_token=***"
+    )
+  ).toHaveCount(1);
+  // The check that passed keeps no output.
+  await expect(lines(page, "progress")).toHaveCount(0);
 
-  // The failed one opens to its error and its stderr, with the credentials of a URL replaced.
-  await checks.nth(0).click();
-  const failed = entry(page, "agentx skill check-updates");
-  await expect(failed).toContainText(
-    "cannot fetch https://***@git.example.com/acme/skills?access_token=***"
-  );
-  await expect(failed).toContainText(
-    "warn: the fetch of acme/skills timed out"
-  );
-
-  await failed.getByRole("button", { exact: true, name: "Copy" }).click();
+  await log(page).getByRole("button", { exact: true, name: "Copy" }).click();
   const copied = await page.evaluate(
     async () => await navigator.clipboard.readText()
   );
-  expect(copied).toContain("$ agentx skill check-updates");
-  expect(copied).toContain("· exit 3");
-  expect(copied).toContain("warn: the fetch of acme/skills timed out");
+  expect(copied).toContain("agentx skill check-updates  FAILED exit 3");
+  expect(copied).toContain("    warn: the fetch of acme/skills timed out");
   expect(copied).not.toContain("s3cret-token");
 });
 
@@ -133,41 +126,22 @@ test("Settings opens the log, and Debug output runs later commands and serve wit
   await expect(toasts(page).getByText(/up to date/u)).toBeVisible();
 
   await openFromPalette(page);
-  const check = entry(page, "agentx skill check-updates --verbose");
-  await check.getByRole("button").click();
-  await expect(check).toContainText(
-    "debug: git fetch --quiet src-1: exit status 0"
+  // The check ran with the flag, and its debug line is under it.
+  await expect(lines(page, "agentx skill check-updates --verbose")).toHaveCount(
+    1
   );
+  await expect(
+    lines(page, "debug: git fetch --quiet src-1: exit status 0")
+  ).toHaveCount(1);
 });
 
-test("Serve log shows the end of serve's log file, and shows the file in the file manager", async ({
+test("Open serve.log shows the serve log file in the file manager", async ({
   cli,
   page,
 }) => {
-  cli.answerServeLog([
-    '{"type":"log","schema_version":2,"level":"debug","message":"fetching https://me:s3cret-token@host.example.com/acme/skills?token=s3cret-token"}',
-    '{"type":"log","schema_version":2,"level":"warn","message":"cannot fetch acme/skills"}',
-    "panic: runtime error",
-  ]);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await openFromPalette(page);
-  await log(page)
-    .getByRole("button", { name: /^Serve log/u })
-    .click();
-
-  // The file's path, then its lines: a log event as its level and message, any other line as written.
-  await expect(log(page).getByText(serveLogPath)).toBeVisible();
-  await expect(
-    log(page).getByText(
-      [
-        "debug: fetching https://***@host.example.com/acme/skills?token=***",
-        "warn: cannot fetch acme/skills",
-        "panic: runtime error",
-      ].join("\n")
-    )
-  ).toBeVisible();
-
-  await log(page).getByRole("button", { name: "Show in file manager" }).click();
-  expect(cli.reveals).toEqual([[serveLogPath]]);
+  await log(page).getByRole("button", { name: "Open serve.log" }).click();
+  await expect.poll(() => cli.reveals).toEqual([[serveLogPath]]);
 });

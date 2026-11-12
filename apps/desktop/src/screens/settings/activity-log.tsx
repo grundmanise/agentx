@@ -1,4 +1,4 @@
-// Activity log: opens the log of every command the app ran this session (src/app/activity-log.tsx).
+// Activity log: opens the log of the last commands the app ran (src/app/activity-log.tsx).
 import { Button } from "#/components/ui/button.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { openActivityLog } from "#/store/activity-log.ts";
@@ -6,7 +6,7 @@ import { openActivityLog } from "#/store/activity-log.ts";
 export const ActivityLogSection = () => (
   <SettingsSection
     title="Activity log"
-    description="Every command the app ran since it opened, and how each ended"
+    description="The last commands the app ran, with the failures in red"
   >
     <div className="flex">
       <Button

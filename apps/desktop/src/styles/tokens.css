@@ -303,10 +303,6 @@
   --color-timeline-connector: var(--gray-890);
   --color-timeline-meta: var(--gray-500);
   --color-timeline-more-ring: var(--gray-700);
-  --color-log-dot-success: var(--color-accent-primary);
-  --color-log-dot-neutral: var(--gray-600);
-  --color-log-dot-attention: var(--color-accent-attention);
-  --color-log-dot-danger: var(--color-accent-danger);
 
   /* Startup checks */
   --color-check-pass-bg: rgb(212 255 79 / 0.12);
@@ -574,6 +570,7 @@
   --padding-menu: 6px;
   --width-sheet: 420px;
   --width-sheet-wide: 560px;
+  --width-log-time: 8ch;
   --inset-sheet: 10px;
   --padding-sheet: 32px;
   --padding-sheet-y: 28px;
@@ -613,8 +610,6 @@
   --gap-diff-segment: 4px;
   --grid-template-columns-timeline: 12px 1fr;
   --size-timeline-dot: 7px;
-  --size-log-dot: 7px;
-  --max-height-log-output: 340px;
   --height-timeline-line: 20px;
   --height-timeline-button-line: 32px;
   --width-check-column: 480px;

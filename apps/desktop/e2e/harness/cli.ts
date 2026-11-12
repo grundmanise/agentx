@@ -329,7 +329,6 @@ export class MockCli {
   private serving = false;
   private serveStart: ServeStart = { events: [firstInventory()] };
   private openAnswer: string | null = null;
-  private serveLogLines: string[] = [];
   private editors: { id: string; name: string }[] = [];
   private failingOpens = false;
   // The app's preferences file, which outlives a page reload as the file outlives a restart.
@@ -370,11 +369,6 @@ export class MockCli {
   /** What every later native open dialog returns: the path the user picks, or null for Cancel. */
   answerOpenDialog(path: string | null) {
     this.openAnswer = path;
-  }
-
-  /** The lines every later read of the serve log file returns, as serve wrote them. */
-  answerServeLog(lines: string[]) {
-    this.serveLogLines = lines;
   }
 
   /** The editors every later detection finds on the machine, in the order the app lists them. */
@@ -644,8 +638,8 @@ export class MockCli {
         }
         return null;
       }
-      case "serve_log": {
-        return { lines: this.serveLogLines, path: serveLogPath };
+      case "serve_log_path": {
+        return serveLogPath;
       }
       case "serve_verbose": {
         this.serveVerbose.push(field(args, "on") === true);

@@ -1,10 +1,9 @@
-// The activity log's sheet (DESIGN.md §6 "Sheet (Activity log)"): every command the app ran this
-// session and what the serve child reported, newest first, from src/store/activity-log.ts. An
-// entry opens to its output and copies as plain text. Settings and the palette open it.
+// The activity log's sheet (DESIGN.md §6 "Sheet (Activity log)"): the last lines of what the app
+// ran and what the background scan reported, as a terminal shows them, from
+// src/store/activity-log.ts. A failure is red. Settings and the palette open it.
 import { cva } from "class-variance-authority";
-import { useEffect, useId, useState } from "react";
+import { useId, useLayoutEffect, useRef } from "react";
 
-import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { notify } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -15,41 +14,48 @@ import {
   SheetTitle,
 } from "#/components/ui/sheet.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
-import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
+import { plural } from "#/lib/plural.ts";
+import { revealInFinder } from "#/lib/reveal.ts";
 import {
-  entryText,
-  formatDuration,
+  LINE_LIMIT,
+  logText,
   openActivityLog,
-  setDebugLines,
-  statusOf,
+  setDebugOutput,
   useActivityLog,
 } from "#/store/activity-log.ts";
-import type { LogEntry, Output } from "#/store/activity-log.ts";
-import { readServeLog, setServeDebug } from "#/store/feed.ts";
+import type { LogLine } from "#/store/activity-log.ts";
+import { serveLogPath, setServeDebug } from "#/store/feed.ts";
 
-const dotVariants = cva("size-log-dot rounded-pill block flex-none", {
+/** How near its end, in pixels, the view still counts as at the end. */
+const END_SLACK = 24;
+
+const lineVariants = cva("type-technical-sm flex gap-3", {
   variants: {
     tone: {
-      attention: "bg-log-dot-attention",
-      danger: "bg-log-dot-danger",
-      neutral: "bg-log-dot-neutral",
-      success: "bg-log-dot-success",
+      failed: "text-tone-danger-fg",
+      plain: "text-text-secondary",
+      quiet: "text-text-caption",
     },
   },
 });
 
-const statusVariants = cva("", {
+/** The time and the note of a line: muted on a plain line, the line's own colour otherwise. */
+const asideVariants = cva("flex-none", {
   variants: {
+    part: {
+      note: "",
+      // As wide as a time on a line of output, which has none, so the text lines up.
+      time: "w-log-time",
+    },
     tone: {
-      attention: "text-tone-attention-fg",
-      danger: "text-tone-danger-fg",
-      neutral: "text-text-caption",
-      success: "text-text-caption",
+      failed: "",
+      plain: "text-text-caption",
+      quiet: "",
     },
   },
 });
 
-/** The time of day an entry started, to the second. */
+/** The time of day a line was recorded, to the second. */
 const timeOf = (at: number) =>
   new Date(at).toLocaleTimeString(undefined, {
     hour: "2-digit",
@@ -58,241 +64,76 @@ const timeOf = (at: number) =>
     second: "2-digit",
   });
 
-const copy = async (text: string, toast: string) => {
+const count = (n: number) => n.toLocaleString("en-US");
+
+const copy = async (text: string) => {
   try {
     await navigator.clipboard.writeText(text);
-    notify(toast);
+    notify("Copied");
   } catch {
     notify("Couldn't copy to the clipboard");
   }
 };
 
-/** One stream of a command's output, or a serve report's lines, under its caption. */
-const Lines = ({ caption, output }: { caption: string; output: Output }) => {
-  const id = useId();
-  if (output.lines.length === 0) {
-    return null;
+/** Shows the serve log file in the file manager. */
+const showServeLog = async () => {
+  const path = await serveLogPath();
+  if (path === undefined) {
+    notify("Couldn't find the serve log");
+    return;
   }
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span id={id} className="type-caption text-text-caption">
-        {caption}
+  await revealInFinder(path);
+};
+
+const Line = ({ line }: { line: LogLine }) => (
+  <li className={lineVariants({ tone: line.tone })}>
+    <span className={asideVariants({ part: "time", tone: line.tone })}>
+      {line.at !== undefined && timeOf(line.at)}
+    </span>
+    <span className="min-w-0 flex-1 break-all whitespace-pre-wrap">
+      {line.text}
+    </span>
+    {line.note !== "" && (
+      <span className={asideVariants({ part: "note", tone: line.tone })}>
+        {line.note}
       </span>
-      <pre
-        aria-labelledby={id}
-        className="rounded-log-output border-code-border bg-code-bg type-technical-sm text-text-secondary max-h-log-output m-0 overflow-auto border px-3 py-2.5 break-all whitespace-pre-wrap"
-      >
-        {output.lines.join("\n")}
-      </pre>
-    </div>
-  );
-};
-
-/** What an open entry shows: why it could not start, its output, and Copy. */
-const Details = ({ entry }: { entry: LogEntry }) => {
-  const ending = entry.kind === "command" ? entry.ending : undefined;
-  const empty =
-    ending !== undefined &&
-    ending.startError === undefined &&
-    ending.events.lines.length === 0 &&
-    ending.stderr.lines.length === 0;
-  return (
-    <div className="flex flex-col gap-3 pt-1 pb-3 pl-3.5">
-      {ending?.startError !== undefined && (
-        <p className="type-notice text-tone-danger-fg m-0 break-all">
-          {ending.startError}
-        </p>
-      )}
-      {entry.kind === "command" && ending === undefined && (
-        <p className="type-secondary text-text-hint m-0">Still running</p>
-      )}
-      {empty && <p className="type-secondary text-text-hint m-0">No output</p>}
-      {ending !== undefined && (
-        <>
-          <Lines caption="Output" output={ending.events} />
-          <Lines caption="Log" output={ending.stderr} />
-        </>
-      )}
-      {entry.kind === "serve" && (
-        <Lines
-          caption="Details"
-          output={{ dropped: 0, lines: entry.details }}
-        />
-      )}
-      <div className="flex">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            void copy(entryText(entry), "Copied");
-          }}
-        >
-          Copy
-        </Button>
-      </div>
-    </div>
-  );
-};
-
-const Entry = ({ entry }: { entry: LogEntry }) => {
-  const [open, setOpen] = useState(false);
-  const status = statusOf(entry);
-  const took =
-    entry.kind === "command" && entry.ending !== undefined
-      ? formatDuration(entry.ending.ms)
-      : undefined;
-  return (
-    <li className="flex flex-col">
-      <Button
-        variant="ghost"
-        size="sm-wrap"
-        aria-expanded={open}
-        onClick={() => {
-          setOpen((o) => !o);
-        }}
-      >
-        <span className="flex h-5 flex-none items-center gap-2.5">
-          <span className={open ? "flex rotate-90" : "flex"}>
-            <ChevronIcon size="xs" />
-          </span>
-          <span className={dotVariants({ tone: status.tone })} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          {entry.kind === "command" ? (
-            <span className="type-technical text-text-primary break-all">
-              {entry.line}
-            </span>
-          ) : (
-            <span className="type-secondary text-text-primary">
-              {entry.title}
-            </span>
-          )}
-          <span className="type-technical-sm text-text-caption">
-            {timeOf(entry.at)}
-            {took !== undefined && ` · ${took}`}
-            {status.tone !== "success" && (
-              <>
-                {" · "}
-                <span className={statusVariants({ tone: status.tone })}>
-                  {status.text}
-                </span>
-              </>
-            )}
-          </span>
-        </span>
-      </Button>
-      {open && <Details entry={entry} />}
-    </li>
-  );
-};
-
-type ServeLogRead =
-  | { kind: "reading" }
-  | { kind: "failed" }
-  | { kind: "read"; path: string; lines: string[] };
-
-/** The end of the serve log file, read when this mounts: its path, its lines, Copy and Show in Finder. */
-const ServeLogDetails = () => {
-  const [read, setRead] = useState<ServeLogRead>({ kind: "reading" });
-  useEffect(() => {
-    let current = true;
-    const load = async () => {
-      const log = await readServeLog();
-      if (current) {
-        setRead(
-          log === undefined ? { kind: "failed" } : { kind: "read", ...log }
-        );
-      }
-    };
-    void load();
-    return () => {
-      current = false;
-    };
-  }, []);
-  if (read.kind !== "read") {
-    return (
-      <p className="type-secondary text-text-hint m-0 pt-1 pb-3 pl-3.5">
-        {read.kind === "reading" ? "Reading…" : "Couldn't read the serve log"}
-      </p>
-    );
-  }
-  const { path, lines } = read;
-  return (
-    <div className="flex flex-col gap-3 pt-1 pb-3 pl-3.5">
-      <span className="type-technical-sm text-text-caption break-all">
-        {path}
-      </span>
-      {lines.length === 0 ? (
-        <p className="type-secondary text-text-hint m-0">Nothing logged yet</p>
-      ) : (
-        <Lines
-          caption={
-            lines.length === 1 ? "Last line" : `Last ${lines.length} lines`
-          }
-          output={{ dropped: 0, lines }}
-        />
-      )}
-      <div className="gap-button flex">
-        {lines.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              void copy(lines.join("\n"), "Copied");
-            }}
-          >
-            Copy
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            void revealInFinder(path);
-          }}
-        >
-          {showInLabel()}
-        </Button>
-      </div>
-    </div>
-  );
-};
+    )}
+  </li>
+);
 
 /**
- * The serve log file, above the entries: everything `agentx serve` wrote to stderr, this session
- * and the ones before it. It is read each time it is opened.
+ * The lines, oldest first. The view stays at the end as lines arrive while it is at the end; a
+ * view scrolled up stays where it is.
  */
-const ServeLogFile = () => {
-  const [open, setOpen] = useState(false);
+const Stream = ({ lines }: { lines: LogLine[] }) => {
+  const list = useRef<HTMLOListElement>(null);
+  const atEnd = useRef(true);
+  // After every render, which new lines cause.
+  useLayoutEffect(() => {
+    const el = list.current;
+    if (el !== null && atEnd.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  });
   return (
-    <div className="flex flex-col">
-      <Button
-        variant="ghost"
-        size="sm-wrap"
-        aria-expanded={open}
-        onClick={() => {
-          setOpen((o) => !o);
-        }}
-      >
-        <span className="flex h-5 flex-none items-center">
-          <span className={open ? "flex rotate-90" : "flex"}>
-            <ChevronIcon size="xs" />
-          </span>
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="type-secondary text-text-primary">Serve log</span>
-          <span className="type-technical-sm text-text-caption">
-            The log file of the background scan
-          </span>
-        </span>
-      </Button>
-      {open && <ServeLogDetails />}
-    </div>
+    <ol
+      ref={list}
+      aria-label="Activity log lines"
+      className="rounded-log-output border-code-border bg-code-bg m-0 flex min-h-0 flex-1 list-none flex-col gap-0.5 overflow-auto border px-3 py-2.5"
+      onScroll={({ currentTarget: el }) => {
+        atEnd.current =
+          el.scrollHeight - el.scrollTop - el.clientHeight < END_SLACK;
+      }}
+    >
+      {lines.map((line) => (
+        <Line key={line.id} line={line} />
+      ))}
+    </ol>
   );
 };
 
 /** The switch that makes the commands run from now on, and serve, log at debug level. */
-const DebugLines = () => {
+const DebugOutput = () => {
   const id = useId();
   const debug = useActivityLog((s) => s.debug);
   return (
@@ -309,7 +150,7 @@ const DebugLines = () => {
         aria-describedby={`${id}-line`}
         checked={debug}
         onCheckedChange={(on) => {
-          setDebugLines(on);
+          setDebugOutput(on);
           void setServeDebug(on);
         }}
       />
@@ -317,34 +158,69 @@ const DebugLines = () => {
   );
 };
 
+/** Under the lines: how many the log keeps and how many it dropped, then how many failed. */
+const Counts = ({ lines, dropped }: { lines: LogLine[]; dropped: number }) => {
+  const failed = lines.filter(
+    (line) => line.tone === "failed" && line.at !== undefined
+  ).length;
+  return (
+    <div className="type-technical-sm text-text-caption flex justify-between gap-3">
+      <span>
+        {count(lines.length)} of {count(LINE_LIMIT)} lines kept ·{" "}
+        {count(dropped)} dropped
+      </span>
+      <span className={failed === 0 ? "" : "text-tone-danger-fg"}>
+        {count(failed)} failed
+      </span>
+    </div>
+  );
+};
+
 /** The activity log, in the sheet at the right edge. */
 export const ActivityLogSheet = () => {
   const open = useActivityLog((s) => s.open);
-  const entries = useActivityLog((s) => s.entries);
+  const lines = useActivityLog((s) => s.lines);
+  const dropped = useActivityLog((s) => s.dropped);
   return (
     <Sheet open={open} onOpenChange={openActivityLog}>
       <SheetContent size="wide">
         <SheetHeader>
           <SheetTitle>Activity log</SheetTitle>
           <SheetDescription>
-            What agentx ran since the app opened
+            The last {plural(LINE_LIMIT, "line")}
           </SheetDescription>
         </SheetHeader>
-        <DebugLines />
-        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
-          <ServeLogFile />
-          {entries.length === 0 ? (
-            <p className="type-secondary text-text-hint m-0">No commands yet</p>
-          ) : (
-            <ol
-              aria-label="Activity log entries"
-              className="m-0 flex list-none flex-col gap-1 p-0"
+        <DebugOutput />
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="gap-button flex">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={lines.length === 0}
+              onClick={() => {
+                void copy(logText(lines));
+              }}
             >
-              {entries.map((entry) => (
-                <Entry key={entry.id} entry={entry} />
-              ))}
-            </ol>
+              Copy
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                void showServeLog();
+              }}
+            >
+              Open serve.log
+            </Button>
+          </div>
+          {lines.length === 0 ? (
+            <p className="type-secondary text-text-hint m-0 flex-1">
+              No commands yet
+            </p>
+          ) : (
+            <Stream lines={lines} />
           )}
+          <Counts lines={lines} dropped={dropped} />
         </div>
       </SheetContent>
     </Sheet>

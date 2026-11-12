@@ -1,16 +1,17 @@
 // What the activity log keeps of a command (src/store/activity-log.ts), as tables over its pure
 // functions: the credentials it replaces, the fields it leaves out, how it quotes a command line,
-// and what it keeps of a long output. No page: the module runs here, as the app runs it.
+// what it keeps of a failed command, and how many lines it holds. No page: the module runs here,
+// as the app runs it.
 import { expect, test } from "@playwright/test";
 
 import type { CliEvent, LogEvent } from "#/cli/events.gen.ts";
 import {
   commandLine,
   eventLine,
+  LINE_LIMIT,
   logCommandEnd,
   logCommandStart,
   redact,
-  statusOf,
   useActivityLog,
 } from "#/store/activity-log.ts";
 
@@ -106,7 +107,10 @@ const log = (level: LogEvent["level"], message: string): LogEvent => ({
   type: "log",
 });
 
-/** Records one run that ended with `events` and `logs`, and returns its entry. */
+/**
+ * Records one run that ended with `events` and `logs`, and returns its line and the lines of
+ * output under it.
+ */
 const record = (exitCode: number, events: CliEvent[], logs: LogEvent[]) => {
   const id = logCommandStart(["skill", "check-updates"]);
   logCommandEnd(id, {
@@ -117,14 +121,20 @@ const record = (exitCode: number, events: CliEvent[], logs: LogEvent[]) => {
     logs,
     timedOut: false,
   });
-  const entry = useActivityLog.getState().entries.find((e) => e.id === id);
-  if (entry?.kind !== "command" || entry.ending === undefined) {
+  const { lines } = useActivityLog.getState();
+  const at = lines.findIndex((line) => line.id === id);
+  if (at === -1) {
     throw new Error("the run was not recorded");
   }
-  return { ending: entry.ending, entry };
+  const rest = lines.slice(at + 1);
+  const next = rest.findIndex((line) => line.at !== undefined);
+  return {
+    line: lines[at],
+    output: (next === -1 ? rest : rest.slice(0, next)).map((l) => l.text),
+  };
 };
 
-test("a long output keeps its first lines and its last, which say how the run ended", () => {
+test("a command that failed keeps its last 5 lines, which say how the run ended", () => {
   const progress: CliEvent[] = Array.from({ length: 260 }, (_, i) => ({
     current: i + 1,
     phase: "fetch",
@@ -138,38 +148,43 @@ test("a long output keeps its first lines and its last, which say how the run en
     schema_version: 2,
     type: "error",
   } satisfies CliEvent;
-  const { ending } = record(3, [...progress, error], []);
-  const { lines, dropped } = ending.events;
-  // 261 lines: 50 first, the note, 150 last.
-  expect(dropped).toBe(61);
-  expect(lines).toHaveLength(201);
-  expect(lines[0]).toContain('"current":1,');
-  expect(lines[49]).toContain('"current":50,');
-  expect(lines[50]).toBe("… 61 lines left out …");
-  expect(lines[51]).toContain('"current":112,');
-  expect(lines.at(-1)).toContain("cannot fetch acme/skills");
+  const failed = record(3, [...progress, error], []);
+  expect(failed.line?.tone).toBe("failed");
+  expect(failed.line?.note).toMatch(/^FAILED exit 3 · /u);
+  expect(failed.output).toHaveLength(5);
+  expect(failed.output[0]).toContain('"current":257,');
+  expect(failed.output.at(-1)).toContain("cannot fetch acme/skills");
 });
 
-test("a run that exited 0 asks for a look when it warned, even on a line the entry left out", () => {
-  const debug = Array.from({ length: 300 }, (_, i) => log("debug", `git ${i}`));
-  const warned = record(
-    0,
-    [],
-    [
-      ...debug.slice(0, 100),
-      log("warn", "a placement was skipped"),
-      ...debug.slice(100),
-    ]
-  );
-  expect(warned.ending.stderr.lines.join("\n")).not.toContain("a placement");
-  expect(statusOf(warned.entry).tone).toBe("attention");
-  expect(statusOf(record(0, [], debug).entry).tone).toBe("success");
+test("a command that succeeded keeps its line only, and its debug lines when it wrote any", () => {
+  const passed = record(0, [], [log("warn", "a placement was skipped")]);
+  expect(passed.line?.tone).toBe("plain");
+  expect(passed.output).toEqual([]);
+
+  const debug = Array.from({ length: 60 }, (_, i) => log("debug", `git ${i}`));
+  const verbose = record(0, [], debug);
+  // Its last 50.
+  expect(verbose.output).toHaveLength(50);
+  expect(verbose.output[0]).toBe("debug: git 10");
+  expect(verbose.output.at(-1)).toBe("debug: git 59");
 });
 
 test("a line is cut after its credentials are replaced", () => {
-  const long = `${"x".repeat(1990)} https://me:s3cret-token@host.example/acme`;
-  const { ending } = record(0, [], [log("warn", long)]);
-  const [line] = ending.stderr.lines;
+  const long = `${"x".repeat(290)} https://me:s3cret-token@host.example/acme`;
+  const { output } = record(3, [], [log("warn", long)]);
+  const [line] = output;
   expect(line).toContain("more characters)");
   expect(line).not.toContain("s3cret");
+});
+
+test("the log keeps its last lines: a line beyond the limit removes the oldest one", () => {
+  const before = useActivityLog.getState();
+  const ids = Array.from({ length: LINE_LIMIT + 100 }, () =>
+    logCommandStart(["version"])
+  );
+  const { lines, dropped } = useActivityLog.getState();
+  expect(lines).toHaveLength(LINE_LIMIT);
+  expect(dropped).toBe(before.dropped + before.lines.length + 100);
+  expect(lines[0]?.id).toBe(ids[100]);
+  expect(lines.at(-1)?.id).toBe(ids.at(-1));
 });

@@ -79,14 +79,6 @@ export interface ServeExit {
   restartInMs: number | null;
 }
 
-/** The end of the serve log file, which holds everything serve wrote to stderr. */
-export interface ServeLog {
-  /** The file being written, which may not exist yet. */
-  path: string;
-  /** Its last lines, oldest first, as serve wrote them. */
-  lines: string[];
-}
-
 // What the supervisor sends, as Rust names it.
 type WireRunLine = RunLine & { run_id: string };
 interface WireRunEnd {
@@ -158,7 +150,7 @@ const subscribed = new Map<string, Promise<UnlistenFn[]>>();
 
 /**
  * The arguments as they are sent: with `--verbose`, before a `--` that ends the flags, while the
- * activity log records debug lines.
+ * activity log's Debug output is on.
  */
 const sentArgs = (args: readonly string[]): readonly string[] => {
   if (!useActivityLog.getState().debug || args.includes("--verbose")) {
@@ -170,7 +162,7 @@ const sentArgs = (args: readonly string[]): readonly string[] => {
 };
 
 /**
- * Runs `agentx <args> --json`. The supervisor adds `--json`. Every run is an entry of the
+ * Runs `agentx <args> --json`. The supervisor adds `--json`. Every run is a line of the
  * activity log (src/store/activity-log.ts), from its start to how it ended.
  */
 export const run = (
@@ -178,7 +170,7 @@ export const run = (
   options: RunOptions = {}
 ): Run => {
   const args = sentArgs(given);
-  const entry = logCommandStart(args);
+  const logged = logCommandStart(args);
   const runId = crypto.randomUUID();
   const lines = channel<RunLine>();
   const ends = channel<WireRunEnd>();
@@ -214,7 +206,7 @@ export const run = (
   const start = async (): Promise<RunResult> => {
     let unlisten: UnlistenFn[] = [];
     try {
-      // Inside the try: a run that cannot be listened to ends its entry as one that did not start.
+      // Inside the try: a run that cannot be listened to ends its line as one that did not start.
       unlisten = await subscription;
       await invoke("cli_run", {
         args,
@@ -234,10 +226,10 @@ export const run = (
         logs: end.logs,
         timedOut: end.timed_out,
       };
-      logCommandEnd(entry, result);
+      logCommandEnd(logged, result);
       return result;
     } catch (error) {
-      logCommandEnd(entry, {
+      logCommandEnd(logged, {
         cancelled: false,
         events: [],
         exitCode: null,
@@ -307,9 +299,9 @@ const requestServe = async (request: ServeRequest): Promise<void> => {
   await invoke("serve_request", { line: JSON.stringify(request) });
 };
 
-/** Reads the end of the serve log file. */
-const readServeLog = async (): Promise<ServeLog> =>
-  await invoke<ServeLog>("serve_log");
+/** The path of the serve log file, which holds everything serve wrote to stderr. */
+const serveLogPath = async (): Promise<string> =>
+  await invoke<string>("serve_log_path");
 
 /** Whether serve logs at debug level; a change restarts the serve child. */
 const setServeVerbose = async (on: boolean): Promise<void> => {
@@ -317,7 +309,7 @@ const setServeVerbose = async (on: boolean): Promise<void> => {
 };
 
 export const serve = {
-  log: readServeLog,
+  logPath: serveLogPath,
   onEvent: onServeLine,
   onExit: onServeExit,
   request: requestServe,

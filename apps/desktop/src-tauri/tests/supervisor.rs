@@ -434,7 +434,7 @@ async fn serve_is_restarted_with_backoff_and_a_fresh_environment() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn serve_verbose_restarts_serve_with_the_flag_and_the_log_is_read_back() {
+async fn serve_verbose_restarts_serve_with_the_flag_and_both_children_write_the_log() {
     let f = Fixture::new("verbose");
     f.serve_mode("echo");
     f.sup.serve_start().await.unwrap();
@@ -454,10 +454,13 @@ async fn serve_verbose_restarts_serve_with_the_flag_and_the_log_is_read_back() {
 
     // What both children wrote to stderr is in the log, oldest first.
     f.wait_for_serve("log", 2).await;
-    let log = f.sup.serve_log();
-    assert_eq!(log.path, f.dir.join("logs/serve.log"));
+    let path = f.sup.serve_log_path();
+    assert_eq!(path, f.dir.join("logs/serve.log"));
     let line = r#"{"type":"log","schema_version":1,"level":"debug","message":"serve started"}"#;
-    assert_eq!(log.lines, [line, line]);
+    assert_eq!(
+        fs::read_to_string(path).unwrap(),
+        format!("{line}\n{line}\n")
+    );
 
     f.sup.shutdown().await;
     assert_eq!(f.emitted(SERVE_EXIT).len(), 2, "one exit per child");

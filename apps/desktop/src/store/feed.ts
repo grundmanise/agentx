@@ -17,12 +17,12 @@ import type {
 } from "#/cli/events.gen.ts";
 import { serve } from "#/cli/transport.ts";
 import type { ServeExit, ServeLine } from "#/cli/transport.ts";
+import { plural } from "#/lib/plural.ts";
 import {
-  eventLine,
   formatDuration,
   lastStderr,
+  logBackground,
   logLine,
-  logServe,
   serveLogLine,
 } from "#/store/activity-log.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
@@ -158,7 +158,7 @@ const activate = (childId: number) => {
     return;
   }
   active = childId;
-  logServe("neutral", "Background scan started", [`child ${childId}`]);
+  logBackground("background scan started");
   // A search the child before did not answer is never answered: the new child's index is asked anew.
   dropSearch();
   const { refreshes } = useAppStore.getState();
@@ -217,18 +217,27 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
     freshness: { kind: "fresh" },
     inventory: event,
   });
-  logServe("neutral", "Inventory updated", [eventLine(event)]);
+  logBackground(
+    `inventory updated: ${[
+      plural(event.skills.length, "skill"),
+      plural(event.mcp_servers.length, "MCP server"),
+      plural(event.plugins.length, "plugin"),
+    ].join(", ")}`
+  );
 };
 
 /** Clears an answered request, even when the inventory did not change. */
 const acknowledge = (event: RefreshCompleteEvent) => {
   rescans.get(event.request_id)?.(event);
   rescans.delete(event.request_id);
-  logServe(
-    event.ok ? "neutral" : "danger",
-    event.ok ? "Scan finished" : "Scan failed",
-    [eventLine(event)]
-  );
+  if (event.ok) {
+    logBackground("scan finished");
+  } else {
+    logBackground("scan failed", {
+      failed: true,
+      output: event.error === undefined ? [] : [event.error],
+    });
+  }
   const { refreshes } = useAppStore.getState();
   if (!Object.hasOwn(refreshes, event.request_id)) {
     return;
@@ -255,22 +264,19 @@ const apply = (childId: number, event: CliEvent) => {
     if (event.outcome !== "restored") {
       addActivity(tone, `${event.name}: ${event.outcome}`);
     }
-    logServe(
-      event.outcome === "restored" ? "neutral" : tone,
-      `${event.name}: ${event.outcome}`,
-      [eventLine(event)]
-    );
+    logBackground(`${event.name}: ${event.outcome}`);
   } else if (event.type === "update_available") {
     set((s) => ({ updates: { ...s.updates, [event.name]: event } }));
     addActivity("success", `Update available for ${event.name}`);
-    logServe("neutral", `Update available for ${event.name}`, [
-      eventLine(event),
-    ]);
+    logBackground(`update available for ${event.name}`);
   } else if (event.type === "drift") {
     addActivity("attention", driftText(event));
-    logServe("attention", driftText(event), [eventLine(event)]);
+    logBackground(driftText(event));
   } else if (event.type === "error") {
-    logServe("danger", event.message, [eventLine(event)]);
+    logBackground(event.message, {
+      failed: true,
+      output: event.hint === undefined ? [] : [event.hint],
+    });
     errors.set(
       childId,
       event.hint === undefined
@@ -290,11 +296,9 @@ const applyLog = (event: LogEvent) => {
     addActivity("attention", event.message);
   }
   // Debug lines come by the hundred while serve logs at debug level: the serve log file holds
-  // them, which the activity log reads when asked (readServeLog).
+  // them, which the activity log shows in the file manager.
   if (event.level !== "debug") {
-    logServe(event.level === "warn" ? "attention" : "neutral", event.message, [
-      logLine(event),
-    ]);
+    logBackground(logLine(event));
   }
 };
 
@@ -317,17 +321,20 @@ const onExit = (exit: ServeExit) => {
     message: lastStderr(exit.stderr) ?? `agentx serve stopped with ${code}`,
   };
   errors.delete(exit.childId);
-  logServe(
-    exit.restarting ? "attention" : "danger",
+  logBackground(
     exit.exitCode === null
-      ? "Background scan stopped by the system"
-      : `Background scan stopped · exit ${exit.exitCode}`,
-    [
-      ...exit.stderr.map(serveLogLine),
-      exit.restarting
-        ? `Restarts in ${formatDuration(exit.restartInMs ?? 0)}`
-        : "Restart agentx to scan again",
-    ]
+      ? "background scan stopped by the system"
+      : `background scan stopped · exit ${exit.exitCode}`,
+    {
+      // A scan the app restarts on purpose, as the Debug output switch does, is no failure: it
+      // ends on a signal or exits 0, and comes back.
+      failed:
+        !exit.restarting || (exit.exitCode !== null && exit.exitCode !== 0),
+      note: exit.restarting
+        ? `restarts in ${formatDuration(exit.restartInMs ?? 0)}`
+        : "restart agentx to scan again",
+      output: exit.stderr.map(serveLogLine),
+    }
   );
   set({
     serveEnd: {
@@ -349,15 +356,12 @@ const onExit = (exit: ServeExit) => {
 };
 
 /**
- * The end of the serve log file, each line as the activity log shows it, and the file's path.
- * Undefined when it could not be read.
+ * Where the serve log file is: everything serve wrote to stderr, this session and the ones before
+ * it. Undefined when the supervisor does not answer.
  */
-export const readServeLog = async (): Promise<
-  { path: string; lines: string[] } | undefined
-> => {
+export const serveLogPath = async (): Promise<string | undefined> => {
   try {
-    const { path, lines } = await serve.log();
-    return { lines: lines.map(serveLogLine), path };
+    return await serve.logPath();
   } catch {
     return undefined;
   }
