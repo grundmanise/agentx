@@ -1,6 +1,6 @@
 ---
 title: "agentx config"
-description: "List, get and set the settings of one machine."
+description: "List, get and set the settings of one machine, and remove configurations."
 ---
 
 Machine settings live in `settings.json` in agentx home, `~/.agentx` by default. agentx does not sync them. To copy them to another machine, use [`agentx export`](/cli/export).
@@ -138,6 +138,41 @@ warning: cursor's copy of pdf is different from the library, so it was left unch
 
 See [A copy that differs from the library](/cli/skill#a-copy-that-differs-from-the-library).
 
+## Remove a configuration
+
+To delete the configuration directory of a client, name the client:
+
+```sh
+agentx config remove adal augment
+```
+
+```text
+Delete /home/me/.adal and /home/me/.augment with everything in them? [y/N] y
+✓ removed 2 configurations
+  adal     /home/me/.adal
+  augment  /home/me/.augment
+```
+
+agentx deletes each directory with everything in it: skills, MCP server declarations, plugins, settings and history. It also takes the client out of `disabled_configurations` and `copy_mode`. `agentx scan` no longer detects the client.
+
+Your library stays as it is, and so does a skills directory outside the configuration directory, such as the one Amp reads in `~/.config/agents/skills`.
+
+Some clients share a directory. Zencoder and Zenflow keep one configuration directory, and Antigravity's directory is inside Gemini CLI's. When you remove a directory, agentx removes every client in it and lists each one.
+
+agentx refuses to delete a directory that is, or holds, your library, agentx home or your home directory, and exits with code 6.
+
+If the run stops part way, the next agentx command finishes it.
+
+### Confirm without a terminal
+
+The command asks once before it deletes anything. Pass `--yes` to answer in advance:
+
+```sh
+agentx config remove adal --yes
+```
+
+Use `--yes` in scripts, with `--json`, and wherever there is no terminal. Without `--yes`, the command exits with code 6 and changes nothing in these cases. It does the same when you answer anything other than `y` or `yes`.
+
 ## Fix a broken file
 
 If agentx cannot parse `settings.json`, every command that reads it exits with code 10 and names the file. Fix the JSON, or delete the file to start again from defaults.
@@ -149,6 +184,7 @@ If a later version of agentx wrote `settings.json`, every command that reads it 
 For what each code means, see [Exit codes](/cli/output#exit-codes). These causes are special to `agentx config`:
 
 - `1`: an invalid value, an unknown key, or a key you cannot set.
-- `5`: `config enable` or `config disable` names a configuration `agentx scan` does not detect.
-- `7`: another agentx command is running. `set`, `enable` and `disable` stop at once.
+- `5`: `config enable`, `config disable` or `config remove` names a configuration `agentx scan` does not detect.
+- `6`: `config remove` was not confirmed, or the directory holds your library, agentx home or your home directory. See [Remove a configuration](#remove-a-configuration).
+- `7`: another agentx command is running. `set`, `enable`, `disable` and `remove` stop at once.
 - `10`: agentx cannot parse `settings.json`, or a later version of agentx wrote it. See [Fix a broken file](#fix-a-broken-file).

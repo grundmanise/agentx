@@ -36,6 +36,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 			`agentx config set label "work laptop"`, "name this machine",
 			"agentx config disable cursor", "keep new skills out of one client",
 			"agentx config enable cursor --place-all", "enable a client and place every skill in it",
+			"agentx config remove adal", "delete the configuration directory of a client, after confirming",
 		),
 		RunE: needSubcommand(inv, "no config command given", "run 'agentx config --help' to list commands"),
 	}
@@ -121,6 +122,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 	})
 	cmd.AddCommand(newEnableCommand(inv, "enable", "Select a client for placements by default"))
 	cmd.AddCommand(newEnableCommand(inv, "disable", "Leave a client out of placements by default"))
+	cmd.AddCommand(newConfigRemoveCommand(inv))
 	return cmd
 }
 

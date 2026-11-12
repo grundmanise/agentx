@@ -105,6 +105,25 @@ func (e *settingsEdit) enable(id string) {
 	e.changed = true
 }
 
+// dropConfiguration takes a configuration that left the machine out of the
+// settings: out of disabled_configurations, and out of the copy modes of
+// every skill, since the copies went with its directory. It reports
+// whether the settings held anything of it.
+func (e *settingsEdit) dropConfiguration(id string) bool {
+	held := false
+	if slices.Contains(e.s.DisabledConfigurations, id) {
+		e.s.DisabledConfigurations = slices.DeleteFunc(e.s.DisabledConfigurations, func(x string) bool { return x == id })
+		e.changed, held = true, true
+	}
+	for name, ids := range e.modes {
+		if slices.Contains(ids, id) {
+			held = true
+		}
+		e.dropCopies(name, []string{id})
+	}
+	return held
+}
+
 // stage records the one settings write of the command, and nothing when
 // nothing changed, so that a command that changed no setting leaves no
 // journal entry for the file.

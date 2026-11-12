@@ -327,6 +327,14 @@ export interface SettingsEvent {
   settings: Settings;
 }
 
+export interface ConfigRemovalEvent {
+  type: "config_removal";
+  schema_version: number;
+  id: string;
+  name: string;
+  path: string;
+}
+
 export interface MachineEvent {
   type: "machine";
   schema_version: number;
@@ -626,6 +634,7 @@ export type CliEvent =
   | VersionEvent
   | UpdateEvent
   | SettingsEvent
+  | ConfigRemovalEvent
   | MachineEvent
   | SourceEvent
   | SourceSkillEvent

@@ -36,6 +36,7 @@ var eventTypes = []struct {
 	{"version", versionEvent{}},
 	{"update", updateEvent{}},
 	{"settings", settingsEvent{}},
+	{"config_removal", configRemovalEvent{}},
 	{"machine", machineEvent{}},
 	{"source", sourceEvent{}},
 	{"source_skill", sourceSkillEvent{}},
