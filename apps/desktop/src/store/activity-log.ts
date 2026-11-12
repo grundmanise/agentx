@@ -339,17 +339,17 @@ export const logServe = (
 
 /** What each exit code means (docs/spec/cli-contract.md, Exit codes). */
 const MEANINGS: Record<string, string | undefined> = {
-  account_repo: "the account repo is unusable",
-  git: "git is missing or too old",
-  internal: "internal error",
-  interrupted: "interrupted",
-  locked: "another agentx command held the lock",
-  not_found: "not found",
-  ok: "succeeded",
-  pending_merge: "a pending merge blocks it, or was left by it",
-  refused: "refused",
-  source: "a source or the account remote was unreachable or denied access",
-  usage: "usage error",
+  account_repo: "The account repo is unusable",
+  git: "Git is missing or too old",
+  internal: "Internal error",
+  interrupted: "Interrupted",
+  locked: "Another agentx command was running",
+  not_found: "Not found",
+  ok: "Succeeded",
+  pending_merge: "A pending merge blocks it, or was left by it",
+  refused: "Refused",
+  source: "A source or the account remote was unreachable or denied access",
+  usage: "Usage error",
 } satisfies Record<keyof typeof EXIT_CODES, string>;
 
 const meaningOf = (exitCode: number) =>
@@ -357,36 +357,37 @@ const meaningOf = (exitCode: number) =>
     .filter(([, code]) => code === exitCode)
     .map(([name]) => MEANINGS[name])[0];
 
-/** How an entry ended, in words, and the tone that goes with it. */
+/**
+ * How an entry ended, in words, and the tone that goes with it: what happened first, then the exit
+ * code. The sheet shows no words for the success tone, whose dot and duration say it.
+ */
 export const statusOf = (entry: LogEntry): { tone: LogTone; text: string } => {
   if (entry.kind === "serve") {
-    return { text: "agentx serve", tone: entry.tone };
+    return { text: "Background", tone: entry.tone };
   }
   const { ending } = entry;
   if (ending === undefined) {
-    return { text: "Running", tone: "neutral" };
+    return { text: "Running…", tone: "neutral" };
   }
   if (ending.startError !== undefined) {
-    return { text: "Could not start", tone: "danger" };
+    return { text: "Couldn't start", tone: "danger" };
   }
   if (ending.timedOut) {
-    return { text: "Stopped at its deadline", tone: "danger" };
+    return { text: "Timed out", tone: "danger" };
   }
   if (ending.cancelled) {
     return { text: "Cancelled", tone: "attention" };
   }
   if (ending.exitCode === null) {
-    return { text: "Ended by a signal", tone: "danger" };
+    return { text: "Stopped by the system", tone: "danger" };
   }
-  const meaning = meaningOf(ending.exitCode);
-  const text =
-    meaning === undefined
-      ? `Exit ${ending.exitCode}`
-      : `Exit ${ending.exitCode}, ${meaning}`;
   if (ending.exitCode === EXIT_CODES.ok) {
     // A command that succeeded and warned asks for a look.
-    return { text, tone: ending.warned ? "attention" : "success" };
+    return ending.warned
+      ? { text: "Succeeded with warnings", tone: "attention" }
+      : { text: "Succeeded", tone: "success" };
   }
+  const text = `${meaningOf(ending.exitCode) ?? "Failed"} · exit ${ending.exitCode}`;
   const soft =
     ending.exitCode === EXIT_CODES.locked ||
     ending.exitCode === EXIT_CODES.interrupted;
@@ -424,7 +425,7 @@ export const entryText = (entry: LogEntry): string => {
     `Took: ${formatDuration(ending.ms)}`,
     `Ended: ${statusOf(entry).text}`,
     ...(ending.startError === undefined ? [] : [ending.startError]),
-    ...block("Events (stdout)", ending.events),
-    ...block("Stderr", ending.stderr),
+    ...block("Output (stdout)", ending.events),
+    ...block("Log (stderr)", ending.stderr),
   ].join("\n");
 };

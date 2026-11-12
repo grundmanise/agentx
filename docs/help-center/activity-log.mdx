@@ -18,16 +18,16 @@ Each command shows:
 
 - The command line. Run it in a terminal to repeat it. The app adds `--json`.
 - The time it started and how long it took.
-- How it ended: the [exit code](/cli/output#exit-codes) and what it means, **Cancelled**, **Stopped at its deadline** or **Could not start**.
+- How it ended, for a command that did not succeed: what went wrong and the [exit code](/cli/output#exit-codes), **Cancelled**, **Timed out** or **Couldn't start**.
 
 A red dot marks a command that failed. An amber dot marks one that was cancelled, found another agentx command running or ended with a warning.
 
 Select an entry to open it:
 
-- **Events** lists what the command reported, one event per line.
-- **Stderr** lists its warnings, and its debug lines when **Debug lines** is on.
+- **Output** lists what the command reported, one event per line.
+- **Log** lists its warnings, and its debug lines when **Debug output** is on.
 
-Entries marked **agentx serve** show what the background scan reported: a new inventory, a finished scan, a warning, or that it stopped and restarted.
+Entries marked **Background** show what the background scan reported: a new inventory, a finished scan, a warning, or that it stopped and restarted.
 
 ## Read the serve log
 
@@ -40,9 +40,9 @@ Select **Serve log**, the first row of the log, to read the end of that file: it
 
 The file is `~/Library/Logs/agentx/serve.log` on macOS and `~/.local/state/agentx/logs/serve.log` on Linux. agentx keeps at most 5 files of 5 MB each.
 
-## Record debug lines
+## Record debug output
 
-Turn on **Debug lines** at the top of the log, then repeat the action. Commands that run from then on also record what agentx logs at debug level, such as each `git` call and its result.
+Turn on **Debug output** at the top of the log, then repeat the action. Commands that run from then on also record what agentx logs at debug level, such as each `git` call and its result.
 
 The switch also restarts `agentx serve` so that it writes its debug lines to the serve log. A bar at the top of the window says so while it restarts. Turn the switch off when you are done: debug lines fill the serve log fast. The switch turns off when you quit the app.
 

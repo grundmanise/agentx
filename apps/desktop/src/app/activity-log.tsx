@@ -109,13 +109,13 @@ const Details = ({ entry }: { entry: LogEntry }) => {
       {empty && <p className="type-secondary text-text-hint m-0">No output</p>}
       {ending !== undefined && (
         <>
-          <Lines caption="Events" output={ending.events} />
-          <Lines caption="Stderr" output={ending.stderr} />
+          <Lines caption="Output" output={ending.events} />
+          <Lines caption="Log" output={ending.stderr} />
         </>
       )}
       {entry.kind === "serve" && (
         <Lines
-          caption="Reported"
+          caption="Details"
           output={{ dropped: 0, lines: entry.details }}
         />
       )}
@@ -124,7 +124,7 @@ const Details = ({ entry }: { entry: LogEntry }) => {
           variant="ghost"
           size="sm"
           onClick={() => {
-            void copy(entryText(entry), "Copied the entry");
+            void copy(entryText(entry), "Copied");
           }}
         >
           Copy
@@ -170,10 +170,14 @@ const Entry = ({ entry }: { entry: LogEntry }) => {
           <span className="type-technical-sm text-text-caption">
             {timeOf(entry.at)}
             {took !== undefined && ` · ${took}`}
-            {" · "}
-            <span className={statusVariants({ tone: status.tone })}>
-              {status.text}
-            </span>
+            {status.tone !== "success" && (
+              <>
+                {" · "}
+                <span className={statusVariants({ tone: status.tone })}>
+                  {status.text}
+                </span>
+              </>
+            )}
           </span>
         </span>
       </Button>
@@ -208,9 +212,7 @@ const ServeLogDetails = () => {
   if (read.kind !== "read") {
     return (
       <p className="type-secondary text-text-hint m-0 pt-1 pb-3 pl-3.5">
-        {read.kind === "reading"
-          ? "Reading the serve log…"
-          : "The serve log could not be read"}
+        {read.kind === "reading" ? "Reading…" : "Couldn't read the serve log"}
       </p>
     );
   }
@@ -221,11 +223,14 @@ const ServeLogDetails = () => {
         {path}
       </span>
       {lines.length === 0 ? (
-        <p className="type-secondary text-text-hint m-0">
-          The serve log is empty
-        </p>
+        <p className="type-secondary text-text-hint m-0">Nothing logged yet</p>
       ) : (
-        <Lines caption="Last lines" output={{ dropped: 0, lines }} />
+        <Lines
+          caption={
+            lines.length === 1 ? "Last line" : `Last ${lines.length} lines`
+          }
+          output={{ dropped: 0, lines }}
+        />
       )}
       <div className="gap-button flex">
         {lines.length > 0 && (
@@ -233,7 +238,7 @@ const ServeLogDetails = () => {
             variant="ghost"
             size="sm"
             onClick={() => {
-              void copy(lines.join("\n"), "Copied the serve log");
+              void copy(lines.join("\n"), "Copied");
             }}
           >
             Copy
@@ -277,7 +282,7 @@ const ServeLogFile = () => {
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="type-secondary text-text-primary">Serve log</span>
           <span className="type-technical-sm text-text-caption">
-            What agentx serve wrote to its log file
+            The log file of the background scan
           </span>
         </span>
       </Button>
@@ -293,10 +298,10 @@ const DebugLines = () => {
   return (
     <div className="flex items-center gap-4">
       <label htmlFor={id} className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="type-body text-text-primary">Debug lines</span>
+        <span className="type-body text-text-primary">Debug output</span>
         <span id={`${id}-line`} className="type-secondary text-text-muted">
-          Commands that run from now on record what agentx logs at debug level,
-          and agentx serve restarts to write it to the serve log
+          Adds debug lines to new commands and to the serve log. Restarts the
+          background scan.
         </span>
       </label>
       <Switch
@@ -321,13 +326,15 @@ export const ActivityLogSheet = () => {
       <SheetContent size="wide">
         <SheetHeader>
           <SheetTitle>Activity log</SheetTitle>
-          <SheetDescription>This session, newest first</SheetDescription>
+          <SheetDescription>
+            What agentx ran since the app opened
+          </SheetDescription>
         </SheetHeader>
         <DebugLines />
         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
           <ServeLogFile />
           {entries.length === 0 ? (
-            <p className="type-secondary text-text-hint m-0">Nothing ran yet</p>
+            <p className="type-secondary text-text-hint m-0">No commands yet</p>
           ) : (
             <ol
               aria-label="Activity log entries"

@@ -19,6 +19,7 @@ import { serve } from "#/cli/transport.ts";
 import type { ServeExit, ServeLine } from "#/cli/transport.ts";
 import {
   eventLine,
+  formatDuration,
   lastStderr,
   logLine,
   logServe,
@@ -157,7 +158,7 @@ const activate = (childId: number) => {
     return;
   }
   active = childId;
-  logServe("neutral", "Serve started", [`child ${childId}`]);
+  logServe("neutral", "Background scan started", [`child ${childId}`]);
   // A search the child before did not answer is never answered: the new child's index is asked anew.
   dropSearch();
   const { refreshes } = useAppStore.getState();
@@ -216,7 +217,7 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
     freshness: { kind: "fresh" },
     inventory: event,
   });
-  logServe("neutral", "Inventory arrived", [eventLine(event)]);
+  logServe("neutral", "Inventory updated", [eventLine(event)]);
 };
 
 /** Clears an answered request, even when the inventory did not change. */
@@ -318,12 +319,14 @@ const onExit = (exit: ServeExit) => {
   errors.delete(exit.childId);
   logServe(
     exit.restarting ? "attention" : "danger",
-    `Serve stopped with ${code}`,
+    exit.exitCode === null
+      ? "Background scan stopped by the system"
+      : `Background scan stopped · exit ${exit.exitCode}`,
     [
       ...exit.stderr.map(serveLogLine),
       exit.restarting
-        ? `restarts in ${exit.restartInMs ?? 0} ms`
-        : "does not restart",
+        ? `Restarts in ${formatDuration(exit.restartInMs ?? 0)}`
+        : "Restart agentx to scan again",
     ]
   );
   set({

@@ -73,11 +73,10 @@ test("a check that succeeds and one that fails are entries with their outcome, o
     .filter({ hasText: "agentx skill check-updates" });
   await expect(checks).toHaveCount(2);
   await expect(checks.nth(0)).toContainText(
-    "Exit 3, a source or the account remote was unreachable or denied access"
+    "A source or the account remote was unreachable or denied access · exit 3"
   );
-  await expect(checks.nth(1)).toContainText("Exit 0, succeeded");
-  await expect(entry(page, "agentx doctor")).toContainText("Exit 0, succeeded");
-  await expect(entry(page, "Inventory arrived")).toContainText("agentx serve");
+  await expect(entry(page, "agentx doctor")).toBeVisible();
+  await expect(entry(page, "Inventory updated")).toContainText("Background");
 
   // The passing check opens to the events it emitted.
   await checks.nth(1).click();
@@ -103,12 +102,12 @@ test("a check that succeeds and one that fails are entries with their outcome, o
     async () => await navigator.clipboard.readText()
   );
   expect(copied).toContain("$ agentx skill check-updates");
-  expect(copied).toContain("Ended: Exit 3");
+  expect(copied).toContain("· exit 3");
   expect(copied).toContain("warn: the fetch of acme/skills timed out");
   expect(copied).not.toContain("s3cret-token");
 });
 
-test("Settings opens the log, and Debug lines runs later commands and serve with --verbose", async ({
+test("Settings opens the log, and Debug output runs later commands and serve with --verbose", async ({
   cli,
   page,
 }) => {
@@ -118,7 +117,7 @@ test("Settings opens the log, and Debug lines runs later commands and serve with
     .getByRole("button", { name: "Show activity log" })
     .click();
   await expect(log(page)).toBeVisible();
-  await log(page).getByRole("switch", { name: "Debug lines" }).click();
+  await log(page).getByRole("switch", { name: "Debug output" }).click();
   // Serve follows the switch: the supervisor restarts it to log at debug level.
   expect(cli.serveVerbose).toEqual([true]);
   await page.keyboard.press("Escape");
