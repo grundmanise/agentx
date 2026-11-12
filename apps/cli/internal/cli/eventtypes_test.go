@@ -186,9 +186,6 @@ var valueLists = []valueList{
 	{name: "AdoptionState", values: []string{adoptCandidate, adoptAdopted, adoptManaged, adoptRefused}, fields: []fieldRef{
 		{adoptionEvent{}, "State"},
 	}},
-	{name: "ConfigRemovalState", values: []string{removalRemovable, removalRemoved, removalKept}, fields: []fieldRef{
-		{configRemovalEvent{}, "State"},
-	}},
 	{name: "ImportState", values: []string{restorePresent, restoreMissing, restoreDifferent}, fields: []fieldRef{
 		{importSkillEvent{}, "State"},
 	}},

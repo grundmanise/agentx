@@ -48,7 +48,7 @@ SETTINGS
   config set <key> <value>        Change label, accept_operations or ignore_system_files
   config enable <configuration>   Select a client for placements by default
   config disable <configuration>  Leave a client out of placements by default
-  config remove [<id>...]         Delete the leftover configuration of a client
+  config remove <id>...           Delete the configuration directory of a client
 
 INVENTORY AND DIAGNOSTICS
   scan                            Inventory the clients, their skills, MCP servers and plugins

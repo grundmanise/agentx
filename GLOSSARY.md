@@ -218,10 +218,6 @@ _Avoid_: debug log, console, command history, journal
 An agent configuration selected by default for explicit placements. This choice does not disable an agent client's own discovery of the universal library.
 _Avoid_: active, target, selected
 
-**Leftover configuration**:
-An agent configuration whose directory holds nothing of its own: only placements, copies of skills that stay on the machine and empty directories. A tool that installs skills into every agent client it knows leaves one for each client the user does not run. The only kind `agentx config remove` deletes.
-_Avoid_: unused agent, orphan, stale configuration
-
 ### Sync
 
 **Account**:
