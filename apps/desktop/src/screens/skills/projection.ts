@@ -165,7 +165,7 @@ const groupNames: Record<string, string> = {
   [GROUP_YOURS]: "Your skills",
 };
 
-/** The name of a group, as a choice of the GROUPS filter: a source's short form, or the fixed ones. */
+/** The name of a group: a source's short form, or the fixed ones, which SHOW offers as choices. */
 export const groupName = (key: string) =>
   groupNames[key] ?? shortSource(key.slice(SOURCE_PREFIX.length));
 
@@ -358,23 +358,19 @@ const sorted = <T>(items: T[], compare: (a: T, b: T) => number): T[] => {
   return copy;
 };
 
-/** Group keys in the list's order: YOUR SKILLS, each source A to Z by its short form, PLUGINS, UNMANAGED. */
-const inListOrder = (keys: string[]) => {
-  const sources = sorted(
-    keys.filter((k) => k.startsWith(SOURCE_PREFIX)),
-    (a, b) => groupLabel(a).localeCompare(groupLabel(b))
-  );
-  return [GROUP_YOURS, ...sources, GROUP_PLUGINS, GROUP_DISK].filter((k) =>
-    keys.includes(k)
-  );
-};
-
 /**
  * The rows in groups: YOUR SKILLS, each source A to Z by its short form, PLUGINS, then UNMANAGED,
  * each sorted by name in `order`. A group with no row is left out.
  */
 export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
-  const ordered = inListOrder([...new Set(rows.map((r) => r.group))]);
+  const keys = [...new Set(rows.map((r) => r.group))];
+  const sources = sorted(
+    keys.filter((k) => k.startsWith(SOURCE_PREFIX)),
+    (a, b) => groupLabel(a).localeCompare(groupLabel(b))
+  );
+  const ordered = [GROUP_YOURS, ...sources, GROUP_PLUGINS, GROUP_DISK].filter(
+    (k) => keys.includes(k)
+  );
   return ordered.map((key) => {
     const byName = sorted(
       rows.filter((r) => r.group === key),
@@ -391,7 +387,7 @@ export const forksOf = (row: Pick<SkillRow, "name">, rows: SkillRow[]) =>
     compareNames
   );
 
-export type Show = "all" | "updates";
+export type Show = "all" | "yours" | "plugins" | "unmanaged" | "updates";
 export type State = "all" | "enabled" | "disabled";
 /** The id of the Universal choice among the agent filters. */
 export const UNIVERSAL = "universal";
@@ -400,8 +396,6 @@ export interface Filters {
   /** A case-insensitive substring of the name. */
   name: string;
   show: Show;
-  /** The keys of the groups the list keeps; none keeps every group. */
-  groups: string[];
   state: State;
   /** Configuration ids, and UNIVERSAL for the clients that read the library. */
   agents: string[];
@@ -409,7 +403,6 @@ export interface Filters {
 
 export const noFilters: Filters = {
   agents: [],
-  groups: [],
   name: "",
   show: "all",
   state: "all",
@@ -418,15 +411,25 @@ export const noFilters: Filters = {
 /** How many filters but the name are set, which the Filter button shows. */
 export const filterCount = (f: Filters) =>
   (f.show === "all" ? 0 : 1) +
-  (f.groups.length > 0 ? 1 : 0) +
   (f.state === "all" ? 0 : 1) +
   (f.agents.length > 0 ? 1 : 0);
 
-const matchesShow = (row: SkillRow, show: Show) =>
-  show === "all" || row.hasUpdate;
+/** The group each SHOW choice keeps, for the choices that keep one group. */
+const showGroups: Partial<Record<Show, string>> = {
+  plugins: GROUP_PLUGINS,
+  unmanaged: GROUP_DISK,
+  yours: GROUP_YOURS,
+};
 
-const matchesGroups = (row: SkillRow, groups: string[]) =>
-  groups.length === 0 || groups.includes(row.group);
+const matchesShow = (row: SkillRow, show: Show) => {
+  if (show === "all") {
+    return true;
+  }
+  if (show === "updates") {
+    return row.hasUpdate;
+  }
+  return row.group === showGroups[show];
+};
 
 const matchesState = (row: SkillRow, state: State) => {
   switch (state) {
@@ -458,7 +461,6 @@ export const filterRows = (rows: SkillRow[], f: Filters) => {
     (row) =>
       (needle === "" || row.name.toLowerCase().includes(needle)) &&
       matchesShow(row, f.show) &&
-      matchesGroups(row, f.groups) &&
       matchesState(row, f.state) &&
       matchesAgents(row, f.agents)
   );
@@ -470,31 +472,13 @@ export const showCounts = (
   f: Filters
 ): Record<Show, number> => {
   const count = (show: Show) => filterRows(rows, { ...f, show }).length;
-  return { all: count("all"), updates: count("updates") };
-};
-
-/** One choice of the GROUPS filter. */
-export interface GroupChoice {
-  key: string;
-  name: string;
-  /** How many rows the group holds, with the other filters as they are. */
-  count: number;
-}
-
-/**
- * The choices of the GROUPS filter, in the list's order: every group the machine's skills are in,
- * and a chosen group they have since left, so that it can still be cleared.
- */
-export const groupChoices = (rows: SkillRow[], f: Filters): GroupChoice[] => {
-  const others = filterRows(rows, { ...f, groups: [] });
-  const keys = inListOrder([
-    ...new Set([...rows.map((r) => r.group), ...f.groups]),
-  ]);
-  return keys.map((key) => ({
-    count: others.filter((r) => r.group === key).length,
-    key,
-    name: groupName(key),
-  }));
+  return {
+    all: count("all"),
+    plugins: count("plugins"),
+    unmanaged: count("unmanaged"),
+    updates: count("updates"),
+    yours: count("yours"),
+  };
 };
 
 /** Where a skill comes from, in the words of the detail header. */
