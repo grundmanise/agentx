@@ -25,7 +25,9 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   },
   "config get": {},
   "config list": {},
-  "config remove": {},
+  "config remove": {
+    yes: false,
+  },
   "config set": {},
   doctor: {},
   export: {

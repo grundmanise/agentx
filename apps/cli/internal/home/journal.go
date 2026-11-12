@@ -30,14 +30,6 @@ var ErrRecovery = errors.New("recovery required")
 // it had found the change itself.
 var ErrMovedBeforeApply = errors.New("a ref moved before the mutation changed anything")
 
-// ErrTakenBack is returned by Apply when a mutation recorded with
-// TakeBackUnfinished could not finish and was taken back: every directory
-// it had moved is at its path again, the files it replaces hold what they
-// held, and its journal is gone. Nothing was changed, so there is nothing
-// to recover and no later command is held up; the error wraps what stopped
-// the mutation.
-var ErrTakenBack = errors.New("the change was taken back")
-
 // movedRef is ErrMovedBeforeApply for the ref that moved.
 type movedRef struct{ ref string }
 
@@ -67,13 +59,6 @@ type journal struct {
 	Progress string        `json:"progress"` // staged, then applied once every live path holds its new state
 	Replace  []replacement `json:"replace"`
 	Steps    []step        `json:"steps,omitempty"`
-	// TakeBack marks a mutation that is taken back, never finished, when
-	// it stops before it is applied: see TakeBackUnfinished.
-	TakeBack bool `json:"take_back,omitempty"`
-	// Note is what the command adds to the warning for a file a take-back
-	// could not restore: what the file may have lost, in the command's
-	// own terms, and how to check it.
-	Note string `json:"note,omitempty"`
 }
 
 // replacement is one live file the mutation replaces: Old and New are the
@@ -84,9 +69,6 @@ type replacement struct {
 	Old    string `json:"old"`
 	New    string `json:"new"`
 	Staged string `json:"staged"`
-	// Backup is where a mutation that may be taken back keeps the content
-	// the file held, from just before the rename until the journal is gone.
-	Backup string `json:"backup,omitempty"`
 }
 
 // step is one change outside the state files of agentx home: a lineage ref,
@@ -353,26 +335,6 @@ func (m *Mutation) Ref(gitDir, ref, old, newValue string) {
 	m.j.Steps = append(m.j.Steps, step{Kind: stepRef, GitDir: gitDir, Ref: ref, Old: old, New: newValue})
 }
 
-// TakeBackUnfinished records that the mutation is taken back, never
-// finished, when it stops before it is applied: by Apply when a step
-// cannot be applied, and by recovery when the process stopped part way.
-// It is for a removal whose right to delete rests on what the command
-// judged under the lock about paths the journal does not hold, as config
-// remove's rests on the copies of a skill that stay elsewhere: finishing
-// it later would delete on a judgment that may no longer be true, while
-// taking it back loses nothing and leaves the command to be run again.
-// Only remove steps of directories can be taken back, so Apply refuses a
-// mutation that records anything else beside its file replacements. Call
-// it once everything is staged. note is added to the warning for a file
-// that could not be put back as it was, which is then left as it is: what
-// it may have lost and how to check, "" for none.
-func (m *Mutation) TakeBackUnfinished(note string) {
-	m.j.TakeBack, m.j.Note = true, note
-	for i := range m.j.Replace {
-		m.j.Replace[i].Backup = m.j.Replace[i].Staged + ".old"
-	}
-}
-
 // Empty reports whether the mutation would change nothing.
 func (m *Mutation) Empty() bool { return len(m.j.Replace) == 0 && len(m.j.Steps) == 0 }
 
@@ -383,14 +345,6 @@ func (m *Mutation) Apply(u RefUpdater) error {
 	if m.Empty() {
 		return nil
 	}
-	if m.j.TakeBack {
-		for _, s := range m.j.Steps {
-			if s.Kind != stepRemove || s.Retained == "" {
-				m.Discard()
-				return fmt.Errorf("a %s step at %s cannot be taken back", s.Kind, s.Path)
-			}
-		}
-	}
 	m.j.Progress = "staged"
 	path := m.journalPath()
 	if err := writeJournal(path, m.j); err != nil {
@@ -399,7 +353,7 @@ func (m *Mutation) Apply(u RefUpdater) error {
 	}
 	m.journaled = true
 	err := apply(path, m.j, u)
-	if errors.Is(err, ErrMovedBeforeApply) || errors.Is(err, ErrTakenBack) {
+	if errors.Is(err, ErrMovedBeforeApply) {
 		m.journaled = false // the journal is gone again, and nothing needs what it named
 	}
 	return err
@@ -431,9 +385,6 @@ func (m *Mutation) discardStaged() { discardStaged(m.j) }
 func discardStaged(j journal) {
 	for _, r := range j.Replace {
 		os.Remove(r.Staged)
-		if r.Backup != "" {
-			os.Remove(r.Backup)
-		}
 	}
 	for _, s := range j.Steps {
 		for _, path := range []string{s.Staged, s.Retained} {
@@ -484,23 +435,12 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 			continue
 		}
 		if _, err := applyStep(s, u); err != nil {
-			if j.TakeBack {
-				return takenBack(journalPath, j, u, s, err)
-			}
 			return unfinished(journalPath, s, err)
 		}
 	}
 	for _, r := range j.Replace {
-		err := keepBackup(r)
-		if err == nil {
-			err = renameSynced(r.Staged, r.Path)
-		}
-		if err != nil {
-			s := step{Kind: "replace", Path: r.Path}
-			if j.TakeBack {
-				return takenBack(journalPath, j, u, s, err)
-			}
-			return unfinished(journalPath, s, err)
+		if err := renameSynced(r.Staged, r.Path); err != nil {
+			return unfinished(journalPath, step{Kind: "replace", Path: r.Path}, err)
 		}
 	}
 	if _, err := applyRefs(late, nil, u); err != nil {
@@ -511,162 +451,6 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 		return err
 	}
 	discardRetained(j, u)
-	for _, r := range j.Replace {
-		if r.Backup != "" {
-			os.Remove(r.Backup)
-		}
-	}
-	return os.Remove(journalPath)
-}
-
-// keepBackup copies the file a replacement is about to replace to its
-// Backup, for a mutation that may be taken back; it does nothing for any
-// other, and nothing when there is no file yet.
-func keepBackup(r replacement) error {
-	if r.Backup == "" {
-		return nil
-	}
-	b, err := os.ReadFile(r.Path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return writeAtomic(r.Backup, b)
-}
-
-// takenBack takes the mutation back after the step s could not be applied
-// and says so, wrapping ErrTakenBack; when it cannot be taken back either,
-// the journal stays and the error is a recovery's.
-func takenBack(journalPath string, j journal, u RefUpdater, s step, cause error) error {
-	if err := takeBack(journalPath, j, u); err != nil {
-		return err
-	}
-	// The cause is worded, not wrapped: a step that refused is a recovery
-	// to every other mutation, and this one has nothing left to recover.
-	return fmt.Errorf("%w: %s could not be changed: %s", ErrTakenBack, s.Path, strings.TrimPrefix(cause.Error(), ErrRecovery.Error()+": "))
-}
-
-// takeBack undoes whatever of the journal was applied and removes it: each
-// directory a remove step moved is back at its path, and each file it
-// replaced holds its old content again, from the backup. It is decided
-// from the live state, like every step, and is safe to repeat.
-//
-// The directories go first, since nothing they need depends on the files,
-// and every one whose path is free goes back whatever happens to the
-// others. A path that something else filled while its directory was
-// retained is left as it is, with the retained directory and the journal,
-// and named in a StrandedError: both versions are the user's to choose
-// between, and the journal is what still names the retained one. A file
-// that cannot be put back as it was, because it was edited meanwhile or
-// its backup is gone, is left as it is and named through u: it strands
-// nothing, so it does not keep the journal.
-func takeBack(journalPath string, j journal, u RefUpdater) error {
-	var stranded []Stranded
-	for i := len(j.Steps) - 1; i >= 0; i-- {
-		s := j.Steps[i]
-		if _, err := os.Lstat(s.Retained); errors.Is(err, fs.ErrNotExist) {
-			continue // never moved, or dealt with by hand
-		} else if err != nil {
-			return unfinished(journalPath, s, err)
-		}
-		if _, err := os.Lstat(s.Path); !errors.Is(err, fs.ErrNotExist) {
-			stranded = append(stranded, Stranded{Path: s.Path, Retained: s.Retained})
-			continue
-		}
-		if err := renameSynced(s.Retained, s.Path); err != nil {
-			return unfinished(journalPath, s, err)
-		}
-	}
-	for _, r := range j.Replace {
-		live, err := hashFile(r.Path)
-		switch {
-		case err != nil:
-			warn(u, r.Path+" could not be read while a change was taken back and is left as it is: "+err.Error()+noted(j))
-		case live == r.Old:
-		case live != r.New:
-			warn(u, r.Path+" changed while a change was taken back and is left as it is"+noted(j))
-		case r.Old == absent:
-			err = os.Remove(r.Path)
-		default:
-			if kept, herr := hashFile(r.Backup); herr != nil || kept != r.Old {
-				warn(u, "what "+r.Path+" held before a change that was taken back is missing, so the file keeps what the change wrote"+noted(j))
-				continue
-			}
-			err = renameSynced(r.Backup, r.Path)
-		}
-		if err != nil && live == r.New {
-			return unfinished(journalPath, step{Kind: "replace", Path: r.Path}, err)
-		}
-	}
-	if len(stranded) > 0 {
-		return &StrandedError{Journal: journalPath, Dirs: stranded}
-	}
-	for _, r := range j.Replace {
-		os.Remove(r.Staged)
-		os.Remove(r.Backup)
-	}
-	return os.Remove(journalPath)
-}
-
-// noted is the journal's note as the end of a warning, "" when it has none.
-func noted(j journal) string {
-	if j.Note == "" {
-		return ""
-	}
-	return "; " + j.Note
-}
-
-// Stranded is one directory a mutation that was taken back could not put
-// back: something made Path again while what it held sat at Retained.
-type Stranded struct{ Path, Retained string }
-
-// StrandedError is the ErrRecovery of a mutation that was taken back as
-// far as it could be: it names every directory that is still retained and
-// the path it belongs at. The journal stays, since it is what names them.
-type StrandedError struct {
-	Journal string
-	Dirs    []Stranded
-}
-
-func (e *StrandedError) Error() string {
-	parts := make([]string, len(e.Dirs))
-	for i, d := range e.Dirs {
-		parts[i] = d.Path + " was made again while its removal was being taken back, and what it held is kept at " + d.Retained
-	}
-	return ErrRecovery.Error() + ": " + strings.Join(parts, "; ")
-}
-
-func (e *StrandedError) Unwrap() error { return ErrRecovery }
-
-// Hint is the way out: deal with each retained directory, after which the
-// next command finds nothing left to put back and drops the journal.
-// Moving the journal aside is never it, since the retained directories
-// would then be named nowhere.
-func (e *StrandedError) Hint() string {
-	return "for each, move what you want to keep out of the kept directory, then delete the kept directory; the next command then finishes. Leave the journal " + e.Journal + " where it is"
-}
-
-// finishTakeBack ends a mutation marked to be taken back that had been
-// applied in full: the directories it removed were judged and reported as
-// removed, so what is left is to delete what is retained of them, a tree a
-// clean-up stopped part way through included, and the journal. The paths
-// they came from are never looked at again: a directory made there since
-// is a new one.
-func finishTakeBack(journalPath string, j journal, u RefUpdater) error {
-	for _, s := range j.Steps {
-		if s.Retained == "" {
-			continue
-		}
-		if err := RemoveTree(s.Retained); err != nil {
-			warn(u, "what "+s.Path+" held could not be removed and is kept at "+s.Retained+": "+err.Error())
-		}
-	}
-	for _, r := range j.Replace {
-		os.Remove(r.Staged)
-		os.Remove(r.Backup)
-	}
 	return os.Remove(journalPath)
 }
 
@@ -1176,17 +960,6 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 	if err := json.Unmarshal(b, &j); err != nil || len(j.Replace)+len(j.Steps) == 0 {
 		return fmt.Errorf("%w: %s is not a mutation journal", ErrRecovery, journalPath)
 	}
-	if j.TakeBack && j.Progress == "applied" {
-		return finishTakeBack(journalPath, j, u)
-	}
-	if j.TakeBack {
-		// Never finished from here: what justified it was judged before
-		// the process stopped, and may no longer hold.
-		if err := takeBack(journalPath, j, u); err != nil {
-			return err
-		}
-		return bumpVersion(dir)
-	}
 	early, late := refPhases(j.Steps)
 	resumed, err := applyRefs(early, late, u)
 	if err != nil {
@@ -1254,9 +1027,6 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 	}
 	for _, r := range j.Replace {
 		os.Remove(r.Staged) // left behind when the live file already held the new content
-		if r.Backup != "" {
-			os.Remove(r.Backup)
-		}
 	}
 	moved, err := applyRefs(late, nil, u)
 	if err != nil {
