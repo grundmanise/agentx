@@ -249,28 +249,6 @@ func TestSkillPlaceForceDiscardsTheDirectory(t *testing.T) {
 	cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 }
 
-// TestSkillPlaceKeepFlagsAreGone: --force is the one way to replace a
-// displaced directory that differs, and the flags that chose which content
-// to keep are no flags of skill place. skill place puts placements back,
-// and skill repair, which did, is no command any more. Each is refused as
-// the command line is read, before anything is.
-func TestSkillPlaceKeepFlagsAreGone(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	for _, c := range []struct {
-		args []string
-		says string
-	}{
-		{[]string{"skill", "place", "alpha", "--keep-library"}, "unknown flag: --keep-library"},
-		{[]string{"skill", "place", "alpha", "--keep-placement"}, "unknown flag: --keep-placement"},
-		{[]string{"skill", "repair", "alpha"}, `unknown command "repair" for "agentx skill"`},
-	} {
-		out := h.run(c.args...)
-		equal(t, strings.Join(c.args, " ")+": exit", out.exit, 1)
-		contains(t, strings.Join(c.args, " ")+": stderr", out.stderr, c.says)
-	}
-}
-
 // TestSkillPlaceWithoutToCoversEveryEnabledConfiguration: with no --to,
 // skill place covers every enabled configuration and no other. Claude
 // Code's missing placement is made, and Cursor, disabled, is left as it

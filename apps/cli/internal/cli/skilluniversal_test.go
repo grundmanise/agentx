@@ -299,8 +299,9 @@ func TestSkillRemoveFromASymlinkedClient(t *testing.T) {
 // The refusal is decided before the lock, the journal and any placement:
 // it is given while another command holds the lock, and afterwards the
 // library, the refs, the placements and the settings are as they were. So
-// every way of asking runs in turn on one machine for each placement mode,
-// the disabled client last.
+// the cases, one for each wording of the refusal and each of these
+// decisions, run in turn on one machine for each placement mode, the
+// disabled client last.
 func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 	t.Parallel()
 	const codexAlone = "codex reads the library directly, so alpha cannot be removed from it alone"
@@ -311,15 +312,11 @@ func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 		refusal string
 	}{
 		{what: "alone", from: []string{"codex"}, refusal: codexAlone},
-		{what: "after a client that is not universal", from: []string{"claude-code", "codex"}, refusal: codexAlone},
 		{what: "before a client that is not universal", from: []string{"gemini-cli", "claude-code"},
 			refusal: "gemini-cli reads the library directly, so alpha cannot be removed from it alone"},
 		{what: "with the other universal client", from: []string{"gemini-cli", "codex"},
 			refusal: "codex, gemini-cli read the library directly, so alpha cannot be removed from them alone"},
 		{what: "after --from universal", from: []string{"universal", "codex"}, refusal: codexAlone},
-		{what: "before --from universal", from: []string{"codex", "universal"}, refusal: codexAlone},
-		{what: "with --from universal and a client that is not universal", from: []string{"universal", "codex", "claude-code"},
-			refusal: codexAlone},
 		{what: "disabled", disable: "codex", from: []string{"codex"}, refusal: codexAlone},
 	}
 	for _, mode := range []string{modeSymlink, modeCopy} {

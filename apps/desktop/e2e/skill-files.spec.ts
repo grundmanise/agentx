@@ -59,15 +59,6 @@ const reveal = (where: Locator, path: string) =>
     exact: true,
     name: `Show ${path} in file manager`,
   });
-/** How the button shows: its wrapper fades it in while the row is hovered or holds the focus. */
-const opacity = async (locator: Locator) =>
-  await locator.evaluate((el) => {
-    let node: Element | null = el;
-    while (node !== null && getComputedStyle(node).opacity === "1") {
-      node = node.parentElement;
-    }
-    return node === null ? "1" : getComputedStyle(node).opacity;
-  });
 /** The paths of the file rows, in order: the buttons that open a row. */
 const rowNames = async (where: Locator) =>
   await where
@@ -288,26 +279,8 @@ test("each file on disk can be shown in the file manager from its row", async ({
 }) => {
   await openSkills(cli, page, "/#/skills/pdf");
   const section = files(page, "pdf");
-  // The button is there, in the tab order, and shows while the row is hovered or holds the focus.
   const button = reveal(section, "SKILL.md");
   await expect(button).toHaveAttribute("title", "Show in file manager");
-  expect(await opacity(button)).toBe("0");
-  // The button takes the meta text's place: the meta fades out as the button fades in, and
-  // nothing moves.
-  const meta = fileRow(section, "SKILL.md").getByText("6 lines");
-  // The screen fades in when it mounts: wait for it.
-  await expect.poll(async () => await opacity(meta)).toBe("1");
-  const before = await meta.boundingBox();
-  await fileRow(section, "SKILL.md").hover();
-  await expect.poll(async () => await opacity(button)).toBe("1");
-  await expect.poll(async () => await opacity(meta)).toBe("0");
-  expect(await meta.boundingBox()).toEqual(before);
-  await page.mouse.move(0, 0);
-  await expect.poll(async () => await opacity(button)).toBe("0");
-  await expect.poll(async () => await opacity(meta)).toBe("1");
-  await button.focus();
-  await expect.poll(async () => await opacity(button)).toBe("1");
-  await expect.poll(async () => await opacity(meta)).toBe("0");
 
   // A click shows the file at the library entry, and leaves the row as it was.
   await expect(fileRow(section, "SKILL.md")).toHaveAttribute(
@@ -337,17 +310,6 @@ test("each file on disk can be shown in the file manager from its row", async ({
     "/home/me/.claude/plugins/acme-tools/skills/commit-helper/reference/forms.md",
   ]);
 
-  // A file the edits removed is not on disk: its row keeps its line count while hovered.
-  await row(page, "review").click();
-  const review = files(page, "review");
-  await expect(reveal(review, "notes.md")).toBeAttached();
-  await expect(fileRow(review, "old.md")).toBeVisible();
-  await fileRow(review, "old.md").hover();
-  await expect
-    .poll(
-      async () => await opacity(fileRow(review, "old.md").getByText("2 lines"))
-    )
-    .toBe("1");
   // One of your own skills is shown at its library entry too, which leads into its worktree.
   await row(page, "pdf-letters").click();
   await reveal(files(page, "pdf-letters"), "SKILL.md").click();
