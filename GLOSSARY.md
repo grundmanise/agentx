@@ -210,6 +210,10 @@ _Avoid_: config, preferences, local state
 A choice the desktop app alone makes on this machine, such as the editor a skill opens in. The app keeps it in its own config directory; it is never a machine setting, the CLI never reads it, and an export does not carry it.
 _Avoid_: app setting, machine setting
 
+**Activity log**:
+The desktop app's list of every agentx command it ran since it opened, whoever started it, a click or the app itself, each with its command line, start time, duration, exit code and output, and of what the serve child reported. Kept in memory, newest first, and gone when the app quits. It never holds a credential or an inventory's content.
+_Avoid_: debug log, console, command history, journal
+
 **Enabled configuration**:
 An agent configuration selected by default for explicit placements. This choice does not disable an agent client's own discovery of the universal library.
 _Avoid_: active, target, selected

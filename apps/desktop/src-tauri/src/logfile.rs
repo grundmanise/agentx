@@ -45,6 +45,11 @@ impl RotatingLog {
         }
     }
 
+    /// The file being written.
+    pub fn current(&self) -> PathBuf {
+        self.path(0)
+    }
+
     fn path(&self, n: usize) -> PathBuf {
         if n == 0 {
             self.dir.join(&self.name)

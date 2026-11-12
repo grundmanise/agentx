@@ -1,8 +1,8 @@
 // The Rust side hosts the window and supervises the CLI: it finds the CLI, reads the login shell's
 // environment, runs one-shot commands and keeps the serve child open. It has no file, git or
-// network code of its own beyond writing serve's log and the app's preferences, and starts no
-// program but the login shell, agentx and, when the user asks, the editor of their choice (ADR
-// 0001, ADR 0013). Its calls to the operating system beside that are the opener plugin, which
+// network code of its own beyond writing serve's log, reading its end back, and the app's
+// preferences, and starts no program but the login shell, agentx and, when the user asks, the
+// editor of their choice (ADR 0001, ADR 0013). Its calls to the operating system beside that are the opener plugin, which
 // shows a path selected in Finder (the file manager elsewhere) and opens a skill's file in the
 // system's default application when the user asks, and the dialog plugin's open dialog, in which
 // the user picks a file to import: it returns the path, and the app passes it to the CLI without
@@ -61,6 +61,19 @@ async fn serve_start(sup: Sup<'_>) -> Result<u64, String> {
 #[tauri::command(rename_all = "snake_case")]
 async fn serve_request(sup: Sup<'_>, line: String) -> Result<(), String> {
     sup.serve_request(&line).await
+}
+
+/// The path of the serve log file, which holds everything serve wrote to stderr.
+#[tauri::command(rename_all = "snake_case")]
+async fn serve_log_path(sup: Sup<'_>) -> Result<PathBuf, String> {
+    Ok(sup.serve_log_path())
+}
+
+/// Whether serve logs at debug level. A change restarts the serve child.
+#[tauri::command(rename_all = "snake_case")]
+async fn serve_verbose(sup: Sup<'_>, on: bool) -> Result<(), String> {
+    sup.serve_verbose(on).await;
+    Ok(())
 }
 
 /// The app's preferences file, in the app's config directory.
@@ -175,6 +188,8 @@ pub fn run() {
             cli_cancel,
             serve_start,
             serve_request,
+            serve_log_path,
+            serve_verbose,
             preferences_read,
             preferences_write,
             editor_detect,
