@@ -239,16 +239,15 @@ func TestUnreadableSettingsExit10(t *testing.T) {
 	}
 }
 
-// TestLabelIsOneRuleForEveryRouteToIt: config set label, machine rename
-// and the label an import restores are held to one rule, so that a
-// settings file agentx wrote is one an import restores byte for byte and a
-// label agentx would refuse to write cannot arrive by the other door. The
-// bound is the part config set label could not reach on its own: its
-// argument is bounded by ARG_MAX, and a document's label is not.
-func TestLabelIsOneRuleForEveryRouteToIt(t *testing.T) {
+// TestValidLabel: config set label, machine rename and the label an import
+// restores are held to one rule, so that a settings file agentx wrote is
+// one an import restores byte for byte and a label agentx would refuse to
+// write cannot arrive by the other door. The bound is the part config set
+// label could not reach on its own: its argument is bounded by ARG_MAX, and
+// a document's label is not. The bound itself is accepted, so it bounds
+// rather than forbids.
+func TestValidLabel(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
 	for _, tc := range []struct{ name, label, says string }{
 		{"empty", "", "one non-empty line"},
 		{"blank", "   ", "one non-empty line"},
@@ -257,20 +256,43 @@ func TestLabelIsOneRuleForEveryRouteToIt(t *testing.T) {
 		{"an escape sequence", "\x1b[31mred\x1b[0m", "no control character"},
 		{"a tab", "one\ttwo", "no control character"},
 		{"longer than the bound", strings.Repeat("l", labelLimit+1), "at most 256 bytes"},
+		{"at the bound", strings.Repeat("l", labelLimit), ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, args := range [][]string{
-				{"config", "set", "label", tc.label},
-				{"machine", "rename", tc.label},
-			} {
-				out := h.run(args...)
-				equal(t, strings.Join(args[:2], " ")+" exit", out.exit, 1)
-				contains(t, "stderr", out.stderr, tc.says)
+			t.Parallel()
+			err := validLabel(tc.label)
+			if tc.says == "" {
+				if err != nil {
+					t.Fatalf("validLabel refused the label: %v", err)
+				}
+				return
 			}
+			if err == nil {
+				t.Fatal("validLabel accepted the label")
+			}
+			equal(t, "status", failureOf(err).status, exitUsage)
+			contains(t, "message", err.Error(), tc.says)
 		})
 	}
-	// The bound itself is reachable, so it bounds rather than forbids.
-	equal(t, "at the bound", h.run("config", "set", "label", strings.Repeat("l", labelLimit)).exit, 0)
+}
+
+// TestLabelIsOneRuleForEveryRouteToIt: config set label and machine rename
+// both answer with validLabel's refusal, one refused label each. The shapes
+// the rule refuses are TestValidLabel's.
+func TestLabelIsOneRuleForEveryRouteToIt(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	for _, tc := range []struct {
+		args []string
+		says string
+	}{
+		{[]string{"config", "set", "label", strings.Repeat("l", labelLimit+1)}, "at most 256 bytes"},
+		{[]string{"machine", "rename", "one\ntwo"}, "no control character"},
+	} {
+		out := h.run(tc.args...)
+		equal(t, strings.Join(tc.args[:2], " ")+" exit", out.exit, 1)
+		contains(t, strings.Join(tc.args[:2], " ")+" stderr", out.stderr, tc.says)
+	}
 }
 
 // TestConfigurationIDAcceptsEveryRegisteredSlug: the shape an import holds
