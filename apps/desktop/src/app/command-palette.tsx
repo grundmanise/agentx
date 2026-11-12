@@ -8,6 +8,7 @@ import { ArrowDownIcon } from "#/components/icons/arrow-down.tsx";
 import { ArrowUpIcon } from "#/components/icons/arrow-up.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
 import type { IconComponent } from "#/components/icons/icon-props.ts";
+import { ListIcon } from "#/components/icons/list.tsx";
 import { PencilIcon } from "#/components/icons/pencil.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SkillsIcon } from "#/components/icons/skills.tsx";
@@ -28,6 +29,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { publishAll } from "#/screens/skills/publish.ts";
 import { useSkillRows } from "#/screens/skills/rows.ts";
 import { checkUpdates, updateAll } from "#/screens/skills/updates.ts";
+import { openActivityLog } from "#/store/activity-log.ts";
 import { rescan } from "#/store/feed.ts";
 
 export interface PaletteItem {
@@ -168,6 +170,15 @@ export const CommandPalette = ({
       label: "Rescan this machine",
       run: () => {
         void rescanMachine();
+      },
+    },
+    {
+      group: "ACTIONS",
+      icon: ListIcon,
+      id: "action:activity-log",
+      label: "Show activity log",
+      run: () => {
+        openActivityLog();
       },
     }
   );

@@ -8,6 +8,11 @@ import { listen } from "@tauri-apps/api/event";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import type { CliEvent, LogEvent, ServeRequest } from "#/cli/events.gen.ts";
+import {
+  logCommandEnd,
+  logCommandStart,
+  useActivityLog,
+} from "#/store/activity-log.ts";
 
 /** A line a child wrote that is not a JSON object. */
 export interface InvalidLine {
@@ -67,7 +72,7 @@ export interface ServeExit {
   childId: number;
   /** The exit code; null when a signal ended it or it could not start. */
   exitCode: number | null;
-  /** Its last stderr lines. */
+  /** Its last stderr lines, debug log events left out. */
   stderr: string[];
   /** Whether the supervisor starts a new child, after restartInMs. */
   restarting: boolean;
@@ -143,28 +148,66 @@ export const resolveCli = async (): Promise<Resolution> => {
 /** Each run's subscription to its events, until it ends. The run is sent once it is in place. */
 const subscribed = new Map<string, Promise<UnlistenFn[]>>();
 
-/** Runs `agentx <args> --json`. The supervisor adds `--json`. */
-export const run = (args: readonly string[], options: RunOptions = {}): Run => {
+/**
+ * The arguments as they are sent: with `--verbose`, before a `--` that ends the flags, while the
+ * activity log's Debug output is on.
+ */
+const sentArgs = (args: readonly string[]): readonly string[] => {
+  if (!useActivityLog.getState().debug || args.includes("--verbose")) {
+    return args;
+  }
+  const end = args.indexOf("--");
+  const at = end === -1 ? args.length : end;
+  return [...args.slice(0, at), "--verbose", ...args.slice(at)];
+};
+
+/**
+ * Runs `agentx <args> --json`. The supervisor adds `--json`. Every run is a line of the
+ * activity log (src/store/activity-log.ts), from its start to how it ended.
+ */
+export const run = (
+  given: readonly string[],
+  options: RunOptions = {}
+): Run => {
+  const args = sentArgs(given);
+  const logged = logCommandStart(args);
   const runId = crypto.randomUUID();
   const lines = channel<RunLine>();
   const ends = channel<WireRunEnd>();
-  const subscription = Promise.all([
-    listen<WireRunLine>("cli-run", ({ payload }) => {
-      if (payload.run_id === runId) {
-        const { run_id: _, ...line } = payload;
-        lines.push(line);
+  const subscribe = async (): Promise<UnlistenFn[]> => {
+    const settled = await Promise.allSettled([
+      listen<WireRunLine>("cli-run", ({ payload }) => {
+        if (payload.run_id === runId) {
+          const { run_id: _, ...line } = payload;
+          lines.push(line);
+        }
+      }),
+      listen<WireRunEnd>("cli-run-end", ({ payload }) => {
+        if (payload.run_id === runId) {
+          ends.push(payload);
+        }
+      }),
+    ]);
+    const stops = settled.flatMap((s) =>
+      s.status === "fulfilled" ? [s.value] : []
+    );
+    const failed = settled.find((s) => s.status === "rejected");
+    if (failed !== undefined) {
+      // One listener may be in place while the other failed: it goes with the run.
+      for (const stop of stops) {
+        stop();
       }
-    }),
-    listen<WireRunEnd>("cli-run-end", ({ payload }) => {
-      if (payload.run_id === runId) {
-        ends.push(payload);
-      }
-    }),
-  ]);
+      throw new Error(`cannot listen to the run: ${String(failed.reason)}`);
+    }
+    return stops;
+  };
+  const subscription = subscribe();
   subscribed.set(runId, subscription);
   const start = async (): Promise<RunResult> => {
-    const unlisten = await subscription;
+    let unlisten: UnlistenFn[] = [];
     try {
+      // Inside the try: a run that cannot be listened to ends its line as one that did not start.
+      unlisten = await subscription;
       await invoke("cli_run", {
         args,
         deadline_ms: options.deadlineMs ?? null,
@@ -175,7 +218,7 @@ export const run = (args: readonly string[], options: RunOptions = {}): Run => {
       if (end === undefined) {
         throw new Error(`run ${runId} ended without its end event`);
       }
-      return {
+      const result = {
         cancelled: end.cancelled,
         events: end.events,
         exitCode: end.exit_code,
@@ -183,6 +226,19 @@ export const run = (args: readonly string[], options: RunOptions = {}): Run => {
         logs: end.logs,
         timedOut: end.timed_out,
       };
+      logCommandEnd(logged, result);
+      return result;
+    } catch (error) {
+      logCommandEnd(logged, {
+        cancelled: false,
+        events: [],
+        exitCode: null,
+        invalid: [],
+        logs: [],
+        startError: String(error),
+        timedOut: false,
+      });
+      throw error;
     } finally {
       subscribed.delete(runId);
       for (const stop of unlisten) {
@@ -243,9 +299,20 @@ const requestServe = async (request: ServeRequest): Promise<void> => {
   await invoke("serve_request", { line: JSON.stringify(request) });
 };
 
+/** The path of the serve log file, which holds everything serve wrote to stderr. */
+const serveLogPath = async (): Promise<string> =>
+  await invoke<string>("serve_log_path");
+
+/** Whether serve logs at debug level; a change restarts the serve child. */
+const setServeVerbose = async (on: boolean): Promise<void> => {
+  await invoke("serve_verbose", { on });
+};
+
 export const serve = {
+  logPath: serveLogPath,
   onEvent: onServeLine,
   onExit: onServeExit,
   request: requestServe,
   start: startServe,
+  verbose: setServeVerbose,
 };

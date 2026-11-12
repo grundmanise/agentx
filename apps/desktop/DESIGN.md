@@ -307,8 +307,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `code.bg` | `gray-980` | Code pane, hunk block |
-| `code.border` | `gray-890` | Hunk block border |
+| `code.bg` | `gray-980` | Code pane, hunk block, the activity log's block of lines |
+| `code.border` | `gray-890` | Hunk block border, output block border |
 | `code.line-number` | `gray-400` | Line numbers: 5.3:1 on `code.bg`, 4:1 on the added tint, where the marker carries the meaning |
 | `code.frontmatter` | `gray-400` | Front-matter and keys |
 | `code.heading` | `gray-50` | Markdown headings |
@@ -603,7 +603,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
-| `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room |
+| `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room, and the Activity log sheet, for its lines |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
 | `sheet.padding` | 28 32 | `py-sheet-y px-sheet` |  |
 | `palette.width` | 640 | `w-palette` |  |
@@ -642,6 +642,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `timeline.line` | 20 | `h-timeline-line` | The box the dot is centred in beside a plain entry: the line height of `type.timeline-entry` |
 | `timeline.button-line` | 32 | `h-timeline-button-line` | The box the dot is centred in beside an entry whose first line is a small wrapping button: the button's top padding (6) plus one `timeline.line` |
 | `timeline.entry-gap` | 16–20 |  | Bottom padding per entry |
+| `log.time-width` | 8ch | `w-log-time` | Time column of an activity log line, which a line of output leaves empty |
 | `check.column-width` | 480 | `w-check-column` | Startup column |
 | `check.block-gap` | 36 | `gap-check-block` | Logo/title → checks → actions |
 | `check.row-gap` | 22 | `gap-check-row` | Between checks |
@@ -688,6 +689,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `popover.radius` | 16 |  |
 | `dialog.radius` | 24 |  |
 | `sheet.radius` | 20 |  |
+| `log.output-radius` | 10 | The activity log's block of lines |
 | `palette.radius` | 20 |  |
 | `palette.row-radius` | 12 | Palette rows |
 | `key-hint.radius` | 9999 | Key hint |
@@ -933,6 +935,18 @@ The History sheet's frame at `sheet.width-wide`, for what an update changes befo
 - A patch with no lines to show, a read in progress and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
 - An update from another machine cannot be diffed before it is taken: the sheet lists its files in the same card, status and path, with no chevron.
 
+### Sheet (Activity log)
+
+The History sheet's frame at `sheet.width-wide` (`src/app/activity-log.tsx`): the last lines of what the app ran and what the background scan reported, as a terminal shows them. A sheet, since the log is looked at beside the screen whose action it explains, and from any screen; Settings and the palette open it.
+
+- One block of lines, oldest first: `code.bg` with 1px `code.border`, `log.output-radius`, `type.technical-sm`, long lines wrapped. A line is its time in a `log.time-width` column, its text, and a note at the right: how long a command ran, and how it ended when it did not succeed. No rows to open, no dots and no filter: the log is read as a terminal is.
+- Red is the one colour, and it means failed. A command that failed is `tone.danger.fg` with its last 5 lines of output under it, in the same colour and with no time. A command that succeeded keeps its line only, in `text.secondary` with its time and note in `text.caption`. What the background scan reported and a command's debug lines are `text.caption`, so the commands stand out. A scan the app restarts on purpose is no failure.
+- The view stays at the end while lines arrive, and a view the user scrolled up stays where it is.
+- The log keeps a fixed number of lines, each cut at a fixed length, and a line beyond the limit removes the oldest one: the app runs for days, and the log takes the same memory throughout. Under the block, one `type.technical-sm` `text.caption` line counts the lines kept and dropped, and at the right the failures, `tone.danger.fg` when there is one.
+- Under the header, a switch row (§6 "Switch") that makes later commands and the serve child log at debug level. Off by default: debug lines cost an event per git call and fill the serve log's 25 MB within a few scans of a large library, so the user turns them on to look into one action. A command's debug lines go under its line; the scan's stay in its log file.
+- Above the block, two small ghost buttons `button.gap` apart: one copies the lines as plain text, one shows the serve log file in the file manager. The sheet never reads that file: it is large, and a text editor reads it better.
+- The log shows text made safe when it is recorded: a URL's credentials replaced, an inventory as counts, a file's content left out, long values and lines cut.
+
 ### Code pane
 
 `code.bg`, `type.code`, grid `code.gutter 1fr`: line number in `code.line-number`, right-aligned · marker · text. Front matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: an added line on `diff.added-bg`, a removed line on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
@@ -980,7 +994,7 @@ At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/c
 
 The ⌘K palette (`src/app/command-palette.tsx`): ACTIONS, GO TO, SKILLS, in that order, each under its caption. A row is its icon in `palette.icon`, its label in `type.body` and an optional hint in `type.palette-hint`; typing keeps the rows whose label holds the text.
 
-- ACTIONS shows an action only when it has something to act on: Update all while an update is offered, Publish all while the publish status counts skills to publish.
+- ACTIONS shows an action only when it has something to act on: Update all while an update is offered, Publish all while the publish status counts skills to publish. The action that opens the activity log is last.
 - SKILLS lists every skill in the Skills list's order, its origin as the hint; while nothing is typed, only the first four, so the actions and screens stay in view.
 
 ## 7. Iconography

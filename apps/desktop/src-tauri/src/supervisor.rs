@@ -52,7 +52,8 @@ const BACKOFF_RESET: Duration = Duration::from_secs(60);
 const NO_RESTART: [i32; 3] = [2, 6, 8];
 /// How many cancels of runs that have not arrived yet are kept.
 const EARLY_CANCELS: usize = 64;
-/// How many of serve's last stderr lines its exit carries.
+/// How many of serve's last stderr lines its exit carries. Debug log events do not count: with
+/// `--verbose` they would push out the line that says why serve stopped.
 const STDERR_TAIL: usize = 20;
 
 /// The serve log: 5 files of 5 MB.
@@ -128,7 +129,7 @@ pub struct ServeExit {
     pub child_id: u64,
     /// The exit code; absent when a signal ended it or it could not start.
     pub exit_code: Option<i32>,
-    /// Its last stderr lines.
+    /// Its last stderr lines, debug log events left out.
     pub stderr: Vec<String>,
     /// Whether the supervisor starts a new child, after `restart_in_ms`.
     pub restarting: bool,
@@ -178,6 +179,8 @@ pub struct Supervisor {
     serve_running: watch::Sender<bool>,
     serve_stop: Notify,
     next_child: AtomicU64,
+    /// Whether serve children run with `--verbose`.
+    serve_verbose: AtomicBool,
     log: Mutex<RotatingLog>,
 }
 
@@ -193,6 +196,7 @@ impl Supervisor {
             serve_running: watch::Sender::new(false),
             serve_stop: Notify::new(),
             next_child: AtomicU64::new(1),
+            serve_verbose: AtomicBool::new(false),
             log: Mutex::new(log),
         })
     }
@@ -416,9 +420,33 @@ impl Supervisor {
         Ok(state.child_id)
     }
 
+    /// Whether serve logs at debug level (`--verbose`), which its log file then holds. A change
+    /// stops the child that runs, and the supervisor starts the next one with the new setting, as
+    /// after any exit.
+    pub async fn serve_verbose(&self, on: bool) {
+        if self.serve_verbose.swap(on, Ordering::SeqCst) == on {
+            return;
+        }
+        let state = self.serve.lock().await;
+        if state.running && !state.stopping {
+            if let Some(pid) = state.pid {
+                signal_group(pid, libc::SIGTERM);
+            }
+        }
+    }
+
+    /// The serve log file being written, which may not exist yet.
+    pub fn serve_log_path(&self) -> PathBuf {
+        self.log.lock().unwrap().current()
+    }
+
     fn spawn_serve(&self, shell: &Shell, state: &mut ServeState) -> Result<Child, String> {
+        let mut args = vec!["serve".to_owned()];
+        if self.serve_verbose.load(Ordering::SeqCst) {
+            args.push("--verbose".to_owned());
+        }
         let mut child = self
-            .command(shell, &["serve".to_owned()])?
+            .command(shell, &args)?
             .stdin(Stdio::piped())
             .spawn()
             .map_err(|err| format!("agentx: {err}"))?;
@@ -524,14 +552,18 @@ impl Supervisor {
         let mut tail = VecDeque::with_capacity(STDERR_TAIL);
         let mut lines = read_lines(child);
         let mut record = |stream, text: String| {
-            if stream == Stream::Stderr {
-                self.log.lock().unwrap().write_line(&text);
+            let stderr = (stream == Stream::Stderr).then(|| text.clone());
+            if let Some(text) = &stderr {
+                self.log.lock().unwrap().write_line(text);
+            }
+            let line = classify(stream, text);
+            if let Some(text) = stderr.filter(|_| !is_debug(line.as_ref())) {
                 if tail.len() == STDERR_TAIL {
                     tail.pop_front();
                 }
-                tail.push_back(text.clone());
+                tail.push_back(text);
             }
-            if let Some(line) = classify(stream, text) {
+            if let Some(line) = line {
                 (self.emit)(SERVE_LINE, with_id("child_id", child_id, &line));
             }
         };
@@ -671,6 +703,11 @@ fn classify(stream: Stream, text: String) -> Option<Line> {
         },
         _ => Line::Invalid(Invalid { stream, line: text }),
     })
+}
+
+/// Whether the line is a log event at the debug level.
+fn is_debug(line: Option<&Line>) -> bool {
+    matches!(line, Some(Line::Log { event }) if event["level"] == "debug")
 }
 
 fn to_value(v: &impl Serialize) -> Value {
