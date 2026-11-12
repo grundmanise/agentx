@@ -19,6 +19,10 @@ import {
 import { popularityOf } from "#/lib/agent-popularity.ts";
 import {
   filterCount,
+  GROUP_DISK,
+  GROUP_PLUGINS,
+  GROUP_YOURS,
+  groupName,
   noFilters,
   showCounts,
   UNIVERSAL,
@@ -32,9 +36,10 @@ import type {
 
 const shows: { value: Show; label: string }[] = [
   { label: "All skills", value: "all" },
+  { label: groupName(GROUP_YOURS), value: "yours" },
+  { label: groupName(GROUP_PLUGINS), value: "plugins" },
+  { label: groupName(GROUP_DISK), value: "unmanaged" },
   { label: "Updates", value: "updates" },
-  { label: "Yours", value: "yours" },
-  { label: "Unmanaged", value: "unmanaged" },
 ];
 
 const states: { value: State; label: string }[] = [
@@ -167,9 +172,10 @@ const AgentChoices = ({
 };
 
 /**
- * The Filter button and its popover: SHOW (one of), STATE (one of), AGENTS (any of, Universal
- * standing for every client that reads the library), and Reset filters while any is applied. It
- * scrolls when the window has no room for all of it.
+ * The Filter button and its popover: SHOW (one of: every skill, one of the fixed groups, or the
+ * skills with an update), STATE (one of), AGENTS (any of, Universal standing for every client
+ * that reads the library), and Reset filters while any is applied. It scrolls when the window has
+ * no room for all of it.
  */
 export const FilterPopover = ({
   rows,

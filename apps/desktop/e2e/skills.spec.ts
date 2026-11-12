@@ -263,25 +263,35 @@ test.describe("filters", () => {
     await expect(list(page).getByText("No skills match")).toBeVisible();
   });
 
-  test("SHOW keeps one kind of skill, and Reset filters clears it", async ({
+  test("SHOW keeps one group or the skills with an update, and Reset filters clears it", async ({
     cli,
     page,
   }) => {
     await openSkills(cli, page);
     await page.getByRole("button", { name: "Filter" }).click();
-    await expect(
-      filters(page).getByRole("radio", { name: "All skills 9" })
-    ).toBeChecked();
-    await filters(page).getByRole("radio", { name: "Updates 1" }).check();
-    expect(await rowNames(list(page))).toEqual(["review"]);
-    await filters(page).getByRole("radio", { name: "Yours 3" }).check();
+    const show = filters(page).getByRole("group", { name: "Show" });
+    await expect(show).toMatchAriaSnapshot(`
+      - group "Show":
+        - radio "All skills 9" [checked]
+        - radio "Your skills 3"
+        - radio "Plugins 1"
+        - radio "Unmanaged 2"
+        - radio "Updates 1"
+    `);
+    await show.getByRole("radio", { name: "Your skills 3" }).check();
     expect(await rowNames(list(page))).toEqual([
       "draft",
       "pdf-letters",
       "release-notes",
     ]);
-    await filters(page).getByRole("radio", { name: "Unmanaged 2" }).check();
+    await show.getByRole("radio", { name: "Plugins 1" }).check();
+    expect(await names(list(page).getByRole("region"))).toEqual([
+      "PLUGINS (1)",
+    ]);
+    await show.getByRole("radio", { name: "Unmanaged 2" }).check();
     expect(await rowNames(list(page))).toEqual(["notes", "scratch"]);
+    await show.getByRole("radio", { name: "Updates 1" }).check();
+    expect(await rowNames(list(page))).toEqual(["review"]);
     await expect(
       page.getByRole("button", { name: "Filter 1 applied" })
     ).toBeVisible();

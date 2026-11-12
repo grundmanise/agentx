@@ -591,7 +591,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `dialog.width` | 480 | `w-dialog` |  |
 | `dialog.padding` | 32 | `p-dialog` |  |
 | `dialog.gap` | 22 | `gap-dialog` | Between dialog blocks |
-| `popover.width` | 300 | `w-popover` | Filter popover |
+| `popover.width` | 360 | `w-popover` | Filter popover: room for three choice pills in a row |
 | `popover.padding` | 8–14 |  | 8 for row lists, 14 for grouped content |
 | `popover.gap` | 16 | `gap-popover` | Between groups |
 | `popover.row-height` | 32–34 |  |  |
@@ -917,7 +917,7 @@ shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for
 
 ### Popover (Filter)
 
-`popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`: a row of choice pills (`type.secondary`, count `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg`, `text.primary`), a segmented control, and agent rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. A ghost reset shows while a filter is applied. A click outside or Escape closes it.
+`popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`: a row of choice pills that wraps (`type.secondary`, count `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg`, `text.primary`), a segmented control, and agent rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. A ghost reset shows while a filter is applied. A click outside or Escape closes it.
 
 - The popover never leaves the window: it is at most `popover.max-height` high and scrolls inside that.
 - AGENTS lists the checked agents first, then the rest by the popularity of the agent client (`src/lib/agent-popularity.ts`), Universal where its most used client would stand; the order is fixed when the popover opens. A machine can have dozens of agent configurations, so the group shows six rows, plus every row that is checked or was since the popover opened, and a small ghost button under them that shows the rest and hides them again. With seven rows or fewer it shows them all and no button.
