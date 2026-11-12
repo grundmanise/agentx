@@ -19,7 +19,7 @@ const StaleDot = ({ title }: { title: string }) => (
 );
 
 /**
- * The sources row of the Add skills screen: one pill per shared source and Your skills, the
+ * The sources row of the Add skills screen: one pill per shared source and Personal, the
  * active one lit; at the right, Select all and Clear for the cards shown, and the refresh button
  * labelled with the active source's last fetch.
  */

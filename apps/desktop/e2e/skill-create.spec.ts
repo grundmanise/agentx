@@ -1,6 +1,6 @@
 // The Create skill dialog, from the Skills and the Add skills headers: the name checked as the CLI
 // checks it, `skill new` with `--description` only when one is given, the new skill selected under
-// YOUR SKILLS once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
+// PERSONAL once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
 // Settings, and a refused name's message under Name.
 import type { Page } from "@playwright/test";
 
@@ -48,7 +48,7 @@ const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
 const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
 const yours = (page: Page) =>
-  list(page).getByRole("region", { name: /^YOUR SKILLS/u });
+  list(page).getByRole("region", { name: /^PERSONAL/u });
 const pane = (page: Page, name: string) =>
   page
     .getByRole("region", { name: "Skill details" })

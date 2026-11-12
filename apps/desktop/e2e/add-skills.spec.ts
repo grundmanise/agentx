@@ -82,7 +82,7 @@ const openAdd = async (cli: MockCli, page: Page) => {
 const commandLines = (cli: MockCli) =>
   later(cli).map((line) => line.slice(0, -1).join(" "));
 
-test("the sources row: one pill per shared source, Your skills, and the stale dots", async ({
+test("the sources row: one pill per shared source, Personal, and the stale dots", async ({
   cli,
   page,
 }) => {
@@ -90,7 +90,7 @@ test("the sources row: one pill per shared source, Your skills, and the stale do
   expect(await names(sourcesRow(page))).toEqual([
     "acme/skills",
     "zeta/tools",
-    "Your skills",
+    "Personal",
   ]);
   await expect(pill(page, "acme/skills")).toHaveAttribute(
     "aria-pressed",
@@ -519,7 +519,7 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
   await dialog(page).getByRole("button", { name: "Add" }).click();
   // The CLI's hint names commands: the dialog names the place in the app instead.
   await expect(alert).toHaveText(
-    "https://github.com/me/account is the account remote: it holds one branch per skill rather than skills on one branch. See and install its skills under Your skills."
+    "https://github.com/me/account is the account remote: it holds one branch per skill rather than skills on one branch. See and install its skills under Personal."
   );
   await expect(dialog(page)).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([
@@ -528,19 +528,19 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
   ]);
 });
 
-test("Your skills lists the account remote's installable skills and adds by name", async ({
+test("Personal lists the account remote's installable skills and adds by name", async ({
   cli,
   page,
 }) => {
   await openAdd(cli, page);
-  await pill(page, "Your skills").click();
+  await pill(page, "Personal").click();
   await expect(card(page, "release-notes")).toBeVisible();
-  expect(await names(grid(page, "Your skills"))).toEqual([
+  expect(await names(grid(page, "Personal"))).toEqual([
     "my-pdf",
     "release-notes",
   ]);
   await expect(card(page, "my-pdf")).toContainText("from acme/skills");
-  await expect(card(page, "release-notes")).toContainText("your skill");
+  await expect(card(page, "release-notes")).toContainText("personal skill");
   await expect(
     page.getByRole("button", { name: "Checked 2 hours ago" })
   ).toBeVisible();

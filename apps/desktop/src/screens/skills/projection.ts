@@ -162,7 +162,7 @@ const SOURCE_PREFIX = "source:";
 const groupNames: Record<string, string> = {
   [GROUP_DISK]: "Unmanaged",
   [GROUP_PLUGINS]: "Plugins",
-  [GROUP_YOURS]: "Your skills",
+  [GROUP_YOURS]: "Personal",
 };
 
 /** The name of a group: a source's short form, or the fixed ones, which SHOW offers as choices. */
@@ -359,7 +359,7 @@ const sorted = <T>(items: T[], compare: (a: T, b: T) => number): T[] => {
 };
 
 /**
- * The rows in groups: YOUR SKILLS, each source A to Z by its short form, PLUGINS, then UNMANAGED,
+ * The rows in groups: PERSONAL, each source A to Z by its short form, PLUGINS, then UNMANAGED,
  * each sorted by name in `order`. A group with no row is left out.
  */
 export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
@@ -490,7 +490,7 @@ export const originOf = (row: SkillRow): string => {
     case "yours": {
       const upstream = row.entry?.upstream;
       return upstream === undefined
-        ? "your skill"
+        ? "personal skill"
         : `from ${shortSource(upstream)}`;
     }
     case "plugin": {
@@ -511,7 +511,7 @@ const kindWords: Record<SkillKindName, string> = {
   disk: "Unmanaged",
   plugin: "Plugin skill",
   source: "Skill",
-  yours: "Your skill",
+  yours: "Personal skill",
 };
 
 /** What the glyph's title says: the skill's kind and whether an agent client sees it. */

@@ -106,13 +106,13 @@ test.describe("the list", () => {
     await openSkills(cli, page);
     await expect(page.getByLabel("9 skills")).toHaveText("9");
     expect(await names(list(page).getByRole("region"))).toEqual([
-      "YOUR SKILLS (3)",
+      "PERSONAL (3)",
       "ACME/SKILLS (2)",
       "ZETA/TOOLS (1)",
       "PLUGINS (1)",
       "UNMANAGED (2)",
     ]);
-    expect(await rowNames(group(page, "YOUR SKILLS (3)"))).toEqual([
+    expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
       "draft",
       "pdf-letters",
       "release-notes",
@@ -161,7 +161,7 @@ test.describe("the list", () => {
       draft.getByText("Not published", { exact: true })
     ).toBeVisible();
     await expect(draft).toHaveAccessibleDescription(
-      "Your skill · Enabled. Not published. Turn a design doc into a task list"
+      "Personal skill · Enabled. Not published. Turn a design doc into a task list"
     );
     expect(await names(draft.getByRole("img"))).toEqual([
       "Codex",
@@ -273,12 +273,12 @@ test.describe("filters", () => {
     await expect(show).toMatchAriaSnapshot(`
       - group "Show":
         - radio "All skills 9" [checked]
-        - radio "Your skills 3"
+        - radio "Personal 3"
         - radio "Plugins 1"
         - radio "Unmanaged 2"
         - radio "Updates 1"
     `);
-    await show.getByRole("radio", { name: "Your skills 3" }).check();
+    await show.getByRole("radio", { name: "Personal 3" }).check();
     expect(await rowNames(list(page))).toEqual([
       "draft",
       "pdf-letters",
@@ -435,7 +435,7 @@ test.describe("filters", () => {
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
-    expect(await rowNames(group(page, "YOUR SKILLS (3)"))).toEqual([
+    expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
       "release-notes",
       "pdf-letters",
       "draft",
@@ -446,11 +446,11 @@ test.describe("filters", () => {
     ]);
     // The groups keep their order.
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
-      "YOUR SKILLS (3)"
+      "PERSONAL (3)"
     );
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
-    expect(await rowNames(group(page, "YOUR SKILLS (3)"))).toEqual([
+    expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
       "draft",
       "pdf-letters",
       "release-notes",
@@ -477,7 +477,7 @@ test.describe("keyboard", () => {
       "true"
     );
     await page.keyboard.press("ArrowDown");
-    // From the last of YOUR SKILLS into the first source.
+    // From the last of PERSONAL into the first source.
     await expect(row(page, "pdf")).toHaveAttribute("aria-current", "true");
     await expect(pane(page, "pdf")).toBeVisible();
     await page.keyboard.press("k");
@@ -551,7 +551,7 @@ test.describe("the detail pane", () => {
     ]);
     await expect(article).toMatchAriaSnapshot(`
       - article "pdf-letters":
-        - text: Your skill · Enabled
+        - text: Personal skill · Enabled
         - heading "pdf-letters" [level=1]
         - text: from acme/skills
         - paragraph: Read PDFs and write letters from them

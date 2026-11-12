@@ -14,18 +14,18 @@ import type {
 import { formatAgo } from "#/lib/dates.ts";
 import { shortSource } from "#/screens/skills/projection.ts";
 
-/** The key of the Your skills pill and the source of its cards, beside the source ids and URLs. */
+/** The key of the Personal pill and the source of its cards, beside the source ids and URLs. */
 export const YOUR_SKILLS = "your-skills";
 
-/** The label of the Your skills pill and of its cards' group. */
-export const YOUR_SKILLS_LABEL = "Your skills";
+/** The label of the Personal pill and of its cards' group. */
+export const YOUR_SKILLS_LABEL = "Personal";
 
 export interface SourcePill {
   /** The source id, or YOUR_SKILLS. */
   key: string;
-  /** The source's short form, or "Your skills". */
+  /** The source's short form, or "Personal". */
   label: string;
-  /** The canonical URL; absent for Your skills. */
+  /** The canonical URL; absent for Personal. */
   url?: string;
   lastFetched?: string;
 }
@@ -34,7 +34,7 @@ const compareLabels = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "base" });
 
 /**
- * One pill per shared source, A to Z by short form, then Your skills when an account remote is
+ * One pill per shared source, A to Z by short form, then Personal when an account remote is
  * set.
  */
 export const sourcePills = (sources: SourceEvent[]): SourcePill[] => {
@@ -231,7 +231,7 @@ export const installableCards = (
       YOUR_SKILLS,
       s.name,
       s.upstream === undefined
-        ? "your skill"
+        ? "personal skill"
         : `from ${shortSource(s.upstream)}`,
       installableStatus(s, library)
     )
@@ -266,7 +266,7 @@ export const orderCards = (cards: SkillCard[]): SkillCard[] => {
 export interface CardGroup {
   /** The source URL, or YOUR_SKILLS. */
   source: string;
-  /** The source's short form, or "Your skills". */
+  /** The source's short form, or "Personal". */
   label: string;
   cards: SkillCard[];
 }

@@ -197,9 +197,9 @@ test.describe("SKILLS", () => {
     await openPalette(page);
     const rows = group(page, "SKILLS").getByRole("option");
     await expect(rows).toHaveText([
-      "changelogyour skill",
-      "draftyour skill",
-      "notesyour skill",
+      "changelogpersonal skill",
+      "draftpersonal skill",
+      "notespersonal skill",
       "pdfacme/skills",
     ]);
   });
