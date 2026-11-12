@@ -410,7 +410,7 @@ test.describe("Check updates", () => {
     );
     run.release();
     await expect(
-      toasts(page).getByText("Everything is up to date")
+      toasts(page).getByText("All skills are up to date")
     ).toBeVisible();
     // Done: the refresh icon is back.
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "false");
@@ -425,7 +425,7 @@ test.describe("Check updates", () => {
     await expect(toasts(page).getByText("1 skill has an update")).toBeVisible();
   });
 
-  test("nothing new: Everything is up to date, and the updates serve found are gone", async ({
+  test("nothing new: All skills are up to date, and the updates serve found are gone", async ({
     cli,
     page,
   }) => {
@@ -434,7 +434,7 @@ test.describe("Check updates", () => {
     cli.register(["skill", "check-updates"]);
     await checkButton(page).click();
     await expect(
-      toasts(page).getByText("Everything is up to date")
+      toasts(page).getByText("All skills are up to date")
     ).toBeVisible();
     await expect(update(page, "pdf")).toHaveCount(0);
   });
