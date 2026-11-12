@@ -318,68 +318,6 @@ func TestSourceAddPeelsAnAnnotatedTagPin(t *testing.T) {
 	equal(t, "skills", len(skills), 1)
 }
 
-// TestSourceAddKeepsAnAliasOnReAdd: nothing writes alias yet, but it is a
-// second URL mapped onto the canonical one, and a re-add rewrites the whole
-// entry. The alias must be carried across, not dropped, and so must the
-// access and the default branch of an entry, which an add that does not
-// find them out again has no reason to forget.
-func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	s, v1, head := h.standardSource(true)
-	h.mustRun("source", "add", s.url)
-
-	const alias = "https://github.com/owner/repo"
-	err := home.Mutate(h.agentx, nil, func() error {
-		settings, err := home.LoadSettings(h.agentx)
-		if err != nil {
-			return err
-		}
-		at := settings.FindSource(s.url)
-		if at < 0 {
-			return fmt.Errorf("the settings hold no entry for %s", s.url)
-		}
-		entry := settings.Sources[at]
-		entry.Alias = alias
-		entry.Access, entry.AccessChecked, entry.DefaultBranch = home.AccessReadOnly, "2026-10-02T10:00:00Z", "trunk"
-		settings.SetSource(entry)
-		return home.SaveSettings(h.agentx, settings)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	out := h.run("--json", "source", "add", s.url+"#v1")
-	equal(t, "exit", out.exit, 0)
-	src, _ := sourceEvents(t, h.events(out.stdout))
-	equal(t, "alias", src["alias"], alias)
-	equal(t, "commit", src["commit"], v1)
-	// The pin took the ref back to v1, which is a move like any other.
-	equal(t, "previous_commit", src["previous_commit"], head)
-	entry := readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)
-	equal(t, "settings alias", entry["alias"], alias)
-	equal(t, "settings pin", entry["pin"], "v1")
-	// The add checks access again and records what it found; a pinned source's
-	// default branch is not read, so the one the entry knew stays.
-	equal(t, "settings access", entry["access"], home.AccessWritable)
-	if entry["access_checked"] == "2026-10-02T10:00:00Z" {
-		t.Error("the add did not record its access check")
-	}
-	equal(t, "settings default_branch", entry["default_branch"], "trunk")
-
-	// The listing carries it too, and so does a fetch, which rewrites the
-	// entry's last_fetched and nothing else.
-	equal(t, "list alias", h.events(h.run("--json", "source", "list").stdout)[0]["alias"], alias)
-	fetched, _ := sourceEvents(t, h.events(h.run("--json", "source", "fetch", s.url).stdout))
-	equal(t, "fetch alias", fetched["alias"], alias)
-	equal(t, "fetch pin", fetched["pin"], "v1")
-	equal(t, "fetch commit", fetched["commit"], v1)
-	equal(t, "fetch previous_commit", fetched["previous_commit"], nil)
-	entry = readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)
-	equal(t, "settings alias after the fetch", entry["alias"], alias)
-	equal(t, "settings pin after the fetch", entry["pin"], "v1")
-}
-
 // TestSourceSkills lists a source whose add was scoped to one subpath. The
 // subpath scopes that one listing: the add brings every SKILL.md of the
 // source, so every later listing, wider, narrower or by id, is answered

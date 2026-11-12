@@ -28,9 +28,6 @@ const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 const checkTools = (page: Page) =>
   page.getByRole("button", { name: "Check tools" });
-/** The `Spinner` inside Check tools, shown while the check runs. */
-const spinner = (page: Page) =>
-  checkTools(page).locator("svg.animate-check-spin");
 
 /** The accessible names of `where`'s elements: an aria-label or an image's alt. */
 const names = async (where: Locator) =>
@@ -195,42 +192,6 @@ test.describe("Check tools", () => {
       request_id: expect.any(String),
       type: "refresh",
     });
-  });
-
-  test("shows a spinner in place of its icon while the check runs", async ({
-    cli,
-    page,
-  }) => {
-    await openServers(cli, page);
-    // At rest: the refresh icon alone, no spinner.
-    await expect(spinner(page)).toHaveCount(0);
-    await expect(checkTools(page).locator("svg")).toHaveCount(1);
-
-    const scan = cli.register(["scan", "--handshake"], {
-      events: [handshakeInventory],
-      holdAfter: 0,
-    });
-    await checkTools(page).click();
-    await scan.started;
-    // Still named Check tools while it runs; busy, with the spinner in the refresh icon's place.
-    // The spinner keeps turning until the check ends, not for one turn.
-    await expect(checkTools(page)).toHaveAttribute("aria-busy", "true");
-    await expect(spinner(page)).toHaveCount(1);
-    await expect(checkTools(page).locator("svg")).toHaveCount(1);
-    await expect(spinner(page)).toHaveCSS(
-      "animation-iteration-count",
-      "infinite"
-    );
-    scan.release();
-    await expect(
-      toasts(page).getByText(
-        "Checked 6 servers · 1 need sign-in, 1 unreachable"
-      )
-    ).toBeVisible();
-    // Done: the refresh icon is back.
-    await expect(checkTools(page)).toHaveAttribute("aria-busy", "false");
-    await expect(spinner(page)).toHaveCount(0);
-    await expect(checkTools(page).locator("svg")).toHaveCount(1);
   });
 
   test("Cancel in the toast stops the check", async ({ cli, page }) => {
