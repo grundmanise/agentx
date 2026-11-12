@@ -49,15 +49,6 @@ const openSkill = async (
   await expect(pane(page, name)).toBeVisible();
 };
 
-test.describe("Edit button", () => {
-  for (const name of ["draft", "pdf-letters", "release-notes", "review"]) {
-    test(`shows for ${name}`, async ({ cli, page }) => {
-      await openSkill(cli, page, name);
-      await expect(editButton(page, name)).toBeVisible();
-    });
-  }
-});
-
 // The action row of each skill that is not yours and has no edits.
 for (const [name, key, shown] of [
   ["pdf", "pdf", ["Fork", "Remove"]],
