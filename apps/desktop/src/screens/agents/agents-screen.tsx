@@ -3,18 +3,37 @@
 // installs and creations go when no agent is named: `config enable <id>` and `config disable
 // <id>`, with Place all (`config enable <id> --place-all`) offered on the toast. The clients that
 // read the library share the Universal card and have no switch: they see the library whatever
-// their setting.
-import type { Configuration, InventoryEvent } from "#/cli/events.gen.ts";
+// their setting. Remove, in the menu of a card and of a Universal column, deletes the
+// configuration's directory after one confirm dialog (`config remove <id> --yes`): the user
+// decides what goes, and the cards follow the inventory that comes after the command.
+import { useState } from "react";
+
+import type {
+  CliEvent,
+  Configuration,
+  InventoryEvent,
+} from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
+import { MoreIcon } from "#/components/icons/more.tsx";
 import { Spinner } from "#/components/spinner.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
+import { againRule, withAppHint } from "#/lib/app-hint.ts";
 import { plural } from "#/lib/plural.ts";
 import {
   countsOf,
   libraryPathOf,
   unplacedCount,
 } from "#/screens/agents/counts.ts";
+import { Confirm } from "#/screens/settings/confirm.tsx";
 import { placedAllText } from "#/screens/skills/placements.ts";
+import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -34,6 +53,87 @@ const placeAll = (c: Configuration) => {
     label: switchLabel(c),
     success: (events) => placedAllText(events, c.name),
   });
+};
+
+/** The label of a configuration's Remove: the runner's name for it. */
+const removeLabel = (c: Configuration) => `remove ${c.id}`;
+
+/**
+ * "Removed Antigravity", or "Removed Antigravity and Antigravity CLI" when the deleted directory
+ * held another configuration: the names the CLI says it removed.
+ */
+const removedText = (events: CliEvent[]) => {
+  const names = events
+    .filter((e) => e.type === "config_removal")
+    .map((e) => e.name);
+  return `Removed ${names.join(", ").replace(/, (?=[^,]*$)/u, " and ")}`;
+};
+
+/** A failed removal in the app's words: the CLI's message, and a hint that names Remove. */
+const removeFailure = ({ events }: Outcome) => {
+  const error = events.find((e) => e.type === "error");
+  return error === undefined
+    ? undefined
+    : withAppHint(
+        error.hint === undefined
+          ? { message: error.message }
+          : { hint: error.hint, message: error.message },
+        [againRule("remove it again")]
+      );
+};
+
+const remove = (c: Configuration) => {
+  void runUntilSettled(["config", "remove", c.id, "--yes"], {
+    failure: removeFailure,
+    label: removeLabel(c),
+    success: removedText,
+  });
+};
+
+/**
+ * The menu of a configuration's other actions: Remove, behind a dialog that names the directory
+ * that is deleted.
+ */
+const AgentMenu = ({ c }: { c: Configuration }) => {
+  const [confirming, setConfirming] = useState(false);
+  const pending = useSettling(removeLabel(c));
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`More actions for ${c.name}`}
+            disabled={pending}
+          >
+            <MoreIcon />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem
+            onSelect={() => {
+              setConfirming(true);
+            }}
+          >
+            <span className="type-body text-text-primary">Remove</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Confirm
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Remove ${c.name}?`}
+        description="Its configuration directory is deleted from this machine, with everything in it."
+        detail={c.path}
+        action="Remove"
+        onConfirm={() => {
+          setConfirming(false);
+          remove(c);
+        }}
+      />
+    </>
+  );
 };
 
 const AgentCard = ({
@@ -93,6 +193,7 @@ const AgentCard = ({
             aria-busy={pending ? true : undefined}
             onCheckedChange={onToggle}
           />
+          <AgentMenu c={c} />
         </span>
       </div>
       <div className="flex min-w-0 flex-col gap-1">
@@ -155,9 +256,12 @@ const UniversalCard = ({
             aria-label={c.name}
             className="border-shell-divider ml-5 flex min-w-0 flex-1 flex-col gap-1 border-l pl-5"
           >
-            <h3 className="type-agent-card-name text-card-title m-0">
-              {c.name}
-            </h3>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="type-agent-card-name text-card-title m-0">
+                {c.name}
+              </h3>
+              <AgentMenu c={c} />
+            </div>
             <span
               className="type-technical text-text-caption truncate"
               title={c.path}

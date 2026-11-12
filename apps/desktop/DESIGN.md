@@ -854,6 +854,12 @@ One card per agent configuration whose client does not read the library, in a 4-
 - Then the name in `type.agent-card-name` `card.title`; the configuration path in `type.technical` `text.caption`, one line with an ellipsis; the counts in `type.secondary` `card.text`, numbers in `text.primary` 500.
 - Enabled decides only where later installs and creations go when no agent is named. It never changes a placement, so the counts do not move when the switch does.
 
+### Removing an agent configuration (Agents page)
+
+- Every card, and every column of the Universal card, has a ghost icon button with the `MoreIcon`, after the switch on a card and at the right of the name in a column, that opens a menu (§6 "Menu") with Remove.
+- Remove opens a confirm dialog: the directory that is deleted in `type.technical` `text.caption`, a ghost cancel and a danger confirm. The app asks nothing else: the user decides what goes, and the CLI deletes the directory whatever it holds.
+- The dialog closes at once and the menu button is disabled until the inventory that follows has arrived; the card goes with that inventory.
+
 ### Universal card (Agents page)
 
 One full-width card below the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. No switch: a universal client sees every library skill whatever its setting.

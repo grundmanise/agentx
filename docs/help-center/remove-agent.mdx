@@ -1,0 +1,29 @@
+---
+title: "Remove an agent"
+description: "Remove an agent from the Agents page of the desktop app by deleting its configuration directory."
+---
+
+The Agents page lists every agent configuration agentx detects on this machine, including the ones a tool created for agent clients you do not use. Remove an agent to delete its configuration directory and take it off the page.
+
+This page uses the terms configuration and library. See the [glossary](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md).
+
+## Remove an agent
+
+1. Open **Agents**.
+2. On the agent's card, open the **⋯** menu and select **Remove**. An agent on the **Universal** card has the menu beside its name.
+3. Check the directory in the dialog, then select **Remove**.
+
+The agent disappears from the Agents page.
+
+## What is deleted
+
+Removing an agent deletes its configuration directory with everything in it: skills, MCP server declarations, plugins, settings and history.
+
+You decide what goes. agentx does not check what the directory holds, so look inside it first when you are not sure.
+
+- The skills in your library stay.
+- An agent whose configuration directory is the same directory, or lies inside it, is removed with it.
+
+## From the command line
+
+`agentx config remove` does the same. See [`agentx config`](/cli/config#remove-a-configuration).

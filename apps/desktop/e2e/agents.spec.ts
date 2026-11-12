@@ -1,6 +1,8 @@
 // The Agents page: every configuration the scan detected, with its counts from the inventory's
-// edges, and the Enabled switch, which runs `config enable|disable <id>` and offers Place all.
-import type { Page } from "@playwright/test";
+// edges, the Enabled switch, which runs `config enable|disable <id>` and offers Place all, and
+// Remove in the menu of a card and of a Universal column, which confirms and runs
+// `config remove <id> --yes`.
+import type { Locator, Page } from "@playwright/test";
 
 import { inventory, LIBRARY, sources } from "./fixtures/agents.ts";
 import { adoption } from "./fixtures/skills.ts";
@@ -157,4 +159,128 @@ test("turning an agent off runs config disable", async ({ cli, page }) => {
     )
   ).toBeVisible();
   expect(later(cli)).toEqual([["config", "disable", "cursor", "--json"]]);
+});
+
+/** The inventory once the configuration `id` is gone, with the answer to the last refresh. */
+const without = (cli: MockCli, id: string) => [
+  {
+    ...inventory,
+    configurations: inventory.configurations.filter((c) => c.id !== id),
+    scan_counter: 2,
+  },
+  {
+    ok: true,
+    request_id: cli.requestIds.at(-1) ?? "",
+    scan_counter: 2,
+    type: "refresh_complete" as const,
+  },
+];
+
+/** What `config remove <id> --yes` answers once it has deleted the configuration's directory. */
+const removed = (id: string) => {
+  const c = inventory.configurations.find((known) => known.id === id);
+  return {
+    events: [
+      {
+        id,
+        name: c?.name ?? "",
+        path: c?.path ?? "",
+        type: "config_removal" as const,
+      },
+      { type: "settings" as const },
+    ],
+  };
+};
+
+/** Opens the menu of the configuration `name` in `within` and selects Remove. */
+const selectRemove = async (page: Page, within: Locator, name: string) => {
+  await within
+    .getByRole("button", { name: `More actions for ${name}` })
+    .click();
+  await page.getByRole("menuitem", { name: "Remove" }).click();
+};
+
+test("Remove on a card confirms with the directory and runs config remove", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  cli.register(
+    ["config", "remove", "github-copilot", "--yes"],
+    removed("github-copilot")
+  );
+  await selectRemove(page, card(page, "GitHub Copilot"), "GitHub Copilot");
+  await expect(page.getByRole("dialog")).toMatchAriaSnapshot(`
+    - dialog "Remove GitHub Copilot?":
+      - heading "Remove GitHub Copilot?" [level=2]
+      - paragraph: Its configuration directory is deleted from this machine, with everything in it.
+      - paragraph: /home/me/.github-copilot
+      - button "Cancel"
+      - button "Remove"
+  `);
+
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Remove" })
+    .click();
+  await expect(toasts(page).getByText("Removed GitHub Copilot")).toBeVisible();
+  expect(later(cli)).toEqual([
+    ["config", "remove", "github-copilot", "--yes", "--json"],
+  ]);
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit(without(cli, "github-copilot"));
+  await expect(card(page, "GitHub Copilot")).toHaveCount(0);
+});
+
+test("Remove on a column of the Universal card removes that agent", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  cli.register(["config", "remove", "codex", "--yes"], removed("codex"));
+  const column = card(page, "Universal").getByRole("region", { name: "Codex" });
+  await selectRemove(page, column, "Codex");
+  const dialog = page.getByRole("dialog", { name: "Remove Codex?" });
+  await expect(dialog).toContainText("/home/me/.codex");
+  await dialog.getByRole("button", { name: "Remove" }).click();
+  await expect(toasts(page).getByText("Removed Codex")).toBeVisible();
+  expect(later(cli)).toEqual([
+    ["config", "remove", "codex", "--yes", "--json"],
+  ]);
+});
+
+test("Cancel in the Remove dialog runs nothing", async ({ cli, page }) => {
+  await openAgents(cli, page);
+  await selectRemove(page, card(page, "Windsurf"), "Windsurf");
+  const dialog = page.getByRole("dialog", { name: "Remove Windsurf?" });
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  expect(later(cli)).toEqual([]);
+});
+
+test("a removal that fails shows the CLI's error, with a hint in the app's words", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  cli.register(["config", "remove", "github-copilot", "--yes"], {
+    events: [
+      {
+        code: "refused",
+        hint: "run the command again",
+        message:
+          "a ref moved before the mutation changed anything, so nothing was changed",
+        type: "error",
+      },
+    ],
+    exitCode: 6,
+  });
+  await selectRemove(page, card(page, "GitHub Copilot"), "GitHub Copilot");
+  await page
+    .getByRole("dialog", { name: "Remove GitHub Copilot?" })
+    .getByRole("button", { name: "Remove" })
+    .click();
+  await expect(toasts(page).getByRole("listitem")).toContainText(
+    "A ref moved before the mutation changed anything, so nothing was changed. Remove it again."
+  );
 });
