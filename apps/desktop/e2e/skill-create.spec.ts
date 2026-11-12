@@ -184,7 +184,7 @@ test("Add in the Skills header goes to Add skills", async ({ cli, page }) => {
   await expect(page).toHaveURL(/#\/add$/u);
 });
 
-test("Add's three-dots button opens a menu with Create skill, from the pointer and the keyboard; Escape closes it", async ({
+test("Add's three-dots button opens a menu with Create skill, from the pointer and the keyboard; Escape, the trigger and a click outside close it", async ({
   cli,
   page,
 }) => {
@@ -210,6 +210,19 @@ test("Add's three-dots button opens a menu with Create skill, from the pointer a
   await opensWith("Enter");
   await opensWith("Space");
   await opensWith("ArrowDown");
+
+  // The trigger closes the menu it opened.
+  await moreAddActions(page).click();
+  await expect(menu).toBeVisible();
+  await moreAddActions(page).click();
+  await expect(menu).toBeHidden();
+
+  // The page under the menu stays live: a click outside closes the menu and acts on what it hits.
+  await moreAddActions(page).click();
+  await expect(menu).toBeVisible();
+  await row(page, "pdf").click();
+  await expect(menu).toBeHidden();
+  await expect(pane(page, "pdf")).toBeVisible();
 
   await moreAddActions(page).click();
   await create.click();
