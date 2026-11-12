@@ -158,7 +158,7 @@ test("Use a new name: Fork runs skill fork <name> --name <new> and selects the f
   await expect(
     page
       .getByRole("navigation", { name: "Skills" })
-      .getByRole("region", { name: "YOUR SKILLS" })
+      .getByRole("region", { name: "PERSONAL" })
       .getByRole("button", { exact: true, name: "my-pdf" })
   ).toHaveAttribute("aria-current", "true");
   expect(forks(cli)).toEqual([
@@ -302,7 +302,7 @@ test("a plugin's skill: Fork runs skill fork <skill> and shows what each agent s
   await cli.serveEmit([commitHelperForked]);
   await notes.getByRole("button", { name: "Done" }).click();
   await expect(notes).toHaveCount(0);
-  await expect(pane(page, "commit-helper")).toContainText("your skill");
+  await expect(pane(page, "commit-helper")).toContainText("personal skill");
   await expect(page).toHaveURL(/#\/skills\/commit-helper$/u);
   expect(forks(cli)).toEqual([["skill", "fork", "commit-helper", "--json"]]);
 });

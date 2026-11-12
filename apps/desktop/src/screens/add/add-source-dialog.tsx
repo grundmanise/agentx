@@ -23,7 +23,7 @@ import { useAppStore } from "#/store/store.ts";
 
 /**
  * The hints of `source add` that name a command, in the app's words: the account remote's skills
- * are the ones under Your skills.
+ * are the ones under Personal.
  */
 const addSourceHintRules: HintRule[] = [
   {
