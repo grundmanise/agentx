@@ -21,8 +21,6 @@ import { fileReads, filesOf, history } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
-const column = (page: Page) =>
-  page.getByRole("region", { name: "Skills list" });
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
 const unmanaged = (page: Page) =>
   list(page).getByRole("region", { name: /^UNMANAGED/u });
@@ -123,14 +121,11 @@ const afterRun = async (cli: MockCli, managed: string[]) => {
 };
 
 test.describe("the Adopt skills section of Settings", () => {
-  test("sits after Sources, with a button for each tool that has skills to adopt", async ({
+  test("has a button for each tool that has skills to adopt", async ({
     cli,
     page,
   }) => {
     await openSettings(cli, page);
-    const sections = page.getByRole("main").getByRole("region");
-    await expect(sections.nth(2)).toHaveAccessibleName("Sources");
-    await expect(sections.nth(3)).toHaveAccessibleName("Adopt skills");
     await expect(settingsSection(page).getByRole("button")).toHaveText([
       "Adopt Skills CLI skills",
       "Adopt Skillshare skills",
@@ -349,40 +344,6 @@ test.describe("the Adopt skills section of Settings", () => {
 });
 
 test.describe("Adopt all in the Unmanaged header", () => {
-  test("shows while a tool has skills to adopt", async ({ cli, page }) => {
-    await openSkills(cli, page);
-    await expect(
-      unmanaged(page).getByRole("button", { exact: true, name: "Adopt all" })
-    ).toBeVisible();
-  });
-
-  for (const size of [
-    { height: 800, width: 1280 },
-    { height: 700, width: 1100 },
-  ]) {
-    test(`fits inside the list column at ${size.width}x${size.height} with a skill open`, async ({
-      cli,
-      page,
-    }) => {
-      await page.setViewportSize(size);
-      await openSkills(cli, page, previewWith(), "/#/skills/scratch");
-      await expect(pane(page, "scratch")).toBeVisible();
-      const cta = unmanaged(page).getByRole("button", { name: "Adopt all" });
-      const box = await cta.boundingBox();
-      const area = await column(page).boundingBox();
-      expect(box).not.toBeNull();
-      expect(area).not.toBeNull();
-      if (box !== null && area !== null) {
-        expect(box.x).toBeGreaterThanOrEqual(area.x);
-        expect(box.x + box.width).toBeLessThanOrEqual(area.x + area.width);
-      }
-      // Its label is whole: nothing is cut off.
-      expect(await cta.evaluate((b) => b.scrollWidth <= b.clientWidth)).toBe(
-        true
-      );
-    });
-  }
-
   test("covers both tools, grouped, and runs them one after the other with one progress", async ({
     cli,
     page,

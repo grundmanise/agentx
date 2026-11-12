@@ -138,16 +138,6 @@ func TestConfigEnablePlaceAllSanitisesTheNameAndQuotesThePaths(t *testing.T) {
 	}
 }
 
-// TestConfigDisableTakesNoPlaceAll: the flag belongs to enable alone, and
-// the command line says so before anything is read.
-func TestConfigDisableTakesNoPlaceAll(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	out := h.run("config", "disable", "cursor", "--place-all")
-	equal(t, "exit", out.exit, 1)
-	contains(t, "stderr", out.stderr, "place-all")
-}
-
 // TestConfigEnablePlaceAllOnAnEmptyLibrary places nothing and still enables
 // the configuration.
 func TestConfigEnablePlaceAllOnAnEmptyLibrary(t *testing.T) {

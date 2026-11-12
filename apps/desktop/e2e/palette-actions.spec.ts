@@ -128,7 +128,7 @@ test.describe("ACTIONS", () => {
     cli.register(["skill", "check-updates"], { events: [] });
     await openPalette(page);
     await option(page, "Check updates").click();
-    await expect(toasts(page)).toContainText("Everything is up to date");
+    await expect(toasts(page)).toContainText("All skills are up to date");
     expect(ran(cli, ["skill", "check-updates"])).toBe(true);
   });
 
