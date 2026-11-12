@@ -500,7 +500,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `row.gap` | 12 | `gap-row` | Glyph → text |
 | `row.line-gap` | 3 | `gap-row-line` | Name row → description |
 | `row.inline-gap` | 8 | `gap-row-inline` | Name → pills → chips |
-| `row.spacing` | 2 | `gap-rows` | Between rows |
+| `row.spacing` | 2 | `gap-rows`, `pt-rows` | Between rows; `pt-rows` on a row of the Skills list, which places each row itself |
 | `row.glyph-col` | 18 | `w-row-glyph` | Glyph column |
 | `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
 | `group.padding` | 20 14 8 | `pt-group-top px-group pb-group-bottom` | Later group headers |
@@ -901,6 +901,10 @@ shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side
 ### Skills header
 
 The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose menu opens the Create skill dialog (§6 "Button group"). Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is pending (§6): `aria-busy`, with a `Spinner` in the refresh icon's place until the check ends, in the same square and ghost fill. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
+
+### Skills list
+
+The rows of the Skills list column, in their groups (§6 "Group header"). Only the headers and rows near the part of the list that shows are in the document, so a machine with hundreds of skills scrolls as one with a dozen. The list places each drawn header and row at its own offset, with the heights and `row.spacing` the tokens give; the library that does this (`@tanstack/react-virtual`) writes the offsets and the list's height on the elements itself, and no component sets a style. A group's label carries its full count, and each row its place in its group (`aria-posinset`, `aria-setsize`). The selected row comes into view when the selection changes: by a key, a click, or a route another screen opened.
 
 ### Tooltip
 
