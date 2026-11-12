@@ -1,28 +1,23 @@
 package cli
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strconv"
 	"syscall"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
-// stubGit puts a git shell script alone on the harness PATH. Every test is
-// one process: a git process another parallel test forks while the script is
-// being written inherits the write descriptor until it execs, and running
-// the script in that instant fails with ETXTBSY, so it is run once here,
-// retrying until it starts. After that no process holds the descriptor.
+// stubGit puts a git shell script alone on the harness PATH.
 func stubGit(t *testing.T, h *harness, script string) {
 	t.Helper()
 	dir := t.TempDir()
-	writeShim(t, filepath.Join(dir, "git"), script)
+	testshim.Write(t, filepath.Join(dir, "git"), script)
 	h.env["PATH"] = dir
 }
 
@@ -32,24 +27,6 @@ func stubGit(t *testing.T, h *harness, script string) {
 // otherwise end the assignment and leave the shell finding nothing.
 func hostPATH() string {
 	return "PATH=" + shellWord(os.Getenv("PATH")) + "\n"
-}
-
-// writeShim writes an executable a test is about to run and waits until it
-// can be run. The suite forks in parallel with itself and a fork duplicates
-// the write descriptor of a file being written, so a shim written here can
-// be refused with ETXTBSY until the child that inherited that descriptor
-// execs. The command under test would report that as a git it cannot run.
-func writeShim(t *testing.T, path, script string) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for {
-		if err := exec.Command(path, "--version").Run(); !errors.Is(err, syscall.ETXTBSY) {
-			return
-		}
-		runtime.Gosched()
-	}
 }
 
 func versionStub(version string) string {
@@ -259,9 +236,7 @@ func TestDoctorIsolatedFromUserGitConfig(t *testing.T) {
 	if err := os.MkdirAll(hooks, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(hooks, "pre-commit"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testshim.Write(t, filepath.Join(hooks, "pre-commit"), "#!/bin/sh\nexit 1\n")
 	hostile := "[core]\n\tautocrlf = true\n\thooksPath = " + hooks + "\n[commit]\n\tgpgsign = true\n[user]\n\tname = Someone\n\temail = someone@example.com\n"
 	if err := os.WriteFile(filepath.Join(h.home, ".gitconfig"), []byte(hostile), 0o644); err != nil {
 		t.Fatal(err)

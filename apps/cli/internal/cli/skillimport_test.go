@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // TestImportCommitIsTheSameEverywhere installs one version of one skill in
@@ -47,10 +48,7 @@ func spoilTheGitConfig(t *testing.T, h *harness) {
 	if err := os.MkdirAll(hooks, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(hooks, "prepare-commit-msg"), "#!/bin/sh\necho spoiled >> \"$1\"\n")
-	if err := os.Chmod(filepath.Join(hooks, "prepare-commit-msg"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testshim.Write(t, filepath.Join(hooks, "prepare-commit-msg"), "#!/bin/sh\necho spoiled >> \"$1\"\n")
 	config := filepath.Join(h.home, ".gitconfig")
 	writeFile(t, config, readText(t, config)+strings.Join([]string{
 		"[core]", "\tautocrlf = true", "\thooksPath = " + hooks,

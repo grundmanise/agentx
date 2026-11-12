@@ -385,7 +385,6 @@ status=$?
 printf '-' >> %s
 exit $status
 `, hostPATH(), log, pattern, gate, gate, want, real, log))
-	_ = os.Remove(log) // the --version stubGit runs to clear ETXTBSY is not one of them
 	return func() (peak, total int) {
 		marks, err := os.ReadFile(log)
 		if err != nil {
