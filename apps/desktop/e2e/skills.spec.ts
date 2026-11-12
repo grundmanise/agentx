@@ -5,6 +5,7 @@ import {
   inventory as statesInventory,
   OLD,
 } from "./fixtures/adoption.ts";
+import { manyConfigurations } from "./fixtures/agents.ts";
 import {
   adoption,
   configurations,
@@ -22,7 +23,7 @@ import {
   loadLines,
   test,
 } from "./harness/cli.ts";
-import type { MockCli } from "./harness/cli.ts";
+import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
 const launchLines = [
   ["version", "--json"],
@@ -69,8 +70,13 @@ const isLaunchOrLoad = (line: string[]) =>
 const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunchOrLoad(l));
 
 /** Opens the Skills screen on the fixture machine and waits for its rows. */
-const openSkills = async (cli: MockCli, page: Page, path = "/#/skills") => {
-  cli.onServeStart({ events: [inventory] });
+const openSkills = async (
+  cli: MockCli,
+  page: Page,
+  path = "/#/skills",
+  machine: InlineEvent = inventory
+) => {
+  cli.onServeStart({ events: [machine] });
   cli.register(["adopt"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
@@ -363,6 +369,51 @@ test.describe("filters", () => {
     await expect(
       page.getByRole("button", { exact: true, name: "Filter" })
     ).toBeVisible();
+  });
+
+  test("AGENTS on a machine with many agents: a short list, the rest on request, inside the window", async ({
+    cli,
+    page,
+  }) => {
+    await page.setViewportSize({ height: 640, width: 1280 });
+    await openSkills(cli, page, "/#/skills", {
+      ...inventory,
+      configurations: manyConfigurations,
+    });
+    await page.getByRole("button", { name: "Filter" }).click();
+    const agents = filters(page).getByRole("group", { name: "Agents" });
+    // The most used clients, whatever the inventory's order.
+    await expect(agents).toMatchAriaSnapshot(`
+      - group "Agents":
+        - checkbox "Claude Code"
+        - checkbox "Cursor"
+        - checkbox /^Universal Cline, Codex/
+        - checkbox "GitHub Copilot"
+        - checkbox "Windsurf"
+        - checkbox "OpenCode"
+        - button "Show 21 more"
+    `);
+
+    await agents.getByRole("button", { name: "Show 21 more" }).click();
+    await expect(agents.getByRole("checkbox")).toHaveCount(27);
+    // The popover scrolls inside the window: its last agent and Reset filters can be reached.
+    await agents.getByRole("checkbox", { name: "Zenflow" }).check();
+    const reset = filters(page).getByRole("button", { name: "Reset filters" });
+    await reset.scrollIntoViewIfNeeded();
+    await expect(reset).toBeInViewport({ ratio: 1 });
+    await expect(filters(page)).toBeInViewport({ ratio: 1 });
+
+    // A checked agent stays in view when the rest is hidden, and comes first the next time.
+    await agents.getByRole("button", { name: "Show fewer" }).click();
+    await expect(agents.getByRole("checkbox")).toHaveCount(7);
+    await expect(
+      agents.getByRole("checkbox", { name: "Zenflow" })
+    ).toBeChecked();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Filter" }).click();
+    expect(await names(agents.getByRole("checkbox").first())).toEqual([
+      "Zenflow",
+    ]);
   });
 
   test("the sort toggle reverses the order within each group", async ({
