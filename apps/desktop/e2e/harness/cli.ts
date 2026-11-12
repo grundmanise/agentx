@@ -154,6 +154,9 @@ export const loadLines = [
 /** The library on the machine a passing launch reports. */
 export const libraryPath = "/home/me/.agents/skills";
 
+/** The serve log file on the machine a passing launch reports. */
+export const serveLogPath = "/home/me/.local/state/agentx/logs/serve.log";
+
 /** The CLI version a passing launch reports. */
 export const cliVersion = "1.2.0";
 
@@ -307,6 +310,9 @@ export class MockCli {
         : "";
     });
   }
+
+  /** Every value the app set serve's debug level to (`serve_verbose`), in order. */
+  readonly serveVerbose: boolean[] = [];
 
   /** How many times the app started serve. */
   serveStarts = 0;
@@ -630,6 +636,13 @@ export class MockCli {
         if (this.failingOpens) {
           throw new Error(`couldn't open ${path}`);
         }
+        return null;
+      }
+      case "serve_log_path": {
+        return serveLogPath;
+      }
+      case "serve_verbose": {
+        this.serveVerbose.push(field(args, "on") === true);
         return null;
       }
       case "editor_detect": {

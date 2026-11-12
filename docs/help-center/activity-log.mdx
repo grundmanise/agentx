@@ -1,0 +1,56 @@
+---
+title: "Activity log"
+description: "See the last commands the desktop app ran, with each failure in red."
+---
+
+The desktop app does its work by running `agentx` commands. The activity log lists the last commands the app ran, so you can check what an action did after its toast is gone.
+
+## Open the log
+
+- Open **Settings** and select **Show activity log**.
+- Or press `⌘K` (`Ctrl+K` on Linux) and run **Show activity log**.
+
+## Read the log
+
+The log reads as a terminal does: one line for each thing that happened, the newest at the bottom. It lists the commands you started with a click and the ones the app ran by itself: the startup checks, the reads that fill each screen and the update checks.
+
+A command is one line:
+
+- The time it started.
+- The command line. Run it in a terminal to repeat it. The app adds `--json`.
+- How long it took. A command that still runs says `running`, and one you cancelled says `cancelled`.
+
+A red line is a command that failed. It says `FAILED` and how: the [exit code](/cli/output#exit-codes), `timed out`, `stopped by the system` or `couldn't start`. The last 5 lines the command wrote come under it, also in red. They say why it failed.
+
+A command that succeeded keeps its line only.
+
+The gray lines are what the background scan reported: a new inventory, a finished scan, a warning, or that it stopped and restarted. A scan that failed is red too.
+
+The log stays at its end while new lines arrive. Scroll up to read an older line, and the log stays where you are.
+
+The line under the log counts the lines it holds, the lines it dropped and the failures.
+
+## Copy the log
+
+Select **Copy** to copy the lines shown. Paste the text into an [issue](https://github.com/grundmanise/agentx/issues) when you report a problem.
+
+## Open the serve log
+
+The app keeps `agentx serve` running to watch this machine, and writes everything it logs to a file. The file outlives a restart of the app, so it also shows what happened in an earlier session.
+
+Select **Open serve.log** to show the file in Finder, or in the file manager on Linux. Open it in a text editor to read it, or attach it to an issue. The file is not redacted. Remove tokens and URL credentials before you share it.
+
+The file is `~/Library/Logs/agentx/serve.log` on macOS and `~/.local/state/agentx/logs/serve.log` on Linux. agentx keeps at most 5 files of 5 MB each.
+
+## Record debug output
+
+Turn on **Debug output** at the top of the log, then repeat the action. Each command that runs from then on also shows what agentx logs at debug level, such as each `git` call and its result: its last 50 debug lines come under its line.
+
+The switch also restarts `agentx serve` so that it writes its debug lines to the serve log. A bar at the top of the window says so while it restarts. Turn the switch off when you are done: debug lines fill the serve log fast. The switch turns off when you quit the app.
+
+## What the log keeps
+
+- The log keeps its last 500 lines in memory, however long the app runs. A new line beyond that removes the oldest one. The log is empty again when you restart the app.
+- A user name, password or token in a URL shows as `***`. So does the value of a query parameter that names a credential, such as `access_token`, `api_key` or `password`.
+- The content of a skill's file and the lines of a diff are left out. The log shows their length.
+- A line of more than 300 characters is cut.
