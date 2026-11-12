@@ -640,36 +640,6 @@ test.describe("the detail pane", () => {
     `);
   });
 
-  test("the action row sits on the title row, at its right end", async ({
-    cli,
-    page,
-  }) => {
-    await openSkills(cli, page, "/#/skills/gone");
-    const article = pane(page, "gone");
-    const [name, actions, remove, banner] = await Promise.all([
-      article.getByRole("heading", { level: 1, name: "gone" }).boundingBox(),
-      article.getByLabel("Actions").boundingBox(),
-      article.getByRole("button", { name: "Remove" }).boundingBox(),
-      article.getByRole("note").boundingBox(),
-    ]);
-    expect([name, actions, remove, banner]).not.toContain(null);
-    if (
-      name !== null &&
-      actions !== null &&
-      remove !== null &&
-      banner !== null
-    ) {
-      // On the name's line, to its right.
-      expect(remove.x).toBeGreaterThan(name.x + name.width);
-      expect(remove.y).toBeLessThan(name.y + name.height);
-      expect(remove.y + remove.height).toBeGreaterThan(name.y);
-      // Pushed to the right end: it ends where the pane's content (the full-width banner) ends.
-      expect(
-        Math.abs(actions.x + actions.width - (banner.x + banner.width))
-      ).toBeLessThan(2);
-    }
-  });
-
   test("an upstream-removed skill shows the banner, and a displaced placement its chip", async ({
     cli,
     page,

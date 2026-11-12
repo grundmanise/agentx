@@ -62,8 +62,8 @@ export const ServersScreen = () => {
   );
   const configurations = inventory?.configurations ?? [];
   return (
-    <div className="pt-page-top px-page pb-page gap-page-title flex h-full flex-col overflow-auto">
-      <header className="flex items-end justify-between gap-3">
+    <div className="px-page pb-page gap-page-title flex h-full flex-col overflow-auto">
+      <header className="pt-page-top flex items-end justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <h1 className="type-page-title text-text-primary m-0">MCP servers</h1>
           <span className="type-caption text-text-caption">Read-only</span>

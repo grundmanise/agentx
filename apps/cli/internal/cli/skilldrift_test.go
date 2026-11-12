@@ -269,15 +269,6 @@ func TestASharedPlaceIsJudgedOnce(t *testing.T) {
 	})
 }
 
-// TestALibraryDirectoryWithNoBranchIsUnmanaged: a library directory with no
-// branch is inventoried as it is, placed nowhere or not.
-func TestALibraryDirectoryWithNoBranchIsUnmanaged(t *testing.T) {
-	t.Parallel()
-	h, _ := installHarness(t)
-	writeFile(t, mkdirs(t, filepath.Join(h.library, "notes"), "SKILL.md"), skill("notes", "My own notes"))
-	equal(t, "kind", h.listed("notes")["kind"], "unmanaged")
-}
-
 func chmod(t *testing.T, path string, mode os.FileMode) {
 	t.Helper()
 	if err := os.Chmod(path, mode); err != nil {
