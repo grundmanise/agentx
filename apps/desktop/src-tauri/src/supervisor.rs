@@ -52,7 +52,8 @@ const BACKOFF_RESET: Duration = Duration::from_secs(60);
 const NO_RESTART: [i32; 3] = [2, 6, 8];
 /// How many cancels of runs that have not arrived yet are kept.
 const EARLY_CANCELS: usize = 64;
-/// How many of serve's last stderr lines its exit carries.
+/// How many of serve's last stderr lines its exit carries. Debug log events do not count: with
+/// `--verbose` they would push out the line that says why serve stopped.
 const STDERR_TAIL: usize = 20;
 
 /// The serve log: 5 files of 5 MB.
@@ -140,7 +141,7 @@ pub struct ServeExit {
     pub child_id: u64,
     /// The exit code; absent when a signal ended it or it could not start.
     pub exit_code: Option<i32>,
-    /// Its last stderr lines.
+    /// Its last stderr lines, debug log events left out.
     pub stderr: Vec<String>,
     /// Whether the supervisor starts a new child, after `restart_in_ms`.
     pub restarting: bool,
@@ -567,14 +568,18 @@ impl Supervisor {
         let mut tail = VecDeque::with_capacity(STDERR_TAIL);
         let mut lines = read_lines(child);
         let mut record = |stream, text: String| {
-            if stream == Stream::Stderr {
-                self.log.lock().unwrap().write_line(&text);
+            let stderr = (stream == Stream::Stderr).then(|| text.clone());
+            if let Some(text) = &stderr {
+                self.log.lock().unwrap().write_line(text);
+            }
+            let line = classify(stream, text);
+            if let Some(text) = stderr.filter(|_| !is_debug(line.as_ref())) {
                 if tail.len() == STDERR_TAIL {
                     tail.pop_front();
                 }
-                tail.push_back(text.clone());
+                tail.push_back(text);
             }
-            if let Some(line) = classify(stream, text) {
+            if let Some(line) = line {
                 (self.emit)(SERVE_LINE, with_id("child_id", child_id, &line));
             }
         };
@@ -714,6 +719,11 @@ fn classify(stream: Stream, text: String) -> Option<Line> {
         },
         _ => Line::Invalid(Invalid { stream, line: text }),
     })
+}
+
+/// Whether the line is a log event at the debug level.
+fn is_debug(line: Option<&Line>) -> bool {
+    matches!(line, Some(Line::Log { event }) if event["level"] == "debug")
 }
 
 fn to_value(v: &impl Serialize) -> Value {

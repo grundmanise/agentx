@@ -414,10 +414,8 @@ async fn serve_is_restarted_with_backoff_and_a_fresh_environment() {
             (json!(3), json!(1), json!(2000)),
         ]
     );
-    assert_eq!(
-        exits[0].1["stderr"].as_array().unwrap().last().unwrap(),
-        "boom"
-    );
+    // The exit carries the line that says why, not the debug line before it.
+    assert_eq!(exits[0].1["stderr"], json!(["boom"]));
     // A stderr line that is not a log event is reported as invalid, as a one-shot's is.
     assert_eq!(
         f.serve_lines("invalid")[0].1,
@@ -442,6 +440,8 @@ async fn serve_verbose_restarts_serve_with_the_flag_and_the_log_is_read_back() {
     f.sup.serve_start().await.unwrap();
     let first = f.wait_for_serve("event", 1).await;
     assert_eq!(first[0].1["event"]["args"], "serve --json");
+    // The child writes its log line after its event: it must not stop before that.
+    f.wait_for_serve("log", 1).await;
 
     f.sup.serve_verbose(true).await;
     let exits = f.wait_for(SERVE_EXIT, 1).await;

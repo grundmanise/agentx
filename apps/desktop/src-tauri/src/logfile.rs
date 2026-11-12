@@ -61,11 +61,13 @@ impl RotatingLog {
             if newest_first.len() >= max_lines || left == 0 {
                 break;
             }
-            let Some(text) = read_end(&self.path(n), left) else {
+            let Some((text, read)) = read_end(&self.path(n), left) else {
                 // No file yet, or one just rotated away: the older ones may still be there.
                 continue;
             };
-            left = left.saturating_sub(text.len() as u64);
+            // The bytes read count, not the text kept: a file the limit cuts uses all of it, so
+            // no older file is read and the lines returned have no gap.
+            left = left.saturating_sub(read);
             let room = max_lines - newest_first.len();
             newest_first.extend(text.lines().rev().take(room).map(str::to_owned));
         }
@@ -104,23 +106,27 @@ impl RotatingLog {
     }
 }
 
-/// The last `max` bytes of the file as text, from the start of a line: when the file is longer,
-/// the line the cut falls in is dropped. Bytes that are not UTF-8 become U+FFFD.
-fn read_end(path: &Path, max: u64) -> Option<String> {
+/// The last `max` bytes of the file as text, from the start of a line, and how many bytes of the
+/// file that is. When the file is longer, the line the cut falls in is dropped; a cut at the start
+/// of a line drops nothing. Bytes that are not UTF-8 become U+FFFD.
+fn read_end(path: &Path, max: u64) -> Option<(String, u64)> {
     let mut file = File::open(path).ok()?;
     let len = file.metadata().ok()?.len();
     let start = len.saturating_sub(max);
-    file.seek(SeekFrom::Start(start)).ok()?;
+    // The byte before the cut is read too: a newline there means the cut is at the start of a line.
+    let from = start.saturating_sub(1);
+    file.seek(SeekFrom::Start(from)).ok()?;
     let mut bytes = Vec::new();
-    file.take(max).read_to_end(&mut bytes).ok()?;
+    file.take(len - from).read_to_end(&mut bytes).ok()?;
     let text = String::from_utf8_lossy(&bytes);
+    let read = len - start;
     if start == 0 {
-        return Some(text.into_owned());
+        return Some((text.into_owned(), read));
     }
-    Some(
-        text.split_once('\n')
-            .map_or_else(String::new, |(_, rest)| rest.to_owned()),
-    )
+    let whole_lines = text
+        .split_once('\n')
+        .map_or_else(String::new, |(_, rest)| rest.to_owned());
+    Some((whole_lines, read))
 }
 
 fn append(path: &Path) -> Option<File> {
@@ -162,8 +168,14 @@ mod tests {
         assert_eq!(log.tail(100, 2), ["dddd", "eeee"]);
         // The byte limit too: 5 bytes of serve.log, then 7 of serve.log.1, whose cut line goes.
         assert_eq!(log.tail(12, 100), ["dddd", "eeee"]);
-        // A limit inside the newest line leaves nothing rather than half a line.
+        // A limit inside the newest line leaves nothing rather than half a line, and no older
+        // line either: that would leave a gap.
         assert!(log.tail(3, 100).is_empty());
+        fs::write(dir.join("serve.log"), "eeeeeeee\n").unwrap();
+        assert!(log.tail(5, 100).is_empty());
+        fs::write(dir.join("serve.log"), "eeee\n").unwrap();
+        // A limit that ends at the start of a line keeps that line.
+        assert_eq!(log.tail(10, 100), ["dddd", "eeee"]);
         // A file that is not UTF-8 is still read.
         fs::write(dir.join("serve.log"), b"ok\n\xff\n").unwrap();
         assert_eq!(log.tail(5, 100), ["ok", "\u{fffd}"]);

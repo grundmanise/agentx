@@ -72,7 +72,7 @@ export interface ServeExit {
   childId: number;
   /** The exit code; null when a signal ended it or it could not start. */
   exitCode: number | null;
-  /** Its last stderr lines. */
+  /** Its last stderr lines, debug log events left out. */
   stderr: string[];
   /** Whether the supervisor starts a new child, after restartInMs. */
   restarting: boolean;

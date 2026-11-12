@@ -36,7 +36,7 @@ The app keeps `agentx serve` running to watch this machine, and writes everythin
 Select **Serve log**, the first row of the log, to read the end of that file: its last 1000 lines, oldest first. Select it again to read the file anew.
 
 - **Copy** copies the lines shown.
-- **Show in Finder** (**Show in file manager** on Linux) shows the file, to read all of it or attach it to an issue.
+- **Show in Finder** (**Show in file manager** on Linux) shows the file, to read all of it or attach it to an issue. The file is not redacted. Remove tokens and URL credentials before you share it.
 
 The file is `~/Library/Logs/agentx/serve.log` on macOS and `~/.local/state/agentx/logs/serve.log` on Linux. agentx keeps at most 5 files of 5 MB each.
 
