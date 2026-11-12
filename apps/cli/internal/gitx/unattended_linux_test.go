@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // unattendedChildEnv marks the process TestAnUnattendedGitDiesWithAgentx
@@ -49,7 +51,7 @@ func TestAnUnattendedGitDiesWithAgentx(t *testing.T) {
 		t.Fatal(err)
 	}
 	ready := filepath.Join(dir, "ready")
-	writeShim(t, filepath.Join(dir, "git"), "#!/bin/sh\n[ \"$1\" = --version ] && exit 0\n"+
+	testshim.Write(t, filepath.Join(dir, "git"), "#!/bin/sh\n"+
 		"echo $$ > "+ready+"\nexec "+sleeper+" 300\n")
 	child := exec.Command(os.Args[0], "-test.run=^TestUnattendedChildProcess$")
 	child.Env = append(os.Environ(), unattendedChildEnv+"="+dir)

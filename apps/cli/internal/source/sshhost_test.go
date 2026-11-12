@@ -2,13 +2,11 @@ package source
 
 import (
 	"context"
-	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"syscall"
 	"testing"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 func TestSSHHostname(t *testing.T) {
@@ -33,8 +31,7 @@ func TestSSHHosts(t *testing.T) {
 	t.Parallel()
 	bin := t.TempDir()
 	log := filepath.Join(t.TempDir(), "calls")
-	writeShim(t, filepath.Join(bin, "ssh"), "#!/bin/sh\n"+
-		"[ \"$1\" = --version ] && exit 0\n"+
+	testshim.Write(t, filepath.Join(bin, "ssh"), "#!/bin/sh\n"+
 		"echo \"$*\" >> "+log+"\n"+
 		"[ \"$3\" = github-work ] && { echo 'user git'; echo 'hostname github.com'; exit 0; }\n"+
 		"[ \"$3\" = broken ] && exit 255\n"+
@@ -60,21 +57,5 @@ func TestSSHHosts(t *testing.T) {
 	}
 	if got := SSHHosts(context.Background(), map[string]string{"PATH": t.TempDir()})("github-work"); got != "github-work" {
 		t.Errorf("without ssh, resolve(github-work) = %q", got)
-	}
-}
-
-// writeShim writes an executable script and waits until it can run: a
-// parallel test that forks while the file is still open for writing makes
-// exec fail with ETXTBSY.
-func writeShim(t *testing.T, path, script string) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for {
-		if err := exec.Command(path, "--version").Run(); !errors.Is(err, syscall.ETXTBSY) {
-			return
-		}
-		runtime.Gosched()
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden inventory files from the current output")
@@ -698,8 +699,7 @@ func TestScanSpawnBudget(t *testing.T) {
 	if err != nil {
 		t.Skip("git not on PATH")
 	}
-	writeShim(t, filepath.Join(bin, "git"), "#!/bin/sh\necho \"$@\" >> "+counter+"\nexec "+real+" \"$@\"\n")
-	_ = os.Remove(counter) // the --version that cleared ETXTBSY is not one of the scan's
+	testshim.Write(t, filepath.Join(bin, "git"), "#!/bin/sh\necho \"$@\" >> "+counter+"\nexec "+real+" \"$@\"\n")
 	h.env["PATH"] = bin + string(os.PathListSeparator) + os.Getenv("PATH")
 
 	start := time.Now()

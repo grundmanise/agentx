@@ -19,6 +19,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // sourceEvents splits the events of a source command into the one source
@@ -614,8 +615,8 @@ func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 	s, _, _ := h.standardSource(true)
 	dir := t.TempDir()
 	denied, sso := filepath.Join(dir, "denied"), filepath.Join(dir, "sso")
-	writeShim(t, denied, "#!/bin/sh\necho 'ERROR: Permission to acme/skills.git denied to someone.' >&2\nexit 128\n")
-	writeShim(t, sso, "#!/bin/sh\necho \"remote: The 'acme' organization has enabled or enforced SAML SSO.\" >&2\nexit 128\n")
+	testshim.Write(t, denied, "#!/bin/sh\necho 'ERROR: Permission to acme/skills.git denied to someone.' >&2\nexit 128\n")
+	testshim.Write(t, sso, "#!/bin/sh\necho \"remote: The 'acme' organization has enabled or enforced SAML SSO.\" >&2\nexit 128\n")
 	receivePack := func(shim string) {
 		h.env["GIT_CONFIG_COUNT"] = "1"
 		h.env["GIT_CONFIG_KEY_0"] = "remote." + gitx.CheckRemote + ".receivepack"

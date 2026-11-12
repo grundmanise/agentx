@@ -48,7 +48,8 @@ import (
 // releases the lock of agentx home through its descriptor for that reason,
 // so a lock does not outlive its holder in another test's child. A file
 // that another test's child still holds open for writing cannot be run,
-// though, which is why writeShim waits for ETXTBSY to clear.
+// which is why a test writes every executable it runs with testshim.Write:
+// no child is forked while that file is open.
 const suiteParallel = 8
 
 // setParallel runs suiteParallel tests at once unless -parallel says how

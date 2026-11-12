@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
 // TestClassifyAccess reads the answers git and the hosts agentx knows give
@@ -157,7 +158,7 @@ func TestProbeAccessAppliesTheIncludesOfItsOwnURL(t *testing.T) {
 	// Each SSH command answers as GitHub does to a key of another account,
 	// naming the one it stands for, so the answer tells which one ran.
 	for _, name := range []string{"work", "personal"} {
-		writeShim(t, filepath.Join(dir, name+"-ssh"), "#!/bin/sh\necho 'ERROR: Permission to x.git denied to "+name+".' >&2\nexit 128\n")
+		testshim.Write(t, filepath.Join(dir, name+"-ssh"), "#!/bin/sh\necho 'ERROR: Permission to x.git denied to "+name+".' >&2\nexit 128\n")
 	}
 	work := filepath.Join(dir, "work.gitconfig")
 	write(t, work, "[core]\n\tsshCommand = "+filepath.Join(dir, "work-ssh")+"\n")
