@@ -485,6 +485,9 @@ export const AddScreen = () => {
           universal={universal}
           targets={chosen}
           onToggleTarget={toggleTarget}
+          onClearTargets={() => {
+            setTargets([]);
+          }}
           adding={adding}
           progress={progress}
           onAdd={() => {

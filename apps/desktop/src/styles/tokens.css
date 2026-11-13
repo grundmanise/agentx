@@ -56,6 +56,28 @@
   --blue-400: #7cb7ff;
   --white: #ffffff;
   --black: #000000;
+
+  /* Monogram tints (DESIGN.md §2.1): a dark tint and a light letter per hue. */
+  --red-900: #4f2222;
+  --red-200: #f2a6a6;
+  --orange-900: #4f3422;
+  --orange-200: #f2c4a6;
+  --amber-900: #4f4122;
+  --amber-200: #f2dba6;
+  --lime-900: #414f22;
+  --lime-200: #dbf2a6;
+  --green-900: #224f31;
+  --green-200: #a6f2bf;
+  --teal-900: #224f49;
+  --teal-200: #a6f2e8;
+  --sky-900: #22414f;
+  --sky-200: #a6dbf2;
+  --blue-900: #22314f;
+  --blue-200: #a6bff2;
+  --violet-900: #31224f;
+  --violet-200: #bfa6f2;
+  --pink-900: #4f2240;
+  --pink-200: #f2a6d9;
 }
 
 /* 2. Font faces (DESIGN.md §3). Kept out of the theme, so `font-sans` and friends do not exist;
@@ -224,6 +246,30 @@
   --color-agent-chip-on-border: rgb(212 255 79 / 0.35);
   --color-agent-chip-hover-border: var(--gray-700);
   --color-agent-chip-text: var(--gray-50);
+  /* Monogram hues, picked by a hash of the client's name */
+  --color-monogram-0-bg: var(--red-900);
+  --color-monogram-0-text: var(--red-200);
+  --color-monogram-1-bg: var(--orange-900);
+  --color-monogram-1-text: var(--orange-200);
+  --color-monogram-2-bg: var(--amber-900);
+  --color-monogram-2-text: var(--amber-200);
+  --color-monogram-3-bg: var(--lime-900);
+  --color-monogram-3-text: var(--lime-200);
+  --color-monogram-4-bg: var(--green-900);
+  --color-monogram-4-text: var(--green-200);
+  --color-monogram-5-bg: var(--teal-900);
+  --color-monogram-5-text: var(--teal-200);
+  --color-monogram-6-bg: var(--sky-900);
+  --color-monogram-6-text: var(--sky-200);
+  --color-monogram-7-bg: var(--blue-900);
+  --color-monogram-7-text: var(--blue-200);
+  --color-monogram-8-bg: var(--violet-900);
+  --color-monogram-8-text: var(--violet-200);
+  --color-monogram-9-bg: var(--pink-900);
+  --color-monogram-9-text: var(--pink-200);
+  /* Agent picker (Add skills bar and its Choose agents dialog) */
+  --color-agent-picker-badge-bg: var(--color-accent-primary);
+  --color-agent-picker-row-hover: var(--gray-880);
 
   /* Cards and banners */
   --color-card-bg: var(--gray-950);
@@ -360,6 +406,7 @@
   --radius-segmented: 9999px;
   --radius-agent-chip: 9999px;
   --radius-logo: 50%;
+  --radius-agent-picker-row: 10px;
   --radius-shell-nav: 10px;
   --radius-shell-logo: 8px;
   --radius-shell-status: 9999px;
@@ -523,6 +570,7 @@
   --gap-segmented: 2px;
   --height-filter: 30px;
   --size-filter-badge: 16px;
+  --size-agent-picker-badge: 16px;
   --height-agent-chip: 44px;
   --padding-agent-chip-right: 8px;
   --padding-agent-chip-left: 7px;
@@ -582,6 +630,7 @@
   --inset-palette: 112px;
   --max-height-palette-list: 420px;
   --max-height-adopt-list: 280px;
+  --max-height-agent-picker-list: 320px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
   --min-height-toast: 44px;
