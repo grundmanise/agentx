@@ -117,7 +117,7 @@ const GroupLabel = ({ label, source }: { label: string; source?: string }) => {
   return (
     <Tooltip>
       <TooltipTrigger asChild>{caption}</TooltipTrigger>
-      <TooltipContent side="bottom" align="start">
+      <TooltipContent side="top" align="start">
         {source}
       </TooltipContent>
     </Tooltip>

@@ -788,7 +788,7 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### Group header (lists)
 
-`type.caption` in `group.label`, then the count in `group.count`. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), below the label and aligned to its start. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
+`type.caption` in `group.label`, then the count in `group.count`. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
 
 ### Banner (detail pane)
 
