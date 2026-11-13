@@ -138,7 +138,7 @@ export const SourceDetail = ({
         {onRemove !== undefined && (
           <Button
             ref={removeRef}
-            variant="ghost"
+            variant="danger"
             size="sm"
             aria-busy={removing}
             disabled={removing}
