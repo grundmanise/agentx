@@ -27,11 +27,22 @@ const letterColour = () =>
     .getPropertyValue("--color-on-accent")
     .trim();
 
+/**
+ * The monograms made so far, by letter. Reading the colour forces the page to compute its styles,
+ * so it is read once per letter, not on every render of every logo; the tokens have one theme.
+ */
+const monograms = new Map<string, string>();
+
 /** A monogram as an image: the first letter of the client's name, drawn in place. */
 const monogram = (name: string) => {
   const letter = name.slice(0, 1).toUpperCase();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text x="12" y="17.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="600" fill="${letterColour()}">${letter}</text></svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  let url = monograms.get(letter);
+  if (url === undefined) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text x="12" y="17.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="600" fill="${letterColour()}">${letter}</text></svg>`;
+    url = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    monograms.set(letter, url);
+  }
+  return url;
 };
 
 /** The sizes of DESIGN.md §6 "Agent client logo chip" this app uses so far, in pixels. */
