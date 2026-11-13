@@ -116,11 +116,6 @@ export const App = () => {
                   />
                 ))}
               </Route>
-              {/* The Add skills screen's old path, which became Sources. */}
-              <Route
-                path="/add/*"
-                element={<Navigate to={SOURCES_PATH} replace />}
-              />
               <Route path="*" element={<Navigate to="/skills" replace />} />
             </Routes>
           </main>

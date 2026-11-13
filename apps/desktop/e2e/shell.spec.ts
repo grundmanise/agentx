@@ -54,11 +54,6 @@ test("moves between screens from the sidebar, Sources nested under Skills", asyn
   ).not.toHaveAttribute("aria-current", "page");
 });
 
-test("the Add skills screen's old path opens Sources", async ({ page }) => {
-  await page.goto("/#/add");
-  await expect(page).toHaveURL(/#\/sources$/u);
-});
-
 test("keeps Skills active on a screen nested under it", async ({ page }) => {
   await page.goto("/#/skills/review/pdf");
   await expect(
