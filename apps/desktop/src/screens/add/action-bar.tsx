@@ -64,7 +64,7 @@ const Divider = () => (
 /**
  * The floating action bar (DESIGN.md §2.2 "Overlays", §4 "Overlays", §8): how many cards are
  * selected, the install targets as round logos (at most five, the rest behind a "+n" button that
- * opens Choose agents) with the Universal stack always on, and Add; while the install runs, its
+ * opens Choose agents, after the Universal stack, which is always on), and Add; while the install runs, its
  * progress and Cancel.
  */
 export const ActionBar = ({
@@ -135,6 +135,24 @@ export const ActionBar = ({
             <TooltipContent>{c.name}</TooltipContent>
           </Tooltip>
         ))}
+        {universal.length > 0 && (
+          <Toggle
+            kind="logo"
+            pressed
+            onPressedChange={() => {
+              // Universal clients read the library: every skill reaches them, whatever is chosen.
+            }}
+            aria-label="Universal"
+            aria-description={universalTitle(universal.map((c) => c.name))}
+          >
+            <LogoStack
+              clients={universal}
+              size={28}
+              hover="tooltip"
+              decorative
+            />
+          </Toggle>
+        )}
         {hidden.length > 0 && (
           <Button
             variant="secondary"
@@ -153,24 +171,6 @@ export const ActionBar = ({
               </span>
             )}
           </Button>
-        )}
-        {universal.length > 0 && (
-          <Toggle
-            kind="logo"
-            pressed
-            onPressedChange={() => {
-              // Universal clients read the library: every skill reaches them, whatever is chosen.
-            }}
-            aria-label="Universal"
-            aria-description={universalTitle(universal.map((c) => c.name))}
-          >
-            <LogoStack
-              clients={universal}
-              size={28}
-              hover="tooltip"
-              decorative
-            />
-          </Toggle>
         )}
       </fieldset>
       <AgentPickerDialog
