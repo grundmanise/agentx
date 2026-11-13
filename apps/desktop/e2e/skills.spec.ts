@@ -426,34 +426,56 @@ test.describe("filters", () => {
     ]);
   });
 
-  test("the sort toggle reverses the order within each group", async ({
+  test("the sort toggle steps through Default, A-Z and Z-A", async ({
     cli,
     page,
   }) => {
-    await openSkills(cli, page);
-    const toggle = page.getByRole("button", { name: "Sort Z to A" });
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    // With no universal client, draft is placed nowhere: disabled.
+    await openSkills(cli, page, "/#/skills", {
+      ...inventory,
+      configurations: configurations.filter((c) => !c.reads_library),
+      library: inventory.library.map((e) => ({
+        ...e,
+        placements: e.placements.filter((p) => p.mode !== "library"),
+        universal: [],
+      })),
+    });
+    const personal = group(page, "PERSONAL (3)");
+    // Default: enabled skills first, then disabled ones, each A to Z.
+    const toggle = page.getByRole("button", { name: /^Sort: /u });
+    await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
+    expect(await rowNames(personal)).toEqual([
+      "pdf-letters",
+      "release-notes",
+      "draft",
+    ]);
+    // A-Z: by name alone, whatever the state.
     await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
-    expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
+    await expect(toggle).toHaveAccessibleName("Sort: A to Z");
+    expect(await rowNames(personal)).toEqual([
+      "draft",
+      "pdf-letters",
+      "release-notes",
+    ]);
+    // Z-A.
+    await toggle.click();
+    await expect(toggle).toHaveAccessibleName("Sort: Z to A");
+    expect(await rowNames(personal)).toEqual([
       "release-notes",
       "pdf-letters",
       "draft",
-    ]);
-    expect(await rowNames(group(page, "ACME/SKILLS (2)"))).toEqual([
-      "review",
-      "pdf",
     ]);
     // The groups keep their order.
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
       "PERSONAL (3)"
     );
+    // Back to Default.
     await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
-    expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
-      "draft",
+    await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
+    expect(await rowNames(personal)).toEqual([
       "pdf-letters",
       "release-notes",
+      "draft",
     ]);
   });
 });
@@ -822,7 +844,7 @@ const openStates = async (cli: MockCli, page: Page, key: string) => {
 };
 
 test.describe("settling a skill", () => {
-  test("the three banners after the displaced one each run their command", async ({
+  test("the two banners after the displaced one each run their command", async ({
     cli,
     page,
   }) => {
@@ -853,27 +875,9 @@ test.describe("settling a skill", () => {
       toasts(page).getByText("Added old/skills source")
     ).toBeVisible();
 
-    await row(page, "gone").click();
-    cli.register(["skill", "fork", "gone"]);
-    const forkBanner = pane(page, "gone").getByRole("note", {
-      name: "No longer in zeta/tools",
-    });
-    await expect(forkBanner).toContainText(
-      "It seems this skill was removed from the source."
-    );
-    // Fork opens the Fork dialog, whose Fork runs the command.
-    await forkBanner.getByRole("button", { name: "Fork" }).click();
-    await page
-      .getByRole("dialog", { name: "Fork gone" })
-      .getByRole("button", { name: "Fork" })
-      .click();
-    await expect(
-      toasts(page).getByText("Forked gone skill", { exact: true })
-    ).toBeVisible();
     expect(ran(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
       ["source", "add", OLD, "--json"],
-      ["skill", "fork", "gone", "--json"],
     ]);
   });
 });

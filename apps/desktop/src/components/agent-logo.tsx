@@ -62,15 +62,27 @@ const token = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 /**
+ * The monograms made so far, by name. Reading the colours forces the page to compute its styles,
+ * so they are read once per name, not on every render of every logo; the tokens have one theme.
+ */
+const monograms = new Map<string, string>();
+
+/**
  * A monogram as an image: two letters of the client's name in `monogram.N.text` on a round
  * `monogram.N.bg` tint, N picked by the name's hash.
  */
 const monogram = (name: string) => {
+  const made = monograms.get(name);
+  if (made !== undefined) {
+    return made;
+  }
   const hue = hueOf(name);
   const bg = token(`--color-monogram-${hue}-bg`);
   const text = token(`--color-monogram-${hue}-text`);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="${bg}"/><text x="12" y="15.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="${text}">${escapeXml(monogramLetters(name))}</text></svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  const url = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  monograms.set(name, url);
+  return url;
 };
 
 /** The sizes of DESIGN.md §6 "Agent client logo chip" this app uses so far, in pixels. */

@@ -226,7 +226,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
-| `filter.sort-text` | `gray-300` | A–Z toggle |
+| `filter.sort-text` | `gray-300` | Sort toggle (Default, A-Z, Z-A) |
 
 #### Lists and rows
 
@@ -236,7 +236,6 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `row.selected-bg` | `gray-900` | Selected Skills row |
 | `row.selected-bar` | `accent.primary` | 2px bar on the selected row |
 | `row.name` | `gray-50` | Row name, enabled |
-| `row.name-off` | `gray-300` | Row name when in no agent client |
 | `row.desc` | `gray-300` | Description line |
 | `row.chip-ring` | `shell.content-bg` | 2px ring behind overlapping agent client logos in rows |
 | `group.label` | `gray-300` | Source group caption |
@@ -249,8 +248,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `glyph.enabled` | `accent.primary` | Dot or fork glyph when enabled (and, for the fork glyph, published) |
-| `glyph.off` | `gray-600` | Glyph when in no agent client or not published |
+| `glyph.idle` | `gray-400` | Dot or fork glyph: no action to take |
+| `glyph.update` | `accent.primary` | Dot or fork glyph of a skill with an update to apply |
 | `glyph.edited` | `accent.attention` | Pencil glyph |
 
 #### Agent client logos and toggle chips
@@ -539,6 +538,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `row.inline-gap` | 8 | `gap-row-inline` | Name → pills → chips |
 | `row.spacing` | 2 | `gap-rows`, `pt-rows` | Between rows; `pt-rows` on a row of the Skills list, which places each row itself |
 | `row.glyph-col` | 18 | `w-row-glyph` | Glyph column |
+| `row.off` | 50% | `opacity-row-off` | Opacity of a row in no agent client: washed out |
 | `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
 | `group.padding` | 20 14 8 | `pt-group-top px-group pb-group-bottom` | Later group headers |
 | `group.gap` | 8 | `gap-group` | Label → count |
@@ -827,9 +827,16 @@ A client with no bundled logo shows two letters of its name, drawn as an image l
 
 ### Skill glyph (16px, leading the row)
 
-- dot (filled) – a skill of a shared source; `glyph.enabled` when enabled, `glyph.off` when not.
+The dot and fork glyphs say one thing: whether there is an action to take. `glyph.update` (the accent) when the skill has an update to apply, else `glyph.idle`. Whether a skill is enabled is not the glyph's to say: a row in no agent client is washed out (`row.off`) instead.
+
+- dot (filled) – a skill of a shared source.
 - pencil – edited locally; `glyph.edited`.
-- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise.
+- fork – one of your own skills.
+
+Sort toggle, at the right end of the filter row, steps through three orders on each click:
+
+- Default – within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
+- A-Z, Z-A – by name alone, whatever the state, with the arrow (turned for Z-A).
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)
@@ -859,6 +866,7 @@ A client with no bundled logo shows two letters of its name, drawn as an image l
 - A banner's actions are small buttons on its right, one command or one dialog each: ghost by default, primary for the action that applies the update, danger ghost for one that discards work. A destructive action opens a confirm dialog first.
 - Adopt and Update are banner buttons only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner; the reason is a row of its DETAILS.
 - The banner of a skill of a source edited locally only informs, with a publish action when this machine can write to the source. It has no fork action: Fork is in the action row.
+- The banner of a skill gone from its source only informs. It has no fork action either: Fork is in the action row.
 - A command refused because the target folder holds another version opens a confirm dialog, with the path in `type.technical` `text.caption` and a danger confirm.
 - The action row sits on the title row, pushed to its right end (`margin-left:auto`), centred on the row and wrapping when it is full, with `button.gap` 6 between its buttons. Remove, last, is a danger ghost button; its dialog lists the agents the skill leaves in `type.body` `text.secondary`, with a danger confirm.
 
@@ -868,7 +876,7 @@ A client with no bundled logo shows two letters of its name, drawn as an image l
 
 ### Fork dialog (detail pane)
 
-Fork is a secondary small button in the action row, before Remove, and a small ghost button on the banner of a skill gone from its source. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
+Fork is a secondary small button in the action row, before Remove. No banner carries it. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
 
 ### Edit (detail pane)
 

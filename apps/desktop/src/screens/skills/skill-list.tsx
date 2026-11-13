@@ -23,7 +23,12 @@ import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
 import type { ToolArg } from "#/screens/skills/adopt.ts";
 import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
-import { forksOf, GROUP_DISK, UNIVERSAL } from "#/screens/skills/projection.ts";
+import {
+  forksOf,
+  GROUP_DISK,
+  nextOrder,
+  UNIVERSAL,
+} from "#/screens/skills/projection.ts";
 import type {
   Filters,
   Group,
@@ -519,9 +524,9 @@ export const SkillList = ({
           )}
           <span className="flex-1" />
           <SortToggle
-            descending={order === "desc"}
+            order={order}
             onToggle={() => {
-              onOrder(order === "asc" ? "desc" : "asc");
+              onOrder(nextOrder(order));
             }}
           />
         </div>

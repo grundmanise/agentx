@@ -41,8 +41,6 @@ export type BannerAction =
   | { kind: "adopt" }
   /** `source add <url>`, for a skill whose source was removed. */
   | { kind: "add-source"; source: string }
-  /** Fork, which opens the Fork dialog, for a skill its source no longer holds. */
-  | { kind: "fork" }
   /** Opens the Publish dialog, which runs `skill publish <name>`. */
   | { kind: "publish" }
   /** Goes to Settings, where an account remote is set. */
@@ -212,8 +210,8 @@ const table: BannerRule[] = [
     when: (row) => row.entry?.drift?.includes("source removed") ?? false,
   },
   {
+    // No action: Fork is in the action row.
     banner: (row) => ({
-      action: { kind: "fork" },
       text: "It seems this skill was removed from the source.",
       title: `No longer in ${shortSource(row.entry?.source ?? "")}`,
       tone: "danger",
