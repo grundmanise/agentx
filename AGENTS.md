@@ -39,7 +39,7 @@ The CLI's tests drive real `git`, and starting a process is what they spend thei
 
 Before adding a test, find the one that already covers the path, and extend it instead.
 
-Test what the product does: its happy paths, and a limited set of known non-happy paths (a refusal, a failure, a conflict, a stale event). Write no test or assertion for a thing the product was never meant to have or do, such as a button a row never had or a command nothing runs. Assert that something is gone only when that is the main effect of the action under test, such as a dialog that closes on Cancel. This applies to the CLI's tests and to the desktop app's tests in `apps/desktop/e2e`.
+Test what the product does: its happy paths, and a limited set of known non-happy paths (a refusal, a failure, a conflict, a stale event). Write no test or assertion for a thing the product was never meant to have or do, such as a button a row never had or a command nothing runs. When a change removes something, delete its test; don't assert it is gone. Assert that something is gone only when that is the main effect of the action under test, such as a dialog that closes on Cancel. This applies to the CLI's tests and to the desktop app's tests in `apps/desktop/e2e`.
 
 ## PRs and commits
 

@@ -813,6 +813,7 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 - A banner's actions are small buttons on its right, one command or one dialog each: ghost by default, primary for the action that applies the update, danger ghost for one that discards work. A destructive action opens a confirm dialog first.
 - Adopt and Update are banner buttons only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner; the reason is a row of its DETAILS.
 - The banner of a skill of a source edited locally only informs, with a publish action when this machine can write to the source. It has no fork action: Fork is in the action row.
+- The banner of a skill gone from its source only informs. It has no fork action either: Fork is in the action row.
 - A command refused because the target folder holds another version opens a confirm dialog, with the path in `type.technical` `text.caption` and a danger confirm.
 - The action row sits on the title row, pushed to its right end (`margin-left:auto`), centred on the row and wrapping when it is full, with `button.gap` 6 between its buttons. Remove, last, is a danger ghost button; its dialog lists the agents the skill leaves in `type.body` `text.secondary`, with a danger confirm.
 
@@ -822,7 +823,7 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### Fork dialog (detail pane)
 
-Fork is a secondary small button in the action row, before Remove, and a small ghost button on the banner of a skill gone from its source. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
+Fork is a secondary small button in the action row, before Remove. No banner carries it. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
 
 ### Edit (detail pane)
 
