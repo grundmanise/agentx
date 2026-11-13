@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 
+import { SOURCES_PATH } from "#/app/screens.ts";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
@@ -450,7 +451,7 @@ const AddSkills = () => {
       <SplitButton
         size="sm"
         onClick={() => {
-          void navigate("/add");
+          void navigate(SOURCES_PATH);
         }}
         menuLabel="More add actions"
         menu={

@@ -27,16 +27,13 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-/**
- * The command lines the page ran after the launch and the loads, without the listings of each
- * shared source the Sources section reads.
- */
+/** The command lines the page ran after the launch and the loads. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
     (l) =>
       ![...launchLines, ...loadLines].some(
         (known) => known.join(" ") === l.join(" ")
-      ) && l.slice(0, 2).join(" ") !== "source skills"
+      )
   );
 
 const toasts = (page: Page) =>
@@ -48,10 +45,6 @@ const importSettings = (page: Page) =>
 
 const openSettings = async (cli: MockCli, page: Page) => {
   cli.register(["source", "list"], { events: sourcesBefore });
-  // The Sources section lists the skills of each shared source, before and after the import.
-  for (const id of ["s-vendor", "s-team"]) {
-    cli.register(["source", "skills", id], { events: [] });
-  }
   await page.goto("/#/settings");
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })

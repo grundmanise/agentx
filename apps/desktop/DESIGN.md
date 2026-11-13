@@ -135,6 +135,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `shell.nav-text` | `gray-300` | Inactive nav item; `text.primary` on hover |
 | `shell.nav-active-bg` | `gray-910` | Active nav item |
 | `shell.nav-active-text` | `gray-50` | Active nav item label |
+| `shell.nav-tree` | `gray-800` | 1px rule to the left of the nav items nested under another |
 | `shell.nav-badge-bg` | `accent.primary` | Inbox count badge (digits `on-accent`) |
 | `shell.topbar-text` | `gray-300` | Command field placeholder and icon (`text.secondary` on hover), account remote status label |
 | `shell.status-published` | `accent.primary` | Account remote status dot, nothing to publish (halo `lime-400/15`) |
@@ -163,9 +164,11 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `button.danger-text` | `accent.danger` | Danger ghost (Remove, Cancel, Restore base version) |
 | `button.danger-bg` | `red-400/10` | Danger button at rest |
 | `button.danger-hover` | `red-400/17` |  |
-| `source-pill.bg` | `gray-910` | Source pill in Add, inactive (label `text.secondary`) |
-| `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
+| `source-pill.bg` | `gray-910` | Source pill on Sources, inactive (label `text.secondary`) |
+| `source-pill.active-bg` | `gray-50` | Source pill on Sources, active |
 | `source-pill.active-text` | `on-accent` |  |
+| `source-pill.count` | `gray-400` | Skill count after the name of an inactive source pill: 4.8:1 on `source-pill.bg` |
+| `source-pill.active-count` | `gray-600` | Skill count on the active source pill: 7.5:1 on `source-pill.active-bg`, the one use of `gray-600` as text, on a light fill |
 | `button.toast-action-text` | `accent.primary` | Action inside a toast |
 | `button.split-divider` | `gray-800` | The 1px separator between the buttons of a button group |
 
@@ -175,7 +178,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | --- | --- | --- |
 | `pill.update-bg` | `accent.primary` | Update pill |
 | `pill.update-text` | `on-accent` |  |
-| `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, a source's pin |
+| `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, Read-only |
 | `pill.neutral-hover` | `gray-800` |  |
 | `pill.neutral-text` | `gray-200` |  |
 | `pill.removed-bg` | `red-400/12` | Removed-from-source pill |
@@ -241,7 +244,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `group.label` | `gray-300` | Source group caption |
 | `group.count` | `gray-500` | Count beside the caption |
 | `group.divider-label` | `gray-500` | Caption of the sub-group of skills in no agent client |
-| `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows, Settings sources |
+| `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows |
 | `table.header-text` | `gray-500` | Column captions |
 
 #### Skill glyph
@@ -308,6 +311,14 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `add-card.status-disk` | `accent.attention` | Card status: already in the library |
 | `add-card.status-in-use` | `gray-400` | Card status: name in use |
 | `add-card.check-ring` | `gray-700` | Ring of the round check on a card that is not selected |
+| `source-card.bg` | `gray-950` | Card of the open source on Sources |
+| `source-card.border` | `gray-870` |  |
+| `source-card.divider` | `gray-870` | Rule above the facts strip, and between its facts |
+| `source-card.tile-bg` | `gray-880` | Owner tile |
+| `source-card.tile-text` | `gray-200` | Owner's initial on the tile |
+| `source-card.name` | `gray-50` | Source name |
+| `source-card.fact-label` | `gray-400` | Fact label (Skills, Branch, Commit, Fetched) |
+| `source-card.fact-value` | `gray-50` | Fact value |
 | `banner.title` | `gray-50` | Banner title (bg/border/tile from `tone.*`) |
 | `banner.text` | `gray-300` |  |
 | `card.chip-ring` | `card.bg` | 2px ring behind overlapping agent client logos on a card (the Universal card) |
@@ -463,6 +474,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
 | `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
+| `type.source-name` | sans | 16 | 500 |  |  |  | Source name on the card of the open source (`source-card.name`) |
 | `type.agent-card-name` | sans | 16 | 600 |  |  |  | Agent client name on an Agents page card, and the Universal card's title |
 | `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
@@ -471,7 +483,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
 | `type.settings-label` | sans | 14 | 500 |  |  |  | Settings section label (`text.primary`); the line under it is `type.secondary` in `text.muted` |
 | `type.plugin-name` | sans | 17 | 600 |  | -0.01em |  | Plugin name on a plugin card |
-| `type.version-pill` | mono | 12 | 500 |  |  |  | A plugin's version pill, a source's pin |
+| `type.version-pill` | mono | 12 | 500 |  |  |  | A plugin's version pill |
 
 Text wrapping: `text-wrap:pretty` on multi-line text. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
@@ -596,7 +608,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `input.search-padding` | 0 14 0 34 | `py-0 pr-input-search-right pl-input-search-left` | Room for the icon |
 | `input.label-gap` | 8 | `gap-input-label` | Label → field |
 | `input.textarea-height` | 88 | `h-textarea` | Create dialog description |
-| `add-search.height` | 40 | `h-add-search` | Search field of the Add skills screen, a pill across the page |
+| `add-search.height` | 40 | `h-add-search` | Search field of the Sources screen, a pill across the page |
 
 ### Cards, banners, tiles
 
@@ -723,6 +735,8 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `agent-card.radius` | 20 | Agents page cards |
 | `plugin-card.radius` | 20 |  |
 | `add-card.radius` | 18 |  |
+| `source-card.radius` | 18 | Card of the open source on Sources |
+| `source-card.tile-radius` | 10 | Its owner tile |
 | `hunk.radius` | 14 | Hunk block |
 | `hunk.pane-radius` | 10 | Yours / theirs panes (outer corners only) |
 | `diff.segment-radius` | 4 | Progress segment |
@@ -765,7 +779,7 @@ Two buttons side by side: `button.gap`, primary on the right.
 
 ### Pills (status)
 
-Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version and a source's pin take `type.version-pill`.
+Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version takes `type.version-pill`.
 
 - Not published: `pill.neutral-*`. The only status pill a skill row carries.
 - Disabled (plugin): `pill.disabled-*`.
@@ -804,7 +818,7 @@ The "+n" button opens Choose agents, a dialog (§6 "Dialog") with a search field
 
 ### Checkbox (popover)
 
-16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark. In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
+16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark; mixed, for a box that stands for several of which some are checked: the same fill with a `checkbox.check` dash. In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
 
 ### Radio group
 
@@ -1037,7 +1051,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
-- Adopt skills sits after Sources, since adopting adds the sources the skills come from: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
+- Adopt skills sits after Account remote: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
 
@@ -1049,6 +1063,19 @@ At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/c
 - It counts your own skills edited since they were published, with the predicate the Skills screen's banner uses (`hasEditsToPublish` in `src/screens/skills/banners.ts`), so the title bar and the Skills screen never disagree. A skill never published is not counted: a bare publish leaves it out, and its own banner publishes it.
 - While the publish runs, and until the inventory that follows arrives, the label counts its progress and the pill is `aria-busy`. While the check runs, a `Spinner` takes the dot's place; it is the Skills screen's check, so only one runs at a time.
 - Hidden while the startup layer shows, and until the inventory and the sources are read, so it never guesses a state.
+
+### Sidebar
+
+The nav items in sidebar order, `shell.nav-gap` apart. A screen nested under another, Sources under Skills, sits under its parent, indented to its parent's icon, behind a 1px `shell.nav-tree` rule, 32 high. A parent is active on its own routes and not on its nested screen's: Skills is active on a skill and on Update review, Sources alone on its page.
+
+### Sources screen
+
+The Sources screen (`src/screens/sources`), under Skills: the serif page title with Add source, the search field, the source pills, the card of the open source, then the select-all row and the skill cards.
+
+- A source pill (`source-pill.*`, `pill.radius`) holds the attention dot of a stale source, the source's short name, and its skill count in `type.technical-sm` (`source-pill.count`, `source-pill.active-count` on the active pill) once it is known.
+- The card of the open source: `source-card.bg`, a 1px `source-card.border`, `source-card.radius`. Its top row is a 36px owner tile (`source-card.tile-*`, `source-card.tile-radius`, the owner's initial in `type.source-name`), the name in `type.source-name`, which opens the repository in the browser, then a neutral Read-only pill when access is limited, and under them the full URL with its `#pin` in `type.technical-sm` `text.muted`; at its right, Refresh (secondary) and Remove (danger), `button.gap` apart. Under it, after a 1px `source-card.divider` rule, a strip of four facts, each a `type.secondary` `source-card.fact-label` label over a `type.technical-sm` value in `source-card.fact-value`, a never-fetched source's Fetched in `tone.attention.fg`. The card shows tags only for limits: a source you can write to has none. It hides while a search runs, since a search looks across every source; Personal's card has no Remove, since Settings manages the account remote.
+- The select-all row: one checkbox (§6 "Checkbox (popover)"), checked, mixed or not as the selection is, its label in `type.secondary` `text.secondary` counting the selection; at the right, how many skills this machine already has in `type.secondary` `text.hint`.
+- Remove opens a dialog (§6 "Dialog") with no line under its title. When this machine has skills from the source, a checkbox offers to remove them too, unticked, their names listed under it in `type.technical` `text.muted`; the confirm is a danger button.
 
 ### Command palette
 

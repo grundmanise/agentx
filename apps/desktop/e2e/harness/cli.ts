@@ -290,6 +290,8 @@ export class MockCli {
   readonly serveRequests: string[] = [];
   /** The paths of every call to the opener plugin's reveal, in order: what the app showed in Finder. */
   readonly reveals: string[][] = [];
+  /** Every URL the app opened in the browser through the opener plugin, in order. */
+  readonly openedUrls: string[] = [];
   /** The options of every native open dialog the app showed (the dialog plugin's open), in order. */
   readonly openDialogs: unknown[] = [];
   /** Every Tauri command the page called, in order: the supervisor's and the plugins'. */
@@ -604,6 +606,10 @@ export class MockCli {
         this.reveals.push(
           Array.isArray(paths) ? paths.map(String) : [String(paths)]
         );
+        return null;
+      }
+      case "plugin:opener|open_url": {
+        this.openedUrls.push(String(field(args, "url")));
         return null;
       }
       case "plugin:dialog|open": {

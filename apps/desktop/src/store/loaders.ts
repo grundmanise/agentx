@@ -11,7 +11,23 @@ import type { AppState, FilesRead } from "#/store/store.ts";
 
 // Each read's latest run: a slower earlier run of the same read does not overwrite a later one.
 const latest = new Map<string, number>();
+const running = new Map<string, Promise<void>>();
 let runs = 0;
+
+const runLoad = async (
+  args: string[],
+  read: (events: CliEvent[], state: AppState) => Partial<AppState>,
+  mine: number
+) => {
+  const key = args.join(" ");
+  const outcome = await runCommand(args, { label: `load ${key}` });
+  if (latest.get(key) !== mine) {
+    // A later run replaced this one: it ends with that run, so its caller finds the store filled.
+    await running.get(key);
+  } else if (outcome.exitCode === 0) {
+    useAppStore.setState((state) => read(outcome.events, state));
+  }
+};
 
 const load = async (
   args: string[],
@@ -19,12 +35,10 @@ const load = async (
 ) => {
   const key = args.join(" ");
   runs += 1;
-  const mine = runs;
-  latest.set(key, mine);
-  const outcome = await runCommand(args, { label: `load ${key}` });
-  if (outcome.exitCode === 0 && latest.get(key) === mine) {
-    useAppStore.setState((state) => read(outcome.events, state));
-  }
+  latest.set(key, runs);
+  const run = runLoad(args, read, runs);
+  running.set(key, run);
+  await run;
 };
 
 /** The label of the control that loads `args`, for `usePending`. */

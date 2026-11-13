@@ -132,12 +132,12 @@ test.describe("ACTIONS", () => {
     expect(ran(cli, ["skill", "check-updates"])).toBe(true);
   });
 
-  test("Add skills goes to its screen", async ({ cli, page }) => {
+  test("Add skills goes to Sources", async ({ cli, page }) => {
     launch(cli);
     await openPalette(page);
     await option(page, "Add skills").click();
     await expect(
-      page.getByRole("heading", { level: 1, name: "Add skills" })
+      page.getByRole("heading", { level: 1, name: "Sources" })
     ).toBeVisible();
   });
 

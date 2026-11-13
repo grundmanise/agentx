@@ -1,7 +1,7 @@
-// What the Add skills screen shows, projected from the store and nothing else: the source pills
-// from the Sources slice, the cards of a listing, of your skills on the account remote or of a
-// search answer, each card's state from the inventory's library, and the `skill add` command
-// lines a selection produces. Pure functions, so that every part of the screen reads a skill the
+// What the Sources screen shows, projected from the store and nothing else: the source pills
+// from the Sources slice, the facts of the open source, the cards of a listing, of your skills on
+// the account remote or of a search answer, each card's state from the inventory's library, and
+// the `skill add` command lines a selection produces. Pure functions, so that every part of the screen reads a skill the
 // same way and the tests pin the command lines.
 import type {
   Configuration,
@@ -12,7 +12,7 @@ import type {
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { formatAgo } from "#/lib/dates.ts";
-import { shortSource } from "#/screens/skills/projection.ts";
+import { hostAndPath, shortSource } from "#/screens/skills/projection.ts";
 
 /** The key of the Personal pill and the source of its cards, beside the source ids and URLs. */
 export const YOUR_SKILLS = "your-skills";
@@ -28,6 +28,10 @@ export interface SourcePill {
   /** The canonical URL; absent for Personal. */
   url?: string;
   lastFetched?: string;
+  /** How many skills it holds: its listing's length, or your skills on the account remote. */
+  skills?: number;
+  /** The entry `source list` gave: the shared source, or the account remote for Personal. */
+  source: SourceEvent;
 }
 
 const compareLabels = (a: string, b: string) =>
@@ -35,19 +39,28 @@ const compareLabels = (a: string, b: string) =>
 
 /**
  * One pill per shared source, A to Z by short form, then Personal when an account remote is
- * set.
+ * set. A shared source's skill count is the length of its listing, once read: `source list`
+ * reports none for a shared source.
  */
-export const sourcePills = (sources: SourceEvent[]): SourcePill[] => {
+export const sourcePills = (
+  sources: SourceEvent[],
+  listings: Readonly<Record<string, readonly unknown[] | undefined>> = {}
+): SourcePill[] => {
   const shared = sources
     .filter((s) => s.account !== true)
     .map((s): SourcePill => {
       const pill: SourcePill = {
         key: s.id,
         label: shortSource(s.url),
+        source: s,
         url: s.url,
       };
       if (s.last_fetched !== undefined) {
         pill.lastFetched = s.last_fetched;
+      }
+      const listing = listings[s.id];
+      if (listing !== undefined) {
+        pill.skills = listing.length;
       }
       return pill;
     });
@@ -58,9 +71,16 @@ export const sourcePills = (sources: SourceEvent[]): SourcePill[] => {
   if (account === undefined) {
     return shared;
   }
-  const yours: SourcePill = { key: YOUR_SKILLS, label: YOUR_SKILLS_LABEL };
+  const yours: SourcePill = {
+    key: YOUR_SKILLS,
+    label: YOUR_SKILLS_LABEL,
+    source: account,
+  };
   if (account.last_fetched !== undefined) {
     yours.lastFetched = account.last_fetched;
+  }
+  if (account.skills !== undefined) {
+    yours.skills = account.skills;
   }
   return [...shared, yours];
 };
@@ -95,15 +115,66 @@ export const staleTitle = (
   return `Not checked in ${count(Math.floor(age / DAY), "day")}`;
 };
 
-/** The label of the refresh button: when the source was last fetched. */
-export const fetchedLabel = (
+/** The Fetched fact of a source: "17 minutes ago", or "Not yet" before its first fetch. */
+export const fetchedFact = (
   lastFetched: string | undefined,
   now: number
-): string => {
-  const ago =
-    lastFetched === undefined ? undefined : formatAgo(lastFetched, now);
-  return ago === undefined ? "Not fetched yet" : `Checked ${ago}`;
+): string =>
+  (lastFetched === undefined ? undefined : formatAgo(lastFetched, now)) ??
+  "Not yet";
+
+/**
+ * The page of a source's repository: `https://<host>/<path>` without `.git`, from an HTTPS or SSH
+ * URL; undefined for anything else, such as a path on this machine. An HTTPS URL keeps its port;
+ * an SSH port is not the web server's.
+ */
+export const webUrl = (url: string): string | undefined => {
+  const parsed = hostAndPath(url);
+  if (parsed === undefined || parsed.host === "") {
+    return undefined;
+  }
+  const host = url.startsWith("https://") ? new URL(url).host : parsed.host;
+  const path = parsed.path.replace(/^\/+/u, "").replace(/\.git$/u, "");
+  return path === "" ? undefined : `https://${host}/${path}`;
 };
+
+/**
+ * The letter on a source's tile: the first letter or digit of its owner, the first part of the
+ * URL's path, in upper case.
+ */
+export const ownerInitial = (url: string): string => {
+  const parsed = hostAndPath(url);
+  const owner = parsed?.path.split("/").find((part) => part.length > 0) ?? url;
+  return (/[\p{L}\p{N}]/u.exec(owner)?.[0] ?? "?").toUpperCase();
+};
+
+/** The label of the checkbox that selects every selectable card. */
+export const selectAllLabel = (selected: number, total: number): string => {
+  if (selected === 0) {
+    return `Select all ${total}`;
+  }
+  return selected >= total
+    ? `All ${total} selected`
+    : `${selected} of ${total} selected`;
+};
+
+/** The skills this machine installed from the source at `url`, A to Z. */
+export const installedFrom = (
+  url: string,
+  library: LibraryEntry[]
+): string[] => {
+  const names = library
+    .filter((e) => e.kind === "managed" && e.source === url)
+    .map((e) => e.name);
+  names.sort(compareLabels);
+  return names;
+};
+
+/** The toast after a source is removed, with the `skills` removed from it. */
+export const removedText = (skills: number): string =>
+  skills === 0
+    ? "Source removed"
+    : `Source and ${count(skills, "skill")} removed`;
 
 /** Why a card cannot be selected, from the inventory's library. */
 export type CardStatus = "added" | "forked" | "on-disk" | "name-in-use";

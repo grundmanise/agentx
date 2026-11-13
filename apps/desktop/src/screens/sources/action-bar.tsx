@@ -9,8 +9,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
-import { AgentPickerDialog } from "#/screens/add/agent-picker-dialog.tsx";
-import { universalTitle } from "#/screens/add/projection.ts";
+import { AgentPickerDialog } from "#/screens/sources/agent-picker-dialog.tsx";
+import { universalTitle } from "#/screens/sources/projection.ts";
 
 /** How many target logos the bar shows before the rest go behind the "+n" button. */
 const SHOWN_TARGETS = 5;
