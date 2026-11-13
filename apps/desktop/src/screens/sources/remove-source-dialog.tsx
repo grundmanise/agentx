@@ -2,7 +2,7 @@
 // and when the user also chose the skills this machine installed from it, `skill remove <name>`
 // for each of them first, one after another, stopping at the first that fails. There is no Undo:
 // the skills removed are gone, and the source is added again with Add source.
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import type { LibraryEntry, SourceEvent } from "#/cli/events.gen.ts";
 import { Button } from "#/components/ui/button.tsx";
@@ -53,11 +53,13 @@ export const RemoveSourceDialog = ({
   library: LibraryEntry[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Moves focus when the dialog closes: it has no trigger to return to. */
-  onCloseAutoFocus: (event: Event) => void;
+  /** Moves focus when the dialog closes, which has no trigger to return to; `confirmed` is true after Remove. */
+  onCloseAutoFocus: (event: Event, confirmed: boolean) => void;
 }) => {
   const [withSkills, setWithSkills] = useState(false);
   const checkboxId = useId();
+  // Whether this close is the confirmation: its Remove button may unmount before focus moves.
+  const confirmed = useRef(false);
   const installed = installedFrom(source.url, library);
   // The choice lasts one confirmation: a dialog opened again starts unticked.
   const close = () => {
@@ -65,6 +67,7 @@ export const RemoveSourceDialog = ({
     onOpenChange(false);
   };
   const remove = () => {
+    confirmed.current = true;
     void removeSource(source, withSkills ? installed : []);
     close();
   };
@@ -81,7 +84,10 @@ export const RemoveSourceDialog = ({
     >
       <DialogContent
         aria-describedby={undefined}
-        onCloseAutoFocus={onCloseAutoFocus}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus(event, confirmed.current);
+          confirmed.current = false;
+        }}
       >
         <DialogHeader showCloseButton={false}>
           <DialogTitle>{`Remove ${shortSource(source.url)}?`}</DialogTitle>

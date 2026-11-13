@@ -84,11 +84,11 @@ export const OpenSource = ({
         library={library}
         open={removing}
         onOpenChange={setRemoving}
-        onCloseAutoFocus={(event) => {
-          // Back to Remove; while the removal runs, Remove is disabled and the fallback takes it.
+        onCloseAutoFocus={(event, confirmed) => {
+          // Back to Remove after Cancel; after a removal its card goes, so the fallback takes it.
           event.preventDefault();
           const button = removeButton.current;
-          (button === null || button.disabled
+          (confirmed || button === null
             ? fallbackFocus.current
             : button
           )?.focus();

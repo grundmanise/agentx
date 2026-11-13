@@ -667,6 +667,10 @@ test("Remove with its installed skills removes each skill, then the source", asy
   });
   await confirm.getByRole("button", { name: "Remove" }).click();
   await expect(confirm).toHaveCount(0);
+  // The removed source's card goes, so focus moves to the search field.
+  await expect(
+    page.getByRole("searchbox", { name: "Search all sources" })
+  ).toBeFocused();
   await expect(
     toasts(page).getByText("Source and 1 skill removed")
   ).toBeVisible();
