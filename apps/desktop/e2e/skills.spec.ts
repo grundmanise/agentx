@@ -822,7 +822,7 @@ const openStates = async (cli: MockCli, page: Page, key: string) => {
 };
 
 test.describe("settling a skill", () => {
-  test("the three banners after the displaced one each run their command", async ({
+  test("the banners after the displaced one run their command, and the one of a skill gone from its source has no button", async ({
     cli,
     page,
   }) => {
@@ -854,26 +854,20 @@ test.describe("settling a skill", () => {
     ).toBeVisible();
 
     await row(page, "gone").click();
-    cli.register(["skill", "fork", "gone"]);
-    const forkBanner = pane(page, "gone").getByRole("note", {
+    const goneBanner = pane(page, "gone").getByRole("note", {
       name: "No longer in zeta/tools",
     });
-    await expect(forkBanner).toContainText(
+    await expect(goneBanner).toContainText(
       "It seems this skill was removed from the source."
     );
-    // Fork opens the Fork dialog, whose Fork runs the command.
-    await forkBanner.getByRole("button", { name: "Fork" }).click();
-    await page
-      .getByRole("dialog", { name: "Fork gone" })
-      .getByRole("button", { name: "Fork" })
-      .click();
+    // Fork is in the action row, so the banner has no button.
+    await expect(goneBanner.getByRole("button")).toHaveCount(0);
     await expect(
-      toasts(page).getByText("Forked gone skill", { exact: true })
-    ).toBeVisible();
+      pane(page, "gone").getByRole("button", { name: "Fork" })
+    ).toHaveCount(1);
     expect(ran(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
       ["source", "add", OLD, "--json"],
-      ["skill", "fork", "gone", "--json"],
     ]);
   });
 });
