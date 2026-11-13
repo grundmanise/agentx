@@ -67,6 +67,8 @@ export interface SkillRow {
 export interface Group {
   key: string;
   label: string;
+  /** The full URL of a source's group, which its header's tooltip shows. */
+  source?: string;
   rows: SkillRow[];
 }
 
@@ -398,11 +400,15 @@ export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
   );
   return ordered.map((key) => {
     const inGroup = rows.filter((r) => r.group === key);
-    return {
+    const group: Group = {
       key,
       label: groupLabel(key),
       rows: sorted(inGroup, comparer(order)),
     };
+    if (key.startsWith(SOURCE_PREFIX)) {
+      group.source = key.slice(SOURCE_PREFIX.length);
+    }
+    return group;
   });
 };
 
