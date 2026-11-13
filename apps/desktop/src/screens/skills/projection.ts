@@ -67,10 +67,24 @@ export interface SkillRow {
 export interface Group {
   key: string;
   label: string;
+  /** The full URL of a source's group, which its header's tooltip shows. */
+  source?: string;
   rows: SkillRow[];
 }
 
-export type SortOrder = "asc" | "desc";
+/**
+ * How rows sort within a group: `default` lists the skills in an agent client first, then the
+ * disabled ones, each part A to Z; `asc` and `desc` sort by name alone, whatever the state.
+ */
+export type SortOrder = "default" | "asc" | "desc";
+
+/** The order the sort toggle steps through: default, then A to Z, then Z to A. */
+export const nextOrder = (order: SortOrder): SortOrder => {
+  if (order === "default") {
+    return "asc";
+  }
+  return order === "asc" ? "desc" : "default";
+};
 
 const GITHUB_OR_GITLAB = /github|gitlab/u;
 const SCP_URL = /^(?:[\w.-]+@)?(?<host>[\w.-]+):(?<path>.+)$/u;
@@ -358,9 +372,22 @@ const sorted = <T>(items: T[], compare: (a: T, b: T) => number): T[] => {
   return copy;
 };
 
+/** Enabled rows before disabled ones, each part A to Z. */
+const compareEnabledFirst = (a: SkillRow, b: SkillRow) =>
+  Number(b.enabled) - Number(a.enabled) || compareNames(a, b);
+
+const comparer = (order: SortOrder) => {
+  if (order === "default") {
+    return compareEnabledFirst;
+  }
+  return order === "asc"
+    ? compareNames
+    : (a: SkillRow, b: SkillRow) => compareNames(b, a);
+};
+
 /**
  * The rows in groups: PERSONAL, each source A to Z by its short form, PLUGINS, then UNMANAGED,
- * each sorted by name in `order`. A group with no row is left out.
+ * each sorted in `order`. A group with no row is left out.
  */
 export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
   const keys = [...new Set(rows.map((r) => r.group))];
@@ -372,11 +399,16 @@ export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
     (k) => keys.includes(k)
   );
   return ordered.map((key) => {
-    const byName = sorted(
-      rows.filter((r) => r.group === key),
-      order === "asc" ? compareNames : (a, b) => compareNames(b, a)
-    );
-    return { key, label: groupLabel(key), rows: byName };
+    const inGroup = rows.filter((r) => r.group === key);
+    const group: Group = {
+      key,
+      label: groupLabel(key),
+      rows: sorted(inGroup, comparer(order)),
+    };
+    if (key.startsWith(SOURCE_PREFIX)) {
+      group.source = key.slice(SOURCE_PREFIX.length);
+    }
+    return group;
   });
 };
 
@@ -530,10 +562,6 @@ export const glyphOf = (row: SkillRow): Glyph => {
   }
   return row.kind === "yours" ? "fork" : "dot";
 };
-
-/** Whether the glyph is lit: enabled, and for one of your own skills also published. */
-export const glyphLit = (row: SkillRow) =>
-  row.kind === "yours" ? row.enabled && row.published : row.enabled;
 
 /** The reads that show a skill's files; see FilesRequest in src/store/loaders.ts. */
 export interface FilesRequest {

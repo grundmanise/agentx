@@ -6,6 +6,7 @@ import {
   ACME,
   ACME_ID,
   acmeSkills,
+  configurations,
   docResults,
   installable,
   inventory,
@@ -15,7 +16,7 @@ import {
   ZETA_ID,
 } from "./fixtures/sources.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { configuration, expect, loadLines, test } from "./harness/cli.ts";
 
 const launchLines = [
   ["version", "--json"],
@@ -79,8 +80,8 @@ const lastSearch = (cli: MockCli) => {
 };
 
 /** Opens the Sources screen on the fixture machine and waits for acme's cards. */
-const openSources = async (cli: MockCli, page: Page) => {
-  cli.onServeStart({ events: [inventory] });
+const openSources = async (cli: MockCli, page: Page, first = inventory) => {
+  cli.onServeStart({ events: [first] });
   cli.register(["source", "list"], { events: sources });
   cli.register(["source", "skills", ACME_ID], { events: acmeSkills });
   cli.register(["source", "skills", ZETA_ID], { events: [] });
@@ -283,6 +284,95 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   expect(commandLines(cli)).toContain(
     `skill add ${ACME} --name artifacts --name docx --to claude-code`
   );
+});
+
+test("many agents: five logos and +n, Choose agents toggles a target, two-letter monograms", async ({
+  cli,
+  page,
+}) => {
+  const off = { enabled: false };
+  await openSources(cli, page, {
+    ...inventory,
+    configurations: [
+      ...configurations,
+      configuration("kilo", { ...off, name: "Kilo Code" }),
+      configuration("aider", { ...off, name: "Aider" }),
+      configuration("amp", { ...off, name: "Amp" }),
+      configuration("cline", { ...off, name: "Cline" }),
+      configuration("zed", { ...off, name: "Zed" }),
+    ],
+  });
+  const add = cli.register(
+    [
+      "skill",
+      "add",
+      ACME,
+      "--name",
+      "docx",
+      "--to",
+      "claude-code",
+      "--to",
+      "cursor",
+      "--to",
+      "zed",
+    ],
+    { events: [{ name: "docx", type: "library_skill" }] }
+  );
+  await card(page, "docx").click();
+  // The chosen agents first, then the rest, five in all, with Universal after the chosen ones; the other three behind +3, last.
+  expect(await names(bar(page).getByRole("group", { name: "Add to" }))).toEqual(
+    [
+      "Claude Code",
+      "Cursor",
+      "Universal",
+      "Windsurf",
+      "Kilo Code",
+      "Aider",
+      "3 more agents",
+    ]
+  );
+  // A client with no bundled logo draws two letters: its initials, or a one-word name's first two.
+  await expect(target(page, "Kilo Code").locator("img")).toHaveAttribute(
+    "src",
+    /%3EKC%3C/u
+  );
+  await expect(target(page, "Aider").locator("img")).toHaveAttribute(
+    "src",
+    /%3EAi%3C/u
+  );
+  await target(page, "Kilo Code").hover();
+  await expect(page.getByRole("tooltip")).toHaveText("Kilo Code");
+
+  await target(page, "3 more agents").click();
+  const picker = page.getByRole("dialog", { name: "Choose agents" });
+  const agents = picker.getByRole("list", { name: "Agents" });
+  expect(
+    await agents
+      .getByRole("checkbox")
+      .evaluateAll((boxes) => boxes.map((b) => b.getAttribute("aria-label")))
+  ).toEqual([
+    "Aider",
+    "Amp",
+    "Claude Code",
+    "Cline",
+    "Cursor",
+    "Kilo Code",
+    "Windsurf",
+    "Zed",
+  ]);
+  await expect(picker).toContainText("2 agents");
+  await picker.getByRole("searchbox", { name: "Search agents" }).fill("ze");
+  await agents.getByText("Zed", { exact: true }).click();
+  await expect(agents.getByRole("checkbox", { name: "Zed" })).toBeChecked();
+  await expect(picker).toContainText("3 agents");
+  await picker.getByRole("button", { name: "Done" }).click();
+  await expect(picker).toHaveCount(0);
+
+  // Zed is chosen, so it moves into the bar.
+  await expect(target(page, "Zed")).toHaveAttribute("aria-pressed", "true");
+  await bar(page).getByRole("button", { name: "Add 1" }).click();
+  await add.started;
+  await expect(toasts(page).getByText("Added 1 skill")).toBeVisible();
 });
 
 test("Select all, two deselected, agents as enabled: --all with --except and no --to", async ({

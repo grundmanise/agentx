@@ -518,6 +518,9 @@ export const SourcesScreen = () => {
           universal={universal}
           targets={chosen}
           onToggleTarget={toggleTarget}
+          onClearTargets={() => {
+            setTargets([]);
+          }}
           adding={adding}
           progress={progress}
           onAdd={() => {
