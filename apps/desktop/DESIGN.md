@@ -67,6 +67,21 @@ Hues:
 | `white`      | `#ffffff` |
 | `black`      | `#000000` |
 
+Monogram tints, one hue each (§6 "Agent client logo chip, monogram"): a dark tint (`-900`, HSL lightness 22%, saturation 40%) behind a light letter (`-200`, lightness 80%, saturation 75%), ten hues spread round the colour wheel.
+
+| Hue      | Dark                   | Light                  |
+| -------- | ---------------------- | ---------------------- |
+| `red`    | `red-900` `#4f2222`    | `red-200` `#f2a6a6`    |
+| `orange` | `orange-900` `#4f3422` | `orange-200` `#f2c4a6` |
+| `amber`  | `amber-900` `#4f4122`  | `amber-200` `#f2dba6`  |
+| `lime`   | `lime-900` `#414f22`   | `lime-200` `#dbf2a6`   |
+| `green`  | `green-900` `#224f31`  | `green-200` `#a6f2bf`  |
+| `teal`   | `teal-900` `#224f49`   | `teal-200` `#a6f2e8`   |
+| `sky`    | `sky-900` `#22414f`    | `sky-200` `#a6dbf2`    |
+| `blue`   | `blue-900` `#22314f`   | `blue-200` `#a6bff2`   |
+| `violet` | `violet-900` `#31224f` | `violet-200` `#bfa6f2` |
+| `pink`   | `pink-900` `#4f2240`   | `pink-200` `#f2a6d9`   |
+
 Alpha is written as `<primitive>/<percent>` and resolves to `rgba` of that primitive (e.g. `lime-400/12` → `rgba(212,255,79,.12)`, `black/55` → `rgba(0,0,0,.55)`).
 
 ### 2.2 Semantic tokens
@@ -250,6 +265,28 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `agent-chip.on-border` | `lime-400/35` |  |
 | `agent-chip.hover-border` | `gray-700` |  |
 | `agent-chip.text` | `gray-50` | Agent client name |
+| `monogram.0-bg` | `red-900` | Monogram tint, picked by a hash of the client name |
+| `monogram.0-text` | `red-200` | Monogram letters |
+| `monogram.1-bg` | `orange-900` |  |
+| `monogram.1-text` | `orange-200` |  |
+| `monogram.2-bg` | `amber-900` |  |
+| `monogram.2-text` | `amber-200` |  |
+| `monogram.3-bg` | `lime-900` |  |
+| `monogram.3-text` | `lime-200` |  |
+| `monogram.4-bg` | `green-900` |  |
+| `monogram.4-text` | `green-200` |  |
+| `monogram.5-bg` | `teal-900` |  |
+| `monogram.5-text` | `teal-200` |  |
+| `monogram.6-bg` | `sky-900` |  |
+| `monogram.6-text` | `sky-200` |  |
+| `monogram.7-bg` | `blue-900` |  |
+| `monogram.7-text` | `blue-200` |  |
+| `monogram.8-bg` | `violet-900` |  |
+| `monogram.8-text` | `violet-200` |  |
+| `monogram.9-bg` | `pink-900` |  |
+| `monogram.9-text` | `pink-200` |  |
+| `agent-picker.badge-bg` | `accent.primary` | Count of chosen targets the Add skills bar hides, on its "+n" button (digits `on-accent`) |
+| `agent-picker.row-hover` | `gray-880` | Row hover in the Choose agents dialog |
 
 #### Cards and banners
 
@@ -537,6 +574,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `segmented.padding-x` | 10–12 |  |  |
 | `filter.height` | 30 | `h-filter` | Filter button and agent client chip |
 | `filter.badge` | 16 | `size-filter-badge` | Count badge |
+| `agent-picker.badge` | 16 | `size-agent-picker-badge` | Count badge on the Add skills bar's "+n" button |
 | `agent-chip.height` | 44 | `h-agent-chip` | Agent client toggle chip |
 | `agent-chip.padding` | 0 8 0 7 | `py-0 pr-agent-chip-right pl-agent-chip-left` |  |
 | `agent-chip.gap` | 10 | `gap-agent-chip` | Logo → name → switch |
@@ -611,6 +649,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.top` | 112 | `top-palette` | From the window top |
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
 | `adopt.list-max-height` | 280 | `max-h-adopt-list` | The adopt dialog's list of skills; it scrolls past it |
+| `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The Choose agents dialog's list; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
 | `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
@@ -663,6 +702,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `segmented.radius` | 9999 | Track and segments |
 | `agent-chip.radius` | 9999 | Agent client toggle chip |
 | `logo.radius` | 50% | Agent client logo |
+| `agent-picker.row-radius` | 10 | Row of the Choose agents dialog |
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
 | `shell.status-radius` | 9999 | Account remote status |
@@ -756,6 +796,12 @@ The Universal chip, on, opens the Remove dialog: a universal client reads the li
 - Order: the chips that are on, then the rest by the popularity of the agent client (`src/lib/agent-popularity.ts`), the clients it does not rank by name. Universal stands where its most used client would. The order is fixed when the pane opens, so a chip stays in place when it is toggled.
 - A machine can have dozens of agent configurations, so the section shows two rows of chips, measured at the pane's width, and a small ghost button in the second row, centred on the chips, that shows the rest and hides them again. Every chip that is on, or was on since the pane opened, stays in view, in more rows when two cannot hold them. No button when every chip fits in two rows.
 
+### Agent picker (Add skills bar)
+
+The install targets in the floating bar of the Add skills screen are round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the rest, each group in inventory order. The order is fixed when the bar opens and again when the dialog closes, so a logo stays in place while it is toggled. With more than six configurations that take a placement, a small secondary button "+n" follows the fifth logo, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo, and each member of the Universal stack, shows the client's name in a Tooltip; the Universal toggle keeps its explanation as its accessible description.
+
+The "+n" button opens Choose agents, a dialog (§6 "Dialog") with a search field (§6 "Inputs") that filters by name, then every configuration that takes a placement, sorted by name, in a list that scrolls past `agent-picker.list-max-height`. A row is the whole hit target, `agent-picker.row-radius`, hover `agent-picker.row-hover`: a 28px logo, the name in `type.body` `text.primary` over the configuration's path in `type.technical-sm` `text.caption`, and the round checkbox (§6 "Checkbox (popover)") at the right. A row toggles the same targets as the bar. The footer counts the chosen targets in `type.secondary` `text.muted`, then a ghost Clear, which unchecks them all, and a primary Done, which closes the dialog.
+
 ### Checkbox (popover)
 
 16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark. In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
@@ -770,14 +816,14 @@ Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segme
 
 ### Agent client logo chip
 
-Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo carries the client's name as its `title`.
+Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo names its client on hover: as its `title`, or, in the Add skills bar and the Choose agents dialog, in the Tooltip (§6 "Tooltip"), which opens at once.
 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
 
 ### Agent client logo chip, monogram
 
-A client with no bundled logo shows the first letter of its name in `type.pill`, `on-accent` on `logo.bg`, drawn as an image like every other logo.
+A client with no bundled logo shows two letters of its name, drawn as an image like every other logo: the initials of its first two words when the name has more than one (words split at spaces, hyphens and underscores), or its first letter and the next for one word. They are semibold, on a round tint that fills the logo's box with no padding: `monogram.N.bg` behind, `monogram.N.text` for the letters, read from the tokens as the page has them, where N comes from a hash of the name, so a client keeps its hue everywhere and on every launch. Ten hues tell more clients apart than one white tile with a letter did, and the dark tint sits with the app's surfaces where a white tile would glare.
 
 ### Skill glyph (16px, leading the row)
 
