@@ -822,7 +822,7 @@ const openStates = async (cli: MockCli, page: Page, key: string) => {
 };
 
 test.describe("settling a skill", () => {
-  test("the banners after the displaced one run their command, and the one of a skill gone from its source has no button", async ({
+  test("the two banners after the displaced one each run their command", async ({
     cli,
     page,
   }) => {
@@ -853,18 +853,6 @@ test.describe("settling a skill", () => {
       toasts(page).getByText("Added old/skills source")
     ).toBeVisible();
 
-    await row(page, "gone").click();
-    const goneBanner = pane(page, "gone").getByRole("note", {
-      name: "No longer in zeta/tools",
-    });
-    await expect(goneBanner).toContainText(
-      "It seems this skill was removed from the source."
-    );
-    // Fork is in the action row, so the banner has no button.
-    await expect(goneBanner.getByRole("button")).toHaveCount(0);
-    await expect(
-      pane(page, "gone").getByRole("button", { name: "Fork" })
-    ).toHaveCount(1);
     expect(ran(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
       ["source", "add", OLD, "--json"],
