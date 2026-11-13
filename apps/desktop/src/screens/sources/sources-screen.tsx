@@ -6,14 +6,16 @@ import type {
   ProgressEvent,
   SearchResult,
   SourceEvent,
+  SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { SearchIcon } from "#/components/icons/search.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { skillNamesOf } from "#/lib/problem-text.ts";
-import { ActionBar } from "#/screens/add/action-bar.tsx";
-import { AddSourceDialog } from "#/screens/add/add-source-dialog.tsx";
+import { ActionBar } from "#/screens/sources/action-bar.tsx";
+import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
+import { OpenSource } from "#/screens/sources/open-source.tsx";
 import {
   count,
   directConfigurations,
@@ -26,15 +28,17 @@ import {
   sourcePills,
   universalConfigurations,
   YOUR_SKILLS,
-} from "#/screens/add/projection.ts";
+} from "#/screens/sources/projection.ts";
 import type {
   AddPlan,
   CardGroup,
   SkillCard,
-} from "#/screens/add/projection.ts";
-import { SkillCards } from "#/screens/add/skill-cards.tsx";
-import { SourceRow } from "#/screens/add/source-row.tsx";
-import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
+  SourcePill,
+} from "#/screens/sources/projection.ts";
+import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
+import { SkillCards } from "#/screens/sources/skill-cards.tsx";
+import { SourceRow } from "#/screens/sources/source-row.tsx";
+import { useFetchedListings } from "#/screens/sources/use-fetched-listings.ts";
 import { search } from "#/store/feed.ts";
 import {
   loadInstallable,
@@ -47,8 +51,6 @@ import { useAppStore } from "#/store/store.ts";
 
 /** The pending label of the install the action bar runs. */
 export const ADD_LABEL = "add skills";
-/** The pending label of the refresh of the active source. */
-export const REFRESH_LABEL = "refresh source";
 /** How long the search field waits after a change before it asks serve. */
 const SEARCH_DEBOUNCE_MS = 150;
 
@@ -78,14 +80,67 @@ const loadingLabel = (key: string) =>
       : ["source", "skills", key]
   );
 
-/** A fetch of the active source: `source fetch <id>`, then its listing again. */
-const refreshSource = async (id: string) => {
-  const outcome = await runCommand(["source", "fetch", id], {
-    label: REFRESH_LABEL,
-  });
-  if (outcome.exitCode === 0) {
-    await loadListing(id);
+/** Whether the pill that was open is gone, its source removed. */
+const isGone = (open: string | undefined, pills: SourcePill[]) =>
+  open !== undefined && !pills.some((p) => p.key === open);
+
+/**
+ * The open pill: the one the user opened, or the first one, also once the one opened was removed.
+ * `onGone` runs when the pill open at the last render is gone, its source removed.
+ */
+const useOpenPill = (
+  pills: SourcePill[],
+  active: string | undefined,
+  onGone: () => void
+) => {
+  const [lastOpen, setLastOpen] = useState<string | undefined>();
+  const pill = pills.find((p) => p.key === active) ?? pills[0];
+  if (isGone(lastOpen, pills)) {
+    onGone();
   }
+  if (pill?.key !== lastOpen) {
+    setLastOpen(pill?.key);
+  }
+  return pill;
+};
+
+/**
+ * Loads the open pill when the user did not open it, such as the first one, unless
+ * `useFetchedListings` reads its listing: Personal, or a source never fetched.
+ */
+const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
+  const key = pill?.key;
+  const fetched = pill?.lastFetched;
+  useEffect(() => {
+    if (
+      key !== undefined &&
+      key !== opened &&
+      (key === YOUR_SKILLS || fetched === undefined)
+    ) {
+      void loadPill(key);
+    }
+  }, [key, opened, fetched]);
+};
+
+/** The pills, with the source Add source just added until the Sources slice lists it. */
+const usePills = (
+  sources: SourceEvent[],
+  listings: Record<string, SourceSkillEvent[]>
+) => {
+  const [justAdded, setJustAdded] = useState<SourceEvent | undefined>();
+  // Once the slice lists it, the slice alone says whether it is there.
+  if (justAdded !== undefined && sources.some((s) => s.id === justAdded.id)) {
+    setJustAdded(undefined);
+  }
+  const pills = useMemo(
+    () =>
+      sourcePills(
+        justAdded === undefined ? sources : [...sources, justAdded],
+        listings
+      ),
+    [sources, justAdded, listings]
+  );
+  return { pills, setJustAdded };
 };
 
 /** The selection without the cards `drop` names. */
@@ -100,11 +155,12 @@ const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
 };
 
 /**
- * The Add skills screen: the sources as pills, the skills of the open one as cards to select,
- * search across every source through serve, and the floating bar that installs the selection
- * with `skill add`. Every list comes from the CLI: the app never filters a listing itself.
+ * The Sources screen, under Skills: the sources as pills, the card of the open one with its facts,
+ * Refresh and Remove, its skills as cards to select, search across every source through serve,
+ * and the floating bar that installs the selection with `skill add`. Every list comes from the
+ * CLI: the app never filters a listing itself.
  */
-export const AddScreen = () => {
+export const SourcesScreen = () => {
   const sources = useAppStore((s) => s.sources);
   const listings = useAppStore((s) => s.listings);
   const installable = useAppStore((s) => s.installable);
@@ -112,12 +168,9 @@ export const AddScreen = () => {
   const configurations =
     useAppStore((s) => s.inventory?.configurations) ?? noConfigurations;
   const adding = usePending(ADD_LABEL);
-  const refreshing = usePending(REFRESH_LABEL);
 
   // The pill the user opened; before any, the first pill is open.
   const [active, setActive] = useState<string | undefined>();
-  // The source Add source just added, until the Sources slice lists it.
-  const [justAdded, setJustAdded] = useState<SourceEvent | undefined>();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Found | undefined>();
   const [selection, setSelection] = useState<Selection>(noSelection);
@@ -126,10 +179,11 @@ export const AddScreen = () => {
   const [targets, setTargets] = useState<string[] | undefined>();
   const [progress, setProgress] = useState<ProgressEvent | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   // The pill opened last, "" before any, for a load that finishes after the user moved on.
   const opened = useRef("");
+  // Where focus goes when the Remove dialog closes and Remove cannot take it.
+  const searchField = useRef<HTMLInputElement>(null);
 
   // The sources are read again when the screen opens, and the fetch labels keep time.
   useEffect(() => {
@@ -142,26 +196,20 @@ export const AddScreen = () => {
     };
   }, []);
 
-  const pills = useMemo(
-    () =>
-      sourcePills(
-        justAdded !== undefined && !sources.some((s) => s.id === justAdded.id)
-          ? [...sources, justAdded]
-          : sources
-      ),
-    [sources, justAdded]
-  );
-  const activePill =
-    pills.find((p) => p.key === active) ??
-    (active === undefined ? pills[0] : undefined);
+  useFetchedListings(sources);
+
+  const { pills, setJustAdded } = usePills(sources, listings);
+  // A source removed while open, opened or first, takes its selection with it; the first pill opens.
+  const activePill = useOpenPill(pills, active, () => {
+    // A late preselection of a source just added must not land on the next one.
+    opened.current = "";
+    setActive(undefined);
+    setSelection(noSelection);
+    setAllMode(false);
+  });
   const activeKey = activePill?.key;
 
-  // A pill the user did not open, the first one, loads itself.
-  useEffect(() => {
-    if (activeKey !== undefined && activeKey !== active) {
-      void loadPill(activeKey);
-    }
-  }, [activeKey, active]);
+  useLoadUnopened(activePill, active);
 
   /** Makes `key` the open pill, with nothing selected and no search. */
   const select = (key: string) => {
@@ -217,9 +265,9 @@ export const AddScreen = () => {
             source: activePill.url ?? YOUR_SKILLS,
           },
         ]);
-  const selectable = groups
-    .flatMap((g) => g.cards)
-    .filter((c) => c.status === undefined);
+  const allCards = groups.flatMap((g) => g.cards);
+  const selectable = allCards.filter((c) => c.status === undefined);
+  const selectedCount = selectable.filter((c) => selection.has(c.key)).length;
   const loading = usePending(
     activeKey === undefined ? "" : loadingLabel(activeKey)
   );
@@ -362,17 +410,6 @@ export const AddScreen = () => {
     setProgress(undefined);
   };
 
-  const refresh = () => {
-    if (activePill === undefined) {
-      return;
-    }
-    if (activePill.key === YOUR_SKILLS) {
-      void loadInstallable();
-    } else {
-      void refreshSource(activePill.key);
-    }
-  };
-
   /** A source just added opens with every selectable card selected, once its listing arrives. */
   const onSourceAdded = async (source: SourceEvent) => {
     setJustAdded(source);
@@ -416,25 +453,15 @@ export const AddScreen = () => {
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="pt-page-top px-page pb-page gap-page-title flex min-h-0 flex-1 flex-col overflow-auto">
         <div className="flex items-start justify-between gap-4">
-          <h1 className="type-page-title text-text-primary m-0">Add skills</h1>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setDialogOpen(true);
-              }}
-            >
-              Add source
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setCreating(true);
-              }}
-            >
-              Create skill
-            </Button>
-          </div>
+          <h1 className="type-page-title text-text-primary m-0">Sources</h1>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setDialogOpen(true);
+            }}
+          >
+            Add source
+          </Button>
         </div>
         <div className="text-input-placeholder relative flex items-center">
           <span className="pointer-events-none absolute left-3.5 flex">
@@ -443,26 +470,36 @@ export const AddScreen = () => {
           <Input
             kind="search"
             type="search"
-            aria-label="Search every source"
-            placeholder="Search every source"
+            ref={searchField}
+            aria-label="Search all sources"
+            placeholder="Search all sources"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
             }}
           />
         </div>
-        <SourceRow
-          pills={pills}
-          active={activeKey}
-          now={now}
-          onOpen={open}
-          canSelectAll={selectable.some((c) => !selection.has(c.key))}
-          onSelectAll={selectAll}
-          canClear={selection.size > 0}
-          onClear={clear}
-          refreshing={refreshing}
-          onRefresh={refresh}
-        />
+        <SourceRow pills={pills} active={activeKey} now={now} onOpen={open} />
+        {/* The card of the open source; a search looks across every source, so it hides. */}
+        {activePill !== undefined && query.trim() === "" && (
+          <OpenSource
+            // A new source gets a new card, so a Remove dialog open on the old one closes.
+            key={activePill.key}
+            pill={activePill}
+            library={library}
+            now={now}
+            fallbackFocus={searchField}
+          />
+        )}
+        {allCards.length > 0 && (
+          <SelectAllRow
+            selected={selectedCount}
+            total={selectable.length}
+            added={allCards.length - selectable.length}
+            onSelectAll={selectAll}
+            onClear={clear}
+          />
+        )}
         {emptyText === undefined ? (
           <SkillCards
             groups={groups.filter((g) => g.cards.length > 0)}
@@ -485,6 +522,9 @@ export const AddScreen = () => {
           universal={universal}
           targets={chosen}
           onToggleTarget={toggleTarget}
+          onClearTargets={() => {
+            setTargets([]);
+          }}
           adding={adding}
           progress={progress}
           onAdd={() => {
@@ -502,7 +542,6 @@ export const AddScreen = () => {
           void onSourceAdded(source);
         }}
       />
-      <CreateSkillDialog open={creating} onOpenChange={setCreating} />
     </div>
   );
 };

@@ -16,7 +16,7 @@ import {
 import { Input } from "#/components/ui/input.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
-import { count, YOUR_SKILLS_LABEL } from "#/screens/add/projection.ts";
+import { count, YOUR_SKILLS_LABEL } from "#/screens/sources/projection.ts";
 import { runCommand, usePending } from "#/store/runner.ts";
 import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";

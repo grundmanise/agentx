@@ -11,7 +11,7 @@ test("opens on Skills and lists the screens in sidebar order", async ({
   const nav = main(page);
   await expect(nav.getByRole("link")).toHaveText([
     "Skills",
-    "Add",
+    "Sources",
     "Agents",
     "MCP servers",
     "Plugins",
@@ -37,18 +37,30 @@ test("opens on Skills and lists the screens in sidebar order", async ({
   ).toBe(true);
 });
 
-test("moves between screens from the sidebar", async ({ page }) => {
+test("moves between screens from the sidebar, Sources nested under Skills", async ({
+  page,
+}) => {
   await page.goto("/");
-  await main(page).getByRole("link", { name: "Add" }).click();
-  await expect(page.getByRole("heading", { name: "Add skills" })).toBeVisible();
-  await expect(main(page).getByRole("link", { name: "Add" })).toHaveAttribute(
-    "aria-current",
-    "page"
-  );
+  await main(page).getByRole("link", { name: "Sources" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Sources" })
+  ).toBeVisible();
+  await expect(page).toHaveURL(/#\/sources$/u);
+  await expect(
+    main(page).getByRole("link", { name: "Sources" })
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    main(page).getByRole("link", { name: "Skills" })
+  ).not.toHaveAttribute("aria-current", "page");
 });
 
 test("keeps Skills active on a screen nested under it", async ({ page }) => {
   await page.goto("/#/skills/review/pdf");
+  await expect(
+    main(page).getByRole("link", { name: "Skills" })
+  ).toHaveAttribute("aria-current", "page");
+  // A skill named like a screen is a skill.
+  await page.goto("/#/skills/sources");
   await expect(
     main(page).getByRole("link", { name: "Skills" })
   ).toHaveAttribute("aria-current", "page");

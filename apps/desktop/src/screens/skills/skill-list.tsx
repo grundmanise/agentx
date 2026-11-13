@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 
+import { SOURCES_PATH } from "#/app/screens.ts";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
@@ -108,13 +109,37 @@ const CheckUpdates = () => {
   );
 };
 
+/**
+ * A group's caption. A source's group shows the source's full URL in a tooltip, as its caption
+ * gives only the short form.
+ */
+const GroupLabel = ({ label, source }: { label: string; source?: string }) => {
+  const caption = (
+    <span className="type-caption text-group-label">{label}</span>
+  );
+  if (source === undefined) {
+    return caption;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{caption}</TooltipTrigger>
+      <TooltipContent side="top" align="start">
+        {source}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
 const GroupHeader = ({
   label,
+  source,
   count,
   first,
   action,
 }: {
   label: string;
+  /** The full URL of a source's group, which the tooltip on its label shows. */
+  source?: string;
   count: number;
   first: boolean;
   /** A control at the header's right end, such as the Unmanaged group's Adopt all. */
@@ -128,7 +153,7 @@ const GroupHeader = ({
     }
   >
     <span className="gap-group flex min-w-0 flex-1 items-baseline">
-      <span className="type-caption text-group-label">{label}</span>
+      <GroupLabel label={label} source={source} />
       <span className="type-technical-sm text-group-count">{count}</span>
     </span>
     {action}
@@ -374,6 +399,7 @@ const SkillGroups = ({
                 >
                   <GroupHeader
                     label={group.label}
+                    source={group.source}
                     count={group.rows.length}
                     first={header.item.first}
                     action={
@@ -425,7 +451,7 @@ const AddSkills = () => {
       <SplitButton
         size="sm"
         onClick={() => {
-          void navigate("/add");
+          void navigate(SOURCES_PATH);
         }}
         menuLabel="More add actions"
         menu={
