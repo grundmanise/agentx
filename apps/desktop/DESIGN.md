@@ -163,7 +163,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | --- | --- | --- |
 | `pill.update-bg` | `accent.primary` | Update pill |
 | `pill.update-text` | `on-accent` |  |
-| `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, a source's pin |
+| `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, Read-only |
 | `pill.neutral-hover` | `gray-800` |  |
 | `pill.neutral-text` | `gray-200` |  |
 | `pill.removed-bg` | `red-400/12` | Removed-from-source pill |
@@ -447,7 +447,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
 | `type.settings-label` | sans | 14 | 500 |  |  |  | Settings section label (`text.primary`); the line under it is `type.secondary` in `text.muted` |
 | `type.plugin-name` | sans | 17 | 600 |  | -0.01em |  | Plugin name on a plugin card |
-| `type.version-pill` | mono | 12 | 500 |  |  |  | A plugin's version pill, a source's pin |
+| `type.version-pill` | mono | 12 | 500 |  |  |  | A plugin's version pill |
 
 Text wrapping: `text-wrap:pretty` on multi-line text. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
@@ -739,7 +739,7 @@ Two buttons side by side: `button.gap`, primary on the right.
 
 ### Pills (status)
 
-Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version and a source's pin take `type.version-pill`.
+Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version takes `type.version-pill`.
 
 - Not published: `pill.neutral-*`. The only status pill a skill row carries.
 - Disabled (plugin): `pill.disabled-*`.
@@ -1019,7 +1019,7 @@ The nav items in sidebar order, `shell.nav-gap` apart. A screen nested under ano
 The Sources screen (`src/screens/sources`), under Skills: the serif page title with Add source, the search field, the source pills, the card of the open source, then the select-all row and the skill cards.
 
 - A source pill (`source-pill.*`, `pill.radius`) holds the attention dot of a stale source, the source's short name, and its skill count in `type.technical-sm` (`source-pill.count`, `source-pill.active-count` on the active pill) once it is known.
-- The card of the open source: `source-card.bg`, a 1px `source-card.border`, `source-card.radius`. Its top row is a 36px owner tile (`source-card.tile-*`, `source-card.tile-radius`, the owner's initial in `type.source-name`), the name in `type.source-name`, which opens the repository in the browser, then a neutral pill for each limit (its pin in `type.version-pill`, Read-only); at its right, Refresh (secondary) and Remove (ghost), `button.gap` apart. Under it, after a 1px `source-card.divider` rule, a strip of four facts, each a `type.secondary` `source-card.fact-label` label over a `type.technical-sm` value in `source-card.fact-value`, a never-fetched source's Fetched in `tone.attention.fg`. The card shows tags only for limits: a source you can write to has none. It hides while a search runs, since a search looks across every source; Personal's card has no Remove, since Settings manages the account remote.
+- The card of the open source: `source-card.bg`, a 1px `source-card.border`, `source-card.radius`. Its top row is a 36px owner tile (`source-card.tile-*`, `source-card.tile-radius`, the owner's initial in `type.source-name`), the name in `type.source-name`, which opens the repository in the browser, then a neutral Read-only pill when access is limited, and under them the full URL with its `#pin` in `type.technical-sm` `text.muted`; at its right, Refresh (secondary) and Remove (ghost), `button.gap` apart. Under it, after a 1px `source-card.divider` rule, a strip of four facts, each a `type.secondary` `source-card.fact-label` label over a `type.technical-sm` value in `source-card.fact-value`, a never-fetched source's Fetched in `tone.attention.fg`. The card shows tags only for limits: a source you can write to has none. It hides while a search runs, since a search looks across every source; Personal's card has no Remove, since Settings manages the account remote.
 - The select-all row: one checkbox (§6 "Checkbox (popover)"), checked, mixed or not as the selection is, its label in `type.secondary` `text.secondary` counting the selection; at the right, how many skills this machine already has in `type.secondary` `text.hint`.
 - Remove opens a dialog (§6 "Dialog") with no line under its title. When this machine has skills from the source, a checkbox offers to remove them too, unticked, their names listed under it in `type.technical` `text.muted`; the confirm is a danger button.
 

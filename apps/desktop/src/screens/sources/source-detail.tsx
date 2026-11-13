@@ -1,6 +1,7 @@
 // The card of the open source on the Sources screen (DESIGN.md §6 "Source card"): its owner's
-// tile, its name, which opens the repository in the browser, a tag for each limit (its pin,
-// read-only access), Refresh and Remove, and a strip of facts from `source list` and its listing.
+// tile, its name, which opens the repository in the browser, a Read-only tag when access is
+// limited, its full URL with its pin beneath, Refresh and Remove, and a strip of facts from
+// `source list` and its listing.
 // The card of Personal, the account remote, has no Remove: Settings manages the account remote.
 import type { Ref } from "react";
 
@@ -17,6 +18,10 @@ import {
   ownerInitial,
   webUrl,
 } from "#/screens/sources/projection.ts";
+
+/** The source as `source add` takes it: its URL, with `#<pin>` when pinned. */
+const fullSource = (source: SourceEvent) =>
+  source.pin === undefined ? source.url : `${source.url}#${source.pin}`;
 
 /** The value of a fact the CLI does not report. */
 const NONE = "–";
@@ -108,12 +113,16 @@ export const SourceDetail = ({
       >
         {ownerInitial(source.url)}
       </span>
-      <div className="flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-2">
-        <SourceName url={source.url} />
-        {source.pin !== undefined && (
-          <Pill tone="neutral" face="mono">{`#${source.pin}`}</Pill>
-        )}
-        {source.access === "read-only" && <Pill tone="neutral">Read-only</Pill>}
+      <div className="flex min-h-9 min-w-0 flex-1 flex-col justify-center gap-0.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <SourceName url={source.url} />
+          {source.access === "read-only" && (
+            <Pill tone="neutral">Read-only</Pill>
+          )}
+        </div>
+        <p className="type-technical-sm text-text-muted m-0 truncate">
+          {fullSource(source)}
+        </p>
       </div>
       <div className="gap-button flex flex-none items-center">
         <Button

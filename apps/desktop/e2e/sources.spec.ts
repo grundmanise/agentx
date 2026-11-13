@@ -124,13 +124,15 @@ test("the sources row: one pill per shared source, Personal, the counts and the 
   expect(commandLines(cli)).toEqual([`source skills ${ACME_ID}`]);
 });
 
-test("the open source's card: its name links to the repository, its limits as tags, and its facts", async ({
+test("the open source's card: its name links to the repository, its full URL, a Read-only tag, and its facts", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
   const name = details(page).getByRole("link", { name: "acme/skills" });
-  await expect(details(page).getByText("#v2", { exact: true })).toBeVisible();
+  await expect(
+    details(page).getByText(`${ACME}#v2`, { exact: true })
+  ).toBeVisible();
   await expect(
     details(page).getByText("Read-only", { exact: true })
   ).toBeVisible();
