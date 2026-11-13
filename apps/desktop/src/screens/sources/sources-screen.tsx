@@ -201,6 +201,8 @@ export const SourcesScreen = () => {
   const { pills, setJustAdded } = usePills(sources, listings);
   // A source removed while open, opened or first, takes its selection with it; the first pill opens.
   const activePill = useOpenPill(pills, active, () => {
+    // A late preselection of a source just added must not land on the next one.
+    opened.current = "";
     setActive(undefined);
     setSelection(noSelection);
     setAllMode(false);
@@ -481,6 +483,8 @@ export const SourcesScreen = () => {
         {/* The card of the open source; a search looks across every source, so it hides. */}
         {activePill !== undefined && query.trim() === "" && (
           <OpenSource
+            // A new source gets a new card, so a Remove dialog open on the old one closes.
+            key={activePill.key}
             pill={activePill}
             library={library}
             now={now}

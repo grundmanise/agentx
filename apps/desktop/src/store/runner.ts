@@ -78,6 +78,11 @@ export interface CommandOptions {
    * the skill the command is for; the name of every skill the inventory holds is kept anyway.
    */
   keep?: readonly string[];
+  /**
+   * What Retry runs after "Another agentx command is running", for a command that is one step of
+   * a longer sequence; by default it runs this command again.
+   */
+  retry?: () => void;
 }
 
 /** An activity entry's tone and words. */
@@ -357,9 +362,15 @@ export const runCommand = async (
   if (!read) {
     void refresh();
   }
-  report(args, options, outcome, () => {
-    void runCommand(args, options);
-  });
+  report(
+    args,
+    options,
+    outcome,
+    options.retry ??
+      (() => {
+        void runCommand(args, options);
+      })
+  );
   for (const handle of finishedListeners) {
     handle({ ...outcome, args, command: commandOf(args), read });
   }

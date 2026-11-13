@@ -26,19 +26,31 @@ import { runCommand } from "#/store/runner.ts";
 /** The pending label of the removal of the source `id`, with its skills when chosen. */
 export const removeSourceLabel = (id: string) => `remove source ${id}`;
 
-/** Removes `skills`, then the source; the toast names what went. */
-const removeSource = async (source: SourceEvent, skills: string[]) => {
+/**
+ * Removes `skills`, then the source; the toast names what went, `total` skills in all. When
+ * another agentx command holds the lock, Retry resumes from the step that met it.
+ */
+const removeSource = async (
+  source: SourceEvent,
+  skills: string[],
+  total = skills.length
+) => {
   const label = removeSourceLabel(source.id);
-  for (const name of skills) {
+  for (const [i, name] of skills.entries()) {
     // oxlint-disable-next-line no-await-in-loop -- one command at a time, in order
-    const outcome = await runCommand(["skill", "remove", name], { label });
+    const outcome = await runCommand(["skill", "remove", name], {
+      label,
+      retry: () => {
+        void removeSource(source, skills.slice(i), total);
+      },
+    });
     if (outcome.exitCode !== 0) {
       return;
     }
   }
   await runCommand(["source", "remove", source.url], {
     label,
-    success: removedText(skills.length),
+    success: removedText(total),
   });
 };
 
