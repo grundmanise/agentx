@@ -269,15 +269,15 @@ test("many agents: five logos and +n, Choose agents toggles a target, two-letter
     { events: [{ name: "docx", type: "library_skill" }] }
   );
   await card(page, "docx").click();
-  // The chosen agents first, then the rest, five in all, then Universal; the other three behind +3, last.
+  // The chosen agents first, then the rest, five in all, with Universal after the chosen ones; the other three behind +3, last.
   expect(await names(bar(page).getByRole("group", { name: "Add to" }))).toEqual(
     [
       "Claude Code",
       "Cursor",
+      "Universal",
       "Windsurf",
       "Kilo Code",
       "Aider",
-      "Universal",
       "3 more agents",
     ]
   );

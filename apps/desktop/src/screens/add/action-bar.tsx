@@ -15,11 +15,15 @@ import { universalTitle } from "#/screens/add/projection.ts";
 /** How many target logos the bar shows before the rest go behind the "+n" button. */
 const SHOWN_TARGETS = 5;
 
-/** The ids of `direct`, the chosen ones first, each group in inventory order. */
-const targetOrder = (direct: Configuration[], targets: string[]) => [
-  ...direct.filter((c) => targets.includes(c.id)).map((c) => c.id),
-  ...direct.filter((c) => !targets.includes(c.id)).map((c) => c.id),
-];
+/**
+ * The ids of `direct`, the chosen ones first, each group in inventory order, and how many were
+ * chosen: the Universal stack goes between the two groups.
+ */
+const targetOrder = (direct: Configuration[], targets: string[]) => {
+  const chosen = direct.filter((c) => targets.includes(c.id)).map((c) => c.id);
+  const rest = direct.filter((c) => !targets.includes(c.id)).map((c) => c.id);
+  return { chosen: chosen.length, ids: [...chosen, ...rest] };
+};
 
 /**
  * The configurations the bar shows as logos, and the rest, in `order`. A configuration the order
@@ -64,7 +68,7 @@ const Divider = () => (
 /**
  * The floating action bar (DESIGN.md §2.2 "Overlays", §4 "Overlays", §8): how many cards are
  * selected, the install targets as round logos (at most five, the rest behind a "+n" button that
- * opens Choose agents, after the Universal stack, which is always on), and Add; while the install runs, its
+ * opens Choose agents; the Universal stack, always on, sits between the chosen ones and the rest), and Add; while the install runs, its
  * progress and Cancel.
  */
 export const ActionBar = ({
@@ -100,7 +104,28 @@ export const ActionBar = ({
   // while it is toggled.
   const [order, setOrder] = useState(() => targetOrder(direct, targets));
   const [picking, setPicking] = useState(false);
-  const { shown, hidden } = splitTargets(direct, order);
+  const { shown, hidden } = splitTargets(direct, order.ids);
+  // The logos chosen when the order was fixed, then Universal, then the rest.
+  const lead = shown.slice(0, order.chosen);
+  const trail = shown.slice(order.chosen);
+  const logoToggle = (c: Configuration) => (
+    <Tooltip key={c.id}>
+      <TooltipTrigger asChild>
+        <Toggle
+          kind="logo"
+          pressed={targets.includes(c.id)}
+          disabled={adding}
+          onPressedChange={() => {
+            onToggleTarget(c.id);
+          }}
+          aria-label={c.name}
+        >
+          <AgentLogo client={c} size={28} hover="none" decorative />
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent>{c.name}</TooltipContent>
+    </Tooltip>
+  );
   const hiddenChosen = hidden.filter((c) => targets.includes(c.id)).length;
   return (
     <div
@@ -117,24 +142,7 @@ export const ActionBar = ({
       </span>
       <fieldset className="m-0 flex items-center gap-2 border-0 p-0">
         <legend className="sr-only">Add to</legend>
-        {shown.map((c) => (
-          <Tooltip key={c.id}>
-            <TooltipTrigger asChild>
-              <Toggle
-                kind="logo"
-                pressed={targets.includes(c.id)}
-                disabled={adding}
-                onPressedChange={() => {
-                  onToggleTarget(c.id);
-                }}
-                aria-label={c.name}
-              >
-                <AgentLogo client={c} size={28} hover="none" decorative />
-              </Toggle>
-            </TooltipTrigger>
-            <TooltipContent>{c.name}</TooltipContent>
-          </Tooltip>
-        ))}
+        {lead.map(logoToggle)}
         {universal.length > 0 && (
           <Toggle
             kind="logo"
@@ -153,6 +161,7 @@ export const ActionBar = ({
             />
           </Toggle>
         )}
+        {trail.map(logoToggle)}
         {hidden.length > 0 && (
           <Button
             variant="secondary"
