@@ -122,6 +122,7 @@
   --color-shell-nav-text: var(--gray-300);
   --color-shell-nav-active-bg: var(--gray-910);
   --color-shell-nav-active-text: var(--gray-50);
+  --color-shell-nav-tree: var(--gray-800);
   --color-shell-nav-badge-bg: var(--color-accent-primary);
   --color-shell-topbar-text: var(--gray-300);
   --color-shell-status-published: var(--color-accent-primary);
@@ -148,6 +149,8 @@
   --color-source-pill-bg: var(--gray-910);
   --color-source-pill-active-bg: var(--gray-50);
   --color-source-pill-active-text: var(--color-on-accent);
+  --color-source-pill-count: var(--gray-400);
+  --color-source-pill-active-count: var(--gray-600);
   --color-button-toast-action-text: var(--color-accent-primary);
   --color-button-split-divider: var(--gray-800);
 
@@ -244,6 +247,14 @@
   --color-add-card-status-disk: var(--color-accent-attention);
   --color-add-card-status-in-use: var(--gray-400);
   --color-add-card-check-ring: var(--gray-700);
+  --color-source-card-bg: var(--gray-950);
+  --color-source-card-border: var(--gray-870);
+  --color-source-card-divider: var(--gray-870);
+  --color-source-card-tile-bg: var(--gray-880);
+  --color-source-card-tile-text: var(--gray-200);
+  --color-source-card-name: var(--gray-50);
+  --color-source-card-fact-label: var(--gray-400);
+  --color-source-card-fact-value: var(--gray-50);
   --color-banner-title: var(--gray-50);
   --color-banner-text: var(--gray-300);
   --color-card-chip-ring: var(--color-card-bg);
@@ -378,6 +389,8 @@
   --radius-agent-card: 20px;
   --radius-plugin-card: 20px;
   --radius-add-card: 18px;
+  --radius-source-card: 18px;
+  --radius-source-card-tile: 10px;
   --radius-hunk: 14px;
   --radius-hunk-pane: 10px;
   --radius-diff-segment: 4px;
@@ -822,6 +835,11 @@
   font-size: 14.5px;
   font-weight: 400;
   line-height: 1.5;
+}
+@utility type-source-name {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 500;
 }
 @utility type-agent-card-name {
   font-family: var(--font-sans);

@@ -2,7 +2,7 @@ import type { Configuration, ProgressEvent } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
-import { universalTitle } from "#/screens/add/projection.ts";
+import { universalTitle } from "#/screens/sources/projection.ts";
 
 /** "Adding 2 of 7" from the last progress event, or "Adding…" before the first. */
 const progressText = (progress: ProgressEvent | undefined) => {

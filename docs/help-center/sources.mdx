@@ -1,0 +1,54 @@
+---
+title: "Sources in the app"
+description: "Browse the sources you added, add skills from them, and refresh or remove a source in the desktop app."
+---
+
+A source is a git repository that holds skills. In the desktop app, open **Skills**, then **Sources** under it, to see every source you added and add skills from them.
+
+This page uses the terms source, account remote and library. See the [glossary](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md).
+
+## Browse a source
+
+Each source has a pill at the top of the page, with the number of skills it holds. **Personal** lists your own skills on your account remote that this machine does not have yet. An amber dot marks a source that was not fetched in the last two days, or never.
+
+Select a pill to open the source. Its card shows:
+
+- Its name. Select it to open the repository in your browser.
+- A tag for each limit: the [pin](/cli/source#pin-a-source) it follows, and **Read-only** when you cannot write to it.
+- **Skills**, **Branch**, **Commit** and **Fetched**: how many skills it holds, the branch it follows, the commit of its last fetch and when that was.
+
+To look in every source at once, type in **Search all sources**. The card hides while you search.
+
+## Add skills
+
+1. Select the skills you want, or select the checkbox above them to select every skill you do not have yet. Select it again once all are selected to clear the selection.
+2. In the bar at the bottom, choose the agents to add them to.
+3. Select **Add**.
+
+Skills this machine already has are marked, and you cannot select them. The count at the right of the checkbox says how many.
+
+## Add a source
+
+1. Select **Add source**.
+2. Paste the repository's URL, or `owner/name` for GitHub. Add `#branch` or `#tag` to pin it.
+3. Select **Add**.
+
+The new source opens with every skill selected.
+
+## Refresh a source
+
+On the source's card, select **Refresh**. agentx fetches the source again and lists its skills from the new fetch.
+
+## Remove a source
+
+1. On the source's card, select **Remove**.
+2. To remove the skills you installed from it as well, select the option that also removes them. It lists them by name, and shows only when this machine has skills from the source.
+3. Select **Remove**.
+
+Without that option, the skills you installed from the source stay in your library and in your agents. There is no undo: add the source again to get it back.
+
+Your account remote has no **Remove** here. Change or detach it in **Settings**. See [Account remote](/account-remote).
+
+## From the command line
+
+[`agentx source`](/cli/source) adds, fetches, lists and removes sources, and [`agentx skill`](/cli/skill) installs and removes skills.

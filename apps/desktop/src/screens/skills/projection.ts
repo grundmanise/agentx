@@ -76,7 +76,7 @@ const GITHUB_OR_GITLAB = /github|gitlab/u;
 const SCP_URL = /^(?:[\w.-]+@)?(?<host>[\w.-]+):(?<path>.+)$/u;
 
 /** The host and path of a source URL, HTTPS or SSH; undefined for anything else. */
-const hostAndPath = (
+export const hostAndPath = (
   url: string
 ): { host: string; path: string } | undefined => {
   if (url.includes("://")) {

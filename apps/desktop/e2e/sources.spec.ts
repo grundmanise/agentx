@@ -9,8 +9,9 @@ import {
   inventory,
   library,
   sources,
+  ZETA,
   ZETA_ID,
-} from "./fixtures/add-skills.ts";
+} from "./fixtures/sources.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 
@@ -42,6 +43,15 @@ const target = (page: Page, name: string) =>
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 const dialog = (page: Page) => page.getByRole("dialog", { name: "Add source" });
+const details = (page: Page) =>
+  page.getByRole("region", { exact: true, name: "Source details" });
+const selectAll = (page: Page) => page.getByRole("checkbox");
+/** The value of the fact `label` on the open source's card. */
+const fact = (page: Page, label: string) =>
+  details(page)
+    .getByRole("term")
+    .filter({ hasText: label })
+    .locator("xpath=following-sibling::dd");
 const urlField = (page: Page) =>
   dialog(page).getByRole("textbox", { name: "Git URL or owner/name" });
 
@@ -66,15 +76,17 @@ const lastSearch = (cli: MockCli) => {
   };
 };
 
-/** Opens the Add skills screen on the fixture machine and waits for acme's cards. */
-const openAdd = async (cli: MockCli, page: Page) => {
+/** Opens the Sources screen on the fixture machine and waits for acme's cards. */
+const openSources = async (cli: MockCli, page: Page) => {
   cli.onServeStart({ events: [inventory] });
   cli.register(["source", "list"], { events: sources });
   cli.register(["source", "skills", ACME_ID], { events: acmeSkills });
   cli.register(["source", "skills", ZETA_ID], { events: [] });
   cli.register(["skill", "list", "--remote"], { events: installable });
-  await page.goto("/#/add");
-  await expect(page.getByRole("heading", { name: "Add skills" })).toBeVisible();
+  await page.goto("/#/skills/sources");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Sources" })
+  ).toBeVisible();
   await expect(card(page, "artifacts")).toBeVisible();
 };
 
@@ -82,11 +94,11 @@ const openAdd = async (cli: MockCli, page: Page) => {
 const commandLines = (cli: MockCli) =>
   later(cli).map((line) => line.slice(0, -1).join(" "));
 
-test("the sources row: one pill per shared source, Personal, and the stale dots", async ({
+test("the sources row: one pill per shared source, Personal, the counts and the stale dots", async ({
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   expect(await names(sourcesRow(page))).toEqual([
     "acme/skills",
     "zeta/tools",
@@ -96,24 +108,58 @@ test("the sources row: one pill per shared source, Personal, and the stale dots"
     "aria-pressed",
     "true"
   );
+  // A count once the listing is read; Personal's from `source list`.
+  await expect(pill(page, "acme/skills")).toHaveText("acme/skills8");
+  await expect(pill(page, "zeta/tools")).toHaveText("zeta/tools");
+  await expect(pill(page, "Personal")).toHaveText("Personal2");
   await expect(
     pill(page, "acme/skills").getByTitle("Not checked in 3 days")
   ).toBeAttached();
   await expect(
     pill(page, "zeta/tools").getByTitle("Not fetched yet")
   ).toBeAttached();
-  await expect(
-    page.getByRole("button", { name: "Checked 3 days ago" })
-  ).toBeVisible();
-  // Opening the screen reads the first source's listing (and the sources again, a store read).
+  // Opening the screen reads the listing of each fetched source (and the sources again, a store read).
   expect(commandLines(cli)).toEqual([`source skills ${ACME_ID}`]);
+});
+
+test("the open source's card: its name links to the repository, its limits as tags, and its facts", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  const name = details(page).getByRole("link", { name: "acme/skills" });
+  await expect(details(page).getByText("#v2", { exact: true })).toBeVisible();
+  await expect(
+    details(page).getByText("Read-only", { exact: true })
+  ).toBeVisible();
+  await expect(fact(page, "Skills")).toHaveText("8");
+  await expect(fact(page, "Branch")).toHaveText("main");
+  await expect(fact(page, "Commit")).toHaveText("3f2a9c1");
+  await expect(fact(page, "Fetched")).toHaveText("3 days ago");
+  await name.click();
+  expect(cli.openedUrls).toEqual([ACME]);
+
+  await pill(page, "zeta/tools").click();
+  await expect(fact(page, "Fetched")).toHaveText("Not yet");
+
+  // The account remote is managed in Settings: its card has no Remove.
+  await pill(page, "Personal").click();
+  await expect(
+    details(page).getByRole("link", { name: "me/account" })
+  ).toBeVisible();
+  await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
+  await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
+
+  // A search answers across every source: the card hides.
+  await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
+  await expect(details(page)).toHaveCount(0);
 });
 
 test("a source listing: selectable cards first, then each state with its label", async ({
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   expect(await names(grid(page, "acme/skills"))).toEqual([
     "artifacts",
     "docx",
@@ -165,7 +211,7 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   const add = cli.register(
     [
       "skill",
@@ -239,7 +285,7 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   const line = [
     "skill",
     "add",
@@ -264,11 +310,17 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
       { name: "slides", type: "library_skill" },
     ],
   });
-  await page.getByRole("button", { name: "Select all" }).click();
+  await expect(page.getByText("4 already added")).toBeVisible();
+  await expect(selectAll(page)).toHaveAccessibleName("Select all 4");
+  await selectAll(page).click();
+  await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
+  await expect(selectAll(page)).toHaveAttribute("aria-checked", "true");
   await expect(bar(page)).toContainText("4 selected");
   await card(page, "docx").click();
   await card(page, "forms").click();
   await expect(bar(page)).toContainText("2 selected");
+  await expect(selectAll(page)).toHaveAccessibleName("2 of 4 selected");
+  await expect(selectAll(page)).toHaveAttribute("aria-checked", "mixed");
   // The Universal stack is on and stays on.
   await expect(target(page, "Universal")).toHaveAttribute(
     "aria-pressed",
@@ -289,7 +341,7 @@ test("progress shows from the progress events, and Cancel stops the run", async 
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   const add = cli.register(
     ["skill", "add", ACME, "--name", "artifacts", "--name", "docx"],
     {
@@ -321,7 +373,7 @@ test("a partial failure lists what was added, the error, its hint and each skipp
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   const error = {
     code: "refused",
     hint: "remove it with 'agentx skill remove docx', then install again",
@@ -363,8 +415,8 @@ test("search asks serve once per settled query and shows only the latest answer"
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
-  const field = page.getByRole("searchbox", { name: "Search every source" });
+  await openSources(cli, page);
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
   await field.fill("pd");
   await expect.poll(() => cli.serveRequests.length).toBe(1);
   const first = lastSearch(cli);
@@ -412,7 +464,7 @@ test("Add source runs source add, then opens the new source fully preselected", 
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   const newId = "9f8e7d6c5b4a3210";
   const newUrl = "https://github.com/acme/more";
   cli.register(["source", "add", "acme/more"], {
@@ -481,7 +533,7 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   cli.register(["source", "add", "bad/repo"], {
     events: [
       {
@@ -532,7 +584,7 @@ test("Personal lists the account remote's installable skills and adds by name", 
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   await pill(page, "Personal").click();
   await expect(card(page, "release-notes")).toBeVisible();
   expect(await names(grid(page, "Personal"))).toEqual([
@@ -541,9 +593,6 @@ test("Personal lists the account remote's installable skills and adds by name", 
   ]);
   await expect(card(page, "my-pdf")).toContainText("from acme/skills");
   await expect(card(page, "release-notes")).toContainText("personal skill");
-  await expect(
-    page.getByRole("button", { name: "Checked 2 hours ago" })
-  ).toBeVisible();
 
   const add = cli.register(["skill", "add", "--name", "release-notes"], {
     events: [{ name: "release-notes", type: "library_skill" }],
@@ -559,17 +608,24 @@ test("Personal lists the account remote's installable skills and adds by name", 
   ]);
 });
 
-test("the refresh button fetches the source, then reads its listing again", async ({
+test("Refresh fetches the source, then reads the listing of the new fetch", async ({
   cli,
   page,
 }) => {
-  await openAdd(cli, page);
+  await openSources(cli, page);
   const fetched: InlineEvent[] = [
     { current: 1, phase: "fetch", subject: ACME, total: 1, type: "progress" },
     { id: ACME_ID, type: "source", url: ACME },
   ];
   cli.register(["source", "fetch", ACME_ID], { events: fetched });
-  await page.getByRole("button", { name: "Checked 3 days ago" }).click();
+  const now = new Date().toISOString();
+  cli.register(["source", "list"], {
+    events: sources.map((s) =>
+      s.id === ACME_ID ? { ...s, last_fetched: now } : s
+    ),
+  });
+  await details(page).getByRole("button", { name: "Refresh" }).click();
+  await expect(fact(page, "Fetched")).toHaveText("just now");
   await expect
     .poll(() => commandLines(cli))
     .toEqual([
@@ -577,4 +633,64 @@ test("the refresh button fetches the source, then reads its listing again", asyn
       `source fetch ${ACME_ID}`,
       `source skills ${ACME_ID}`,
     ]);
+});
+
+test("Remove with its installed skills removes each skill, then the source", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await details(page).getByRole("button", { name: "Remove" }).click();
+  const confirm = page.getByRole("dialog", { name: "Remove acme/skills?" });
+  const also = confirm.getByRole("checkbox", {
+    name: "Also remove its 1 installed skill pdf",
+  });
+  await expect(also).not.toBeChecked();
+  await also.click();
+  cli.register(["skill", "remove", "pdf"], {
+    events: [{ name: "pdf", type: "library_skill" }],
+  });
+  cli.register(["source", "remove", ACME], {
+    events: [{ id: ACME_ID, type: "source", url: ACME }],
+  });
+  cli.register(["source", "list"], {
+    events: sources.filter((s) => s.id !== ACME_ID),
+  });
+  await confirm.getByRole("button", { name: "Remove" }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(
+    toasts(page).getByText("Source and 1 skill removed")
+  ).toBeVisible();
+  // The source's pill goes with the next `source list`, and the first pill opens.
+  await expect(pill(page, "acme/skills")).toHaveCount(0);
+  await expect(pill(page, "zeta/tools")).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  expect(commandLines(cli)).toEqual([
+    `source skills ${ACME_ID}`,
+    "skill remove pdf",
+    `source remove ${ACME}`,
+    `source skills ${ZETA_ID}`,
+  ]);
+});
+
+test("Remove alone removes the source and keeps its skills", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await pill(page, "zeta/tools").click();
+  await details(page).getByRole("button", { name: "Remove" }).click();
+  const confirm = page.getByRole("dialog", { name: "Remove zeta/tools?" });
+  cli.register(["source", "remove", ZETA], {
+    events: [{ id: ZETA_ID, type: "source", url: ZETA }],
+  });
+  await confirm.getByRole("button", { name: "Remove" }).click();
+  await expect(toasts(page).getByText("Source removed")).toBeVisible();
+  expect(commandLines(cli)).toEqual([
+    `source skills ${ACME_ID}`,
+    `source skills ${ZETA_ID}`,
+    `source remove ${ZETA}`,
+  ]);
 });

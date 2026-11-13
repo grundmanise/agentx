@@ -1,7 +1,8 @@
 // shadcn/ui Checkbox (`pnpm dlx shadcn@latest add checkbox`), on our tokens: DESIGN.md §6
 // "Checkbox (popover)". It keeps shadcn's parts and `data-slot` attributes and takes no
 // `className`; the lucide check is swapped for our drawn CheckMark, which also draws the ring
-// of the unchecked box, so the indicator is the mark itself.
+// of the unchecked box, so the indicator is the mark itself. `checked` may be "indeterminate", for
+// a box that stands for several of which some are checked: the mark then shows a dash.
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
 
 import { CheckMark } from "#/components/check-mark.tsx";
@@ -12,7 +13,7 @@ export type CheckboxProps = Omit<
   "checked" | "defaultChecked"
 > & {
   /** Always set: the caller holds the choice. */
-  checked: boolean;
+  checked: boolean | "indeterminate";
 };
 
 const Checkbox = ({ checked, ...props }: CheckboxProps) => (

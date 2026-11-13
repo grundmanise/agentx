@@ -2,8 +2,8 @@ import { cva } from "class-variance-authority";
 import { useId } from "react";
 
 import { Toggle } from "#/components/ui/toggle.tsx";
-import { statusLabels } from "#/screens/add/projection.ts";
-import type { CardGroup, SkillCard } from "#/screens/add/projection.ts";
+import { statusLabels } from "#/screens/sources/projection.ts";
+import type { CardGroup, SkillCard } from "#/screens/sources/projection.ts";
 
 /** The round check at the right of a selectable card: a ring, filled with the check when selected. */
 const CheckMark = ({ checked }: { checked: boolean }) => (

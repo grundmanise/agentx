@@ -1,5 +1,5 @@
-// The machine the Add skills tests run against: two shared sources (one fetched three days ago,
-// one never) and an account remote; the listing of the first source; a library that puts one of
+// The machine the Sources tests run against: two shared sources (one pinned and read-only here,
+// fetched three days ago, one never fetched) and an account remote; the listing of the first source; a library that puts one of
 // its skills in each state a card can be in; three configurations that take placements (two
 // enabled) and two universal ones; your skills on the account remote; and a search answer.
 // Inline events with only the fields the tests check, typed by the generated event types.
@@ -26,18 +26,22 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
-/** The sources `source list` reports: acme fetched three days ago, zeta never, the account remote two hours ago. */
+/** acme: pinned to v2, read-only here, fetched three days ago. */
+export const acme: SourceEvent = {
+  access: "read-only",
+  commit: "3f2a9c1e8d7b6a",
+  default_branch: "main",
+  id: ACME_ID,
+  last_fetched: ago(3 * DAY + 2 * HOUR),
+  pin: "v2",
+  schema_version: 2,
+  type: "source",
+  url: ACME,
+};
+
+/** The sources `source list` reports: acme, zeta never fetched, the account remote two hours ago. */
 export const sources: SourceEvent[] = [
-  {
-    access: "unknown",
-    commit: "3f2a9c1e8d7b6a",
-    default_branch: "main",
-    id: ACME_ID,
-    last_fetched: ago(3 * DAY + 2 * HOUR),
-    schema_version: 2,
-    type: "source",
-    url: ACME,
-  },
+  acme,
   {
     access: "unknown",
     id: ZETA_ID,
