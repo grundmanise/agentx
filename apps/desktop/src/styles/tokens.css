@@ -213,7 +213,8 @@
   --color-table-header-text: var(--gray-500);
 
   /* Skill glyph */
-  --color-glyph-enabled: var(--color-accent-primary);
+  --color-glyph-enabled: var(--gray-400);
+  --color-glyph-update: var(--color-accent-primary);
   --color-glyph-off: var(--gray-600);
   --color-glyph-edited: var(--color-accent-attention);
 

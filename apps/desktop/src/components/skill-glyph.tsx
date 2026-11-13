@@ -16,6 +16,7 @@ const glyphVariants = cva("block flex-none", {
       inherit: "",
       lit: "text-glyph-enabled",
       off: "text-glyph-off",
+      update: "text-glyph-update",
     },
   },
 });
@@ -23,26 +24,36 @@ const glyphVariants = cva("block flex-none", {
 /** How the glyph is coloured: by the skill's state, or as its parent says for a marker. */
 export type GlyphTone = "state" | "caption" | "inherit";
 
-const toneOf = (shape: GlyphShape, lit: boolean, tone: GlyphTone) => {
+const toneOf = (
+  shape: GlyphShape,
+  lit: boolean,
+  update: boolean,
+  tone: GlyphTone
+) => {
   if (tone !== "state") {
     return tone;
   }
   if (shape === "pencil") {
     return "edited";
   }
+  if (update) {
+    return "update";
+  }
   return lit ? "lit" : "off";
 };
 
 /**
  * The glyph leading a skill row and the detail header: a filled dot for a skill of a source or an
- * unmanaged one, a pencil when it was edited, a fork for one of your own. `lit` is `glyph.enabled`;
- * the pencil is always `glyph.edited`. The title says what the glyph means, as a tooltip and to a
+ * unmanaged one, a pencil when it was edited, a fork for one of your own. `lit` is `glyph.enabled`,
+ * a quiet gray; only a skill with an update to apply takes the accent, `glyph.update`. The pencil
+ * is always `glyph.edited`. The title says what the glyph means, as a tooltip and to a
  * screen reader. At 12px it is a marker beside a row's name or in a pill: the fork glyph on the
  * original of a fork made under a new name, in `caption` or in its parent's colour.
  */
 export const SkillGlyph = ({
   shape,
   lit,
+  update = false,
   title,
   size = 16,
   tone = "state",
@@ -50,6 +61,8 @@ export const SkillGlyph = ({
 }: {
   shape: GlyphShape;
   lit: boolean;
+  /** An update is there to apply: the glyph takes the accent, the one glyph that asks for action. */
+  update?: boolean;
   title: string;
   size?: 12 | 16 | 18;
   tone?: GlyphTone;
@@ -61,7 +74,10 @@ export const SkillGlyph = ({
       viewBox="0 0 16 16"
       aria-hidden
       focusable="false"
-      className={glyphVariants({ size, tone: toneOf(shape, lit, tone) })}
+      className={glyphVariants({
+        size,
+        tone: toneOf(shape, lit, update, tone),
+      })}
     >
       {shape === "dot" && <circle cx="8" cy="8" r="4" fill="currentColor" />}
       {shape === "pencil" && (

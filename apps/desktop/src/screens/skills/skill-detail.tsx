@@ -123,6 +123,7 @@ export const SkillDetail = ({
           <SkillGlyph
             shape={glyphOf(row)}
             lit={glyphLit(row)}
+            update={row.hasUpdate}
             title={glyphTitle(row)}
             size={18}
           />

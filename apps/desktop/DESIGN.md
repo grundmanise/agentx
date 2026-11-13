@@ -234,7 +234,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `glyph.enabled` | `accent.primary` | Dot or fork glyph when enabled (and, for the fork glyph, published) |
+| `glyph.enabled` | `gray-400` | Dot or fork glyph when enabled (and, for the fork glyph, published): no action to take |
+| `glyph.update` | `accent.primary` | Dot or fork glyph of a skill with an update to apply |
 | `glyph.off` | `gray-600` | Glyph when in no agent client or not published |
 | `glyph.edited` | `accent.attention` | Pencil glyph |
 
@@ -781,9 +782,9 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### Skill glyph (16px, leading the row)
 
-- dot (filled) – a skill of a shared source; `glyph.enabled` when enabled, `glyph.off` when not.
+- dot (filled) – a skill of a shared source; `glyph.update` when it has an update, else `glyph.enabled` when enabled, `glyph.off` when not. The accent marks the one state that asks for action.
 - pencil – edited locally; `glyph.edited`.
-- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise.
+- fork – one of your own skills; `glyph.update` when it has an update, else `glyph.enabled` when enabled and published, `glyph.off` otherwise.
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)
