@@ -50,7 +50,7 @@ export const SkillsScreen = () => {
   const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
   const [filters, setFilters] = useState<Filters>(noFilters);
-  const [order, setOrder] = useState<SortOrder>("asc");
+  const [order, setOrder] = useState<SortOrder>("default");
 
   const rows = useMemo(
     () =>
