@@ -211,7 +211,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
-| `filter.sort-text` | `gray-300` | A–Z toggle |
+| `filter.sort-text` | `gray-300` | Sort toggle (Default, A-Z, Z-A) |
 
 #### Lists and rows
 
@@ -221,7 +221,6 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `row.selected-bg` | `gray-900` | Selected Skills row |
 | `row.selected-bar` | `accent.primary` | 2px bar on the selected row |
 | `row.name` | `gray-50` | Row name, enabled |
-| `row.name-off` | `gray-300` | Row name when in no agent client |
 | `row.desc` | `gray-300` | Description line |
 | `row.chip-ring` | `shell.content-bg` | 2px ring behind overlapping agent client logos in rows |
 | `group.label` | `gray-300` | Source group caption |
@@ -234,8 +233,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `glyph.enabled` | `accent.primary` | Dot or fork glyph when enabled (and, for the fork glyph, published) |
-| `glyph.off` | `gray-600` | Glyph when in no agent client or not published |
+| `glyph.idle` | `gray-400` | Dot or fork glyph: no action to take |
+| `glyph.update` | `accent.primary` | Dot or fork glyph of a skill with an update to apply |
 | `glyph.edited` | `accent.attention` | Pencil glyph |
 
 #### Agent client logos and toggle chips
@@ -502,6 +501,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `row.inline-gap` | 8 | `gap-row-inline` | Name → pills → chips |
 | `row.spacing` | 2 | `gap-rows`, `pt-rows` | Between rows; `pt-rows` on a row of the Skills list, which places each row itself |
 | `row.glyph-col` | 18 | `w-row-glyph` | Glyph column |
+| `row.off` | 50% | `opacity-row-off` | Opacity of a row in no agent client: washed out |
 | `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
 | `group.padding` | 20 14 8 | `pt-group-top px-group pb-group-bottom` | Later group headers |
 | `group.gap` | 8 | `gap-group` | Label → count |
@@ -781,9 +781,16 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### Skill glyph (16px, leading the row)
 
-- dot (filled) – a skill of a shared source; `glyph.enabled` when enabled, `glyph.off` when not.
+The dot and fork glyphs say one thing: whether there is an action to take. `glyph.update` (the accent) when the skill has an update to apply, else `glyph.idle`. Whether a skill is enabled is not the glyph's to say: a row in no agent client is washed out (`row.off`) instead.
+
+- dot (filled) – a skill of a shared source.
 - pencil – edited locally; `glyph.edited`.
-- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise.
+- fork – one of your own skills.
+
+Sort toggle, at the right end of the filter row, steps through three orders on each click:
+
+- Default – within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
+- A-Z, Z-A – by name alone, whatever the state, with the arrow (turned for Z-A).
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)

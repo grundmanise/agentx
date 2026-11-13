@@ -432,34 +432,56 @@ test.describe("filters", () => {
     ]);
   });
 
-  test("the sort toggle reverses the order within each group", async ({
+  test("the sort toggle steps through Default, A-Z and Z-A", async ({
     cli,
     page,
   }) => {
-    await openSkills(cli, page);
-    const toggle = page.getByRole("button", { name: "Sort Z to A" });
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    // With no universal client, draft is placed nowhere: disabled.
+    await openSkills(cli, page, "/#/skills", {
+      ...inventory,
+      configurations: configurations.filter((c) => !c.reads_library),
+      library: inventory.library.map((e) => ({
+        ...e,
+        placements: e.placements.filter((p) => p.mode !== "library"),
+        universal: [],
+      })),
+    });
+    const personal = group(page, "PERSONAL (3)");
+    // Default: enabled skills first, then disabled ones, each A to Z.
+    const toggle = page.getByRole("button", { name: /^Sort: /u });
+    await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
+    expect(await rowNames(personal)).toEqual([
+      "pdf-letters",
+      "release-notes",
+      "draft",
+    ]);
+    // A-Z: by name alone, whatever the state.
     await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
-    expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
+    await expect(toggle).toHaveAccessibleName("Sort: A to Z");
+    expect(await rowNames(personal)).toEqual([
+      "draft",
+      "pdf-letters",
+      "release-notes",
+    ]);
+    // Z-A.
+    await toggle.click();
+    await expect(toggle).toHaveAccessibleName("Sort: Z to A");
+    expect(await rowNames(personal)).toEqual([
       "release-notes",
       "pdf-letters",
       "draft",
-    ]);
-    expect(await rowNames(group(page, "ACME/SKILLS (2)"))).toEqual([
-      "review",
-      "pdf",
     ]);
     // The groups keep their order.
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
       "PERSONAL (3)"
     );
+    // Back to Default.
     await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
-    expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
-      "draft",
+    await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
+    expect(await rowNames(personal)).toEqual([
       "pdf-letters",
       "release-notes",
+      "draft",
     ]);
   });
 });
