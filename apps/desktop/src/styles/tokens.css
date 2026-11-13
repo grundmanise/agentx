@@ -203,7 +203,6 @@
   --color-row-selected-bg: var(--gray-900);
   --color-row-selected-bar: var(--color-accent-primary);
   --color-row-name: var(--gray-50);
-  --color-row-name-off: var(--gray-300);
   --color-row-desc: var(--gray-300);
   --color-row-chip-ring: var(--color-shell-content-bg);
   --color-group-label: var(--gray-300);
@@ -213,8 +212,8 @@
   --color-table-header-text: var(--gray-500);
 
   /* Skill glyph */
-  --color-glyph-enabled: var(--color-accent-primary);
-  --color-glyph-off: var(--gray-600);
+  --color-glyph-idle: var(--gray-400);
+  --color-glyph-update: var(--color-accent-primary);
   --color-glyph-edited: var(--color-accent-attention);
 
   /* Agent logos and toggle chips */
@@ -444,6 +443,9 @@
    element's name, and each other value adds its side (`pt-page-top px-page pb-page`). A zero side
    uses the `0` step. A token given as a range in DESIGN.md is guidance and has no variable. */
 @theme static {
+  /* A skill row in no agent client, washed out. */
+  --opacity-row-off: 50%;
+
   /* Window and shell */
   --height-titlebar: 50px;
   --width-sidebar: 216px;

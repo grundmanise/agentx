@@ -9,7 +9,7 @@ import type { PillTone } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
 import type { BannerFacts } from "#/screens/skills/banners.ts";
-import { glyphLit, glyphOf, glyphTitle } from "#/screens/skills/projection.ts";
+import { glyphOf, glyphTitle } from "#/screens/skills/projection.ts";
 import type { PillKind, SkillRow } from "#/screens/skills/projection.ts";
 
 /** How many agent client logos a row shows before "+n". */
@@ -32,7 +32,7 @@ const alertOf = (
 };
 
 /**
- * One skill in the list: glyph, name, its one possible pill, an amber alert triangle when its
+ * One skill in the list, washed out (`row.off`) when it is in no agent client: glyph, name, its one possible pill, an amber alert triangle when its
  * banner warns, a small fork marker for each fork made from it under a new name, and the logos
  * of the agent clients that see it, then its description. Selecting it shows the skill in the
  * detail pane, where the banner says what the alert triangle stands for. It draws again only when
@@ -78,22 +78,28 @@ const SkillRowView = ({
         onSelect(row);
       }}
     >
-      <span className="w-row-glyph flex h-5 flex-none items-center justify-center">
+      <span
+        className={
+          row.enabled
+            ? "w-row-glyph flex h-5 flex-none items-center justify-center"
+            : "w-row-glyph opacity-row-off flex h-5 flex-none items-center justify-center"
+        }
+      >
         <SkillGlyph
           shape={glyphOf(row)}
-          lit={glyphLit(row)}
+          update={row.hasUpdate}
           title={glyphTitle(row)}
         />
       </span>
-      <span className="gap-row-line flex min-w-0 flex-1 flex-col">
+      <span
+        className={
+          row.enabled
+            ? "gap-row-line flex min-w-0 flex-1 flex-col"
+            : "gap-row-line opacity-row-off flex min-w-0 flex-1 flex-col"
+        }
+      >
         <span className="gap-row-inline flex h-5 items-center">
-          <span
-            className={
-              row.enabled
-                ? "type-row-name text-row-name truncate"
-                : "type-row-name text-row-name-off truncate"
-            }
-          >
+          <span className="type-row-name text-row-name truncate">
             {row.name}
           </span>
           {row.pills.map((pill) => (
@@ -114,7 +120,6 @@ const SkillRowView = ({
             <SkillGlyph
               key={fork.key}
               shape="fork"
-              lit={false}
               size={12}
               tone="caption"
               title={`Forked as ${fork.name}`}

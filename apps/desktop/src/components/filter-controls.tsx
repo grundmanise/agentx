@@ -82,31 +82,43 @@ const sortVariants = cva(
   "rounded-button type-button-sm text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary inline-flex h-7 items-center gap-1 px-2 font-medium",
   {
     variants: {
-      descending: {
-        false: "",
-        true: "[&>svg]:rotate-180",
+      order: {
+        asc: "",
+        default: "",
+        desc: "[&>svg]:rotate-180",
       },
     },
   }
 );
 
-/** The A-Z sort toggle: the arrow turns around when the order is descending. */
+/** What the sort toggle shows and says for each order. */
+const sortLabels = {
+  asc: { name: "A to Z", shown: "A-Z" },
+  default: { name: "Enabled first, A to Z", shown: "Default" },
+  desc: { name: "Z to A", shown: "Z-A" },
+} as const;
+
+/**
+ * The three-way sort toggle. Each click steps to the next order: Default (enabled skills first,
+ * then disabled ones, each A to Z), A-Z, then Z-A, by name alone. The arrow shows for A-Z and
+ * turns around for Z-A.
+ */
 export const SortToggle = ({
-  descending,
+  order,
   onToggle,
 }: {
-  descending: boolean;
+  order: "default" | "asc" | "desc";
   onToggle: () => void;
 }) => (
   <button
     type="button"
-    aria-label="Sort Z to A"
-    aria-pressed={descending}
+    aria-label={`Sort: ${sortLabels[order].name}`}
+    title={`Sort: ${sortLabels[order].name}`}
     onClick={onToggle}
-    className={sortVariants({ descending })}
+    className={sortVariants({ order })}
   >
-    <span aria-hidden>{descending ? "Z-A" : "A-Z"}</span>
-    <ArrowDownIcon size="xs" />
+    <span aria-hidden>{sortLabels[order].shown}</span>
+    {order !== "default" && <ArrowDownIcon size="xs" />}
   </button>
 );
 

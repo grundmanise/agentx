@@ -18,7 +18,6 @@ import { HistorySection } from "#/screens/skills/history.tsx";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
   filesVersionOf,
-  glyphLit,
   glyphOf,
   glyphTitle,
   originOf,
@@ -122,7 +121,7 @@ export const SkillDetail = ({
         <div className="flex flex-wrap items-center gap-3">
           <SkillGlyph
             shape={glyphOf(row)}
-            lit={glyphLit(row)}
+            update={row.hasUpdate}
             title={glyphTitle(row)}
             size={18}
           />
@@ -145,7 +144,6 @@ export const SkillDetail = ({
               icon={
                 <SkillGlyph
                   shape="fork"
-                  lit={false}
                   size={12}
                   tone="inherit"
                   title={`Forked as ${fork.name}`}
