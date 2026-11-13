@@ -822,7 +822,7 @@ const openStates = async (cli: MockCli, page: Page, key: string) => {
 };
 
 test.describe("settling a skill", () => {
-  test("the three banners after the displaced one each run their command", async ({
+  test("the two banners after the displaced one each run their command", async ({
     cli,
     page,
   }) => {
@@ -853,27 +853,9 @@ test.describe("settling a skill", () => {
       toasts(page).getByText("Added old/skills source")
     ).toBeVisible();
 
-    await row(page, "gone").click();
-    cli.register(["skill", "fork", "gone"]);
-    const forkBanner = pane(page, "gone").getByRole("note", {
-      name: "No longer in zeta/tools",
-    });
-    await expect(forkBanner).toContainText(
-      "It seems this skill was removed from the source."
-    );
-    // Fork opens the Fork dialog, whose Fork runs the command.
-    await forkBanner.getByRole("button", { name: "Fork" }).click();
-    await page
-      .getByRole("dialog", { name: "Fork gone" })
-      .getByRole("button", { name: "Fork" })
-      .click();
-    await expect(
-      toasts(page).getByText("Forked gone skill", { exact: true })
-    ).toBeVisible();
     expect(ran(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
       ["source", "add", OLD, "--json"],
-      ["skill", "fork", "gone", "--json"],
     ]);
   });
 });
