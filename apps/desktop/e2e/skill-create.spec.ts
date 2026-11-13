@@ -183,7 +183,7 @@ test("Add in the Skills header goes to Sources", async ({ cli, page }) => {
   await expect(
     page.getByRole("heading", { level: 1, name: "Sources" })
   ).toBeVisible();
-  await expect(page).toHaveURL(/#\/skills\/sources$/u);
+  await expect(page).toHaveURL(/#\/sources$/u);
 });
 
 test("Add's three-dots button opens a menu with Create skill, from the pointer and the keyboard; Escape, the trigger and a click outside close it", async ({

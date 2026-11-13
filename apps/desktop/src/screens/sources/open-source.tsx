@@ -2,7 +2,8 @@
 // Refresh fetches a shared source, `source fetch <id>`, whose listing the screen reads again once
 // `source list` reports the new fetch; for Personal it reads your skills on the account remote
 // again, `skill list --remote`, which fetches it.
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { RefObject } from "react";
 
 import type { LibraryEntry } from "#/cli/events.gen.ts";
 import { YOUR_SKILLS } from "#/screens/sources/projection.ts";
@@ -12,11 +13,17 @@ import {
   removeSourceLabel,
 } from "#/screens/sources/remove-source-dialog.tsx";
 import { SourceDetail } from "#/screens/sources/source-detail.tsx";
-import { loadInstallable } from "#/store/loaders.ts";
+import { loadInstallable, loadLabel } from "#/store/loaders.ts";
 import { runCommand, usePending } from "#/store/runner.ts";
 
 /** The pending label of Refresh on a shared source. */
 export const REFRESH_LABEL = "refresh source";
+
+/** The pending label of what Refresh runs: on Personal, the read of your skills. */
+const refreshLabel = (pill: SourcePill) =>
+  pill.key === YOUR_SKILLS
+    ? loadLabel(["skill", "list", "--remote"])
+    : REFRESH_LABEL;
 
 const refresh = (pill: SourcePill) => {
   if (pill.key === YOUR_SKILLS) {
@@ -30,14 +37,18 @@ export const OpenSource = ({
   pill,
   library,
   now,
+  fallbackFocus,
 }: {
   pill: SourcePill;
   library: LibraryEntry[];
   /** Date.now(), for the Fetched fact. */
   now: number;
+  /** Where focus goes when the Remove dialog closes while Remove cannot take it. */
+  fallbackFocus: RefObject<HTMLElement | null>;
 }) => {
   const [removing, setRemoving] = useState(false);
-  const refreshing = usePending(REFRESH_LABEL);
+  const removeButton = useRef<HTMLButtonElement>(null);
+  const refreshing = usePending(refreshLabel(pill));
   const pendingRemove = usePending(removeSourceLabel(pill.source.id));
   const onRefresh = () => {
     refresh(pill);
@@ -66,12 +77,22 @@ export const OpenSource = ({
         onRemove={() => {
           setRemoving(true);
         }}
+        removeRef={removeButton}
       />
       <RemoveSourceDialog
         source={pill.source}
         library={library}
         open={removing}
         onOpenChange={setRemoving}
+        onCloseAutoFocus={(event) => {
+          // Back to Remove; while the removal runs, Remove is disabled and the fallback takes it.
+          event.preventDefault();
+          const button = removeButton.current;
+          (button === null || button.disabled
+            ? fallbackFocus.current
+            : button
+          )?.focus();
+        }}
       />
     </>
   );

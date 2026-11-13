@@ -1,5 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
+import { webUrl } from "#/screens/sources/projection.ts";
+
 import {
   ACME,
   ACME_ID,
@@ -83,7 +85,7 @@ const openSources = async (cli: MockCli, page: Page) => {
   cli.register(["source", "skills", ACME_ID], { events: acmeSkills });
   cli.register(["source", "skills", ZETA_ID], { events: [] });
   cli.register(["skill", "list", "--remote"], { events: installable });
-  await page.goto("/#/skills/sources");
+  await page.goto("/#/sources");
   await expect(
     page.getByRole("heading", { level: 1, name: "Sources" })
   ).toBeVisible();
@@ -640,8 +642,15 @@ test("Remove with its installed skills removes each skill, then the source", asy
   page,
 }) => {
   await openSources(cli, page);
-  await details(page).getByRole("button", { name: "Remove" }).click();
+  // The first source, open without a click, with a card selected.
+  await card(page, "artifacts").click();
+  const remove = details(page).getByRole("button", { name: "Remove" });
+  await remove.click();
   const confirm = page.getByRole("dialog", { name: "Remove acme/skills?" });
+  // Cancel returns focus to Remove.
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(remove).toBeFocused();
+  await remove.click();
   const also = confirm.getByRole("checkbox", {
     name: "Also remove its 1 installed skill pdf",
   });
@@ -661,12 +670,13 @@ test("Remove with its installed skills removes each skill, then the source", asy
   await expect(
     toasts(page).getByText("Source and 1 skill removed")
   ).toBeVisible();
-  // The source's pill goes with the next `source list`, and the first pill opens.
+  // The source's pill goes with the next `source list`, the first pill opens, and the selection goes.
   await expect(pill(page, "acme/skills")).toHaveCount(0);
   await expect(pill(page, "zeta/tools")).toHaveAttribute(
     "aria-pressed",
     "true"
   );
+  await expect(bar(page)).toHaveCount(0);
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
     "skill remove pdf",
@@ -693,4 +703,21 @@ test("Remove alone removes the source and keeps its skills", async ({
     `source skills ${ZETA_ID}`,
     `source remove ${ZETA}`,
   ]);
+});
+
+test("the repository link of a source URL", () => {
+  const cases: [string, string | undefined][] = [
+    ["https://github.com/acme/skills.git", "https://github.com/acme/skills"],
+    [
+      "https://git.example.com:8443/team/skills.git",
+      "https://git.example.com:8443/team/skills",
+    ],
+    [
+      "ssh://git@git.example.com:2222/team/skills.git",
+      "https://git.example.com/team/skills",
+    ],
+    ["git@github.com:acme/skills.git", "https://github.com/acme/skills"],
+    ["/home/me/skills", undefined],
+  ];
+  expect(cases.map(([url]) => [url, webUrl(url)])).toEqual(cases);
 });

@@ -125,15 +125,17 @@ export const fetchedFact = (
 
 /**
  * The page of a source's repository: `https://<host>/<path>` without `.git`, from an HTTPS or SSH
- * URL; undefined for anything else, such as a path on this machine.
+ * URL; undefined for anything else, such as a path on this machine. An HTTPS URL keeps its port;
+ * an SSH port is not the web server's.
  */
 export const webUrl = (url: string): string | undefined => {
   const parsed = hostAndPath(url);
   if (parsed === undefined || parsed.host === "") {
     return undefined;
   }
+  const host = url.startsWith("https://") ? new URL(url).host : parsed.host;
   const path = parsed.path.replace(/^\/+/u, "").replace(/\.git$/u, "");
-  return path === "" ? undefined : `https://${parsed.host}/${path}`;
+  return path === "" ? undefined : `https://${host}/${path}`;
 };
 
 /**

@@ -2,6 +2,8 @@
 // tile, its name, which opens the repository in the browser, a tag for each limit (its pin,
 // read-only access), Refresh and Remove, and a strip of facts from `source list` and its listing.
 // The card of Personal, the account remote, has no Remove: Settings manages the account remote.
+import type { Ref } from "react";
+
 import type { SourceEvent } from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { Pill } from "#/components/pill.tsx";
@@ -78,6 +80,7 @@ export const SourceDetail = ({
   onRefresh,
   removing,
   onRemove,
+  removeRef,
 }: {
   source: SourceEvent;
   /** How many skills it holds, once known. */
@@ -91,6 +94,8 @@ export const SourceDetail = ({
   removing?: boolean;
   /** Opens the Remove dialog; absent for the account remote. */
   onRemove?: () => void;
+  /** The Remove button, which focus returns to when its dialog closes. */
+  removeRef?: Ref<HTMLButtonElement>;
 }) => (
   <section
     aria-label="Source details"
@@ -123,6 +128,7 @@ export const SourceDetail = ({
         </Button>
         {onRemove !== undefined && (
           <Button
+            ref={removeRef}
             variant="ghost"
             size="sm"
             aria-busy={removing}

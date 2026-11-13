@@ -104,7 +104,6 @@ export const App = () => {
             <Routes>
               {/* No screen mounts until the checks pass: none runs a command before they do. */}
               <Route element={<Screen ready={startup.ready} />}>
-                {/* Sources' own path outranks the skill routes under /skills. */}
                 {allScreens.map((s) => (
                   <Route
                     key={s.path}

@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from "react-router";
+import { NavLink } from "react-router";
 
 import { screens } from "#/app/screens.ts";
 import type { Screen } from "#/app/screens.ts";
@@ -14,44 +14,34 @@ const MachineLabel = () => {
   );
 };
 
-const noScreens: Screen[] = [];
-
 /**
- * One nav item. A screen with nested screens is active on its own routes but not on theirs, so
- * Skills is active on a skill and on Update review, and Sources alone on its page.
+ * One nav item, active on its own routes. A nested screen has a path of its own, outside its
+ * parent's, so Skills is active on a skill and on Update review, and Sources alone on its page.
  */
 const NavItem = ({
-  screen: { icon: ScreenIcon, label, path, children = noScreens },
+  screen: { icon: ScreenIcon, label, path },
   nested = false,
 }: {
   screen: Screen;
   nested?: boolean;
-}) => {
-  const { pathname } = useLocation();
-  const onChild = children.some(
-    (c) => pathname === c.path || pathname.startsWith(`${c.path}/`)
-  );
-  return (
-    <NavLink
-      to={path}
-      className={({ isActive }) =>
-        cn(
-          "rounded-shell-nav type-nav gap-nav-icon flex items-center px-2.5",
-          nested ? "h-8" : "h-nav",
-          isActive && !onChild
-            ? "bg-shell-nav-active-bg text-shell-nav-active-text"
-            : "text-shell-nav-text hover:text-text-primary"
-        )
-      }
-      // NavLink marks every ancestor of the route as current; a parent of the open screen is not.
-      aria-current={onChild ? false : undefined}
-    >
-      {/* The icon takes the link's text colour, so it brightens with the label. */}
-      <ScreenIcon />
-      <span className="flex-1">{label}</span>
-    </NavLink>
-  );
-};
+}) => (
+  <NavLink
+    to={path}
+    className={({ isActive }) =>
+      cn(
+        "rounded-shell-nav type-nav gap-nav-icon flex items-center px-2.5",
+        nested ? "h-8" : "h-nav",
+        isActive
+          ? "bg-shell-nav-active-bg text-shell-nav-active-text"
+          : "text-shell-nav-text hover:text-text-primary"
+      )
+    }
+  >
+    {/* The icon takes the link's text colour, so it brightens with the label. */}
+    <ScreenIcon />
+    <span className="flex-1">{label}</span>
+  </NavLink>
+);
 
 export const Sidebar = () => (
   <aside className="bg-shell-bg w-sidebar gap-nav pt-sidebar-top pr-sidebar-right pb-sidebar pl-sidebar flex flex-none flex-col">

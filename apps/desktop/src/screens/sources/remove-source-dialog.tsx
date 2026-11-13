@@ -47,11 +47,14 @@ export const RemoveSourceDialog = ({
   library,
   open,
   onOpenChange,
+  onCloseAutoFocus,
 }: {
   source: SourceEvent;
   library: LibraryEntry[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Moves focus when the dialog closes: it has no trigger to return to. */
+  onCloseAutoFocus: (event: Event) => void;
 }) => {
   const [withSkills, setWithSkills] = useState(false);
   const checkboxId = useId();
@@ -76,7 +79,10 @@ export const RemoveSourceDialog = ({
         }
       }}
     >
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent
+        aria-describedby={undefined}
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogHeader showCloseButton={false}>
           <DialogTitle>{`Remove ${shortSource(source.url)}?`}</DialogTitle>
         </DialogHeader>

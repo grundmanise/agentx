@@ -45,7 +45,7 @@ test("moves between screens from the sidebar, Sources nested under Skills", asyn
   await expect(
     page.getByRole("heading", { level: 1, name: "Sources" })
   ).toBeVisible();
-  await expect(page).toHaveURL(/#\/skills\/sources$/u);
+  await expect(page).toHaveURL(/#\/sources$/u);
   await expect(
     main(page).getByRole("link", { name: "Sources" })
   ).toHaveAttribute("aria-current", "page");
@@ -56,11 +56,16 @@ test("moves between screens from the sidebar, Sources nested under Skills", asyn
 
 test("the Add skills screen's old path opens Sources", async ({ page }) => {
   await page.goto("/#/add");
-  await expect(page).toHaveURL(/#\/skills\/sources$/u);
+  await expect(page).toHaveURL(/#\/sources$/u);
 });
 
 test("keeps Skills active on a screen nested under it", async ({ page }) => {
   await page.goto("/#/skills/review/pdf");
+  await expect(
+    main(page).getByRole("link", { name: "Skills" })
+  ).toHaveAttribute("aria-current", "page");
+  // A skill named like a screen is a skill.
+  await page.goto("/#/skills/sources");
   await expect(
     main(page).getByRole("link", { name: "Skills" })
   ).toHaveAttribute("aria-current", "page");

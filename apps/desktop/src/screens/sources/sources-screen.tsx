@@ -6,6 +6,7 @@ import type {
   ProgressEvent,
   SearchResult,
   SourceEvent,
+  SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { SearchIcon } from "#/components/icons/search.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
@@ -79,9 +80,29 @@ const loadingLabel = (key: string) =>
       : ["source", "skills", key]
   );
 
-/** Whether the pill the user opened is gone, its source removed. */
-const isGone = (opened: string | undefined, pills: SourcePill[]) =>
-  opened !== undefined && !pills.some((p) => p.key === opened);
+/** Whether the pill that was open is gone, its source removed. */
+const isGone = (open: string | undefined, pills: SourcePill[]) =>
+  open !== undefined && !pills.some((p) => p.key === open);
+
+/**
+ * The open pill: the one the user opened, or the first one, also once the one opened was removed.
+ * `onGone` runs when the pill open at the last render is gone, its source removed.
+ */
+const useOpenPill = (
+  pills: SourcePill[],
+  active: string | undefined,
+  onGone: () => void
+) => {
+  const [lastOpen, setLastOpen] = useState<string | undefined>();
+  const pill = pills.find((p) => p.key === active) ?? pills[0];
+  if (isGone(lastOpen, pills)) {
+    onGone();
+  }
+  if (pill?.key !== lastOpen) {
+    setLastOpen(pill?.key);
+  }
+  return pill;
+};
 
 /**
  * Loads the open pill when the user did not open it, such as the first one, unless
@@ -99,6 +120,27 @@ const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
       void loadPill(key);
     }
   }, [key, opened, fetched]);
+};
+
+/** The pills, with the source Add source just added until the Sources slice lists it. */
+const usePills = (
+  sources: SourceEvent[],
+  listings: Record<string, SourceSkillEvent[]>
+) => {
+  const [justAdded, setJustAdded] = useState<SourceEvent | undefined>();
+  // Once the slice lists it, the slice alone says whether it is there.
+  if (justAdded !== undefined && sources.some((s) => s.id === justAdded.id)) {
+    setJustAdded(undefined);
+  }
+  const pills = useMemo(
+    () =>
+      sourcePills(
+        justAdded === undefined ? sources : [...sources, justAdded],
+        listings
+      ),
+    [sources, justAdded, listings]
+  );
+  return { pills, setJustAdded };
 };
 
 /** The selection without the cards `drop` names. */
@@ -129,8 +171,6 @@ export const SourcesScreen = () => {
 
   // The pill the user opened; before any, the first pill is open.
   const [active, setActive] = useState<string | undefined>();
-  // The source Add source just added, until the Sources slice lists it.
-  const [justAdded, setJustAdded] = useState<SourceEvent | undefined>();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Found | undefined>();
   const [selection, setSelection] = useState<Selection>(noSelection);
@@ -142,6 +182,8 @@ export const SourcesScreen = () => {
   const [now, setNow] = useState(() => Date.now());
   // The pill opened last, "" before any, for a load that finishes after the user moved on.
   const opened = useRef("");
+  // Where focus goes when the Remove dialog closes and Remove cannot take it.
+  const searchField = useRef<HTMLInputElement>(null);
 
   // The sources are read again when the screen opens, and the fetch labels keep time.
   useEffect(() => {
@@ -156,27 +198,14 @@ export const SourcesScreen = () => {
 
   useFetchedListings(sources);
 
-  const pills = useMemo(
-    () =>
-      sourcePills(
-        justAdded !== undefined && !sources.some((s) => s.id === justAdded.id)
-          ? [...sources, justAdded]
-          : sources,
-        listings
-      ),
-    [sources, justAdded, listings]
-  );
-  // The pill the user opened, or the first one, also once the one opened was removed.
-  const activePill = pills.find((p) => p.key === active) ?? pills[0];
-  const activeKey = activePill?.key;
-
-  // A source removed while open takes its selection with it; the first pill opens.
-  const activeGone = isGone(active, pills);
-  if (activeGone) {
+  const { pills, setJustAdded } = usePills(sources, listings);
+  // A source removed while open, opened or first, takes its selection with it; the first pill opens.
+  const activePill = useOpenPill(pills, active, () => {
     setActive(undefined);
     setSelection(noSelection);
     setAllMode(false);
-  }
+  });
+  const activeKey = activePill?.key;
 
   useLoadUnopened(activePill, active);
 
@@ -439,6 +468,7 @@ export const SourcesScreen = () => {
           <Input
             kind="search"
             type="search"
+            ref={searchField}
             aria-label="Search all sources"
             placeholder="Search all sources"
             value={query}
@@ -450,7 +480,12 @@ export const SourcesScreen = () => {
         <SourceRow pills={pills} active={activeKey} now={now} onOpen={open} />
         {/* The card of the open source; a search looks across every source, so it hides. */}
         {activePill !== undefined && query.trim() === "" && (
-          <OpenSource pill={activePill} library={library} now={now} />
+          <OpenSource
+            pill={activePill}
+            library={library}
+            now={now}
+            fallbackFocus={searchField}
+          />
         )}
         {allCards.length > 0 && (
           <SelectAllRow

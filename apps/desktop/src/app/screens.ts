@@ -7,16 +7,19 @@ import { SkillsIcon } from "#/components/icons/skills.tsx";
 import { SourcesIcon } from "#/components/icons/sources.tsx";
 
 export interface Screen {
-  /** Route path; nested routes (such as Update review under Skills) keep their parent active. */
+  /** Route path; routes under it (such as Update review under Skills) keep it active. */
   path: string;
   label: string;
   icon: IconComponent;
-  /** The screens nested under this one in the sidebar, each at a path under its parent's. */
+  /** The screens nested under this one in the sidebar, each at its own path. */
   children?: Screen[];
 }
 
-/** The Sources screen, nested under Skills. */
-export const SOURCES_PATH = "/skills/sources";
+/**
+ * The Sources screen, nested under Skills in the sidebar. Its path is outside /skills, where
+ * `/skills/<name>` opens a skill, which could be named "sources".
+ */
+export const SOURCES_PATH = "/sources";
 
 /** Sidebar order: Skills with Sources under it, Agents, MCP servers, Plugins, Settings. */
 export const screens: Screen[] = [
