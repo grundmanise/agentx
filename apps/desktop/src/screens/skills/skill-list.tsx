@@ -103,13 +103,37 @@ const CheckUpdates = () => {
   );
 };
 
+/**
+ * A group's caption. A source's group shows the source's full URL in a tooltip, as its caption
+ * gives only the short form.
+ */
+const GroupLabel = ({ label, source }: { label: string; source?: string }) => {
+  const caption = (
+    <span className="type-caption text-group-label">{label}</span>
+  );
+  if (source === undefined) {
+    return caption;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{caption}</TooltipTrigger>
+      <TooltipContent side="bottom" align="start">
+        {source}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
 const GroupHeader = ({
   label,
+  source,
   count,
   first,
   action,
 }: {
   label: string;
+  /** The full URL of a source's group, which the tooltip on its label shows. */
+  source?: string;
   count: number;
   first: boolean;
   /** A control at the header's right end, such as the Unmanaged group's Adopt all. */
@@ -123,7 +147,7 @@ const GroupHeader = ({
     }
   >
     <span className="gap-group flex min-w-0 flex-1 items-baseline">
-      <span className="type-caption text-group-label">{label}</span>
+      <GroupLabel label={label} source={source} />
       <span className="type-technical-sm text-group-count">{count}</span>
     </span>
     {action}
@@ -369,6 +393,7 @@ const SkillGroups = ({
                 >
                   <GroupHeader
                     label={group.label}
+                    source={group.source}
                     count={group.rows.length}
                     first={header.item.first}
                     action={
