@@ -1,4 +1,4 @@
-// The Create skill dialog, from the Skills and the Add skills headers: the name checked as the CLI
+// The Create skill dialog, from the Skills header: the name checked as the CLI
 // checks it, `skill new` with `--description` only when one is given, the new skill selected under
 // PERSONAL once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
 // Settings, and a refused name's message under Name.
@@ -175,13 +175,15 @@ const openOnSkill = async (cli: MockCli, page: Page, name: string) => {
   await expect(pane(page, name)).toBeVisible();
 };
 
-test("Add in the Skills header goes to Add skills", async ({ cli, page }) => {
+test("Add in the Skills header goes to Sources", async ({ cli, page }) => {
   await openOnSkill(cli, page, "release-notes");
   await skillsHeader(page)
     .getByRole("button", { exact: true, name: "Add" })
     .click();
-  await expect(page.getByRole("heading", { name: "Add skills" })).toBeVisible();
-  await expect(page).toHaveURL(/#\/add$/u);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Sources" })
+  ).toBeVisible();
+  await expect(page).toHaveURL(/#\/sources$/u);
 });
 
 test("Add's three-dots button opens a menu with Create skill, from the pointer and the keyboard; Escape, the trigger and a click outside close it", async ({
@@ -231,15 +233,11 @@ test("Add's three-dots button opens a menu with Create skill, from the pointer a
   await expect(nameField(page)).toBeFocused();
 });
 
-test("Create skill in the Add skills header runs skill new without --description when it is empty", async ({
+test("Create skill runs skill new without --description when it is empty", async ({
   cli,
   page,
 }) => {
-  registerReads(cli);
-  await page.goto("/#/add");
-  await expect(page.getByRole("heading", { name: "Add skills" })).toBeVisible();
-  await page.getByRole("button", { exact: true, name: "Create skill" }).click();
-  await expect(dialog(page)).toBeVisible();
+  await openDialog(cli, page);
 
   await nameField(page).fill(NEW_SKILL);
   // Spaces alone are no description.

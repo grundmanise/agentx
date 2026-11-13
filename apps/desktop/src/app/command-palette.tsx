@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 
 import { usePublishState } from "#/app/publish-status.tsx";
-import { screens } from "#/app/screens.ts";
+import { allScreens, SOURCES_PATH } from "#/app/screens.ts";
 import { AddIcon } from "#/components/icons/add.tsx";
 import { ArrowDownIcon } from "#/components/icons/arrow-down.tsx";
 import { ArrowUpIcon } from "#/components/icons/arrow-up.tsx";
@@ -142,7 +142,7 @@ export const CommandPalette = ({
       id: "action:add-skills",
       label: "Add skills",
       run: () => {
-        void navigate("/add");
+        void navigate(SOURCES_PATH);
       },
     },
     {
@@ -182,7 +182,7 @@ export const CommandPalette = ({
       },
     }
   );
-  const goTo: PaletteItem[] = screens.map((s) => ({
+  const goTo: PaletteItem[] = allScreens.map((s) => ({
     group: "GO TO",
     icon: s.icon,
     id: `go:${s.path}`,

@@ -1,6 +1,7 @@
 import { NavLink } from "react-router";
 
 import { screens } from "#/app/screens.ts";
+import type { Screen } from "#/app/screens.ts";
 import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { cn } from "#/lib/utils.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -13,6 +14,35 @@ const MachineLabel = () => {
   );
 };
 
+/**
+ * One nav item, active on its own routes. A nested screen has a path of its own, outside its
+ * parent's, so Skills is active on a skill and on Update review, and Sources alone on its page.
+ */
+const NavItem = ({
+  screen: { icon: ScreenIcon, label, path },
+  nested = false,
+}: {
+  screen: Screen;
+  nested?: boolean;
+}) => (
+  <NavLink
+    to={path}
+    className={({ isActive }) =>
+      cn(
+        "rounded-shell-nav type-nav gap-nav-icon flex items-center px-2.5",
+        nested ? "h-8" : "h-nav",
+        isActive
+          ? "bg-shell-nav-active-bg text-shell-nav-active-text"
+          : "text-shell-nav-text hover:text-text-primary"
+      )
+    }
+  >
+    {/* The icon takes the link's text colour, so it brightens with the label. */}
+    <ScreenIcon />
+    <span className="flex-1">{label}</span>
+  </NavLink>
+);
+
 export const Sidebar = () => (
   <aside className="bg-shell-bg w-sidebar gap-nav pt-sidebar-top pr-sidebar-right pb-sidebar pl-sidebar flex flex-none flex-col">
     <div className="flex items-center gap-2.5 px-2.5 pt-1 pb-5.5">
@@ -23,23 +53,18 @@ export const Sidebar = () => (
       </div>
     </div>
     <nav aria-label="Main" className="gap-nav flex flex-col">
-      {screens.map(({ icon: ScreenIcon, ...s }) => (
-        <NavLink
-          key={s.path}
-          to={s.path}
-          className={({ isActive }) =>
-            cn(
-              "rounded-shell-nav type-nav h-nav gap-nav-icon flex items-center px-2.5",
-              isActive
-                ? "bg-shell-nav-active-bg text-shell-nav-active-text"
-                : "text-shell-nav-text hover:text-text-primary"
-            )
-          }
-        >
-          {/* The icon takes the link's text colour, so it brightens with the label. */}
-          <ScreenIcon />
-          <span className="flex-1">{s.label}</span>
-        </NavLink>
+      {screens.map((s) => (
+        <div key={s.path} className="gap-nav flex flex-col">
+          <NavItem screen={s} />
+          {s.children !== undefined && (
+            // Nested screens hang off a `shell.nav-tree` rule under their parent's icon.
+            <div className="gap-nav border-shell-nav-tree ml-4.5 flex flex-col border-l pl-2">
+              {s.children.map((child) => (
+                <NavItem key={child.path} screen={child} nested />
+              ))}
+            </div>
+          )}
+        </div>
       ))}
     </nav>
   </aside>

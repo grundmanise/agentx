@@ -5,31 +5,31 @@ import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router";
 import { ActivityLogSheet } from "#/app/activity-log.tsx";
 import { CommandPalette } from "#/app/command-palette.tsx";
 import { LaunchProgress } from "#/app/launch-progress.tsx";
-import { screens, titles } from "#/app/screens.ts";
+import { allScreens, SOURCES_PATH, titles } from "#/app/screens.ts";
 import { Sidebar } from "#/app/sidebar.tsx";
 import { StaleBar } from "#/app/stale-bar.tsx";
 import { StartupLayer } from "#/app/startup-layer.tsx";
 import { TopBar } from "#/app/top-bar.tsx";
 import { Toaster } from "#/components/toast.tsx";
 import { setNavigate } from "#/lib/navigate.ts";
-import { AddScreen } from "#/screens/add/add-screen.tsx";
 import { AgentsScreen } from "#/screens/agents/agents-screen.tsx";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
 import { PluginsScreen } from "#/screens/plugins/plugins-screen.tsx";
 import { ServersScreen } from "#/screens/servers/servers-screen.tsx";
 import { SettingsScreen } from "#/screens/settings/settings-screen.tsx";
 import { SkillsScreen } from "#/screens/skills/skills-screen.tsx";
+import { SourcesScreen } from "#/screens/sources/sources-screen.tsx";
 import { launch, useStartup } from "#/startup/startup.ts";
 import { startLoaders } from "#/store/loaders.ts";
 
 /** The screens built so far, by route; the others show their placeholder. */
 const built: Record<string, ReactElement> = {
-  "/add": <AddScreen />,
   "/agents": <AgentsScreen />,
   "/plugins": <PluginsScreen />,
   "/servers": <ServersScreen />,
   "/settings": <SettingsScreen />,
   "/skills": <SkillsScreen />,
+  [SOURCES_PATH]: <SourcesScreen />,
 };
 
 /** The screen of the current route, faded in; nothing until the startup checks pass. */
@@ -104,7 +104,7 @@ export const App = () => {
             <Routes>
               {/* No screen mounts until the checks pass: none runs a command before they do. */}
               <Route element={<Screen ready={startup.ready} />}>
-                {screens.map((s) => (
+                {allScreens.map((s) => (
                   <Route
                     key={s.path}
                     path={`${s.path}/*`}

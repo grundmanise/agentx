@@ -67,6 +67,21 @@ Hues:
 | `white`      | `#ffffff` |
 | `black`      | `#000000` |
 
+Monogram tints, one hue each (§6 "Agent client logo chip, monogram"): a dark tint (`-900`, HSL lightness 22%, saturation 40%) behind a light letter (`-200`, lightness 80%, saturation 75%), ten hues spread round the colour wheel.
+
+| Hue      | Dark                   | Light                  |
+| -------- | ---------------------- | ---------------------- |
+| `red`    | `red-900` `#4f2222`    | `red-200` `#f2a6a6`    |
+| `orange` | `orange-900` `#4f3422` | `orange-200` `#f2c4a6` |
+| `amber`  | `amber-900` `#4f4122`  | `amber-200` `#f2dba6`  |
+| `lime`   | `lime-900` `#414f22`   | `lime-200` `#dbf2a6`   |
+| `green`  | `green-900` `#224f31`  | `green-200` `#a6f2bf`  |
+| `teal`   | `teal-900` `#224f49`   | `teal-200` `#a6f2e8`   |
+| `sky`    | `sky-900` `#22414f`    | `sky-200` `#a6dbf2`    |
+| `blue`   | `blue-900` `#22314f`   | `blue-200` `#a6bff2`   |
+| `violet` | `violet-900` `#31224f` | `violet-200` `#bfa6f2` |
+| `pink`   | `pink-900` `#4f2240`   | `pink-200` `#f2a6d9`   |
+
 Alpha is written as `<primitive>/<percent>` and resolves to `rgba` of that primitive (e.g. `lime-400/12` → `rgba(212,255,79,.12)`, `black/55` → `rgba(0,0,0,.55)`).
 
 ### 2.2 Semantic tokens
@@ -120,6 +135,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `shell.nav-text` | `gray-300` | Inactive nav item; `text.primary` on hover |
 | `shell.nav-active-bg` | `gray-910` | Active nav item |
 | `shell.nav-active-text` | `gray-50` | Active nav item label |
+| `shell.nav-tree` | `gray-800` | 1px rule to the left of the nav items nested under another |
 | `shell.nav-badge-bg` | `accent.primary` | Inbox count badge (digits `on-accent`) |
 | `shell.topbar-text` | `gray-300` | Command field placeholder and icon (`text.secondary` on hover), account remote status label |
 | `shell.status-published` | `accent.primary` | Account remote status dot, nothing to publish (halo `lime-400/15`) |
@@ -148,9 +164,11 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `button.danger-text` | `accent.danger` | Danger ghost (Remove, Cancel, Restore base version) |
 | `button.danger-bg` | `red-400/10` | Danger button at rest |
 | `button.danger-hover` | `red-400/17` |  |
-| `source-pill.bg` | `gray-910` | Source pill in Add, inactive (label `text.secondary`) |
-| `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
+| `source-pill.bg` | `gray-910` | Source pill on Sources, inactive (label `text.secondary`) |
+| `source-pill.active-bg` | `gray-50` | Source pill on Sources, active |
 | `source-pill.active-text` | `on-accent` |  |
+| `source-pill.count` | `gray-400` | Skill count after the name of an inactive source pill: 4.8:1 on `source-pill.bg` |
+| `source-pill.active-count` | `gray-600` | Skill count on the active source pill: 7.5:1 on `source-pill.active-bg`, the one use of `gray-600` as text, on a light fill |
 | `button.toast-action-text` | `accent.primary` | Action inside a toast |
 | `button.split-divider` | `gray-800` | The 1px separator between the buttons of a button group |
 
@@ -160,7 +178,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | --- | --- | --- |
 | `pill.update-bg` | `accent.primary` | Update pill |
 | `pill.update-text` | `on-accent` |  |
-| `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, a source's pin |
+| `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, Read-only |
 | `pill.neutral-hover` | `gray-800` |  |
 | `pill.neutral-text` | `gray-200` |  |
 | `pill.removed-bg` | `red-400/12` | Removed-from-source pill |
@@ -226,7 +244,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `group.label` | `gray-300` | Source group caption |
 | `group.count` | `gray-500` | Count beside the caption |
 | `group.divider-label` | `gray-500` | Caption of the sub-group of skills in no agent client |
-| `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows, Settings sources |
+| `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows |
 | `table.header-text` | `gray-500` | Column captions |
 
 #### Skill glyph
@@ -249,6 +267,28 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `agent-chip.on-border` | `lime-400/35` |  |
 | `agent-chip.hover-border` | `gray-700` |  |
 | `agent-chip.text` | `gray-50` | Agent client name |
+| `monogram.0-bg` | `red-900` | Monogram tint, picked by a hash of the client name |
+| `monogram.0-text` | `red-200` | Monogram letters |
+| `monogram.1-bg` | `orange-900` |  |
+| `monogram.1-text` | `orange-200` |  |
+| `monogram.2-bg` | `amber-900` |  |
+| `monogram.2-text` | `amber-200` |  |
+| `monogram.3-bg` | `lime-900` |  |
+| `monogram.3-text` | `lime-200` |  |
+| `monogram.4-bg` | `green-900` |  |
+| `monogram.4-text` | `green-200` |  |
+| `monogram.5-bg` | `teal-900` |  |
+| `monogram.5-text` | `teal-200` |  |
+| `monogram.6-bg` | `sky-900` |  |
+| `monogram.6-text` | `sky-200` |  |
+| `monogram.7-bg` | `blue-900` |  |
+| `monogram.7-text` | `blue-200` |  |
+| `monogram.8-bg` | `violet-900` |  |
+| `monogram.8-text` | `violet-200` |  |
+| `monogram.9-bg` | `pink-900` |  |
+| `monogram.9-text` | `pink-200` |  |
+| `agent-picker.badge-bg` | `accent.primary` | Count of chosen targets the Add skills bar hides, on its "+n" button (digits `on-accent`) |
+| `agent-picker.row-hover` | `gray-880` | Row hover in the Choose agents dialog |
 
 #### Cards and banners
 
@@ -271,6 +311,14 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `add-card.status-disk` | `accent.attention` | Card status: already in the library |
 | `add-card.status-in-use` | `gray-400` | Card status: name in use |
 | `add-card.check-ring` | `gray-700` | Ring of the round check on a card that is not selected |
+| `source-card.bg` | `gray-950` | Card of the open source on Sources |
+| `source-card.border` | `gray-870` |  |
+| `source-card.divider` | `gray-870` | Rule above the facts strip, and between its facts |
+| `source-card.tile-bg` | `gray-880` | Owner tile |
+| `source-card.tile-text` | `gray-200` | Owner's initial on the tile |
+| `source-card.name` | `gray-50` | Source name |
+| `source-card.fact-label` | `gray-400` | Fact label (Skills, Branch, Commit, Fetched) |
+| `source-card.fact-value` | `gray-50` | Fact value |
 | `banner.title` | `gray-50` | Banner title (bg/border/tile from `tone.*`) |
 | `banner.text` | `gray-300` |  |
 | `card.chip-ring` | `card.bg` | 2px ring behind overlapping agent client logos on a card (the Universal card) |
@@ -426,6 +474,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
 | `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
+| `type.source-name` | sans | 16 | 500 |  |  |  | Source name on the card of the open source (`source-card.name`) |
 | `type.agent-card-name` | sans | 16 | 600 |  |  |  | Agent client name on an Agents page card, and the Universal card's title |
 | `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
@@ -434,7 +483,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
 | `type.settings-label` | sans | 14 | 500 |  |  |  | Settings section label (`text.primary`); the line under it is `type.secondary` in `text.muted` |
 | `type.plugin-name` | sans | 17 | 600 |  | -0.01em |  | Plugin name on a plugin card |
-| `type.version-pill` | mono | 12 | 500 |  |  |  | A plugin's version pill, a source's pin |
+| `type.version-pill` | mono | 12 | 500 |  |  |  | A plugin's version pill |
 
 Text wrapping: `text-wrap:pretty` on multi-line text. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
@@ -537,6 +586,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `segmented.padding-x` | 10–12 |  |  |
 | `filter.height` | 30 | `h-filter` | Filter button and agent client chip |
 | `filter.badge` | 16 | `size-filter-badge` | Count badge |
+| `agent-picker.badge` | 16 | `size-agent-picker-badge` | Count badge on the Add skills bar's "+n" button |
 | `agent-chip.height` | 44 | `h-agent-chip` | Agent client toggle chip |
 | `agent-chip.padding` | 0 8 0 7 | `py-0 pr-agent-chip-right pl-agent-chip-left` |  |
 | `agent-chip.gap` | 10 | `gap-agent-chip` | Logo → name → switch |
@@ -558,7 +608,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `input.search-padding` | 0 14 0 34 | `py-0 pr-input-search-right pl-input-search-left` | Room for the icon |
 | `input.label-gap` | 8 | `gap-input-label` | Label → field |
 | `input.textarea-height` | 88 | `h-textarea` | Create dialog description |
-| `add-search.height` | 40 | `h-add-search` | Search field of the Add skills screen, a pill across the page |
+| `add-search.height` | 40 | `h-add-search` | Search field of the Sources screen, a pill across the page |
 
 ### Cards, banners, tiles
 
@@ -611,6 +661,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.top` | 112 | `top-palette` | From the window top |
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
 | `adopt.list-max-height` | 280 | `max-h-adopt-list` | The adopt dialog's list of skills; it scrolls past it |
+| `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The Choose agents dialog's list; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
 | `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
@@ -663,6 +714,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `segmented.radius` | 9999 | Track and segments |
 | `agent-chip.radius` | 9999 | Agent client toggle chip |
 | `logo.radius` | 50% | Agent client logo |
+| `agent-picker.row-radius` | 10 | Row of the Choose agents dialog |
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
 | `shell.status-radius` | 9999 | Account remote status |
@@ -683,6 +735,8 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `agent-card.radius` | 20 | Agents page cards |
 | `plugin-card.radius` | 20 |  |
 | `add-card.radius` | 18 |  |
+| `source-card.radius` | 18 | Card of the open source on Sources |
+| `source-card.tile-radius` | 10 | Its owner tile |
 | `hunk.radius` | 14 | Hunk block |
 | `hunk.pane-radius` | 10 | Yours / theirs panes (outer corners only) |
 | `diff.segment-radius` | 4 | Progress segment |
@@ -725,7 +779,7 @@ Two buttons side by side: `button.gap`, primary on the right.
 
 ### Pills (status)
 
-Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version and a source's pin take `type.version-pill`.
+Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version takes `type.version-pill`.
 
 - Not published: `pill.neutral-*`. The only status pill a skill row carries.
 - Disabled (plugin): `pill.disabled-*`.
@@ -756,9 +810,15 @@ The Universal chip, on, opens the Remove dialog: a universal client reads the li
 - Order: the chips that are on, then the rest by the popularity of the agent client (`src/lib/agent-popularity.ts`), the clients it does not rank by name. Universal stands where its most used client would. The order is fixed when the pane opens, so a chip stays in place when it is toggled.
 - A machine can have dozens of agent configurations, so the section shows two rows of chips, measured at the pane's width, and a small ghost button in the second row, centred on the chips, that shows the rest and hides them again. Every chip that is on, or was on since the pane opened, stays in view, in more rows when two cannot hold them. No button when every chip fits in two rows.
 
+### Agent picker (Add skills bar)
+
+The install targets in the floating bar of the Add skills screen are round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the Universal stack, then the rest, each group in inventory order. The order is fixed when the bar opens and again when the dialog closes, so a logo stays in place while it is toggled. With more than six configurations that take a placement, a small secondary button "+n" comes last, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo, and each member of the Universal stack, shows the client's name in a Tooltip; the Universal toggle keeps its explanation as its accessible description.
+
+The "+n" button opens Choose agents, a dialog (§6 "Dialog") with a search field (§6 "Inputs") that filters by name, then every configuration that takes a placement, sorted by name, in a list that scrolls past `agent-picker.list-max-height`. A row is the whole hit target, `agent-picker.row-radius`, hover `agent-picker.row-hover`: a 28px logo, the name in `type.body` `text.primary` over the configuration's path in `type.technical-sm` `text.caption`, and the round checkbox (§6 "Checkbox (popover)") at the right. A row toggles the same targets as the bar. The footer counts the chosen targets in `type.secondary` `text.muted`, then a ghost Clear, which unchecks them all, and a primary Done, which closes the dialog.
+
 ### Checkbox (popover)
 
-16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark. In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
+16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark; mixed, for a box that stands for several of which some are checked: the same fill with a `checkbox.check` dash. In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
 
 ### Radio group
 
@@ -770,14 +830,14 @@ Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segme
 
 ### Agent client logo chip
 
-Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo carries the client's name as its `title`.
+Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo names its client on hover: as its `title`, or, in the Add skills bar and the Choose agents dialog, in the Tooltip (§6 "Tooltip"), which opens at once.
 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
 
 ### Agent client logo chip, monogram
 
-A client with no bundled logo shows the first letter of its name in `type.pill`, `on-accent` on `logo.bg`, drawn as an image like every other logo.
+A client with no bundled logo shows two letters of its name, drawn as an image like every other logo: the initials of its first two words when the name has more than one (words split at spaces, hyphens and underscores), or its first letter and the next for one word. They are semibold, on a round tint that fills the logo's box with no padding: `monogram.N.bg` behind, `monogram.N.text` for the letters, read from the tokens as the page has them, where N comes from a hash of the name, so a client keeps its hue everywhere and on every launch. Ten hues tell more clients apart than one white tile with a letter did, and the dark tint sits with the app's surfaces where a white tile would glare.
 
 ### Skill glyph (16px, leading the row)
 
@@ -795,7 +855,7 @@ Sort toggle, at the right end of the filter row, steps through three orders on e
 
 ### Group header (lists)
 
-`type.caption` in `group.label`, then the count in `group.count`. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
+`type.caption` in `group.label`, then the count in `group.count`. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
 
 ### Banner (detail pane)
 
@@ -929,7 +989,7 @@ The rows of the Skills list column, in their groups (§6 "Group header"). Only t
 
 ### Tooltip
 
-shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs.
+shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, or shows the full text of a shortened label, such as a source group's URL: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs.
 
 ### Popover (Filter)
 
@@ -991,7 +1051,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
-- Adopt skills sits after Sources, since adopting adds the sources the skills come from: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
+- Adopt skills sits after Account remote: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
 
@@ -1003,6 +1063,19 @@ At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/c
 - It counts your own skills edited since they were published, with the predicate the Skills screen's banner uses (`hasEditsToPublish` in `src/screens/skills/banners.ts`), so the title bar and the Skills screen never disagree. A skill never published is not counted: a bare publish leaves it out, and its own banner publishes it.
 - While the publish runs, and until the inventory that follows arrives, the label counts its progress and the pill is `aria-busy`. While the check runs, a `Spinner` takes the dot's place; it is the Skills screen's check, so only one runs at a time.
 - Hidden while the startup layer shows, and until the inventory and the sources are read, so it never guesses a state.
+
+### Sidebar
+
+The nav items in sidebar order, `shell.nav-gap` apart. A screen nested under another, Sources under Skills, sits under its parent, indented to its parent's icon, behind a 1px `shell.nav-tree` rule, 32 high. A parent is active on its own routes and not on its nested screen's: Skills is active on a skill and on Update review, Sources alone on its page.
+
+### Sources screen
+
+The Sources screen (`src/screens/sources`), under Skills: the serif page title with Add source, the search field, the source pills, the card of the open source, then the select-all row and the skill cards.
+
+- A source pill (`source-pill.*`, `pill.radius`) holds the attention dot of a stale source, the source's short name, and its skill count in `type.technical-sm` (`source-pill.count`, `source-pill.active-count` on the active pill) once it is known.
+- The card of the open source: `source-card.bg`, a 1px `source-card.border`, `source-card.radius`. Its top row is a 36px owner tile (`source-card.tile-*`, `source-card.tile-radius`, the owner's initial in `type.source-name`), the name in `type.source-name`, which opens the repository in the browser, then a neutral Read-only pill when access is limited, and under them the full URL with its `#pin` in `type.technical-sm` `text.muted`; at its right, Refresh (secondary) and Remove (danger), `button.gap` apart. Under it, after a 1px `source-card.divider` rule, a strip of four facts, each a `type.secondary` `source-card.fact-label` label over a `type.technical-sm` value in `source-card.fact-value`, a never-fetched source's Fetched in `tone.attention.fg`. The card shows tags only for limits: a source you can write to has none. It hides while a search runs, since a search looks across every source; Personal's card has no Remove, since Settings manages the account remote.
+- The select-all row: one checkbox (§6 "Checkbox (popover)"), checked, mixed or not as the selection is, its label in `type.secondary` `text.secondary` counting the selection; at the right, how many skills this machine already has in `type.secondary` `text.hint`.
+- Remove opens a dialog (§6 "Dialog") with no line under its title. When this machine has skills from the source, a checkbox offers to remove them too, unticked, their names listed under it in `type.technical` `text.muted`; the confirm is a danger button.
 
 ### Command palette
 

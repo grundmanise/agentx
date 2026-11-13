@@ -67,6 +67,8 @@ export interface SkillRow {
 export interface Group {
   key: string;
   label: string;
+  /** The full URL of a source's group, which its header's tooltip shows. */
+  source?: string;
   rows: SkillRow[];
 }
 
@@ -88,7 +90,7 @@ const GITHUB_OR_GITLAB = /github|gitlab/u;
 const SCP_URL = /^(?:[\w.-]+@)?(?<host>[\w.-]+):(?<path>.+)$/u;
 
 /** The host and path of a source URL, HTTPS or SSH; undefined for anything else. */
-const hostAndPath = (
+export const hostAndPath = (
   url: string
 ): { host: string; path: string } | undefined => {
   if (url.includes("://")) {
@@ -398,11 +400,15 @@ export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
   );
   return ordered.map((key) => {
     const inGroup = rows.filter((r) => r.group === key);
-    return {
+    const group: Group = {
       key,
       label: groupLabel(key),
       rows: sorted(inGroup, comparer(order)),
     };
+    if (key.startsWith(SOURCE_PREFIX)) {
+      group.source = key.slice(SOURCE_PREFIX.length);
+    }
+    return group;
   });
 };
 

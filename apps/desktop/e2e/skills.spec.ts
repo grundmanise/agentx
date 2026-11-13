@@ -15,6 +15,7 @@ import {
   inventory,
   releaseNotesDiffs,
   reviewDiffs,
+  ACME,
 } from "./fixtures/skills.ts";
 import {
   configuration,
@@ -112,6 +113,11 @@ test.describe("the list", () => {
       "PLUGINS (1)",
       "UNMANAGED (2)",
     ]);
+    // A source's group shows the source's full URL when its label is pointed at.
+    await group(page, "ACME/SKILLS (2)")
+      .getByText("ACME/SKILLS", { exact: true })
+      .hover();
+    await expect(page.getByRole("tooltip")).toHaveText(ACME);
     expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
       "draft",
       "pdf-letters",
