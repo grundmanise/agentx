@@ -107,18 +107,12 @@ const closeNotes = () => {
   useForkStore.setState({ notes: undefined });
 };
 
-/** Fork, in the detail pane's action row (secondary) or on a banner (ghost): opens the dialog. */
-export const ForkButton = ({
-  row,
-  place = "actions",
-}: {
-  row: SkillRow;
-  place?: "actions" | "banner";
-}) => {
+/** Fork, a secondary button in the detail pane's action row: opens the dialog. */
+export const ForkButton = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(forkLabel(row));
   return (
     <Button
-      variant={place === "banner" ? "ghost" : "secondary"}
+      variant="secondary"
       size="sm"
       disabled={pending}
       aria-busy={pending ? true : undefined}
