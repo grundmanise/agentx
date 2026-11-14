@@ -112,19 +112,23 @@ func TestSourceFetchByURLByIDAndAll(t *testing.T) {
 	backdate(t, h)
 	before := readVersion(t, h)
 
-	// By URL: one source, one progress event, the ref moved and the event
-	// says where from.
+	// By URL: one source, a progress event before the fetch and one as it
+	// ends, the ref moved and the event says where from.
 	out := h.run("--json", "source", "fetch", one.url)
 	equal(t, "exit", out.exit, 0)
 	events := h.events(out.stdout)
-	if got, want := h.types(events), []string{"progress", "source", "result"}; !reflect.DeepEqual(got, want) {
+	if got, want := h.types(events), []string{"progress", "progress", "source", "result"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v\n%s", got, want, out.stderr)
 	}
-	equal(t, "progress.phase", events[0]["phase"], "fetch")
-	equal(t, "progress.subject", events[0]["subject"], one.url)
-	equal(t, "progress.current", events[0]["current"], float64(1))
-	equal(t, "progress.total", events[0]["total"], float64(1))
-	src := events[1]
+	equal(t, "start.phase", events[0]["phase"], "fetch")
+	equal(t, "start.subject", events[0]["subject"], nil)
+	equal(t, "start.current", events[0]["current"], float64(0))
+	equal(t, "start.total", events[0]["total"], float64(1))
+	equal(t, "progress.phase", events[1]["phase"], "fetch")
+	equal(t, "progress.subject", events[1]["subject"], one.url)
+	equal(t, "progress.current", events[1]["current"], float64(1))
+	equal(t, "progress.total", events[1]["total"], float64(1))
+	src := events[2]
 	equal(t, "source.id", src["id"], source.ID(one.url))
 	equal(t, "source.url", src["url"], one.url)
 	equal(t, "source.commit", src["commit"], moved)
@@ -163,11 +167,11 @@ func TestSourceFetchByURLByIDAndAll(t *testing.T) {
 	out = h.run("--json", "source", "fetch", two.url, source.ID(one.url))
 	equal(t, "exit", out.exit, 0)
 	events = h.events(out.stdout)
-	if got, want := h.types(events), []string{"progress", "progress", "source", "source", "result"}; !reflect.DeepEqual(got, want) {
+	if got, want := h.types(events), []string{"progress", "progress", "progress", "source", "source", "result"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v\n%s", got, want, out.stderr)
 	}
-	equal(t, "source[0].url", events[2]["url"], two.url)
-	equal(t, "source[1].url", events[3]["url"], one.url)
+	equal(t, "source[0].url", events[3]["url"], two.url)
+	equal(t, "source[1].url", events[4]["url"], one.url)
 	refetched(t, h, one.url)
 	refetched(t, h, two.url)
 	equal(t, "version", readVersion(t, h), before+1) // one settings write for the whole run
@@ -181,14 +185,18 @@ func TestSourceFetchByURLByIDAndAll(t *testing.T) {
 	out = h.run("--json", "source", "fetch", "--all")
 	equal(t, "exit", out.exit, 0)
 	events = h.events(out.stdout)
-	if got, want := h.types(events), []string{"progress", "progress", "source", "source", "result"}; !reflect.DeepEqual(got, want) {
+	if got, want := h.types(events), []string{"progress", "progress", "progress", "source", "source", "result"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v\n%s", got, want, out.stderr)
 	}
-	// The progress events stream as the fetches end, so their subjects come
-	// in the order the network decided; what each one says about the run is
-	// fixed: one step per source, counted 1 to the total.
+	// The first progress event comes before any fetch: 0 of the total, with
+	// no subject. The others stream as the fetches end, so their subjects
+	// come in the order the network decided; what each one says about the
+	// run is fixed: one step per source, counted 1 to the total.
+	equal(t, "start.current", events[0]["current"], float64(0))
+	equal(t, "start.total", events[0]["total"], float64(2))
+	equal(t, "start.subject", events[0]["subject"], nil)
 	var subjects []string
-	for i, e := range events[:2] {
+	for i, e := range events[1:3] {
 		subjects = append(subjects, e["subject"].(string))
 		equal(t, "progress.phase", e["phase"], "fetch")
 		equal(t, "progress.current", e["current"], float64(i+1))
@@ -198,13 +206,13 @@ func TestSourceFetchByURLByIDAndAll(t *testing.T) {
 	if want := []string{one.url, two.url}; !reflect.DeepEqual(subjects, want) {
 		t.Errorf("progress subjects = %v, want %v", subjects, want)
 	}
-	equal(t, "source[0].url", events[2]["url"], one.url) // sorted by URL: one before two
-	equal(t, "source[0].commit", events[2]["commit"], moved)
-	equal(t, "source[0].previous_commit", events[2]["previous_commit"], nil) // it did not move
-	equal(t, "source[1].url", events[3]["url"], two.url)
-	equal(t, "source[1].commit", events[3]["commit"], twoMoved)
-	equal(t, "source[1].previous_commit", events[3]["previous_commit"], twoHead)
-	equal(t, "source[1].skills", events[3]["skills"], float64(2))
+	equal(t, "source[0].url", events[3]["url"], one.url) // sorted by URL: one before two
+	equal(t, "source[0].commit", events[3]["commit"], moved)
+	equal(t, "source[0].previous_commit", events[3]["previous_commit"], nil) // it did not move
+	equal(t, "source[1].url", events[4]["url"], two.url)
+	equal(t, "source[1].commit", events[4]["commit"], twoMoved)
+	equal(t, "source[1].previous_commit", events[4]["previous_commit"], twoHead)
+	equal(t, "source[1].skills", events[4]["skills"], float64(2))
 	refetched(t, h, one.url)
 	refetched(t, h, two.url)
 	equal(t, "ref of two", h.sourceRef(two.url), twoMoved)
@@ -229,15 +237,15 @@ func TestSourceFetchWarnsOnAnUnreachableSourceAndFetchesTheRest(t *testing.T) {
 	out := h.run("--json", "source", "fetch", "--all")
 	equal(t, "exit", out.exit, 3)
 	events := h.events(out.stdout)
-	if got, want := h.types(events), []string{"progress", "progress", "source", "error", "result"}; !reflect.DeepEqual(got, want) {
+	if got, want := h.types(events), []string{"progress", "progress", "progress", "source", "error", "result"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v\n%s", got, want, out.stderr)
 	}
-	equal(t, "source.url", events[2]["url"], one.url)
-	equal(t, "source.commit", events[2]["commit"], moved)
-	equal(t, "error.code", events[3]["code"], "source")
-	contains(t, "error.message", events[3]["message"].(string), two.url)
-	equal(t, "result.ok", events[4]["ok"], false)
-	contains(t, "result.summary", events[4]["summary"].(string), two.url)
+	equal(t, "source.url", events[3]["url"], one.url)
+	equal(t, "source.commit", events[3]["commit"], moved)
+	equal(t, "error.code", events[4]["code"], "source")
+	contains(t, "error.message", events[4]["message"].(string), two.url)
+	equal(t, "result.ok", events[5]["ok"], false)
+	contains(t, "result.summary", events[5]["summary"].(string), two.url)
 
 	logs := h.events(out.stderr)
 	if len(logs) != 1 || logs[0]["level"] != "warn" {
@@ -308,7 +316,7 @@ func TestSourceFetchErrors(t *testing.T) {
 	// Naming one source twice fetches it once.
 	out = h.run("--json", "source", "fetch", s.url, source.ID(s.url))
 	equal(t, "exit", out.exit, 0)
-	if got, want := h.types(h.events(out.stdout)), []string{"progress", "source", "result"}; !reflect.DeepEqual(got, want) {
+	if got, want := h.types(h.events(out.stdout)), []string{"progress", "progress", "source", "result"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("event types = %v, want %v", got, want)
 	}
 

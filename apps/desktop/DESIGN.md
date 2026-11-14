@@ -686,6 +686,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
 | `code.gap` | 12 | `gap-x-code` | Between gutter and text |
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
+| `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
 | `file-row.height` | 44 | `h-file-row` | File tree row |
 | `file-row.padding-x` | 16 | `px-file-row`, `right-file-row` for the control at the row's end |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
@@ -1039,6 +1041,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file
 
 - A row: a chevron (turns 90° when open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` status for a file the user changed, and the meta (line count, binary, or size) in `file-row.meta` at the right. An open row shows the file in the Code pane below it.
 - SKILL.md comes first and open; the rest follow by path, a file the user removed among them.
+- While the files are read, the card shows the SKILL.md row alone, open and with no meta, over a Code pane at `code.height` that holds a stand-in SKILL.md, blurred by `code.loading-blur` like frosted glass, with a `md` (20px) `Spinner` in `text.muted` at its centre. When the files come in, the stand-in fades out over the real SKILL.md, which fades in from the same blur to sharp (§8). Every skill has a SKILL.md, so the list keeps its place when the files come in. The stand-in is hidden from assistive technology; the spinner's status says the files are being read.
 - A file on disk has a Show in Finder button group (§6 "Button group") over the meta, beside the trigger, never inside it. While the row is hovered, focused or has its menu open, the meta fades out and the button fades in at the same spot. The meta stays laid out, so the row never shifts, and the button stays in the tab order throughout. A removed file has no button.
 - The button opens the file at the skill's first place: the library when it holds the skill, else the first placement in the row's agent order. The chevron's menu lists every other placement, the path as the inventory carries it. A skill with one place has no chevron.
 
@@ -1104,12 +1107,13 @@ The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-
 
 ## 8. Motion
 
-Nothing loops forever, and nothing waits on purpose. The one loop is the `Spinner` of a pending control (§6) or of a running check: it turns only while its command runs and stops when the command ends.
+Nothing loops forever, and nothing waits on purpose. The one loop is the `Spinner` of a pending control (§6), of a running check, or of a read the screen waits on, such as a skill's files: it turns only while its command runs and stops when the command ends.
 
 - Hover and background changes: no transition, or at most `.2s`.
 - Switches: the track changes colour in `.2s`; the knob moves with no transition.
 - File list chevron: `rotate(90deg)` in `.15s`. The History sheet's chevron turns with no transition.
 - File row: the meta and the Show in Finder button swap by opacity in `.15s`.
+- Files read (`animate-code-reveal`, `animate-code-loading-out`): when a skill's files come in, the blurred stand-in SKILL.md and its spinner fade out while the real SKILL.md fades in, its blur going from `code.loading-blur` to none, both `.3s ease-out`. A skill whose files are already read shows them at once.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0` and opacity 0 → 1, `.22s ease`, when it appears.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; a control with a leading icon, such as Check updates or Check tools, shows it in the icon's place, so a long check reads as busy past its first second.
