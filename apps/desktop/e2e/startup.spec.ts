@@ -172,6 +172,17 @@ const relaunch = async (cli: MockCli, page: Page) => {
   return { commands: () => cli.commands.slice(before), doctor: held };
 };
 
+/** Starts a command as a control does, through the store harness, which it loads first. */
+const start = async (page: Page, args: string[]) => {
+  await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
+  await page.waitForFunction(() => "store" in window);
+  await page.evaluate((a) => {
+    window.store.run(a, { label: a.join(" ") });
+  }, args);
+};
+
+const removeNotes = ["skill", "remove", "notes"];
+
 test("a later launch shows the kept inventory at once, washed out and pulsing, and runs commands once the checks pass", async ({
   cli,
   page,
@@ -191,6 +202,14 @@ test("a later launch shows the kept inventory at once, washed out and pulsing, a
   ).toBeVisible();
   await expect(screen(page)).toHaveCSS("animation-name", "panel-loading");
 
+  // A change started now waits too, and Cancel stops one that waits.
+  cli.register(["skill", "place", "notes"], {});
+  await start(page, ["skill", "place", "notes"]);
+  await start(page, removeNotes);
+  await page.evaluate(async (label) => {
+    await window.store.cancel(label);
+  }, removeNotes.join(" "));
+
   doctor.release();
   await expect(screen(page)).toHaveCSS("animation-name", "none");
   await expect(screen(page)).toHaveCSS("opacity", "1");
@@ -200,10 +219,30 @@ test("a later launch shows the kept inventory at once, washed out and pulsing, a
     .toEqual(
       expect.arrayContaining([
         ["skill", "files", "notes", "--json"],
+        ["skill", "place", "notes", "--json"],
         ...loadLines,
       ])
     );
+  expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
   expect(cli.serveStarts).toBe(2);
+});
+
+test("a change started on a kept inventory does not run on a machine that is no longer as it showed", async ({
+  cli,
+  page,
+}) => {
+  const { commands, doctor } = await relaunch(cli, page);
+  // The skill went while the app was closed: the serve child's first inventory has none.
+  cli.onServeStart({ events: [firstInventory()] });
+  await start(page, removeNotes);
+  doctor.release();
+
+  await expect(screen(page)).toHaveCSS("opacity", "1");
+  await expect(page.getByRole("heading", { name: "notes" })).toHaveCount(0);
+  await expect
+    .poll(() => commands())
+    .toEqual(expect.arrayContaining(loadLines));
+  expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
 });
 
 test("a later launch whose check fails shows the layer, and drops a change started before it", async ({
@@ -211,11 +250,7 @@ test("a later launch whose check fails shows the layer, and drops a change start
   page,
 }) => {
   const { commands, doctor } = await relaunch(cli, page);
-  await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
-  await page.waitForFunction(() => "store" in window);
-  await page.evaluate(() => {
-    window.store.run(["skill", "remove", "notes"], { label: "remove notes" });
-  });
+  await start(page, removeNotes);
   doctor.expire();
   await expect(title(page)).toHaveText("agentx can't check this machine");
 
@@ -226,7 +261,7 @@ test("a later launch whose check fails shows the layer, and drops a change start
   await expect
     .poll(() => commands())
     .toEqual(expect.arrayContaining(loadLines));
-  expect(commands()).not.toContainEqual(["skill", "remove", "notes", "--json"]);
+  expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
 });
 
 test("a machine with no skills and no agents passes", async ({ cli, page }) => {

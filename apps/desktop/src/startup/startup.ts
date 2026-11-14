@@ -17,7 +17,11 @@ import type { RunResult } from "#/cli/transport.ts";
 import { readChecks } from "#/startup/checks.ts";
 import type { Findings, Problem } from "#/startup/checks.ts";
 import { connect, startServe } from "#/store/feed.ts";
-import { keepLaunch, restoreLaunch } from "#/store/launch-cache.ts";
+import {
+  keepLaunch,
+  restoreLaunch,
+  stillAsShown,
+} from "#/store/launch-cache.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { ServeEnd } from "#/store/store.ts";
 
@@ -180,6 +184,12 @@ const oneShot = async (
 // Each sequence gets a number; a later one makes the earlier one's findings stale.
 let generation = 0;
 
+/**
+ * The checks passed and the machine is no longer as the kept inventory showed it: a change a
+ * control started against that inventory does not run.
+ */
+let moved = false;
+
 const sequence = async () => {
   generation += 1;
   const mine = generation;
@@ -268,6 +278,10 @@ const sequence = async () => {
   } finally {
     if (mine === generation) {
       const { passed } = readChecks(findings, false);
+      const { cached, ready } = useStartup.getState();
+      if (passed && cached && !ready) {
+        moved = !stillAsShown();
+      }
       update({
         // A failure shows the layer; a pass closes it at once, except in manual mode.
         open: !passed || useStartup.getState().mode === "manual",
@@ -322,15 +336,21 @@ export const showKept = () => {
 /**
  * Waits for the checks while the screens show the kept inventory: a command a control starts then
  * runs once they pass. Resolves with whether the command may run. A command that changes
- * something does not outlive a failed check: the startup layer has replaced the control that
- * started it, so it does not run after a Retry.
+ * something runs only on the machine the user saw. It does not run when the serve child's first
+ * inventory differs from the kept one: the name it was given may now be another skill's. It does
+ * not outlive a failed check either: the startup layer has replaced the control that started it,
+ * so it does not run after a Retry.
  */
 export const checksPass = async (changes: boolean): Promise<boolean> => {
-  const answer = ({ cached, ready, running }: StartupState) => {
-    if (ready || !cached) {
-      return true;
+  const { cached, ready } = useStartup.getState();
+  if (ready || !cached) {
+    return true;
+  }
+  const answer = (state: StartupState) => {
+    if (state.ready) {
+      return !(changes && moved);
     }
-    return changes && !running ? false : undefined;
+    return changes && !state.running ? false : undefined;
   };
   let unsubscribe: (() => void) | undefined;
   const answers = new ReadableStream<boolean>({

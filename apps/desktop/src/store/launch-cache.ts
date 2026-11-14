@@ -58,6 +58,18 @@ const read = (): Kept | undefined => {
   return undefined;
 };
 
+/** What an inventory says of the machine: all of it but which serve child scanned, and when. */
+const machineOf = (inventory: InventoryEvent | undefined) => {
+  if (inventory === undefined) {
+    return "";
+  }
+  const { instance_id: _, scan_counter: __, ...machine } = inventory;
+  return JSON.stringify(machine);
+};
+
+/** The machine as the kept inventory this launch showed has it; undefined when it showed none. */
+let shown: string | undefined;
+
 /**
  * Fills the store from the kept inventory, and says whether there was one. Called once, before
  * the first render.
@@ -69,8 +81,16 @@ export const restoreLaunch = (): boolean => {
   }
   const { build: _, ...slices } = kept;
   useAppStore.setState(slices);
+  shown = machineOf(kept.inventory);
   return true;
 };
+
+/**
+ * Whether the machine is still as the kept inventory showed it, by the inventory the store holds
+ * now: the serve child's first one, once the checks pass.
+ */
+export const stillAsShown = () =>
+  shown === machineOf(useAppStore.getState().inventory);
 
 const write = () => {
   const { inventory, ...slices } = slicesOf(useAppStore.getState());
