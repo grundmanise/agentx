@@ -152,8 +152,10 @@ test("the log opens twice as wide as the What's new sheet, and its left edge dra
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await openFromPalette(page);
-  const width = async () =>
-    Math.round((await log(page).boundingBox())?.width ?? 0);
+  const width = async () => {
+    const box = await log(page).boundingBox();
+    return Math.round(box?.width ?? 0);
+  };
   expect(await width()).toBe(1120);
 
   // Dragged far to the left, the sheet stops at 90% of the 1280-wide window.
