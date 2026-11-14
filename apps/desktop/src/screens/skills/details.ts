@@ -1,13 +1,35 @@
 // The DETAILS of a skill, per kind: key and value pairs read from its library entry, its node and
-// the plugin that provides it, as the CLI reported them.
+// the plugin that provides it, as the CLI reported them. A value that names a repository links to
+// its page in the browser, and one that names a directory on this machine shows it in Finder.
 import type { Configuration, LibraryEntry } from "#/cli/events.gen.ts";
 import { shortId, toolName } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import { webUrl } from "#/screens/sources/projection.ts";
+
+/** Where a value leads: a repository's page in the browser, or a path shown in Finder. */
+export type DetailLink =
+  | { kind: "page"; url: string }
+  | { kind: "path"; path: string };
 
 export interface Detail {
   key: string;
   value: string;
+  link?: DetailLink;
 }
+
+/** The page of the repository at `url`, when it has one. */
+const pageLink = (url: string | undefined): DetailLink | undefined => {
+  const page = url === undefined ? undefined : webUrl(url);
+  return page === undefined ? undefined : { kind: "page", url: page };
+};
+
+/** `path` shown in Finder, when it is absolute. */
+const pathLink = (path: string): DetailLink | undefined =>
+  path.startsWith("/") ? { kind: "path", path } : undefined;
+
+/** `detail` with `link` when there is one. */
+const linked = (detail: Detail, link: DetailLink | undefined): Detail =>
+  link === undefined ? detail : { ...detail, link };
 
 const at = (source: string, subpath: string | undefined) =>
   subpath === undefined || subpath === "" ? source : `${source}/${subpath}`;
@@ -27,7 +49,10 @@ const worktreeOf = (row: SkillRow): string | undefined => {
 
 const sourceDetails = (entry: LibraryEntry): Detail[] => {
   const details: Detail[] = [
-    { key: "Source", value: at(entry.source ?? "", entry.subpath) },
+    linked(
+      { key: "Source", value: at(entry.source ?? "", entry.subpath) },
+      pageLink(entry.source)
+    ),
   ];
   if (entry.upstream_commit !== undefined) {
     details.push({ key: "Version", value: shortId(entry.upstream_commit) });
@@ -47,21 +72,28 @@ const sourceDetails = (entry: LibraryEntry): Detail[] => {
 const yoursDetails = (row: SkillRow, entry: LibraryEntry): Detail[] => {
   const details: Detail[] = [];
   if (entry.upstream !== undefined) {
-    details.push({
-      key: "Forked from",
-      value: at(entry.upstream, entry.upstream_subpath),
-    });
+    details.push(
+      linked(
+        {
+          key: "Forked from",
+          value: at(entry.upstream, entry.upstream_subpath),
+        },
+        pageLink(entry.upstream)
+      )
+    );
     if (entry.upstream_commit !== undefined) {
       details.push({ key: "Based on", value: shortId(entry.upstream_commit) });
     }
   }
-  details.push({
-    key: "Published to",
-    value: entry.source ?? "No account remote",
-  });
+  details.push(
+    linked(
+      { key: "Published to", value: entry.source ?? "No account remote" },
+      pageLink(entry.source)
+    )
+  );
   const files = worktreeOf(row);
   if (files !== undefined) {
-    details.push({ key: "Files", value: files });
+    details.push(linked({ key: "Files", value: files }, pathLink(files)));
   }
   if (entry.fork_id !== undefined) {
     details.push({ key: "Id", value: shortId(entry.fork_id) });
@@ -95,10 +127,9 @@ const diskDetails = (row: SkillRow): Detail[] => {
       ? row.occurrences.map((o) => o.path)
       : (row.entry?.placements.map((p) => p.path) ?? []);
   // Universal clients share the library directory: one line per place, not per client.
-  const details: Detail[] = [...new Set(paths)].map((path) => ({
-    key: "Found at",
-    value: path,
-  }));
+  const details: Detail[] = [...new Set(paths)].map((path) =>
+    linked({ key: "Found at", value: path }, pathLink(path))
+  );
   if (row.adoption !== undefined) {
     details.push({
       key: "Installed by",

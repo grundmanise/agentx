@@ -549,7 +549,8 @@ test.describe("the detail pane", () => {
         - region "Details":
           - heading "Details" [level=2]
           - term: Source
-          - definition: https://github.com/acme/skills/pdf
+          - definition:
+            - link "https://github.com/acme/skills/pdf"
           - term: Version
           - definition: 3f2a9c1
           - term: State
@@ -593,13 +594,16 @@ test.describe("the detail pane", () => {
         - region "Details":
           - heading "Details" [level=2]
           - term: Forked from
-          - definition: https://github.com/acme/skills/pdf
+          - definition:
+            - link "https://github.com/acme/skills/pdf"
           - term: Based on
           - definition: 3f2a9c1
           - term: Published to
-          - definition: git@github.com:me/account.git
+          - definition:
+            - link "git@github.com:me/account.git"
           - term: Files
-          - definition: /home/me/.agentx/worktrees/pdf-letters/pdf-letters
+          - definition:
+            - link "/home/me/.agentx/worktrees/pdf-letters/pdf-letters"
           - term: Id
           - definition: f0f0f0f
         - region "History":
@@ -611,6 +615,21 @@ test.describe("the detail pane", () => {
             - listitem:
               - button "Show all 5"
     `);
+
+    // A repository opens its page in the browser, the skill's files show in the file manager.
+    const details = article.getByRole("region", { name: "Details" });
+    await details
+      .getByRole("link", { name: "git@github.com:me/account.git" })
+      .click();
+    expect(cli.openedUrls).toEqual(["https://github.com/me/account"]);
+    await details
+      .getByRole("link", {
+        name: "/home/me/.agentx/worktrees/pdf-letters/pdf-letters",
+      })
+      .click();
+    expect(cli.reveals).toEqual([
+      ["/home/me/.agentx/worktrees/pdf-letters/pdf-letters"],
+    ]);
 
     await article.getByRole("button", { name: "Show all 5" }).click();
     const sheet = page.getByRole("dialog", { name: "History" });
@@ -720,7 +739,8 @@ test.describe("the detail pane", () => {
         - region "Details":
           - heading "Details" [level=2]
           - term: Found at
-          - definition: /home/me/.agents/skills/scratch
+          - definition:
+            - link "/home/me/.agents/skills/scratch"
           - term: Installed by
           - definition: Skills CLI · https://github.com/vercel/skills
         - region "History":
