@@ -100,7 +100,7 @@ const sortLabels = {
 
 /**
  * The sort toggle. It always reads as a sort by name: A-Z with the arrow, which turns around
- * for Z-A. Until a click it is off and dimmed, with no fill, and the list keeps its own order
+ * for Z-A. Until a click it is off: a quieter grey with no fill, and the list keeps its own order
  * (enabled skills first, then disabled ones, each A to Z). Each click steps on: A-Z, then Z-A,
  * by name alone, then off again.
  */

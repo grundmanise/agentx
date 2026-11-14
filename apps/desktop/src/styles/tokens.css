@@ -221,8 +221,8 @@
   --color-filter-chip-bg: var(--gray-920);
   --color-filter-chip-text: var(--gray-150);
   --color-filter-chip-hover: var(--gray-880);
-  --color-filter-sort-text: var(--gray-300);
-  --color-filter-sort-off-text: var(--color-text-disabled);
+  --color-filter-sort-text: var(--gray-200);
+  --color-filter-sort-off-text: var(--color-text-caption);
 
   /* Lists and rows */
   --color-row-hover: var(--gray-920);

@@ -229,8 +229,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
-| `filter.sort-text` | `gray-300` | Sort toggle while it sorts by name (A-Z, Z-A) |
-| `filter.sort-off-text` | `text.disabled` | Sort toggle while off |
+| `filter.sort-text` | `gray-200` | Sort toggle while it sorts by name (A-Z, Z-A) |
+| `filter.sort-off-text` | `text.caption` | Sort toggle while off |
 
 #### Lists and rows
 
@@ -425,7 +425,7 @@ Every text colour token reaches at least 4.5:1 (WCAG AA) on the backgrounds it i
 
 - Body text is `text.primary`–`text.muted`. `text.hint` and `text.caption` are for helper text, keys, captions, counts, meta and placeholders.
 - `text.hint` and `text.caption` reach 4.5:1 on the surfaces and hover fills above, not on lighter fills. On `palette.row-active`, a button fill or a pill, use `text.muted` or lighter: a palette row's hint turns `text.muted` while the row is selected.
-- `gray-500` is the darkest grey for text a person needs to read. `text.disabled` and `text.faint` (`gray-600`, `gray-700`) stay below 4.5:1, so use them only for disabled controls, which WCAG exempts, for the sort toggle while off (`filter.sort-off-text`), whose tooltip and accessible name say the order, and for line numbers and marks that are not content.
+- `gray-500` is the darkest grey for text a person needs to read. `text.disabled` and `text.faint` (`gray-600`, `gray-700`) stay below 4.5:1, so use them only for disabled controls, which WCAG exempts, and for line numbers and marks that are not content.
 - Check a new pairing before you use it, and keep it at 4.5:1 or more.
 - Never put alpha-muted text on accent fills.
 
@@ -850,7 +850,7 @@ The dot and fork glyphs say one thing: whether there is an action to take. `glyp
 
 Sort toggle, at the right end of the filter row, always reads as a sort by name: A-Z or Z-A with the arrow (turned for Z-A). It steps through three states on each click:
 
-- Off – A-Z and the arrow in `filter.sort-off-text` with no fill, so the toggle reads as disabled; hover brings back the ghost fill and `text.primary`. The list keeps its own order: within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
+- Off – A-Z and the arrow in `filter.sort-off-text` with no fill, so the toggle reads as quiet beside the lighter, filled states and still reaches 4.5:1; hover brings back the ghost fill and `text.primary`. The list keeps its own order: within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
 - A-Z, Z-A – by name alone, whatever the state, in `filter.sort-text` on `button.ghost-bg`.
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
