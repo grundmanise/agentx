@@ -1,12 +1,11 @@
 // The DETAILS of a skill, per kind: key and value pairs read from its library entry, its node and
-// the plugin that provides it, as the CLI reported them. A value that names a repository links to
-// its page in the browser, and one that names a directory on this machine shows it in Finder.
+// the plugin that provides it, as the CLI reported them. An https URL opens in the browser, and a
+// directory on this machine shows in Finder.
 import type { Configuration, LibraryEntry } from "#/cli/events.gen.ts";
 import { shortId, toolName } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
-import { webUrl } from "#/screens/sources/projection.ts";
 
-/** Where a value leads: a repository's page in the browser, or a path shown in Finder. */
+/** Where a value leads: a URL opened in the browser, or a path shown in Finder. */
 export type DetailLink =
   | { kind: "page"; url: string }
   | { kind: "path"; path: string };
@@ -17,11 +16,9 @@ export interface Detail {
   link?: DetailLink;
 }
 
-/** The page of the repository at `url`, when it has one. */
-const pageLink = (url: string | undefined): DetailLink | undefined => {
-  const page = url === undefined ? undefined : webUrl(url);
-  return page === undefined ? undefined : { kind: "page", url: page };
-};
+/** `url` opened in the browser, when it is an https URL; an SSH remote stays text. */
+const pageLink = (url: string | undefined): DetailLink | undefined =>
+  url?.startsWith("https://") === true ? { kind: "page", url } : undefined;
 
 /** `path` shown in Finder, when it is absolute. */
 const pathLink = (path: string): DetailLink | undefined =>

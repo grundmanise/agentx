@@ -599,8 +599,7 @@ test.describe("the detail pane", () => {
           - term: Based on
           - definition: 3f2a9c1
           - term: Published to
-          - definition:
-            - link "git@github.com:me/account.git"
+          - definition: git@github.com:me/account.git
           - term: Files
           - definition:
             - link "/home/me/.agentx/worktrees/pdf-letters/pdf-letters"
@@ -616,12 +615,12 @@ test.describe("the detail pane", () => {
               - button "Show all 5"
     `);
 
-    // A repository opens its page in the browser, the skill's files show in the file manager.
+    // A URL opens in the browser, the skill's files show in the file manager.
     const details = article.getByRole("region", { name: "Details" });
     await details
-      .getByRole("link", { name: "git@github.com:me/account.git" })
+      .getByRole("link", { name: "https://github.com/acme/skills/pdf" })
       .click();
-    expect(cli.openedUrls).toEqual(["https://github.com/me/account"]);
+    expect(cli.openedUrls).toEqual(["https://github.com/acme/skills"]);
     await details
       .getByRole("link", {
         name: "/home/me/.agentx/worktrees/pdf-letters/pdf-letters",

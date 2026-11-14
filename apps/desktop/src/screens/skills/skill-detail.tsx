@@ -35,8 +35,8 @@ const Caption = ({ children }: { children: string }) => (
 );
 
 /**
- * A value of DETAILS: a link that opens its repository's page in the browser, or shows its
- * directory in Finder, when it has one.
+ * A value of DETAILS: a link that opens its URL in the browser, or shows its directory in Finder,
+ * when it has one.
  */
 const DetailValue = ({ detail }: { detail: Detail }) => {
   const { link, value } = detail;
