@@ -107,7 +107,8 @@ const pauseTimers = async (page: Page) => {
   await page.clock.install({ time: new Date("2026-10-23T10:00:00Z") });
   await page.clock.pauseAt(new Date("2026-10-23T10:00:01Z"));
 };
-const progress = (page: Page) => page.getByRole("main").locator("output");
+/** The launch progress in the empty panel; a screen has status lines of its own. */
+const progress = (page: Page) => page.getByRole("main").locator("> output");
 
 test("a first launch says at once that it loads, and from 5 seconds how much longer it tries", async ({
   cli,
