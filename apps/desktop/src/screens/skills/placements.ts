@@ -39,7 +39,7 @@ export const lockReason = (row: SkillRow): string | undefined => {
   switch (row.kind) {
     case "plugin": {
       const plugin = row.plugin?.name ?? row.occurrences[0]?.plugin ?? "";
-      return `Comes with the ${plugin} plugin. Fork it to manage it here`;
+      return `Comes with the ${plugin} plugin. Fork to edit`;
     }
     case "disk": {
       return row.adoption?.state === "candidate"

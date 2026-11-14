@@ -190,8 +190,7 @@ test.describe("chips", () => {
   test("locked chips toast the lock reason", async ({ cli, page }) => {
     await openSkill(cli, page, "commit-helper", "skill:h-commit");
     const plugin = pane(page, "commit-helper");
-    const reason =
-      "Comes with the acme-tools plugin. Fork it to manage it here";
+    const reason = "Comes with the acme-tools plugin. Fork to edit";
     await expect(chip(plugin, "Cursor")).toHaveAttribute("title", reason);
     await chip(plugin, "Cursor").click();
     await expect(toasts(page).getByText(reason)).toBeVisible();
