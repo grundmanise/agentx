@@ -2,9 +2,7 @@ import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import type { Range } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useNavigate } from "react-router";
 
-import { SOURCES_PATH } from "#/app/screens.ts";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
@@ -19,6 +17,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { AddSkillDialog } from "#/screens/skills/add-skill-dialog.tsx";
 import { AdoptDialog } from "#/screens/skills/adopt-dialog.tsx";
 import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
 import type { ToolArg } from "#/screens/skills/adopt.ts";
@@ -440,18 +439,19 @@ const SkillGroups = ({
 };
 
 /**
- * Add, a button group whose menu opens the Create skill dialog. The dialog's open state lives
- * here, so opening or closing it draws this group again and no row of the list.
+ * Add, a button group that opens the Add skill dialog, and whose menu opens the Create skill
+ * dialog. The dialogs' open state lives here, so opening or closing one draws this group again
+ * and no row of the list.
  */
 const AddSkills = () => {
-  const navigate = useNavigate();
+  const [adding, setAdding] = useState(false);
   const [creating, setCreating] = useState(false);
   return (
     <>
       <SplitButton
         size="sm"
         onClick={() => {
-          void navigate(SOURCES_PATH);
+          setAdding(true);
         }}
         menuLabel="More add actions"
         menu={
@@ -466,6 +466,7 @@ const AddSkills = () => {
       >
         Add
       </SplitButton>
+      <AddSkillDialog open={adding} onOpenChange={setAdding} />
       <CreateSkillDialog open={creating} onOpenChange={setCreating} />
     </>
   );

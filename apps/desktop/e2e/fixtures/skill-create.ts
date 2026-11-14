@@ -93,3 +93,72 @@ export const createdEvents: InlineEvent[] = [
     type: "result",
   },
 ];
+
+/** The source the Add skill tests link into, which this machine has not added yet. */
+export const ANTHROPIC = "https://github.com/anthropics/skills";
+/** The skill the Add skill tests install, and the link to its folder they paste. */
+export const ADDED_SKILL = "docx";
+export const ADD_LINK = `${ANTHROPIC}/tree/main/skills/${ADDED_SKILL}`;
+
+/** The library entry `skill add` made: a managed skill of the source, placed like the new skill. */
+const added: LibraryEntry = {
+  base_hash: "h-docx",
+  content_hash: "h-docx",
+  kind: "managed",
+  name: ADDED_SKILL,
+  placements: placements.map((p) => ({
+    ...p,
+    path: p.path.replace(NEW_SKILL, ADDED_SKILL),
+  })),
+  source: ANTHROPIC,
+  state: "current",
+  subpath: `skills/${ADDED_SKILL}`,
+  universal,
+  upstream_commit: "c0ffee1234567",
+};
+
+/** The scan after `skill add`: the Skills fixture's machine with the skill it installed. */
+export const inventoryAfterAdd = {
+  ...inventory,
+  // Sorted by name, as an inventory lists it: docx comes after draft.
+  library: [
+    ...library.filter((e) => e.name < ADDED_SKILL),
+    added,
+    ...library.filter((e) => e.name > ADDED_SKILL),
+  ],
+  scan_counter: 2,
+  skills: [
+    ...skills,
+    {
+      ...node,
+      content_hash: "h-docx",
+      description: "Read and write Word documents",
+      logical_id: "skill:h-docx",
+      name: ADDED_SKILL,
+      occurrences: node.occurrences.map((o) => ({
+        ...o,
+        id: o.id.replace(NEW_SKILL, ADDED_SKILL),
+        path: o.path.replace(NEW_SKILL, ADDED_SKILL),
+        resolved_path: `${LIBRARY}/${ADDED_SKILL}`,
+      })),
+      physical_id: "skill:h-docx",
+    },
+  ],
+} satisfies InlineEvent;
+
+/** What `skill add` writes when it adds the source and installs the skill its link names. */
+export const addedEvents: InlineEvent[] = [
+  {
+    id: "anthropics-skills",
+    skills: 1,
+    subpath: `skills/${ADDED_SKILL}`,
+    type: "source",
+    url: ANTHROPIC,
+  },
+  { type: "library_skill", ...added },
+  {
+    ok: true,
+    summary: `installed ${ADDED_SKILL} in 4 configurations`,
+    type: "result",
+  },
+];

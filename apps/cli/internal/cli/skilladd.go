@@ -46,7 +46,9 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 			"'agentx source add' would; an added source is installed from as it was last\n" +
 			"fetched, unless --fetch fetches it again. Name the skills with --name, once for\n" +
 			"each, or take the whole source with --all and leave out what you do not want\n" +
-			"with --except.\n\n" +
+			"with --except. A path that holds one skill needs no --name, so a link to a\n" +
+			"skill's folder or to its SKILL.md, copied from GitHub or GitLab, installs it;\n" +
+			"a link at the source's default branch pins nothing.\n\n" +
 			"With no source, install your own skills from the account remote, which is\n" +
 			"fetched every time: the ones you name with --name, or with --all every one this\n" +
 			"machine lacks. Each is the same skill, with its history, that you publish back\n" +
@@ -55,6 +57,7 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 			"placements; any other directory the library holds of the name is refused.",
 		Example: examples(
 			"agentx skill add anthropics/skills --name pdf", "install one skill from a GitHub repository",
+			"agentx skill add https://github.com/anthropics/skills/tree/main/skills/pdf", "install one skill from a link to its folder",
 			"agentx skill add anthropics/skills --all --except pdf", "install every other skill of the source",
 			"agentx skill add owner/repo#v2 --name pdf --to cursor", "install from a pinned tag, into one client",
 			"agentx skill add anthropics/skills --name pdf --fetch", "fetch the source again first",
@@ -111,6 +114,9 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		if entry.Account {
 			return forkSourceIs(entry.URL, entry)
 		}
+		if src.RefFromPath && src.Ref != entry.Pin && inv.isDefaultBranch(ctx, src, entry.DefaultBranch) {
+			src.Ref, src.RefFromPath = "", false
+		}
 		if src.Ref != "" && src.Ref != entry.Pin {
 			return pinMismatch(src, entry)
 		}
@@ -124,6 +130,12 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	targets, err := inv.placementTargets(to)
 	if err != nil {
 		return err
+	}
+	// A source this run adds from a link at its default branch is added
+	// unpinned; git is asked which branch that is once the arguments are
+	// known to be good, since asking is network.
+	if add && src.RefFromPath && inv.isDefaultBranch(ctx, src, "") {
+		src.Ref, src.RefFromPath = "", false
 	}
 	// A source this run adds, or fetches because --fetch asked, is fetched
 	// once, outside the lock, and the install reads the listing that fetch
@@ -172,6 +184,26 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		return err
 	}
 	return inv.installSkills(ctx, gitDir, src, entry.LastFetched, listing.Commit, skills, targets, asCopy)
+}
+
+// isDefaultBranch reports whether the ref a tree or SKILL.md link carries in
+// its path is the source's default branch, the branch a browser shows a
+// repository at, which skill add reads as no pin: a link copied from the
+// browser names a skill, and the branch in it was only what the page showed.
+// recorded is the default branch the settings entry holds, "" for none;
+// git is asked when it is "" or names another branch, since a remote's HEAD
+// can move, and an answer that does not come leaves the ref a pin. A link at
+// any other branch, and a ref a #ref fragment names, stays a pin.
+func (inv *invocation) isDefaultBranch(ctx context.Context, src source.Source, recorded string) bool {
+	if recorded != "" && src.Ref == recorded {
+		return true
+	}
+	branch, err := inv.git.DefaultBranch(ctx, src.URL)
+	if err != nil {
+		inv.out.debugf("reading the default branch of %s: %v", src.URL, err)
+		return false
+	}
+	return branch != "" && branch == src.Ref
 }
 
 // installSkills is the install of skill add once the source is fetched and

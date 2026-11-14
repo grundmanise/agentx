@@ -1,12 +1,19 @@
 // The Create skill dialog, from the Skills header: the name checked as the CLI
 // checks it, `skill new` with `--description` only when one is given, the new skill selected under
 // PERSONAL once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
-// Settings, and a refused name's message under Name.
+// Settings, and a refused name's message under Name. And the Add skill dialog, which Add opens:
+// `skill add` on the pasted link, the skill selected once the inventory lists it, and a refusal
+// under the field.
 import type { Page } from "@playwright/test";
 
 import {
+  ADD_LINK,
+  ADDED_SKILL,
+  addedEvents,
+  ANTHROPIC,
   createdEvents,
   inventoryAfter,
+  inventoryAfterAdd,
   NEW_DESCRIPTION,
   NEW_SKILL,
 } from "./fixtures/skill-create.ts";
@@ -111,11 +118,11 @@ const eachName = async (
   await eachName(rest, check);
 };
 
-/** Plays the scan that follows `skill new`: the inventory with the new skill, then the answer. */
-const answerRefresh = async (cli: MockCli) => {
+/** Plays the scan that follows a command: the inventory with the new skill, then the answer. */
+const answerRefresh = async (cli: MockCli, after = inventoryAfter) => {
   await expect.poll(() => cli.serveRequests.length).toBeGreaterThan(0);
   await cli.serveEmit([
-    inventoryAfter,
+    after,
     {
       ok: true,
       request_id: cli.requestIds.at(-1) ?? "",
@@ -175,15 +182,87 @@ const openOnSkill = async (cli: MockCli, page: Page, name: string) => {
   await expect(pane(page, name)).toBeVisible();
 };
 
-test("Add in the Skills header goes to Sources", async ({ cli, page }) => {
+const addDialog = (page: Page) =>
+  page.getByRole("dialog", { name: "Add skill" });
+const linkField = (page: Page) =>
+  addDialog(page).getByRole("textbox", { name: "Link to a skill" });
+const addButton = (page: Page) =>
+  addDialog(page).getByRole("button", { exact: true, name: "Add" });
+
+/** Opens the Add skill dialog from Add in the Skills header. */
+const openAddDialog = async (cli: MockCli, page: Page) => {
   await openOnSkill(cli, page, "release-notes");
   await skillsHeader(page)
     .getByRole("button", { exact: true, name: "Add" })
     .click();
+  await expect(addDialog(page)).toBeVisible();
+  await expect(linkField(page)).toBeFocused();
+};
+
+test("Add in the Skills header runs skill add on the pasted link and selects the skill", async ({
+  cli,
+  page,
+}) => {
+  await openAddDialog(cli, page);
+  await expect(linkField(page)).toHaveAccessibleDescription(
+    "A GitHub or GitLab link to the skill's folder or its SKILL.md"
+  );
+  await expect(addButton(page)).toBeDisabled();
+  cli.register(["skill", "files", ADDED_SKILL], {
+    events: filesOf(ADDED_SKILL),
+  });
+
+  await linkField(page).fill(` ${ADD_LINK} `);
+  const add = cli.register(["skill", "add", ADD_LINK], {
+    events: addedEvents,
+    holdAfter: 0,
+  });
+  await addButton(page).click();
+  await add.started;
+  await expect(addButton(page)).toHaveAttribute("aria-busy", "true");
+  add.release();
   await expect(
-    page.getByRole("heading", { level: 1, name: "Sources" })
+    toasts(page).getByText(`Added ${ADDED_SKILL} skill from anthropics/skills`)
   ).toBeVisible();
-  await expect(page).toHaveURL(/#\/sources$/u);
+
+  // The command ended; the inventory that follows has not come: the dialog stays busy.
+  await expect(addButton(page)).toHaveAttribute("aria-busy", "true");
+  await answerRefresh(cli, inventoryAfterAdd);
+  await expect(addDialog(page)).toBeHidden();
+  await expect(row(page, ADDED_SKILL)).toHaveAttribute("aria-current", "true");
+  await expect(pane(page, ADDED_SKILL)).toBeVisible();
+  expect(later(cli)).toEqual([["skill", "add", ADD_LINK, "--json"]]);
+});
+
+test("a link to a folder of several skills shows the refusal under the field, its hint in the app's words", async ({
+  cli,
+  page,
+}) => {
+  await openAddDialog(cli, page);
+  const link = `${ANTHROPIC}/tree/main/skills`;
+  cli.register(["skill", "add", link], {
+    events: [
+      {
+        hint: "name one with --name, or take them all with --all: docx, pdf, pptx",
+        message: `${ANTHROPIC} under skills holds 3 skills`,
+        type: "error",
+      },
+    ],
+    exitCode: 1,
+  });
+  await linkField(page).fill(link);
+  await linkField(page).press("Enter");
+
+  const alert = addDialog(page).getByRole("alert");
+  await expect(alert).toHaveText(
+    `${ANTHROPIC} under skills holds 3 skills. Link to one skill's folder: docx, pdf, pptx.`
+  );
+  await expect(linkField(page)).toHaveAttribute("aria-invalid", "true");
+
+  // Changing the link clears it.
+  await linkField(page).fill(`${link}/docx`);
+  await expect(alert).toHaveCount(0);
+  await expect(linkField(page)).not.toHaveAttribute("aria-invalid");
 });
 
 test("Add's three-dots button opens a menu with Create skill, from the pointer and the keyboard; Escape, the trigger and a click outside close it", async ({

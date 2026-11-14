@@ -910,6 +910,10 @@ The run stays in the dialog. Each row shows its state: nothing while waiting, a 
 
 `src/screens/skills/create-dialog.tsx`. Two fields, each with its label in `type.secondary` `text.secondary` and its rule as a hint under it: Name, mono and focused on open, and Description. A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and the confirm is disabled. A name the CLI refuses shows the refusal under Name in place of the rule; any other refusal shows under Description. The dialog stays pending until the inventory that follows lists the new skill; it then selects the skill and opens its `SKILL.md` as Edit does (§6 "Edit (detail pane)").
 
+### Add skill dialog
+
+`src/screens/skills/add-skill-dialog.tsx`, which Add in the Skills header and the palette open. One mono field for a link to one skill, named by its placeholder and focused on open, with a hint under it in `type.secondary` `text.hint`; the confirm is disabled while the field is empty. The confirm runs `skill add` on the link, which adds the skill's source first when this machine lacks it. The dialog stays pending until the inventory that follows lists the skill; it then closes and selects the skill, and the toast names the skill and its source. A refusal shows under the field (§6 "Refusal under a field"), a source git cannot reach as the Add source dialog words it, and a change to the field clears it.
+
 ### Refusal under a field
 
 A CLI refusal of what a field holds shows under the field as one paragraph, the message then the hint, in `type.notice` `tone.danger.fg`, as an alert (`src/components/problem-text.tsx`). `src/lib/problem-text.ts` sentence-cases each part and ends it with a full stop, and changes nothing else: commands, paths and the skill names the field knows keep the CLI's spelling. When the CLI's hint names a flag or a command, the field shows a hint in the app's own words that names its own control (`src/lib/app-hint.ts`). The error toast says a refusal the same way.
@@ -981,7 +985,7 @@ shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side
 
 ### Skills header
 
-The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose menu opens the Create skill dialog (§6 "Button group"). Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is pending (§6): `aria-busy`, with a `Spinner` in the refresh icon's place until the check ends, in the same square and ghost fill. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
+The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose action opens the Add skill dialog and whose menu opens the Create skill dialog (§6 "Button group"). The menu holds Create skill alone, as Sources sits under Skills in the sidebar. Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is pending (§6): `aria-busy`, with a `Spinner` in the refresh icon's place until the check ends, in the same square and ghost fill. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
 
 ### Skills list
 

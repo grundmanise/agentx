@@ -60,7 +60,7 @@ test.describe("ACTIONS", () => {
     await expect(group(page, "ACTIONS").getByRole("option")).toHaveText([
       /^Update all/u,
       /^Publish all/u,
-      "Add skills",
+      "Add skill",
       "Create skill",
       "Check updates",
       "Rescan this machine",
@@ -77,7 +77,7 @@ test.describe("ACTIONS", () => {
     launch(cli, "published", { update: false });
     await openPalette(page);
     await expect(group(page, "ACTIONS").getByRole("option")).toHaveText([
-      "Add skills",
+      "Add skill",
       "Create skill",
       "Check updates",
       "Rescan this machine",
@@ -132,13 +132,15 @@ test.describe("ACTIONS", () => {
     expect(ran(cli, ["skill", "check-updates"])).toBe(true);
   });
 
-  test("Add skills goes to Sources", async ({ cli, page }) => {
+  test("Add skill opens the Add skill dialog", async ({ cli, page }) => {
     launch(cli);
     await openPalette(page);
-    await option(page, "Add skills").click();
+    await option(page, "Add skill").click();
+    const dialog = page.getByRole("dialog", { name: "Add skill" });
+    await expect(dialog).toBeVisible();
     await expect(
-      page.getByRole("heading", { level: 1, name: "Sources" })
-    ).toBeVisible();
+      dialog.getByRole("textbox", { name: "Link to a skill" })
+    ).toBeFocused();
   });
 
   test("Create skill opens the Create skill dialog", async ({ cli, page }) => {

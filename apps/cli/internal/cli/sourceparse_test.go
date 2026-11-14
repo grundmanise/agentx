@@ -19,7 +19,7 @@ func TestParseSourceNeverEchoesACredential(t *testing.T) {
 		"https://user:" + secret + "@github.com",
 		"https://" + secret + "@github.com/owner",
 		"https://user:" + secret + "@host:notaport/owner/repo",
-		"https://user:" + secret + "@github.com/owner/repo/blob/main/SKILL.md",
+		"https://user:" + secret + "@github.com/owner/repo/blob/main/README.md",
 		"https://user:" + secret + "@github.com/owner/repo#",
 		"https://user:" + secret + "@github.com/owner/../repo",
 		"ftp://user:" + secret + "@example.com/repo",

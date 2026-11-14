@@ -39,6 +39,19 @@ When the source holds more than one skill, name the one you want with `--name`. 
 agentx skill add anthropics/skills/skills/pdf
 ```
 
+### Install from a link
+
+Copy the link to a skill's folder, or to its `SKILL.md`, from GitHub or GitLab, and pass it to `skill add`. agentx adds the source if you have not added it yet and installs that one skill:
+
+```sh
+agentx skill add https://github.com/anthropics/skills/tree/main/skills/pdf
+agentx skill add https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md
+```
+
+A link always names a branch, the one the page showed. When that branch is the source's default branch, agentx does not pin the source to it: the link installs as `anthropics/skills/skills/pdf` would. A link to any other branch, tag or commit pins a new source to that ref, and stops with exit code 1 for a source you already added with another pin. A `#<ref>` at the end of the link is always a pin.
+
+If the folder holds more than one skill, agentx adds the source, then stops with exit code 1 and lists the skills. Name one with `--name`, or take them all with `--all`.
+
 ### Install several at once
 
 Give `--name` once for each skill you want:
