@@ -265,11 +265,57 @@ A short paragraph that says what this skill is for and when to reach for it.
 Anything else the agent should keep in mind while it works.
 `;
 
+const loadingVariants = cva("bg-code-bg overflow-hidden", {
+  variants: {
+    leaving: {
+      false: "h-code relative",
+      true: "animate-code-loading-out pointer-events-none absolute inset-0",
+    },
+  },
+});
+
 /**
- * The list while the files are read: the SKILL.md row every skill has, over a stand-in file
- * blurred like frosted glass with a spinner on top, at the Code pane's full height, so the list
- * keeps its place when the files come in. It shares the list's open rows, so a row the user
- * closes stays closed.
+ * The SKILL.md pane while the files are read: a stand-in file blurred like frosted glass with a
+ * spinner on top, at the Code pane's full height. `leaving`, it lies over the real SKILL.md as
+ * that comes in and fades out, hidden from assistive technology, then calls `onLeft`.
+ */
+const LoadingPane = ({
+  leaving = false,
+  onLeft,
+}: {
+  leaving?: boolean;
+  onLeft?: () => void;
+}) => (
+  <div
+    aria-busy={leaving ? undefined : true}
+    aria-hidden={leaving ? true : undefined}
+    inert={leaving}
+    className={loadingVariants({ leaving })}
+    onAnimationEnd={(event) => {
+      // The spinner turns inside; only the pane's own fade ends it.
+      if (event.target === event.currentTarget) {
+        onLeft?.();
+      }
+    }}
+  >
+    <div
+      aria-hidden
+      inert
+      className="blur-code-loading pointer-events-none select-none"
+    >
+      <CodePane path={SKILL_MD} label={SKILL_MD} content={STAND_IN} />
+    </div>
+    <output className="text-text-muted absolute inset-0 flex items-center justify-center">
+      <Spinner size={20} />
+      <span className="sr-only">Reading the files…</span>
+    </output>
+  </div>
+);
+
+/**
+ * The list while the files are read: the SKILL.md row every skill has, over the loading pane, so
+ * the list keeps its place when the files come in. It shares the list's open rows, so a row the
+ * user closes stays closed.
  */
 const Reading = ({
   open,
@@ -286,19 +332,7 @@ const Reading = ({
         </span>
       </AccordionTrigger>
       <AccordionContent>
-        <div aria-busy className="bg-code-bg h-code relative overflow-hidden">
-          <div
-            aria-hidden
-            inert
-            className="blur-code-loading pointer-events-none select-none"
-          >
-            <CodePane path={SKILL_MD} label={SKILL_MD} content={STAND_IN} />
-          </div>
-          <output className="text-text-muted absolute inset-0 flex items-center justify-center">
-            <Spinner />
-            <span className="sr-only">Reading the files…</span>
-          </output>
-        </div>
+        <LoadingPane />
       </AccordionContent>
     </AccordionItem>
   </Accordion>
@@ -344,6 +378,16 @@ export const FilesSection = ({
 
   const current =
     read !== undefined && read.version === version ? read : undefined;
+  // Files that come in while the loading pane shows cross-fade into it; files already read show
+  // at once. Set while rendering, from the read the last render showed.
+  const [shown, setShown] = useState(current);
+  const [revealing, setRevealing] = useState(false);
+  if (shown !== current) {
+    setShown(current);
+    setRevealing(
+      shown === undefined && current !== undefined && current.failed !== true
+    );
+  }
   const compared =
     current?.failed === undefined && current?.diffs !== undefined
       ? comparedWith(row)
@@ -399,7 +443,21 @@ export const FilesSection = ({
                   )}
                 </AccordionTrigger>
                 <AccordionContent>
-                  <Pane row={file} />
+                  {revealing && file.path === SKILL_MD ? (
+                    <div className="relative">
+                      <div className="animate-code-reveal">
+                        <Pane row={file} />
+                      </div>
+                      <LoadingPane
+                        leaving
+                        onLeft={() => {
+                          setRevealing(false);
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <Pane row={file} />
+                  )}
                 </AccordionContent>
               </AccordionItem>
             );

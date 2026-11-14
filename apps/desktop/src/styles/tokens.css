@@ -394,6 +394,19 @@
       opacity: 0;
     }
   }
+  --animate-code-reveal: code-reveal 0.3s ease-out;
+  @keyframes code-reveal {
+    from {
+      opacity: 0;
+      filter: blur(var(--blur-code-loading));
+    }
+  }
+  --animate-code-loading-out: code-loading-out 0.3s ease-out forwards;
+  @keyframes code-loading-out {
+    to {
+      opacity: 0;
+    }
+  }
   --animate-floating-bar: floating-bar 0.22s ease;
   @keyframes floating-bar {
     from {
@@ -403,7 +416,7 @@
   }
 
   /* Blurs (DESIGN.md §4, code): `blur-code-loading`. */
-  --blur-code-loading: 6px;
+  --blur-code-loading: 8px;
 
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
