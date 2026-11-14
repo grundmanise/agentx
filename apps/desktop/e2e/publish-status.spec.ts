@@ -310,18 +310,24 @@ test.describe("check", () => {
     await expect(pane(page, "notes")).toBeVisible();
   });
 
-  test("with nothing from another machine: Nothing new from your other machines", async ({
-    cli,
-    page,
-  }) => {
-    launch(cli, "published");
-    cli.register(["skill", "check-updates"], { events: [pdfUpdate] });
-    await page.goto("/");
-    await status(page).click();
-    await expect(toasts(page)).toContainText(
-      "Nothing new from your other machines"
-    );
-    await expect(status(page)).not.toHaveAttribute("aria-busy", "true");
-    expect(ran(cli, ["skill", "check-updates"])).toBe(true);
-  });
+  const nothingFromMachines = [
+    { events: [], shown: "No new updates available" },
+    { events: [pdfUpdate], shown: "1 update from sources" },
+  ];
+  for (const c of nothingFromMachines) {
+    test(`with nothing from another machine: ${c.shown}`, async ({
+      cli,
+      page,
+    }) => {
+      launch(cli, "published");
+      cli.register(["skill", "check-updates"], { events: c.events });
+      await page.goto("/");
+      await status(page).click();
+      await expect(
+        toasts(page).getByText(c.shown, { exact: true })
+      ).toBeVisible();
+      await expect(status(page)).not.toHaveAttribute("aria-busy", "true");
+      expect(ran(cli, ["skill", "check-updates"])).toBe(true);
+    });
+  }
 });

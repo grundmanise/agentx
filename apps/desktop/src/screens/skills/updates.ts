@@ -230,16 +230,21 @@ const foundIn = (events: CliEvent[]) => {
   };
 };
 
-/** What a check found on your other machines, then how many updates from sources. */
+/**
+ * What a check found on your other machines, then how many updates from sources, or that it
+ * found nothing.
+ */
 const otherMachinesText = (events: CliEvent[]) => {
   const { fromMachines, fromSources } = foundIn(events);
+  const sources =
+    fromSources.length === 0
+      ? undefined
+      : `${plural(fromSources.length, "update", "updates")} from sources`;
   if (fromMachines.length === 0) {
-    return "Nothing new from your other machines";
+    return sources ?? "No new updates available";
   }
   const changed = `${plural(fromMachines.length, "skill", "skills")} changed on your other machines`;
-  return fromSources.length === 0
-    ? changed
-    : `${changed}, ${plural(fromSources.length, "update", "updates")} from sources`;
+  return sources === undefined ? changed : `${changed}, ${sources}`;
 };
 
 /**
