@@ -111,6 +111,7 @@ test.describe("the list", () => {
       "ACME/SKILLS (2)",
       "ZETA/TOOLS (1)",
       "PLUGINS (1)",
+      "ACME-TOOLS (1)",
       "UNMANAGED (2)",
     ]);
     // A source's group shows the source's full URL when its label is pointed at.
@@ -293,6 +294,7 @@ test.describe("filters", () => {
     await show.getByRole("radio", { name: "Plugins 1" }).check();
     expect(await names(list(page).getByRole("region"))).toEqual([
       "PLUGINS (1)",
+      "ACME-TOOLS (1)",
     ]);
     await show.getByRole("radio", { name: "Unmanaged 2" }).check();
     expect(await rowNames(list(page))).toEqual(["notes", "scratch"]);

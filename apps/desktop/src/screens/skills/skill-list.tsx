@@ -1,6 +1,13 @@
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import type { Range } from "@tanstack/react-virtual";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 
@@ -8,6 +15,7 @@ import { SOURCES_PATH } from "#/app/screens.ts";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
+import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { Spinner } from "#/components/spinner.tsx";
@@ -35,6 +43,7 @@ import type {
   Group,
   SkillRow,
   SortOrder,
+  Subgroup,
 } from "#/screens/skills/projection.ts";
 import { SkillRowItem } from "#/screens/skills/skill-row.tsx";
 import { checkUpdates, useCheckingUpdates } from "#/screens/skills/updates.ts";
@@ -161,6 +170,36 @@ const GroupHeader = ({
 );
 
 /**
+ * A plugin's header in the PLUGINS group: a ghost button with a chevron, the plugin's name and
+ * how many of its skills pass the filters, that collapses and expands the plugin's rows.
+ */
+const SubgroupHeader = ({
+  label,
+  count,
+  open,
+  onToggle,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+}) => (
+  <div className="flex pt-1">
+    <Button variant="ghost" size="sm" aria-expanded={open} onClick={onToggle}>
+      <span
+        className={
+          open ? "text-text-caption flex rotate-90" : "text-text-caption flex"
+        }
+      >
+        <ChevronIcon size="xs" />
+      </span>
+      <span className="type-caption text-subgroup-label">{label}</span>
+      <span className="type-technical-sm text-subgroup-count">{count}</span>
+    </Button>
+  </div>
+);
+
+/**
  * Adopt all, at the right end of the Unmanaged group's header while another tool installed skills
  * agentx can adopt: it opens the adopt dialog for every such tool.
  */
@@ -177,22 +216,60 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
   );
 };
 
-/** One thing the list places at its own offset: a group's header, or one of its rows. */
+/**
+ * One thing the list places at its own offset: a group's header, a plugin's header, or a row,
+ * with its place among the rows of its group or plugin.
+ */
 type Item =
   | { kind: "header"; key: string; group: Group; first: boolean }
-  | { kind: "row"; key: string; group: Group; row: SkillRow; at: number };
+  | {
+      kind: "subheader";
+      key: string;
+      group: Group;
+      subgroup: Subgroup;
+      open: boolean;
+    }
+  | {
+      kind: "row";
+      key: string;
+      group: Group;
+      subgroup?: Subgroup;
+      row: SkillRow;
+      at: number;
+      size: number;
+    };
 
-/** The headers and rows in the order the list shows them. */
-const itemsOf = (groups: Group[]): Item[] =>
-  groups.flatMap((group, i) => [
+/** The rows of a group, or of one plugin in it, as items. */
+const rowItems = (group: Group, rows: SkillRow[], subgroup?: Subgroup) =>
+  rows.map((row, at): Item => ({
+    at,
+    group,
+    key: `row:${row.key}`,
+    kind: "row",
+    row,
+    size: rows.length,
+    ...(subgroup === undefined ? {} : { subgroup }),
+  }));
+
+/** The headers and rows in the order the list shows them; a collapsed plugin shows its header only. */
+const itemsOf = (groups: Group[], collapsed: ReadonlySet<string>): Item[] =>
+  groups.flatMap((group, i): Item[] => [
     { first: i === 0, group, key: `group:${group.key}`, kind: "header" },
-    ...group.rows.map((row, at): Item => ({
-      at,
-      group,
-      key: `row:${row.key}`,
-      kind: "row",
-      row,
-    })),
+    ...(group.subgroups === undefined
+      ? rowItems(group, group.rows)
+      : group.subgroups.flatMap((subgroup): Item[] => {
+          const open = !collapsed.has(subgroup.key);
+          return [
+            {
+              group,
+              key: `subgroup:${subgroup.key}`,
+              kind: "subheader",
+              open,
+              subgroup,
+            },
+            ...(open ? rowItems(group, subgroup.rows, subgroup) : []),
+          ];
+        })),
   ]);
 
 /**
@@ -203,6 +280,9 @@ const itemsOf = (groups: Group[]): Item[] =>
 const estimatedHeight = (item: Item | undefined) => {
   if (item?.kind === "header") {
     return item.first ? 30 : 46;
+  }
+  if (item?.kind === "subheader") {
+    return 38;
   }
   return item?.row.description === "" ? 44 : 66;
 };
@@ -242,14 +322,21 @@ const forksByOriginal = (rows: SkillRow[]) => {
   return forks;
 };
 
-/** The drawn part of one group: its header when that is drawn, and its drawn rows. */
-interface DrawnGroup {
-  group: Group;
-  header?: { index: number; item: Item & { kind: "header" } };
+/** The drawn part of a group's rows, or of one plugin's: its header when that is drawn, and its drawn rows. */
+interface DrawnPart {
+  subgroup?: Subgroup;
+  subheader?: { index: number; item: Item & { kind: "subheader" } };
   rows: { index: number; item: Item & { kind: "row" } }[];
 }
 
-/** The drawn items by group, in order. */
+/** The drawn part of one group: its header when that is drawn, and its drawn parts. */
+interface DrawnGroup {
+  group: Group;
+  header?: { index: number; item: Item & { kind: "header" } };
+  parts: DrawnPart[];
+}
+
+/** The drawn items by group and plugin, in order. */
 const drawnGroups = (items: Item[], indexes: number[]): DrawnGroup[] => {
   const drawn: DrawnGroup[] = [];
   for (const index of indexes) {
@@ -259,13 +346,25 @@ const drawnGroups = (items: Item[], indexes: number[]): DrawnGroup[] => {
     }
     let last = drawn.at(-1);
     if (last?.group !== item.group) {
-      last = { group: item.group, rows: [] };
+      last = { group: item.group, parts: [] };
       drawn.push(last);
     }
     if (item.kind === "header") {
       last.header = { index, item };
+      continue;
+    }
+    let part = last.parts.at(-1);
+    if (part === undefined || part.subgroup !== item.subgroup) {
+      part =
+        item.subgroup === undefined
+          ? { rows: [] }
+          : { rows: [], subgroup: item.subgroup };
+      last.parts.push(part);
+    }
+    if (item.kind === "subheader") {
+      part.subheader = { index, item };
     } else {
-      last.rows.push({ index, item });
+      part.rows.push({ index, item });
     }
   }
   return drawn;
@@ -284,6 +383,8 @@ const SkillGroups = ({
   selectedKey,
   onSelect,
   onAdoptAll,
+  collapsed,
+  onToggle,
 }: {
   /** Every row, before the filters. */
   rows: SkillRow[];
@@ -294,6 +395,10 @@ const SkillGroups = ({
   onSelect: (row: SkillRow) => void;
   /** Opens the adopt dialog for every tool with skills to adopt. */
   onAdoptAll: () => void;
+  /** The keys of the collapsed plugin subgroups. */
+  collapsed: ReadonlySet<string>;
+  /** Collapses or expands a plugin's subgroup, by its key. */
+  onToggle: (key: string) => void;
 }) => {
   // What the rows' banners read besides the row, for their alert triangles.
   const sources = useAppStore((s) => s.sources);
@@ -309,7 +414,7 @@ const SkillGroups = ({
     latestSelect.current(row);
   }, []);
   const scroller = useRef<HTMLElement>(null);
-  const items = useMemo(() => itemsOf(groups), [groups]);
+  const items = useMemo(() => itemsOf(groups, collapsed), [groups, collapsed]);
   // Where the selected row is among the items, or -1 when the filters leave it out.
   const selectedIndex = useMemo(
     () =>
@@ -385,7 +490,7 @@ const SkillGroups = ({
         </p>
       ) : (
         <div ref={virtualizer.containerRef} className="relative">
-          {drawn.map(({ group, header, rows: groupRows }) => (
+          {drawn.map(({ group, header, parts }) => (
             <section
               key={group.key}
               aria-label={`${group.label} (${group.rows.length})`}
@@ -410,27 +515,61 @@ const SkillGroups = ({
                   />
                 </div>
               )}
-              <ul className="contents">
-                {groupRows.map(({ index, item }) => (
-                  <li
-                    key={item.key}
-                    ref={virtualizer.measureElement}
-                    data-index={index}
-                    aria-posinset={item.at + 1}
-                    aria-setsize={group.rows.length}
-                    className={item.at === 0 ? PLACED_ROW : PLACED_ROW_AFTER}
+              {parts.map(({ subgroup, subheader, rows: partRows }) => {
+                const list = (
+                  <ul className="contents">
+                    {partRows.map(({ index, item }) => (
+                      <li
+                        key={item.key}
+                        ref={virtualizer.measureElement}
+                        data-index={index}
+                        aria-posinset={item.at + 1}
+                        aria-setsize={item.size}
+                        className={
+                          item.at === 0 ? PLACED_ROW : PLACED_ROW_AFTER
+                        }
+                      >
+                        <SkillRowItem
+                          row={item.row}
+                          forks={forks.get(item.row.name) ?? NO_FORKS}
+                          configurations={configurations}
+                          facts={facts}
+                          selected={item.row.key === selectedKey}
+                          onSelect={select}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                );
+                if (subgroup === undefined) {
+                  return <Fragment key="rows">{list}</Fragment>;
+                }
+                return (
+                  <section
+                    key={subgroup.key}
+                    aria-label={`${subgroup.label} (${subgroup.rows.length})`}
+                    className="contents"
                   >
-                    <SkillRowItem
-                      row={item.row}
-                      forks={forks.get(item.row.name) ?? NO_FORKS}
-                      configurations={configurations}
-                      facts={facts}
-                      selected={item.row.key === selectedKey}
-                      onSelect={select}
-                    />
-                  </li>
-                ))}
-              </ul>
+                    {subheader !== undefined && (
+                      <div
+                        ref={virtualizer.measureElement}
+                        data-index={subheader.index}
+                        className={PLACED}
+                      >
+                        <SubgroupHeader
+                          label={subgroup.label}
+                          count={subgroup.rows.length}
+                          open={subheader.item.open}
+                          onToggle={() => {
+                            onToggle(subgroup.key);
+                          }}
+                        />
+                      </div>
+                    )}
+                    {list}
+                  </section>
+                );
+              })}
             </section>
           ))}
         </div>
@@ -486,6 +625,8 @@ export const SkillList = ({
   onOrder,
   selectedKey,
   onSelect,
+  collapsed,
+  onToggle,
 }: {
   /** Every row, before the filters. */
   rows: SkillRow[];
@@ -498,6 +639,10 @@ export const SkillList = ({
   onOrder: (order: SortOrder) => void;
   selectedKey: string | undefined;
   onSelect: (row: SkillRow) => void;
+  /** The keys of the collapsed plugin subgroups. */
+  collapsed: ReadonlySet<string>;
+  /** Collapses or expands a plugin's subgroup, by its key. */
+  onToggle: (key: string) => void;
 }) => {
   const [adopting, setAdopting] = useState(false);
   // The tools the open adopt dialog covers: every tool with skills to adopt when it opened.
@@ -563,6 +708,8 @@ export const SkillList = ({
         configurations={configurations}
         selectedKey={selectedKey}
         onSelect={onSelect}
+        collapsed={collapsed}
+        onToggle={onToggle}
         onAdoptAll={() => {
           setAdoptTools(toolsToAdopt(adoption).map((t) => t.arg));
           setAdopting(true);

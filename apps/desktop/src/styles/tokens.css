@@ -233,6 +233,8 @@
   --color-group-label: var(--gray-300);
   --color-group-count: var(--gray-500);
   --color-group-divider-label: var(--gray-500);
+  --color-subgroup-label: var(--gray-400);
+  --color-subgroup-count: var(--gray-500);
   --color-table-row-hover: var(--gray-930);
   --color-table-header-text: var(--gray-500);
 
