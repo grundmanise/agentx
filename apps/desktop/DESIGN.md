@@ -205,11 +205,12 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `checkbox.checked-bg` | `accent.primary` |                                   |
 | `checkbox.check`      | `on-accent`      |                                   |
 
-#### Segmented control (Update review, filter State)
+#### Segmented control (Update review, filter State, agent client placement)
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `segmented.track-bg` | `gray-950` | Track (`gray-980` when it sits on a card) |
+| `segmented.track-bg` | `gray-950` | Track |
+| `segmented.card-track-bg` | `gray-980` | Track on a card (placement on an agent client card) |
 | `segmented.track-border` | `gray-870` |  |
 | `segmented.text` | `gray-50` | Unselected segment; `gray-400` once another segment is chosen |
 | `segmented.yours-selected` | `accent.yours` | Your side chosen (label `on-accent`) |
@@ -828,6 +829,8 @@ One choice among a few (`src/components/ui/radio-group.tsx`): a column of rows `
 
 Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segmented.padding`, `segmented.gap`. Segments `segmented.height`, `segmented.radius`, `type.segment`. The selected segment fills with its meaning colour (`segmented.*-selected`) and `on-accent`; the others are transparent in `segmented.text`.
 
+On a card the track is `segmented.card-track-bg`. A control whose command runs is pending like a switch (§6 "Switch"): disabled at 50% opacity, `aria-busy`, with a `Spinner` beside its label, until the inventory that follows arrives.
+
 ### Agent client logo chip
 
 Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo names its client on hover: as its `title`, or, in the Add skills bar and the Choose agents dialog, in the Tooltip (§6 "Tooltip"), which opens at once.
@@ -921,6 +924,8 @@ One card per agent configuration whose client does not read the library, in a 4-
 - Top row: the `agent-card.logo` logo on the left, the Enabled switch on the right.
 - Then the name in `type.agent-card-name` `card.title`; the configuration path in `type.technical` `text.caption`, one line with an ellipsis; the counts in `type.secondary` `card.text`, numbers in `text.primary` 500.
 - Enabled decides only where later installs and creations go when no agent is named. It never changes a placement, so the counts do not move when the switch does.
+- Last, at the card's foot so it lines up across a row: the placement, a `type.caption` `text.caption` caption over a full-width segmented control (§6 "Segmented control", on a card) with Symlink and Copy, the selected segment `segmented.neutral-selected`. A segmented control, not a switch or a menu: two named choices that both show at once, the same control as the filter's State, and it fits the narrowest card at the minimum window. Its `title` explains both choices.
+- The placement decides only how later placements in the configuration are made (an add, a place, Place all, a create, a fork): skills already placed keep their kind, so the counts do not move either. The control shows the inventory's `placement` and is pending until the inventory that follows the command arrives; it is also disabled while the switch's command runs.
 
 ### Removing an agent configuration (Agents page)
 
@@ -930,7 +935,7 @@ One card per agent configuration whose client does not read the library, in a 4-
 
 ### Universal card (Agents page)
 
-One full-width card below the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. No switch: a universal client sees every library skill whatever its setting.
+One full-width card below the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. No switch and no placement: a universal client sees every library skill whatever its setting, through the library itself.
 
 ### Plugin card (Plugins)
 

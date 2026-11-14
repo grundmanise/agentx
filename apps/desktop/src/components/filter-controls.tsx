@@ -187,32 +187,70 @@ export const ChoicePill = ({
   </label>
 );
 
+const trackVariants = cva(
+  "rounded-segmented border-segmented-track-border gap-segmented flex border p-0.5",
+  {
+    defaultVariants: { disabled: false, surface: "overlay" },
+    variants: {
+      disabled: { false: "", true: "opacity-50" },
+      surface: {
+        card: "bg-segmented-card-track-bg",
+        overlay: "bg-segmented-track-bg",
+      },
+    },
+  }
+);
+
 const segmentVariants = cva(
-  "rounded-segmented type-segment has-focus-visible:outline-shell-focus-ring relative inline-flex h-6 flex-1 cursor-pointer items-center justify-center px-2.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-2",
+  "rounded-segmented type-segment has-focus-visible:outline-shell-focus-ring relative inline-flex h-6 flex-1 cursor-pointer items-center justify-center px-2.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-disabled:cursor-default",
   {
     variants: {
       selected: {
-        false: "text-segmented-text hover:text-text-primary",
+        false:
+          "text-segmented-text hover:text-text-primary has-disabled:hover:text-segmented-text",
         true: "bg-segmented-neutral-selected text-text-primary",
       },
     },
   }
 );
 
-/** A segmented control of equal segments, one selected (STATE in the popover). */
+/**
+ * A segmented control of equal segments, one selected: STATE in the popover, and the placement
+ * on an agent client card. While `busy`, its command runs: it is disabled and says so.
+ */
 export const Segmented = <T extends string>({
   group,
   options,
   value,
   onChange,
+  labelledBy,
+  title,
+  surface,
+  disabled = false,
+  busy = false,
 }: {
   /** The name shared by the radios of the control. */
   group: string;
   options: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
+  /** The id of the text that names the control, when no fieldset's legend does. */
+  labelledBy?: string;
+  /** What the control decides, on hover. */
+  title?: string;
+  /** What it sits on: the popover (the default) or a card. */
+  surface?: "overlay" | "card";
+  disabled?: boolean;
+  busy?: boolean;
 }) => (
-  <div className="rounded-segmented border-segmented-track-border bg-segmented-track-bg gap-segmented flex border p-0.5">
+  <div
+    role="radiogroup"
+    aria-labelledby={labelledBy}
+    aria-busy={busy ? true : undefined}
+    aria-disabled={disabled || busy ? true : undefined}
+    title={title}
+    className={trackVariants({ disabled: disabled || busy, surface })}
+  >
     {options.map((o) => (
       <label
         key={o.value}
@@ -222,10 +260,11 @@ export const Segmented = <T extends string>({
           type="radio"
           name={group}
           checked={o.value === value}
+          disabled={disabled || busy}
           onChange={() => {
             onChange(o.value);
           }}
-          className="absolute inset-0 size-full cursor-pointer opacity-0"
+          className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-default"
         />
         {o.label}
       </label>
