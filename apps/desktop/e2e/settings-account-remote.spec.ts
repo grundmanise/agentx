@@ -218,10 +218,13 @@ test("Detach warns, runs source remove and shows the field once source list has 
 }) => {
   await openSettings(cli, page);
   await accountRemote(page).getByRole("button", { name: "Detach" }).click();
-  const confirm = page.getByRole("dialog", { name: `Detach ${ACCOUNT}?` });
+  const confirm = page.getByRole("dialog", {
+    name: "Detach the account remote?",
+  });
   await expect(confirm).toContainText(
     "Your skills stay on this machine, and nothing on the account remote changes."
   );
+  await expect(confirm).toContainText(ACCOUNT);
   cli.register(["source", "remove", ACCOUNT], {
     events: [{ id: account.id, type: "source", url: ACCOUNT }],
   });
