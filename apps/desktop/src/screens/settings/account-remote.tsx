@@ -240,7 +240,8 @@ const AccountRemoteRow = ({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {/* Baseline, not center: the mono URL then sits on the middle of the pill. */}
+        <div className="flex min-w-0 flex-wrap items-baseline gap-2">
           <p className="type-technical text-text-primary m-0 break-all">
             {url}
           </p>
