@@ -402,6 +402,9 @@
     }
   }
 
+  /* Blurs (DESIGN.md §4, code): `blur-code-loading`. */
+  --blur-code-loading: 6px;
+
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
   --shadow-popover: 0 24px 60px -12px rgb(0 0 0 / 0.7);

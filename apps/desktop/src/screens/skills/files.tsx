@@ -9,6 +9,7 @@ import type {
 } from "#/cli/events.gen.ts";
 import { CodePane, codeLines } from "#/components/code-pane.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
+import { Spinner } from "#/components/spinner.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import {
   Accordion,
@@ -235,9 +236,40 @@ const Hint = ({ children }: { children: string }) => (
 );
 
 /**
- * The list while the files are read: the SKILL.md row every skill has, over an empty pane at the
- * Code pane's full height, so the list keeps its place when the files come in. It shares the
- * list's open rows, so a row the user closes stays closed.
+ * A stand-in for a SKILL.md, long enough to fill the Code pane, shown blurred while the files are
+ * read. Its words are never read: it gives the blur the shape of a real file.
+ */
+const STAND_IN = `---
+name: skill-name
+description: What the skill does, and when an agent should use it.
+---
+
+# Skill name
+
+A short paragraph that says what this skill is for and when to reach for it.
+
+## When to use
+
+- The first situation where the skill helps
+- A second situation, described in a few words
+- A third one, with a little more detail than the others
+
+## How it works
+
+1. Read the input and decide what to do with it
+2. Do the work, one step at a time
+3. Check the result before handing it back
+
+## Notes
+
+Anything else the agent should keep in mind while it works.
+`;
+
+/**
+ * The list while the files are read: the SKILL.md row every skill has, over a stand-in file
+ * blurred like frosted glass with a spinner on top, at the Code pane's full height, so the list
+ * keeps its place when the files come in. It shares the list's open rows, so a row the user
+ * closes stays closed.
  */
 const Reading = ({
   open,
@@ -254,15 +286,19 @@ const Reading = ({
         </span>
       </AccordionTrigger>
       <AccordionContent>
-        <section
-          aria-label={`Content of ${SKILL_MD}`}
-          aria-busy
-          className="bg-code-bg h-code py-code"
-        >
-          <p className="px-file-row type-secondary text-text-hint m-0">
-            Reading the files…
-          </p>
-        </section>
+        <div aria-busy className="bg-code-bg h-code relative overflow-hidden">
+          <div
+            aria-hidden
+            inert
+            className="blur-code-loading pointer-events-none select-none"
+          >
+            <CodePane path={SKILL_MD} label={SKILL_MD} content={STAND_IN} />
+          </div>
+          <output className="text-text-muted absolute inset-0 flex items-center justify-center">
+            <Spinner />
+            <span className="sr-only">Reading the files…</span>
+          </output>
+        </div>
       </AccordionContent>
     </AccordionItem>
   </Accordion>

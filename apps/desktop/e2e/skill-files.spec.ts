@@ -256,15 +256,15 @@ test("files that cannot be read say so, and are read again on the next selection
   });
   await row(page, "gone").click();
   await read.started;
-  // While the files are read, the SKILL.md row every skill has stands open over an empty pane.
+  // While the files are read, the SKILL.md row every skill has stands open, a spinner in its pane.
   expect(await rowNames(files(page, "gone"))).toEqual(["SKILL.md"]);
   await expect(fileRow(files(page, "gone"), "SKILL.md")).toHaveAttribute(
     "aria-expanded",
     "true"
   );
-  await expect(content(files(page, "gone"), "SKILL.md")).toContainText(
-    "Reading the files…"
-  );
+  await expect(
+    content(files(page, "gone"), "SKILL.md").getByRole("status")
+  ).toHaveText("Reading the files…");
   read.release();
   await expect(files(page, "gone")).toContainText(
     "The files could not be read"
