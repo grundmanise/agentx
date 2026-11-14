@@ -323,6 +323,7 @@
   --color-dialog-subtitle: var(--gray-400);
   --color-sheet-bg: var(--gray-960);
   --color-sheet-border: var(--gray-850);
+  --color-sheet-handle: var(--gray-700);
   --color-toast-text: var(--gray-50);
 
   /* Code, file tree and diffs */
@@ -634,6 +635,10 @@
   --padding-menu: 6px;
   --width-sheet: 420px;
   --width-sheet-wide: 560px;
+  --width-sheet-log: 1120px;
+  --min-width-sheet-log: 420px;
+  --max-width-sheet-log: 90vw;
+  --width-sheet-handle: 8px;
   --width-log-time: 8ch;
   --inset-sheet: 10px;
   --padding-sheet: 32px;
@@ -945,9 +950,13 @@
   font-weight: 500;
 }
 
-/* 6. Sizes a library measures (DESIGN.md §4 "Overlays"). A theme value cannot hold them: the
-   variable exists only on the element the library sets it on. */
+/* 6. Sizes a library measures or the user drags (DESIGN.md §4 "Overlays"). A theme value cannot
+   hold them: the variable exists only on the element the library or the drag sets it on. */
 /* popover.max-height: the room between the popover's anchor and the window's edge. */
 @utility max-h-popover {
   max-height: var(--radix-popover-content-available-height);
+}
+/* sheet.log-width: the width the user dragged the Activity log sheet to, else its default. */
+@utility w-sheet-dragged {
+  width: var(--sheet-dragged-width, var(--width-sheet-log));
 }

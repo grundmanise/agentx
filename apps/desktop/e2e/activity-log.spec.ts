@@ -145,3 +145,32 @@ test("Open serve.log shows the serve log file in the file manager", async ({
   await log(page).getByRole("button", { name: "Open serve.log" }).click();
   await expect.poll(() => cli.reveals).toEqual([[serveLogPath]]);
 });
+
+test("the log opens twice as wide as the What's new sheet, and its left edge drags its width up to 90% of the window", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await openFromPalette(page);
+  const width = async () =>
+    Math.round((await log(page).boundingBox())?.width ?? 0);
+  expect(await width()).toBe(1120);
+
+  // Dragged far to the left, the sheet stops at 90% of the 1280-wide window.
+  const handle = log(page).getByRole("separator", { name: "Resize" });
+  const box = await handle.boundingBox();
+  const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  await page.mouse.move(box?.x ?? 0, y);
+  await page.mouse.down();
+  await page.mouse.move(0, y, { steps: 5 });
+  await page.mouse.up();
+  expect(await width()).toBe(1152);
+
+  // An arrow key narrows it, and the sheet opens again at the width it was left at.
+  await handle.press("ArrowRight");
+  expect(await width()).toBe(1112);
+  await page.keyboard.press("Escape");
+  await expect(log(page)).toBeHidden();
+  await openFromPalette(page);
+  expect(await width()).toBe(1112);
+});
