@@ -334,20 +334,76 @@ test("the places of a skill come from the inventory, the library first", () => {
       rows.find((r) => r.name === name) ?? rows[0],
       inventory.configurations,
       library ?? undefined
-    ).map((l) => [l.label, l.path, l.directory]);
+    ).map((l) => [l.label, l.path, l.directory, l.symlink]);
   // A library skill: the library entry, then each placement in a client's own directory, which
   // opens where it resolves; one of your own resolves into its worktree.
   expect(places("pdf", libraryPath)).toEqual([
-    ["Library", `${libraryPath}/pdf`, `${libraryPath}/pdf`],
-    ["Claude Code", "/home/me/.claude-code/skills/pdf", `${libraryPath}/pdf`],
+    ["Library", `${libraryPath}/pdf`, `${libraryPath}/pdf`, false],
+    [
+      "Claude Code",
+      "/home/me/.claude-code/skills/pdf",
+      `${libraryPath}/pdf`,
+      true,
+    ],
   ]);
   expect(places("pdf-letters", libraryPath)).toEqual([
-    ["Library", `${libraryPath}/pdf-letters`, `${libraryPath}/pdf-letters`],
+    [
+      "Library",
+      `${libraryPath}/pdf-letters`,
+      `${libraryPath}/pdf-letters`,
+      false,
+    ],
     [
       "Claude Code",
       "/home/me/.claude-code/skills/pdf-letters",
       "/home/me/.agentx/worktrees/pdf-letters/pdf-letters",
+      true,
     ],
+  ]);
+  // Two symlinks of one client that lead to the same place are one place.
+  const pdf = rows.find((r) => r.name === "pdf") ?? rows[0];
+  const cursorLinks = [
+    "/home/me/.claude-code/skills/pdf",
+    "/home/me/.cursor/skills/pdf",
+  ];
+  const linkedTwice = {
+    ...pdf,
+    entry:
+      pdf.entry === undefined
+        ? undefined
+        : {
+            ...pdf.entry,
+            placements: [
+              ...pdf.entry.placements,
+              ...cursorLinks.map((path) => ({
+                configuration: "cursor",
+                kind: "symlink" as const,
+                mode: "symlink" as const,
+                path,
+              })),
+            ],
+          },
+    occurrences: [
+      ...pdf.occurrences,
+      ...cursorLinks.map((path) => ({
+        configuration: "cursor",
+        id: `occurrence:cursor:${path}`,
+        kind: "symlink" as const,
+        path,
+        resolved_path: `${libraryPath}/pdf`,
+        scope: "user" as const,
+      })),
+    ],
+  };
+  expect(
+    locationsOf(linkedTwice, inventory.configurations, libraryPath).map((l) => [
+      l.label,
+      l.path,
+    ])
+  ).toEqual([
+    ["Library", `${libraryPath}/pdf`],
+    ["Claude Code", "/home/me/.claude-code/skills/pdf"],
+    ["Cursor", "/home/me/.claude-code/skills/pdf"],
   ]);
   // A plugin's skill and a skill a client holds on its own: each occurrence, named by its agent.
   expect(places("commit-helper", libraryPath)).toEqual([
@@ -355,6 +411,7 @@ test("the places of a skill come from the inventory, the library first", () => {
       "Claude Code (acme-tools plugin)",
       "/home/me/.claude-code/plugins/acme-tools/skills/commit-helper",
       "/home/me/.claude/plugins/acme-tools/skills/commit-helper",
+      false,
     ],
   ]);
   expect(places("notes", libraryPath)).toEqual([
@@ -362,11 +419,17 @@ test("the places of a skill come from the inventory, the library first", () => {
       "Cursor",
       "/home/me/.cursor/skills/notes",
       "/home/me/.cursor/skills/notes",
+      false,
     ],
   ]);
   // While the library's path is unknown, a library skill's placements are all it has.
   expect(places("pdf", null)).toEqual([
-    ["Claude Code", "/home/me/.claude-code/skills/pdf", `${libraryPath}/pdf`],
+    [
+      "Claude Code",
+      "/home/me/.claude-code/skills/pdf",
+      `${libraryPath}/pdf`,
+      true,
+    ],
   ]);
   expect(places("draft", null)).toEqual([]);
 });
@@ -492,10 +555,10 @@ test("the menu beside Show in file manager lists a skill's other places", async 
   const menu = page.getByRole("menu", {
     name: "Show SKILL.md in file manager elsewhere",
   });
+  // The placement is a symlink: marked as one, it shows where it leads, and opens the file there.
   await expect(menu.getByRole("menuitem")).toHaveText([
-    "Claude Code/home/me/.claude-code/skills/pdf",
+    `Claude CodeSymlink${libraryPath}/pdf`,
   ]);
-  // The placement is a symlink: the file opens where it resolves, and the row stays as it was.
   await menu.getByRole("menuitem", { name: /^Claude Code/u }).click();
   await expect(menu).toBeHidden();
   expect(cli.reveals).toEqual([[`${libraryPath}/pdf/SKILL.md`]]);

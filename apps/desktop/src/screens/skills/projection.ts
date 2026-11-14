@@ -623,18 +623,22 @@ export interface SkillLocation {
   key: string;
   /** "Library", or the agent client's name, with the plugin for a plugin's copy. */
   label: string;
-  /** The path as the inventory carries it, shown as written. */
+  /** The path as the inventory carries it: for a symlink, the link itself. */
   path: string;
   /** The directory Finder opens: where the place resolves. */
   directory: string;
+  /** Whether the place is a symlink, which the menu shows by where it leads, `directory`. */
+  symlink: boolean;
 }
 
 /**
  * Every place a skill is on disk, the one Show in Finder opens first: for a skill the library
  * holds, the library entry, `<library>/<name>`, then each placement in a client's own skills
  * directory; for a skill a client holds on its own, or a plugin's, each occurrence. Placements
- * and occurrences come in the order the row lists its agents, then by path. `library` is where
- * agentx keeps the library, from `machine`; without it a library skill's placements are all.
+ * and occurrences come in the order the row lists its agents, then by path. A symlink that leads
+ * where an earlier symlink of the same agent client leads is left out, as the menu would show the
+ * same row twice. `library` is where agentx keeps the library, from `machine`; without it a library
+ * skill's placements are all.
  */
 export const locationsOf = (
   row: SkillRow,
@@ -648,12 +652,25 @@ export const locationsOf = (
     return at === -1 ? row.agents.length : at;
   };
   const locations: SkillLocation[] = [];
+  const add = (location: SkillLocation) => {
+    const shown = locations.some(
+      (l) =>
+        location.symlink &&
+        l.symlink &&
+        l.label === location.label &&
+        l.directory === location.directory
+    );
+    if (!shown) {
+      locations.push(location);
+    }
+  };
   if (row.entry !== undefined && library !== undefined) {
-    locations.push({
+    add({
       directory: `${library}/${row.name}`,
       key: "library",
       label: "Library",
       path: `${library}/${row.name}`,
+      symlink: false,
     });
   }
   if (row.entry === undefined) {
@@ -664,7 +681,7 @@ export const locationsOf = (
         a.path.localeCompare(b.path)
     );
     for (const o of occurrences) {
-      locations.push({
+      add({
         directory: o.resolved_path,
         key: o.id,
         label:
@@ -672,6 +689,7 @@ export const locationsOf = (
             ? name(o.configuration)
             : `${name(o.configuration)} (${o.plugin} plugin)`,
         path: o.path,
+        symlink: o.kind === "symlink",
       });
     }
     return locations;
@@ -686,11 +704,12 @@ export const locationsOf = (
     const through = row.occurrences.find(
       (o) => o.configuration === p.configuration && o.path === p.path
     );
-    locations.push({
+    add({
       directory: through?.resolved_path ?? p.path,
       key: `${p.configuration}:${p.path}`,
       label: name(p.configuration),
       path: p.path,
+      symlink: p.kind === "symlink",
     });
   }
   return locations;

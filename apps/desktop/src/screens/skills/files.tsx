@@ -169,7 +169,8 @@ const Pane = ({ row }: { row: FileRow }) => {
 /**
  * Show in Finder for one file: the button opens the file at the skill's first place, the library
  * for a skill the library holds; when the skill is elsewhere too, a three-dots button beside it opens a
- * menu of those places, each named by its agent client with its path, which opens the file there.
+ * menu of those places, each named by its agent client with its path, which opens the file there. A
+ * symlink is marked as one and shows the path it leads to, the one it opens.
  */
 const Reveal = ({
   path,
@@ -218,9 +219,16 @@ const Reveal = ({
             void revealInFinder(`${location.directory}/${path}`);
           }}
         >
-          <span className="type-body text-text-primary">{location.label}</span>
+          <span className="flex items-baseline gap-2">
+            <span className="type-body text-text-primary">
+              {location.label}
+            </span>
+            {location.symlink ? (
+              <span className="type-caption text-text-caption">Symlink</span>
+            ) : undefined}
+          </span>
           <span className="type-technical-sm text-text-caption break-all">
-            {location.path}
+            {location.symlink ? location.directory : location.path}
           </span>
         </DropdownMenuItem>
       ))}
