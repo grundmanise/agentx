@@ -505,6 +505,8 @@
 @theme static {
   /* A skill row in no agent client, washed out. */
   --opacity-row-off: 50%;
+  /* The screen in the main panel while it shows the kept inventory, before the startup checks pass. */
+  --opacity-panel-loading: 50%;
 
   /* Window and shell */
   --height-titlebar: 50px;

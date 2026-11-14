@@ -31,8 +31,8 @@ const launchCommands = (cli: MockCli) =>
   cli.commands.filter((l) => l[0] !== "skill");
 
 /**
- * Waits for the launch and the store's reads once the checks pass, which the app runs out of
- * sight, so that the commands a test triggers next come after them.
+ * Waits for the launch and the store's reads once the checks pass, so that the commands a test
+ * triggers next come after them.
  */
 const launched = async (cli: MockCli) => {
   await expect
@@ -109,7 +109,7 @@ const pauseTimers = async (page: Page) => {
 };
 const progress = (page: Page) => page.getByRole("main").locator("output");
 
-test("a launch over 2 seconds says what it checks, and from 5 seconds how much longer it tries", async ({
+test("a first launch says what it checks at once, and from 5 seconds how much longer it tries", async ({
   cli,
   page,
 }) => {
@@ -120,13 +120,10 @@ test("a launch over 2 seconds says what it checks, and from 5 seconds how much l
   await pauseTimers(page);
   await page.goto("/");
   await doctor.started;
-  await page.clock.runFor(1999);
-  await expect(progress(page)).toHaveCount(0);
-  await page.clock.runFor(1);
   await expect(progress(page)).toContainText("Checking this machine");
   await expect(progress(page)).not.toContainText("trying for");
 
-  await page.clock.runFor(3000);
+  await page.clock.runFor(5000);
   await expect(progress(page)).toContainText(
     "Taking longer than usual · trying for 25s more"
   );
@@ -149,19 +146,112 @@ test("while serve scans, the panel names skills, MCP servers and plugins in turn
   const named = (text: string) =>
     progress(page).getByText(text, { exact: true });
 
-  await page.clock.runFor(2000);
   await expect(named("Looking for skills")).toBeVisible();
   await page.clock.runFor(1500);
   await expect(named("Looking for MCP servers")).toBeVisible();
   await page.clock.runFor(1500);
   await expect(named("Looking for plugins")).toBeVisible();
-  await expect(progress(page)).toContainText("trying for 25s more");
   await page.clock.runFor(1500);
   await expect(named("Looking for skills")).toBeVisible();
+  await page.clock.runFor(500);
+  await expect(progress(page)).toContainText("trying for 25s more");
 
   await cli.serveEmit([firstInventory()]);
   await expect(skills(page)).toBeVisible();
   await expect(progress(page)).toHaveCount(0);
+});
+
+/** The screen in the main panel: washed out while it shows the kept inventory. */
+const screen = (page: Page) => page.getByRole("main").locator("> div");
+
+/**
+ * Launches with one skill of your own, waits until its inventory is kept for the next launch, then
+ * restarts the app with `doctor` held. Returns the held doctor and the command lines of the
+ * restart, the reads of the skill included.
+ */
+const relaunch = async (cli: MockCli, page: Page) => {
+  cli.onServeStart({
+    events: [
+      { ...firstInventory(), library: [skill("notes", { fork_id: "f1" })] },
+    ],
+  });
+  cli.register(["skill", "files", "notes"], { events: filesOf("notes") });
+  cli.register(["skill", "history", "notes"], { events: [] });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
+  await launched(cli);
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(() => localStorage.getItem("agentx.launch"))
+    )
+    .not.toBeNull();
+
+  const before = cli.commands.length;
+  const held = cli.register(["doctor"], {
+    events: doctorWith(),
+    holdAfter: 0,
+  });
+  cli.restart();
+  await page.reload();
+  await held.started;
+  return { commands: () => cli.commands.slice(before), doctor: held };
+};
+
+test("a later launch shows the kept inventory at once, washed out, and runs commands once the checks pass", async ({
+  cli,
+  page,
+}) => {
+  const { commands, doctor } = await relaunch(cli, page);
+  // The skill is there while the checks run, and none of its reads ran.
+  await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
+  await expect(screen(page)).toHaveCSS("opacity", "0.5");
+  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
+  await expect(progress(page)).toHaveCount(0);
+  expect(commands()).toEqual(launchLines);
+
+  // The sidebar goes to another screen, washed out as well.
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Settings" })
+  ).toBeVisible();
+  await expect(screen(page)).toHaveCSS("opacity", "0.5");
+
+  doctor.release();
+  await expect(screen(page)).toHaveCSS("opacity", "1");
+  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
+  await expect
+    .poll(() => commands())
+    .toEqual(
+      expect.arrayContaining([
+        ["skill", "files", "notes", "--json"],
+        ...loadLines,
+      ])
+    );
+  expect(cli.serveStarts).toBe(2);
+});
+
+test("a later launch whose check fails shows the layer, and drops a change started before it", async ({
+  cli,
+  page,
+}) => {
+  const { commands, doctor } = await relaunch(cli, page);
+  await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
+  await page.waitForFunction(() => "store" in window);
+  await page.evaluate(() => {
+    window.store.run(["skill", "remove", "notes"], { label: "remove notes" });
+  });
+  doctor.expire();
+  await expect(title(page)).toHaveText("agentx can't check this machine");
+
+  cli.register(["doctor"], { events: doctorWith() });
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
+  await expect(screen(page)).toHaveCSS("opacity", "1");
+  await expect
+    .poll(() => commands())
+    .toEqual(expect.arrayContaining(loadLines));
+  expect(commands()).not.toContainEqual(["skill", "remove", "notes", "--json"]);
 });
 
 test("a machine with no skills and no agents passes", async ({ cli, page }) => {

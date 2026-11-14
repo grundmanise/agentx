@@ -509,6 +509,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `shell.command-height` | 32 | `h-command` |  |
 | `shell.status-height` | 30 | `h-status` | Account remote status pill |
 | `shell.panel-inset` | 10 | `mr-panel mb-panel` | Main panel inset from the right and bottom |
+| `shell.panel-loading` | 50% | `opacity-panel-loading` | Opacity of the screen in the main panel while it shows the kept inventory, before the startup checks pass |
 | `stale-bar.height` | 36 | `h-stale-bar` | Stale bar at the top of the main panel |
 | `stale-bar.padding` | 0 16 | `px-stale-bar` |  |
 | `shell.focus-ring-width` | 2 | none: `index.css` sets it on every element | Keyboard focus outline |
@@ -1106,6 +1107,7 @@ Nothing loops forever, and nothing waits on purpose. The one loop is the `Spinne
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; a control with a leading icon, such as Check updates or Check tools, shows it in the icon's place, so a long check reads as busy past its first second.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass; a passing launch shows no startup layer.
-- A launch whose checks run over 2s shows a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way; while serve scans, its status lines turn every 1.5s. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
+- A launch with a kept inventory shows its screens with the first frame, with no fade, at `shell.panel-loading`, and nothing else says that the checks run: no spinner and no text. The title bar and the sidebar stay at full opacity, and the sidebar navigates. When the checks pass, the screen goes to full opacity in `.2s`.
+- A launch with no kept inventory shows, from its first frame, a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way; while serve scans, its status lines turn every 1.5s. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
 - Button enable and disable, every variant: `opacity .2s`.

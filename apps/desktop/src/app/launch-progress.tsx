@@ -32,8 +32,7 @@ const useClock = () => {
 };
 
 /**
- * What a launch that runs over 2 seconds shows in the empty panel: what the checks do now and,
- * from 5 seconds into a check, how much longer that check keeps trying. A screen reader hears
+ * What a launch with no kept inventory shows in the empty panel, from its first moment: what the checks do now and, from 5 seconds into a check, how much longer that check keeps trying. A screen reader hears
  * each step once, not each turn of the text or each second of the countdown.
  */
 export const LaunchProgress = ({ step }: { step: Step }) => {

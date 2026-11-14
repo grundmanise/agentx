@@ -1,5 +1,5 @@
 /**
- * A turning ring in the parent's text colour, for a button whose action runs or a slow launch: one
+ * A turning ring in the parent's text colour, for a button whose action runs or a launch: one
  * rotation a second, linear (DESIGN.md §8). Show it only while something runs; nothing turns forever.
  */
 export const Spinner = () => (
