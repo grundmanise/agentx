@@ -448,7 +448,7 @@ test.describe("Remove", () => {
     // only with the library.
     await chip(article, "Universal").click();
     await expect(dialog).toContainText(
-      "It will be deleted from every agent on this machine:"
+      "Universal agents read your library, where agentx keeps this skill. Removing it there deletes it from every agent on this machine:"
     );
     await expect(
       dialog
@@ -469,6 +469,12 @@ test.describe("Remove", () => {
 
     cli.register(["skill", "remove", "pdf-letters", "--remote"]);
     await article.getByRole("button", { name: "Remove" }).click();
+    // The Remove button has no reason to give: the dialog says only what goes.
+    await expect(
+      dialog.getByText("It will be deleted from every agent on this machine:", {
+        exact: true,
+      })
+    ).toBeVisible();
     await remote.click();
     await expect(remote).toBeChecked();
     await dialog.getByRole("button", { name: "Remove" }).click();

@@ -96,7 +96,8 @@ export const SkillDetail = ({
   forks: SkillRow[];
   configurations: Configuration[];
 }) => {
-  const [removing, setRemoving] = useState(false);
+  // Which control opened the Remove dialog: the Universal chip says why the skill leaves every agent.
+  const [removing, setRemoving] = useState<"button" | "universal">();
   const sources = useAppStore((s) => s.sources);
   // How many files `skill diff` found changed, from the FILES read of this version of the skill.
   const changedFiles = useAppStore((s) => {
@@ -169,7 +170,7 @@ export const SkillDetail = ({
               <RemoveButton
                 row={row}
                 onClick={() => {
-                  setRemoving(true);
+                  setRemoving("button");
                 }}
               />
             )}
@@ -188,7 +189,7 @@ export const SkillDetail = ({
           row={row}
           configurations={configurations}
           onRemove={() => {
-            setRemoving(true);
+            setRemoving("universal");
           }}
         />
       </section>
@@ -196,8 +197,11 @@ export const SkillDetail = ({
         <RemoveDialog
           row={row}
           configurations={configurations}
-          open={removing}
-          onOpenChange={setRemoving}
+          open={removing !== undefined}
+          fromUniversal={removing === "universal"}
+          onClose={() => {
+            setRemoving(undefined);
+          }}
         />
       )}
       <FilesSection
