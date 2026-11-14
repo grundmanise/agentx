@@ -664,6 +664,7 @@
   --inset-file-row: 16px;
   --height-file-row: 44px;
   --max-height-code: 340px;
+  --height-code: 340px;
   --gap-code: 12px;
   --gap-hunk: 12px;
   --padding-hunk-header: 8px;

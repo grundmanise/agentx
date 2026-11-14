@@ -234,6 +234,40 @@ const Hint = ({ children }: { children: string }) => (
   <p className="type-secondary text-text-hint m-0">{children}</p>
 );
 
+/**
+ * The list while the files are read: the SKILL.md row every skill has, over an empty pane at the
+ * Code pane's full height, so the list keeps its place when the files come in. It shares the
+ * list's open rows, so a row the user closes stays closed.
+ */
+const Reading = ({
+  open,
+  onOpenChange,
+}: {
+  open: string[];
+  onOpenChange: (open: string[]) => void;
+}) => (
+  <Accordion label="Files" value={open} onValueChange={onOpenChange}>
+    <AccordionItem value={SKILL_MD}>
+      <AccordionTrigger label={SKILL_MD} open={open.includes(SKILL_MD)}>
+        <span className={pathVariants({ open: open.includes(SKILL_MD) })}>
+          {SKILL_MD}
+        </span>
+      </AccordionTrigger>
+      <AccordionContent>
+        <section
+          aria-label={`Content of ${SKILL_MD}`}
+          aria-busy
+          className="bg-code-bg h-code py-code"
+        >
+          <p className="px-file-row type-secondary text-text-hint m-0">
+            Reading the files…
+          </p>
+        </section>
+      </AccordionContent>
+    </AccordionItem>
+  </Accordion>
+);
+
 /** What the edits of a modified skill are compared with, by what the skill is. */
 const comparedWith = (row: SkillRow) =>
   row.kind === "yours"
@@ -283,7 +317,7 @@ export const FilesSection = ({
   if (request === undefined) {
     body = <Hint>No files to show</Hint>;
   } else if (current === undefined) {
-    body = <Hint>Reading the files…</Hint>;
+    body = <Reading open={open} onOpenChange={setOpen} />;
   } else if (current.failed === true) {
     body = <Hint>The files could not be read</Hint>;
   } else {

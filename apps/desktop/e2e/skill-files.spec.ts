@@ -107,13 +107,14 @@ test("an unmodified skill: every file, SKILL.md first and open, the rest by path
   );
   expect(later(cli)).toEqual([["skill", "files", "pdf", "--json"]]);
   await expect(section).toContainText("Read-only");
+  // The meta comes with the files: the SKILL.md row is there while they are read.
+  await expect(fileRow(section, "SKILL.md")).toContainText("6 lines");
   expect(await rowNames(section)).toEqual([
     "SKILL.md",
     "assets/logo.png",
     "reference.pdf",
     "reference/forms.md",
   ]);
-  await expect(fileRow(section, "SKILL.md")).toContainText("6 lines");
   await expect(fileRow(section, "assets/logo.png")).toContainText("binary");
   await expect(fileRow(section, "reference.pdf")).toContainText(
     "Too large to show (303 KiB)"
@@ -248,11 +249,23 @@ test("files that cannot be read say so, and are read again on the next selection
   page,
 }) => {
   await openSkills(cli, page, "/#/skills/pdf");
-  cli.register(["skill", "files", "gone"], {
+  const read = cli.register(["skill", "files", "gone"], {
     events: [{ code: "not_found", message: "gone is not here", type: "error" }],
     exitCode: 5,
+    holdAfter: 0,
   });
   await row(page, "gone").click();
+  await read.started;
+  // While the files are read, the SKILL.md row every skill has stands open over an empty pane.
+  expect(await rowNames(files(page, "gone"))).toEqual(["SKILL.md"]);
+  await expect(fileRow(files(page, "gone"), "SKILL.md")).toHaveAttribute(
+    "aria-expanded",
+    "true"
+  );
+  await expect(content(files(page, "gone"), "SKILL.md")).toContainText(
+    "Reading the files…"
+  );
+  read.release();
   await expect(files(page, "gone")).toContainText(
     "The files could not be read"
   );
