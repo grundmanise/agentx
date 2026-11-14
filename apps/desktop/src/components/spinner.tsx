@@ -1,11 +1,12 @@
 import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 
 const spinnerVariants = cva("animate-check-spin block flex-none", {
-  defaultVariants: { size: 16 },
+  defaultVariants: { size: "sm" },
   variants: {
     size: {
-      16: "size-4",
-      20: "size-5",
+      md: "size-5",
+      sm: "size-4",
     },
   },
 });
@@ -13,9 +14,11 @@ const spinnerVariants = cva("animate-check-spin block flex-none", {
 /**
  * A turning ring in the parent's text colour, for a button whose action runs or a slow launch: one
  * rotation a second, linear (DESIGN.md §8). Show it only while something runs; nothing turns forever.
- * 16px in a control; 20px alone over a pane, such as the files being read.
+ * `sm` (16px) in a control; `md` (20px) alone over a pane, such as the files being read.
  */
-export const Spinner = ({ size }: { size?: 16 | 20 }) => (
+export const Spinner = ({
+  size,
+}: Pick<VariantProps<typeof spinnerVariants>, "size">) => (
   <svg
     viewBox="0 0 20 20"
     fill="none"

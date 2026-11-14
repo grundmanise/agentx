@@ -306,7 +306,7 @@ const LoadingPane = ({
       <CodePane path={SKILL_MD} label={SKILL_MD} content={STAND_IN} />
     </div>
     <output className="text-text-muted absolute inset-0 flex items-center justify-center">
-      <Spinner size={20} />
+      <Spinner size="md" />
       <span className="sr-only">Reading the files…</span>
     </output>
   </div>
