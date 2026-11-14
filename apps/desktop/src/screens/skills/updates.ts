@@ -163,7 +163,8 @@ const checking = (current?: number, total?: number) =>
 
 /**
  * Check updates: `skill check-updates`, which fetches each source and lists every update it finds.
- * Its toast says how far it got, one source fetched at a time, then what it found: how many skills
+ * Its toast says how far it got, from 0 of the total before the first fetch and then one source
+ * fetched at a time, then what it found: how many skills
  * have an update, with Update all when there is more than one. A source it could not reach
  * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere are
  * listed all the same (src/store/loaders.ts).
