@@ -190,21 +190,21 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 #### Inputs, switches, checkboxes
 
-| Token                 | Primitive        | Element                           |
-| --------------------- | ---------------- | --------------------------------- |
-| `input.bg`            | `gray-980`       | Text inputs, search fields        |
-| `input.border`        | `gray-860`       |                                   |
-| `input.border-focus`  | `gray-700`       |                                   |
+| Token | Primitive | Element |
+| --- | --- | --- |
+| `input.bg` | `gray-980` | Text inputs, search fields |
+| `input.border` | `gray-860` |  |
+| `input.border-focus` | `gray-700` |  |
 | `input.border-invalid` | `accent.danger` | A field marked `aria-invalid`, focused or not |
-| `input.text`          | `gray-50`        |                                   |
-| `input.placeholder`   | `gray-500`       | Placeholder text and leading icon |
-| `switch.on-track`     | `accent.primary` | Switch on (full and compact)      |
-| `switch.on-knob`      | `on-accent`      |                                   |
-| `switch.off-track`    | `gray-850`       | Switch off                        |
-| `switch.off-knob`     | `gray-400`       |                                   |
-| `checkbox.ring`       | `gray-700`       | Unchecked popover checkbox        |
-| `checkbox.checked-bg` | `accent.primary` |                                   |
-| `checkbox.check`      | `on-accent`      |                                   |
+| `input.text` | `gray-50` |  |
+| `input.placeholder` | `gray-500` | Placeholder text and leading icon |
+| `switch.on-track` | `accent.primary` | Switch on (full and compact) |
+| `switch.on-knob` | `on-accent` |  |
+| `switch.off-track` | `gray-850` | Switch off |
+| `switch.off-knob` | `gray-400` |  |
+| `checkbox.ring` | `gray-700` | Unchecked popover checkbox |
+| `checkbox.checked-bg` | `accent.primary` |  |
+| `checkbox.check` | `on-accent` |  |
 
 #### Segmented control (Update review, filter State)
 
