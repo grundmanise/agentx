@@ -15,9 +15,9 @@ import { SOURCES_PATH } from "#/app/screens.ts";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
-import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchField } from "#/components/search-field.tsx";
+import { SectionToggle } from "#/components/section-toggle.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -170,36 +170,6 @@ const GroupHeader = ({
 );
 
 /**
- * A plugin's header in the PLUGINS group: a ghost button with a chevron, the plugin's name and
- * how many of its skills pass the filters, that collapses and expands the plugin's rows.
- */
-const SubgroupHeader = ({
-  label,
-  count,
-  open,
-  onToggle,
-}: {
-  label: string;
-  count: number;
-  open: boolean;
-  onToggle: () => void;
-}) => (
-  <div className="flex pt-1">
-    <Button variant="ghost" size="sm" aria-expanded={open} onClick={onToggle}>
-      <span
-        className={
-          open ? "text-text-caption flex rotate-90" : "text-text-caption flex"
-        }
-      >
-        <ChevronIcon size="xs" />
-      </span>
-      <span className="type-caption text-subgroup-label">{label}</span>
-      <span className="type-technical-sm text-subgroup-count">{count}</span>
-    </Button>
-  </div>
-);
-
-/**
  * Adopt all, at the right end of the Unmanaged group's header while another tool installed skills
  * agentx can adopt: it opens the adopt dialog for every such tool.
  */
@@ -228,6 +198,8 @@ type Item =
       group: Group;
       subgroup: Subgroup;
       open: boolean;
+      /** The first subgroup of its group, right under the group's header. */
+      first: boolean;
     }
   | {
       kind: "row";
@@ -257,10 +229,11 @@ const itemsOf = (groups: Group[], collapsed: ReadonlySet<string>): Item[] =>
     { first: i === 0, group, key: `group:${group.key}`, kind: "header" },
     ...(group.subgroups === undefined
       ? rowItems(group, group.rows)
-      : group.subgroups.flatMap((subgroup): Item[] => {
+      : group.subgroups.flatMap((subgroup, at): Item[] => {
           const open = !collapsed.has(subgroup.key);
           return [
             {
+              first: at === 0,
               group,
               key: `subgroup:${subgroup.key}`,
               kind: "subheader",
@@ -282,7 +255,7 @@ const estimatedHeight = (item: Item | undefined) => {
     return item.first ? 30 : 46;
   }
   if (item?.kind === "subheader") {
-    return 38;
+    return item.first ? 28 : 36;
   }
   return item?.row.description === "" ? 44 : 66;
 };
@@ -556,14 +529,22 @@ const SkillGroups = ({
                         data-index={subheader.index}
                         className={PLACED}
                       >
-                        <SubgroupHeader
-                          label={subgroup.label}
-                          count={subgroup.rows.length}
-                          open={subheader.item.open}
-                          onToggle={() => {
-                            onToggle(subgroup.key);
-                          }}
-                        />
+                        <div
+                          className={
+                            subheader.item.first
+                              ? "flex"
+                              : "pt-subgroup-top flex"
+                          }
+                        >
+                          <SectionToggle
+                            label={subgroup.label}
+                            count={subgroup.rows.length}
+                            open={subheader.item.open}
+                            onToggle={() => {
+                              onToggle(subgroup.key);
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
                     {list}
