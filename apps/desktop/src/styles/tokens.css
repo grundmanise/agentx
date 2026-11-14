@@ -395,6 +395,13 @@
       opacity: 0;
     }
   }
+  /* The kept inventory before the startup checks pass: from `opacity-panel-loading` down and back. */
+  --animate-panel-loading: panel-loading 2.4s ease-in-out infinite;
+  @keyframes panel-loading {
+    50% {
+      opacity: 30%;
+    }
+  }
   --animate-floating-bar: floating-bar 0.22s ease;
   @keyframes floating-bar {
     from {

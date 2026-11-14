@@ -8,7 +8,7 @@ The desktop applies inventories only from its active `agentx serve` child. One-s
 
 Each serve process creates a new `instance_id`. Its `scan_counter` starts at 1 for the initial inventory and increases for each changed inventory it emits. The supervisor associates events with the child that produced them. Apply inventories only from that active child's instance and with increasing counters within it; never compare counters across instances or with one-shot commands. On restart, keep the displayed inventory marked stale until the new child's initial inventory arrives. Ignore queued events from old children, including refresh acknowledgements.
 
-At launch, before any serve child runs, the desktop may display the kept inventory: the last inventory it applied in an earlier run, read from its own storage ([ADR 0014](../adr/0014-the-app-keeps-the-last-inventory-and-shows-it-while-the-startup-checks-run.md)). It is displayed, not applied: it belongs to no child and no instance, and its counter is never compared. The initial inventory of the first child replaces it whole. Until the startup checks pass, the desktop shows it washed out and runs no command.
+At launch, before any serve child runs, the desktop may display the kept inventory: the last inventory it applied in an earlier run, read from its own storage ([ADR 0014](../adr/0014-the-app-keeps-the-last-inventory-and-shows-it-while-the-startup-checks-run.md)). It is displayed, not applied: it belongs to no child and no instance, and its counter is never compared. The initial inventory of the first child replaces it whole. Until the startup checks pass, the desktop shows it washed out, pulsing, and runs no command.
 
 ## Refresh after a command
 

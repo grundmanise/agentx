@@ -40,15 +40,18 @@ const screenVariants = cva(
     variants: {
       // The kept inventory is there with the first render: it does not fade in.
       enter: { fade: "animate-fade-in", none: "" },
-      // Washed out while it may not be this machine as it is now.
-      loading: { false: "", true: "opacity-panel-loading" },
+      // Washed out, and pulsing slowly, while it may not be this machine as it is now.
+      loading: {
+        false: "",
+        true: "opacity-panel-loading animate-panel-loading motion-reduce:animate-none",
+      },
     },
   }
 );
 
 /**
  * The screen of the current route. It mounts once the startup checks pass, faded in, or with the
- * first render when the store holds the kept inventory: washed out until they pass.
+ * first render when the store holds the kept inventory: washed out and pulsing until they pass.
  */
 const Screen = ({ cached, ready }: Pick<StartupState, "cached" | "ready">) =>
   ready || cached ? (

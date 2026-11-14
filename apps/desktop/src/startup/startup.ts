@@ -2,7 +2,7 @@
 // `version` and `doctor` at the same time, then starts the serve child and waits for its first
 // inventory. The layer shows only when a check fails, when a command exits with code 8, and in
 // manual mode. Until the checks pass, the panel shows the kept inventory, washed out
-// (src/store/launch-cache.ts), or, on a launch with none, what the sequence does now. The
+// (src/store/launch-cache.ts), or, on a launch with none, that it loads. The
 // only commands it runs are `version`, `doctor` and `serve`: it changes nothing on disk.
 import { create } from "zustand";
 
@@ -24,10 +24,11 @@ import type { ServeEnd } from "#/store/store.ts";
 /** How long a check may take before it fails. A launch normally takes well under a second. */
 export const CHECK_DEADLINE_MS = 30_000;
 const deadline = `${CHECK_DEADLINE_MS / 1000} seconds`;
-/** What the sequence waits for, and since when (`Date.now()`): a check's deadline counts from then. */
+/**
+ * Since when (`Date.now()`) the sequence waits for what it waits for now: first the CLI, `version`
+ * and `doctor`, then serve's first inventory. A check's deadline counts from then.
+ */
 export interface Step {
-  /** "machine" while the CLI, `version` and `doctor` run; "inventory" while serve scans. */
-  kind: "machine" | "inventory";
   startedAt: number;
 }
 
@@ -189,13 +190,13 @@ const sequence = async () => {
       update({ findings });
     }
   };
-  const stepTo = (kind: Step["kind"]) => {
+  const nextStep = () => {
     if (mine === generation) {
-      update({ step: { kind, startedAt: Date.now() } });
+      update({ step: { startedAt: Date.now() } });
     }
   };
   update({ findings, running: true });
-  stepTo("machine");
+  nextStep();
   try {
     const resolution = await resolveCli().catch(() => ({ path: null }));
     found({ cli: { path: resolution.path } });
@@ -205,7 +206,7 @@ const sequence = async () => {
 
     // Both read the machine and neither waits for the other: doctor's rows count only once the
     // version is known.
-    stepTo("machine");
+    nextStep();
     const versioning = oneShot(["version"]);
     const checking = oneShot(["doctor"]);
     const version = await versioning;
@@ -255,7 +256,7 @@ const sequence = async () => {
       return;
     }
 
-    stepTo("inventory");
+    nextStep();
     let childId: number;
     try {
       childId = await startServe();

@@ -109,7 +109,7 @@ const pauseTimers = async (page: Page) => {
 };
 const progress = (page: Page) => page.getByRole("main").locator("output");
 
-test("a first launch says what it checks at once, and from 5 seconds how much longer it tries", async ({
+test("a first launch says at once that it loads, and from 5 seconds how much longer it tries", async ({
   cli,
   page,
 }) => {
@@ -120,7 +120,7 @@ test("a first launch says what it checks at once, and from 5 seconds how much lo
   await pauseTimers(page);
   await page.goto("/");
   await doctor.started;
-  await expect(progress(page)).toContainText("Checking this machine");
+  await expect(progress(page)).toContainText("Loading");
   await expect(progress(page)).not.toContainText("trying for");
 
   await page.clock.runFor(5000);
@@ -135,33 +135,7 @@ test("a first launch says what it checks at once, and from 5 seconds how much lo
   await expect(progress(page)).toHaveCount(0);
 });
 
-test("while serve scans, the panel names skills, MCP servers and plugins in turn", async ({
-  cli,
-  page,
-}) => {
-  cli.onServeStart({ events: [] });
-  await pauseTimers(page);
-  await page.goto("/");
-  await expect.poll(() => cli.serveStarts).toBe(1);
-  const named = (text: string) =>
-    progress(page).getByText(text, { exact: true });
-
-  await expect(named("Looking for skills")).toBeVisible();
-  await page.clock.runFor(1500);
-  await expect(named("Looking for MCP servers")).toBeVisible();
-  await page.clock.runFor(1500);
-  await expect(named("Looking for plugins")).toBeVisible();
-  await page.clock.runFor(1500);
-  await expect(named("Looking for skills")).toBeVisible();
-  await page.clock.runFor(500);
-  await expect(progress(page)).toContainText("trying for 25s more");
-
-  await cli.serveEmit([firstInventory()]);
-  await expect(skills(page)).toBeVisible();
-  await expect(progress(page)).toHaveCount(0);
-});
-
-/** The screen in the main panel: washed out while it shows the kept inventory. */
+/** The screen in the main panel: washed out and pulsing while it shows the kept inventory. */
 const screen = (page: Page) => page.getByRole("main").locator("> div");
 
 /**
@@ -198,14 +172,14 @@ const relaunch = async (cli: MockCli, page: Page) => {
   return { commands: () => cli.commands.slice(before), doctor: held };
 };
 
-test("a later launch shows the kept inventory at once, washed out, and runs commands once the checks pass", async ({
+test("a later launch shows the kept inventory at once, washed out and pulsing, and runs commands once the checks pass", async ({
   cli,
   page,
 }) => {
   const { commands, doctor } = await relaunch(cli, page);
   // The skill is there while the checks run, and none of its reads ran.
   await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
-  await expect(screen(page)).toHaveCSS("opacity", "0.5");
+  await expect(screen(page)).toHaveCSS("animation-name", "panel-loading");
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
   await expect(progress(page)).toHaveCount(0);
   expect(commands()).toEqual(launchLines);
@@ -215,9 +189,10 @@ test("a later launch shows the kept inventory at once, washed out, and runs comm
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })
   ).toBeVisible();
-  await expect(screen(page)).toHaveCSS("opacity", "0.5");
+  await expect(screen(page)).toHaveCSS("animation-name", "panel-loading");
 
   doctor.release();
+  await expect(screen(page)).toHaveCSS("animation-name", "none");
   await expect(screen(page)).toHaveCSS("opacity", "1");
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await expect
