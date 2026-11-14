@@ -1047,7 +1047,7 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 		}
 		m := home.NewMutation(inv.dirs.Home)
 		for _, v := range versions {
-			done, f, err := inv.stageSkill(m, gitDir, v, records, targets, asCopy, edit.copiesOf(v.name))
+			done, f, err := inv.stageSkill(m, gitDir, v, records, edit.placing(targets), asCopy, edit.copiesOf(v.name))
 			switch {
 			case err != nil:
 				m.Discard()

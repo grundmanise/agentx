@@ -19,11 +19,12 @@ label                    my-laptop
 accept_operations        false
 ignore_system_files      true
 disabled_configurations  (none)
+copy_configurations      (none)
 sources                  []
 copy_mode                {}
 ```
 
-An empty `disabled_configurations` shows as `(none)`. `sources` and `copy_mode` print as one line of JSON.
+An empty `disabled_configurations` or `copy_configurations` shows as `(none)`. `sources` and `copy_mode` print as one line of JSON.
 
 | Key | Meaning |
 |---|---|
@@ -32,8 +33,9 @@ An empty `disabled_configurations` shows as `(none)`. `sources` and `copy_mode` 
 | `accept_operations` | Reserved for a later version. agentx does not use it yet. |
 | `ignore_system_files` | Whether agentx ignores files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups. On by default. See [Files that do not count](/cli/skill#files-that-do-not-count) and [Files that stay local](/cli/fork#files-that-stay-local). |
 | `disabled_configurations` | The configurations agentx skips when you install or place a skill without `--to`. See [Enable or disable a configuration](#enable-or-disable-a-configuration). |
+| `copy_configurations` | The configurations that get a copy of each new skill instead of a symlink. See [Choose symlink or copy](#choose-symlink-or-copy). |
 | `sources` | The sources skills are installed from, managed with [`agentx source`](/cli/source). |
-| `copy_mode` | For each skill placed as a copy, the configurations that hold the copy. Written by `agentx skill add --copy` and `agentx skill place --copy`, and cleared by `agentx skill remove`. |
+| `copy_mode` | For each skill placed as a copy, the configurations that hold the copy. Written by `agentx skill add --copy`, `agentx skill place --copy` and every placement in a configuration listed in `copy_configurations`, and cleared by `agentx skill remove`. |
 
 ## Get one setting
 
@@ -138,6 +140,26 @@ warning: cursor's copy of pdf is different from the library, so it was left unch
 
 See [A copy that differs from the library](/cli/skill#a-copy-that-differs-from-the-library).
 
+## Choose symlink or copy
+
+agentx places a skill in a client as a symlink to the library by default. For a client that does not follow symlinks, choose a copy:
+
+```sh
+agentx config placement cursor copy
+agentx config placement cursor symlink
+```
+
+```text
+✓ cursor now places copies
+✓ cursor now places symlinks
+```
+
+The choice applies to every later placement in that client: `agentx skill add`, `agentx skill place`, `agentx skill new`, `agentx skill fork` and `agentx config enable --place-all`. `--copy` still places a copy in every client it covers.
+
+The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to cursor` turns a symlink into a copy. To turn a copy back into a symlink, run `agentx skill remove <name> --from cursor`, then `agentx skill place <name> --to cursor`.
+
+A client that reads the library directly, such as Codex, has no choice to make: the command exits with code 1. In the desktop app, choose on the agent's card under **Agents**. See [Choose symlink or copy for an agent](/agent-placement).
+
 ## Remove a configuration
 
 To delete the configuration directory of a client, name the client:
@@ -153,7 +175,7 @@ Delete /home/me/.adal and /home/me/.augment with everything in them? [y/N] y
   augment  /home/me/.augment
 ```
 
-agentx deletes each directory with everything in it: skills, MCP server declarations, plugins, settings and history. It also takes the client out of `disabled_configurations` and `copy_mode`. `agentx scan` no longer detects the client.
+agentx deletes each directory with everything in it: skills, MCP server declarations, plugins, settings and history. It also takes the client out of `disabled_configurations`, `copy_configurations` and `copy_mode`. `agentx scan` no longer detects the client.
 
 Your library stays as it is, and so does a skills directory outside the configuration directory, such as the one Amp reads in `~/.config/agents/skills`.
 
@@ -183,8 +205,8 @@ If a later version of agentx wrote `settings.json`, every command that reads it 
 
 For what each code means, see [Exit codes](/cli/output#exit-codes). These causes are special to `agentx config`:
 
-- `1`: an invalid value, an unknown key, or a key you cannot set.
-- `5`: `config enable`, `config disable` or `config remove` names a configuration `agentx scan` does not detect.
+- `1`: an invalid value, an unknown key, a key you cannot set, or `config placement` names an unknown mode or a client that reads the library.
+- `5`: `config enable`, `config disable`, `config placement` or `config remove` names a configuration `agentx scan` does not detect.
 - `6`: `config remove` was not confirmed, or the directory holds your library, agentx home or your home directory. See [Remove a configuration](#remove-a-configuration).
-- `7`: another agentx command is running. `set`, `enable`, `disable` and `remove` stop at once.
+- `7`: another agentx command is running. `set`, `enable`, `disable`, `placement` and `remove` stop at once.
 - `10`: agentx cannot parse `settings.json`, or a later version of agentx wrote it. See [Fix a broken file](#fix-a-broken-file).

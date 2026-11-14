@@ -173,6 +173,7 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 				InstanceID: inv.instanceID(),
 				Project:    project,
 				Disabled:   s.DisabledConfigurations,
+				Copies:     s.CopyConfigurations,
 				CopyMode:   copyMode,
 				Library:    library,
 			})

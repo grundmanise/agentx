@@ -88,6 +88,24 @@ func (e *settingsEdit) dropCopies(name string, ids []string) {
 // did not.
 func (e *settingsEdit) copiesOf(name string) []string { return e.modes[name] }
 
+// placing is targets as the settings read under the lock would have them
+// placed into, see withCopies.
+func (e *settingsEdit) placing(targets []placeTarget) []placeTarget {
+	return withCopies(targets, e.s.CopyConfigurations)
+}
+
+// withCopies is targets with copies set on each one copy_configurations,
+// ids, lists, so that a placement made there is a copy, and cleared on
+// every other.
+func withCopies(targets []placeTarget, ids []string) []placeTarget {
+	out := make([]placeTarget, len(targets))
+	for i, t := range targets {
+		t.copies = slices.Contains(ids, t.id)
+		out[i] = t
+	}
+	return out
+}
+
 // dropSkill takes every copy mode of the skill away, for a removal that
 // takes the skill off the machine.
 func (e *settingsEdit) dropSkill(name string) {
@@ -106,14 +124,16 @@ func (e *settingsEdit) enable(id string) {
 }
 
 // dropConfiguration takes a configuration that left the machine out of the
-// settings: out of disabled_configurations, and out of the copy modes of
-// every skill, since the copies went with its directory. It reports
-// whether the settings held anything of it.
+// settings: out of disabled_configurations and copy_configurations, and out
+// of the copy modes of every skill, since the copies went with its
+// directory. It reports whether the settings held anything of it.
 func (e *settingsEdit) dropConfiguration(id string) bool {
 	held := false
-	if slices.Contains(e.s.DisabledConfigurations, id) {
-		e.s.DisabledConfigurations = slices.DeleteFunc(e.s.DisabledConfigurations, func(x string) bool { return x == id })
-		e.changed, held = true, true
+	for _, list := range []*[]string{&e.s.DisabledConfigurations, &e.s.CopyConfigurations} {
+		if slices.Contains(*list, id) {
+			*list = slices.DeleteFunc(*list, func(x string) bool { return x == id })
+			e.changed, held = true, true
+		}
 	}
 	for name, ids := range e.modes {
 		if slices.Contains(ids, id) {

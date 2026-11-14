@@ -493,3 +493,86 @@ func TestSkillPlaceQuotesThePathsOfItsRows(t *testing.T) {
 		"  adopted "+placement+"\n"+
 		"  always available to universal clients: codex, gemini-cli\n")
 }
+
+// TestConfigPlacementPlacesCopies: config placement lists a configuration
+// in copy_configurations, and every placement agentx makes there from then
+// on is a copy, recorded in copy_mode as --copy records it: by an install,
+// through the staging every placement shares, and by skill place, which
+// turns the library's symlink there into a copy. Choosing a placement
+// changes nothing on disk, and a symlink in a configuration that places
+// copies is no drift. A client that reads the library has no choice to
+// make, and an unknown mode is refused.
+func TestConfigPlacementPlacesCopies(t *testing.T) {
+	t.Parallel()
+	h, s := placementHarness(t)
+	copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
+	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	isCopy := func(path string) bool {
+		info, err := os.Lstat(path)
+		return err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0
+	}
+
+	out := h.run("--json", "config", "placement", "github-copilot", "copy")
+	equal(t, "exit", out.exit, 0)
+	settings := h.one(out.stdout, "settings")["settings"].(map[string]any)
+	deep(t, "copy_configurations", settings["copy_configurations"], any([]any{"github-copilot"}))
+
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--to", "github-copilot")
+	if !isCopy(copilot) {
+		t.Errorf("the install placed no copy in github-copilot")
+	}
+	if _, ok := isSymlink(t, cursor); !ok {
+		t.Errorf("the install placed no symlink in cursor")
+	}
+	equal(t, "copy_mode after the install", copyModeOf(t, h, "alpha"), "github-copilot")
+
+	out = h.run("config", "placement", "cursor", "copy")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "stdout", out.stdout, "✓ cursor now places copies\n")
+	deep(t, "copy_configurations", readSettingsFile(t, h)["copy_configurations"], any([]any{"cursor", "github-copilot"}))
+	if _, ok := isSymlink(t, cursor); !ok {
+		t.Errorf("config placement changed the placement in cursor")
+	}
+	inventory := h.inventory(t)
+	modes := map[string]string{}
+	for _, c := range inventory["configurations"].([]any) {
+		conf := c.(map[string]any)
+		modes[conf["id"].(string)] = conf["placement"].(string)
+	}
+	equal(t, "placements", modes["cursor"]+" "+modes["claude-code"]+" "+modes["codex"], "copy symlink library")
+	for _, e := range inventory["library"].([]any) {
+		if entry := e.(map[string]any); entry["name"] == "alpha" {
+			if strings.Contains(drift(entry), driftDisplaced) {
+				t.Errorf("the symlink in a configuration that places copies is displaced: %v", entry["drift"])
+			}
+		}
+	}
+
+	out = h.run("--json", "skill", "place", "alpha", "--to", "cursor")
+	equal(t, "exit of skill place", out.exit, 0)
+	if !isCopy(cursor) {
+		t.Errorf("skill place did not turn the symlink in cursor into a copy")
+	}
+	equal(t, "copy_mode after skill place", copyModeOf(t, h, "alpha"), "cursor,github-copilot")
+
+	out = h.run("config", "placement", "cursor", "symlink")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "stdout", out.stdout, "✓ cursor now places symlinks\n")
+	deep(t, "copy_configurations", readSettingsFile(t, h)["copy_configurations"], any([]any{"github-copilot"}))
+	if !isCopy(cursor) {
+		t.Errorf("config placement changed the copy in cursor")
+	}
+
+	for _, c := range []struct {
+		args []string
+		says string
+	}{
+		{[]string{"codex", "copy"}, "codex reads the library, so its placement is the library entry"},
+		{[]string{"cursor", "hardlink"}, `unknown placement "hardlink"`},
+	} {
+		out = h.run(append([]string{"config", "placement"}, c.args...)...)
+		equal(t, "exit of "+c.args[0]+" "+c.args[1], out.exit, 1)
+		contains(t, "stderr", out.stderr, c.says)
+	}
+	deep(t, "copy_configurations after the refusals", readSettingsFile(t, h)["copy_configurations"], any([]any{"github-copilot"}))
+}

@@ -47,7 +47,7 @@ func (inv *invocation) enableAndPlaceAll(ctx context.Context, id string) error {
 		done, names = placements{}, nil
 		for _, lib := range skills {
 			names = append(names, lib.Name)
-			for _, t := range targets {
+			for _, t := range edit.placing(targets) {
 				inv.stagePlacement(m, libraryPlaceable(lib), t, lib.Path, false, edit.copiesOf(lib.Name), &done)
 			}
 		}

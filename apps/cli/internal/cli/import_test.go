@@ -641,6 +641,12 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 			[]any{"cursor", "cursor"}), "disabled twice"},
 		{"disabled configurations out of order", settingsWith("disabled_configurations",
 			[]any{"cursor", "codex"}), "must be sorted"},
+		// copy_configurations, which config placement writes, is held to the
+		// same rule.
+		{"a copy configuration carrying an escape", settingsWith("copy_configurations",
+			[]any{"\u001b[31mcursor"}), "copy_configurations holds"},
+		{"a configuration that places copies twice", settingsWith("copy_configurations",
+			[]any{"cursor", "cursor"}), "places copies twice"},
 
 		// copy_mode is kept as raw JSON so that a write never loses it,
 		// which is also why a spelling agentx would not write is kept for
@@ -986,6 +992,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
   "accept_operations": false,
   "ignore_system_files": true,
   "disabled_configurations": [],
+  "copy_configurations": [],
   "sources": [],
   "copy_mode": {}
 }
@@ -1033,6 +1040,7 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 		"Settings.AcceptOperations":       "a bool: the JSON type is the whole domain",
 		"Settings.IgnoreSystemFiles":      "a bool: the JSON type is the whole domain",
 		"Settings.DisabledConfigurations": "badDisabledConfigurations",
+		"Settings.CopyConfigurations":     "badCopyConfigurations",
 		"Settings.Sources":                "badSources",
 		"Settings.CopyMode":               "badCopyMode",
 		"Source.URL":                      "sourceRefusal, through badSourceURL",

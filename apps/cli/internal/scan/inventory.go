@@ -17,6 +17,7 @@ type Options struct {
 	InstanceID string
 	Project    string              // absolute project root; empty scans user scope only
 	Disabled   []string            // configuration ids the user disabled
+	Copies     []string            // configuration ids whose new placements are copies
 	CopyMode   map[string][]string // skill directory name to the configuration ids holding a copy
 	Library    bool                // also list the library's own directories, for an inventory that reports them
 }
@@ -47,6 +48,7 @@ type Configuration struct {
 	Name         string `json:"name"`
 	Path         string `json:"path"`
 	Enabled      bool   `json:"enabled"`
+	Placement    string `json:"placement"` // what agentx places there: symlink, copy, or library for a client that reads the library
 	ReadsLibrary bool   `json:"reads_library"`
 	PhysicalID   string `json:"physical_id"`
 	LogicalID    string `json:"logical_id"`
@@ -66,6 +68,16 @@ const (
 	KindSymlink   = "symlink"
 	KindCopy      = "copy"
 	KindDirectory = "directory"
+)
+
+// The placement modes of a configuration: what agentx places into it. A
+// configuration copy_configurations lists gets copies, any other a symlink
+// to the library, and one whose client reads the library has the library
+// entry for its placement.
+const (
+	PlacementSymlink = "symlink"
+	PlacementCopy    = "copy"
+	PlacementLibrary = "library"
 )
 
 // The scopes of an occurrence: a client's user-scope skills directories,
@@ -220,7 +232,14 @@ func Read(o Options) *Scan {
 			Name:         c.Name(),
 			Path:         c.ConfigDir(o.Dirs),
 			Enabled:      !slices.Contains(o.Disabled, c.Slug()),
+			Placement:    PlacementSymlink,
 			ReadsLibrary: readsLibrary(dirs, o.Dirs.Library),
+		}
+		switch {
+		case conf.ReadsLibrary:
+			conf.Placement = PlacementLibrary
+		case slices.Contains(o.Copies, conf.ID):
+			conf.Placement = PlacementCopy
 		}
 		conf.PhysicalID = id("configuration", o.MachineID, conf.ID, b.portable(conf.Path))
 		conf.LogicalID = conf.PhysicalID
