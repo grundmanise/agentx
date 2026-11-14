@@ -1,26 +1,32 @@
-// The publish status at the right of the title bar: its three states from the inventory and the
-// Sources slice, Publish all from "{n} to publish", and the check of what your other machines
-// published from "Published". Every click's command line is asserted as the mocked CLI recorded it.
+// The sync status at the right of the title bar: its states from the inventory, the Sources slice
+// and the updates serve found, the popover it opens with what there is to publish and what is
+// incoming, Publish all from that popover, and when the account remote was last checked. Every
+// click's command line is asserted as the mocked CLI recorded it.
 import type { Page } from "@playwright/test";
 
-import {
-  draftNotPublished,
-  launch,
-  notesFromAnotherMachine,
-  pdfUpdate,
-} from "./fixtures/palette-publish.ts";
+import type { PublishOutcome } from "#/cli/events.gen.ts";
+
+import { launch } from "./fixtures/palette-publish.ts";
 import { ACCOUNT } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
 const status = (page: Page) =>
-  page.getByRole("banner").getByRole("button", { name: /publish|remote/iu });
+  page
+    .getByRole("banner")
+    .getByRole("button", { name: /publish|sync|incoming/iu });
+const popover = (page: Page) => page.getByRole("dialog", { name: "Sync" });
+const group = (page: Page, name: string) =>
+  popover(page).getByRole("region", { name });
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 const pane = (page: Page, name: string) =>
   page
     .getByRole("region", { name: "Skill details" })
     .getByRole("article", { name });
+
+/** Every skill to publish on the fixture machine, as Publish all names them. */
+const OUTGOING = ["changelog", "draft", "notes"];
 
 /** Answers every refresh request so far, as serve does after its scan. */
 const answerRefreshes = async (cli: MockCli) => {
@@ -38,15 +44,21 @@ const answerRefreshes = async (cli: MockCli) => {
 const ran = (cli: MockCli, args: string[]) =>
   cli.commands.some((l) => l.join(" ") === [...args, "--json"].join(" "));
 
+/** Opens the popover and runs its Publish all. */
+const publishAll = async (page: Page) => {
+  await status(page).click();
+  await popover(page).getByRole("button", { name: "Publish all" }).click();
+};
+
 const progress = (current: number, subject: string): InlineEvent => ({
   current,
   phase: "publish",
   subject,
-  total: 2,
+  total: 3,
   type: "progress",
 });
 
-const published = (name: string, outcome: "pushed" | "moved"): InlineEvent => ({
+const published = (name: string, outcome: PublishOutcome): InlineEvent => ({
   name,
   outcome,
   source: ACCOUNT,
@@ -54,28 +66,42 @@ const published = (name: string, outcome: "pushed" | "moved"): InlineEvent => ({
 });
 
 test.describe("states", () => {
-  test("two of your skills edited since they were published: 2 to publish", async ({
+  test("edited and new skills: 3 to publish, its tooltip counts each kind", async ({
     cli,
     page,
   }) => {
     launch(cli);
     await page.goto("/");
-    await expect(status(page)).toHaveText("2 to publish");
+    await expect(status(page)).toHaveText("3 to publish");
+    await status(page).hover();
+    await expect(page.getByRole("tooltip")).toHaveText("2 edited · 1 new");
   });
 
-  test("nothing to publish: Published", async ({ cli, page }) => {
-    launch(cli, "published");
+  test("changed on another machine: 1 incoming", async ({ cli, page }) => {
+    launch(cli, "synced", { incoming: true });
     await page.goto("/");
-    await expect(status(page)).toHaveText("Published");
+    await expect(status(page)).toHaveText("1 incoming");
   });
 
-  test("no account remote: says so, and a click goes to Settings, Account remote", async ({
+  test("both: 3 to publish · 1 incoming", async ({ cli, page }) => {
+    launch(cli, "edited", { incoming: true });
+    await page.goto("/");
+    await expect(status(page)).toHaveText("3 to publish · 1 incoming");
+  });
+
+  test("nothing pending: Synced", async ({ cli, page }) => {
+    launch(cli, "synced");
+    await page.goto("/");
+    await expect(status(page)).toHaveText("Synced");
+  });
+
+  test("no account remote: Set up sync, and a click goes to Settings, Account remote", async ({
     cli,
     page,
   }) => {
     launch(cli, "no-account-remote");
     await page.goto("/");
-    await expect(status(page)).toHaveText("No account remote");
+    await expect(status(page)).toHaveText("Set up sync");
     await status(page).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Settings" })
@@ -88,7 +114,7 @@ test.describe("states", () => {
   test("is hidden while the startup layer shows", async ({ cli, page }) => {
     launch(cli);
     await page.goto("/");
-    await expect(status(page)).toHaveText("2 to publish");
+    await expect(status(page)).toHaveText("3 to publish");
     await page.addScriptTag({
       type: "module",
       url: "/e2e/harness/run-checks.ts",
@@ -100,110 +126,138 @@ test.describe("states", () => {
   });
 });
 
+test.describe("popover", () => {
+  test("lists what to publish and what is incoming; an incoming row opens the skill", async ({
+    cli,
+    page,
+  }) => {
+    launch(cli, "edited", { incoming: true });
+    await page.goto("/");
+    await status(page).click();
+    await expect(group(page, "To publish").getByRole("listitem")).toHaveText([
+      /^changelog\s*edited$/u,
+      /^draft\s*new$/u,
+      /^notes\s*edited$/u,
+    ]);
+    await expect(
+      group(page, "To publish").getByRole("button", { name: "Publish all" })
+    ).toBeVisible();
+    await expect(popover(page)).toContainText("me/account");
+    await expect(popover(page)).toContainText("Not checked yet");
+
+    await group(page, "Incoming")
+      .getByRole("button", { name: "notes" })
+      .click();
+    await expect(page).toHaveURL(/#\/skills\/notes$/u);
+    await expect(pane(page, "notes")).toBeVisible();
+  });
+
+  test("synced: says so, with when serve last checked; a failed check leaves that time", async ({
+    cli,
+    page,
+  }) => {
+    launch(cli, "synced");
+    await page.goto("/");
+    await expect(status(page)).toHaveText("Synced");
+    // Five and a half minutes ago: the status reads the clock once a minute.
+    const checkedAt = new Date(Date.now() - 330_000).toISOString();
+    await cli.serveEmit([
+      {
+        checked_at: checkedAt,
+        fetched: true,
+        instance_id: "instance-1",
+        ok: true,
+        scope: "account",
+        type: "update_check",
+      },
+      {
+        checked_at: new Date().toISOString(),
+        fetched: false,
+        instance_id: "instance-1",
+        ok: false,
+        scope: "account",
+        type: "update_check",
+      },
+    ]);
+    await status(page).hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "Synced with your account remote · checked 5 minutes ago"
+    );
+    await status(page).click();
+    await expect(popover(page)).toContainText("Everything is synced");
+    await expect(popover(page)).toContainText("Checked 5 minutes ago");
+  });
+});
+
 test.describe("publish", () => {
-  test("a click runs a bare skill publish, shows its progress, then names the skill with a newer version on the account remote, with Update and the skills not published", async ({
+  test("Publish all runs one skill publish naming every skill to publish, shows its progress, then names the skill with a newer version on the account remote, with Update", async ({
     cli,
     page,
   }) => {
     launch(cli);
-    const run = cli.register(["skill", "publish"], {
+    const run = cli.register(["skill", "publish", ...OUTGOING], {
       events: [
         progress(1, "changelog"),
         published("changelog", "pushed"),
-        progress(2, "notes"),
+        progress(2, "draft"),
+        published("draft", "pushed"),
+        progress(3, "notes"),
         published("notes", "moved"),
         {
           code: "refused",
           message:
-            "1 of 2 skills could not be published: the account remote holds changes to notes that this machine lacks, published from another machine",
+            "1 of 3 skills could not be published: the account remote holds changes to notes that this machine lacks, published from another machine",
           type: "error",
         },
       ],
       exitCode: 6,
       holdAfter: 1,
-      logs: [draftNotPublished],
     });
     cli.register(["skill", "update", "notes"], {
       events: [{ name: "notes", state: "current", type: "library_skill" }],
     });
     await page.goto("/");
-    await status(page).click();
+    await publishAll(page);
     await run.started;
-    await expect(status(page)).toHaveText("Publishing 1 of 2");
+    await expect(status(page)).toHaveText("Publishing 1 of 3");
     await expect(status(page)).toHaveAttribute("aria-busy", "true");
     run.release();
 
     const toast = toasts(page);
     await expect(toast).toContainText(
-      "There is a newer version of notes skill on the account remote. Update it first, then publish your changes. · 1 not published yet"
+      "There is a newer version of notes skill on the account remote. Update it first, then publish your changes."
     );
-    expect(ran(cli, ["skill", "publish"])).toBe(true);
+    expect(ran(cli, ["skill", "publish", ...OUTGOING])).toBe(true);
     await answerRefreshes(cli);
-    await expect(status(page)).toHaveText("2 to publish");
+    await expect(status(page)).toHaveText("3 to publish");
 
     await toast.getByRole("button", { name: "Update" }).click();
     await expect.poll(() => ran(cli, ["skill", "update", "notes"])).toBe(true);
   });
 
-  test("every skill pushed: Published {n} skills, and Show opens the first one not published", async ({
-    cli,
-    page,
-  }) => {
+  test("every skill pushed: Published {n} skills", async ({ cli, page }) => {
     launch(cli);
-    cli.register(["skill", "publish"], {
-      events: [
-        progress(1, "changelog"),
-        published("changelog", "pushed"),
-        progress(2, "notes"),
-        published("notes", "pushed"),
-      ],
-      logs: [draftNotPublished],
+    cli.register(["skill", "publish", ...OUTGOING], {
+      events: OUTGOING.map((name) => published(name, "pushed")),
     });
     await page.goto("/");
-    await status(page).click();
-    const toast = toasts(page);
-    await expect(toast).toContainText(
-      "Published 2 skills · 1 not published yet"
-    );
-    await toast.getByRole("button", { name: "Show" }).click();
-    await expect(page).toHaveURL(/#\/skills\/draft$/u);
-    await expect(pane(page, "draft")).toBeVisible();
+    await publishAll(page);
+    await expect(toasts(page)).toContainText("Published 3 skills");
   });
-});
 
-test.describe("publish, nothing sent", () => {
   test("every skill already matches: no skills were published, and why", async ({
     cli,
     page,
   }) => {
     launch(cli);
-    cli.register(["skill", "publish"], {
-      events: [
-        progress(1, "changelog"),
-        {
-          name: "changelog",
-          outcome: "up to date",
-          source: ACCOUNT,
-          type: "publish",
-        },
-        progress(2, "notes"),
-        {
-          name: "notes",
-          outcome: "up to date",
-          source: ACCOUNT,
-          type: "publish",
-        },
-      ],
-      logs: [draftNotPublished],
+    cli.register(["skill", "publish", ...OUTGOING], {
+      events: OUTGOING.map((name) => published(name, "up to date")),
     });
     await page.goto("/");
-    await status(page).click();
-    const toast = toasts(page);
-    await expect(toast).toContainText(
-      "No skills were published. They already match the published versions. · 1 not published yet"
+    await publishAll(page);
+    await expect(toasts(page)).toContainText(
+      "No skills were published. They already match the published versions."
     );
-    await expect(toast.getByRole("button", { name: "Show" })).toBeVisible();
-    expect(ran(cli, ["skill", "publish"])).toBe(true);
   });
 });
 
@@ -218,7 +272,7 @@ test.describe("publish, refused: the hint in the app's words", () => {
   }[] = [
     {
       exitCode: 6,
-      hint: "once the account remote takes it, run 'agentx skill publish' again",
+      hint: "once the account remote takes it, run 'agentx skill publish changelog draft notes' again",
       message: "the account remote declined skills/notes: protected branch",
       name: "declined",
       outcomes: [["notes", "declined"]],
@@ -227,7 +281,7 @@ test.describe("publish, refused: the hint in the app's words", () => {
     },
     {
       exitCode: 3,
-      hint: "check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then run 'agentx skill publish' again",
+      hint: "check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then run 'agentx skill publish changelog draft notes' again",
       message: `the account remote ${ACCOUNT} did not let this machine push skills/notes: permission denied`,
       name: "denied",
       outcomes: [["notes", "denied"]],
@@ -237,18 +291,18 @@ test.describe("publish, refused: the hint in the app's words", () => {
       exitCode: 6,
       hint: "run 'agentx skill list' to see the state of each skill, then publish the rest one at a time",
       message:
-        "2 of 2 skills could not be published: the account remote declined skills/changelog: protected branch; notes: the account remote did not let this machine push skills/notes: permission denied",
+        "2 of 3 skills could not be published: the account remote declined skills/changelog: protected branch; notes: the account remote did not let this machine push skills/notes: permission denied",
       name: "several causes",
       outcomes: [
         ["changelog", "declined"],
         ["notes", "denied"],
       ],
       shown:
-        "2 of 2 skills could not be published: the account remote declined skills/changelog: protected branch; notes: the account remote did not let this machine push skills/notes: permission denied. See the state of each skill in Skills, then publish the rest one at a time.",
+        "2 of 3 skills could not be published: the account remote declined skills/changelog: protected branch; notes: the account remote did not let this machine push skills/notes: permission denied. See the state of each skill in Skills, then publish the rest one at a time.",
     },
     {
       exitCode: 3,
-      hint: "check your network; the edits were recorded, so run 'agentx skill publish' again once the account remote can be reached",
+      hint: "check your network; the edits were recorded, so run 'agentx skill publish changelog draft notes' again once the account remote can be reached",
       message: `cannot reach ${ACCOUNT}: connection refused`,
       name: "the account remote cannot be reached",
       outcomes: [],
@@ -258,14 +312,9 @@ test.describe("publish, refused: the hint in the app's words", () => {
   for (const c of cases) {
     test(c.name, async ({ cli, page }) => {
       launch(cli);
-      cli.register(["skill", "publish"], {
+      cli.register(["skill", "publish", ...OUTGOING], {
         events: [
-          ...c.outcomes.map(([name, outcome]): InlineEvent => ({
-            name,
-            outcome,
-            source: ACCOUNT,
-            type: "publish",
-          })),
+          ...c.outcomes.map(([name, outcome]) => published(name, outcome)),
           {
             code: c.exitCode === 3 ? "source" : "refused",
             hint: c.hint,
@@ -276,52 +325,10 @@ test.describe("publish, refused: the hint in the app's words", () => {
         exitCode: c.exitCode,
       });
       await page.goto("/");
-      await status(page).click();
+      await publishAll(page);
       const toast = toasts(page).getByRole("listitem");
       await expect(toast.getByText(c.shown, { exact: true })).toBeVisible();
-      expect(ran(cli, ["skill", "publish"])).toBe(true);
+      expect(ran(cli, ["skill", "publish", ...OUTGOING])).toBe(true);
     });
   }
-});
-
-test.describe("check", () => {
-  test("Published runs skill check-updates and counts what your other machines published, with Review", async ({
-    cli,
-    page,
-  }) => {
-    launch(cli, "published");
-    const run = cli.register(["skill", "check-updates"], {
-      events: [notesFromAnotherMachine, pdfUpdate],
-      holdAfter: 0,
-    });
-    await page.goto("/");
-    await status(page).click();
-    await run.started;
-    await expect(status(page)).toHaveAttribute("aria-busy", "true");
-    run.release();
-
-    const toast = toasts(page);
-    await expect(toast).toContainText(
-      "1 skill changed on your other machines, 1 update from sources"
-    );
-    expect(ran(cli, ["skill", "check-updates"])).toBe(true);
-    await toast.getByRole("button", { name: "Review" }).click();
-    await expect(page).toHaveURL(/#\/skills\/notes$/u);
-    await expect(pane(page, "notes")).toBeVisible();
-  });
-
-  test("with nothing from another machine: Nothing new from your other machines", async ({
-    cli,
-    page,
-  }) => {
-    launch(cli, "published");
-    cli.register(["skill", "check-updates"], { events: [pdfUpdate] });
-    await page.goto("/");
-    await status(page).click();
-    await expect(toasts(page)).toContainText(
-      "Nothing new from your other machines"
-    );
-    await expect(status(page)).not.toHaveAttribute("aria-busy", "true");
-    expect(ran(cli, ["skill", "check-updates"])).toBe(true);
-  });
 });

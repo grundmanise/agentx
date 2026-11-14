@@ -79,6 +79,7 @@ export type ImportAction =
   | "kept"
   | "skipped";
 export type MachineDerivation = "platform" | "random";
+export type UpdateCheckScope = "all" | "account";
 export type SourceAccess = "writable" | "read-only" | "unknown";
 export type ProgressPhase =
   | "fetch"
@@ -619,6 +620,16 @@ export interface SearchEvent {
   results: SearchResult[];
 }
 
+export interface UpdateCheckEvent {
+  type: "update_check";
+  schema_version: number;
+  instance_id: string;
+  scope: UpdateCheckScope;
+  checked_at: string;
+  ok: boolean;
+  fetched: boolean;
+}
+
 // Reserved by the contract and never emitted: known, and not rendered.
 export interface OperationEvent {
   type: "operation";
@@ -662,6 +673,7 @@ export type CliEvent =
   | DriftEvent
   | RefreshCompleteEvent
   | SearchEvent
+  | UpdateCheckEvent
   | OperationEvent
   | FleetEvent;
 export type CliEventType = CliEvent["type"];

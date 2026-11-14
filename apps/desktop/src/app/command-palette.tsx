@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { usePublishState } from "#/app/publish-status.tsx";
+import { useSyncState } from "#/app/publish-status.tsx";
 import { allScreens, SOURCES_PATH } from "#/app/screens.ts";
 import { AddIcon } from "#/components/icons/add.tsx";
 import { ArrowDownIcon } from "#/components/icons/arrow-down.tsx";
@@ -87,7 +87,8 @@ const skillItems = (rows: SkillRow[]): PaletteItem[] =>
 
 /**
  * The ⌘K palette: ACTIONS, GO TO and SKILLS. Update all shows while the store holds an update,
- * Publish all while the title bar says there are skills to publish. With nothing typed, SKILLS
+ * Publish all while the title bar counts skills to publish, and publishes the same skills as the
+ * title bar's Publish all. With nothing typed, SKILLS
  * lists the first four skills.
  */
 export const CommandPalette = ({
@@ -107,7 +108,8 @@ export const CommandPalette = ({
     setSearch("");
   }
   const rows = useSkillRows();
-  const publishState = usePublishState();
+  const sync = useSyncState();
+  const outgoing = sync?.kind === "account-remote" ? sync.outgoing : [];
   const updates = rows.filter((r) => r.update !== undefined).length;
 
   const actions: PaletteItem[] = [];
@@ -123,15 +125,15 @@ export const CommandPalette = ({
       },
     });
   }
-  if (publishState?.kind === "to-publish") {
+  if (outgoing.length > 0) {
     actions.push({
       group: "ACTIONS",
-      hint: skillsWord(publishState.count),
+      hint: skillsWord(outgoing.length),
       icon: ArrowUpIcon,
       id: "action:publish-all",
       label: "Publish all",
       run: () => {
-        void publishAll();
+        void publishAll(outgoing.map((skill) => skill.name));
       },
     });
   }

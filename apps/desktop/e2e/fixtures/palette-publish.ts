@@ -1,8 +1,9 @@
-// The machine the publish status and palette tests run against: two of your own skills edited
-// since they were published, one never published, and two skills of a source, one with an update
-// serve found. `source list` answers with the account remote and the source, or without the
-// account remote. Variants: nothing to publish, and no account remote. Inline events with only
-// the fields the tests check.
+// The machine the title bar's sync status and the palette tests run against: two of your own
+// skills edited since they were published, one never published, and two skills of a source, one
+// with an update serve found. `source list` answers with the account remote and the source, or
+// without the account remote. Variants: nothing to publish, and no account remote; serve can also
+// find what another of your machines published. Inline events with only the fields the tests
+// check.
 import type { LibraryEntry, LibraryPlacement } from "#/cli/events.gen.ts";
 
 import type { InlineEvent, MockCli } from "../harness/cli.ts";
@@ -63,10 +64,12 @@ export const library: LibraryEntry[] = [
   ofSource("review"),
 ];
 
-/** The same skills with nothing to publish: changelog and notes as they were published. */
-export const publishedLibrary: LibraryEntry[] = library.map((entry) =>
-  entry.state === "modified" ? { ...entry, state: "current" } : entry
-);
+/** The same skills with nothing to publish: changelog and notes as published, draft published. */
+export const syncedLibrary: LibraryEntry[] = library.map((entry) => ({
+  ...entry,
+  drift: [],
+  state: "current",
+}));
 
 const inventoryOf = (entries: LibraryEntry[]) =>
   ({
@@ -114,25 +117,31 @@ export const sourcesWithoutAccount: InlineEvent[] = sources.filter(
   (s) => s.type === "source" && s.account !== true
 );
 
-export type Variant = "edited" | "published" | "no-account-remote";
+export type Variant = "edited" | "synced" | "no-account-remote";
 
 export interface LaunchOptions {
   /** Whether serve found the update of pdf; it does unless a test says otherwise. */
   update?: boolean;
+  /** Whether serve found what another of your machines published to notes; it does not by default. */
+  incoming?: boolean;
 }
 
 /**
- * Starts the app on the fixture machine: serve writes the inventory of `variant`, then the update
- * it found for pdf, and every read the Skills screen runs for a selected skill is registered.
+ * Starts the app on the fixture machine: serve writes the inventory of `variant`, then the updates
+ * it found, and every read the Skills screen runs for a selected skill is registered.
  */
 export const launch = (
   cli: MockCli,
   variant: Variant = "edited",
-  { update = true }: LaunchOptions = {}
+  { update = true, incoming = false }: LaunchOptions = {}
 ) => {
-  const entries = variant === "published" ? publishedLibrary : library;
+  const entries = variant === "synced" ? syncedLibrary : library;
   cli.onServeStart({
-    events: [inventoryOf(entries), ...(update ? [pdfUpdate] : [])],
+    events: [
+      inventoryOf(entries),
+      ...(update ? [pdfUpdate] : []),
+      ...(incoming ? [notesFromAnotherMachine] : []),
+    ],
   });
   cli.register(["source", "list"], {
     events: variant === "no-account-remote" ? sourcesWithoutAccount : sources,
@@ -147,11 +156,4 @@ export const launch = (
   // What the Add skills screen reads when it opens: your skills on the account remote and the source's.
   cli.register(["skill", "list", "--remote"], { events: [] });
   cli.register(["source", "skills", "1111111111111111"], { events: [] });
-};
-
-/** The warning a bare publish gives for draft, which it leaves out. */
-export const draftNotPublished = {
-  level: "warn" as const,
-  message:
-    "draft is not published: run 'agentx skill publish draft' to publish it",
 };
