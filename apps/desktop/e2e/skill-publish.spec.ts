@@ -229,13 +229,11 @@ test.describe("the Publish dialog", () => {
     await shown.getByRole("checkbox", { name: "Add a custom message" }).click();
     await expect(
       shown.getByRole("textbox", { name: "What changed" })
-    ).toHaveAttribute(
-      "placeholder",
-      "Leave empty and agentx describes the files"
-    );
+    ).toHaveAttribute("placeholder", "Describe your changes");
     await expect(
       shown.getByRole("textbox", { name: "What changed" })
     ).toBeFocused();
+    await shown.getByRole("checkbox", { name: "Add a custom message" }).click();
     const changed = shown.getByRole("list", { name: "Changed files" });
     await expect(changed.getByRole("listitem")).toHaveText([
       "SKILL.mdedited by you",
@@ -277,6 +275,40 @@ test.describe("the Publish dialog", () => {
       "changelog",
       "--message",
       "Tighten the wording",
+      "--json",
+    ]);
+  });
+
+  test("a custom message is required once its box is checked: Publish with it empty marks it and runs nothing", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "changelog");
+    const shown = await openDialog(page, "changelog");
+    const box = shown.getByRole("checkbox", { name: "Add a custom message" });
+    await box.click();
+    const field = shown.getByRole("textbox", { name: "What changed" });
+    await expect(field).not.toHaveAttribute("aria-invalid");
+    await field.fill("   ");
+    await shown.getByRole("button", { name: "Publish" }).click();
+    await expect(field).toHaveAttribute("aria-invalid", "true");
+    await expect(field).toBeFocused();
+    await expect(shown).toBeVisible();
+    expect(later(cli).some((l) => l[1] === "publish")).toBe(false);
+    // Unchecking the box drops the requirement: Publish runs with no message.
+    await box.click();
+    cli.register(
+      ["skill", "publish", "changelog"],
+      publishReply("changelog", "pushed")
+    );
+    await shown.getByRole("button", { name: "Publish" }).click();
+    await expect(
+      toasts(page).getByText("Published changelog skill")
+    ).toBeVisible();
+    expect(later(cli).at(-1)).toEqual([
+      "skill",
+      "publish",
+      "changelog",
       "--json",
     ]);
   });

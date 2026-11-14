@@ -2,8 +2,8 @@
 // banner buttons that open it, and the toast each outcome of `skill publish` gives. The button
 // reads the changed files as it opens the dialog: `skill diff <name>`, or, for a skill never
 // published, every file `skill files <name>` lists, since the publish sends them all. Publish runs
-// `skill publish <name>`, with `--message <text>` when Add a custom message is checked and its
-// field filled, showing the run's progress until it ends. The toast follows the `publish` event's outcome and the exit code; a failure the
+// `skill publish <name>`, with `--message <text>` when Add a custom message is checked: its field
+// is then required, and Publish with it empty marks it invalid and runs nothing, showing the run's progress until it ends. The toast follows the `publish` event's outcome and the exit code; a failure the
 // toast does not name keeps the runner's error toast, the CLI's message then its hint as one
 // sentence-cased paragraph, the skill's name keeping its case, and the hint in the app's words
 // where the CLI's names a command (`publishFailure` in publish.ts).
@@ -219,14 +219,23 @@ const PublishForm = ({
   const { name } = row;
   const fieldId = useId();
   const toggleId = useId();
+  const field = useRef<HTMLInputElement>(null);
   const [custom, setCustom] = useState(false);
   const [message, setMessage] = useState("");
+  // Publish was pressed with the custom message empty: the field shows its error border.
+  const [tried, setTried] = useState(false);
+  const messageMissing = custom && message.trim() === "";
   const [progress, setProgress] = useState<ProgressEvent | undefined>();
   const pending = useSettling(publishLabel(name));
   const [running, setRunning] = useState(false);
 
   const publish = async () => {
     if (running || pending) {
+      return;
+    }
+    if (messageMissing) {
+      setTried(true);
+      field.current?.focus();
       return;
     }
     setRunning(true);
@@ -264,6 +273,7 @@ const PublishForm = ({
             disabled={running}
             onCheckedChange={(checked) => {
               setCustom(checked === true);
+              setTried(false);
             }}
           />
           <span className="type-secondary text-text-muted">
@@ -272,10 +282,13 @@ const PublishForm = ({
         </label>
         {custom && (
           <Input
+            ref={field}
             id={fieldId}
             aria-label="What changed"
+            aria-required
+            aria-invalid={tried && messageMissing ? true : undefined}
             autoFocus
-            placeholder="Leave empty and agentx describes the files"
+            placeholder="Describe your changes"
             value={message}
             disabled={running}
             onChange={(e) => {

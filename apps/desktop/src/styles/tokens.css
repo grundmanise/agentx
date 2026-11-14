@@ -193,6 +193,7 @@
   --color-input-bg: var(--gray-980);
   --color-input-border: var(--gray-860);
   --color-input-border-focus: var(--gray-700);
+  --color-input-border-invalid: var(--color-accent-danger);
   --color-input-text: var(--gray-50);
   --color-input-placeholder: var(--gray-500);
   --color-switch-on-track: var(--color-accent-primary);

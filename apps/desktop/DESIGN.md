@@ -195,6 +195,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `input.bg`            | `gray-980`       | Text inputs, search fields        |
 | `input.border`        | `gray-860`       |                                   |
 | `input.border-focus`  | `gray-700`       |                                   |
+| `input.border-invalid` | `accent.danger` | A field marked `aria-invalid`, focused or not |
 | `input.text`          | `gray-50`        |                                   |
 | `input.placeholder`   | `gray-500`       | Placeholder text and leading icon |
 | `switch.on-track`     | `accent.primary` | Switch on (full and compact)      |
