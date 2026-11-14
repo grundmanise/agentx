@@ -83,26 +83,26 @@ test("a plugin's subgroup collapses to its header, and the keys skip its rows", 
   cli,
   page,
 }) => {
-  // The last skill of the first plugin.
-  const end = listedPluginSkill(SKILLS_PER_PLUGIN - 1);
-  await openAt(cli, page, end.name);
+  // The first plugin's first skill, so its header is drawn beside it.
+  const first = listedPluginSkill(0);
+  await openAt(cli, page, first.name);
   const plugin = list(page).getByRole("region", {
-    name: `${end.plugin} (${SKILLS_PER_PLUGIN})`,
+    name: `${first.plugin} (${SKILLS_PER_PLUGIN})`,
   });
   const toggle = plugin.getByRole("button", {
     exact: true,
-    name: `${end.plugin} ${SKILLS_PER_PLUGIN}`,
+    name: `${first.plugin} ${SKILLS_PER_PLUGIN}`,
   });
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await expect(plugin.getByRole("listitem")).toHaveCount(0);
   // The detail pane keeps the selected skill; the next key moves to the next plugin's first.
-  await expect(pane(page, end.name)).toBeVisible();
+  await expect(pane(page, first.name)).toBeVisible();
   const next = listedPluginSkill(SKILLS_PER_PLUGIN).name;
   await page.keyboard.press("j");
   await expect(row(page, next)).toHaveAttribute("aria-current", "true");
   // Expanded again, it lists its rows.
   await toggle.click();
-  await expect(row(page, end.name)).toBeVisible();
+  await expect(row(page, first.name)).toBeVisible();
 });
