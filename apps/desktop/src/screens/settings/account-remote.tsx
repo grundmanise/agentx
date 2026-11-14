@@ -40,7 +40,7 @@ export const SAVE_ACCOUNT_LABEL = "save account remote";
 /** The pending label of `source remove <url>` of the account remote. */
 export const DETACH_ACCOUNT_LABEL = "detach account remote";
 
-/** A confirmation: its title, its warning, an optional URL, Cancel and the button that goes ahead. */
+/** A confirmation: its title, an optional URL, its warning, Cancel and the button that goes ahead. */
 const Confirm = ({
   open,
   onOpenChange,
@@ -65,13 +65,13 @@ const Confirm = ({
     <DialogContent>
       <DialogHeader showCloseButton={false}>
         <DialogTitle>{title}</DialogTitle>
+        {detail !== undefined && (
+          <p className="type-technical text-text-caption m-0 break-all">
+            {detail}
+          </p>
+        )}
         <DialogDescription>{warning}</DialogDescription>
       </DialogHeader>
-      {detail !== undefined && (
-        <p className="type-technical text-text-caption m-0 break-all">
-          {detail}
-        </p>
-      )}
       <DialogFooter>
         <DialogClose asChild>
           <Button variant="ghost">Cancel</Button>
@@ -288,7 +288,7 @@ const AccountRemoteRow = ({
         open={detaching}
         onOpenChange={setDetaching}
         title="Detach the account remote?"
-        warning="Your skills stay on this machine, and nothing on the account remote changes."
+        warning="agentx stops publishing to this repository. Your skills and the repository stay as they are."
         detail={url}
         action="Detach"
         danger

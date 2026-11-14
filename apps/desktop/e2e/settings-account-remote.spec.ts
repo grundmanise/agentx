@@ -222,7 +222,7 @@ test("Detach warns, runs source remove and shows the field once source list has 
     name: "Detach the account remote?",
   });
   await expect(confirm).toContainText(
-    "Your skills stay on this machine, and nothing on the account remote changes."
+    "agentx stops publishing to this repository. Your skills and the repository stay as they are."
   );
   await expect(confirm).toContainText(ACCOUNT);
   cli.register(["source", "remove", ACCOUNT], {
