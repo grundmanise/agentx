@@ -168,6 +168,38 @@ func (r *Runner) ProbeRemote(ctx context.Context, url string) (forks bool, err e
 	return strings.TrimSpace(out) != "", err
 }
 
+// ForkTips asks the repository at url which fork branches it holds and
+// the commit each one holds, by fork name, in the user's environment, with
+// no hook of theirs, see networkConfig. It is one ls-remote, which brings
+// no object and writes nothing, so that a caller can tell whether a fetch
+// would bring anything before it fetches. It runs where no repository is,
+// as ProbeRemote does, so that it needs no remote set up in the account
+// repo and no configuration but the user's applies.
+func (r *Runner) ForkTips(ctx context.Context, url string) (map[string]string, error) {
+	const prefix = "refs/heads/skills/"
+	args := append(networkConfig(), "ls-remote", "--refs", url, prefix+"*")
+	out, err := r.run(ctx, call{dir: os.TempDir()}, args...)
+	if err != nil {
+		return nil, err
+	}
+	return parseForkTips(out), nil
+}
+
+// parseForkTips reads what ls-remote printed of the fork branches, one
+// "<commit>\t<ref>" line each, by fork name. A line of another ref, which
+// a pattern matching the tail of a ref name lets in, is left out. Pure.
+func parseForkTips(out string) map[string]string {
+	const prefix = "refs/heads/skills/"
+	tips := map[string]string{}
+	for _, line := range strings.Split(out, "\n") {
+		commit, ref, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if name, under := strings.CutPrefix(ref, prefix); ok && under && name != "" && commit != "" {
+			tips[name] = commit
+		}
+	}
+	return tips
+}
+
 // FetchRemote fetches the fork branches of the remote called remote into
 // their remote-tracking branches, in the user's environment: quiet, no
 // tags, no FETCH_HEAD, no submodules, and a remote-tracking branch whose

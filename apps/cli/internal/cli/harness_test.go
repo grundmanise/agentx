@@ -364,8 +364,9 @@ func (p *serveProc) send(line string) {
 }
 
 // next returns the next stdout event, which must be of type typ. The
-// reconcile events a serve starts with are passed over unless typ asks for
-// one: most tests are about what comes after them.
+// reconcile events a serve starts with, and the update_check that ends
+// each of its update checks, whenever that check ends, are passed over
+// unless typ asks for one: most tests are about what comes around them.
 func (p *serveProc) next(typ string) jsonEvent {
 	p.t.Helper()
 	deadline := time.After(serveDeadline)
@@ -383,7 +384,7 @@ func (p *serveProc) next(typ string) jsonEvent {
 			if e["schema_version"] != float64(schemaVersion) {
 				p.t.Errorf("event %v: schema_version = %v, want %d", e, e["schema_version"], schemaVersion)
 			}
-			if e["type"] == "reconcile" && typ != "reconcile" {
+			if (e["type"] == "reconcile" || e["type"] == "update_check") && e["type"] != typ {
 				continue
 			}
 			if e["type"] != typ {

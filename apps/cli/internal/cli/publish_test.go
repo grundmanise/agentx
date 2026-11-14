@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -83,7 +84,10 @@ func (h *harness) record(name string) string {
 // of a skill whose tip the account remote holds already is recorded with
 // the message agentx writes and pushed, not reported up to date, and -m
 // with nothing to record warns, for a named and a bare publish and for
-// the first publish of a skill.
+// the first publish of a skill. Then two skills named in one run, one never
+// published and one named twice, go in one push, each once, reported in
+// name order; a skill of a shared source named beside them is refused
+// before anything is looked up.
 func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	t.Parallel()
 	h, s, _ := forkUpdateHarness(t)
@@ -128,6 +132,7 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 		{[]string{"absent", "-m", "subject\n\nAgentx-Fork-ID: 11111111-2222-4333-8444-555555555555"}, exitUsage, "-m may not end in a trailer agentx writes itself"},
 		{[]string{"absent"}, exitNotFound, `the library holds no skill called "absent"`},
 		{[]string{"mine"}, exitRefused, "mine is not managed, so it has no source to publish to"},
+		{[]string{"notes", "beta"}, exitUsage, "beta is installed from a shared source, which a skill is published to only when it is named alone"},
 		{[]string{"jot", "-m", "unused"}, exitRefused, "which git would record as a link rather than its files"},
 	} {
 		out := h.run(append([]string{"--json", "skill", "publish"}, tc.args...)...)
@@ -193,6 +198,27 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	h.mustRun("skill", "new", "fresh")
 	out = h.mustRun("skill", "publish", "fresh", "-m", "unused")
 	contains(t, "a first publish: -m with nothing to record", out.stderr, "fresh has no edits to record, so -m was not used")
+
+	h.mustRun("skill", "new", "draft")
+	writeFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited for the pair"))
+	calls := countingGit(t, h)
+	out = h.mustRun("--json", "skill", "publish", "notes", "draft", "notes")
+	equal(t, "several named: the result", h.one(out.stdout, "result")["summary"], "published 2 of 2 skills")
+	events = h.eventsOfType(out.stdout, "publish")
+	equal(t, "several named: publish events", len(events), 2)
+	for i, n := range []string{"draft", "notes"} {
+		equal(t, n+": the event's name", events[i]["name"], n)
+		equal(t, n+": outcome", events[i]["outcome"], publishPushed)
+		equal(t, n+": the remote's branch", remoteGit(t, h, remote, "rev-parse", "refs/heads/skills/"+n), h.ref(lineage.ForkRef(n)))
+	}
+	var totals []string
+	for _, e := range h.eventsOfType(out.stdout, "progress") {
+		if e["phase"] == phasePublish {
+			totals = append(totals, fmt.Sprint(e["subject"], " ", e["current"], "/", e["total"]))
+		}
+	}
+	equal(t, "several named: progress", strings.Join(totals, ", "), "draft 1/2, notes 2/2")
+	equal(t, "several named: pushes", strings.Count(strings.Join(calls(), "\n"), " push --porcelain"), 1)
 }
 
 // TestPublishRefusesASkillThatChangedWhileRecording edits a skill's
@@ -361,6 +387,25 @@ func TestCommitSubject(t *testing.T) {
 		{nil, "notes: edit (laptop)"},
 	} {
 		equal(t, tc.want, commitSubject("notes", "laptop", tc.files), tc.want)
+	}
+}
+
+// TestPublishCommand: the command line that publishes the skills named, as
+// a hint gives it, every name a shell word and the names after "--" once
+// one of them starts with a dash.
+func TestPublishCommand(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		names []string
+		want  string
+	}{
+		{nil, "agentx skill publish"},
+		{[]string{"notes"}, "agentx skill publish notes"},
+		{[]string{"-x"}, "agentx skill publish -- -x"},
+		{[]string{"draft", "notes"}, "agentx skill publish draft notes"},
+		{[]string{"-x", "my notes"}, "agentx skill publish -- -x 'my notes'"},
+	} {
+		equal(t, strings.Join(tc.names, ","), publishCommand(tc.names...), tc.want)
 	}
 }
 

@@ -700,6 +700,7 @@ agentx skill publish release-notes -m "Cover reverted pull requests"
 - Give the commit a message with `-m`. Its first line is the subject. Without `-m`, agentx writes one that names the skill, the files you changed and this machine, such as `release-notes: edit SKILL.md (laptop)`.
 - With `-m`, agentx publishes all your unpublished changes as one commit under your message. A rename or an upstream update keeps its own commit.
 - Publish a skill the first time by name. Its push creates the skill's branch on the account remote.
+- Name several skills to publish them in one run, such as `agentx skill publish release-notes changelog`. Each one you never published gets its branch. A skill installed from a shared source is published only when you name it alone.
 - Run `agentx skill publish` with no name to publish every skill of your own that the account remote already holds. `-m` then gives the message of each commit it records. A bare publish never creates a branch: it skips each skill shown as `not published`, one you never published or one another machine removed, and names the command that publishes it:
 
   ```text
