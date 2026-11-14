@@ -222,13 +222,20 @@ test.describe("the Publish dialog", () => {
     expect(diffReads(cli, "changelog")).toBe(1);
     const shown = await openDialog(page, "changelog");
     expect(diffReads(cli, "changelog")).toBe(2);
-    await expect(shown).toContainText(`To your account remote, ${ACCOUNT}`);
+    await expect(shown).toContainText(`To your account remote: ${ACCOUNT}`);
+    await expect(
+      shown.getByRole("textbox", { name: "What changed" })
+    ).toHaveCount(0);
+    await shown.getByRole("checkbox", { name: "Add a custom message" }).click();
     await expect(
       shown.getByRole("textbox", { name: "What changed" })
     ).toHaveAttribute(
       "placeholder",
       "Leave empty and agentx describes the files"
     );
+    await expect(
+      shown.getByRole("textbox", { name: "What changed" })
+    ).toBeFocused();
     const changed = shown.getByRole("list", { name: "Changed files" });
     await expect(changed.getByRole("listitem")).toHaveText([
       "SKILL.mdedited by you",
@@ -250,12 +257,10 @@ test.describe("the Publish dialog", () => {
     ]);
   });
 
-  test("Enter publishes, with What changed as the message", async ({
-    cli,
-    page,
-  }) => {
+  test("Enter publishes, with the custom message", async ({ cli, page }) => {
     await openSkill(cli, page, "changelog");
     const shown = await openDialog(page, "changelog");
+    await shown.getByRole("checkbox", { name: "Add a custom message" }).click();
     cli.register(
       ["skill", "publish", "changelog", "--message", "Tighten the wording"],
       publishReply("changelog", "pushed")
@@ -307,15 +312,19 @@ test.describe("the Publish dialog", () => {
     ).toBeVisible();
   });
 
-  test("your skill never published: Publish from its banner", async ({
+  test("your skill never published: Publish from its banner, listing every file as new", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "draft");
     const shown = await openDialog(page, "draft");
-    await expect(shown).toContainText(`To your account remote, ${ACCOUNT}`);
+    await expect(shown).toContainText(`To your account remote: ${ACCOUNT}`);
+    // Never published: every file goes, even of a fork that matches the commit that created it.
     await expect(shown.getByRole("listitem")).toHaveText([
-      "SKILL.mdadded by you",
+      "SKILL.mdnew",
+      "assets/logo.pngnew",
+      "reference.pdfnew",
+      "reference/forms.mdnew",
     ]);
     cli.register(
       ["skill", "publish", "draft"],
@@ -323,10 +332,8 @@ test.describe("the Publish dialog", () => {
     );
     await shown.getByRole("button", { name: "Publish" }).click();
     await expect(toasts(page).getByText("Published draft skill")).toBeVisible();
-    expect(later(cli)).toEqual([
-      ["skill", "diff", "draft", "--json"],
-      ["skill", "publish", "draft", "--json"],
-    ]);
+    expect(diffReads(cli, "draft")).toBe(0);
+    expect(later(cli)).toEqual([["skill", "publish", "draft", "--json"]]);
   });
 
   test("an edited skill of a writable source: Publish to its source, under your own Git name", async ({

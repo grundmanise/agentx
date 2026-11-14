@@ -1,8 +1,9 @@
 // Publishing a skill (docs/help-center/cli/skill.mdx, "Publish a skill"): the Publish dialog, the
 // banner buttons that open it, and the toast each outcome of `skill publish` gives. The button
-// reads the changed files with `skill diff <name>` as it opens the dialog, and Publish runs `skill
-// publish <name>`, with `--message <text>` when What changed is filled, showing the run's progress
-// until it ends. The toast follows the `publish` event's outcome and the exit code; a failure the
+// reads the changed files as it opens the dialog: `skill diff <name>`, or, for a skill never
+// published, every file `skill files <name>` lists, since the publish sends them all. Publish runs
+// `skill publish <name>`, with `--message <text>` when Add a custom message is checked and its
+// field filled, showing the run's progress until it ends. The toast follows the `publish` event's outcome and the exit code; a failure the
 // toast does not name keeps the runner's error toast, the CLI's message then its hint as one
 // sentence-cased paragraph, the skill's name keeping its case, and the hint in the app's words
 // where the CLI's names a command (`publishFailure` in publish.ts).
@@ -13,6 +14,7 @@ import type { DiffEvent, ProgressEvent } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { notify } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
   Dialog,
   DialogClose,
@@ -24,7 +26,7 @@ import {
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
-import { accountRemoteOf } from "#/screens/skills/banners.ts";
+import { accountRemoteOf, notPublished } from "#/screens/skills/banners.ts";
 import { fileStatusLabels } from "#/screens/skills/files.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
@@ -119,10 +121,13 @@ const progressText = (name: string, progress: ProgressEvent | undefined) => {
   return `Publishing ${name}…`;
 };
 
-/** The changed files `skill diff <name>` reports, read when the dialog opens. */
+/**
+ * The files a publish sends, read when the dialog opens: the changed files `skill diff <name>`
+ * reports, or, with `fresh`, every file of a skill never published, each new to the remote.
+ */
 type FilesState =
   | { kind: "reading" }
-  | { kind: "read"; diffs: DiffEvent[] }
+  | { kind: "read"; diffs: DiffEvent[]; fresh?: boolean }
   | { kind: "failed" };
 
 const ChangedFiles = ({ files }: { files: FilesState }) => {
@@ -154,7 +159,7 @@ const ChangedFiles = ({ files }: { files: FilesState }) => {
             {diff.path}
           </span>
           <span className="type-technical-sm text-file-row-edited-label flex-none">
-            {fileStatusLabels[diff.status]}
+            {files.fresh === true ? "new" : fileStatusLabels[diff.status]}
           </span>
         </li>
       ))}
@@ -162,8 +167,37 @@ const ChangedFiles = ({ files }: { files: FilesState }) => {
   );
 };
 
-/** `skill diff <name>`, the read of the files a publish would record. */
-const readChanged = async (name: string): Promise<FilesState> => {
+/**
+ * The read of the files a publish would record: `skill diff <name>`, which compares a skill never
+ * published with the commit that created it, so a fresh fork reads as unchanged. Such a skill
+ * reads every file `skill files <name>` lists but those git ignores, each added.
+ */
+const readChanged = async (row: SkillRow): Promise<FilesState> => {
+  const { name } = row;
+  if (notPublished(row)) {
+    const outcome = await runCommand(["skill", "files", name], {
+      label: `publish files ${name}`,
+    });
+    if (outcome.exitCode !== EXIT_CODES.ok) {
+      return { kind: "failed" };
+    }
+    const diffs = outcome.events.flatMap((e): DiffEvent[] =>
+      e.type === "skill_file" && e.ignored !== true
+        ? [
+            {
+              name,
+              patch: "",
+              path: e.path,
+              schema_version: e.schema_version,
+              status: "added",
+              type: "diff",
+            },
+          ]
+        : []
+    );
+    diffs.sort((a, b) => (a.path < b.path ? -1 : 1));
+    return { diffs, fresh: true, kind: "read" };
+  }
   const outcome = await runCommand(["skill", "diff", name], {
     label: `publish diff ${name}`,
   });
@@ -184,6 +218,8 @@ const PublishForm = ({
 }) => {
   const { name } = row;
   const fieldId = useId();
+  const toggleId = useId();
+  const [custom, setCustom] = useState(false);
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState<ProgressEvent | undefined>();
   const pending = useSettling(publishLabel(name));
@@ -195,12 +231,15 @@ const PublishForm = ({
     }
     setRunning(true);
     setProgress(undefined);
-    const outcome = await runUntilSettled(publishArgs(name, message), {
-      failure: (ended) => publishFailure(ended, row.entry?.source),
-      keep: [name],
-      label: publishLabel(name),
-      onProgress: setProgress,
-    });
+    const outcome = await runUntilSettled(
+      publishArgs(name, custom ? message : ""),
+      {
+        failure: (ended) => publishFailure(ended, row.entry?.source),
+        keep: [name],
+        label: publishLabel(name),
+        onProgress: setProgress,
+      }
+    );
     reportPublish(
       row,
       outcome,
@@ -218,18 +257,32 @@ const PublishForm = ({
       }}
     >
       <div className="gap-input-label flex flex-col">
-        <label htmlFor={fieldId} className="type-secondary text-text-muted">
-          What changed
+        <label htmlFor={toggleId} className="flex items-center gap-2.5">
+          <Checkbox
+            id={toggleId}
+            checked={custom}
+            disabled={running}
+            onCheckedChange={(checked) => {
+              setCustom(checked === true);
+            }}
+          />
+          <span className="type-secondary text-text-muted">
+            Add a custom message
+          </span>
         </label>
-        <Input
-          id={fieldId}
-          placeholder="Leave empty and agentx describes the files"
-          value={message}
-          disabled={running}
-          onChange={(e) => {
-            setMessage(e.target.value);
-          }}
-        />
+        {custom && (
+          <Input
+            id={fieldId}
+            aria-label="What changed"
+            autoFocus
+            placeholder="Leave empty and agentx describes the files"
+            value={message}
+            disabled={running}
+            onChange={(e) => {
+              setMessage(e.target.value);
+            }}
+          />
+        )}
       </div>
       <section aria-label="Files" className="flex flex-col gap-2.5">
         <h3 className="type-caption text-text-caption m-0">Files</h3>
@@ -264,7 +317,7 @@ const Subtitle = ({ row }: { row: SkillRow }) => {
   if (row.kind === "yours") {
     return (
       <DialogDescription>
-        {`To your account remote, ${accountRemote?.url ?? ""}`}
+        {`To your account remote: ${accountRemote?.url ?? ""}`}
       </DialogDescription>
     );
   }
@@ -275,7 +328,7 @@ const Subtitle = ({ row }: { row: SkillRow }) => {
   );
 };
 
-/** The Publish dialog: "Publish {skill}", where it goes, What changed, the files, Cancel · Publish. */
+/** The Publish dialog: "Publish {skill}", where it goes, Add a custom message, the files, Cancel · Publish. */
 const PublishDialog = ({
   row,
   files,
@@ -322,7 +375,7 @@ export const PublishButton = ({
     const mine = opening.current;
     setFiles({ kind: "reading" });
     setOpen(true);
-    const read = await readChanged(row.name);
+    const read = await readChanged(row);
     if (opening.current === mine) {
       setFiles(read);
     }
