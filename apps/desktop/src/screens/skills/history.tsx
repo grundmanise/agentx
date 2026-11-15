@@ -21,16 +21,9 @@ const SHOWN = 3;
 
 const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
 
-/** What the meta line of an entry says: the date, the files, and how the commit came about. */
-export const metaOf = (e: HistoryEvent) => {
-  const parts = [formatDate(e.time), files(e.files.length)];
-  if (e.foreign) {
-    parts.push("made with Git");
-  } else if (e.import) {
-    parts.push("from the original");
-  }
-  return parts.join(" · ");
-};
+/** What the meta line of an entry says: the date and the number of files. */
+const metaOf = (e: HistoryEvent) =>
+  [formatDate(e.time), files(e.files.length)].join(" · ");
 
 /** The version a skill's history is read for: a new read when the skill changed. */
 const versionOf = (row: SkillRow) =>

@@ -104,9 +104,9 @@ func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 	lines := strings.Split(strings.TrimSuffix(h.mustRun("skill", "history", "alpha").stdout, "\n"), "\n")
 	equal(t, "text lines", len(lines), 4)
 	contains(t, "the foreign line", lines[0], short(foreign)+"  ")
-	contains(t, "the foreign line", lines[0], "  By hand  foreign  2 files")
+	contains(t, "the foreign line", lines[0], "  By hand  2 files")
 	contains(t, "the commit line", lines[1], "  alpha: add extra.md (test-host)  1 file")
-	contains(t, "the import line", lines[3], "  import  "+plural(len(importFiles), "file"))
+	contains(t, "the import line", lines[3], "  "+plural(len(importFiles), "file"))
 
 	for _, c := range []struct {
 		name, message string

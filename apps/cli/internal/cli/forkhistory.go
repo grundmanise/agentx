@@ -18,8 +18,8 @@ func newSkillHistoryCommand(inv *invocation) *cobra.Command {
 		Short:       "List the commits of one of your own skills",
 		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "List every commit of <name>, one of your own skills, newest first: the commits\n" +
-			"agentx wrote, those made with git in its worktree, which are marked foreign, and\n" +
-			"the upstream imports it was forked from or merged, which are marked import.\n" +
+			"agentx wrote, those made with git in its worktree, and the upstream imports it\n" +
+			"was forked from or merged.\n" +
 			"Each names the files it changes in the skill's directory, a merge against its\n" +
 			"first parent. Nothing is written.",
 		Example: examples(
@@ -200,8 +200,7 @@ func parseForkLog(out string) ([]forkLogCommit, error) {
 // name, whose skill directory is dir, in the order git log listed them,
 // the one of the commit that created the fork with where it came from,
 // and prints one line each: the short commit, the author date, the
-// subject, a mark for an import or a foreign commit, and how many files it
-// changes.
+// subject and how many files it changes.
 func (inv *invocation) reportHistory(name, dir string, commits []forkLogCommit) {
 	out := inv.out
 	byID := make(map[string]lineage.Commit, len(commits))
@@ -229,14 +228,8 @@ func (inv *invocation) reportHistory(name, dir string, commits []forkLogCommit) 
 			ev.Files = append(ev.Files, f)
 		}
 		out.emit(ev)
-		line := []string{out.paint(noteStyle, short(c.id)), "  ", historyDate(c.time), "  ", sanitised(ev.Subject)}
-		switch {
-		case ev.Import:
-			line = append(line, "  ", out.paint(tagStyle, "import"))
-		case ev.Foreign:
-			line = append(line, "  ", out.paint(tagStyle, "foreign"))
-		}
-		out.print(append(line, "  ", out.paint(muted, plural(len(ev.Files), "file")))...)
+		out.print(out.paint(noteStyle, short(c.id)), "  ", historyDate(c.time), "  ", sanitised(ev.Subject),
+			"  ", out.paint(muted, plural(len(ev.Files), "file")))
 	}
 	inv.summary = sanitised(name) + " has " + plural(len(commits), "commit")
 }

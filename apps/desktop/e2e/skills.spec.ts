@@ -610,7 +610,7 @@ test.describe("the detail pane", () => {
         - region "History":
           - heading "History" [level=2]
           - list "History":
-            - listitem: /Tighten the examples\\s+Oct 2(, 2026)?\\s+· 1 file · made with Git/
+            - listitem: /Tighten the examples\\s+Oct 2(, 2026)?\\s+· 1 file/
             - listitem: /pdf-letters:\\sedit SKILL\\.md and add examples\\.md \\(studio-mac\\)\\s+Oct 2(, 2026)?\\s+· 2 files/
             - listitem: /pdf-letters:\\sedit SKILL\\.md \\(studio-mac\\)\\s+Oct 1(, 2026)?\\s+· 1 file/
             - listitem:
@@ -651,7 +651,7 @@ test.describe("the detail pane", () => {
       .getByRole("list", { name: "All history" })
       .getByRole("listitem");
     await expect(entries).toHaveCount(5);
-    await expect(entries.last()).toContainText("from the original");
+    await expect(entries.last()).toContainText("Import pdf from acme/skills");
     // A long subject wraps inside the sheet; the sheet never scrolls sideways.
     const long = sheet.getByRole("button", {
       name: "pdf-letters: edit SKILL.md and add examples.md (studio-mac)",
