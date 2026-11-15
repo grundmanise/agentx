@@ -190,20 +190,21 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 #### Inputs, switches, checkboxes
 
-| Token                 | Primitive        | Element                           |
-| --------------------- | ---------------- | --------------------------------- |
-| `input.bg`            | `gray-980`       | Text inputs, search fields        |
-| `input.border`        | `gray-860`       |                                   |
-| `input.border-focus`  | `gray-700`       |                                   |
-| `input.text`          | `gray-50`        |                                   |
-| `input.placeholder`   | `gray-500`       | Placeholder text and leading icon |
-| `switch.on-track`     | `accent.primary` | Switch on (full and compact)      |
-| `switch.on-knob`      | `on-accent`      |                                   |
-| `switch.off-track`    | `gray-850`       | Switch off                        |
-| `switch.off-knob`     | `gray-400`       |                                   |
-| `checkbox.ring`       | `gray-700`       | Unchecked popover checkbox        |
-| `checkbox.checked-bg` | `accent.primary` |                                   |
-| `checkbox.check`      | `on-accent`      |                                   |
+| Token | Primitive | Element |
+| --- | --- | --- |
+| `input.bg` | `gray-980` | Text inputs, search fields |
+| `input.border` | `gray-860` |  |
+| `input.border-focus` | `gray-700` |  |
+| `input.border-invalid` | `accent.danger` | A field marked `aria-invalid`, focused or not |
+| `input.text` | `gray-50` |  |
+| `input.placeholder` | `gray-500` | Placeholder text and leading icon |
+| `switch.on-track` | `accent.primary` | Switch on (full and compact) |
+| `switch.on-knob` | `on-accent` |  |
+| `switch.off-track` | `gray-850` | Switch off |
+| `switch.off-knob` | `gray-400` |  |
+| `checkbox.ring` | `gray-700` | Unchecked popover checkbox |
+| `checkbox.checked-bg` | `accent.primary` |  |
+| `checkbox.check` | `on-accent` |  |
 
 #### Segmented control (Update review, filter State)
 
@@ -222,14 +223,15 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | Token | Primitive | Element |
 | --- | --- | --- |
 | `filter.bg` | `gray-880` | Filter button at rest |
-| `filter.text` | `gray-300` |  |
+| `filter.text` | `gray-200` | Matches `filter.sort-text` |
 | `filter.active-bg` | `lime-400/12` | Filter button with any filter applied |
 | `filter.active-text` | `accent.primary` |  |
 | `filter.badge-bg` | `accent.primary` | Count badge (digits `on-accent`) |
 | `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
-| `filter.sort-text` | `gray-300` | Sort toggle (Default, A-Z, Z-A) |
+| `filter.sort-text` | `gray-200` | Sort toggle while it sorts by name (A-Z, Z-A) |
+| `filter.sort-off-text` | `text.caption` | Sort toggle while off |
 
 #### Lists and rows
 
@@ -244,6 +246,9 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `group.label` | `gray-300` | Source group caption |
 | `group.count` | `gray-500` | Count beside the caption |
 | `group.divider-label` | `gray-500` | Caption of the sub-group of skills in no agent client |
+| `subgroup.label` | `gray-400` | Caption of a plugin's subgroup under PLUGINS |
+| `subgroup.count` | `gray-500` | Count beside a plugin's caption |
+| `subgroup.hover` | `gray-920` | A plugin's header under the pointer |
 | `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows |
 | `table.header-text` | `gray-500` | Column captions |
 
@@ -556,6 +561,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
 | `group.padding` | 20 14 8 | `pt-group-top px-group pb-group-bottom` | Later group headers |
 | `group.gap` | 8 | `gap-group` | Label → count |
+| `subgroup.padding` | 6 14 | `py-subgroup-y px-subgroup-x` | A plugin's header under PLUGINS |
+| `subgroup.spacing` | 8 | `pt-subgroup-top` | Above a plugin's header, but the first in its group |
+| `subgroup.indent` | 22 | `pl-subgroup-indent` | Left inset of a plugin's rows: the row's glyph sits under the plugin's name |
 | `table.header-height` | 40 | `h-table-header` | Sticky header (servers) |
 | `table.row-padding` | 16 | `p-table-row` | Server rows |
 | `table.col-gap` | 24 | `gap-x-table-col` |  |
@@ -855,15 +863,17 @@ The dot and fork glyphs say one thing: whether there is an action to take. `glyp
 - pencil – edited locally; `glyph.edited`.
 - fork – one of your own skills.
 
-Sort toggle, at the right end of the filter row, steps through three orders on each click:
+Sort toggle, at the right end of the filter row, always reads as a sort by name: A-Z or Z-A with the arrow (turned for Z-A). It steps through three states on each click:
 
-- Default – within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
-- A-Z, Z-A – by name alone, whatever the state, with the arrow (turned for Z-A).
+- Off – A-Z and the arrow in `filter.sort-off-text` with no fill, so the toggle reads as quiet beside the lighter, filled states and still reaches 4.5:1; hover brings back the ghost fill and `text.primary`. The list keeps its own order: within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
+- A-Z, Z-A – by name alone, whatever the state, in `filter.sort-text` on `button.ghost-bg`.
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)
 
 `type.caption` in `group.label`, then the count in `group.count`. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
+
+The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a plugin installed in several agent clients is one subgroup. Its header (`src/components/section-toggle.tsx`) is a flat, full-width row, not a button with a fill: `subgroup.padding`, `row.radius`, no fill at rest and `subgroup.hover` under the pointer; a `xs` chevron in `text.caption`, the plugin's name in `type.caption` `subgroup.label`, then the count in `type.technical-sm` `subgroup.count`, `group.gap` apart. Its chevron lines up with the group's caption above it. `subgroup.spacing` above each header but the first in its group. The plugin's rows are inset by `subgroup.indent`, so each row's glyph sits under the plugin's name and the rows read as inside its section; their hover and selected fill start at the inset. A click collapses or expands the plugin's rows (`aria-expanded`); the chevron turns 90° while they show, with no transition. A collapsed subgroup keeps its header and count, and j/k skip its rows. Every subgroup is open when the screen opens. Each row's place (`aria-posinset`, `aria-setsize`) is among its plugin's rows.
 
 ### Banner (detail pane)
 
@@ -1062,6 +1072,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
+- Account remote, once set, shows its URL in `type.technical` with a neutral Read-only pill beside it when access is limited, as a source card does (§6 "Source card"); a remote you can write to has no tag.
 - Adopt skills sits after Account remote: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.

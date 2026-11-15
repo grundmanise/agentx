@@ -10,9 +10,6 @@ import { isMac } from "#/lib/platform.ts";
 /** The file manager's name: "Finder" on macOS, "file manager" on Linux. */
 export const FILE_MANAGER = isMac ? "Finder" : "file manager";
 
-/** The file manager in a sentence: "in Finder", "in the file manager". */
-export const IN_FILE_MANAGER = isMac ? "in Finder" : "in the file manager";
-
 /**
  * A control that shows a file there: "Show in Finder" or "Show in file manager", and with `what`,
  * "Show SKILL.md in Finder".
@@ -27,6 +24,6 @@ export const revealInFinder = async (absolutePath: string) => {
   try {
     await revealItemInDir(absolutePath);
   } catch {
-    notify(`Couldn't show ${absolutePath} ${IN_FILE_MANAGER}`);
+    notify(`"${absolutePath}" doesn't exist`);
   }
 };

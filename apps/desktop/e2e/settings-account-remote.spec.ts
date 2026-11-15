@@ -64,9 +64,23 @@ test("the account remote with what the Sources slice reports", async ({
   await expect(
     remote.getByText("3 of your skills on it · fetched 2 hours ago")
   ).toBeVisible();
-  await expect(remote.getByText("You can write to it")).toBeVisible();
+  // Write access is the norm, so it shows no tag.
+  await expect(remote.getByText("Read-only", { exact: true })).toHaveCount(0);
   await expect(remote.getByRole("button", { name: "Change…" })).toBeVisible();
   await expect(remote.getByRole("button", { name: "Detach" })).toBeVisible();
+});
+
+test("a read-only account remote has a Read-only tag beside its URL", async ({
+  cli,
+  page,
+}) => {
+  await openSettings(cli, page, [
+    ...sharedOnly,
+    { ...account, access: "read-only" },
+  ]);
+  await expect(
+    accountRemote(page).getByText("Read-only", { exact: true })
+  ).toBeVisible();
 });
 
 test("set the account remote: Save runs source add --account, and the row comes from the next source list", async ({
@@ -103,9 +117,6 @@ test("set the account remote: Save runs source add --account, and the row comes 
   relisted.release();
   await expect(
     accountRemote(page).getByText(ACCOUNT, { exact: true })
-  ).toBeVisible();
-  await expect(
-    accountRemote(page).getByText("You can write to it")
   ).toBeVisible();
   expect(commandLines(cli)).toEqual([
     "source add git@github.com:me/account.git --account",
@@ -218,10 +229,13 @@ test("Detach warns, runs source remove and shows the field once source list has 
 }) => {
   await openSettings(cli, page);
   await accountRemote(page).getByRole("button", { name: "Detach" }).click();
-  const confirm = page.getByRole("dialog", { name: `Detach ${ACCOUNT}?` });
+  const confirm = page.getByRole("dialog", {
+    name: "Detach the account remote?",
+  });
   await expect(confirm).toContainText(
-    "Your skills stay on this machine, and nothing on the account remote changes."
+    "agentx stops publishing to this repository. Your skills and the repository stay as they are."
   );
+  await expect(confirm).toContainText(ACCOUNT);
   cli.register(["source", "remove", ACCOUNT], {
     events: [{ id: account.id, type: "source", url: ACCOUNT }],
   });

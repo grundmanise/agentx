@@ -137,9 +137,10 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 	refetched(t, h, s.url)
 	equal(t, "last_fetched of the unreachable source", lastFetched(t, h, other.url), backdated)
 	progress := h.eventsOfType(out.stdout, "progress")
-	equal(t, "progress events", len(progress), 2)
-	for _, p := range progress {
+	equal(t, "progress events", len(progress), 3) // 0 of 2 before the fetches, then one each
+	for i, p := range progress {
 		equal(t, "phase", p["phase"], "fetch")
+		equal(t, "current", p["current"], float64(i))
 		equal(t, "total", p["total"], float64(2))
 	}
 	up := h.updateOf(out.stdout, "alpha")

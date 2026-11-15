@@ -317,6 +317,8 @@ test.describe("Check updates", () => {
     await open(cli, page, "pdf", []);
     const run = cli.register(["skill", "check-updates"], {
       events: [
+        // Before the first fetch: the total at once.
+        { current: 0, phase: "fetch", total: 2, type: "progress" },
         {
           current: 1,
           phase: "fetch",
@@ -339,7 +341,7 @@ test.describe("Check updates", () => {
     await run.started;
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "true");
     await expect(
-      toasts(page).getByText("Checking for updates · 1 of 2 sources")
+      toasts(page).getByText("Checking for updates · 0 of 2 sources")
     ).toBeVisible();
     run.release();
     // draft's pending merge comes first: four skills are offered an update.
