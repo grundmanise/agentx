@@ -6,10 +6,13 @@ import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { openInEditor } from "#/lib/editor.ts";
+import { openInBrowser } from "#/lib/open-url.ts";
+import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import { AgentsSection } from "#/screens/skills/agents-section.tsx";
 import { BannerView } from "#/screens/skills/banner-view.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
 import { detailsOf } from "#/screens/skills/details.ts";
+import type { Detail } from "#/screens/skills/details.ts";
 import { canEdit, skillFile } from "#/screens/skills/edit.ts";
 import { FilesSection } from "#/screens/skills/files.tsx";
 import { ForkButton } from "#/screens/skills/fork-dialog.tsx";
@@ -30,6 +33,35 @@ import { useAppStore } from "#/store/store.ts";
 const Caption = ({ children }: { children: string }) => (
   <h2 className="type-caption text-text-caption m-0">{children}</h2>
 );
+
+/**
+ * A value of DETAILS: a link that opens its URL in the browser, or shows its directory in Finder,
+ * when it has one.
+ */
+const DetailValue = ({ detail }: { detail: Detail }) => {
+  const { link, value } = detail;
+  if (link === undefined) {
+    return value;
+  }
+  const page = link.kind === "page";
+  return (
+    <a
+      href={page ? link.url : `file://${link.path}`}
+      title={page ? link.url : showInLabel()}
+      className="text-text-secondary hover:text-text-primary hover:underline"
+      onClick={(e) => {
+        e.preventDefault();
+        if (page) {
+          void openInBrowser(link.url);
+        } else {
+          void revealInFinder(link.path);
+        }
+      }}
+    >
+      {value}
+    </a>
+  );
+};
 
 /** Remove, a danger ghost for every library skill; pending until the skill has left the inventory. */
 const RemoveButton = ({
@@ -221,7 +253,7 @@ export const SkillDetail = ({
                   {d.key}
                 </dt>
                 <dd className="type-technical-sm text-text-secondary m-0 min-w-0 flex-1 break-all">
-                  {d.value}
+                  <DetailValue detail={d} />
                 </dd>
               </div>
             ))}

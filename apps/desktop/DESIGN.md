@@ -190,20 +190,21 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 #### Inputs, switches, checkboxes
 
-| Token                 | Primitive        | Element                           |
-| --------------------- | ---------------- | --------------------------------- |
-| `input.bg`            | `gray-980`       | Text inputs, search fields        |
-| `input.border`        | `gray-860`       |                                   |
-| `input.border-focus`  | `gray-700`       |                                   |
-| `input.text`          | `gray-50`        |                                   |
-| `input.placeholder`   | `gray-500`       | Placeholder text and leading icon |
-| `switch.on-track`     | `accent.primary` | Switch on (full and compact)      |
-| `switch.on-knob`      | `on-accent`      |                                   |
-| `switch.off-track`    | `gray-850`       | Switch off                        |
-| `switch.off-knob`     | `gray-400`       |                                   |
-| `checkbox.ring`       | `gray-700`       | Unchecked popover checkbox        |
-| `checkbox.checked-bg` | `accent.primary` |                                   |
-| `checkbox.check`      | `on-accent`      |                                   |
+| Token | Primitive | Element |
+| --- | --- | --- |
+| `input.bg` | `gray-980` | Text inputs, search fields |
+| `input.border` | `gray-860` |  |
+| `input.border-focus` | `gray-700` |  |
+| `input.border-invalid` | `accent.danger` | A field marked `aria-invalid`, focused or not |
+| `input.text` | `gray-50` |  |
+| `input.placeholder` | `gray-500` | Placeholder text and leading icon |
+| `switch.on-track` | `accent.primary` | Switch on (full and compact) |
+| `switch.on-knob` | `on-accent` |  |
+| `switch.off-track` | `gray-850` | Switch off |
+| `switch.off-knob` | `gray-400` |  |
+| `checkbox.ring` | `gray-700` | Unchecked popover checkbox |
+| `checkbox.checked-bg` | `accent.primary` |  |
+| `checkbox.check` | `on-accent` |  |
 
 #### Segmented control (Update review, filter State)
 
@@ -348,6 +349,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `dialog.subtitle` | `gray-400` |  |
 | `sheet.bg` | `gray-960` | History sheet body |
 | `sheet.border` | `gray-850` |  |
+| `sheet.handle` | `gray-700` | A resizable sheet's handle on hover and while it drags |
 | `toast.text` | `gray-50` |  |
 
 #### Code, file tree and diffs
@@ -653,7 +655,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
-| `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room, and the Activity log sheet, for its lines |
+| `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room |
+| `sheet.log-width` | the width the user dragged it to, else 1120 | `w-sheet-dragged` | Activity log sheet, twice `sheet.width-wide`, for its lines. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet-log` |
+| `sheet.log-min-width` | 420 | `min-w-sheet-log` | The narrowest the Activity log sheet drags to: `sheet.width` |
+| `sheet.log-max-width` | 90% of the window | `max-w-sheet-log` | The widest the Activity log sheet drags to, and opens at in a narrow window |
+| `sheet.handle-width` | 8 | `w-sheet-handle` | The drag handle on a resizable sheet's left edge |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
 | `sheet.padding` | 28 32 | `py-sheet-y px-sheet` |  |
 | `palette.width` | 640 | `w-palette` |  |
@@ -680,6 +686,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
 | `code.gap` | 12 | `gap-x-code` | Between gutter and text |
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
+| `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
 | `file-row.height` | 44 | `h-file-row` | File tree row |
 | `file-row.padding-x` | 16 | `px-file-row`, `right-file-row` for the control at the row's end |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
@@ -1012,7 +1020,9 @@ The History sheet's frame at `sheet.width-wide`, for what an update changes befo
 
 ### Sheet (Activity log)
 
-The History sheet's frame at `sheet.width-wide` (`src/app/activity-log.tsx`): the last lines of what the app ran and what the background scan reported, as a terminal shows them. A sheet, since the log is looked at beside the screen whose action it explains, and from any screen; Settings and the palette open it.
+The History sheet's frame at `sheet.log-width` (`src/app/activity-log.tsx`): the last lines of what the app ran and what the background scan reported, as a terminal shows them. A sheet, since the log is looked at beside the screen whose action it explains, and from any screen; Settings and the palette open it.
+
+- The sheet is resizable: a `sheet.handle-width` handle on its left edge drags its width between `sheet.log-min-width` and `sheet.log-max-width`. The handle shows `sheet.handle` on hover and while it drags, and `shell.focus-ring` on focus. The arrow keys move it 40 at a time, and a double click or Home brings back the default. The sheet opens at the width the user left it at until the app quits.
 
 - One block of lines, oldest first: `code.bg` with 1px `code.border`, `log.output-radius`, `type.technical-sm`, long lines wrapped. A line is its time in a `log.time-width` column, its text, and a note at the right: how long a command ran, and how it ended when it did not succeed. No rows to open, no dots and no filter: the log is read as a terminal is.
 - Red is the one colour, and it means failed. A command that failed is `tone.danger.fg` with its last 5 lines of output under it, in the same colour and with no time. A command that succeeded keeps its line only, in `text.secondary` with its time and note in `text.caption`. What the background scan reported and a command's debug lines are `text.caption`, so the commands stand out. A scan the app restarts on purpose is no failure.
@@ -1032,6 +1042,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file
 
 - A row: a chevron (turns 90° when open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` status for a file the user changed, and the meta (line count, binary, or size) in `file-row.meta` at the right. An open row shows the file in the Code pane below it.
 - SKILL.md comes first and open; the rest follow by path, a file the user removed among them.
+- While the files are read, the card shows the SKILL.md row alone, open and with no meta, over a Code pane at `code.height` that holds a stand-in SKILL.md, blurred by `code.loading-blur` like frosted glass, with a `md` (20px) `Spinner` in `text.muted` at its centre. When the files come in, the stand-in fades out over the real SKILL.md, which fades in from the same blur to sharp (§8). Every skill has a SKILL.md, so the list keeps its place when the files come in. The stand-in is hidden from assistive technology; the spinner's status says the files are being read.
 - A file on disk has a Show in Finder button group (§6 "Button group") over the meta, beside the trigger, never inside it. While the row is hovered, focused or has its menu open, the meta fades out and the button fades in at the same spot. The meta stays laid out, so the row never shifts, and the button stays in the tab order throughout. A removed file has no button.
 - The button opens the file at the skill's first place: the library when it holds the skill, else the first placement in the row's agent order. The chevron's menu lists every other placement, the path as the inventory carries it. A skill with one place has no chevron.
 
@@ -1052,6 +1063,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
+- Account remote, once set, shows its URL in `type.technical` with a neutral Read-only pill beside it when access is limited, as a source card does (§6 "Source card"); a remote you can write to has no tag.
 - Adopt skills sits after Account remote: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
@@ -1097,12 +1109,13 @@ The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-
 
 ## 8. Motion
 
-Nothing loops forever, and nothing waits on purpose. The one loop is the `Spinner` of a pending control (§6) or of a running check: it turns only while its command runs and stops when the command ends.
+Nothing loops forever, and nothing waits on purpose. The one loop is the `Spinner` of a pending control (§6), of a running check, or of a read the screen waits on, such as a skill's files: it turns only while its command runs and stops when the command ends.
 
 - Hover and background changes: no transition, or at most `.2s`.
 - Switches: the track changes colour in `.2s`; the knob moves with no transition.
 - File list chevron: `rotate(90deg)` in `.15s`. The History sheet's chevron turns with no transition.
 - File row: the meta and the Show in Finder button swap by opacity in `.15s`.
+- Files read (`animate-code-reveal`, `animate-code-loading-out`): when a skill's files come in, the blurred stand-in SKILL.md and its spinner fade out while the real SKILL.md fades in, its blur going from `code.loading-blur` to none, both `.3s ease-out`. A skill whose files are already read shows them at once.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0` and opacity 0 → 1, `.22s ease`, when it appears.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; a control with a leading icon, such as Check updates or Check tools, shows it in the icon's place, so a long check reads as busy past its first second.
