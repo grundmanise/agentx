@@ -21,6 +21,7 @@ import {
   groupCards,
   installableCards,
   listingCards,
+  pageRef,
   orderCards,
   planAdds,
   resultCards,
@@ -34,7 +35,7 @@ import type {
   SourcePill,
 } from "#/screens/sources/projection.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
-import { SkillCards } from "#/screens/sources/skill-cards.tsx";
+import { SkillList } from "#/screens/sources/skill-list.tsx";
 import { SourceRow } from "#/screens/sources/source-row.tsx";
 import { useFetchedListings } from "#/screens/sources/use-fetched-listings.ts";
 import { search } from "#/store/feed.ts";
@@ -153,7 +154,7 @@ const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
 
 /**
  * The Sources screen, under Skills: the sources as pills, the card of the open one with its facts,
- * Refresh and Remove, its skills as cards to select, search across every source through serve,
+ * Refresh and Remove, its skills as a list to open and select, search across every source through serve,
  * and the floating bar that installs the selection with `skill add`. Every list comes from the
  * CLI: the app never filters a listing itself.
  */
@@ -178,6 +179,8 @@ export const SourcesScreen = () => {
   const opened = useRef("");
   // Where focus goes when the Remove dialog closes and Remove cannot take it.
   const searchField = useRef<HTMLInputElement>(null);
+  // The screen's scroll container, which the skill list scrolls in.
+  const scroller = useRef<HTMLDivElement>(null);
 
   // The sources are read again when the screen opens, and the fetch labels keep time.
   useEffect(() => {
@@ -234,9 +237,16 @@ export const SourcesScreen = () => {
     }
     return listing === undefined || activePill.url === undefined
       ? noCards
-      : orderCards(listingCards(listing, activePill.url, library));
-  }, [activePill, installable, listing, library]);
-  // A search answer replaces the grid while it answers the query as it stands.
+      : orderCards(
+          listingCards(
+            listing,
+            activePill.url,
+            library,
+            pageRef(sources.find((s) => s.id === activePill.key))
+          )
+        );
+  }, [activePill, installable, listing, library, sources]);
+  // A search answer replaces the listing while it answers the query as it stands.
   const results =
     found !== undefined && found.query === query.trim()
       ? found.results
@@ -245,8 +255,14 @@ export const SourcesScreen = () => {
     () =>
       results === undefined
         ? undefined
-        : groupCards(orderCards(resultCards(results, library))),
-    [results, library]
+        : groupCards(
+            orderCards(
+              resultCards(results, library, (url) =>
+                pageRef(sources.find((s) => s.url === url))
+              )
+            )
+          ),
+    [results, library, sources]
   );
   const groups: CardGroup[] =
     resultGroups ??
@@ -266,7 +282,7 @@ export const SourcesScreen = () => {
     activeKey === undefined ? "" : loadingLabel(activeKey)
   );
 
-  // Each settled query asks serve once; the answer to the latest request replaces the grid.
+  // Each settled query asks serve once; the answer to the latest request replaces the listing.
   useEffect(() => {
     const text = query.trim();
     let stale = false;
@@ -442,7 +458,10 @@ export const SourcesScreen = () => {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div className="pt-page-top px-page pb-page gap-page-title flex min-h-0 flex-1 flex-col overflow-auto">
+      <div
+        ref={scroller}
+        className="pt-page-top px-page pb-page gap-page-title flex min-h-0 flex-1 flex-col overflow-auto"
+      >
         <div className="flex items-start justify-between gap-4">
           <h1 className="type-page-title text-text-primary m-0">Sources</h1>
           <Button
@@ -492,18 +511,19 @@ export const SourcesScreen = () => {
           />
         )}
         {emptyText === undefined ? (
-          <SkillCards
+          <SkillList
             groups={groups.filter((g) => g.cards.length > 0)}
             captions={resultGroups !== undefined}
             selected={new Set(selection.keys())}
             onToggle={toggleCard}
+            scroller={scroller}
           />
         ) : (
           <p className="type-secondary text-text-hint m-0 py-10 text-center">
             {emptyText}
           </p>
         )}
-        {/* Room for the floating bar over the last row of cards. */}
+        {/* Room for the floating bar over the last skill of the list. */}
         {selection.size > 0 && <div className="h-floating-bar flex-none" />}
       </div>
       {selection.size > 0 && (

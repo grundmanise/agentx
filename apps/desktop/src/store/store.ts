@@ -107,6 +107,11 @@ export interface AppState {
   /** The files of each skill read so far, by the row's key. */
   files: Record<string, FilesRead>;
   /**
+   * The SKILL.md of each skill of a source read so far, by the Sources card's key, from
+   * `source read`: a row of the Sources list reads it when it opens.
+   */
+  skillMds: Record<string, SkillMdRead>;
+  /**
    * The declarations whose handshake failed in the last Check tools of this session, from that
    * one-shot's inventory, which is not applied. Replaced by the next check; gone on a restart.
    */
@@ -157,6 +162,15 @@ export type FilesRead =
   | { version: string; files?: undefined; failed: true };
 
 /**
+ * One read of `source read` for a skill of a source, kept with the version it was read for, its
+ * subpath and the tree the source listed it at, so that a fetch that changes the skill never
+ * shows the SKILL.md of the version before it.
+ */
+export type SkillMdRead =
+  | { version: string; file: SkillFileEvent; failed?: undefined }
+  | { version: string; file?: undefined; failed: true };
+
+/**
  * One read of `skill diff <name> --update`, kept with the update candidate it was read for, so
  * that a newer update never shows the changes of the one before it.
  */
@@ -183,6 +197,7 @@ export const useAppStore = create<AppState>()(() => ({
   refreshes: {},
   serveEnd: undefined,
   settings: undefined,
+  skillMds: {},
   sources: [],
   updateDiffs: {},
   updates: {},

@@ -48,7 +48,7 @@ import {
 } from "#/screens/sources/projection.ts";
 import type { SkillCard } from "#/screens/sources/projection.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
-import { SkillRows } from "#/screens/sources/skill-cards.tsx";
+import { SkillRows } from "#/screens/sources/skill-rows.tsx";
 import { runCommand, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { afterSettled } from "#/store/settle.ts";

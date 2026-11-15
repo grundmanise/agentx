@@ -208,6 +208,61 @@ export const loadFiles = async (
   useAppStore.setState((s) => ({ files: { ...s.files, [key]: read } }));
 };
 
+// The version of each skill of a source whose SKILL.md was read, or is being read: card key →
+// version.
+const skillMdVersions = new Map<string, string>();
+
+/** What `source read` reads: the source's id or URL, the skill's subpath and the tree listed. */
+export interface SkillMdRequest {
+  source: string;
+  /** "" for a skill at the root, which `source read` takes as ".". */
+  subpath: string;
+  tree: string;
+}
+
+/**
+ * Loads the SKILL.md of a skill of a source, before it is installed: `source read <source>
+ * <subpath>`, a read of the last fetch. `key` names the skill on the Sources screen. The same
+ * subpath and tree are read once, however often the skill's row opens, and a fetch that changes
+ * the tree reads again. A failed read is kept as such, and tried again the next time the row opens.
+ */
+export const loadSkillMd = async (key: string, request: SkillMdRequest) => {
+  const version = `${request.subpath}\u0000${request.tree}`;
+  if (skillMdVersions.get(key) === version) {
+    return;
+  }
+  skillMdVersions.set(key, version);
+  useAppStore.setState((s) => {
+    const { [key]: previous, ...rest } = s.skillMds;
+    return previous === undefined || previous.version === version
+      ? s
+      : { skillMds: rest };
+  });
+  const subpath = request.subpath === "" ? "." : request.subpath;
+  const outcome = await runCommand(
+    ["source", "read", request.source, subpath],
+    {
+      label: `read ${request.source} ${subpath}`,
+      // The row says the file could not be read; a toast per row opened would add nothing.
+      ownFailure: true,
+    }
+  );
+  if (skillMdVersions.get(key) !== version) {
+    return;
+  }
+  const file = outcome.events.find((e) => e.type === "skill_file");
+  if (outcome.exitCode !== 0 || file === undefined) {
+    useAppStore.setState((s) => ({
+      skillMds: { ...s.skillMds, [key]: { failed: true, version } },
+    }));
+    skillMdVersions.delete(key);
+    return;
+  }
+  useAppStore.setState((s) => ({
+    skillMds: { ...s.skillMds, [key]: { file, version } },
+  }));
+};
+
 // The candidate of each update whose changes were read, or are being read: name → candidate.
 const updateDiffCandidates = new Map<string, string>();
 

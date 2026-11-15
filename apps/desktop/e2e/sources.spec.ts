@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { webUrl } from "#/screens/sources/projection.ts";
+import { skillPage, webUrl } from "#/screens/sources/projection.ts";
 
 import {
   ACME,
@@ -11,6 +11,7 @@ import {
   installable,
   inventory,
   library,
+  skillMd,
   sources,
   ZETA,
   ZETA_ID,
@@ -37,8 +38,15 @@ const pill = (page: Page, name: string) =>
   sourcesRow(page).getByRole("button", { exact: true, name });
 const grid = (page: Page, name: string) =>
   page.getByRole("region", { exact: true, name });
-const card = (page: Page, name: string) =>
-  page.getByRole("list").getByRole("button", { exact: true, name });
+/** The row of a skill, which opens and closes it. */
+const row = (page: Page, name: string) =>
+  page.getByRole("heading").getByRole("button", { exact: true, name });
+/** The round check that selects a skill. */
+const check = (page: Page, name: string) =>
+  page.getByRole("button", { exact: true, name: `Select ${name}` });
+/** What the open row of a skill shows. */
+const opened = (page: Page, name: string) =>
+  page.getByRole("region", { exact: true, name });
 const bar = (page: Page) =>
   page.getByRole("toolbar", { name: "Selected skills" });
 const target = (page: Page, name: string) =>
@@ -64,6 +72,13 @@ const names = async (where: Locator) =>
     .getByRole("button")
     .evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label")));
 
+/** The skills of `where`, by the accessible names of their rows. */
+const skillNames = async (where: Locator) =>
+  await where
+    .getByRole("heading")
+    .getByRole("button")
+    .evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label")));
+
 /** The last search request written to serve's stdin: its type, request id and query. */
 const lastSearch = (cli: MockCli) => {
   const line = cli.serveRequests.at(-1) ?? "";
@@ -79,7 +94,7 @@ const lastSearch = (cli: MockCli) => {
   };
 };
 
-/** Opens the Sources screen on the fixture machine and waits for acme's cards. */
+/** Opens the Sources screen on the fixture machine and waits for acme's skills. */
 const openSources = async (cli: MockCli, page: Page, first = inventory) => {
   cli.onServeStart({ events: [first] });
   cli.register(["source", "list"], { events: sources });
@@ -90,7 +105,7 @@ const openSources = async (cli: MockCli, page: Page, first = inventory) => {
   await expect(
     page.getByRole("heading", { level: 1, name: "Sources" })
   ).toBeVisible();
-  await expect(card(page, "artifacts")).toBeVisible();
+  await expect(row(page, "artifacts")).toBeVisible();
 };
 
 /** The command lines of the screen, as text, without the --json the supervisor adds. */
@@ -160,12 +175,12 @@ test("the open source's card: its name links to the repository, its full URL, a 
   await expect(details(page)).toHaveCount(0);
 });
 
-test("a source listing: selectable cards first, then each state with its label", async ({
+test("a source listing: selectable skills first, then each state with its label and, once open, its reason", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
-  expect(await names(grid(page, "acme/skills"))).toEqual([
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual([
     "artifacts",
     "docx",
     "forms",
@@ -175,8 +190,11 @@ test("a source listing: selectable cards first, then each state with its label",
     "scratch",
     "xlsx",
   ]);
-  await expect(card(page, "artifacts")).toBeEnabled();
-  await expect(card(page, "artifacts")).toHaveAccessibleDescription(
+  await expect(check(page, "artifacts")).toHaveAttribute(
+    "aria-pressed",
+    "false"
+  );
+  await expect(row(page, "artifacts")).toHaveAccessibleDescription(
     "Build web artifacts"
   );
   const states: [string, string][] = [
@@ -187,19 +205,25 @@ test("a source listing: selectable cards first, then each state with its label",
   ];
   await Promise.all(
     states.flatMap(([name, label]) => [
-      expect(card(page, name)).toBeDisabled(),
-      expect(card(page, name)).toHaveAccessibleDescription(
+      expect(check(page, name)).toHaveCount(0),
+      expect(row(page, name)).toHaveAccessibleDescription(
         new RegExp(`^${label}\\.`, "u")
       ),
-      expect(card(page, name).getByText(label, { exact: true })).toBeVisible(),
+      expect(row(page, name).getByText(label, { exact: true })).toBeVisible(),
     ])
   );
-  await expect(card(page, "xlsx")).toHaveAttribute(
-    "title",
+  // An open row says why its skill cannot be selected.
+  for (const name of ["xlsx", "scratch"]) {
+    cli.register(["source", "read", ACME_ID, `skills/${name}`], {
+      events: [skillMd(name, `# ${name}\n`)],
+    });
+  }
+  await row(page, "xlsx").click();
+  await row(page, "scratch").click();
+  await expect(opened(page, "xlsx")).toContainText(
     "Remove or rename xlsx first"
   );
-  await expect(card(page, "scratch")).toHaveAttribute(
-    "title",
+  await expect(opened(page, "scratch")).toContainText(
     "A folder named scratch is already in your library, added outside agentx. Adopt it in Skills to manage it, or remove it to add this one."
   );
 
@@ -208,7 +232,39 @@ test("a source listing: selectable cards first, then each state with its label",
   await expect(page.getByText("No skills in this source")).toBeVisible();
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
+    `source read ${ACME_ID} skills/xlsx`,
+    `source read ${ACME_ID} skills/scratch`,
     `source skills ${ZETA_ID}`,
+  ]);
+});
+
+test("opening a row reads its SKILL.md once and links to the skill", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  const read = cli.register(["source", "read", ACME_ID, "skills/docx"], {
+    events: [skillMd("docx", "---\nname: docx\n---\n# Word documents\n")],
+  });
+  await row(page, "docx").click();
+  await read.started;
+  await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
+  ).toContainText("# Word documents");
+  await opened(page, "docx").getByRole("link", { name: "View skill" }).click();
+  expect(cli.openedUrls).toEqual([`${ACME}/tree/3f2a9c1e8d7b6a/skills/docx`]);
+  // The row opens and closes on a click; the check alone selects.
+  await expect(bar(page)).toHaveCount(0);
+  await row(page, "docx").click();
+  await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "false");
+  await row(page, "docx").click();
+  await expect(
+    opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
+  ).toContainText("# Word documents");
+  expect(commandLines(cli)).toEqual([
+    `source skills ${ACME_ID}`,
+    `source read ${ACME_ID} skills/docx`,
   ]);
 });
 
@@ -236,8 +292,8 @@ test("names and targets: two cards and one enabled agent turned off", async ({
       ],
     }
   );
-  await card(page, "docx").click();
-  await card(page, "artifacts").click();
+  await check(page, "docx").click();
+  await check(page, "artifacts").click();
   await expect(bar(page)).toContainText("2 selected");
   // The enabled agents are preselected; the disabled one is off.
   await expect(target(page, "Claude Code")).toHaveAttribute(
@@ -257,7 +313,7 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   await expect(toasts(page).getByText("Added 2 skills")).toBeVisible();
   // The selection clears; the cards turn Added only with the next inventory.
   await expect(bar(page)).toHaveCount(0);
-  await expect(card(page, "docx")).toBeEnabled();
+  await expect(check(page, "docx")).toBeVisible();
   await cli.serveEmit([
     {
       ...inventory,
@@ -277,9 +333,8 @@ test("names and targets: two cards and one enabled agent turned off", async ({
       scan_counter: 2,
     },
   ]);
-  await expect(card(page, "docx")).toBeDisabled();
   await expect(
-    card(page, "docx").getByText("Added", { exact: true })
+    row(page, "docx").getByText("Added", { exact: true })
   ).toBeVisible();
   expect(commandLines(cli)).toContain(
     `skill add ${ACME} --name artifacts --name docx --to claude-code`
@@ -318,7 +373,7 @@ test("many agents: five logos and +n, Choose agents toggles a target, two-letter
     ],
     { events: [{ name: "docx", type: "library_skill" }] }
   );
-  await card(page, "docx").click();
+  await check(page, "docx").click();
   // The chosen agents first, then the rest, five in all, with Universal after the chosen ones; the other three behind +3, last.
   expect(await names(bar(page).getByRole("group", { name: "Add to" }))).toEqual(
     [
@@ -410,8 +465,8 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
   await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
   await expect(selectAll(page)).toHaveAttribute("aria-checked", "true");
   await expect(bar(page)).toContainText("4 selected");
-  await card(page, "docx").click();
-  await card(page, "forms").click();
+  await check(page, "docx").click();
+  await check(page, "forms").click();
   await expect(bar(page)).toContainText("2 selected");
   await expect(selectAll(page)).toHaveAccessibleName("2 of 4 selected");
   await expect(selectAll(page)).toHaveAttribute("aria-checked", "mixed");
@@ -449,8 +504,8 @@ test("progress shows from the progress events, and Cancel stops the run", async 
       holdAfter: 2,
     }
   );
-  await card(page, "artifacts").click();
-  await card(page, "docx").click();
+  await check(page, "artifacts").click();
+  await check(page, "docx").click();
   await bar(page).getByRole("button", { name: "Add 2" }).click();
   await add.started;
   await expect(bar(page)).toContainText("Adding 2 of 3");
@@ -485,8 +540,8 @@ test("a partial failure lists what was added, the error, its hint and each skipp
       logs: [{ level: "warn", message: warning }],
     }
   );
-  await card(page, "artifacts").click();
-  await card(page, "docx").click();
+  await check(page, "artifacts").click();
+  await check(page, "docx").click();
   await bar(page).getByRole("button", { name: "Add 2" }).click();
   await add.started;
   const toast = toasts(page)
@@ -498,8 +553,8 @@ test("a partial failure lists what was added, the error, its hint and each skipp
   await expect(toast).toContainText(warning);
   // The skill that landed leaves the selection; the skipped one stays.
   await expect(bar(page)).toContainText("1 selected");
-  await expect(card(page, "docx")).toHaveAttribute("aria-pressed", "true");
-  await expect(card(page, "artifacts")).toHaveAttribute(
+  await expect(check(page, "docx")).toHaveAttribute("aria-pressed", "true");
+  await expect(check(page, "artifacts")).toHaveAttribute(
     "aria-pressed",
     "false"
   );
@@ -534,9 +589,9 @@ test("search asks serve once per settled query and shows only the latest answer"
       type: "search",
     },
   ]);
-  await expect(card(page, "artifacts")).toBeVisible();
+  await expect(row(page, "artifacts")).toBeVisible();
 
-  // The matching answer replaces the grid, grouped by source.
+  // The matching answer replaces the listing, grouped by source.
   await cli.serveEmit([
     {
       query: "pdf",
@@ -546,12 +601,12 @@ test("search asks serve once per settled query and shows only the latest answer"
     },
   ]);
   await expect(grid(page, "zeta/tools")).toBeVisible();
-  expect(await names(grid(page, "acme/skills"))).toEqual(["docx"]);
-  expect(await names(grid(page, "zeta/tools"))).toEqual(["docgen"]);
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
+  expect(await skillNames(grid(page, "zeta/tools"))).toEqual(["docgen"]);
 
   // Clearing the query shows the listing again.
   await field.fill("");
-  await expect(card(page, "artifacts")).toBeVisible();
+  await expect(row(page, "artifacts")).toBeVisible();
 });
 
 test("Add source runs source add, then opens the new source fully preselected", async ({
@@ -602,8 +657,8 @@ test("Add source runs source add, then opens the new source fully preselected", 
     toasts(page).getByText(`Added ${newUrl}: 2 skills`)
   ).toBeVisible();
   await expect(pill(page, "acme/more")).toHaveAttribute("aria-pressed", "true");
-  await expect(card(page, "review")).toHaveAttribute("aria-pressed", "true");
-  await expect(card(page, "triage")).toHaveAttribute("aria-pressed", "true");
+  await expect(check(page, "review")).toHaveAttribute("aria-pressed", "true");
+  await expect(check(page, "triage")).toHaveAttribute("aria-pressed", "true");
   await expect(bar(page)).toContainText("2 selected");
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
@@ -680,18 +735,20 @@ test("Personal lists the account remote's installable skills and adds by name", 
 }) => {
   await openSources(cli, page);
   await pill(page, "Personal").click();
-  await expect(card(page, "release-notes")).toBeVisible();
-  expect(await names(grid(page, "Personal"))).toEqual([
+  await expect(row(page, "release-notes")).toBeVisible();
+  expect(await skillNames(grid(page, "Personal"))).toEqual([
     "my-pdf",
     "release-notes",
   ]);
-  await expect(card(page, "my-pdf")).toContainText("from acme/skills");
-  await expect(card(page, "release-notes")).toContainText("personal skill");
+  await expect(row(page, "my-pdf")).toContainText("from acme/skills");
+  // Your skills on the account remote open to their description alone.
+  await row(page, "release-notes").click();
+  await expect(opened(page, "release-notes")).toHaveText("personal skill");
 
   const add = cli.register(["skill", "add", "--name", "release-notes"], {
     events: [{ name: "release-notes", type: "library_skill" }],
   });
-  await card(page, "release-notes").click();
+  await check(page, "release-notes").click();
   await bar(page).getByRole("button", { name: "Add 1" }).click();
   await add.started;
   await expect(toasts(page).getByText("Added 1 skill")).toBeVisible();
@@ -734,8 +791,8 @@ test("Remove with its installed skills removes each skill, then the source", asy
   page,
 }) => {
   await openSources(cli, page);
-  // The first source, open without a click, with a card selected.
-  await card(page, "artifacts").click();
+  // The first source, open without a click, with a skill selected.
+  await check(page, "artifacts").click();
   const remove = details(page).getByRole("button", { name: "Remove" });
   await remove.click();
   const confirm = page.getByRole("dialog", { name: "Remove acme/skills?" });
@@ -858,4 +915,27 @@ test("the repository link of a source URL", () => {
     ["/home/me/skills", undefined],
   ];
   expect(cases.map(([url]) => [url, webUrl(url)])).toEqual(cases);
+});
+
+test("the page of a skill in its source", () => {
+  const cases: [string, string, string, string | undefined][] = [
+    [ACME, "v2", "skills/docx", `${ACME}/tree/v2/skills/docx`],
+    [ACME, "release/1.x", "", `${ACME}/tree/release/1.x`],
+    [
+      "https://gitlab.com/group/sub/repo",
+      "HEAD",
+      "tools/a b",
+      "https://gitlab.com/group/sub/repo/-/tree/HEAD/tools/a%20b",
+    ],
+    ["https://git.example.com/team/skills", "HEAD", "x", undefined],
+    ["/home/me/skills", "HEAD", "x", undefined],
+  ];
+  expect(
+    cases.map(([url, ref, subpath]) => [
+      url,
+      ref,
+      subpath,
+      skillPage(url, ref, subpath),
+    ])
+  ).toEqual(cases);
 });
