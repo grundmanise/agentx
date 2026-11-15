@@ -1,4 +1,4 @@
-// Every button has a resting shape: a ghost button, a danger button and the title bar's publish
+// Every button has a resting shape: a ghost button, a danger button and the title bar's sync
 // status have a fill before any hover, and a button group with a menu makes one shape, rounded
 // on its outer corners only.
 import type { Locator } from "@playwright/test";
@@ -82,7 +82,7 @@ test("ghost and danger buttons have a resting fill; a button group makes one sha
   // The publish status in the title bar is a button too: the ghost fill at rest.
   const status = page
     .getByRole("banner")
-    .getByRole("button", { name: /publish|remote/iu });
+    .getByRole("button", { name: /publish|sync|incoming/iu });
   await expect(status).toBeVisible();
   const statusShape = await shapeOf(status);
   expect(statusShape.background).toBe(ghostShape.background);

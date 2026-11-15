@@ -1,37 +1,73 @@
-// The publish status at the right of the title bar: whether your own skills have edits to
-// publish, read from the inventory's library and the Sources slice. With no account remote set,
-// it says so and a click goes to Settings, where one is set. With skills to publish, "{n} to
-// publish", which a click publishes all at once (a bare `skill publish`). Otherwise "Published",
-// which a click checks for what your other machines published (`skill check-updates`).
-import { StatusButton } from "#/components/status-button.tsx";
+// The sync status at the right of the title bar: how this machine stands with the account remote,
+// from the inventory's library, the Sources slice and the update candidates. With no account
+// remote set, it says so and a click goes to Settings, where one is set. Otherwise it counts what
+// there is to publish (your own skills edited since they were published, and those never
+// published) and what is incoming (your own skills changed on your other machines), or says it
+// is synced; a click opens a popover that lists both, with Publish all, and says when the account
+// remote was last checked. It runs no check itself: serve checks on its own, and Check updates on
+// the Skills screen checks by hand.
+import { useState } from "react";
+
+import type { UpdateAvailableEvent } from "#/cli/events.gen.ts";
+import { Spinner } from "#/components/spinner.tsx";
+import {
+  StatusAnnouncement,
+  StatusButton,
+} from "#/components/status-button.tsx";
+import type { StatusTone } from "#/components/status-button.tsx";
+import {
+  SyncFooter,
+  SyncGroup,
+  SyncNote,
+  SyncRow,
+  SyncRows,
+} from "#/components/sync-list.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "#/components/ui/popover.tsx";
+import { formatAgo } from "#/lib/dates.ts";
 import { navigateTo } from "#/lib/navigate.ts";
+import { useNow } from "#/screens/settings/clock.ts";
 import { accountRemoteOf } from "#/screens/skills/banners.ts";
+import { openSkill } from "#/screens/skills/open.ts";
+import {
+  fromAnotherMachine,
+  shortSource,
+} from "#/screens/skills/projection.ts";
 import {
   PUBLISH_ALL,
   publishAll,
   toPublish,
   usePublishProgress,
 } from "#/screens/skills/publish.ts";
+import type { ToPublish } from "#/screens/skills/publish.ts";
 import { useSkillRows } from "#/screens/skills/rows.ts";
-import {
-  checkOtherMachines,
-  useCheckingUpdates,
-} from "#/screens/skills/updates.ts";
 import { loadLabel } from "#/store/loaders.ts";
 import { usePending } from "#/store/runner.ts";
 import { useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
-/** The status, as the store says it: no account remote, how many skills to publish, or none. */
-export type PublishState =
+/**
+ * The status, as the store says it: no account remote, or with one, the skills to publish and
+ * those incoming, each in name order.
+ */
+export type SyncState =
   | { kind: "no-account-remote" }
-  | { kind: "to-publish"; count: number }
-  | { kind: "published" };
+  | {
+      kind: "account-remote";
+      url: string;
+      outgoing: ToPublish[];
+      incoming: UpdateAvailableEvent[];
+    };
 
-/** The publish status from the store; undefined until the inventory and the sources are read. */
-export const usePublishState = (): PublishState | undefined => {
+/** The sync status from the store; undefined until the inventory and the sources are read. */
+export const useSyncState = (): SyncState | undefined => {
   const rows = useSkillRows();
   const inventory = useAppStore((s) => s.inventory);
+  const updates = useAppStore((s) => s.updates);
   const accountRemote = useAppStore((s) => accountRemoteOf(s.sources));
   // The sources load once the checks pass: until their first answer, the status would guess.
   const loadingSources = usePending(loadLabel(["source", "list"]));
@@ -42,8 +78,25 @@ export const usePublishState = (): PublishState | undefined => {
   if (accountRemote === undefined) {
     return { kind: "no-account-remote" };
   }
-  const count = toPublish(rows).length;
-  return count > 0 ? { count, kind: "to-publish" } : { kind: "published" };
+  // Only what another machine published to this account remote, for one of your own skills still
+  // in the library: a skill removed since, a plugin's or a client's skill of the same name, or an
+  // update from an account remote set before this one, is not incoming.
+  const installed = new Set(
+    rows.filter((row) => row.kind === "yours").map((row) => row.name)
+  );
+  const incoming = Object.values(updates).filter(
+    (update) =>
+      fromAnotherMachine(update) &&
+      update.source === accountRemote.url &&
+      installed.has(update.name)
+  );
+  incoming.sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    incoming,
+    kind: "account-remote",
+    outgoing: toPublish(rows),
+    url: accountRemote.url,
+  };
 };
 
 /** What the label says while Publish all runs, from its progress. */
@@ -52,58 +105,144 @@ const publishingLabel = (progress?: { current: number; total?: number }) =>
     ? "Publishing…"
     : `Publishing ${progress.current} of ${progress.total}`;
 
-/** Publish all: a bare `skill publish`. */
-const publish = () => {
-  void publishAll();
+/** "2 edited · 1 new", leaving out a part that counts none. */
+const outgoingLine = (outgoing: ToPublish[]) => {
+  const edited = outgoing.filter((s) => s.kind === "edited").length;
+  const added = outgoing.length - edited;
+  return [
+    ...(edited > 0 ? [`${edited} edited`] : []),
+    ...(added > 0 ? [`${added} new`] : []),
+  ].join(" · ");
+};
+
+/** The pill's tone, label and tooltip lines with an account remote set. */
+const describe = (
+  outgoing: ToPublish[],
+  incoming: UpdateAvailableEvent[],
+  checked: string | undefined
+): { tone: StatusTone; label: string; tooltip: string[] } => {
+  const n = outgoing.length;
+  const m = incoming.length;
+  if (n === 0 && m === 0) {
+    return {
+      label: "Synced",
+      tone: "synced",
+      tooltip: [
+        `Synced with your account remote · ${checked === undefined ? "not checked yet" : `checked ${checked}`}`,
+      ],
+    };
+  }
+  return {
+    label: [
+      ...(n > 0 ? [`${n} to publish`] : []),
+      ...(m > 0 ? [`${m} incoming`] : []),
+    ].join(" · "),
+    tone: "pending",
+    tooltip: [
+      ...(n > 0 ? [outgoingLine(outgoing)] : []),
+      ...(m > 0 ? ["Changed on your other machines"] : []),
+    ],
+  };
 };
 
 export const PublishStatus = () => {
-  const state = usePublishState();
+  const state = useSyncState();
   const publishing = useSettling(PUBLISH_ALL);
   const progress = usePublishProgress();
-  const checking = useCheckingUpdates();
+  const lastChecked = useAppStore((s) => s.lastChecked);
+  const now = useNow();
+  const [open, setOpen] = useState(false);
   if (state === undefined) {
     return null;
   }
   if (state.kind === "no-account-remote") {
     return (
-      <StatusButton
-        tone="none"
-        label="No account remote"
-        onClick={() => {
-          navigateTo("/settings");
-        }}
-      />
+      <>
+        <StatusButton
+          tone="none"
+          label="Set up sync"
+          tooltip={["Connect an account remote to sync skills"]}
+          onClick={() => {
+            navigateTo("/settings");
+          }}
+        />
+        <StatusAnnouncement text="Set up sync" />
+      </>
     );
   }
-  if (publishing) {
-    return (
-      <StatusButton
-        tone="pending"
-        label={publishingLabel(progress)}
-        busy
-        onClick={publish}
-      />
-    );
-  }
-  if (state.kind === "to-publish") {
-    return (
-      <StatusButton
-        tone="pending"
-        label={`${state.count} to publish`}
-        onClick={publish}
-      />
-    );
-  }
+  const { incoming, outgoing, url } = state;
+  const checked =
+    lastChecked === undefined ? undefined : formatAgo(lastChecked, now);
+  const shown = describe(outgoing, incoming, checked);
   return (
-    <StatusButton
-      tone="published"
-      label="Published"
-      turning={checking}
-      busy={checking}
-      onClick={() => {
-        void checkOtherMachines();
-      }}
-    />
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <StatusButton
+            tone={shown.tone}
+            label={publishing ? publishingLabel(progress) : shown.label}
+            // The tooltip would cover the popover, and says nothing while the publish runs.
+            tooltip={publishing || open ? [] : shown.tooltip}
+            busy={publishing}
+          />
+        </PopoverTrigger>
+        <PopoverContent aria-label="Sync" align="end">
+          {outgoing.length === 0 && incoming.length === 0 && (
+            <SyncNote>Everything is synced</SyncNote>
+          )}
+          {outgoing.length > 0 && (
+            <SyncGroup caption="To publish">
+              <SyncRows>
+                {outgoing.map((skill) => (
+                  <SyncRow
+                    key={skill.name}
+                    name={skill.name}
+                    meta={skill.kind}
+                  />
+                ))}
+              </SyncRows>
+              <div className="mt-2 flex px-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  aria-busy={publishing}
+                  onClick={() => {
+                    setOpen(false);
+                    void publishAll(outgoing.map((skill) => skill.name));
+                  }}
+                >
+                  {publishing && <Spinner />}
+                  Publish all
+                </Button>
+              </div>
+            </SyncGroup>
+          )}
+          {incoming.length > 0 && (
+            <SyncGroup caption="Incoming">
+              <SyncRows>
+                {incoming.map((update) => (
+                  <SyncRow
+                    key={update.name}
+                    name={update.name}
+                    onOpen={() => {
+                      setOpen(false);
+                      openSkill(update.name);
+                    }}
+                  />
+                ))}
+              </SyncRows>
+            </SyncGroup>
+          )}
+          <SyncFooter
+            remote={shortSource(url)}
+            checked={
+              checked === undefined ? "Not checked yet" : `Checked ${checked}`
+            }
+          />
+        </PopoverContent>
+      </Popover>
+      {/* The summary alone, never the publish's progress, so a screen reader hears each change once. */}
+      <StatusAnnouncement text={shown.label} />
+    </>
   );
 };

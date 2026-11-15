@@ -3,8 +3,8 @@ import { CommandField } from "#/components/command-field.tsx";
 
 /**
  * The 50px title bar. On macOS the window's own traffic lights sit in the left column; the whole
- * bar drags the window. The right column holds the publish status. The startup layer hides the
- * command field and the publish status.
+ * bar drags the window. The right column holds the sync status. The startup layer hides the
+ * command field and the sync status.
  */
 export const TopBar = ({
   commandField,

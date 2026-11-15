@@ -26,7 +26,7 @@ SKILLS
 UPDATES AND PUBLISHING
   skill check-updates             Look for upstream updates and other machines' edits
   skill update <name>             Apply the update the last check found
-  skill publish [<name>]          Publish edits to the source or the account remote
+  skill publish [<name>...]       Publish edits to the source or the account remote
 
 SOURCES
   source add <url>                Fetch a git repository and add it as a source

@@ -93,12 +93,15 @@ export const accountRemoteOf = (sources: SourceEvent[]) =>
 
 /**
  * One of your own skills edited since it was published: what a bare `skill publish` covers, and
- * what the title bar's publish status counts.
+ * what the title bar's status counts as edited.
  */
 export const hasEditsToPublish = (row: SkillRow) =>
   row.kind === "yours" && row.modified && row.published;
 
-/** One of your own skills the account remote holds no branch of: a publish sends every file. */
+/**
+ * One of your own skills the account remote holds no branch of: a publish sends every file, and
+ * the title bar counts it as new.
+ */
 export const notPublished = (row: SkillRow) =>
   row.kind === "yours" &&
   (row.entry?.drift?.includes("not published") ?? false);
