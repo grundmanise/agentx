@@ -16,6 +16,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
 const settableKeys = "label, accept_operations, ignore_system_files"
@@ -36,6 +37,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 			`agentx config set label "work laptop"`, "name this machine",
 			"agentx config disable cursor", "keep new skills out of one client",
 			"agentx config enable cursor --place-all", "enable a client and place every skill in it",
+			"agentx config placement cursor copy", "place copies in one client instead of symlinks",
 			"agentx config remove adal", "delete the configuration directory of a client, after confirming",
 		),
 		RunE: needSubcommand(inv, "no config command given", "run 'agentx config --help' to list commands"),
@@ -76,7 +78,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 					return nil
 				}
 			}
-			return fail(exitUsage, fmt.Sprintf("unknown setting %q", args[0]), "keys: schema_version, "+settableKeys+", disabled_configurations, sources, copy_mode")
+			return fail(exitUsage, fmt.Sprintf("unknown setting %q", args[0]), "keys: schema_version, "+settableKeys+", disabled_configurations, copy_configurations, sources, copy_mode")
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -122,6 +124,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 	})
 	cmd.AddCommand(newEnableCommand(inv, "enable", "Select a client for placements by default"))
 	cmd.AddCommand(newEnableCommand(inv, "disable", "Leave a client out of placements by default"))
+	cmd.AddCommand(newPlacementCommand(inv))
 	cmd.AddCommand(newConfigRemoveCommand(inv))
 	return cmd
 }
@@ -190,6 +193,101 @@ func (inv *invocation) printEnabled(id string, enabled bool) {
 	inv.out.done(inv.out.paint(label, id) + " is now " + state)
 }
 
+// newPlacementCommand builds config placement, which chooses what agentx
+// places into one configuration from now on: a symlink to the library, or
+// a copy. On its own it edits the copy_configurations list and nothing on
+// disk: a placement already made stays what it is until skill place makes
+// it again. With --convert the same mutation also turns the placements
+// already there into the mode, see setPlacementAndConvert. A configuration
+// whose client reads the library has no choice to make, since the library
+// entry is its placement.
+func newPlacementCommand(inv *invocation) *cobra.Command {
+	var convert bool
+	cmd := &cobra.Command{
+		Use:         "placement <configuration> <symlink|copy>",
+		Short:       "Choose whether a client gets symlinks or copies",
+		Annotations: map[string]string{annotationSection: "settings", annotationSynopsis: "<id> <mode>"},
+		Long: "Choose what agentx places into one agent configuration from now on: symlink,\n" +
+			"a symlink to the library directory, which is the default, or copy, a copy of\n" +
+			"it, as --copy makes. Placements already on disk stay as they are unless\n" +
+			"--convert is given: then every symlink to the library there becomes a copy,\n" +
+			"or every copy agentx placed there that holds the library's version becomes\n" +
+			"a symlink. A copy that is different from the library is kept as it is. No\n" +
+			"skill is placed that was not placed there already. A client that reads the\n" +
+			"library has no choice to make: the library entry is its placement.",
+		Args: cobra.ExactArgs(2),
+		Example: examples(
+			"agentx config placement cursor copy", "skills placed in Cursor from now on are copies",
+			"agentx config placement cursor symlink", "and symlinks to the library again",
+			"agentx config placement cursor copy --convert", "and turn the symlinks already in Cursor into copies",
+		),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, mode := args[0], args[1]
+			if mode != scan.PlacementSymlink && mode != scan.PlacementCopy {
+				return fail(exitUsage, fmt.Sprintf("unknown placement %q", mode), "use symlink or copy")
+			}
+			if err := inv.detectedConfiguration(id); err != nil {
+				return err
+			}
+			if inv.configurationReadsLibrary(id) {
+				return fail(exitUsage, id+" reads the library, so its placement is the library entry",
+					"it sees every library skill there; choose symlink or copy for a configuration that does not read the library")
+			}
+			if convert {
+				return inv.setPlacementAndConvert(cmd.Context(), id, mode == scan.PlacementCopy)
+			}
+			var s home.Settings
+			err := home.Mutate(inv.dirs.Home, inv.refs(cmd.Context()), func() error {
+				var err error
+				if s, err = inv.loadSettings(); err != nil {
+					return err
+				}
+				setCopyConfiguration(&s, id, mode == scan.PlacementCopy)
+				return home.SaveSettings(inv.dirs.Home, s)
+			})
+			if err != nil {
+				return err
+			}
+			inv.emitSettings(s)
+			inv.out.done(inv.out.paint(label, id) + " now places " + inv.out.paint(heading, placedWord(mode == scan.PlacementCopy)))
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&convert, "convert", false,
+		"also turn the placements already in the configuration into the mode: symlinks to the library into copies, or unchanged copies into symlinks")
+	return cmd
+}
+
+// setCopyConfiguration puts id in copy_configurations when it places
+// copies and takes it out when it places symlinks.
+func setCopyConfiguration(s *home.Settings, id string, copies bool) {
+	s.CopyConfigurations = slices.DeleteFunc(s.CopyConfigurations, func(x string) bool { return x == id })
+	if copies {
+		s.CopyConfigurations = append(s.CopyConfigurations, id)
+		slices.Sort(s.CopyConfigurations)
+	}
+}
+
+// placedWord is what a configuration that places copies, or symlinks,
+// gets, in the words config placement confirms it with.
+func placedWord(copies bool) string {
+	if copies {
+		return "copies"
+	}
+	return "symlinks"
+}
+
+// configurationReadsLibrary reports whether the detected configuration id
+// is one whose client reads the library.
+func (inv *invocation) configurationReadsLibrary(id string) bool {
+	for _, c := range scan.Detect(inv.dirs) {
+		if c.Slug() == id {
+			return scan.ReadsLibrary(c, inv.dirs)
+		}
+	}
+	return false
+}
+
 // settingSetter validates value for key before any lock is taken and returns
 // the change to apply.
 func settingSetter(key, value string) (func(*home.Settings), error) {
@@ -205,7 +303,7 @@ func settingSetter(key, value string) (func(*home.Settings), error) {
 	case "ignore_system_files":
 		b, err := parseBool(key, value)
 		return func(s *home.Settings) { s.IgnoreSystemFiles = b }, err
-	case "schema_version", "disabled_configurations", "sources", "copy_mode":
+	case "schema_version", "disabled_configurations", "copy_configurations", "sources", "copy_mode":
 		return nil, fail(exitUsage, key+" cannot be changed with config set", "settable keys: "+settableKeys)
 	}
 	return nil, fail(exitUsage, fmt.Sprintf("unknown setting %q", key), "settable keys: "+settableKeys)
@@ -329,6 +427,7 @@ func (inv *invocation) settingRows(s home.Settings) []settingRow {
 		{"accept_operations", strconv.FormatBool(s.AcceptOperations)},
 		{"ignore_system_files", strconv.FormatBool(s.IgnoreSystemFiles)},
 		{"disabled_configurations", strings.Join(s.DisabledConfigurations, ", ")},
+		{"copy_configurations", strings.Join(s.CopyConfigurations, ", ")},
 		{"sources", compactValue(s.Sources)},
 		{"copy_mode", compact(s.CopyMode)},
 	}

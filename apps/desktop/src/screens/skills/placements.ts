@@ -260,6 +260,25 @@ export const placedAllText = (events: CliEvent[], agent: string): string => {
   return skipped > 0 ? `${text}, ${skipped} skipped` : text;
 };
 
+/**
+ * The toast after `config placement <id> <mode> --convert`, from its result: `<id> now places
+ * <mode>s, <k> skills converted[, <s> skipped]`. A skipped skill is a copy edited in place, which
+ * the CLI keeps.
+ */
+export const convertedText = (
+  events: CliEvent[],
+  agent: string,
+  mode: "symlink" | "copy"
+): string => {
+  const summary = summaryOf(events);
+  const converted = firstNumber(summary, /(?<n>\d+) skills? converted/u) ?? 0;
+  const skipped = firstNumber(summary, /(?<n>\d+) skipped/u) ?? 0;
+  const text = `Converted ${plural(converted, "skill")} in ${agent} to ${mode === "copy" ? "copies" : "symlinks"}`;
+  return skipped > 0
+    ? `${text}. Kept ${skipped} edited ${skipped === 1 ? "copy" : "copies"}`
+    : text;
+};
+
 /** The error that refuses a Reconnect because the directory holds another version (exit code 6). */
 export const holdsOtherContent = (events: CliEvent[]) =>
   events.some(

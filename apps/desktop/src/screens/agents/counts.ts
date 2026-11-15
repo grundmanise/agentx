@@ -62,6 +62,19 @@ export const libraryPathOf = (
   return occurrence === undefined ? undefined : dirname(occurrence.path);
 };
 
+/**
+ * How many library skills the configuration holds as `mode`: what `config placement <id>
+ * <other mode> --convert` would convert.
+ */
+export const placedAsCount = (
+  inventory: InventoryEvent,
+  id: string,
+  mode: "symlink" | "copy"
+) =>
+  inventory.library.filter((e) =>
+    e.placements.some((p) => p.configuration === id && p.mode === mode)
+  ).length;
+
 /** How many library skills have no placement in the configuration: what Place all would place. */
 export const unplacedCount = (inventory: InventoryEvent, id: string) =>
   inventory.library.filter(

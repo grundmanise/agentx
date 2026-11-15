@@ -42,3 +42,4 @@ SVG
 Antigravity
 Zencoder
 Zenflow
+symlinks?

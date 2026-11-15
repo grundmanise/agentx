@@ -1,6 +1,6 @@
 // The Agents page: every configuration the scan detected, with its counts from the inventory's
-// edges, the Enabled switch, which runs `config enable|disable <id>` and offers Place all, and
-// Remove in the menu of a card and of a Universal column, which confirms and runs
+// edges, the Enabled switch, which runs `config enable|disable <id>` and offers Place all, the
+// Placement control, which runs `config placement <id> symlink|copy` and offers Convert, and Remove in the menu of a card and of a Universal column, which confirms and runs
 // `config remove <id> --yes`.
 import type { Locator, Page } from "@playwright/test";
 
@@ -50,6 +50,9 @@ test("lists the direct agents and the Universal card with their counts", async (
       - heading "Claude Code" [level=2]
       - text: /home/me/.claude-code
       - paragraph: 5 skills · 1 server · 1 plugin
+      - radiogroup "Placement":
+        - radio "Symlink" [checked]
+        - radio "Copy"
   `);
   await expect(card(page, "Cursor")).toContainText(
     "3 skills · 1 server · 0 plugins"
@@ -159,6 +162,82 @@ test("turning an agent off runs config disable", async ({ cli, page }) => {
     )
   ).toBeVisible();
   expect(later(cli)).toEqual([["config", "disable", "cursor", "--json"]]);
+});
+
+test("choosing Copy on a card runs config placement, the control follows the next inventory, and Convert converts the skills already there", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  const control = card(page, "Cursor").getByRole("radiogroup", {
+    name: "Placement",
+  });
+  const copy = control.getByRole("radio", { name: "Copy" });
+  const placement = cli.register(["config", "placement", "cursor", "copy"], {
+    events: [{ type: "settings" }],
+    holdAfter: 0,
+  });
+
+  await copy.click();
+  await placement.started;
+  await expect(control).toHaveAttribute("aria-busy", "true");
+  await expect(copy).toBeDisabled();
+  // The control shows the inventory's placement until the next inventory arrives.
+  await expect(control.getByRole("radio", { name: "Symlink" })).toBeChecked();
+  placement.release();
+  await expect(
+    toasts(page).getByText("Cursor now gets copies of new skills")
+  ).toBeVisible();
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit([
+    {
+      ...inventory,
+      configurations: inventory.configurations.map((c) =>
+        c.id === "cursor" ? { ...c, placement: "copy" } : c
+      ),
+      scan_counter: 2,
+    },
+    {
+      ok: true,
+      request_id: cli.requestIds.at(-1) ?? "",
+      scan_counter: 2,
+      type: "refresh_complete",
+    },
+  ]);
+  await expect(copy).toBeChecked();
+  await expect(control).not.toHaveAttribute("aria-busy");
+
+  // The toast offers to convert the symlinks Cursor already holds.
+  cli.register(["config", "placement", "cursor", "copy", "--convert"], {
+    events: [
+      { type: "settings" },
+      {
+        ok: true,
+        summary: "cursor now places copies, 2 skills converted, 1 skipped",
+        type: "result",
+      },
+    ],
+  });
+  await toasts(page).getByRole("button", { name: "Convert existing" }).click();
+  await expect.poll(() => cli.serveRequests.length).toBe(2);
+  await cli.serveEmit([
+    { ...inventory, scan_counter: 3 },
+    {
+      ok: true,
+      request_id: cli.requestIds.at(-1) ?? "",
+      scan_counter: 3,
+      type: "refresh_complete",
+    },
+  ]);
+  await expect(
+    toasts(page).getByText(
+      "Converted 2 skills in Cursor to copies. Kept 1 edited copy"
+    )
+  ).toBeVisible();
+  expect(later(cli)).toEqual([
+    ["config", "placement", "cursor", "copy", "--json"],
+    ["config", "placement", "cursor", "copy", "--convert", "--json"],
+  ]);
 });
 
 /** The inventory once the configuration `id` is gone, with the answer to the last refresh. */

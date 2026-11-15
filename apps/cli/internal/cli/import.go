@@ -265,7 +265,7 @@ const notAnExportHint = "give the path of a snapshot 'agentx export' wrote"
 // import may not be the one that puts one there.
 func validSettings(path string, s home.Settings) error {
 	for _, check := range []func(home.Settings) string{
-		badSchemaVersion, badLabel, badDisabledConfigurations, badSources, badCopyMode,
+		badSchemaVersion, badLabel, badDisabledConfigurations, badCopyConfigurations, badSources, badCopyMode,
 	} {
 		if why := check(s); why != "" {
 			return fail(exitRefused, path+" holds settings agentx cannot write: "+sanitised(why),
@@ -304,18 +304,31 @@ func badLabel(s home.Settings) string {
 // this build has no entry for names a configuration that is real there –
 // but the shape and the order are.
 func badDisabledConfigurations(s home.Settings) string {
+	return badConfigurationList("disabled_configurations", s.DisabledConfigurations, "is disabled twice")
+}
+
+// badCopyConfigurations holds copy_configurations, which config placement
+// writes, to the rule of disabled_configurations.
+func badCopyConfigurations(s home.Settings) string {
+	return badConfigurationList("copy_configurations", s.CopyConfigurations, "places copies twice")
+}
+
+// badConfigurationList checks one list of configuration ids the settings
+// hold under key: each of the shape of one, none twice, and sorted. twice
+// is what is said of an id listed twice.
+func badConfigurationList(key string, ids []string, twice string) string {
 	seen := map[string]bool{}
-	for _, id := range s.DisabledConfigurations {
+	for _, id := range ids {
 		switch {
 		case !configurationID(id):
-			return "disabled_configurations holds " + clipped(id) + ", which is not a configuration id"
+			return key + " holds " + clipped(id) + ", which is not a configuration id"
 		case seen[id]:
-			return id + " is disabled twice"
+			return id + " " + twice
 		}
 		seen[id] = true
 	}
-	if !slices.IsSorted(s.DisabledConfigurations) {
-		return "disabled_configurations must be sorted"
+	if !slices.IsSorted(ids) {
+		return key + " must be sorted"
 	}
 	return ""
 }
