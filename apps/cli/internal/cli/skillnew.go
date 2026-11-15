@@ -207,7 +207,7 @@ func (inv *invocation) createFork(ctx context.Context, gitDir, name, dir, commit
 	hash, _ := scan.ContentHashAt(staged)
 	p := placeable{name: name, hash: hash, stage: func(dest string) error { return copyTreeTo(staged, dest) }}
 	*done = placements{}
-	for _, t := range targets {
+	for _, t := range edit.placing(targets) {
 		inv.stagePlacement(m, p, t, libPath, false, edit.copiesOf(copiesOf), done)
 	}
 	edit.addCopies(name, done.copies)

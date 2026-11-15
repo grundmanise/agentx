@@ -19,6 +19,7 @@ type Settings struct {
 	AcceptOperations       bool            `json:"accept_operations"`
 	IgnoreSystemFiles      bool            `json:"ignore_system_files"` // a file without the key reads true; see SystemFiles
 	DisabledConfigurations []string        `json:"disabled_configurations"`
+	CopyConfigurations     []string        `json:"copy_configurations"` // the configurations whose new placements are copies, sorted
 	Sources                []Source        `json:"sources"`
 	CopyMode               json.RawMessage `json:"copy_mode"`
 }
@@ -203,6 +204,9 @@ func LoadSettings(dir string) (Settings, error) {
 func Normalise(s *Settings) {
 	if s.DisabledConfigurations == nil {
 		s.DisabledConfigurations = []string{}
+	}
+	if s.CopyConfigurations == nil {
+		s.CopyConfigurations = []string{}
 	}
 	if s.Sources == nil {
 		s.Sources = []Source{}

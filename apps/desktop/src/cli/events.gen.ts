@@ -26,6 +26,7 @@ export type DriftState =
   | (string & Record<never, never>);
 export type PlacementMode = "symlink" | "copy" | "library";
 export type PlacementKind = "symlink" | "copy" | "directory" | "library";
+export type ConfigurationPlacement = "symlink" | "copy" | "library";
 export type OccurrenceKind = "symlink" | "copy" | "directory";
 export type OccurrenceScope = "user" | "project";
 export type Transport = "stdio" | "sse" | "streamable-http";
@@ -114,6 +115,7 @@ export interface Settings {
   accept_operations: boolean;
   ignore_system_files: boolean;
   disabled_configurations: string[];
+  copy_configurations: string[];
   sources: SettingsSource[];
   copy_mode: Record<string, string[]>;
 }
@@ -231,6 +233,7 @@ export interface Configuration {
   name: string;
   path: string;
   enabled: boolean;
+  placement: ConfigurationPlacement;
   reads_library: boolean;
   physical_id: string;
   logical_id: string;

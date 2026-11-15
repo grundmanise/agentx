@@ -37,6 +37,7 @@ func TestConfigListDefaults(t *testing.T) {
 		"accept_operations        false",
 		"ignore_system_files      true",
 		"disabled_configurations  (none)",
+		"copy_configurations      (none)",
 		"sources                  []",
 		"copy_mode                {}",
 	} {
@@ -61,6 +62,7 @@ func TestConfigListDefaults(t *testing.T) {
 		"accept_operations":       false,
 		"ignore_system_files":     true,
 		"disabled_configurations": []any{},
+		"copy_configurations":     []any{},
 		"sources":                 []any{},
 		"copy_mode":               map[string]any{},
 	}

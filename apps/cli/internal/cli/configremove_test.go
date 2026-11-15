@@ -48,7 +48,7 @@ func TestConfigRemoveDeletesTheNamedDirectories(t *testing.T) {
 			".claude/settings.json":        "{}\n",
 		},
 		links:    map[string]string{".adal/skills/pdf": ".agents/skills/pdf"},
-		settings: `{"schema_version": 1, "disabled_configurations": ["adal", "cursor"], "copy_mode": {"pdf": ["augment", "claude-code"]}}`,
+		settings: `{"schema_version": 1, "disabled_configurations": ["adal", "cursor"], "copy_configurations": ["augment", "cursor"], "copy_mode": {"pdf": ["augment", "claude-code"]}}`,
 	})
 	before := mutationVersion(t, h)
 
@@ -65,6 +65,7 @@ func TestConfigRemoveDeletesTheNamedDirectories(t *testing.T) {
 	equal(t, "the second event", events[1]["id"], "augment")
 	settings := events[2]["settings"].(map[string]any)
 	deep(t, "disabled_configurations", settings["disabled_configurations"], any([]any{"cursor"}))
+	deep(t, "copy_configurations", settings["copy_configurations"], any([]any{"cursor"}))
 	deep(t, "copy_mode", settings["copy_mode"], any(map[string]any{"pdf": []any{"claude-code"}}))
 	equal(t, "summary", events[3]["summary"], "removed adal and augment")
 	equal(t, "mutations", mutationVersion(t, h)-before, 1)

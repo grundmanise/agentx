@@ -135,6 +135,9 @@ var valueLists = []valueList{
 	{name: "PlacementKind", values: []string{scan.KindSymlink, scan.KindCopy, scan.KindDirectory, modeLibrary}, fields: []fieldRef{
 		{scan.LibraryPlacement{}, "Kind"},
 	}},
+	{name: "ConfigurationPlacement", values: []string{scan.PlacementSymlink, scan.PlacementCopy, scan.PlacementLibrary}, fields: []fieldRef{
+		{scan.Configuration{}, "Placement"},
+	}},
 	{name: "OccurrenceKind", values: []string{scan.KindSymlink, scan.KindCopy, scan.KindDirectory}, fields: []fieldRef{
 		{scan.Occurrence{}, "Kind"},
 	}},

@@ -184,8 +184,12 @@ One machine's canonical directory for skills managed by agentx at ~/.agents/skil
 _Avoid_: store, cache, vault
 
 **Placement**:
-The path inside one agent configuration's skills directory through which that client sees a library skill. The library itself for a universal client; otherwise a symlink by default or a copy when needed.
+The path inside one agent configuration's skills directory through which that client sees a library skill. The library itself for a universal client; otherwise a symlink, or a copy where the configuration's placement mode is copy or `--copy` asks for one.
 _Avoid_: install, link, copy
+
+**Placement mode**:
+What agentx places into one agent configuration on this machine: a symlink to the library, the default, or a copy, chosen with `agentx config placement` and kept in the machine settings. It decides the placements made from then on and changes none already on disk. A universal client has none to choose: the library entry is its placement.
+_Avoid_: copy mode (the per-skill record of copies), link mode
 
 **Displaced placement**:
 A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift and never put back on its own: `skill place` puts it back when the user asks, and replaces a directory whose content differs from the library only with `--force`, which discards that content.
@@ -211,7 +215,7 @@ _Avoid_: original, parent, snapshot
 The ~/.agentx directory holding the account repo clone with its worktrees, the machine settings, local mutation journals and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
 
 **Machine settings**:
-The one file in agentx home holding what only this machine decides: its label, enabled configurations, sources and their pins, and copy modes. Leaves the machine only inside a snapshot.
+The one file in agentx home holding what only this machine decides: its label, enabled configurations, the placement mode of each configuration, sources and their pins, and copy modes. Leaves the machine only inside a snapshot.
 _Avoid_: config, preferences, local state
 
 **App preference**:

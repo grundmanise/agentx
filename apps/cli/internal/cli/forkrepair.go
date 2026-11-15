@@ -159,7 +159,7 @@ func (inv *invocation) placeFork(ctx context.Context, rec lineage.Record, target
 		}
 		done = placements{}
 		p := dirPlaceable(rec.Name, from)
-		for _, t := range targets {
+		for _, t := range edit.placing(targets) {
 			inv.stagePlacement(m, p, t, f.libPath, asCopy, edit.copiesOf(rec.Name), &done)
 		}
 		edit.addCopies(rec.Name, done.copies)
