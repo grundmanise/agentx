@@ -63,7 +63,10 @@ export interface ServeStart {
   exit?: { code: number; stderr?: string[] };
 }
 
-/** A configuration as an inventory lists it, with `overrides` in place of the defaults. */
+/**
+ * A configuration as an inventory lists it, with `overrides` in place of the defaults: one that
+ * reads the library places through it, any other by symlink.
+ */
 export const configuration = (
   id: string,
   overrides: Partial<Configuration> = {}
@@ -75,6 +78,7 @@ export const configuration = (
   name: id,
   path: `/home/me/.${id}`,
   physical_id: id,
+  placement: overrides.reads_library === true ? "library" : "symlink",
   reads_library: false,
   ...overrides,
 });

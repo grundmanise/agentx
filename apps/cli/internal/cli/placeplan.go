@@ -19,7 +19,8 @@ import (
 type plannedPlace struct {
 	placeSite
 	word   string // missing or displaced, as drift names the place, or "" for neither
-	writes bool   // the run writes the place: it is missing or displaced, or --copy replaces the library's symlink there
+	writes bool   // the run writes the place: it is missing or displaced, or a copy replaces the library's symlink there
+	copy   bool   // what the run writes there is a copy: --copy, or a covered configuration whose own place it is places copies
 	state  string // what the path holds, in the words a journal records
 	tree   string // a displaced directory's tree id, as git would record it
 	same   bool   // the displaced directory holds exactly what the library directory holds
@@ -59,8 +60,11 @@ type placePlan struct {
 // own place is in the plan, judged by the classifier drift reads, see
 // ownPlaces and placeSite.drift, one judgement per path: a place two
 // configurations share is planned once. copies is what copy_mode records
-// and nothing more: --copy changes what is written at a place, not whether
-// what is there is displaced.
+// and nothing more: --copy, and a configuration copy_configurations lists,
+// change what is written at a place, not whether what is there is
+// displaced. A copy is written at a place when --copy asks for one or a
+// covered configuration whose own place it is places copies, see
+// withCopies, so the library's symlink there is replaced by one.
 //
 // A place that is the library directory itself is planned as it is, with
 // no drift: one a skills directory made a symlink to the library, or the
@@ -95,7 +99,10 @@ func (inv *invocation) planPlace(lib scan.LibrarySkill, detected []placeTarget, 
 			continue
 		}
 		place := plannedPlace{placeSite: p, word: p.drift(lib.Path)}
-		place.writes = place.word != "" || asCopy && sameTarget(p.path, lib.Path)
+		place.copy = asCopy || slices.ContainsFunc(p.targets, func(t placeTarget) bool {
+			return t.copies && slices.Contains(p.enabled, t.id)
+		})
+		place.writes = place.word != "" || place.copy && sameTarget(p.path, lib.Path)
 		place.state, place.err = home.State(p.path)
 		plan.places = append(plan.places, place)
 	}
@@ -150,8 +157,8 @@ func (plan placePlan) signature() string {
 		plan.libState, plan.libTree.ID, len(plan.libTree.Unrecordable), plan.libBytes,
 		strings.Join(plan.copies, ","), strings.Join(plan.sites, ","))
 	for _, p := range plan.places {
-		fmt.Fprintf(&b, "%s\x00%s\x00%t\x00%s\x00%s\x00%t\x00%t\x00%t\x00%s\x00%s\n",
-			p.path, p.word, p.writes, p.state, p.tree, p.same, p.copied, p.err != nil, strings.Join(p.enabled, ","), strings.Join(p.paths, ","))
+		fmt.Fprintf(&b, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%t\x00%t\x00%t\x00%s\x00%s\n",
+			p.path, p.word, p.writes, p.copy, p.state, p.tree, p.same, p.copied, p.err != nil, strings.Join(p.enabled, ","), strings.Join(p.paths, ","))
 	}
 	return b.String()
 }
@@ -447,7 +454,7 @@ func (inv *invocation) stagePlace(m *home.Mutation, plan placePlan, force bool, 
 	p := libraryPlaceable(plan.lib)
 	done.placed = append(done.placed, plan.universal...)
 	for _, place := range plan.places {
-		inv.stagePlaceAt(m, p, place, plan.lib.Path, plan.copies, plan.asCopy, force, done)
+		inv.stagePlaceAt(m, p, place, plan.lib.Path, plan.copies, force, done)
 	}
 }
 
@@ -457,7 +464,7 @@ func (inv *invocation) stagePlace(m *home.Mutation, plan placePlan, force bool, 
 // reach is not a reason to leave every other one unplaced.
 //
 // A displaced directory is replaced by the expected placement: a symlink,
-// or a copy where --copy asks for one. One holding the library's content
+// or a copy where the place is to be written as one, see planPlace. One holding the library's content
 // loses nothing to it, is replaced all the same and is reported as
 // adopted, as an install adopts it. One holding anything else is replaced
 // only with --force, which discards it. Every other place gets the
@@ -468,7 +475,7 @@ func (inv *invocation) stagePlace(m *home.Mutation, plan placePlan, force bool, 
 //
 // A place two configurations share is placed once, and counts as placed
 // for each of them the run covers.
-func (inv *invocation) stagePlaceAt(m *home.Mutation, p placeable, place plannedPlace, libPath string, copies []string, asCopy, force bool, done *placements) {
+func (inv *invocation) stagePlaceAt(m *home.Mutation, p placeable, place plannedPlace, libPath string, copies []string, force bool, done *placements) {
 	t := place.representative(copies)
 	switch {
 	case place.err != nil:
@@ -481,13 +488,13 @@ func (inv *invocation) stagePlaceAt(m *home.Mutation, p placeable, place planned
 		// directory the place sits in, where the symlink is written: both
 		// are checked now, before a step of this place is recorded, as a
 		// placement checks them.
-		staged, fingerprint, err := inv.placementContent(m, p, t, place.path, asCopy)
+		staged, fingerprint, err := inv.placementContent(m, p, t, place.path, place.copy)
 		if err != nil {
 			inv.skipPlacement(done, t, place.path, err)
 			return
 		}
 		m.Remove(place.path, place.state)
-		if asCopy {
+		if place.copy {
 			m.Publish(place.path, staged, fingerprint)
 			done.copiedAt(place)
 		} else {
@@ -505,8 +512,8 @@ func (inv *invocation) stagePlaceAt(m *home.Mutation, p placeable, place planned
 		// would make, made by the same staging and refused for the same
 		// reasons.
 		var one placements
-		inv.stagePlacement(m, p, t, libPath, asCopy || place.copied, copies, &one)
-		if asCopy && len(one.copies) > 0 {
+		inv.stagePlacement(m, p, t, libPath, place.copy || place.copied, copies, &one)
+		if place.copy && len(one.copies) > 0 {
 			done.copiedAt(place)
 		} else {
 			done.copies = append(done.copies, one.copies...)
@@ -549,9 +556,10 @@ func (d *placements) placedAt(place plannedPlace) {
 	}
 }
 
-// copiedAt records that the place holds the copy --copy asked for, for
-// every configuration the run covers whose own place it is, as an install
-// that names each of them records it.
+// copiedAt records that the place holds the copy --copy, or a covered
+// configuration that places copies, asked for, for every configuration the
+// run covers whose own place it is, as an install that names each of them
+// records it.
 func (d *placements) copiedAt(place plannedPlace) {
 	for _, t := range place.targets {
 		if slices.Contains(place.enabled, t.id) {
