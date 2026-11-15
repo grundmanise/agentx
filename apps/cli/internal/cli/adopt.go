@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
@@ -118,7 +117,9 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 			"branch of its own, skills/<name>, in the account repo, checked out as a\n" +
 			"worktree in agentx home, and a symlink to it in the library. A folder in a\n" +
 			"client's skills directory moves there and a symlink to the library takes its\n" +
-			"place, so every client that reads the library sees the skill too.",
+			"place, so every client that reads the library sees the skill too.\n\n" +
+			"--all adopts every skill that can be adopted, and lists the ones that cannot,\n" +
+			"each with what to do about it.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
@@ -151,7 +152,9 @@ func (s adoptSelection) check() error {
 // adopt reads what the other tools installed and reports, or adopts, the
 // skills they recorded, see adoptChosen. A run that names no tool also
 // covers the unmanaged skills no tool recorded, see looseSkills: the
-// preview lists them and --all adopts them with the recorded ones. A skill
+// preview lists them and --all adopts them with the recorded ones. With
+// --all, a skill that cannot be adopted is listed and fails nothing, see
+// adoptChosen; one named with --skill is the run's to answer for. A skill
 // named with --skill that no record covers is one of those, adopted as one
 // of the user's own with its files as they are, see planAdoption; every
 // one named is planned before anything changes and made first, so that
@@ -191,12 +194,6 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 	if err != nil {
 		return err
 	}
-	var ready []string // the skills no tool recorded that --all adopts
-	for _, l := range loose {
-		if l.reason() == "" {
-			ready = append(ready, l.name)
-		}
-	}
 	var plans []*forking
 	for _, name := range own {
 		fk, err := inv.planAdoption(ctx, name, notAdoptable(name, records))
@@ -213,7 +210,7 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 		summaries = append(summaries, inv.summary)
 	}
 	if len(chosen) > 0 || len(plans) == 0 {
-		if err := inv.adoptChosen(ctx, chosen, ready); err != nil {
+		if err := inv.adoptChosen(ctx, chosen, loose, sel.all); err != nil {
 			return err
 		}
 		summaries = append(summaries, inv.summary)
@@ -609,45 +606,77 @@ func noAdoptionNamed(name string, cands []*candidate, records []record, tool str
 	return fail(exitNotFound, fmt.Sprintf("no skill called %q was installed by %s", sanitised(name), toolNames(toolSet(tool), "or")), hint)
 }
 
-// adoptChosen adopts every chosen skill, and every one of loose, the
-// unmanaged skills no tool recorded that --all covers. One whose record
-// names a source is installed from it, as skill add installs one: the
-// source is added and fetched when the settings do not hold it, the
-// version at its pin is read out of the account repo, the import commits
-// are written, and the library directories, the import branches and the
-// placements land as one journaled mutation. One whose record names none,
-// and one no tool recorded, is adopted with its files as they are, see
-// adoptAsItIs, each in a mutation of its own, in name order, before the
-// installs. A skill agentx already manages is not acted on, and one that
-// cannot be adopted costs the run that skill and no other.
-func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, loose []string) error {
-	var chosen []*candidate
-	for _, c := range covered {
-		if c.state != adoptManaged {
-			chosen = append(chosen, c)
-		}
-	}
-	if len(chosen)+len(loose) == 0 {
-		inv.reportAdopted(nil, covered, nil)
-		inv.out.print("Already adopted.")
-		inv.summary = "already adopted"
-		return nil
-	}
-	b := newBatch(inv, len(chosen)+len(loose))
-	b.verb, b.mixed = "adopted", "run 'agentx adopt' to see what is left, and adopt the rest one at a time"
+// unadopted is one skill a run that adopts every skill could not adopt: a
+// row of the list it ends with.
+type unadopted struct {
+	name   string
+	tool   string // the tool that installed it, "" for one no tool recorded
+	reason string // what it is and what to do, as a preview says it of a skill it cannot adopt
+}
+
+// adoptChosen adopts every chosen skill, and every one of loose that can
+// be adopted, the unmanaged skills no tool recorded that --all covers. One
+// whose record names a source is installed from it, as skill add installs
+// one: the source is added and fetched when the settings do not hold it,
+// the version at its pin is read out of the account repo, the import
+// commits are written, and the library directories, the import branches
+// and the placements land as one journaled mutation. One whose record
+// names none, and one no tool recorded, is adopted with its files as they
+// are, see adoptAsItIs, each in a mutation of its own, in name order,
+// before the installs. A skill agentx already manages is not acted on.
+//
+// A skill that cannot be adopted costs the run that skill and no other.
+// One the run was asked for by name fails it. With all, the run was asked
+// for whatever can be adopted, so a skill that cannot be, as it was judged
+// or as a refusal found out while it was adopted, fails nothing: it is
+// listed once the run ends, see reportUnadopted. Any other failure, a
+// source that cannot be fetched among them, is the run's either way.
+func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, loose []looseSkill, all bool) error {
 	var ready []*candidate
-	asItIs := slices.Clone(loose)
-	for _, c := range chosen {
+	var asItIs []string
+	var judged []*candidate // the ones judged not adoptable, which a run by name answers for
+	var left []unadopted
+	tools := map[string]string{}
+	for _, c := range covered {
+		tools[c.rec.name] = c.rec.tool
 		switch {
+		case c.state == adoptManaged:
+		case c.fail != nil && all:
+			left = append(left, unadopted{c.rec.name, c.rec.tool, c.reason})
 		case c.fail != nil:
-			b.drop(c.rec.name, stepsPerSkill, c.fail)
+			judged = append(judged, c)
 		case c.asItIs:
 			asItIs = append(asItIs, c.rec.name)
 		default:
 			ready = append(ready, c)
 		}
 	}
+	for _, l := range loose {
+		if reason := l.reason(); reason != "" {
+			left = append(left, unadopted{name: l.name, reason: reason})
+		} else {
+			asItIs = append(asItIs, l.name)
+		}
+	}
 	sort.Strings(asItIs)
+	mixed := len(toolsOf(covered)) > 1
+	selected := len(ready) + len(asItIs) + len(judged)
+	if selected == 0 {
+		inv.reportAdopted(nil, covered, nil)
+		if len(left) == 0 {
+			inv.out.print("Already adopted.")
+			inv.summary = "already adopted"
+			return nil
+		}
+		inv.reportUnadopted(left, 0, mixed)
+		return nil
+	}
+	b := newBatch(inv, selected)
+	b.verb, b.mixed = "adopted", "run 'agentx adopt' to see what is left, and adopt the rest one at a time"
+	b.listsRefused = all
+	for _, c := range judged {
+		b.drop(c.rec.name, stepsPerSkill, c.fail)
+	}
 	kept, summaries, err := inv.adoptAsItIs(ctx, b, asItIs)
 	if err != nil {
 		return err
@@ -661,10 +690,71 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, lo
 	}
 	inv.summary = strings.Join(summaries, "; ")
 	inv.reportAdopted(b, covered, kept)
-	if f := b.refusals.failure(b.selected, len(b.done)+len(kept)); f != nil {
+	adopted := len(b.done) + len(kept)
+	if all {
+		// A refusal is a skill that cannot be adopted, which is listed; what
+		// is left is what went wrong.
+		var failed []brokenSkill
+		for _, broken := range b.broken {
+			if broken.fail.status != exitRefused {
+				failed = append(failed, broken)
+				continue
+			}
+			reason := broken.fail.message
+			if broken.fail.hint != "" {
+				reason += "; " + broken.fail.hint
+			}
+			left = append(left, unadopted{broken.subject, tools[broken.subject], reason})
+			selected--
+		}
+		b.broken = failed
+		if len(left) > 0 {
+			inv.reportUnadopted(left, adopted, mixed)
+		}
+	}
+	if f := b.refusals.failure(selected, adopted); f != nil {
 		return f
 	}
 	return nil // a typed nil would be an error the caller cannot see through
+}
+
+// toolsOf are the tools whose records cands are.
+func toolsOf(cands []*candidate) map[string]bool {
+	tools := map[string]bool{}
+	for _, c := range cands {
+		tools[c.rec.tool] = true
+	}
+	return tools
+}
+
+// reportUnadopted ends a run that adopts every skill with the ones it
+// could not adopt, in name order: a list in the shape of the preview's,
+// each with what it is and what to do, then a line that counts them and
+// the adopted skills, which is the result's summary too. In JSON mode each
+// is a warning. mixed says the records of both tools were covered, which
+// shows the tool of each.
+func (inv *invocation) reportUnadopted(left []unadopted, adopted int, mixed bool) {
+	out := inv.out
+	sort.SliceStable(left, func(i, j int) bool { return left[i].name < left[j].name })
+	if adopted > 0 {
+		out.print()
+	}
+	out.print(out.paint(heading, fmt.Sprintf("Could not adopt (%d)", len(left))))
+	t := &table{wrap: out.columns(out.stdout)}
+	for _, u := range left {
+		t.add(refusedRow(u.name, u.tool, u.reason, mixed)...)
+		if out.json {
+			out.warn(sanitised(u.name) + " could not be adopted: " + u.reason)
+		}
+	}
+	out.render(t, "  ")
+	inv.summary = "adopted " + plural(adopted, "skill")
+	if adopted == 0 {
+		inv.summary = "adopted no skill"
+	}
+	inv.summary += fmt.Sprintf("; %d could not be adopted", len(left))
+	out.print()
+	out.print(strings.ToUpper(inv.summary[:1]), inv.summary[1:], ".")
 }
 
 // adoptAsItIs adopts each skill of names with its files as they are, see
@@ -952,12 +1042,10 @@ func (inv *invocation) previewAdoption(cands []*candidate, loose []looseSkill, r
 	out := inv.out
 	var ready, managed []string
 	var refused [][]cell
-	tools := map[string]bool{}
 	for _, c := range cands {
 		out.emit(c.eventOf())
-		tools[c.rec.tool] = true
 	}
-	mixed := len(tools) > 1
+	mixed := len(toolsOf(cands)) > 1
 	for _, c := range cands {
 		switch c.state {
 		case adoptCandidate:
@@ -1070,8 +1158,8 @@ func toolNames(tools map[string]bool, conj string) string {
 	return strings.Join(names, " "+conj+" ")
 }
 
-// refusedRow is one row of the skills a preview cannot adopt: the name and
-// why, which does not name the skill again. The tool that installed it,
+// refusedRow is one row of the skills a preview cannot adopt, or a run that
+// adopts every skill could not, see reportUnadopted: the name and why. The tool that installed it,
 // none for a skill no tool recorded, is shown only when the records of
 // both tools are listed. The name is sanitised: it is text agentx did not
 // write.

@@ -274,6 +274,9 @@ type batch struct {
 	total    int
 	done     []*installed // the skills that landed, in the order they were installed
 	skipped  int          // the skills passed over, see skip
+	// listsRefused says the run lists the skills it refused once it ends,
+	// as agentx adopt --all does, so drop warns of no refusal as it happens.
+	listsRefused bool
 }
 
 func newBatch(inv *invocation, selected int) *batch {
@@ -297,7 +300,7 @@ func (b *batch) step(phase, subject string) {
 func (b *batch) drop(subject string, remaining int, f *failure) {
 	b.total -= remaining
 	b.add(subject, f)
-	if b.selected > 1 {
+	if b.selected > 1 && (!b.listsRefused || f.status != exitRefused) {
 		b.inv.out.warn(namedReason(subject, f.message))
 	}
 }
