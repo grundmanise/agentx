@@ -42,7 +42,7 @@ const addSourceLabel = (source: string) => `add source ${source}`;
 const abortLabel = (name: string) => `abort update ${name}`;
 
 /** Adopt: `adopt --skill <name>`. The skill is then managed, and agentx can update it. */
-const adopt = async (name: string) =>
+export const adopt = async (name: string) =>
   await runUntilSettled(["adopt", "--skill", name], {
     label: adoptLabel(name),
     success: `Adopted ${name} skill`,
