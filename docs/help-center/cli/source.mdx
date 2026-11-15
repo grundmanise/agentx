@@ -193,7 +193,27 @@ agentx source skills anthropics/skills
 
 Every directory with a `SKILL.md` is a skill. Hidden directories and `node_modules` are skipped.
 
-Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`. You can also name the source by its id. The command reads what the last add or fetch stored and makes no network calls. A `#<ref>` that differs from the source's pin is refused with exit code 1.
+Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`. You can also name the source by its id. For a source you added, the command reads what the last add or fetch stored and makes no network calls. A `#<ref>` that differs from the source's pin is refused with exit code 1.
+
+### List a repository you have not added
+
+Give the URL or a link of any repository to see its skills before you add it:
+
+```sh
+agentx source skills https://github.com/owner/repo/tree/main/skills
+```
+
+```text
+2 skills in https://github.com/owner/repo under skills at 9b1e4d2
+  alpha  skills/alpha  The first skill
+  beta   skills/beta   The second skill
+Not added as a source. Install a skill with agentx skill add https://github.com/owner/repo#main --name <name>.
+```
+
+- agentx reads the repository over the network, at the ref the URL or link names, or at the default branch.
+- Nothing changes on this machine: the repository is not added as a source, and nothing is fetched into agentx home.
+- To install a skill from it, run `agentx skill add <url> --name <name>`. That adds the source too.
+- An id names only a source you added.
 
 ## Remove a source
 
@@ -266,8 +286,8 @@ agentx source add git@github.com:you/agentx-account.git --account
 For what each code means, see [Exit codes](/cli/output#exit-codes). These causes are special to `agentx source`:
 
 - `1`: the URL is not one of the accepted forms, or its `#<ref>` and its tree URL name different refs. Also: the account remote's URL carries a token, a ref or a path; `source fetch` or `source skills` names a ref other than the source's pin; or `source fetch` was given both sources and `--all`, or neither.
-- `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons. Read the warnings.
+- `3`: the source, or the repository `source skills` lists, cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons. Read the warnings.
 - `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete. For an id of a source you removed, the hint names the `agentx source add` command that brings it back.
-- `6`: `source skills` names your account remote, or `source add` names its repository by another URL. List its skills with `agentx skill list --remote`, and install one with `agentx skill add --name <name>`. See [Install your skills on another machine](/cli/skill#install-your-skills-on-another-machine). Exit code 6 also means `--account` named a source you added without it, by the same or another URL.
+- `6`: `source skills` names your account remote or its repository by another URL, or `source add` names its repository by another URL. List its skills with `agentx skill list --remote`, and install one with `agentx skill add --name <name>`. See [Install your skills on another machine](/cli/skill#install-your-skills-on-another-machine). Exit code 6 also means `--account` named a source you added without it, by the same or another URL.
 - `7`: another agentx command is running. Retry when it finishes. An add that could not undo its work says what it left and how to clear it.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

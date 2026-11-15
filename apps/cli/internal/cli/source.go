@@ -75,8 +75,17 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 		Short:       "List the installable skills of a source",
 		Annotations: map[string]string{annotationSection: "sources"},
 		Args:        cobra.ExactArgs(1),
-		Example:     examples("agentx source skills anthropics/skills", "the skills a source holds, as last fetched"),
-		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceSkills(cmd.Context(), args[0]) },
+		Example: examples(
+			"agentx source skills anthropics/skills", "the skills a source holds, as last fetched",
+			"agentx source skills https://github.com/owner/repo/tree/main/skills", "the skills under a link, added or not",
+		),
+		Long: "List the installable skills of a source, under the subpath of the URL when it\n" +
+			"has one. An added source is listed as it was last fetched, without the network.\n" +
+			"A URL that is not added is listed from its repository, at the ref of the URL\n" +
+			"or the remote's default branch, and nothing is added: install one of its\n" +
+			"skills with 'agentx skill add <url> --name <name>'. An id names an added\n" +
+			"source only.",
+		RunE: func(cmd *cobra.Command, args []string) error { return inv.sourceSkills(cmd.Context(), args[0]) },
 	})
 	cmd.AddCommand(newSourceFetchCommand(inv))
 	cmd.AddCommand(&cobra.Command{
@@ -484,9 +493,13 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 }
 
 // sourceSkills lists the skills of a fetched source under the subpath of
-// the argument, from the account repo alone.
+// the argument, from the account repo alone. A URL the settings hold no
+// source for is listed from its repository instead, see listUnadded.
 func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	src, entry, err := inv.findSource(ctx, arg)
+	if errors.Is(err, errNotAdded) && !source.IsID(arg) {
+		return inv.listUnadded(ctx, src)
+	}
 	if err != nil {
 		return err
 	}
@@ -512,10 +525,53 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	if err != nil {
 		return sourceFailure(err, pinned)
 	}
+	inv.printSourceSkills(entryEvent(entry), src, listing)
+	return nil
+}
+
+// listUnadded is source skills of a URL the settings hold no source for:
+// the skills of that repository under the subpath of the link, at the ref
+// it names or the remote's default branch, read from the network into a
+// repository of the run's own that goes with it, see source.ListUnadded.
+// Nothing is added, so the link's ref is only what to list and never a pin,
+// and a link at the default branch needs no look at the remote's HEAD. A URL
+// naming the account remote's repository is refused, exit 6, as source add
+// and skill add refuse it. The source event carries what the listing
+// found, the id, the canonical URL, the subpath, the commit and the count,
+// and nothing a settings entry would.
+func (inv *invocation) listUnadded(ctx context.Context, src source.Source) error {
+	s, err := inv.loadSettings()
+	if err != nil {
+		return err
+	}
+	if f := forkSourceRefusal(s, home.Source{URL: src.URL}, inv.sshHosts(ctx)); f != nil {
+		return f
+	}
+	listing, err := source.ListUnadded(ctx, inv.git, src)
+	switch {
+	case errors.Is(err, source.ErrIncomplete):
+		// A fetch again would be refused, the source not being added: the
+		// listing is what is run again.
+		return fail(exitNotFound, src.URL+": "+err.Error(), "run 'agentx source skills "+sourceAddArg(src.URL, src.Ref)+"' again")
+	case errors.Is(err, source.ErrRefNotFound), errors.Is(err, source.ErrNoSubpath), errors.Is(err, source.ErrUnreachable):
+		return sourceFailure(err, src)
+	case err != nil:
+		// A failure of the run's own repository, never of the account repo.
+		return err
+	}
+	inv.printSourceSkills(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL}, src, listing)
+	out := inv.out
+	out.print("Not added as a source. Install a skill with ", out.paint(label, "agentx skill add "+sourceAddArg(src.URL, src.Ref)+" --name <name>"), ".")
+	return nil
+}
+
+// printSourceSkills reports the listing of source skills: ev, the source
+// event, with the subpath, the commit and the count of the listing, then
+// one source_skill event per skill, and the heading line and the rows.
+func (inv *invocation) printSourceSkills(ev sourceEvent, src source.Source, listing source.Listing) {
 	out := inv.out
 	n := len(listing.Skills)
 	id := src.ID()
-	ev := entryEvent(entry)
 	ev.Subpath, ev.Commit, ev.Skills = src.Subpath, listing.Commit, &n
 	out.emit(ev)
 	out.print(out.paint(heading, plural(n, "skill")), " in ", out.paint(heading, src.URL), under(out, src.Subpath), " at ", short(listing.Commit))
@@ -533,7 +589,6 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 		t.add(c("  "+sanitised(sk.Name), label), c(sanitised(subpath), muted), c(sanitised(sk.Description), plain))
 	}
 	out.render(t, "")
-	return nil
 }
 
 // sourceRemove deletes the remote, the ref and the settings entry. The git
