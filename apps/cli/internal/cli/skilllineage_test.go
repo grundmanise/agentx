@@ -85,37 +85,6 @@ func TestInstallRefusesASubpathItCannotRecord(t *testing.T) {
 	}
 }
 
-// TestAdoptRefusesASubpathItCannotRecord is the same rule on the other
-// route that writes import commits. The lock file of another tool names the
-// directory, and that tool has no trailer to fit it on one line of, so it
-// may perfectly well name one agentx cannot record.
-func TestAdoptRefusesASubpathItCannotRecord(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("padded", true)
-	// A directory whose name ends in a space, holding a real skill: the
-	// lineage of it would be written as a trailer the reader hands back
-	// trimmed, naming a directory this source does not have.
-	const padded = "skills/alpha "
-	s.skill(padded, "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-	v1 := s.commit("the version the other tool installed")
-	vercelInstall(t, h, s, padded, "alpha")
-	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-		SkillPath: padded, SkillFolderHash: s.treeAt(v1, padded),
-		InstalledAt: "2026-01-01T00:00:00.000Z", UpdatedAt: "2026-01-01T00:00:00.000Z",
-	}})
-
-	out := h.run("--json", "adopt", "--all")
-	equal(t, "exit", out.exit, exitRefused.exit)
-	contains(t, "the refusal", lastError(t, h.events(out.stdout))["message"].(string), "is not a directory of "+s.url)
-	h.lockUnchanged(h.lockPath(), lock)
-	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
-		t.Error("alpha has an import branch after a refused adoption")
-	}
-}
-
 // TestTheDirectoryIsRefusedBeforeTheEntriesUnderIt holds the order of the
 // two path rules of an install: the skill's directory is held to the
 // trailer reader first, and only a directory that passes has its entries

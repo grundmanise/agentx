@@ -228,12 +228,12 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 	equal(t, "current", last["current"], last["total"])
 
 	// The hint's way to keep what was in the way works as it says: the
-	// fork under another name leaves beta in place, so the removal is what
-	// frees the name for the install.
+	// adoption makes beta one of the user's own in its place, so the rename
+	// is what frees the name for the install.
 	equal(t, "the hint", lastError(t, h.events(out.stdout))["hint"],
-		"remove it with 'agentx skill remove beta', then install again; to keep it, first fork it with 'agentx skill fork beta --name <new>'")
-	h.mustRun("skill", "fork", "beta", "--name", "my-beta")
-	h.mustRun("skill", "remove", "beta")
+		"remove it with 'agentx skill remove beta', then install again; or, to keep it, adopt it with 'agentx adopt --skill beta' and rename it with 'agentx skill rename beta <new>', then install again")
+	h.mustRun("adopt", "--skill", "beta")
+	h.mustRun("skill", "rename", "beta", "my-beta")
 	h.mustRun("skill", "add", s.url, "--name", "beta")
 	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "alpha,beta,gamma,my-beta")
 	if h.accountGit("rev-parse", "refs/heads/managed/beta") == "" {

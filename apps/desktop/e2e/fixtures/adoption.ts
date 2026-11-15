@@ -25,7 +25,10 @@ const libraryPlacements = (name: string) =>
     path: `${LIBRARY}/${name}`,
   }));
 
-/** A skill of a source that was removed from this machine, and an unmanaged skill the CLI refuses to adopt. */
+/**
+ * A skill of a source that was removed from this machine, and an unmanaged skill the CLI refuses
+ * to adopt: the library holds a symlink of it, and its record names nowhere to install it from.
+ */
 const more: LibraryEntry[] = [
   {
     base_hash: "h-lint",
@@ -57,7 +60,13 @@ const more: LibraryEntry[] = [
   },
 ];
 
-const node = (name: string, hash: string, description: string): SkillNode => ({
+/** A library skill as the clients that read the library see it: a folder, or a symlink to `linkedTo`. */
+const node = (
+  name: string,
+  hash: string,
+  description: string,
+  linkedTo?: string
+): SkillNode => ({
   content_hash: hash,
   description,
   logical_id: `skill:${hash}`,
@@ -65,9 +74,10 @@ const node = (name: string, hash: string, description: string): SkillNode => ({
   occurrences: universal.map((id) => ({
     configuration: id,
     id: `${id}:${LIBRARY}/${name}`,
-    kind: "directory" as const,
+    kind:
+      linkedTo === undefined ? ("directory" as const) : ("symlink" as const),
     path: `${LIBRARY}/${name}`,
-    resolved_path: `${LIBRARY}/${name}`,
+    resolved_path: linkedTo ?? `${LIBRARY}/${name}`,
     scope: "user" as const,
   })),
   physical_id: `skill:${hash}`,
@@ -80,21 +90,27 @@ export const inventory = {
   skills: [
     ...skillsInventory.skills,
     node("lint", "h-lint", "Lint a change before it lands"),
-    node("legacy", "h-legacy", "Format a changelog from release tags"),
+    node(
+      "legacy",
+      "h-legacy",
+      "Format a changelog from release tags",
+      "/home/me/work/legacy"
+    ),
   ],
 } satisfies InlineEvent;
 
-/** What `adopt` would take over: the candidate of the Skills fixture, and one entry it refuses. */
+/**
+ * What `adopt` would take over: the candidate of the Skills fixture, and one entry it refuses, in
+ * the CLI's words. That one names no source: the CLI gives one only where it can install from it.
+ */
 export const adoption: AdoptionEvent[] = [
   ...skillsAdoption,
   {
     file: "/home/me/.agents/.skill-lock.json",
     name: "legacy",
-    reason: "legacy is a symlink, not a directory",
+    reason: `a symlink to /home/me/work/legacy. To adopt it, move that folder to ${LIBRARY}/legacy`,
     schema_version: 3,
-    source: "https://github.com/vercel/skills",
     state: "refused",
-    subpath: "legacy",
     tool: "vercel",
     type: "adoption",
   },

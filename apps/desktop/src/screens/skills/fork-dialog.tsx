@@ -1,5 +1,5 @@
-// The Fork dialog and the dialog of what each agent sees after a plugin's skill is forked. Any
-// control opens the Fork dialog with `openFork(row)`, or is the `ForkButton`; `ForkDialogs`, which
+// The Fork dialog and the dialog of what each agent sees after a plugin's skill is forked. The
+// `ForkButton` of the detail pane's action row opens the Fork dialog; `ForkDialogs`, which
 // the Skills screen mounts once, shows them, so they outlive the detail pane of the skill forked,
 // which the fork replaces in the selection. Fork runs `skill fork <name>`, or `--name <new>` with
 // Use a new name on, and the screen redraws from the inventory that follows: the fork is selected
@@ -95,7 +95,7 @@ interface ForkState {
 const useForkStore = create<ForkState>()(() => ({}));
 
 /** Opens the Fork dialog for `row`. */
-export const openFork = (row: SkillRow) => {
+const openFork = (row: SkillRow) => {
   useForkStore.setState({ forking: row });
 };
 

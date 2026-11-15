@@ -46,8 +46,9 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 // newName's branch on the account remote deletes old's there, once it is
 // the same skill by that fork id, see dropRenamed. Before either step
 // runs, everything either would refuse is asked: what skill fork refuses
-// of old and of newName, see planFork, and what skill remove refuses of
-// old, see judgeForkRemoval. Old's unpublished edits are recorded on its
+// of old and of newName, see planFork, an unmanaged skill, which is sent
+// to agentx adopt, among them, and what skill remove refuses of old, see
+// judgeForkRemoval. Old's unpublished edits are recorded on its
 // branch only then, as the fork is made, see makeFork, so a refused
 // rename records nothing. A removal that fails once the fork is made says
 // so, names both skills and the command that finishes the rename.
@@ -56,7 +57,7 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string) err
 	if old == newName {
 		return fail(exitUsage, sanitised(old)+" already has that name", "give the new name the skill should have")
 	}
-	fk, err := inv.planFork(ctx, old, newName, true)
+	fk, err := inv.planFork(ctx, old, newName, modeRename)
 	if err != nil {
 		return err
 	}

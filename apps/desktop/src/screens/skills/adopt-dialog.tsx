@@ -107,7 +107,11 @@ const Row = ({ row }: { row: AdoptRow }) => (
       {row.reason !== undefined &&
         (row.status === "failed" || row.status === "left-out") && (
           <p className="type-notice text-tone-danger-fg m-0">
-            {problemSentence({ message: row.reason }, { keep: [row.name] })}
+            {problemSentence(
+              { message: row.reason },
+              // Only a run's refusal may start with the skill's name, which keeps its case.
+              { keep: row.status === "failed" ? [row.name] : [] }
+            )}
           </p>
         )}
     </div>

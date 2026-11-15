@@ -106,6 +106,111 @@ func TestConversionRecoversFromEveryBoundary(t *testing.T) {
 	}
 }
 
+// adoption is the shape of a skill adopted out of a client's skills
+// directory, which a second client holds the same directory of: the fork's
+// branch created, the worktree added, the first client's directory moved
+// into it, the library symlink to it, that client's symlink to the library
+// where its directory was, and the second client's directory removed for
+// the same symlink.
+type adoption struct {
+	creation
+	other string // the second client's skills directory
+}
+
+func newAdoption(t *testing.T, name string) (adoption, refs) {
+	t.Helper()
+	c, u := newCreation(t)
+	a := adoption{creation: c, other: filepath.Join(filepath.Dir(filepath.Dir(c.place)), "other", "skills")}
+	for _, dir := range []string{filepath.Join(a.place, name), filepath.Join(a.other, name)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("mine\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return a, u
+}
+
+func (a adoption) adoptionOf(t *testing.T, name string) *Mutation {
+	t.Helper()
+	from, dup, lib := filepath.Join(a.place, name), filepath.Join(a.other, name), filepath.Join(a.library, name)
+	fp, err := Fingerprint(from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewMutation(a.dir)
+	m.Ref(a.gitDir, "refs/heads/skills/"+name, "", "fork-"+name)
+	m.Worktree(a.gitDir, a.root(name), "skills/"+name)
+	m.Move(from, filepath.Join(a.root(name), name), fp)
+	m.Link(lib, filepath.Join(a.root(name), name))
+	m.Link(from, lib)
+	m.Remove(dup, dirOf+fp)
+	m.Link(dup, lib)
+	return m
+}
+
+// adopted reports what of an adoption is not in place.
+func (a adoption) adopted(u refs, name string) []string {
+	var missing []string
+	if u[a.gitDir+" refs/heads/skills/"+name] != "fork-"+name {
+		missing = append(missing, "the fork's branch")
+	}
+	if !WorktreeAt(a.root(name), "skills/"+name) {
+		missing = append(missing, "the worktree")
+	}
+	dir, lib := filepath.Join(a.root(name), name), filepath.Join(a.library, name)
+	if b, err := os.ReadFile(filepath.Join(dir, "SKILL.md")); err != nil || string(b) != "mine\n" {
+		missing = append(missing, "the moved SKILL.md")
+	}
+	if target, err := os.Readlink(lib); err != nil || target != dir {
+		missing = append(missing, "the library symlink")
+	}
+	for _, client := range []string{a.place, a.other} {
+		if target, err := os.Readlink(filepath.Join(client, name)); err != nil || target != lib {
+			missing = append(missing, "the symlink in "+client)
+		}
+		if entries, _ := os.ReadDir(client); len(entries) != 1 {
+			missing = append(missing, "something is left beside the symlink in "+client)
+		}
+	}
+	if left, _ := Journals(a.dir); len(left) > 0 {
+		missing = append(missing, "the journal is still there")
+	}
+	return missing
+}
+
+// TestAdoptionRecoversFromEveryBoundary stops an adoption after each step
+// and checks that recovery finishes it, twice over without repeating
+// anything: the directory that moved is in the worktree, the one that held
+// the same content is gone, and both clients have the library's symlink.
+func TestAdoptionRecoversFromEveryBoundary(t *testing.T) {
+	t.Parallel()
+	total := 0
+	{
+		a, _ := newAdoption(t, "alpha")
+		total = a.adoptionOf(t, "alpha").steps()
+	}
+	for stop := 0; stop <= total; stop++ {
+		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
+			t.Parallel()
+			a, u := newAdoption(t, "alpha")
+			m := a.adoptionOf(t, "alpha")
+			if err := m.stopAfter(stop, u); err != nil {
+				t.Fatalf("stopping after %d steps: %v", stop, err)
+			}
+			for _, pass := range []string{"recovery", "recovery run again"} {
+				if err := recoverJournals(a.dir, u); err != nil {
+					t.Fatalf("%s after %d steps: %v", pass, stop, err)
+				}
+				if missing := a.adopted(u, "alpha"); len(missing) > 0 {
+					t.Errorf("after %s from step %d: %s", pass, stop, strings.Join(missing, ", "))
+				}
+			}
+		})
+	}
+}
+
 // TestRecoveryMovesTheDirectoryAsItIs stops a conversion before its move
 // and changes the library directory. One edited since the journal captured
 // it is moved all the same, edit and all, since the move only takes the

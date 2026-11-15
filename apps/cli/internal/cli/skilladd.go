@@ -274,6 +274,9 @@ type batch struct {
 	total    int
 	done     []*installed // the skills that landed, in the order they were installed
 	skipped  int          // the skills passed over, see skip
+	// listsRefused says the run lists the skills it refused once it ends,
+	// as agentx adopt --all does, so drop warns of no refusal as it happens.
+	listsRefused bool
 }
 
 func newBatch(inv *invocation, selected int) *batch {
@@ -297,7 +300,7 @@ func (b *batch) step(phase, subject string) {
 func (b *batch) drop(subject string, remaining int, f *failure) {
 	b.total -= remaining
 	b.add(subject, f)
-	if b.selected > 1 {
+	if b.selected > 1 && (!b.listsRefused || f.status != exitRefused) {
 		b.inv.out.warn(namedReason(subject, f.message))
 	}
 }
@@ -1173,7 +1176,8 @@ func libraryFailure(library string, err error) error {
 // whose worktree is gone. An adoption displaces whatever another tool put
 // there instead, the one case a library entry gives way without a word. The refusal's hint frees the name with skill
 // rename for one of your own skills, and with skill remove for anything else,
-// which a fork under another name keeps first.
+// which a fork under another name keeps first, or, for an unmanaged skill,
+// an adoption and a rename.
 func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Record, libPath, state string) (libraryAction, *failure) {
 	switch {
 	case home.IsAbsent(state):
@@ -1190,9 +1194,16 @@ func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Recor
 		// The directory another tool copied, edited since or not.
 		return libraryAction{displace: true}, nil
 	}
-	hint := "remove it with '" + skillCommand("remove", v.name) + "', then install again; to keep it, first fork it with '" + skillCommand("fork", v.name, "--name", "<new>") + "'"
-	if records[v.name].Kind == lineage.KindFork {
+	hint := "remove it with '" + skillCommand("remove", v.name) + "', then install again; "
+	switch rec, known := records[v.name]; {
+	case !known:
+		// An unmanaged skill, which an adoption takes over in its place, so
+		// the rename is what frees the name.
+		hint += "or, to keep it, adopt it with '" + adoptCommand(v.name) + "' and rename it with '" + skillCommand("rename", v.name, "<new>") + "', then install again"
+	case rec.Kind == lineage.KindFork:
 		hint = ownSkillHint(v.name)
+	default:
+		hint += "to keep it, first fork it with '" + skillCommand("fork", v.name, "--name", "<new>") + "'"
 	}
 	return libraryAction{}, refuse(exitRefused, fmt.Sprintf("the library already holds %s at %s", v.name, inv.dirs.Library), hint)
 }

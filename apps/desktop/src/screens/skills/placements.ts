@@ -1,7 +1,8 @@
-// What the AGENTS chips, the banners and the Remove dialog say about a skill's placements, and
-// what the toasts after their commands say: pure functions over a row, the configurations and a
-// command's events, so that every control reads a placement the same way. Nothing here predicts:
-// a chip's state comes from the inventory, and a count from the CLI's result.
+// What the AGENTS chips, the banners and the Remove dialog say about a skill's placements, the
+// `adopt` command line that takes over an unmanaged skill, and what the toasts after their
+// commands say: pure functions over a row, the configurations and a command's events, so that
+// every control reads a placement the same way. Nothing here predicts: a chip's state comes from
+// the inventory, and a count from the CLI's result.
 import type {
   CliEvent,
   Configuration,
@@ -9,7 +10,7 @@ import type {
 } from "#/cli/events.gen.ts";
 import type { AgentChipState } from "#/components/agent-chip.tsx";
 import { plural } from "#/lib/plural.ts";
-import { canFork } from "#/screens/skills/fork.ts";
+import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 /**
@@ -151,29 +152,56 @@ export const inertReason = (
   }
 };
 
+/** `adopt --skill <name>`. It names no tool, so the CLI decides by itself how it adopts the skill. */
+const adoptLine = (name: string): string[] => ["adopt", "--skill", name];
+
+/**
+ * The `adopt` command line that takes over an unmanaged skill, or undefined when `adopt` has no
+ * way to take it:
+ *
+ * - a skill another tool recorded, which the CLI can adopt (`candidate`), is installed from its
+ *   source, or becomes one of your own with its files as they are when the record names none;
+ * - a library skill no tool recorded becomes one of your own in its place;
+ * - a skill a client holds as a real directory in its own skills directory is named by that
+ *   directory, which moves into the library, unless the library holds another skill under that
+ *   name.
+ *
+ * A skill whose record the CLI refuses is one no form of `adopt` takes. A skill of a project, a
+ * symlink in a client's skills directory and a plugin's skill are not `adopt`'s to take either.
+ */
+export const adoptArgs = (row: SkillRow): string[] | undefined => {
+  if (row.kind !== "disk") {
+    return undefined;
+  }
+  const state = row.adoption?.state;
+  if (state === "candidate") {
+    return adoptLine(row.name);
+  }
+  if (state === "refused") {
+    return undefined;
+  }
+  if (row.entry !== undefined) {
+    return state === undefined ? adoptLine(row.name) : undefined;
+  }
+  const occurrence = occurrenceOf(row);
+  if (occurrence?.kind !== "directory" || row.nameInLibrary === true) {
+    return undefined;
+  }
+  return adoptLine(directoryName(occurrence.path));
+};
+
 /** Why no chip of a skill can be changed, and the control that unlocks them when there is one. */
 export interface Lock {
   reason: string;
-  /** What the toast of a locked chip offers: Adopt or Fork. */
-  action?: "adopt" | "fork";
+  /** What the toast of a locked chip offers: Adopt, for a skill `adoptArgs` has a command for. */
+  action?: "adopt";
 }
 
 const UNMANAGED = "This skill is not managed by agentx";
 
-/** An unmanaged skill: adopted when another tool installed it, forked when the library holds it. */
-const unmanagedLock = (row: SkillRow): Lock => {
-  if (row.adoption?.state === "candidate") {
-    return { action: "adopt", reason: `${UNMANAGED}. Adopt it to manage` };
-  }
-  return canFork(row)
-    ? { action: "fork", reason: `${UNMANAGED}. Fork it to manage` }
-    : { reason: UNMANAGED };
-};
-
 /**
  * Why no chip of the skill can be changed, or undefined when they can: a plugin's skill belongs
- * to its plugin, and an unmanaged skill is not agentx's to place until it is adopted, which
- * `adopt` does for a skill another tool installed, or forked.
+ * to its plugin, and an unmanaged skill is not agentx's to place until it is adopted.
  */
 export const lockOf = (row: SkillRow): Lock | undefined => {
   switch (row.kind) {
@@ -182,7 +210,9 @@ export const lockOf = (row: SkillRow): Lock | undefined => {
       return { reason: `Comes with the ${plugin} plugin. Fork to edit` };
     }
     case "disk": {
-      return unmanagedLock(row);
+      return adoptArgs(row) === undefined
+        ? { reason: UNMANAGED }
+        : { action: "adopt", reason: `${UNMANAGED}. Adopt it to manage` };
     }
     case "source":
     case "yours": {

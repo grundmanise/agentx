@@ -55,9 +55,7 @@ const libraryNames = [
   "pdf-letters",
   "release-notes",
   "review",
-  "scratch",
   "my-pdf",
-  "my-scratch",
   "commit-helper",
 ];
 
@@ -170,13 +168,10 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
   cli,
   page,
 }) => {
-  await openSkill(cli, page, "scratch");
-  await actions(page, "scratch").getByRole("button", { name: "Fork" }).click();
-  const dialog = forkDialog(page, "scratch");
-  await expect(dialog).toContainText(
-    "It becomes one of your skills and replaces scratch in every agent that has it. agentx then keeps its history."
-  );
-  cli.register(["skill", "fork", "scratch"], {
+  await openSkill(cli, page, "pdf");
+  await actions(page, "pdf").getByRole("button", { name: "Fork" }).click();
+  const dialog = forkDialog(page, "pdf");
+  cli.register(["skill", "fork", "pdf"], {
     events: [refusedInPlace],
     exitCode: 6,
   });
@@ -187,7 +182,7 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
   // name keeps its case. Exit 6 turns the switch on, so the hint names what is left to do with
   // the form as it now stands.
   await expect(alert).toHaveText(
-    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill, or type a new name."
+    "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git. Move its .git out of the skill, or type a new name."
   );
   await expect(
     dialog.getByRole("switch", { name: "Use a new name" })
@@ -195,19 +190,19 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
   const field = dialog.getByRole("textbox", { name: "Name" });
   await expect(field).toBeFocused();
 
-  cli.register(["skill", "fork", "scratch", "--name", "my-scratch"], {
-    events: [forked("my-scratch"), forked("scratch")],
+  cli.register(["skill", "fork", "pdf", "--name", "my-pdf"], {
+    events: [forked("my-pdf"), forked("pdf")],
   });
-  await field.fill("my-scratch");
+  await field.fill("my-pdf");
   await dialog.getByRole("button", { name: "Fork" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(
-    toasts(page).getByText("Forked scratch skill", { exact: true })
+    toasts(page).getByText("Forked pdf skill", { exact: true })
   ).toBeVisible();
-  await expect(page).toHaveURL(/#\/skills\/my-scratch$/u);
+  await expect(page).toHaveURL(/#\/skills\/my-pdf$/u);
   expect(forks(cli)).toEqual([
-    ["skill", "fork", "scratch", "--json"],
-    ["skill", "fork", "scratch", "--name", "my-scratch", "--json"],
+    ["skill", "fork", "pdf", "--json"],
+    ["skill", "fork", "pdf", "--name", "my-pdf", "--json"],
   ]);
 });
 
@@ -215,12 +210,12 @@ test("a refusal clears when the switch or the name changes", async ({
   cli,
   page,
 }) => {
-  await openSkill(cli, page, "scratch");
-  await actions(page, "scratch").getByRole("button", { name: "Fork" }).click();
-  const dialog = forkDialog(page, "scratch");
+  await openSkill(cli, page, "pdf");
+  await actions(page, "pdf").getByRole("button", { name: "Fork" }).click();
+  const dialog = forkDialog(page, "pdf");
   const toggle = dialog.getByRole("switch", { name: "Use a new name" });
   const alert = dialog.getByRole("alert");
-  cli.register(["skill", "fork", "scratch"], {
+  cli.register(["skill", "fork", "pdf"], {
     events: [refusedInPlace],
     exitCode: 6,
   });
@@ -239,7 +234,7 @@ test("a refusal clears when the switch or the name changes", async ({
   await toggle.click();
   await dialog.getByRole("button", { name: "Fork" }).click();
   await expect(alert).toContainText("or type a new name.");
-  await dialog.getByRole("textbox", { name: "Name" }).fill("my-scratch");
+  await dialog.getByRole("textbox", { name: "Name" }).fill("my-pdf");
   await expect(alert).toHaveCount(0);
 });
 
@@ -247,22 +242,22 @@ test("refused in place with Use a new name on: the hint leaves the switch out", 
   cli,
   page,
 }) => {
-  await openSkill(cli, page, "scratch");
-  await actions(page, "scratch").getByRole("button", { name: "Fork" }).click();
-  const dialog = forkDialog(page, "scratch");
+  await openSkill(cli, page, "pdf");
+  await actions(page, "pdf").getByRole("button", { name: "Fork" }).click();
+  const dialog = forkDialog(page, "pdf");
   await dialog.getByRole("switch", { name: "Use a new name" }).click();
   // The skill's own name forks it in its place, which the CLI refuses as without the switch.
-  await dialog.getByRole("textbox", { name: "Name" }).fill("scratch");
-  cli.register(["skill", "fork", "scratch", "--name", "scratch"], {
+  await dialog.getByRole("textbox", { name: "Name" }).fill("pdf");
+  cli.register(["skill", "fork", "pdf", "--name", "pdf"], {
     events: [refusedInPlace],
     exitCode: 6,
   });
   await dialog.getByRole("button", { name: "Fork" }).click();
   await expect(dialog.getByRole("alert")).toHaveText(
-    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill."
+    "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git. Move its .git out of the skill."
   );
   expect(forks(cli)).toEqual([
-    ["skill", "fork", "scratch", "--name", "scratch", "--json"],
+    ["skill", "fork", "pdf", "--name", "pdf", "--json"],
   ]);
 });
 

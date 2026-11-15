@@ -415,7 +415,7 @@ func (inv *invocation) unpublishable(ctx context.Context, name string) error {
 	}
 	switch {
 	case held:
-		hint := "make it one of your own skills with '" + skillCommand("fork", name) + "', then publish it"
+		hint := "make it one of your own skills with '" + adoptCommand(name) + "', then publish it"
 		if published {
 			hint += "; or move " + quotedPath(inv.libraryPath(name)) + " aside and install the one you published with '" + accountAddCommand(name) + "'"
 		}

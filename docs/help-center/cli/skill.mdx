@@ -75,18 +75,18 @@ warning: xlsx: the library already holds xlsx at /home/me/.agents/skills
 ✓ installed pdf from https://github.com/anthropics/skills under skills/pdf: 4 placements
   ...
 error: 1 of 3 skills could not be installed: xlsx: the library already holds xlsx at /home/me/.agents/skills
-hint: remove it with 'agentx skill remove xlsx', then install again; to keep it, first fork it with 'agentx skill fork xlsx --name <new>'
+hint: remove it with 'agentx skill remove xlsx', then install again; or, to keep it, adopt it with 'agentx adopt --skill xlsx' and rename it with 'agentx skill rename xlsx <new>', then install again
 ```
 
-To keep the skill that holds the name, fork it under a new name first:
+The hint depends on the skill that holds the name. To keep an unmanaged skill, as here, [adopt it](/cli/adopt#skills-adopted-as-they-are), then rename it:
 
 ```sh
-agentx skill fork xlsx --name my-xlsx
-agentx skill remove xlsx
+agentx adopt --skill xlsx
+agentx skill rename xlsx my-xlsx
 agentx skill add anthropics/skills --name xlsx
 ```
 
-If the skill that holds the name is one of your own skills, [rename it](/cli/fork#rename-a-skill-of-your-own) instead with `agentx skill rename xlsx my-xlsx`, then install again.
+If the skill that holds the name is one of your own skills, [rename it](/cli/fork#rename-a-skill-of-your-own) with `agentx skill rename xlsx my-xlsx`, then install again. If you installed it from another source, [fork it under a new name](/cli/fork#fork-under-a-new-name) with `agentx skill fork xlsx --name my-xlsx`, remove it with `agentx skill remove xlsx`, then install again.
 
 agentx also refuses a skill whose directory name in the source holds a control character, or starts or ends with a space. Ask the source to rename the directory, or install another skill.
 
@@ -324,8 +324,8 @@ Each row shows the skill, its kind, whether it holds edits you have not publishe
 
 | Kind | What it means |
 |---|---|
-| `managed` | A skill agentx keeps: one installed from a source, or one of your own, which you created with [`agentx skill new`](/cli/fork#create-a-skill), forked with [`agentx skill fork`](/cli/fork#fork-a-skill) or installed from your account remote. |
-| `unmanaged` | A directory in the library agentx did not install. agentx lists it and otherwise leaves it alone. |
+| `managed` | A skill agentx keeps: one installed from a source, or one of your own, which you created with [`agentx skill new`](/cli/fork#create-a-skill), forked with [`agentx skill fork`](/cli/fork#fork-a-skill), adopted as it was with [`agentx adopt`](/cli/adopt#skills-adopted-as-they-are) or installed from your account remote. |
+| `unmanaged` | A directory in the library that agentx does not manage. agentx lists it and otherwise leaves it alone. To have agentx manage it, [adopt it](/cli/adopt). |
 
 The source column shows where the skill is published to:
 
@@ -410,7 +410,7 @@ A repository nested in the skill, or anything else git cannot record, such as a 
 - the first line of the diff counts the paths git cannot record, as in `pdf differs from its base version at 3f2a9c1 only in 1 path git cannot record`;
 - `skill update` refuses to apply an update to it until you move the path out of the skill.
 
-A skill agentx did not install has no base version to compare with, so `skill diff` stops with exit code 6. For one of your own skills, `skill diff` shows its unpublished edits, against what you last published: see [See what changed](/cli/fork#see-what-changed).
+An unmanaged skill has no base version to compare with, so `skill diff` stops with exit code 6. For one of your own skills, `skill diff` shows its unpublished edits, against what you last published: see [See what changed](/cli/fork#see-what-changed).
 
 ### Files that do not count
 
@@ -584,7 +584,7 @@ If a file of the skill changes while the update writes it, agentx stops with exi
 
 ### Update to what another machine published
 
-Your own skills travel between your machines through the [account remote](/account-remote): the ones you created with `agentx skill new`, forked with `agentx skill fork`, or installed from the account remote. Update them to the latest version you published from another machine the way you take an update:
+Your own skills travel between your machines through the [account remote](/account-remote): the ones you created with `agentx skill new`, forked with `agentx skill fork`, adopted as they were with `agentx adopt`, or installed from the account remote. Update them to the latest version you published from another machine the way you take an update:
 
 ```sh
 agentx skill check-updates
@@ -603,7 +603,7 @@ no skill was updated from upstream
 - Edits you have not published are recorded on the skill first, and what the account remote holds is merged with them. They stay unpublished until you [publish](#publish-a-skill) them. Publish with `-m` to publish them under your own message.
 - Update before you publish: [`agentx skill publish`](#publish-a-skill) never merges, and stops with exit code 6 when another machine published changes and this machine has changes of its own.
 - When both machines changed the same lines, the merge waits for you: see [Resolve a conflict](/cli/fork#resolve-a-conflict). Resolve it, then run `agentx skill update <name>` again.
-- A skill with no upstream (one you created with `agentx skill new`, or forked from an unmanaged or a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`. One you never published, or one another machine removed, has no branch there, and the update tells you to run `agentx skill publish <name>`.
+- A skill with no upstream (one you created with `agentx skill new`, adopted as it was with `agentx adopt`, or forked from a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`. One you never published, or one another machine removed, has no branch there, and the update tells you to run `agentx skill publish <name>`.
 - If Git cannot reach the account remote, the update of a skill with no upstream stops with exit code 3. A skill you forked from a source gets a warning and still takes its new upstream version.
 
 ### A skill you edited
@@ -689,7 +689,7 @@ This removes the worktree and whatever you resolved in it. Your library director
 | A [merge pending](#when-your-edits-conflict) with files still to resolve | 4 | Finish the merge. The update lists the files that are left. |
 | You removed the skill's source | 5 | Run the `agentx source add` command in the hint. With `--all`, the skill is skipped with a warning that names the same command. The update found earlier is kept. |
 | The skill shows `upstream removed` | 6 | Nothing. The skill stays as it is. |
-| A skill agentx did not install | 6 | Nothing. It has no update to apply. |
+| An unmanaged skill | 6 | Nothing. It has no update to apply. |
 | One of your own skills with no upstream, such as a skill you created, and no account remote set | 6 | Add an account remote. The update then brings the skill to what your other machines published. See [Update to what another machine published](#update-to-what-another-machine-published). |
 | The library directory is gone | 6 | Install it again with `agentx skill add <source> --name <name>`, or stop managing it with `agentx skill remove <name>`. See [A skill whose library directory is gone](#a-skill-whose-library-directory-is-gone). |
 | agentx cannot read the skill's record in the account repo | 6 | Run `agentx doctor` and check the account repo it names. |
@@ -700,7 +700,7 @@ With `--all`, agentx updates every skill it can and names each one it could not.
 
 ## Publish a skill
 
-Publish one of your own skills, one you created with `agentx skill new` or forked with `agentx skill fork`, to your [account remote](/account-remote) so your other machines can install it and get what you change:
+Publish one of your own skills, one you created with `agentx skill new`, forked with `agentx skill fork` or adopted as it was with `agentx adopt`, to your [account remote](/account-remote) so your other machines can install it and get what you change:
 
 ```sh
 agentx skill publish release-notes -m "Cover reverted pull requests"
@@ -738,7 +738,7 @@ agentx skill publish release-notes -m "Cover reverted pull requests"
   - A host SSH does not trust yet: connect to it once with `ssh` to add its key to `known_hosts`.
   - An organisation that requires single sign-on or an IP allow list: authorise your token or key for the organisation, or allow this machine's IP address.
 - Publishing needs an [account remote](/account-remote). Without one, it stops with exit code 6 and names `agentx source add <url> --account`.
-- A skill agentx does not manage has no source to publish to: fork it with `agentx skill fork <name>` to make it one of your own.
+- A skill agentx does not manage has no source to publish to: [adopt it](/cli/adopt#skills-adopted-as-they-are) with `agentx adopt --skill <name>` to make it one of your own.
 - To delete a skill's branch from the remote, remove the skill with [`agentx skill remove <name> --remote`](/cli/fork#remove-a-skill-of-your-own).
 
 ### Publish edits to a shared source
@@ -936,7 +936,7 @@ Add `--copy` to give those configurations a copy instead of a symlink, as on thi
 agentx skill place pdf --machine cloud --to cursor --copy
 ```
 
-The cloud machine always takes the latest version of the skill: the account remote's for one of your own skills, and the source's for a skill of a source. Publish your own skills first. If the account remote does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine.
+The cloud machine always takes the latest version of the skill: the account remote's for one of your own skills, and the source's for a skill of a source. Publish your own skills first. If the account remote does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine. [Adopt it](/cli/adopt#skills-adopted-as-they-are) and publish it first.
 
 Take a skill away from some configurations, or off the cloud machine:
 

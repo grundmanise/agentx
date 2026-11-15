@@ -139,55 +139,6 @@ func TestForksOfOneVersionShareTheImport(t *testing.T) {
 	}
 }
 
-// TestSkillForkOfAnUnmanagedSkill forks two skills the library holds that
-// no branch records. One, whose directory name agentx cannot give a fork,
-// is refused unless --name gives another, and then forked beside itself
-// under that name, into the client it is placed in, as a branch of its own
-// named after the fork. The other is forked in its place: its content is
-// the first commit of a branch of its own, by the user and with a new fork
-// id, its directory moves into the worktree and the library holds a
-// symlink to it.
-func TestSkillForkOfAnUnmanagedSkill(t *testing.T) {
-	t.Parallel()
-	h, _ := installHarness(t)
-	h.withIdentity("Ada Lovelace", "ada@example.com")
-	writeFile(t, mkdirs(t, filepath.Join(h.library, "My_Skill"), "SKILL.md"), skill("My_Skill", "Mine"))
-	writeFile(t, mkdirs(t, filepath.Join(h.library, "notes"), "SKILL.md"), skill("notes", "Take notes"))
-	if err := os.MkdirAll(filepath.Join(h.home, ".claude", "skills"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(filepath.Join(h.library, "My_Skill"), filepath.Join(h.home, ".claude", "skills", "My_Skill")); err != nil {
-		t.Fatal(err)
-	}
-	out := h.run("--json", "skill", "fork", "My_Skill")
-	equal(t, "an invalid name: exit", out.exit, exitRefused.exit)
-	contains(t, "an invalid name: hint", h.one(out.stdout, "error")["hint"].(string), "agentx skill fork My_Skill --name <new>")
-
-	h.mustRun("skill", "fork", "My_Skill", "--name", "my-skill")
-	tip := h.ref(lineage.ForkRef("my-skill"))
-	equal(t, "the renamed fork's tree", h.accountGit("ls-tree", "-r", "--name-only", tip), "my-skill/SKILL.md")
-	contains(t, "the renamed fork's SKILL.md", h.accountGit("cat-file", "blob", tip+":my-skill/SKILL.md"), "name: my-skill\n")
-	if target, _ := os.Readlink(filepath.Join(h.home, ".claude", "skills", "my-skill")); target != filepath.Join(h.library, "my-skill") {
-		t.Errorf("the renamed fork's claude-code placement points at %q", target)
-	}
-	equal(t, "the original", h.listed("My_Skill")["kind"], lineage.KindUnmanaged)
-
-	text := h.mustRun("skill", "fork", "notes")
-	// No account remote is set, so the fork ends with how to publish it.
-	equal(t, "the text output", text.stdout, "✓ forked notes; the fork replaces it wherever it was\n"+
-		"No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish notes' to publish it.\n")
-	tip = h.ref(lineage.ForkRef("notes"))
-	equal(t, "the history", h.accountGit("rev-list", "--parents", lineage.ForkRef("notes")), tip)
-	equal(t, "the author", h.accountGit("log", "-1", "--format=%an <%ae>", tip), "Ada Lovelace <ada@example.com>")
-	equal(t, "the tree", h.accountGit("ls-tree", "-r", "--name-only", tip), "notes/SKILL.md")
-	if link, _ := os.Readlink(filepath.Join(h.library, "notes")); link != "../../../agentx/worktrees/notes/notes" {
-		t.Errorf("the library symlink is %q", link)
-	}
-	ev := h.listed("notes")
-	equal(t, "kind", ev["kind"], lineage.KindManaged)
-	equal(t, "the fork id", ev["fork_id"], h.trailer(tip, lineage.TrailerForkID))
-}
-
 // pluginHome gives h's user a plugin called formatter, which provides a
 // skill called format to Claude Code and to Codex, and another, linter,
 // which provides a skill of the same name to Claude Code alone. Both come
@@ -335,17 +286,22 @@ func TestSkillForkOfAFork(t *testing.T) {
 }
 
 // TestSkillForkRefusals refuses, in one home and changing nothing, a skill
-// nothing provides, a name another branch holds, a library entry that is a
-// symlink of the user's, a worktree path that is taken, a skill holding a
-// repository git would record as a link, a skill that is itself a
-// repository, which its own .gitignore naming .git does not let move, and
-// a skill whose update left a merge pending, which is asked about before
-// anything is committed.
+// nothing provides, an unmanaged one, which is sent to agentx adopt, a
+// name another branch holds, a library entry that is a symlink of the
+// user's, a worktree path that is taken, a skill holding a repository git
+// would record as a link, a skill that is itself a repository, which its
+// own .gitignore naming .git does not let move, and a skill whose update
+// left a merge pending, which is asked about before anything is committed.
 func TestSkillForkRefusals(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta")
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "beta", "vendor", ".git"), "HEAD"), "ref: refs/heads/main\n")
+	// Three more managed skills, each with a branch of its own at beta's
+	// import: what refuses them is asked before their content is read.
+	for _, name := range []string{"gamma", "held", "cloned"} {
+		h.accountGit("update-ref", lineage.ManagedRef(name), h.ref(lineage.ManagedRef("beta")))
+	}
 	writeFile(t, mkdirs(t, filepath.Join(h.home, "mine", "gamma"), "SKILL.md"), skill("gamma", "Mine"))
 	if err := os.Symlink(filepath.Join(h.home, "mine", "gamma"), filepath.Join(h.library, "gamma")); err != nil {
 		t.Fatal(err)
@@ -357,6 +313,7 @@ func TestSkillForkRefusals(t *testing.T) {
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "cloned"), "SKILL.md"), skill("cloned", "A clone"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "cloned", ".git"), "HEAD"), "ref: refs/heads/main\n")
 	writeFile(t, filepath.Join(h.library, "cloned", ".gitignore"), ".git\n")
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "loose"), "SKILL.md"), skill("loose", "No branch records it"))
 	refs := h.accountGit("for-each-ref")
 	for _, tc := range []struct {
 		args []string
@@ -364,6 +321,7 @@ func TestSkillForkRefusals(t *testing.T) {
 		says string
 	}{
 		{[]string{"nothing"}, exitNotFound, `neither the library nor any plugin holds a skill called "nothing"`},
+		{[]string{"loose", "--name", "tight"}, exitRefused, "loose is not managed by agentx, so it cannot be forked"},
 		{[]string{"alpha", "--name", "beta"}, exitRefused, "the account repo already holds beta as a skill of a shared source"},
 		{[]string{"gamma"}, exitRefused, "is a symlink to"},
 		{[]string{"held"}, exitRefused, "worktrees/held already exists"},
@@ -372,7 +330,11 @@ func TestSkillForkRefusals(t *testing.T) {
 	} {
 		out := h.run(append([]string{"--json", "skill", "fork"}, tc.args...)...)
 		equal(t, strings.Join(tc.args, " ")+": exit", out.exit, tc.exit.exit)
-		contains(t, strings.Join(tc.args, " ")+": error", h.one(out.stdout, "error")["message"].(string), tc.says)
+		e := h.one(out.stdout, "error")
+		contains(t, strings.Join(tc.args, " ")+": error", e["message"].(string), tc.says)
+		if tc.args[0] == "loose" {
+			equal(t, "an unmanaged skill: hint", e["hint"], "adopt it first with 'agentx adopt --skill loose'")
+		}
 	}
 	if err := os.MkdirAll(filepath.Join(h.agentx, "merges", "alpha"), 0o755); err != nil {
 		t.Fatal(err)
@@ -481,15 +443,16 @@ func TestPluginForkNotes(t *testing.T) {
 	}, "\n"))
 }
 
-// forkChildEnv marks the process TestSkillForkRecoversWhereItWasKilled
-// starts, which forks the skill it names and is killed part way.
+// forkChildEnv marks the process TestSkillForkRecoversWhereItWasKilled and
+// TestAdoptRecoversWhereItWasKilled start, which runs the command line it
+// holds, its words separated by spaces, and is killed part way.
 const forkChildEnv = "AGENTX_TEST_FORK_CHILD"
 
 // TestForkChildProcess is not a test: it is the body of that process. It
 // does nothing when the variable that marks it is not set.
 func TestForkChildProcess(t *testing.T) {
-	name := os.Getenv(forkChildEnv)
-	if name == "" {
+	line := os.Getenv(forkChildEnv)
+	if line == "" {
 		t.Skip("not the skill fork child process")
 	}
 	env := map[string]string{}
@@ -498,7 +461,7 @@ func TestForkChildProcess(t *testing.T) {
 			env[k] = v
 		}
 	}
-	os.Exit(Run(context.Background(), []string{"skill", "fork", name}, env, strings.NewReader(""), os.Stdout, os.Stderr))
+	os.Exit(Run(context.Background(), strings.Fields(line), env, strings.NewReader(""), os.Stdout, os.Stderr))
 }
 
 // TestSkillForkRecoversWhereItWasKilled kills a fork of a managed skill in
@@ -538,7 +501,7 @@ exec %GIT% "$@"
 			h.mustRun("skill", "add", s.url, "--name", "alpha")
 			writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "my notes\n")
 			writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder\n")
-			out := killedChild(t, h, "TestForkChildProcess", forkChildEnv, "alpha", tc.script)
+			out := killedChild(t, h, "TestForkChildProcess", forkChildEnv, "skill fork alpha", tc.script)
 			_, kinds := journalKinds(t, h)
 			equal(t, "the journal's steps", kinds, "ref, ref, worktree, move, link")
 			if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
@@ -561,4 +524,45 @@ exec %GIT% "$@"
 			equal(t, "kind", h.listed("alpha")["kind"], lineage.KindManaged)
 		})
 	}
+}
+
+// TestAdoptRecoversWhereItWasKilled kills, right after git added the
+// worktree, the adoption of a skill two clients hold the same directory
+// of. Every other boundary is the journal's, which
+// home.TestAdoptionRecoversFromEveryBoundary replays without git. The next
+// command finishes it: the first directory, which only moved, is in the
+// worktree, the other is gone, and both clients have the library's
+// symlink.
+func TestAdoptRecoversWhereItWasKilled(t *testing.T) {
+	t.Parallel()
+	h, _ := installHarness(t)
+	for _, client := range []string{".claude", ".cursor"} {
+		writeFile(t, mkdirs(t, filepath.Join(h.home, client, "skills", "jot"), "SKILL.md"), skill("jot", "Jot things down"))
+	}
+	out := killedChild(t, h, "TestForkChildProcess", forkChildEnv, "adopt --skill jot", `
+case " $* " in
+*" worktree add "*)
+	%GIT% "$@"
+	kill -9 $PPID
+	exit 1 ;;
+esac
+exec %GIT% "$@"
+`)
+	_, kinds := journalKinds(t, h)
+	equal(t, "the journal's steps", kinds, "ref, worktree, move, link, link, remove, link")
+	if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
+		t.Fatalf("the command after the killed adoption: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
+	}
+	equal(t, "journals after recovery", journalCount(t, h), 0)
+	if !home.WorktreeAt(filepath.Join(h.agentx, "worktrees", "jot"), "skills/jot") {
+		t.Error("the worktree is not on the branch after recovery")
+	}
+	for _, client := range []string{".claude", ".cursor"} {
+		if target, _ := os.Readlink(filepath.Join(h.home, client, "skills", "jot")); target != filepath.Join(h.library, "jot") {
+			t.Errorf("%s's placement points at %q", client, target)
+		}
+		equal(t, "what is left in "+client, strings.Join(hiddenEntries(t, filepath.Join(h.home, client, "skills")), " "), "")
+	}
+	equal(t, "SKILL.md through the library symlink", fileBody(t, filepath.Join(h.library, "jot", "SKILL.md")), skill("jot", "Jot things down"))
+	equal(t, "kind", h.listed("jot")["kind"], lineage.KindManaged)
 }

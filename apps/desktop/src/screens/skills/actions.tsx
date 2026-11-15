@@ -5,7 +5,7 @@
 import { useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { LibraryPlacement } from "#/cli/events.gen.ts";
+import type { CliEvent, LibraryPlacement } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { dismissToast } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -19,7 +19,9 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { revealInFinder } from "#/lib/reveal.ts";
+import { openSkill } from "#/screens/skills/open.ts";
 import {
+  adoptArgs,
   agentsWord,
   holdsOtherContent,
   placedCount,
@@ -31,8 +33,8 @@ import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
-/** The label of the Adopt control for `name`: the runner's name for it. */
-const adoptLabel = (name: string) => `adopt ${name}`;
+/** The label of the Adopt control for `row`: the runner's name for it. */
+const adoptLabel = (row: SkillRow) => `adopt ${row.key}`;
 
 /** The label of the Reconnect control for a placement of `row`. */
 const reconnectLabel = (row: SkillRow, placement: LibraryPlacement) =>
@@ -41,12 +43,33 @@ const reconnectLabel = (row: SkillRow, placement: LibraryPlacement) =>
 const addSourceLabel = (source: string) => `add source ${source}`;
 const abortLabel = (name: string) => `abort update ${name}`;
 
-/** Adopt: `adopt --skill <name>`. The skill is then managed, and agentx can update it. */
-export const adopt = async (name: string) =>
-  await runUntilSettled(["adopt", "--skill", name], {
-    label: adoptLabel(name),
-    success: `Adopted ${name} skill`,
+/** The name the CLI reports for the skill a run of `adopt` took over as one of your own. */
+const adoptedName = (events: CliEvent[]) =>
+  events.find((e) => e.type === "library_skill")?.name;
+
+/**
+ * Adopt: the `adopt` command line of `adoptArgs` for an unmanaged skill, which agentx manages
+ * from then on. A skill taken out of a client's own skills directory becomes a library skill
+ * under its directory's name, so it is selected by the name the CLI reports.
+ */
+export const adopt = async (row: SkillRow) => {
+  const args = adoptArgs(row);
+  if (args === undefined) {
+    return;
+  }
+  const outcome = await runUntilSettled(args, {
+    label: adoptLabel(row),
+    success: (events) => `Adopted ${adoptedName(events) ?? row.name} skill`,
   });
+  const adopted = adoptedName(outcome.events);
+  if (
+    outcome.exitCode === EXIT_CODES.ok &&
+    row.entry === undefined &&
+    adopted !== undefined
+  ) {
+    openSkill(adopted);
+  }
+};
 
 /** A small ghost button that runs a command, pending while the command and its inventory come. */
 const ActionButton = ({
@@ -89,15 +112,15 @@ export const AddToAgents = ({ row }: { row: SkillRow }) => {
   );
 };
 
-/** Adopt, for a skill another tool installed. */
-export const Adopt = ({ name }: { name: string }) => {
-  const pending = useSettling(adoptLabel(name));
+/** Adopt, for an unmanaged skill `adopt` can take over. */
+export const Adopt = ({ row }: { row: SkillRow }) => {
+  const pending = useSettling(adoptLabel(row));
   return (
     <ActionButton
       label="Adopt"
       pending={pending}
       onClick={() => {
-        void adopt(name);
+        void adopt(row);
       }}
     />
   );

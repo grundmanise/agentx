@@ -123,7 +123,8 @@ func TestAdoptAgainAfterSkillshareTookTheSkillBack(t *testing.T) {
 // source under the name the library already shows it as: the link gives way
 // to a real directory, so does Skillshare's link in a client's folder,
 // Skillshare's folder and store stay as they are, and a record of a tracked
-// repository, a local path or an agent is left alone.
+// repository, a local path or an agent is left alone: the first two are
+// reported as not adopted, which fails nothing.
 func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -148,7 +149,7 @@ func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 	before := libraryTree(t, h.skillshareSkills())
 
 	out := h.run("--json", "adopt", "--all")
-	equal(t, "exit", out.exit, exitRefused.exit)
+	equal(t, "exit", out.exit, 0)
 	h.lockUnchanged(filepath.Join(h.skillshareSkills(), skillshare.StoreName), store)
 	sameTree(t, "Skillshare's folder", libraryTree(t, h.skillshareSkills()), before)
 	contains(t, "stderr", out.stderr, "../escape")
@@ -163,8 +164,8 @@ func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 	for _, c := range []struct{ name, state, reason string }{
 		{"alpha", adoptAdopted, ""},
 		{"team__beta", adoptAdopted, ""},
-		{"_tracked", adoptRefused, "tracks as a whole"},
-		{"local", adoptRefused, "not a git repository agentx can fetch"},
+		{"_tracked", adoptRefused, "a whole repository that Skillshare tracks"},
+		{"local", adoptRefused, "only in " + filepath.Join(h.skillshareSkills(), "local") + ", where no agent looks for skills"},
 	} {
 		if states[c.name] != c.state {
 			t.Errorf("%s is %q, want %q", c.name, states[c.name], c.state)

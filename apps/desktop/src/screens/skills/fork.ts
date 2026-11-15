@@ -10,14 +10,12 @@ import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 /**
- * Whether the detail pane offers Fork: for a skill of a source, a plugin's skill and an unmanaged
- * skill in the library. One of your own skills is already yours, and a skill an agent client holds
- * in its own skills directory is one `skill fork` cannot find.
+ * Whether the detail pane offers Fork: for a skill of a source and a plugin's skill. One of your
+ * own skills is already yours, and `skill fork` refuses an unmanaged skill, which Adopt takes
+ * over.
  */
 export const canFork = (row: SkillRow) =>
-  row.kind === "source" ||
-  row.kind === "plugin" ||
-  (row.kind === "disk" && row.entry !== undefined);
+  row.kind === "source" || row.kind === "plugin";
 
 /**
  * How `skill fork` names `row`: a library skill by its name; a plugin's skill by its directory,
@@ -47,24 +45,11 @@ export const forkArgs = (target: string, newName?: string): string[] =>
     ? ["skill", "fork", target]
     : ["skill", "fork", target, "--name", newName];
 
-/** What the Fork dialog says forking `row` does, by its kind. */
-export const forkText = (row: SkillRow): string => {
-  switch (row.kind) {
-    case "plugin": {
-      return `It becomes one of your skills, in your library. The plugin's ${row.name} stays as it is; agentx tells you after forking what each agent sees.`;
-    }
-    case "disk": {
-      return `It becomes one of your skills and replaces ${row.name} in every agent that has it. agentx then keeps its history.`;
-    }
-    case "source":
-    case "yours": {
-      return `It becomes one of your skills and replaces ${row.name} in every agent that has it. You can still take new versions of the original.`;
-    }
-    default: {
-      return "";
-    }
-  }
-};
+/** What the Fork dialog says forking `row` does: a plugin's skill is forked beside the plugin's. */
+export const forkText = (row: SkillRow): string =>
+  row.kind === "plugin"
+    ? `It becomes one of your skills, in your library. The plugin's ${row.name} stays as it is; agentx tells you after forking what each agent sees.`
+    : `It becomes one of your skills and replaces ${row.name} in every agent that has it. You can still take new versions of the original.`;
 
 /**
  * The Use a new name switch and the name field as they stand once a refusal shows: off; on with

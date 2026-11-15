@@ -10,10 +10,15 @@ import (
 // TestAdoptJudgesEveryUntrustedEntry runs one lock file holding every shape
 // a third party's file, or a user's hand, can put in it. The file is read,
 // never trusted: an entry that cannot name a library directory is left out
-// before any path is built from it, one that names no source agentx can
-// fetch is refused, and the file is the same afterwards. What the library
-// holds under the name does not decide: a symlink or a directory without a
-// SKILL.md is what that tool left there, and adopting replaces it.
+// before any path is built from it, and the file is the same afterwards.
+// What the library holds under the name does not decide for an entry that
+// names a source: a symlink or a directory without a SKILL.md is what that
+// tool left there, and adopting replaces it. An entry that names no source
+// agentx can install from is adopted as the folder the library holds, and
+// refused, in the preview and in a run, when the library holds a symlink.
+// The preview lists the unmanaged skills no entry names with them, a
+// folder as ready and a symlink as one it cannot adopt, and reports no
+// adoption of either.
 func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	t.Parallel()
 	h, s, _, _ := adoptHarness(t)
@@ -43,6 +48,7 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 		"escaping":   escaping,
 		"newline":    newline,
 		"wellknown":  wellKnown,
+		"aliased":    wellKnown,
 		"sourceless": sourceless,
 		"../escape":  entry("skills/alpha"),
 		"gone":       entry("skills/gone"),
@@ -61,6 +67,14 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 		writeFile(t, filepath.Join(h.library, name, "SKILL.md"), skill(name, description))
 	}
 
+	// A symlink no entry names, to a skill outside the library.
+	writeFile(t, mkdirs(t, filepath.Join(h.home, "work", "shortcut"), "SKILL.md"), skill("shortcut", "A skill kept elsewhere"))
+	for link, target := range map[string]string{"aliased": filepath.Join(h.library, "wellknown"), "shortcut": filepath.Join(h.home, "work", "shortcut")} {
+		if err := os.Symlink(target, filepath.Join(h.library, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	out := h.run("--json", "adopt")
 	equal(t, "exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
@@ -77,9 +91,10 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 		{"alpha", adoptCandidate, ""},
 		{"linked", adoptCandidate, ""},
 		{"notaskill", adoptCandidate, ""},
-		{"escaping", adoptRefused, "which is not a directory of"},
-		{"newline", adoptRefused, "which is not a directory of"},
-		{"wellknown", adoptRefused, "not a git repository agentx can fetch"},
+		{"escaping", adoptCandidate, ""},
+		{"newline", adoptCandidate, ""},
+		{"wellknown", adoptCandidate, ""},
+		{"aliased", adoptRefused, "a symlink to " + filepath.Join(h.library, "wellknown") + ". To adopt it, move that folder to " + filepath.Join(h.library, "aliased")},
 	} {
 		if states[c.name] != c.state {
 			t.Errorf("%s is %q, want %q", c.name, states[c.name], c.state)
@@ -88,9 +103,9 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 			t.Errorf("%s: reason %q, want one about %q", c.name, reasons[c.name], c.reason)
 		}
 	}
-	// An entry the reader can make nothing of, and one whose directory is not
-	// there, are no candidates at all.
-	for _, name := range []string{"../escape", "gone", "sourceless"} {
+	// An entry the reader can make nothing of, one whose directory is not
+	// there, and a skill no entry names are no candidates at all.
+	for _, name := range []string{"../escape", "gone", "sourceless", "shortcut"} {
 		if _, reported := states[name]; reported {
 			t.Errorf("%s was reported as a candidate", name)
 		}
@@ -102,42 +117,82 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	// Without --json the skills are grouped by what adopting would do.
 	human := h.run("adopt")
 	equal(t, "exit", human.exit, 0)
-	for _, want := range []string{"Found 6 skills installed by the Vercel skills CLI.", "agentx adopt --all", "adopt all 3"} {
-		contains(t, "stdout", human.stdout, want)
-	}
-	groups := map[string]string{} // each group's title and the rows under it
-	for _, section := range strings.Split(human.stdout, "\n\n") {
-		title, rows, _ := strings.Cut(section, "\n")
-		groups[title] = rows
-	}
-	for title, names := range map[string][]string{
-		"Ready to adopt (3)": {"alpha", "linked", "notaskill"},
-		"Cannot adopt (3)":   {"escaping", "newline", "wellknown"},
-	} {
-		for _, name := range names {
-			contains(t, title, groups[title], "  "+name+" ")
-		}
-	}
+	aliased := "a symlink to " + filepath.Join(h.library, "wellknown") + ". To adopt it, move that folder to " + filepath.Join(h.library, "aliased")
+	equal(t, "the preview", human.stdout, "Found 9 unmanaged skills.\n\n"+
+		"Ready to adopt (7)\n  alpha, escaping, linked, newline, notaskill, sourceless, wellknown\n\n"+
+		"Cannot adopt (2)\n"+
+		"  aliased   "+aliased+"\n"+
+		"  shortcut  a symlink to "+filepath.Join(h.home, "work", "shortcut")+". To adopt it, move that folder to "+filepath.Join(h.library, "shortcut")+"\n\n"+
+		"To adopt:\n"+
+		"  agentx adopt --all           all 7 skills\n"+
+		"  agentx adopt --skill <name>  one skill\n")
+	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "9 unmanaged skills, 7 to adopt, 2 that cannot be adopted")
+	// A run asked for the one it cannot adopt says the same, and what to do.
+	refused := h.run("--json", "adopt", "--skill", "aliased")
+	equal(t, "a symlink: exit", refused.exit, exitRefused.exit)
+	e := lastError(t, h.events(refused.stdout))
+	equal(t, "a symlink: the error", e["message"], "aliased is a symlink to "+filepath.Join(h.library, "wellknown")+", and agentx adopts folders only")
+	equal(t, "a symlink: the hint", e["hint"], "move "+filepath.Join(h.library, "wellknown")+" to "+filepath.Join(h.library, "aliased")+", then run 'agentx adopt --skill aliased' again")
+	equal(t, "a symlink: the adoption", h.one(refused.stdout, "adoption")["reason"], aliased)
 	// Naming the other tool reads its records alone, and it recorded none.
 	other := h.run("adopt", "skillshare")
 	equal(t, "exit", other.exit, 0)
 	contains(t, "stdout", other.stdout, "Nothing to adopt: no skill installed by Skillshare is on this machine.")
 }
 
-// TestAdoptRefusesAnEscapingSubpathBeforeItReadsAnything is the same
-// refusal on the adopting path: a subpath that leaves the repository never
-// reaches git, so no run can be talked into reading outside the source.
-func TestAdoptRefusesAnEscapingSubpathBeforeItReadsAnything(t *testing.T) {
+// TestAdoptAllAdoptsFoldersAsTheyAre adopts every unmanaged skill of a
+// machine whose folders have no source to install them from. One the lock
+// file names with a subpath that leaves the repository, as one an import
+// commit cannot record: the subpath never reaches git, so no run can be
+// talked into reading outside the source, and the run reports the record
+// as adopted, with no import branch. One no tool recorded is adopted, with
+// no adoption event. Two more cannot be adopted, as the preview says of
+// them: a symlink, and a folder that is a Git repository of its own. The
+// run lists them after the skills it adopted, and says once that those are
+// not published yet. Run again, with nothing left to adopt, it lists the
+// two, each a warning, counts them in the result, and succeeds.
+func TestAdoptAllAdoptsFoldersAsTheyAre(t *testing.T) {
 	t.Parallel()
 	h, s, _, _ := adoptHarness(t)
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
 		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "../../../etc/passwd",
 	}})
-	out := h.run("--json", "adopt", "--all")
-	equal(t, "exit", out.exit, exitRefused.exit)
+	for _, name := range []string{"cloned", "notes"} {
+		writeFile(t, mkdirs(t, filepath.Join(h.library, name), "SKILL.md"), skill(name, "No tool installed it"))
+	}
+	git := filepath.Join(h.library, "cloned", ".git")
+	writeFile(t, mkdirs(t, git, "HEAD"), "ref: refs/heads/main\n")
+	work := filepath.Join(h.home, "work", "shortcut")
+	writeFile(t, mkdirs(t, work, "SKILL.md"), skill("shortcut", "A skill kept elsewhere"))
+	if err := os.Symlink(work, filepath.Join(h.library, "shortcut")); err != nil {
+		t.Fatal(err)
+	}
+	cloned := "a Git repository of its own. To adopt it, move " + git + " out of the folder"
+	shortcut := "a symlink to " + work + ". To adopt it, move that folder to " + filepath.Join(h.library, "shortcut")
+
+	out := h.run("adopt", "--all")
+	equal(t, "exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
-	if _, err := os.Stat(filepath.Join(h.agentx, "account.git")); err == nil {
-		t.Error("a refused entry made the run create an account repo")
+	equal(t, "stdout", out.stdout, "✓ adopted alpha\n"+
+		"✓ adopted notes\n"+
+		"Adopted skills stay on this machine until you publish them: run 'agentx source add <url> --account', then 'agentx skill publish <name>'.\n\n"+
+		"Could not adopt (2)\n"+
+		"  cloned    "+cloned+"\n"+
+		"  shortcut  "+shortcut+"\n\n"+
+		"Adopted 2 skills; 2 could not be adopted.\n")
+	equal(t, "the notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes\n")
+	if _, err := h.accountGitErr("rev-parse", "--verify", "-q", "refs/heads/managed/alpha"); err == nil {
+		t.Error("alpha has an import branch")
+	}
+
+	again := h.run("--json", "adopt", "--all")
+	equal(t, "again: exit", again.exit, 0)
+	equal(t, "again: the events", strings.Join(h.types(h.events(again.stdout)), ", "), "adoption, result")
+	adoption := h.one(again.stdout, "adoption")
+	equal(t, "again: the adoption", adoption["name"].(string)+" "+adoption["state"].(string), "alpha "+adoptManaged)
+	equal(t, "again: the summary", h.one(again.stdout, "result")["summary"], "no skills adopted; 2 could not be adopted")
+	for _, warning := range []string{"cloned could not be adopted: " + cloned, "shortcut could not be adopted: " + shortcut} {
+		contains(t, "again: stderr", again.stderr, warning)
 	}
 }
 
@@ -227,33 +282,10 @@ func TestAdoptWithNoRecords(t *testing.T) {
 	h := newHarness(t)
 	out := h.run("adopt")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "Nothing to adopt")
+	equal(t, "stdout", out.stdout, "Nothing to adopt: this machine has no unmanaged skill.\n")
 	out = h.run("adopt", "--all")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "Already adopted.")
-}
-
-// TestAdoptRefusesAFork: a name the account repo holds as a fork has a
-// history of its own, and an import branch of the same name would take its
-// place.
-func TestAdoptRefusesAFork(t *testing.T) {
-	t.Parallel()
-	h, s, v1, _ := adoptHarness(t)
-	if out := h.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
-	h.accountGit("update-ref", "refs/heads/skills/alpha", v1)
-	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha",
-	}})
-
-	out := h.run("--json", "adopt", "--all")
-	equal(t, "exit", out.exit, exitRefused.exit)
-	h.lockUnchanged(h.lockPath(), lock)
-	contains(t, "the reason", h.one(out.stdout, "adoption")["reason"].(string), "is a skill of the account remote on this machine")
-	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
-		t.Error("a fork was given an import branch")
-	}
 }
 
 // TestAdoptOneSkillOfSeveral covers a run that adopts what it can and says
@@ -293,4 +325,7 @@ func TestAdoptOneSkillOfSeveral(t *testing.T) {
 	}
 	equal(t, "alpha", kinds["alpha"], "managed")
 	equal(t, "beta", kinds["beta"], "unmanaged")
+	// Adopting every skill fails the same way: the source no longer holds
+	// the skill, which is a failure and no skill that cannot be adopted.
+	equal(t, "every skill: exit", h.run("adopt", "--all").exit, exitNotFound.exit)
 }

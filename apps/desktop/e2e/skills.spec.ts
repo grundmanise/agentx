@@ -874,16 +874,19 @@ const ran = (cli: MockCli) =>
 const openStates = async (cli: MockCli, page: Page, key: string) => {
   cli.onServeStart({ events: [statesInventory] });
   cli.register(["adopt"], { events: statesAdoption });
-  for (const name of ["scratch", "legacy", "lint", "gone", "notes"]) {
+  for (const name of ["scratch", "lint", "gone"]) {
     cli.register(["skill", "files", name], { events: filesOf(name) });
   }
+  cli.register(["skill", "files", "notes", "--configuration", "cursor"], {
+    events: filesOf("notes"),
+  });
   await page.goto(`/#/skills/${key}`);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect(pane(page, key)).toBeVisible();
 };
 
 test.describe("settling a skill", () => {
-  test("the two banners after the displaced one each run their command", async ({
+  test("the three banners after the displaced one each run their command", async ({
     cli,
     page,
   }) => {
@@ -901,6 +904,18 @@ test.describe("settling a skill", () => {
     await adoptBanner.getByRole("button", { name: "Adopt" }).click();
     await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
 
+    // A skill no tool recorded, here one Cursor holds in its own folder.
+    await row(page, "notes").click();
+    cli.register(["adopt", "--skill", "notes"]);
+    const unmanagedBanner = pane(page, "notes").getByRole("note", {
+      name: "Not managed by agentx",
+    });
+    await expect(unmanagedBanner).toContainText(
+      "Adopt to manage it from agentx"
+    );
+    await unmanagedBanner.getByRole("button", { name: "Adopt" }).click();
+    await expect(toasts(page).getByText("Adopted notes skill")).toBeVisible();
+
     await row(page, "lint").click();
     cli.register(["source", "add", OLD]);
     const sourceBanner = pane(page, "lint").getByRole("note", {
@@ -916,6 +931,7 @@ test.describe("settling a skill", () => {
 
     expect(ran(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
+      ["adopt", "--skill", "notes", "--json"],
       ["source", "add", OLD, "--json"],
     ]);
   });

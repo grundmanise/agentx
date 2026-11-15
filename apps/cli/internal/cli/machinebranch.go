@@ -521,7 +521,7 @@ func (inv *invocation) machineEntry(sc skillContext, snap snapshot, name string)
 		}
 		if _, held := librarySkill(inv.dirs.Library, name); held {
 			return snapshotSkill{}, fail(exitRefused, name+" is not managed by agentx, so the "+cloudMachine+" machine has nowhere to install it from",
-				"make it one of your own with '"+skillCommand("fork", name)+"' and publish it, then place it again")
+				"make it one of your own with '"+adoptCommand(name)+"' and publish it, then place it again")
 		}
 		return snapshotSkill{}, inv.noLibrarySkill(name)
 	case rec.Kind == lineage.KindFork:

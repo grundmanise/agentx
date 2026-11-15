@@ -812,7 +812,7 @@ Pill button: `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent
 | On | `agent-chip.on-bg`, 1px `agent-chip.on-border` |
 | Hover | border `agent-chip.hover-border` |
 | Pending | `cursor:wait`, a `Spinner` in place of the switch |
-| Locked | 45% opacity, `cursor:not-allowed`; a click toasts the reason |
+| Locked | 45% opacity, `cursor:not-allowed`; a click toasts the reason, with the adopt action when adopting the skill unlocks its chips |
 | Displaced | on, with a `type.technical-sm` line in `tone.attention.fg` under the name; inert |
 | Inherited | on, seen only through another agent's placement, as Cursor reads Claude Code's skills folder; inert |
 | Inert | the switch at 50% opacity, `cursor:default`, no hover border; a click runs nothing, and the Tooltip (§6 "Tooltip") says why and how to change it. The chip keeps focus, so the keyboard opens the Tooltip too |
@@ -888,6 +888,7 @@ The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a 
 | An update | `primary` |
 | A client that holds its own copy instead of the library's | `attention` |
 | A skill another tool added | `neutral` |
+| An unmanaged skill no tool recorded, which the CLI can adopt | `neutral` |
 | A source that is gone, or a skill gone from its source | `danger` |
 | A skill in no agent | `neutral` |
 | One of your own skills with unpublished edits, or never published | `yours` |
@@ -896,7 +897,7 @@ The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a 
 ### Banner actions and dialogs (detail pane)
 
 - A banner's actions are small buttons on its right, one command or one dialog each: ghost by default, primary for the action that applies the update, danger ghost for one that discards work. A destructive action opens a confirm dialog first.
-- Adopt and Update are banner buttons only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner; the reason is a row of its DETAILS.
+- Adopt and Update are banner buttons only: a skill row carries no call-to-action pill. Every unmanaged skill the CLI can adopt has the adopt action, whether another tool recorded it or not. A skill whose record the CLI refuses, a skill of a project and a symlink in a client's skills directory have none, and the chips' toast then offers no action. The CLI's reason for refusing a record is in the adopt dialog alone (§6 "Adopt dialog").
 - The banner of a skill of a source edited locally only informs, with a publish action when this machine can write to the source. It has no fork action: Fork is in the action row.
 - The banner of a skill gone from its source only informs. It has no fork action either: Fork is in the action row.
 - A command refused because the target folder holds another version opens a confirm dialog, with the path in `type.technical` `text.caption` and a danger confirm.
@@ -908,7 +909,7 @@ The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a 
 
 ### Fork dialog (detail pane)
 
-Fork is a secondary small button in the action row, before Remove. No banner carries it. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
+Fork is a secondary small button in the action row, before Remove, for a skill of a source and a plugin's skill. No banner carries it. An unmanaged skill is adopted from its banner. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
 
 ### Edit (detail pane)
 
@@ -920,9 +921,9 @@ Under the subtitle, an optional message field, then FILES (`type.caption` `text.
 
 ### Adopt dialog
 
-A bulk adopt confirms in a dialog that lists the skills by name, grouped by tool under a `type.caption` caption when it covers two (`src/screens/skills/adopt-dialog.tsx`). A record the preview refuses is in the list from the start, marked as not adoptable with the CLI's reason. The list scrolls past `adopt.list-max-height`.
+A bulk adopt confirms in a dialog that lists the skills by name, grouped by tool under a `type.caption` caption when it covers two (`src/screens/skills/adopt-dialog.tsx`). A record the preview refuses is in the list from the start, marked as not adoptable with the CLI's reason under its name. The list scrolls past `adopt.list-max-height`.
 
-The run stays in the dialog. Each row shows its state: nothing while waiting, a `Spinner` once a step of the run names it, a check in `text.hint` once it is installed; then its result, a check in `tone.primary.fg` or a cross in `tone.danger.fg` with the reason under the name in `type.notice` `tone.danger.fg`. The footer's left side counts the skills started, from the run's `blobs` steps, then sums the result. The dialog cannot be dismissed while it runs, and one primary button closes it afterwards. It shows the result, so no toast does; the activity list still logs each run. A run that fails as a whole is a refusal paragraph (§6 "Refusal under a field") above the footer.
+The run stays in the dialog. Each row shows its state: nothing while waiting, a `Spinner` once a step of the run names it, a check in `text.hint` once it is installed; then its result, a check in `tone.primary.fg` or a cross in `tone.danger.fg` with the reason under the name in `type.notice` `tone.danger.fg`. The footer's left side counts the skills started, from the run's `blobs` steps, then sums the result. The dialog cannot be dismissed while it runs, and one primary button closes it afterwards. It shows the result, so no toast does; the activity list still logs each run. A run that fails as a whole is a refusal paragraph (§6 "Refusal under a field") above the footer. A warning the run logs is a `type.notice` `tone.attention.fg` paragraph above the footer, except one about a skill the run did not adopt, whose row says why.
 
 ### Create skill dialog
 

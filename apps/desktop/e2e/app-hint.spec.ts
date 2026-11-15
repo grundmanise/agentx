@@ -16,11 +16,11 @@ const refused = (message: string, hint: string): ErrorEvent => ({
 });
 
 const beside =
-  "fork it beside the skill with 'agentx skill fork scratch --name <new>'";
+  "fork it beside the skill with 'agentx skill fork pdf --name <new>'";
 
 const gitRepo = refused(
-  "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork",
-  `move its .git out of the skill, then run 'agentx skill fork scratch' again, or ${beside}`
+  "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork",
+  `move its .git out of the skill, then run 'agentx skill fork pdf' again, or ${beside}`
 );
 
 // [the CLI's error, the form as the refusal leaves it, the hint the dialog shows]
@@ -32,15 +32,15 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   [gitRepo, "off", "move its .git out of the skill, or turn on Use a new name"],
   [
     refused(
-      "/home/me/.agents/skills/scratch is a symlink to /home/me/work/scratch; forking scratch in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to",
-      `replace the link with the directory it points to, then run 'agentx skill fork scratch' again, or ${beside}`
+      "/home/me/.agents/skills/pdf is a symlink to /home/me/work/pdf; forking pdf in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to",
+      `replace the link with the directory it points to, then run 'agentx skill fork pdf' again, or ${beside}`
     ),
     "on",
     "replace the link with the directory it points to, then fork again, or type a new name",
   ],
   [
     refused(
-      "the library and agentx home are on different file systems, so scratch cannot be moved into its fork's worktree",
+      "the library and agentx home are on different file systems, so pdf cannot be moved into its fork's worktree",
       `keep AGENTX_HOME and AGENTX_LIBRARY on one file system, or ${beside}`
     ),
     "on",
@@ -48,16 +48,16 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "scratch is already one of your own skills",
-      "fork it under a new name with 'agentx skill fork scratch --name <new>'"
+      "pdf is already one of your own skills",
+      "fork it under a new name with 'agentx skill fork pdf --name <new>'"
     ),
     "on",
     "type a new name",
   ],
   [
     refused(
-      "Scratch is not a valid skill name",
-      "fork it under a valid name with 'agentx skill fork Scratch --name <new>'"
+      "Pdf is not a valid skill name",
+      "fork it under a valid name with 'agentx skill fork Pdf --name <new>'"
     ),
     "on",
     "type a valid new name",
@@ -72,7 +72,7 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "the account repo already holds scratch as one of your own skills",
+      "the account repo already holds pdf as one of your own skills",
       "choose another name with --name <new>"
     ),
     "on",
@@ -80,15 +80,15 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "/home/me/.agentx/worktrees/scratch already exists",
-      "move it aside, then run 'agentx skill fork scratch' again"
+      "/home/me/.agentx/worktrees/pdf already exists",
+      "move it aside, then run 'agentx skill fork pdf' again"
     ),
     "on",
     "move it aside, then fork again",
   ],
   [
     refused(
-      "the import branch refs/heads/managed/scratch records no version agentx can read",
+      "the import branch refs/heads/managed/pdf records no version agentx can read",
       "run 'agentx doctor' and check the account repo it names"
     ),
     "on",
@@ -96,7 +96,7 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "scratch changed while it was being forked, so nothing was changed",
+      "pdf changed while it was being forked, so nothing was changed",
       "run the command again"
     ),
     "on",
@@ -115,14 +115,14 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
 
 for (const [error, form, want] of forkTable) {
   test(`forkHint(${JSON.stringify(error.hint)}, form ${form})`, () => {
-    expect(forkHint(error, 6, "scratch", form)).toBe(want);
+    expect(forkHint(error, 6, "pdf", form)).toBe(want);
   });
 }
 
 // [exit code, switch on when Fork ran, name typed, the form the refusal leaves]
 const formTable: [number | null, boolean, string, ForkFields][] = [
   [6, false, "", "on"],
-  [6, true, "scratch", "named"],
+  [6, true, "pdf", "named"],
   [6, true, "", "on"],
   [10, false, "", "off"],
   [null, false, "", "off"],
@@ -137,12 +137,12 @@ for (const [exitCode, renaming, name, want] of formTable) {
 test("forkHint tells a refusal by exit 6 and the code refused, not by the message alone", () => {
   const error = {
     ...refused(
-      "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git",
+      "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git",
       "move its .git out of the skill"
     ),
     code: "internal",
   } as const;
-  expect(forkHint(error, 10, "scratch", "off")).toBe(
+  expect(forkHint(error, 10, "pdf", "off")).toBe(
     "move its .git out of the skill"
   );
 });
