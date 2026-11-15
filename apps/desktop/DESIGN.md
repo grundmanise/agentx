@@ -816,7 +816,7 @@ Pill button: `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent
 | On | `agent-chip.on-bg`, 1px `agent-chip.on-border` |
 | Hover | border `agent-chip.hover-border` |
 | Pending | `cursor:wait`, a `Spinner` in place of the switch |
-| Locked | 45% opacity, `cursor:not-allowed`; a click toasts the reason |
+| Locked | 45% opacity, `cursor:not-allowed`; a click toasts the reason, with the adopt action when adopting the skill unlocks its chips |
 | Displaced | a `type.technical-sm` line in `tone.attention.fg` under the name; a click runs nothing and toasts why |
 
 The Universal chip, on, opens the Remove dialog: a universal client reads the library, so a skill leaves it only by leaving the machine.
@@ -888,6 +888,7 @@ The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a 
 | An update | `primary` |
 | A client that holds its own copy instead of the library's | `attention` |
 | A skill another tool added | `neutral` |
+| An unmanaged skill agentx can take over as it is | `neutral` |
 | A source that is gone, or a skill gone from its source | `danger` |
 | A skill in no agent | `neutral` |
 | One of your own skills with unpublished edits, or never published | `yours` |
@@ -896,7 +897,7 @@ The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a 
 ### Banner actions and dialogs (detail pane)
 
 - A banner's actions are small buttons on its right, one command or one dialog each: ghost by default, primary for the action that applies the update, danger ghost for one that discards work. A destructive action opens a confirm dialog first.
-- Adopt and Update are banner buttons only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner; the reason is a row of its DETAILS.
+- Adopt and Update are banner buttons only: a skill row carries no call-to-action pill. Every unmanaged skill agentx can take over has the adopt action: one another tool recorded is installed from its source, and any other, a skill whose record the CLI refuses included, becomes one of the user's own with its files as they are. An unmanaged skill agentx has no way to take over, such as a skill of a project or a symlink in a client's skills directory, has no adopt action.
 - The banner of a skill of a source edited locally only informs, with a publish action when this machine can write to the source. It has no fork action: Fork is in the action row.
 - The banner of a skill gone from its source only informs. It has no fork action either: Fork is in the action row.
 - A command refused because the target folder holds another version opens a confirm dialog, with the path in `type.technical` `text.caption` and a danger confirm.
@@ -908,7 +909,7 @@ The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a 
 
 ### Fork dialog (detail pane)
 
-Fork is a secondary small button in the action row, before Remove. No banner carries it. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
+Fork is a secondary small button in the action row, before Remove, for a skill of a source and a plugin's skill. No banner carries it. An unmanaged skill is adopted from its banner. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
 
 ### Edit (detail pane)
 

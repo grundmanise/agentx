@@ -113,7 +113,7 @@ const EditButton = ({ row }: { row: SkillRow }) => {
  * The right pane: what the CLI reports about one skill. Header: the title row with the name,
  * origin (unless the banner says where the skill came from), a pill per fork made from it under a
  * new name, which opens that fork, and at its right end the action row (Edit for a skill the user
- * may write to, Fork for a skill that is not yet yours, Remove for a library skill; the other
+ * may write to, Fork for a skill of a source or a plugin's, Remove for a library skill; the other
  * actions come with the changes that add them); then the description. No status pill: the banner is the status. One banner, with its
  * button; AGENTS, whose chips add and remove placements; FILES; then DETAILS and HISTORY side by
  * side. Every control runs one command and redraws from the inventory that follows.

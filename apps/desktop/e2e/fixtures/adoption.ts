@@ -90,7 +90,7 @@ export const adoption: AdoptionEvent[] = [
   {
     file: "/home/me/.agents/.skill-lock.json",
     name: "legacy",
-    reason: "legacy is a symlink, not a directory",
+    reason: "legacy names no source agentx can read",
     schema_version: 3,
     source: "https://github.com/vercel/skills",
     state: "refused",

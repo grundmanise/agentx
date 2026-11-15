@@ -2,7 +2,7 @@
 // directory, then Universal for the clients that read the library. A chip runs one command and
 // shows pending until the command ends and the next inventory arrives; the inventory then says
 // what the chip shows. A locked or displaced chip runs nothing and toasts why; the toast of an
-// unmanaged skill offers what unlocks it, Adopt or Fork.
+// unmanaged skill offers Adopt when `adopt` can take the skill over.
 //
 // The chips that are on come first, then the rest by the popularity of the agent client. The
 // order is fixed when the pane opens, so a chip stays where it is when it is toggled. Collapsed,
@@ -18,7 +18,6 @@ import type { ToastAction } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { popularityOf } from "#/lib/agent-popularity.ts";
 import { adopt } from "#/screens/skills/actions.tsx";
-import { openFork } from "#/screens/skills/fork-dialog.tsx";
 import {
   chipLabel,
   chipStateOf,
@@ -56,33 +55,16 @@ const toggle = (row: SkillRow, c: Configuration, add: boolean) => {
   );
 };
 
-/** The action of a locked chip's toast: Adopt runs the adoption, Fork opens the Fork dialog. */
-const unlockAction = (row: SkillRow, lock: Lock): ToastAction | undefined => {
-  switch (lock.action) {
-    case "adopt": {
-      return {
+/** The action of a locked chip's toast: Adopt, which unlocks the chips of an unmanaged skill. */
+const unlockAction = (row: SkillRow, lock: Lock): ToastAction | undefined =>
+  lock.action === "adopt"
+    ? {
         label: "Adopt",
         onClick: () => {
-          void adopt(row.name);
+          void adopt(row);
         },
-      };
-    }
-    case "fork": {
-      return {
-        label: "Fork",
-        onClick: () => {
-          openFork(row);
-        },
-      };
-    }
-    case undefined: {
-      return undefined;
-    }
-    default: {
-      return undefined;
-    }
-  }
-};
+      }
+    : undefined;
 
 /** Toasts why the chips of `row` are locked, with what unlocks them. */
 const notifyLocked = (row: SkillRow, lock: Lock) => {

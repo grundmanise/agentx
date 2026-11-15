@@ -6,7 +6,7 @@ import type {
   LibraryPlacement,
   SourceEvent,
 } from "#/cli/events.gen.ts";
-import { displacedPlacement } from "#/screens/skills/placements.ts";
+import { adoptArgs, displacedPlacement } from "#/screens/skills/placements.ts";
 import {
   fromAnotherMachine,
   shortSource,
@@ -37,7 +37,7 @@ export type BannerAction =
   | { kind: "add-to-agents" }
   /** `skill place <name> --to <configuration>` for the displaced placement. */
   | { kind: "put-back"; placement: LibraryPlacement; agent: string }
-  /** `adopt --skill <name>`, for a skill another tool installed. */
+  /** The `adopt` command line of `adoptArgs`, for an unmanaged skill `adopt` can take over. */
   | { kind: "adopt" }
   /** `source add <url>`, for a skill whose source was removed. */
   | { kind: "add-source"; source: string }
@@ -200,6 +200,16 @@ const table: BannerRule[] = [
       };
     },
     when: (row) => row.adoption?.state === "candidate",
+  },
+  {
+    // An unmanaged skill no tool recorded, or one whose record the CLI refuses.
+    banner: () => ({
+      action: { kind: "adopt" },
+      text: "Adopt to make it one of your skills",
+      title: "Not managed by agentx",
+      tone: "neutral",
+    }),
+    when: (row) => adoptArgs(row) !== undefined,
   },
   {
     banner: (row) => {

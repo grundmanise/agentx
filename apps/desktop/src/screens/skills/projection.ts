@@ -62,6 +62,11 @@ export interface SkillRow {
   adoption?: AdoptionEvent;
   /** The name of the skill this one was forked from, when that skill is in the library too. */
   forkedFrom?: string;
+  /**
+   * For a skill a client holds in its own skills directory: whether the library holds a skill
+   * under the name of that directory, the one `occurrenceOf` chooses. That is another skill.
+   */
+  nameInLibrary?: boolean;
 }
 
 /** The skills of one plugin, under their own header in the PLUGINS group. */
@@ -259,6 +264,8 @@ interface Context extends ProjectionInput {
   universal: Set<string>;
   /** Configuration ids in inventory order. */
   order: string[];
+  /** The names the library holds a skill under. */
+  names: Set<string>;
 }
 
 const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
@@ -308,6 +315,30 @@ const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
   return row;
 };
 
+/** The last segment of an occurrence's path: the skill directory's own name. */
+const LAST_SEGMENT = /(?<name>[^/]+)\/*$/u;
+export const directoryName = (path: string) =>
+  LAST_SEGMENT.exec(path)?.groups?.name ?? "";
+
+/**
+ * The one occurrence a plugin's skill or a skill a client holds on its own is read and shown
+ * from, so that `skill files` and Show in Finder meet the same copy: among the user-scope
+ * occurrences, a plugin's for a plugin's skill, in the CLI's order (configuration, then path),
+ * a real directory first. Undefined when there is none.
+ */
+export const occurrenceOf = (row: SkillRow): Occurrence | undefined => {
+  const candidates = row.occurrences.filter(
+    (o) =>
+      o.scope === "user" && (row.kind === "plugin") === (o.plugin !== undefined)
+  );
+  candidates.sort(
+    (a, b) =>
+      a.configuration.localeCompare(b.configuration) ||
+      a.path.localeCompare(b.path)
+  );
+  return candidates.find((o) => o.kind === "directory") ?? candidates[0];
+};
+
 /** A skill node no library entry accounts for: a plugin's skill, or one found in a client's directory. */
 const nodeRow = (node: SkillNode, c: Context): SkillRow => {
   const inPlugin = node.occurrences.every((o) => o.plugin !== undefined);
@@ -346,6 +377,10 @@ const nodeRow = (node: SkillNode, c: Context): SkillRow => {
   if (adopted !== undefined) {
     row.adoption = adopted;
   }
+  const held = inPlugin ? undefined : occurrenceOf(row);
+  if (held !== undefined && c.names.has(directoryName(held.path))) {
+    row.nameInLibrary = true;
+  }
   return row;
 };
 
@@ -354,6 +389,7 @@ export const projectRows = (input: ProjectionInput): SkillRow[] => {
   const { inventory } = input;
   const c: Context = {
     ...input,
+    names: new Set(inventory.library.map((entry) => entry.name)),
     order: inventory.configurations.map((cfg) => cfg.id),
     universal: new Set(
       inventory.configurations
@@ -614,30 +650,6 @@ export interface FilesRequest {
   args: string[];
   diff?: string;
 }
-
-/** The last segment of an occurrence's path: the skill directory's own name. */
-const LAST_SEGMENT = /(?<name>[^/]+)\/*$/u;
-export const directoryName = (path: string) =>
-  LAST_SEGMENT.exec(path)?.groups?.name ?? "";
-
-/**
- * The one occurrence a plugin's skill or a skill a client holds on its own is read and shown
- * from, so that `skill files` and Show in Finder meet the same copy: among the user-scope
- * occurrences, a plugin's for a plugin's skill, in the CLI's order (configuration, then path),
- * a real directory first. Undefined when there is none.
- */
-export const occurrenceOf = (row: SkillRow): Occurrence | undefined => {
-  const candidates = row.occurrences.filter(
-    (o) =>
-      o.scope === "user" && (row.kind === "plugin") === (o.plugin !== undefined)
-  );
-  candidates.sort(
-    (a, b) =>
-      a.configuration.localeCompare(b.configuration) ||
-      a.path.localeCompare(b.path)
-  );
-  return candidates.find((o) => o.kind === "directory") ?? candidates[0];
-};
 
 /**
  * How `skill files` names a skill, and whether `skill diff` is read for it: a library skill by its

@@ -883,7 +883,7 @@ const openStates = async (cli: MockCli, page: Page, key: string) => {
 };
 
 test.describe("settling a skill", () => {
-  test("the two banners after the displaced one each run their command", async ({
+  test("the three banners after the displaced one each run their command", async ({
     cli,
     page,
   }) => {
@@ -901,6 +901,18 @@ test.describe("settling a skill", () => {
     await adoptBanner.getByRole("button", { name: "Adopt" }).click();
     await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
 
+    // A skill whose record the CLI refuses is taken over with its files as they are.
+    await row(page, "legacy").click();
+    cli.register(["adopt", "--skill", "legacy", "--as-is"]);
+    const unmanagedBanner = pane(page, "legacy").getByRole("note", {
+      name: "Not managed by agentx",
+    });
+    await expect(unmanagedBanner).toContainText(
+      "Adopt to make it one of your skills"
+    );
+    await unmanagedBanner.getByRole("button", { name: "Adopt" }).click();
+    await expect(toasts(page).getByText("Adopted legacy skill")).toBeVisible();
+
     await row(page, "lint").click();
     cli.register(["source", "add", OLD]);
     const sourceBanner = pane(page, "lint").getByRole("note", {
@@ -916,6 +928,7 @@ test.describe("settling a skill", () => {
 
     expect(ran(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
+      ["adopt", "--skill", "legacy", "--as-is", "--json"],
       ["source", "add", OLD, "--json"],
     ]);
   });

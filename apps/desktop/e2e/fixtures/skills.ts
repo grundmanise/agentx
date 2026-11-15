@@ -589,3 +589,18 @@ export const meetingNotes: SkillNode = {
   ],
   physical_id: "skill:h-meeting",
 };
+
+/**
+ * A skill a client's own skills directory holds as a symlink of the user's: there is no directory
+ * of it for `adopt` to take.
+ */
+export const linked: SkillNode = {
+  content_hash: "h-linked",
+  description: "Draft a weekly status update",
+  logical_id: "skill:h-linked",
+  name: "linked",
+  occurrences: [
+    occurrence("cursor", "linked", "symlink", "/home/me/work/linked"),
+  ],
+  physical_id: "skill:h-linked",
+};

@@ -89,7 +89,7 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
       );
     }
     case "adopt": {
-      return <Adopt name={row.name} />;
+      return <Adopt row={row} />;
     }
     case "add-source": {
       return <AddSource source={banner.action.source} />;

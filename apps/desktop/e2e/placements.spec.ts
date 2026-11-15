@@ -7,7 +7,9 @@ import { inventory, manyAgentsInventory, sources } from "./fixtures/agents.ts";
 import {
   adoption,
   fileReads,
+  filesOf,
   history,
+  linked,
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
@@ -189,7 +191,13 @@ test.describe("chips", () => {
   });
 
   test("locked chips toast the lock reason", async ({ cli, page }) => {
-    await openSkill(cli, page, "commit-helper", "skill:h-commit");
+    cli.register(["skill", "files", "linked", "--configuration", "cursor"], {
+      events: filesOf("linked"),
+    });
+    await openSkill(cli, page, "commit-helper", "skill:h-commit", {
+      ...inventory,
+      skills: [...inventory.skills, linked],
+    });
     const plugin = pane(page, "commit-helper");
     const reason = "Comes with the acme-tools plugin. Fork to edit";
     await expect(chip(plugin, "Cursor")).toHaveAttribute("title", reason);
@@ -199,10 +207,8 @@ test.describe("chips", () => {
     // The toast before, with the same text, may still be on its way out.
     await expect(toasts(page).getByText(reason).last()).toBeVisible();
 
-    await page
-      .getByRole("navigation", { name: "Skills" })
-      .getByRole("button", { exact: true, name: "scratch" })
-      .click();
+    const skills = page.getByRole("navigation", { name: "Skills" });
+    await skills.getByRole("button", { exact: true, name: "scratch" }).click();
     const candidate = pane(page, "scratch");
     const adopt = "This skill is not managed by agentx. Adopt it to manage";
     await expect(chip(candidate, "Claude Code")).toHaveAttribute(
@@ -216,19 +222,29 @@ test.describe("chips", () => {
     await toasts(page).getByRole("button", { name: "Adopt" }).click();
     await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
 
-    await page
-      .getByRole("navigation", { name: "Skills" })
-      .getByRole("button", { exact: true, name: "notes" })
-      .click();
-    // A skill only an agent holds can be neither adopted nor forked: the toast has no action.
-    const unmanaged = "This skill is not managed by agentx";
+    // A skill an agent holds in its own folder is adopted by its directory's name, and selected
+    // as the library skill the CLI reports.
+    await skills.getByRole("button", { exact: true, name: "notes" }).click();
     await chip(pane(page, "notes"), "Claude Code").click();
+    await expect(toasts(page).getByText(adopt)).toBeVisible();
+    cli.register(["adopt", "--skill", "notes"], {
+      events: [{ name: "notes", type: "library_skill" }],
+    });
+    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    await expect(toasts(page).getByText("Adopted notes skill")).toBeVisible();
+    await expect(page).toHaveURL(/#\/skills\/notes$/u);
+
+    // A symlink in an agent's folder is not adopt's to take: the toast has no action.
+    await skills.getByRole("button", { exact: true, name: "linked" }).click();
+    await chip(pane(page, "linked"), "Claude Code").click();
     await expect(
-      toasts(page).getByText(unmanaged, { exact: true })
+      toasts(page).getByText("This skill is not managed by agentx", {
+        exact: true,
+      })
     ).toBeVisible();
   });
 
-  test("an unmanaged library skill no tool recorded: the toast opens the Fork dialog", async ({
+  test("an unmanaged library skill no tool recorded: the toast's Adopt takes it over", async ({
     cli,
     page,
   }) => {
@@ -236,13 +252,15 @@ test.describe("chips", () => {
     await chip(pane(page, "scratch"), "Claude Code").click();
     await expect(
       toasts(page).getByText(
-        "This skill is not managed by agentx. Fork it to manage"
+        "This skill is not managed by agentx. Adopt it to manage"
       )
     ).toBeVisible();
-    await toasts(page).getByRole("button", { name: "Fork" }).click();
-    await expect(
-      page.getByRole("dialog", { name: "Fork scratch" })
-    ).toBeVisible();
+    cli.register(["adopt", "--skill", "scratch"], {
+      events: [{ name: "scratch", type: "library_skill" }],
+    });
+    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    expect(later(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
   });
 
   test("a displaced chip says to reconnect it first", async ({ cli, page }) => {

@@ -53,7 +53,7 @@ const openSkill = async (
 for (const [name, key, shown] of [
   ["pdf", "pdf", ["Fork", "Remove"]],
   ["gone", "gone", ["Fork", "Remove"]],
-  ["scratch", "scratch", ["Fork", "Remove"]],
+  ["scratch", "scratch", ["Remove"]],
   ["commit-helper", "skill:h-commit", ["Fork"]],
 ] as const) {
   test(`the action row of ${name} shows ${shown.join(" and ")}`, async ({

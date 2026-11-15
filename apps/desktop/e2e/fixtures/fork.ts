@@ -193,6 +193,6 @@ export const refusedInPlace: InlineEvent = {
   code: "refused",
   hint: "move its .git out of the skill, or fork it beside the skill with --name <new>",
   message:
-    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git",
+    "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git",
   type: "error",
 };
