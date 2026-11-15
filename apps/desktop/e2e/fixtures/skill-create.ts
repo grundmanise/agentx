@@ -1,8 +1,9 @@
 // The Create skill tests: the Skills fixture's machine before `skill new`, and the inventory the
 // scan after it reports, with the new skill of your own in the library, placed in every enabled
 // agent: a symlink in Claude Code and Cursor, the library itself for the two that read it. And the
-// Add skill tests: a folder of a source that holds four skills, one of them installed already,
-// what Find skills reads of it, and the machine after two more are installed.
+// Add skill tests: a folder of a source not added that holds four skills, one of them installed
+// already and kept when its source was removed, what Find skills reads of it, and the machine
+// after two more are installed.
 import type {
   LibraryEntry,
   LibraryPlacement,
@@ -164,29 +165,47 @@ export const inventoryBeforeAdd = withAdded([ALREADY_ADDED], 1);
 /** The scan after `skill add`: the two skills it installed besides. */
 export const inventoryAfterAdd = withAdded([ALREADY_ADDED, ...ADDED_SKILLS], 2);
 
-/** The `source` event `source add` and `source skills` write for the link. */
-const sourceEvent: InlineEvent = {
-  id: "anthropics-skills",
-  skills: Object.keys(descriptions).length,
-  subpath: "skills",
-  type: "source",
-  url: ANTHROPIC,
-};
-
-/** What `source add` writes for the link: the source, added or fetched again. */
-export const sourceAddedEvents: InlineEvent[] = [sourceEvent];
-
-/** What `source skills` writes for the link: the source, then one event per skill under it. */
+/**
+ * What `source skills` writes for the link, read from the network as the source is not added:
+ * the source, with no id, then one event per skill under it. The dialog reads the skills by the
+ * source's URL and their subpaths, so the events leave out the source each names.
+ */
 export const sourceSkillEvents: InlineEvent[] = [
-  sourceEvent,
+  {
+    commit: "c0ffee1234567",
+    skills: Object.keys(descriptions).length,
+    subpath: "skills",
+    type: "source",
+    url: ANTHROPIC,
+  },
   ...Object.entries(descriptions).map(([name, description]): InlineEvent => ({
     description,
     name,
-    source: "anthropics-skills",
     subpath: `skills/${name}`,
     tree: `tree-${name}`,
     type: "source_skill",
   })),
+];
+
+/** The link to the folder of the skill this machine installed already. */
+export const INSTALLED_LINK = `${ADD_LINK}/${ALREADY_ADDED}`;
+
+/** What `source skills` writes for that link: the source, then that one skill. */
+export const installedSkillEvents: InlineEvent[] = [
+  {
+    commit: "c0ffee1234567",
+    skills: 1,
+    subpath: `skills/${ALREADY_ADDED}`,
+    type: "source",
+    url: ANTHROPIC,
+  },
+  {
+    description: descriptions[ALREADY_ADDED] ?? "",
+    name: ALREADY_ADDED,
+    subpath: `skills/${ALREADY_ADDED}`,
+    tree: `tree-${ALREADY_ADDED}`,
+    type: "source_skill",
+  },
 ];
 
 /** What `skill add` writes when it installs the two skills. */

@@ -34,7 +34,7 @@ export const addSourceHintRules: HintRule[] = [
 ];
 
 /**
- * What went wrong with a command run on a link the user typed, `source add` or `skill add`, in
+ * What went wrong with a command run on a link the user typed, such as `source add`, in
  * the CLI's words: a source git cannot reach as "Couldn't reach {link}", and the CLI's hint in the
  * app's words by `rules`.
  */

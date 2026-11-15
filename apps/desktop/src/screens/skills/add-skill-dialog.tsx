@@ -1,10 +1,11 @@
 // The Add skill dialog, which Add in the Skills header and the palette open: a Git link to a
-// repository, a folder of skills or one skill. Find skills runs `source add <link>`, which adds
-// the source or fetches it again, then `source skills <link>`, which lists the skills under the
-// link; the user checks the ones to add and the agents to add them to, and Add runs one
-// `skill add <link> --name <a> --name <b> [--to <configuration>]...` (docs/help-center/cli/skill.mdx).
-// The first skill installed is selected once the inventory that follows lists it; a refusal of
-// either step shows under the field.
+// repository, a folder of skills or one skill. Find skills runs `source skills <link>`, a read that
+// lists the skills under the link, from the network for a source not added and from the last fetch
+// of one added, and changes nothing; the user checks the ones to install and the agents to install
+// them in, and Install runs one `skill add <link> --name <a> --name <b> [--to <configuration>]...`
+// (docs/help-center/cli/skill.mdx), which adds the source and installs them. Cancel after a lookup
+// runs nothing. The first skill installed is selected once the inventory that follows lists it; a
+// refusal of either step shows under the field.
 import { useId, useRef, useState } from "react";
 import type { RefObject } from "react";
 
@@ -45,6 +46,7 @@ import {
   listingCards,
   orderCards,
 } from "#/screens/sources/projection.ts";
+import type { SkillCard } from "#/screens/sources/projection.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillRows } from "#/screens/sources/skill-cards.tsx";
 import { runCommand, usePending } from "#/store/runner.ts";
@@ -55,12 +57,12 @@ import { useAppStore } from "#/store/store.ts";
 
 /** The pending label of `skill add` from this dialog. */
 export const ADD_SKILL_LABEL = "add skill";
-/** The pending label of the lookup, `source add` then `source skills`, from this dialog. */
+/** The pending label of the lookup, `source skills`, from this dialog. */
 export const FIND_SKILLS_LABEL = "find skills";
 
 /**
- * The hints of `source add`, `source skills` and `skill add` that name a command, in the app's
- * words: the account remote's skills are under Personal, and Sources shows what a source holds.
+ * The hints of `source skills` and `skill add` that name a command, in the app's words: the
+ * account remote's skills are under Personal, and Sources shows what a source holds.
  */
 const linkHintRules: HintRule[] = [
   ...addSourceHintRules,
@@ -73,7 +75,10 @@ const linkHintRules: HintRule[] = [
 
 const noEntries: LibraryEntry[] = [];
 
-/** What Find skills found under a link: the link as typed, its source's URL and the listing. */
+/**
+ * What Find skills found under a link: the link as typed, its source's canonical URL and the
+ * listing. A source not added has no id, so installed skills match by URL and subpath.
+ */
 interface Found {
   link: string;
   url: string;
@@ -85,11 +90,24 @@ const installedNames = (events: CliEvent[]) =>
   events.flatMap((e) => (e.type === "library_skill" ? [e.name] : []));
 
 /** The success toast: the skills the run installed, as its events name them, and their source. */
-const addedText = (events: CliEvent[], url: string) => {
+const installedText = (events: CliEvent[], url: string) => {
   const names = installedNames(events);
   const what =
     names.length === 1 ? `${names[0]} skill` : count(names.length, "skill");
-  return `Added ${what} from ${shortSource(url)}`;
+  return `Installed ${what} from ${shortSource(url)}`;
+};
+
+/** What the list says when nothing under the link can be installed, or undefined when some can. */
+const nothingToInstall = (cards: SkillCard[]): string | undefined => {
+  if (cards.length === 0) {
+    return "No skills under this link";
+  }
+  if (cards.every((c) => c.status === "added")) {
+    return "Every skill under this link is already installed";
+  }
+  return cards.some((c) => c.status === undefined)
+    ? undefined
+    : "None of the skills under this link can be installed";
 };
 
 /** Whether the refusal is the field's to show: not a lock, whose toast has Retry, nor a cancel. */
@@ -125,10 +143,8 @@ const AddSkillForm = ({
   const [refused, setRefused] = useState<string[]>([]);
   const [found, setFound] = useState<Found | undefined>();
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
-  // Find skills is pending from `source add` through `source skills`.
-  const [looking, setLooking] = useState(false);
-  const finding = usePending(FIND_SKILLS_LABEL) || looking;
-  // Add is pending while `skill add` runs and, once it installed the skills, until the inventory
+  const finding = usePending(FIND_SKILLS_LABEL);
+  // Install is pending while `skill add` runs and, once it installed the skills, until the inventory
   // that follows lists them. A refusal changed nothing, so it waits for no inventory.
   const running = usePending(ADD_SKILL_LABEL);
   const [selecting, setSelecting] = useState(false);
@@ -141,6 +157,7 @@ const AddSkillForm = ({
       : orderCards(listingCards(found.listing, found.url, library));
   const selectable = cards.filter((c) => c.status === undefined);
   const selected = selectable.filter((c) => selection.has(c.key));
+  const nothing = nothingToInstall(cards);
 
   const refuse = (
     outcome: Outcome,
@@ -159,42 +176,24 @@ const AddSkillForm = ({
     setProblem(undefined);
     setFound(undefined);
     setSelection(new Set());
-    setLooking(true);
-    const retry = () => {
-      void lookUp(typed);
-    };
-    const added = await runCommand(["source", "add", typed], {
+    const listed = await runCommand(["source", "skills", typed], {
       label: FIND_SKILLS_LABEL,
       ownFailure: true,
-      retry,
+      retry: () => {
+        void lookUp(typed);
+      },
     });
-    const listed =
-      added.exitCode === EXIT_CODES.ok
-        ? await runCommand(["source", "skills", typed], {
-            label: FIND_SKILLS_LABEL,
-            ownFailure: true,
-            retry,
-          })
-        : undefined;
-    setLooking(false);
     // The link changed while it was looked up: what was found is not under it.
     if (current.current.trim() !== typed) {
       return;
     }
-    if (listed === undefined || listed.exitCode !== EXIT_CODES.ok) {
-      const outcome = listed ?? added;
-      if (showsUnderField(outcome)) {
-        refuse(
-          outcome,
-          listed === undefined ? "source add" : "source skills",
-          typed
-        );
+    if (listed.exitCode !== EXIT_CODES.ok) {
+      if (showsUnderField(listed)) {
+        refuse(listed, "source skills", typed);
       }
       return;
     }
-    const url =
-      [...listed.events, ...added.events].find((e) => e.type === "source")
-        ?.url ?? typed;
+    const url = listed.events.find((e) => e.type === "source")?.url ?? typed;
     const listing = listed.events.filter((e) => e.type === "source_skill");
     setFound({ link: typed, listing, url });
     // One skill found is checked; of several, the user picks.
@@ -212,7 +211,7 @@ const AddSkillForm = ({
     }
   };
 
-  const add = async () => {
+  const install = async () => {
     if (
       found === undefined ||
       selected.length === 0 ||
@@ -231,7 +230,7 @@ const AddSkillForm = ({
     const outcome = await runCommand(plan.args, {
       label: ADD_SKILL_LABEL,
       ownFailure: true,
-      success: (events) => addedText(events, found.url),
+      success: (events) => installedText(events, found.url),
     });
     if (outcome.exitCode !== EXIT_CODES.ok) {
       if (showsUnderField(outcome)) {
@@ -309,7 +308,7 @@ const AddSkillForm = ({
       {found !== undefined && (
         <>
           <div className="flex flex-col gap-3">
-            {cards.length > 1 && (
+            {nothing === undefined && cards.length > 1 && (
               <SelectAllRow
                 selected={selected.length}
                 total={selectable.length}
@@ -322,11 +321,10 @@ const AddSkillForm = ({
                 }}
               />
             )}
-            {cards.length === 0 ? (
-              <p className="type-secondary text-text-hint m-0">
-                No skills under this link
-              </p>
-            ) : (
+            {nothing !== undefined && (
+              <p className="type-secondary text-text-hint m-0">{nothing}</p>
+            )}
+            {cards.length > 0 && (
               <SkillRows
                 cards={cards}
                 selected={selection}
@@ -336,16 +334,18 @@ const AddSkillForm = ({
               />
             )}
           </div>
-          <div className="flex items-center gap-3">
-            <AgentTargets
-              direct={direct}
-              universal={universal}
-              targets={chosen}
-              onToggleTarget={toggleTarget}
-              onClearTargets={clearTargets}
-              disabled={adding}
-            />
-          </div>
+          {nothing === undefined && (
+            <div className="flex items-center gap-3">
+              <AgentTargets
+                direct={direct}
+                universal={universal}
+                targets={chosen}
+                onToggleTarget={toggleTarget}
+                onClearTargets={clearTargets}
+                disabled={adding}
+              />
+            </div>
+          )}
         </>
       )}
       <DialogFooter>
@@ -357,11 +357,11 @@ const AddSkillForm = ({
           disabled={found === undefined || selected.length === 0 || finding}
           aria-busy={adding ? true : undefined}
           onClick={() => {
-            void add();
+            void install();
           }}
         >
           {adding && <Spinner />}
-          Add
+          Install
         </Button>
       </DialogFooter>
     </form>
@@ -391,7 +391,7 @@ export const AddSkillDialog = ({
         <DialogHeader>
           <DialogTitle>Add skill</DialogTitle>
           <DialogDescription>
-            Adds skills from a link to your agents, and their source to Sources.
+            Installs the skills you pick in your agents, and adds their source.
           </DialogDescription>
         </DialogHeader>
         <AddSkillForm

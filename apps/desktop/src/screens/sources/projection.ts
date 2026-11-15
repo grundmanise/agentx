@@ -391,8 +391,9 @@ export const nameFlags = (names: string[]): string[] =>
   names.flatMap((name) => ["--name", name]);
 
 /**
- * The `skill add` of the skills `selected` under a link the user gave, which this machine
- * fetched: the link, one `--name` per card in card order, and `--to` as `planAdds` gives it.
+ * The `skill add` of the skills `selected` under a link the user gave, which adds the link's
+ * source if it is not added: the link, one `--name` per card in card order, and `--to` as
+ * `planAdds` gives it.
  */
 export const linkAdd = ({
   link,

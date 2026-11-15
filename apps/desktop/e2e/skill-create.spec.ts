@@ -2,9 +2,9 @@
 // checks it, `skill new` with `--description` only when one is given, the new skill selected under
 // PERSONAL once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
 // Settings, and a refused name's message under Name. And the Add skill dialog, which Add opens:
-// Find skills runs `source add` and `source skills` on the pasted link, the skills picked go to the
-// agents chosen with one `skill add`, the first is selected once the inventory lists it, and a
-// refusal shows under the field.
+// Find skills runs `source skills` on the pasted link, the skills picked go to the agents chosen
+// with one `skill add`, which adds the source, the first is selected once the inventory lists it,
+// Cancel after a lookup runs nothing, and a refusal shows under the field.
 import type { Page } from "@playwright/test";
 
 import {
@@ -16,9 +16,10 @@ import {
   inventoryAfter,
   inventoryAfterAdd,
   inventoryBeforeAdd,
+  INSTALLED_LINK,
+  installedSkillEvents,
   NEW_DESCRIPTION,
   NEW_SKILL,
-  sourceAddedEvents,
   sourceSkillEvents,
 } from "./fixtures/skill-create.ts";
 import {
@@ -197,8 +198,8 @@ const linkField = (page: Page) =>
   addDialog(page).getByRole("textbox", { name: "Link to skills" });
 const findButton = (page: Page) =>
   addDialog(page).getByRole("button", { exact: true, name: "Find skills" });
-const addButton = (page: Page) =>
-  addDialog(page).getByRole("button", { exact: true, name: "Add" });
+const installButton = (page: Page) =>
+  addDialog(page).getByRole("button", { exact: true, name: "Install" });
 const found = (page: Page) =>
   addDialog(page).getByRole("list", { name: "Skills" });
 const agent = (page: Page, name: string) =>
@@ -216,21 +217,7 @@ const openAddDialog = async (cli: MockCli, page: Page) => {
   await expect(linkField(page)).toBeFocused();
 };
 
-/** Plays the scan that answers every refresh asked for so far: the source added, the skills installed. */
-const answerRefreshes = async (cli: MockCli, after: InlineEvent) => {
-  await expect.poll(() => cli.serveRequests.length).toBe(2);
-  await cli.serveEmit([
-    after,
-    ...cli.requestIds.map((id): InlineEvent => ({
-      ok: true,
-      request_id: id,
-      scan_counter: 2,
-      type: "refresh_complete",
-    })),
-  ]);
-};
-
-test("Add skill finds the skills under a link, and adds the two picked to the agents chosen with one skill add", async ({
+test("Add skill finds the skills under a link, and installs the two picked in the agents chosen with one skill add", async ({
   cli,
   page,
 }) => {
@@ -239,22 +226,21 @@ test("Add skill finds the skills under a link, and adds the two picked to the ag
     "A GitHub or GitLab link to a repository, a folder or a skill"
   );
   await expect(findButton(page)).toBeDisabled();
-  await expect(addButton(page)).toBeDisabled();
+  await expect(installButton(page)).toBeDisabled();
   for (const name of ADDED_SKILLS) {
     cli.register(["skill", "files", name], { events: filesOf(name) });
   }
 
-  // Enter in the field finds the skills: the source is added, then its skills under the link listed.
+  // Enter in the field finds the skills under the link.
   await linkField(page).fill(` ${ADD_LINK} `);
-  const lookup = cli.register(["source", "add", ADD_LINK], {
-    events: sourceAddedEvents,
+  const lookup = cli.register(["source", "skills", ADD_LINK], {
+    events: sourceSkillEvents,
     holdAfter: 0,
   });
-  cli.register(["source", "skills", ADD_LINK], { events: sourceSkillEvents });
   await linkField(page).press("Enter");
   await lookup.started;
   await expect(findButton(page)).toHaveAttribute("aria-busy", "true");
-  await expect(addButton(page)).toBeDisabled();
+  await expect(installButton(page)).toBeDisabled();
   lookup.release();
 
   // The selectable skills by name, then the one this machine holds, which shows as added.
@@ -270,7 +256,7 @@ test("Add skill finds the skills under a link, and adds the two picked to the ag
       .evaluateAll((boxes) => boxes.map((b) => b.getAttribute("aria-label")))
   ).toEqual(["docx", "frontend-design", "xlsx"]);
   await expect(addDialog(page).getByText("1 already added")).toBeVisible();
-  await expect(addButton(page)).toBeDisabled();
+  await expect(installButton(page)).toBeDisabled();
 
   await found(page).getByText("docx", { exact: true }).click();
   await found(page).getByRole("checkbox", { name: "xlsx" }).click();
@@ -298,22 +284,28 @@ test("Add skill finds the skills under a link, and adds the two picked to the ag
     ],
     { events: addedEvents, holdAfter: 0 }
   );
-  await addButton(page).click();
+  await installButton(page).click();
   await add.started;
-  await expect(addButton(page)).toHaveAttribute("aria-busy", "true");
+  await expect(installButton(page)).toHaveAttribute("aria-busy", "true");
   add.release();
   await expect(
-    toasts(page).getByText("Added 2 skills from anthropics/skills")
+    toasts(page).getByText("Installed 2 skills from anthropics/skills")
   ).toBeVisible();
 
   // The command ended; the inventory that follows has not come: the dialog stays busy.
-  await expect(addButton(page)).toHaveAttribute("aria-busy", "true");
-  await answerRefreshes(cli, inventoryAfterAdd);
+  await expect(installButton(page)).toHaveAttribute("aria-busy", "true");
+  await answerRefresh(cli, inventoryAfterAdd);
   await expect(addDialog(page)).toBeHidden();
   await expect(row(page, "docx")).toHaveAttribute("aria-current", "true");
   await expect(pane(page, "docx")).toBeVisible();
+  // The sources are read again, so Sources lists the source the install added.
+  await expect
+    .poll(
+      () =>
+        cli.commands.filter((l) => l.join(" ") === "source list --json").length
+    )
+    .toBe(2);
   expect(later(cli)).toEqual([
-    ["source", "add", ADD_LINK, "--json"],
     ["source", "skills", ADD_LINK, "--json"],
     [
       "skill",
@@ -330,13 +322,41 @@ test("Add skill finds the skills under a link, and adds the two picked to the ag
   ]);
 });
 
+test("a link whose skills are all installed says so, and Cancel then runs nothing", async ({
+  cli,
+  page,
+}) => {
+  await openAddDialog(cli, page);
+  cli.register(["source", "skills", INSTALLED_LINK], {
+    events: installedSkillEvents,
+  });
+  await linkField(page).fill(INSTALLED_LINK);
+  await findButton(page).click();
+
+  await expect(
+    addDialog(page).getByText(
+      "Every skill under this link is already installed"
+    )
+  ).toBeVisible();
+  await expect(found(page).getByRole("listitem")).toHaveText([
+    new RegExp(`^${ALREADY_ADDED}.*Added$`, "u"),
+  ]);
+  await expect(installButton(page)).toBeDisabled();
+
+  await addDialog(page)
+    .getByRole("button", { exact: true, name: "Cancel" })
+    .click();
+  await expect(addDialog(page)).toBeHidden();
+  expect(later(cli)).toEqual([["source", "skills", INSTALLED_LINK, "--json"]]);
+});
+
 test("a link git cannot reach shows the refusal under the field, and a change to the link clears it", async ({
   cli,
   page,
 }) => {
   await openAddDialog(cli, page);
   const link = "https://github.com/acme/missing";
-  cli.register(["source", "add", link], {
+  cli.register(["source", "skills", link], {
     events: [
       {
         hint: "check the URL and your access to it",
@@ -354,12 +374,12 @@ test("a link git cannot reach shows the refusal under the field, and a change to
     `Couldn't reach ${link}. Check the URL and your access to it.`
   );
   await expect(linkField(page)).toHaveAttribute("aria-invalid", "true");
-  await expect(addButton(page)).toBeDisabled();
+  await expect(installButton(page)).toBeDisabled();
 
   await linkField(page).fill("https://github.com/acme/skills");
   await expect(alert).toHaveCount(0);
   await expect(linkField(page)).not.toHaveAttribute("aria-invalid");
-  expect(later(cli)).toEqual([["source", "add", link, "--json"]]);
+  expect(later(cli)).toEqual([["source", "skills", link, "--json"]]);
 });
 
 test("Add's three-dots button opens a menu with Create skill, from the pointer and the keyboard; Escape, the trigger and a click outside close it", async ({
