@@ -190,20 +190,21 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 #### Inputs, switches, checkboxes
 
-| Token                 | Primitive        | Element                           |
-| --------------------- | ---------------- | --------------------------------- |
-| `input.bg`            | `gray-980`       | Text inputs, search fields        |
-| `input.border`        | `gray-860`       |                                   |
-| `input.border-focus`  | `gray-700`       |                                   |
-| `input.text`          | `gray-50`        |                                   |
-| `input.placeholder`   | `gray-500`       | Placeholder text and leading icon |
-| `switch.on-track`     | `accent.primary` | Switch on (full and compact)      |
-| `switch.on-knob`      | `on-accent`      |                                   |
-| `switch.off-track`    | `gray-850`       | Switch off                        |
-| `switch.off-knob`     | `gray-400`       |                                   |
-| `checkbox.ring`       | `gray-700`       | Unchecked popover checkbox        |
-| `checkbox.checked-bg` | `accent.primary` |                                   |
-| `checkbox.check`      | `on-accent`      |                                   |
+| Token | Primitive | Element |
+| --- | --- | --- |
+| `input.bg` | `gray-980` | Text inputs, search fields |
+| `input.border` | `gray-860` |  |
+| `input.border-focus` | `gray-700` |  |
+| `input.border-invalid` | `accent.danger` | A field marked `aria-invalid`, focused or not |
+| `input.text` | `gray-50` |  |
+| `input.placeholder` | `gray-500` | Placeholder text and leading icon |
+| `switch.on-track` | `accent.primary` | Switch on (full and compact) |
+| `switch.on-knob` | `on-accent` |  |
+| `switch.off-track` | `gray-850` | Switch off |
+| `switch.off-knob` | `gray-400` |  |
+| `checkbox.ring` | `gray-700` | Unchecked popover checkbox |
+| `checkbox.checked-bg` | `accent.primary` |  |
+| `checkbox.check` | `on-accent` |  |
 
 #### Segmented control (Update review, filter State)
 
@@ -1062,6 +1063,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
+- Account remote, once set, shows its URL in `type.technical` with a neutral Read-only pill beside it when access is limited, as a source card does (§6 "Source card"); a remote you can write to has no tag.
 - Adopt skills sits after Account remote: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
