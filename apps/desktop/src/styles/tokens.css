@@ -240,6 +240,7 @@
   --color-subgroup-hover: var(--gray-920);
   --color-table-row-hover: var(--gray-930);
   --color-table-header-text: var(--gray-500);
+  --color-add-skill-row-hover: var(--gray-880);
 
   /* Skill glyph */
   --color-glyph-idle: var(--gray-400);
@@ -440,6 +441,7 @@
   --radius-agent-chip: 9999px;
   --radius-logo: 50%;
   --radius-agent-picker-row: 10px;
+  --radius-add-skill-row: 10px;
   --radius-shell-nav: 10px;
   --radius-shell-logo: 8px;
   --radius-shell-status: 9999px;
@@ -674,6 +676,7 @@
   --max-height-palette-list: 420px;
   --max-height-adopt-list: 280px;
   --max-height-agent-picker-list: 320px;
+  --max-height-add-skill-list: 264px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
   --min-height-toast: 44px;
