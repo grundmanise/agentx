@@ -281,13 +281,11 @@
   --color-card-text: var(--gray-300);
   --color-card-tag: var(--gray-500);
   --color-card-subrow-hover: var(--gray-930);
-  --color-add-card-bg: var(--gray-930);
-  --color-add-card-border: var(--gray-870);
   --color-add-card-hover-border: var(--gray-700);
   --color-add-card-selected-bg: rgb(212 255 79 / 0.06);
   --color-add-card-selected-border: rgb(212 255 79 / 0.5);
   --color-add-card-check-bg: var(--color-accent-primary);
-  --color-add-card-status-added: var(--gray-400);
+  --color-add-card-status-added: var(--color-accent-primary);
   --color-add-card-status-forked: var(--color-accent-yours);
   --color-add-card-status-disk: var(--color-accent-attention);
   --color-add-card-status-in-use: var(--gray-400);
@@ -434,7 +432,8 @@
   --radius-banner: 18px;
   --radius-agent-card: 20px;
   --radius-plugin-card: 20px;
-  --radius-add-card: 18px;
+  --radius-add-card: 16px;
+  --radius-add-card-check: 50%;
   --radius-source-card: 18px;
   --radius-source-card-tile: 10px;
   --radius-hunk: 14px;
@@ -621,8 +620,7 @@
   --height-plugin-card-row: 36px;
   --gap-plugin-card: 12px;
   --size-plugin-card-tile: 40px;
-  --gap-add-card: 12px;
-  --min-height-add-card: 120px;
+  --padding-add-card: 6px;
 
   /* Overlays */
   --width-dialog: 480px;
@@ -751,17 +749,6 @@
   font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 400;
-}
-@utility type-add-card-name {
-  font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 500;
-}
-@utility type-add-card-desc {
-  font-family: var(--font-sans);
-  font-size: 13.5px;
-  font-weight: 400;
-  line-height: 1.5;
 }
 @utility type-row-name {
   font-family: var(--font-sans);

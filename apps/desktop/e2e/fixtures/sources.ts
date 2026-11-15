@@ -1,13 +1,15 @@
 // The machine the Sources tests run against: two shared sources (one pinned and read-only here,
 // fetched three days ago, one never fetched) and an account remote; the listing of the first source; a library that puts one of
 // its skills in each state a card can be in; three configurations that take placements (two
-// enabled) and two universal ones; your skills on the account remote; and a search answer.
+// enabled) and two universal ones; your skills on the account remote; a search answer; and the
+// SKILL.md `source read` gives for a skill.
 // Inline events with only the fields the tests check, typed by the generated event types.
 import type {
   Configuration,
   InstallableSkillEvent,
   LibraryEntry,
   SearchResult,
+  SkillFileEvent,
   SourceEvent,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
@@ -197,3 +199,15 @@ export const docResults: SearchResult[] = [
     tree: "t-docgen",
   },
 ];
+
+/** The one `skill_file` event `source read` emits: the SKILL.md of `name`, holding `content`. */
+export const skillMd = (name: string, content: string): SkillFileEvent => ({
+  binary: false,
+  content,
+  lines: content.split("\n").length - 1,
+  name,
+  path: "SKILL.md",
+  schema_version: 2,
+  size: content.length,
+  type: "skill_file",
+});

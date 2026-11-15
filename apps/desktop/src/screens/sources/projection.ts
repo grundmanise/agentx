@@ -186,6 +186,17 @@ export const statusLabels: Record<CardStatus, string> = {
   "on-disk": "Already in library",
 };
 
+/**
+ * Where `source read` finds a skill's SKILL.md: the source as the command takes it (its id for a
+ * listing's card, its URL for a search answer's), the skill's subpath as the CLI gave it, "" for
+ * a skill at the root, and the tree it was listed at, which a fetch of the source can change.
+ */
+export interface SkillMdRef {
+  source: string;
+  subpath: string;
+  tree: string;
+}
+
 export interface SkillCard {
   /** The card's own key: its source and name. */
   key: string;
@@ -195,8 +206,10 @@ export interface SkillCard {
   description: string;
   /** Why it cannot be selected; absent for a selectable card. */
   status?: CardStatus;
-  /** The tooltip of a card that cannot be selected. */
+  /** Why a card that cannot be selected cannot be. */
   title?: string;
+  /** Where its SKILL.md is read from; absent for your skills on the account remote. */
+  skillMd?: SkillMdRef;
 }
 
 export const cardKey = (source: string, name: string) =>
@@ -206,7 +219,8 @@ const card = (
   source: string,
   name: string,
   description: string,
-  status: CardStatus | undefined
+  status: CardStatus | undefined,
+  skillMd?: SkillMdRef
 ): SkillCard => {
   const c: SkillCard = {
     description,
@@ -214,6 +228,9 @@ const card = (
     name,
     source,
   };
+  if (skillMd !== undefined) {
+    c.skillMd = skillMd;
+  }
   if (status !== undefined) {
     c.status = status;
     if (status === "name-in-use") {
@@ -265,7 +282,8 @@ export const listingCards = (
       url,
       s.name,
       s.description,
-      sourceSkillStatus(url, s.subpath, s.name, library)
+      sourceSkillStatus(url, s.subpath, s.name, library),
+      { source: s.source, subpath: s.subpath, tree: s.tree }
     )
   );
 
@@ -318,7 +336,8 @@ export const resultCards = (
       r.source,
       r.name,
       r.description,
-      sourceSkillStatus(r.source, r.subpath, r.name, library)
+      sourceSkillStatus(r.source, r.subpath, r.name, library),
+      { source: r.source, subpath: r.subpath, tree: r.tree }
     )
   );
 
