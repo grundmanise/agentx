@@ -178,7 +178,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | --- | --- | --- |
 | `pill.update-bg` | `accent.primary` | Update pill |
 | `pill.update-text` | `on-accent` |  |
-| `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, origin pill, Read-only |
+| `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, Read-only |
 | `pill.neutral-hover` | `gray-800` |  |
 | `pill.neutral-text` | `gray-200` |  |
 | `pill.removed-bg` | `red-400/12` | Removed-from-source pill |
@@ -793,7 +793,6 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a 
 - Disabled (plugin): `pill.disabled-*`.
 - Version (plugin): `pill.version-*`.
 - Fork: `pill.neutral-*`, hover `pill.neutral-hover`, the 12px fork glyph then the fork's name. In the detail header of the original of a fork made under a new name, one per fork; it opens the fork.
-- Origin: `pill.neutral-*`, hover `pill.neutral-hover`, `pill.height`. Under the meta line of the commit that created a fork, in HISTORY and the History sheet alike (§6 "Timeline (history)"). When the machine has the skill the fork came from, the 12px glyph of that skill's row then its name; it selects the skill, and when the filters hide it, sets SHOW to all skills, or clears the filters when that is not enough. Else, when the CLI knows the origin's page, the `xs` external-link icon then the plugin's, source's or skill's name; it opens the page in the browser. Its accessible name and tooltip say which. With neither, the entry has no pill.
 
 A skill row whose banner (§6 "Banner (detail pane)") has tone `attention` or `danger` shows an `AlertTriangleIcon` (`xs`) in `tone.attention.fg` after the name and pill, whatever the banner's tone; its accessible name is the banner's title. The banner tile keeps the circled `AlertIcon`. Other banner tones put nothing on the row.
 
@@ -978,7 +977,7 @@ Under the product name in the sidebar: `type.machine-label`, `text.muted`, one l
 
 ### Timeline (history)
 
-Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote. The dot is centred in a box as high as the entry's first line (`timeline.line` beside text, `timeline.button-line` beside a small button), with a 1px `timeline.connector` from that box to the next entry. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. The commit that created a fork adds the origin pill (§6 "Pills (status)") 6px under its meta line. When the list is cut short, the last item is a hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button that opens the History sheet.
+Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote. The dot is centred in a box as high as the entry's first line (`timeline.line` beside text, `timeline.button-line` beside a small button), with a 1px `timeline.connector` from that box to the next entry. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. The subject of the commit that created a fork is a link when the CLI knows the https page of the fork's origin: same type and colour, underlined on hover, the URL as its tooltip; it opens the page in the browser. When the list is cut short, the last item is a hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button that opens the History sheet.
 
 ### Menu
 
@@ -1009,7 +1008,7 @@ shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for
 
 ### Sheet (History)
 
-`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a small wrapping ghost button with a chevron that expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. The origin pill of the commit that created a fork stays outside that button, under the meta line, as in HISTORY.
+`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a small wrapping ghost button with a chevron that expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. An entry whose subject is a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the link follows it where the subject would be.
 
 ### Sheet (What's new)
 

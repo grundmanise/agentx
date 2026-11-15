@@ -6,7 +6,6 @@
 import type {
   AdoptionEvent,
   Configuration,
-  ForkOrigin,
   InventoryEvent,
   LibraryEntry,
   Occurrence,
@@ -514,18 +513,6 @@ export const showCounts = (
   };
 };
 
-/**
- * The filters with `row` among the rows they pass: the same filters when they already pass it,
- * else SHOW set to all skills, else no filters at all.
- */
-export const filtersShowing = (row: SkillRow, f: Filters): Filters => {
-  if (filterRows([row], f).length > 0) {
-    return f;
-  }
-  const all = { ...f, show: "all" as const };
-  return filterRows([row], all).length > 0 ? all : noFilters;
-};
-
 /** Where a skill comes from, in the words of the detail header. */
 export const originOf = (row: SkillRow): string => {
   switch (row.kind) {
@@ -586,51 +573,6 @@ export interface FilesRequest {
 const LAST_SEGMENT = /(?<name>[^/]+)\/*$/u;
 export const directoryName = (path: string) =>
   LAST_SEGMENT.exec(path)?.groups?.name ?? "";
-
-/**
- * The row of the skill a fork was made from, from the origin the history event of the commit
- * that created the fork names; undefined when this machine does not have that skill. A plugin's
- * skill is found by the plugin and its directory's name, in the marketplace the origin names when
- * both name one; a skill of a source by the source and its path in it; a library skill or another
- * fork by its name.
- */
-export const originRow = (
-  origin: ForkOrigin,
-  rows: SkillRow[]
-): SkillRow | undefined => {
-  switch (origin.kind) {
-    case "plugin": {
-      return rows.find(
-        (r) =>
-          r.kind === "plugin" &&
-          (origin.marketplace === undefined ||
-            origin.marketplace === "" ||
-            r.plugin === undefined ||
-            r.plugin.marketplace === "" ||
-            r.plugin.marketplace === origin.marketplace) &&
-          r.occurrences.some(
-            (o) =>
-              o.plugin === origin.plugin &&
-              directoryName(o.path) === origin.skill
-          )
-      );
-    }
-    case "source": {
-      return rows.find(
-        (r) =>
-          r.kind === "source" &&
-          r.entry?.source === origin.source &&
-          (r.entry?.subpath ?? "") === (origin.path ?? "")
-      );
-    }
-    case "skill": {
-      return rows.find((r) => r.entry !== undefined && r.name === origin.skill);
-    }
-    default: {
-      return undefined;
-    }
-  }
-};
 
 /**
  * The one occurrence a plugin's skill or a skill a client holds on its own is read and shown

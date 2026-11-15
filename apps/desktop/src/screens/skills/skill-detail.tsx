@@ -120,19 +120,13 @@ const EditButton = ({ row }: { row: SkillRow }) => {
  */
 export const SkillDetail = ({
   row,
-  rows,
   forks,
   configurations,
-  onShow,
 }: {
   row: SkillRow;
-  /** Every row of the screen, before the filters. */
-  rows: SkillRow[];
   /** The forks made from this skill under a new name. */
   forks: SkillRow[];
   configurations: Configuration[];
-  /** Shows a row in the list, selected, as the pill of a fork's origin in HISTORY does. */
-  onShow: (row: SkillRow) => void;
 }) => {
   const [removing, setRemoving] = useState(false);
   const sources = useAppStore((s) => s.sources);
@@ -261,7 +255,7 @@ export const SkillDetail = ({
         </section>
         <section aria-label="History" className="flex flex-col gap-3">
           <Caption>History</Caption>
-          <HistorySection row={row} rows={rows} onShow={onShow} />
+          <HistorySection row={row} />
         </section>
       </div>
     </article>

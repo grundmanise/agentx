@@ -2,11 +2,8 @@ import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { ForkOrigin, HistoryEvent } from "#/cli/events.gen.ts";
+import type { HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
-import { ExternalLinkIcon } from "#/components/icons/external-link.tsx";
-import { PillButton } from "#/components/pill.tsx";
-import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Sheet,
@@ -17,11 +14,6 @@ import {
 } from "#/components/ui/sheet.tsx";
 import { formatDate } from "#/lib/dates.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
-import {
-  glyphOf,
-  originRow,
-  shortSource,
-} from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -98,108 +90,52 @@ const versionOf = (row: SkillRow) =>
   ].join(":");
 
 /**
- * What the pill on the commit that created a fork does: show the skill it was forked from when
- * this machine has it, else open the origin's page when the CLI knows one.
+ * The page of the skill a fork came from, on the commit that created the fork, when the CLI knows
+ * one: an https URL alone, since the window opens nothing else.
  */
-type OriginLink =
-  | { kind: "show"; row: SkillRow }
-  | { kind: "open"; url: string; name: string };
-
-/** The origin as its pill names it: the plugin, the source, or the skill. */
-const originName = (origin: ForkOrigin) => {
-  if (origin.kind === "plugin" && origin.plugin !== undefined) {
-    return origin.plugin;
-  }
-  if (origin.kind === "source" && origin.source !== undefined) {
-    return shortSource(origin.source);
-  }
-  return origin.skill;
+export const originPage = (e: HistoryEvent) => {
+  const url = e.origin?.url;
+  return url?.startsWith("https://") === true ? url : undefined;
 };
 
-const linkOf = (
-  entry: HistoryEvent,
-  rows: SkillRow[]
-): OriginLink | undefined => {
-  const { origin } = entry;
-  if (origin === undefined) {
-    return undefined;
-  }
-  const row = originRow(origin, rows);
-  if (row !== undefined) {
-    return { kind: "show", row };
-  }
-  // The window opens https pages alone.
-  if (origin.url?.startsWith("https://") === true) {
-    return { kind: "open", name: originName(origin), url: origin.url };
-  }
-  return undefined;
-};
-
-/** The origin pill under the commit that created a fork. */
-const OriginPill = ({
-  link,
-  onShow,
-}: {
-  link: OriginLink;
-  onShow: (row: SkillRow) => void;
-}) => {
-  if (link.kind === "open") {
-    const label = `Open ${link.url}`;
-    return (
-      <PillButton
-        tone="neutral"
-        label={label}
-        title={label}
-        icon={<ExternalLinkIcon size="xs" />}
-        onClick={() => {
-          void openInBrowser(link.url);
-        }}
-      >
-        {link.name}
-      </PillButton>
-    );
-  }
-  const { row } = link;
-  const label = `Show ${row.name} in Skills`;
-  return (
-    <PillButton
-      tone="neutral"
-      label={label}
-      title={label}
-      icon={
-        <SkillGlyph
-          shape={glyphOf(row)}
-          size={12}
-          tone="inherit"
-          title={label}
-          decorative
-        />
-      }
-      onClick={() => {
-        onShow(row);
+/** An entry's subject: a link to the page of the fork's origin when it has one, else text. */
+const Subject = ({ subject, page }: { subject: string; page?: string }) =>
+  page === undefined ? (
+    <span className="type-timeline-entry text-text-primary">{subject}</span>
+  ) : (
+    <a
+      href={page}
+      title={page}
+      className="type-timeline-entry text-text-primary hover:underline"
+      onClick={(e) => {
+        e.preventDefault();
+        void openInBrowser(page);
       }}
     >
-      {row.name}
-    </PillButton>
+      {subject}
+    </a>
   );
-};
+
+const Chevron = ({ open }: { open: boolean }) => (
+  <span className="h-timeline-line flex flex-none items-center">
+    <span className={open ? "flex rotate-90" : "flex"}>
+      <ChevronIcon size="xs" />
+    </span>
+  </span>
+);
 
 const Entry = ({
   entry,
   last,
-  link,
-  onShow,
   expandable = false,
 }: {
   entry: HistoryEvent;
   last: boolean;
-  /** The origin pill's action, on the commit that created a fork. */
-  link: OriginLink | undefined;
-  onShow: (row: SkillRow) => void;
   /** Shows a chevron that opens the files the commit changed. */
   expandable?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
+  const page = originPage(entry);
   return (
     <li className="grid-cols-timeline grid gap-x-3">
       <DotColumn button={expandable} last={last}>
@@ -210,7 +146,27 @@ const Entry = ({
           last ? "flex min-w-0 flex-col" : "flex min-w-0 flex-col pb-4"
         }
       >
-        {expandable ? (
+        {expandable && page !== undefined && (
+          // The subject is a link of its own, so the button holds the chevron alone and the
+          // link starts where the button's subject would.
+          <div className="-ml-3.5 flex items-start">
+            <Button
+              variant="ghost"
+              size="sm-wrap"
+              aria-expanded={open}
+              aria-label={`Show the files of ${entry.subject}`}
+              onClick={() => {
+                setOpen((o) => !o);
+              }}
+            >
+              <Chevron open={open} />
+            </Button>
+            <span className="-ml-1.5 min-w-0 py-1.5">
+              <Subject subject={entry.subject} page={page} />
+            </span>
+          </div>
+        )}
+        {expandable && page === undefined && (
           // A block, so the button shrinks to fit the column and its subject wraps inside it.
           <div className="-ml-3.5">
             <Button
@@ -221,29 +177,17 @@ const Entry = ({
                 setOpen((o) => !o);
               }}
             >
-              <span className="h-timeline-line flex flex-none items-center">
-                <span className={open ? "flex rotate-90" : "flex"}>
-                  <ChevronIcon size="xs" />
-                </span>
-              </span>
+              <Chevron open={open} />
               <span className="type-timeline-entry text-text-primary">
                 {entry.subject}
               </span>
             </Button>
           </div>
-        ) : (
-          <span className="type-timeline-entry text-text-primary">
-            {entry.subject}
-          </span>
         )}
+        {!expandable && <Subject subject={entry.subject} page={page} />}
         <span className="type-timeline-meta text-timeline-meta">
           {metaOf(entry)}
         </span>
-        {link !== undefined && (
-          <div className="mt-1.5 flex">
-            <OriginPill link={link} onShow={onShow} />
-          </div>
-        )}
         {expandable && open && (
           <ul
             aria-label={`Files of ${entry.subject}`}
@@ -270,15 +214,11 @@ const Entry = ({
 const HistorySheet = ({
   name,
   entries,
-  rows,
-  onShow,
   open,
   onOpenChange,
 }: {
   name: string;
   entries: HistoryEvent[];
-  rows: SkillRow[];
-  onShow: (row: SkillRow) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => (
@@ -299,8 +239,6 @@ const HistorySheet = ({
               key={e.commit}
               entry={e}
               last={i === entries.length - 1}
-              link={linkOf(e, rows)}
-              onShow={onShow}
               expandable
             />
           ))}
@@ -312,22 +250,11 @@ const HistorySheet = ({
 
 /**
  * HISTORY in the detail pane. For one of your own skills, the latest commits of its branch from
- * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. The commit
- * that created a fork carries a pill that shows the skill it was forked from, or opens the
- * origin's page when this machine does not have that skill. Other skills have no history of
- * their own.
+ * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. The subject
+ * of the commit that created a fork links to the page it came from, when the CLI knows one. Other
+ * skills have no history of their own.
  */
-export const HistorySection = ({
-  row,
-  rows,
-  onShow,
-}: {
-  row: SkillRow;
-  /** Every row of the Skills screen, which a fork's origin is looked up in. */
-  rows: SkillRow[];
-  /** Shows a row in the Skills list, selected. */
-  onShow: (row: SkillRow) => void;
-}) => {
+export const HistorySection = ({ row }: { row: SkillRow }) => {
   const yours = row.kind === "yours";
   const version = versionOf(row);
   const read = useAppStore((s) => s.histories[row.name]);
@@ -373,8 +300,6 @@ export const HistorySection = ({
             key={e.commit}
             entry={e}
             last={!more && i === shown.length - 1}
-            link={linkOf(e, rows)}
-            onShow={onShow}
           />
         ))}
         {more && (
@@ -413,8 +338,6 @@ export const HistorySection = ({
       <HistorySheet
         name={row.name}
         entries={entries}
-        rows={rows}
-        onShow={onShow}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
