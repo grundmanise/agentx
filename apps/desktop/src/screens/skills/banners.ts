@@ -98,7 +98,8 @@ export const accountRemoteOf = (sources: SourceEvent[]) =>
 export const hasEditsToPublish = (row: SkillRow) =>
   row.kind === "yours" && row.modified && row.published;
 
-const notPublished = (row: SkillRow) =>
+/** One of your own skills the account remote holds no branch of: a publish sends every file. */
+export const notPublished = (row: SkillRow) =>
   row.kind === "yours" &&
   (row.entry?.drift?.includes("not published") ?? false);
 
