@@ -202,7 +202,7 @@ const table: BannerRule[] = [
     when: (row) => row.adoption?.state === "candidate",
   },
   {
-    // An unmanaged skill no tool recorded, or one whose record the CLI refuses.
+    // An unmanaged skill no tool recorded.
     banner: () => ({
       action: { kind: "adopt" },
       text: "Adopt to manage it from agentx",

@@ -77,7 +77,11 @@ export interface AdoptRow {
   name: string;
   tool: ToolArg;
   status: RowStatus;
-  /** Why the CLI did not adopt it, in its words. */
+  /**
+   * Why the CLI did not adopt it, in its words. The preview's reason of a record it refuses is a
+   * sentence about the skill that does not name it; a run's is the refusal's message, which may
+   * start with the name.
+   */
   reason?: string;
 }
 
@@ -178,7 +182,7 @@ const adoptionsOf = (events: CliEvent[]) =>
 /**
  * The activity entry of one tool's run that reported its skills: how many of those it offered it
  * adopted, `success` when it adopted them all. A record the preview refused is not counted: the
- * run covers it too, and exits non-zero for it, whatever became of the others.
+ * run covers it too, and reports it refused again.
  */
 const activityOf = (
   events: CliEvent[],
@@ -227,19 +231,31 @@ const settled = (
   };
 };
 
-/** The warnings a run logged, but those that only repeat a row's reason ("<name>: <reason>"). */
+/** How the CLI starts the warning it logs for a skill a run of every skill cannot adopt. */
+const cannotAdopt = (name: string) => `${name} could not be adopted: `;
+
+/**
+ * The warnings a run logged, but those about a skill it did not adopt, whose row says why: the
+ * warning that the skill could not be adopted ("<name> could not be adopted: …"), and one that only
+ * repeats a row's reason ("<name>: <reason>").
+ */
 const otherWarnings = (outcome: Outcome) => {
+  const adoption = adoptionsOf(outcome.events);
   const said = new Set(
-    adoptionsOf(outcome.events).flatMap((e) =>
+    adoption.flatMap((e) =>
       e.reason === undefined
         ? []
         : [e.reason, `${e.name}: ${e.reason}`, `${e.name} ${e.reason}`]
     )
   );
+  const refused = adoption.filter((e) => e.state === "refused");
   return outcome.logs
     .filter((l) => l.level === "warn")
     .map((l) => l.message)
-    .filter((m) => !said.has(m));
+    .filter(
+      (m) =>
+        !said.has(m) && !refused.some((e) => m.startsWith(cannotAdopt(e.name)))
+    );
 };
 
 /** A run that failed as a whole: the CLI's problem, its hint in the app's words. */

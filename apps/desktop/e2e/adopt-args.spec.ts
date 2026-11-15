@@ -20,7 +20,7 @@ const record = (
 ): AdoptionEvent => ({
   file: "/home/me/.agents/.skill-lock.json",
   name,
-  schema_version: 2,
+  schema_version: 3,
   state,
   tool: "vercel",
   type: "adoption",
@@ -74,7 +74,7 @@ const rowOf = (
     machine: { id: "machine-1", label: "studio-mac" },
     mcp_servers: [],
     scan_counter: 1,
-    schema_version: 2,
+    schema_version: 3,
     type: "inventory",
     warnings: [],
     ...machine,
@@ -107,7 +107,7 @@ const table: [string, ReturnType<typeof rowOf>, string[] | undefined][] = [
   [
     "a library skill whose record the CLI refuses",
     rowOf("legacy", [record("legacy", "refused")], refusedInventory),
-    ["adopt", "--skill", "legacy"],
+    undefined,
   ],
   [
     "a library skill whose record says agentx manages it",

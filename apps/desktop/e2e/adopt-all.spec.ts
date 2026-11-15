@@ -11,9 +11,11 @@ import {
   nothingToAdopt,
   previewWith,
   skillsCliAllRun,
+  skillsCliAllWarnings,
   skillsCliNames,
   skillsCliNoneRun,
   skillsCliRun,
+  skillsCliWarnings,
   skillshareNames,
   skillshareRun,
 } from "./fixtures/adopt-all.ts";
@@ -168,13 +170,13 @@ test.describe("the Adopt skills section of Settings", () => {
     await expect(open).toHaveAccessibleName("Adopt Skills CLI skills");
     await expect(open.getByRole("paragraph")).toHaveText([
       "agentx will import these 3 skills and manage them from now on. Skills CLI keeps its own files. Edits you made to the copies in your library are not kept. 1 skill can't be adopted and is left out.",
-      "legacy is a symlink, not a directory.",
+      "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     await expect(rows(open, "Skills CLI")).toHaveText([
       "Waiting: commit-style",
       "Waiting: deck-outline",
       "Waiting: scratch",
-      "Can't be adopted: legacylegacy is a symlink, not a directory.",
+      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     await open.getByRole("button", { name: "Cancel" }).click();
     await expect(open).toHaveCount(0);
@@ -204,6 +206,7 @@ test.describe("the Adopt skills section of Settings", () => {
       exitCode: 5,
       // The fetch of the source, then deck-outline's first two steps: the fetch is no skill.
       holdAfter: 3,
+      logs: skillsCliWarnings.map((message) => ({ level: "warn", message })),
     });
     await settingsSection(page)
       .getByRole("button", { name: "Adopt Skills CLI skills" })
@@ -216,7 +219,7 @@ test.describe("the Adopt skills section of Settings", () => {
       "Waiting: commit-style",
       "Adopting: deck-outline",
       "Waiting: scratch",
-      "Can't be adopted: legacylegacy is a symlink, not a directory.",
+      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     const adopt = open.getByRole("button", { name: "Adopt" });
     await expect(adopt).toBeDisabled();
@@ -248,7 +251,14 @@ test.describe("the Adopt skills section of Settings", () => {
       "Not adopted: commit-stylehttps://github.com/vercel/skills holds no skill at commit-style now.",
       "Adopted: deck-outline",
       "Adopted: scratch",
-      "Can't be adopted: legacylegacy is a symlink, not a directory.",
+      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
+    ]);
+    // Each skill the run did not adopt says why once, under its name, as the warning the CLI
+    // logged for it did.
+    await expect(open.getByRole("paragraph")).toHaveText([
+      /^agentx will import these 3 skills/u,
+      "https://github.com/vercel/skills holds no skill at commit-style now.",
+      "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     // The activity list logs the result.
     expect(await activity(page)).toEqual([
@@ -351,9 +361,9 @@ test.describe("Adopt all in the Unmanaged header", () => {
     await openSkills(cli, page);
     const first = cli.register(["adopt", "skills-cli", "--all"], {
       events: skillsCliAllRun,
-      exitCode: 6,
       // The fetch alone: no skill has started.
       holdAfter: 1,
+      logs: skillsCliAllWarnings.map((message) => ({ level: "warn", message })),
     });
     const second = cli.register(["adopt", "skillshare", "--all"], {
       events: skillshareRun,
@@ -395,7 +405,11 @@ test.describe("Adopt all in the Unmanaged header", () => {
     ]);
     second.release();
     await expect(progress(open)).toHaveText("Adopted 5 skills");
-    // The Skills CLI's run exits 6 for the record the preview refused: still a success.
+    await expect(rows(open, "Skills CLI").last()).toHaveText(
+      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy."
+    );
+    // The Skills CLI's run exits 0 and warns of the record the preview refused, whose row says why
+    // already: a success.
     expect(await activity(page)).toEqual([
       { message: "Adopted 2 skills", tone: "success" },
       { message: "Adopted 3 skills", tone: "success" },
