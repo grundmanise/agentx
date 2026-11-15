@@ -149,6 +149,27 @@ func TestSkillRemoveFromOneConfiguration(t *testing.T) {
 		filepath.Join(h.home, ".claude", "skills", "alpha")+"; remove it from claude-code to take it from both")
 }
 
+// TestSkillRemoveFromASharedPlace: Zencoder and Zenflow share one skills
+// directory, so removing the skill from one takes it from the other, and
+// the run warns.
+func TestSkillRemoveFromASharedPlace(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
+	s, _, _ := h.standardSource(true)
+	h.mustRun("source", "add", s.url)
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
+	place := filepath.Join(h.home, ".zencoder", "skills", "alpha")
+
+	out := h.run("--json", "skill", "remove", "alpha", "--from", "zenflow")
+	equal(t, "exit", out.exit, 0)
+	nothingAt(t, "the shared placement", place)
+	warning := h.one(out.stderr, "log")
+	equal(t, "the warning level", warning["level"], "warn")
+	contains(t, "the warning", warning["message"].(string), "zencoder shares "+filepath.Dir(place)+
+		" with zenflow, so removing alpha from zenflow took it from zencoder too")
+}
+
 // TestSkillRemoveTakesTheSkillOffTheMachine removes every placement, the
 // library directory, the import branch, the candidate ref and the copy-mode
 // entries, in one mutation.

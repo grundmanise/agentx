@@ -38,7 +38,9 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"A client that reads another client's skills directory, as Cursor reads Claude\n" +
 			"Code's, keeps seeing the skill through that client's placement after --from\n" +
 			"removes its own, and the removal warns: remove the skill from that client too to\n" +
-			"take it from both.\n\n" +
+			"take it from both. Two clients that share one skills directory, as Zencoder and\n" +
+			"Zenflow do, share each placement in it: --from naming one takes the skill from\n" +
+			"both, and the removal warns.\n\n" +
 			"A managed skill whose library directory was deleted outside agentx can still be\n" +
 			"removed without --from: its import branch and the placements agentx made go.\n\n" +
 			"Removing one of your own skills also deletes its worktree, with any unpublished\n" +
@@ -769,6 +771,7 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 		inv.out.emit(sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(targets)))
 	}
 	inv.warnStillSeen(inventory, plan, targetIDs(targets))
+	inv.warnSharedPlaces(plan, targetIDs(targets))
 	if !plan.quiet {
 		inv.printRemoved(plan)
 	}
@@ -844,6 +847,38 @@ func placementOwner(targets []placeTarget, id, path, name string) string {
 		}
 	}
 	return ""
+}
+
+// warnSharedPlaces names every configuration that lost the skill along
+// with a placement a removal with --from deleted, because its own
+// placement path is that same path: Zencoder and Zenflow share
+// ~/.zencoder/skills, so a removal from one takes the skill from both. The
+// confirmation names only the configurations --from named, so without this
+// line the other one would lose the skill unannounced. A configuration
+// --from named too is covered already, and a whole removal names every
+// configuration itself.
+func (inv *invocation) warnSharedPlaces(plan removalPlan, covered []string) {
+	if plan.whole || len(plan.deleted) == 0 {
+		return
+	}
+	var left []string
+	for _, t := range inv.detectedTargets() {
+		if t.readsLibrary || t.dir == "" || containsString(covered, t.id) {
+			continue
+		}
+		own := canonicalPath(filepath.Join(t.dir, plan.name))
+		for _, step := range plan.deleted {
+			if canonicalPath(step.path) == own {
+				left = append(left, t.id+" shares "+filepath.Dir(step.path)+" with "+step.id+
+					", so removing "+plan.name+" from "+step.id+" took it from "+t.id+" too")
+				break
+			}
+		}
+	}
+	sort.Strings(left)
+	for _, message := range left {
+		inv.out.warn(message)
+	}
 }
 
 // keptLibrary reports whether a fork's removal left what its library path

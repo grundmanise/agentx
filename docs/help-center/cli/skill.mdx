@@ -881,6 +881,14 @@ warning: cursor still sees pdf through claude-code's placement at /home/me/.clau
 
 To take the skill from both, name both clients: `agentx skill remove pdf --from cursor --from claude-code`.
 
+Two clients that share one skills directory, as Zencoder and Zenflow share `~/.zencoder/skills`, share each placement in it. Removing the skill from one takes it from both, and agentx warns:
+
+```text
+warning: zencoder shares /home/me/.zencoder/skills with zenflow, so removing pdf from zenflow took it from zencoder too
+✓ removed pdf from zenflow: 1 placement
+  zenflow  symlink  /home/me/.zencoder/skills/pdf
+```
+
 ### Your own skills
 
 Removing one of your own skills from the machine also deletes its local history. Add `--remote` to delete it from your account remote too. See [Remove a skill of your own](/cli/fork#remove-a-skill-of-your-own).
