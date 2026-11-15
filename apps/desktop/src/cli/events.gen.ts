@@ -36,6 +36,7 @@ export type HandshakeReason =
   | "not_found"
   | "timeout"
   | "failed";
+export type OriginKind = "plugin" | "source" | "skill";
 export type FileStatus = "added" | "modified" | "deleted";
 export type DoctorStatus = "ok" | "warn" | "fail" | "info";
 export type UpdateState = "current" | "available" | "updated";
@@ -142,7 +143,7 @@ export interface ChangedFile {
 }
 
 export interface ForkOrigin {
-  kind: string;
+  kind: OriginKind;
   skill: string;
   plugin?: string;
   marketplace?: string;
@@ -263,6 +264,7 @@ export interface Plugin {
   enabled?: boolean;
   hooks: Hook[];
   icon?: string;
+  url?: string;
 }
 
 export interface Edge {

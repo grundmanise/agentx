@@ -2,8 +2,11 @@ import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { HistoryEvent } from "#/cli/events.gen.ts";
+import type { ForkOrigin, HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
+import { ExternalLinkIcon } from "#/components/icons/external-link.tsx";
+import { PillButton } from "#/components/pill.tsx";
+import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Sheet,
@@ -13,6 +16,12 @@ import {
   SheetTitle,
 } from "#/components/ui/sheet.tsx";
 import { formatDate } from "#/lib/dates.ts";
+import { openInBrowser } from "#/lib/open-url.ts";
+import {
+  glyphOf,
+  originRow,
+  shortSource,
+} from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -88,13 +97,105 @@ const versionOf = (row: SkillRow) =>
     ...(row.entry?.drift ?? []),
   ].join(":");
 
+/**
+ * What the pill on the commit that created a fork does: show the skill it was forked from when
+ * this machine has it, else open the origin's page when the CLI knows one.
+ */
+type OriginLink =
+  | { kind: "show"; row: SkillRow }
+  | { kind: "open"; url: string; name: string };
+
+/** The origin as its pill names it: the plugin, the source, or the skill. */
+const originName = (origin: ForkOrigin) => {
+  if (origin.kind === "plugin" && origin.plugin !== undefined) {
+    return origin.plugin;
+  }
+  if (origin.kind === "source" && origin.source !== undefined) {
+    return shortSource(origin.source);
+  }
+  return origin.skill;
+};
+
+const linkOf = (
+  entry: HistoryEvent,
+  rows: SkillRow[]
+): OriginLink | undefined => {
+  const { origin } = entry;
+  if (origin === undefined) {
+    return undefined;
+  }
+  const row = originRow(origin, rows);
+  if (row !== undefined) {
+    return { kind: "show", row };
+  }
+  // The window opens https pages alone.
+  if (origin.url?.startsWith("https://") === true) {
+    return { kind: "open", name: originName(origin), url: origin.url };
+  }
+  return undefined;
+};
+
+/** The origin pill under the commit that created a fork. */
+const OriginPill = ({
+  link,
+  onShow,
+}: {
+  link: OriginLink;
+  onShow: (row: SkillRow) => void;
+}) => {
+  if (link.kind === "open") {
+    const label = `Open ${link.url}`;
+    return (
+      <PillButton
+        tone="neutral"
+        label={label}
+        title={label}
+        icon={<ExternalLinkIcon size="xs" />}
+        onClick={() => {
+          void openInBrowser(link.url);
+        }}
+      >
+        {link.name}
+      </PillButton>
+    );
+  }
+  const { row } = link;
+  const label = `Show ${row.name} in Skills`;
+  return (
+    <PillButton
+      tone="neutral"
+      label={label}
+      title={label}
+      icon={
+        <SkillGlyph
+          shape={glyphOf(row)}
+          size={12}
+          tone="inherit"
+          title={label}
+          decorative
+        />
+      }
+      onClick={() => {
+        onShow(row);
+      }}
+    >
+      {row.name}
+    </PillButton>
+  );
+};
+
 const Entry = ({
   entry,
   last,
+  link,
+  onShow,
   expandable = false,
 }: {
   entry: HistoryEvent;
   last: boolean;
+  /** The origin pill's action, on the commit that created a fork. */
+  link: OriginLink | undefined;
+  onShow: (row: SkillRow) => void;
   /** Shows a chevron that opens the files the commit changed. */
   expandable?: boolean;
 }) => {
@@ -138,6 +239,11 @@ const Entry = ({
         <span className="type-timeline-meta text-timeline-meta">
           {metaOf(entry)}
         </span>
+        {link !== undefined && (
+          <div className="mt-1.5 flex">
+            <OriginPill link={link} onShow={onShow} />
+          </div>
+        )}
         {expandable && open && (
           <ul
             aria-label={`Files of ${entry.subject}`}
@@ -164,11 +270,15 @@ const Entry = ({
 const HistorySheet = ({
   name,
   entries,
+  rows,
+  onShow,
   open,
   onOpenChange,
 }: {
   name: string;
   entries: HistoryEvent[];
+  rows: SkillRow[];
+  onShow: (row: SkillRow) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => (
@@ -189,6 +299,8 @@ const HistorySheet = ({
               key={e.commit}
               entry={e}
               last={i === entries.length - 1}
+              link={linkOf(e, rows)}
+              onShow={onShow}
               expandable
             />
           ))}
@@ -200,10 +312,22 @@ const HistorySheet = ({
 
 /**
  * HISTORY in the detail pane. For one of your own skills, the latest commits of its branch from
- * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. Other
- * skills have no history of their own.
+ * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. The commit
+ * that created a fork carries a pill that shows the skill it was forked from, or opens the
+ * origin's page when this machine does not have that skill. Other skills have no history of
+ * their own.
  */
-export const HistorySection = ({ row }: { row: SkillRow }) => {
+export const HistorySection = ({
+  row,
+  rows,
+  onShow,
+}: {
+  row: SkillRow;
+  /** Every row of the Skills screen, which a fork's origin is looked up in. */
+  rows: SkillRow[];
+  /** Shows a row in the Skills list, selected. */
+  onShow: (row: SkillRow) => void;
+}) => {
   const yours = row.kind === "yours";
   const version = versionOf(row);
   const read = useAppStore((s) => s.histories[row.name]);
@@ -249,6 +373,8 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
             key={e.commit}
             entry={e}
             last={!more && i === shown.length - 1}
+            link={linkOf(e, rows)}
+            onShow={onShow}
           />
         ))}
         {more && (
@@ -287,6 +413,8 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
       <HistorySheet
         name={row.name}
         entries={entries}
+        rows={rows}
+        onShow={onShow}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />

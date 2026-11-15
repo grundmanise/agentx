@@ -6,6 +6,7 @@ import { ForkDialogs } from "#/screens/skills/fork-dialog.tsx";
 import { skillPath } from "#/screens/skills/open.ts";
 import {
   filterRows,
+  filtersShowing,
   forksOf,
   groupRows,
   noFilters,
@@ -82,6 +83,12 @@ export const SkillsScreen = () => {
     current.current = row.key;
     void navigate(skillPath(row.key));
   };
+  // Selects a row the filters may hide, such as the skill a fork came from: the filters change
+  // so that the list shows it.
+  const show = (row: SkillRow) => {
+    setFilters((f) => filtersShowing(row, f));
+    select(row);
+  };
 
   // j/k and the arrows move the selection through the visible rows, in group order.
   useEffect(() => {
@@ -134,8 +141,10 @@ export const SkillsScreen = () => {
           <SkillDetail
             key={selected.key}
             row={selected}
+            rows={rows}
             forks={forksOf(selected, rows)}
             configurations={configurations}
+            onShow={show}
           />
         )}
       </section>

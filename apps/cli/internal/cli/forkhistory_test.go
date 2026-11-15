@@ -18,8 +18,9 @@ import (
 // its author and its whole message, the two agentx wrote carrying the
 // machine, and the import at the root, with every file it holds added.
 // Paths are relative to the skill's directory, a file beside it starting
-// with ../. A managed skill, an unmanaged one and a name the library does
-// not hold are refused, each in its own words.
+// with ../. The creation commit alone names where the fork came from, the
+// source of the import it was made from. A managed skill, an unmanaged one
+// and a name the library does not hold are refused, each in its own words.
 func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -87,6 +88,15 @@ func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 			t.Errorf("%s: time %q is not RFC 3339: %v", want.subject, ev["time"], err)
 		}
 	}
+	for i, ev := range events {
+		if _, ok := ev["origin"]; ok != (i == 2) {
+			t.Errorf("event %d: origin %v", i, ev["origin"])
+		}
+	}
+	origin := events[2]["origin"].(map[string]any)
+	equal(t, "the origin's kind", origin["kind"], "source")
+	equal(t, "the origin's source", origin["source"], h.trailer(imported, lineage.TrailerSource))
+	equal(t, "the origin's skill", origin["skill"], "alpha")
 	equal(t, "the foreign commit's author", events[0]["author"], h.accountGit("log", "-1", "--format=%an <%ae>", foreign))
 	equal(t, "the foreign commit's message", events[0]["message"], "By hand\n\nWith a body.")
 	equal(t, "the result", h.one(out.stdout, "result")["summary"], "alpha has 4 commits")
@@ -150,5 +160,44 @@ func TestParseForkLog(t *testing.T) {
 	}
 	if _, err := parseForkLog(commit("c", "p", "Cut\n") + "\x00\nM\x00"); err == nil {
 		t.Error("a status with no path was read")
+	}
+}
+
+// TestHistoryOrigin reads where a fork came from off its creation commit:
+// the origin its trailers record, of a plugin's skill or another skill,
+// else the source and directory of the import commit it was made from,
+// with the web URL of a source an https or SSH URL names, and nothing for
+// a commit that creates no fork or a creation commit that records neither.
+func TestHistoryOrigin(t *testing.T) {
+	t.Parallel()
+	const forkID = "01234567-89ab-4def-8123-456789abcdef"
+	imported := func(src, path string) *lineage.Commit {
+		i := lineage.Import{Source: src, Path: path, Commit: strings.Repeat("a", 40), Hash: strings.Repeat("b", 64)}
+		return &lineage.Commit{ID: "i", Message: i.Message()}
+	}
+	created := lineage.ForkTrailers{ForkID: forkID}
+	for _, tc := range []struct {
+		name   string
+		t      lineage.ForkTrailers
+		parent *lineage.Commit
+		want   *forkOrigin
+	}{
+		{"a plugin's skill", lineage.ForkTrailers{ForkID: forkID, Origin: lineage.Origin{Skill: "format", Plugin: "formatter", Marketplace: "acme", URL: "https://github.com/acme/formatter"}}, nil,
+			&forkOrigin{Kind: originPlugin, Skill: "format", Plugin: "formatter", Marketplace: "acme", URL: "https://github.com/acme/formatter"}},
+		{"another skill", lineage.ForkTrailers{ForkID: forkID, Origin: lineage.Origin{Skill: "alpha"}}, &lineage.Commit{ID: "f", Parents: []string{"i"}, Message: "x\n"},
+			&forkOrigin{Kind: originSkill, Skill: "alpha"}},
+		{"a source's skill", created, imported("https://github.com/acme/skills", "skills/pdf"),
+			&forkOrigin{Kind: originSource, Skill: "pdf", Source: "https://github.com/acme/skills", Path: "skills/pdf", URL: "https://github.com/acme/skills"}},
+		{"a skill at an SSH source's root", created, imported("ssh://git@gitlab.com/acme/pdf", ""),
+			&forkOrigin{Kind: originSource, Skill: "pdf", Source: "ssh://git@gitlab.com/acme/pdf", URL: "https://gitlab.com/acme/pdf"}},
+		{"a local source's skill", created, imported("file:///srv/skills", "pdf"),
+			&forkOrigin{Kind: originSource, Skill: "pdf", Source: "file:///srv/skills", Path: "pdf"}},
+		{"no fork id", lineage.ForkTrailers{Machine: strings.Repeat("0", 32)}, imported("https://github.com/acme/skills", "pdf"), nil},
+		{"a creation commit that records none", created, &lineage.Commit{ID: "f", Parents: []string{"i"}, Message: "Fork alpha from beta\n"}, nil},
+		{"skill new's", created, nil, nil},
+	} {
+		if got := historyOrigin(tc.t, tc.parent); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: historyOrigin = %+v, want %+v", tc.name, got, tc.want)
+		}
 	}
 }

@@ -67,7 +67,8 @@ export const Pill = ({ tone, size, face, icon, children }: PillProps) => (
 );
 
 /**
- * A pill that opens something: the fork pill on the original of a fork made under a new name.
+ * A pill that opens something: the fork pill on the original of a fork made under a new name, and
+ * the origin pill on the commit that created a fork.
  * `label` is its accessible name and `title` its tooltip; the text is what shows.
  */
 export const PillButton = ({

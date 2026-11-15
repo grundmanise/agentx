@@ -291,7 +291,9 @@ const historyEvent = (
   time: string,
   subject: string,
   files: HistoryEvent["files"],
-  flags: Partial<Pick<HistoryEvent, "import" | "foreign" | "machine">> = {}
+  flags: Partial<
+    Pick<HistoryEvent, "import" | "foreign" | "machine" | "origin">
+  > = {}
 ): HistoryEvent => ({
   author: "Me <me@example.com>",
   commit,
@@ -308,7 +310,10 @@ const historyEvent = (
   ...flags,
 });
 
-/** The history of pdf-letters, newest first: a commit made with Git, three of agentx's, the import. */
+/**
+ * The history of pdf-letters, newest first: a commit made with Git, three of agentx's, the last
+ * of them the fork's creation with the skill of acme/skills it came from, then the import.
+ */
 export const history: HistoryEvent[] = [
   historyEvent(
     "9b41c07aaaa",
@@ -337,9 +342,18 @@ export const history: HistoryEvent[] = [
   historyEvent(
     "51f3a8edddd",
     "2026-09-30T12:00:00Z",
-    "Fork pdf as pdf-letters",
+    "Fork pdf-letters from https://github.com/acme/skills/pdf at 3f2a9c1",
     [{ path: "SKILL.md", status: "modified" }],
-    { machine: "machine-1" }
+    {
+      machine: "machine-1",
+      origin: {
+        kind: "source",
+        path: "pdf",
+        skill: "pdf",
+        source: ACME,
+        url: `${ACME}/tree/main/pdf`,
+      },
+    }
   ),
   historyEvent(
     "3f2a9c1e8d7",
