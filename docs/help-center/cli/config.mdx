@@ -156,7 +156,7 @@ agentx config placement cursor symlink
 
 The choice applies to every later placement in that client: `agentx skill add`, `agentx skill place`, `agentx skill new`, `agentx skill fork` and `agentx config enable --place-all`. `--copy` still places a copy in every client it covers.
 
-The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to cursor` turns a symlink into a copy. To turn a copy back into a symlink, run `agentx skill remove <name> --from cursor`, then `agentx skill place <name> --to cursor`.
+The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to cursor` turns a symlink into a copy. To turn every symlink in the client into a copy at once, run `agentx config enable cursor --place-all`. To turn a copy back into a symlink, run `agentx skill remove <name> --from cursor`, then `agentx skill place <name> --to cursor`.
 
 A client that reads the library directly, such as Codex, has no choice to make: the command exits with code 1. In the desktop app, choose on the agent's card under **Agents**. See [Choose symlink or copy for an agent](/agent-placement).
 

@@ -47,9 +47,20 @@ func (inv *invocation) enableAndPlaceAll(ctx context.Context, id string) error {
 		done, names = placements{}, nil
 		for _, lib := range skills {
 			names = append(names, lib.Name)
+			// The copies made for this skill are recorded under its own name,
+			// in the same settings write, as skill place records them: a copy
+			// copy_mode does not name is no placement of agentx's, and the
+			// rescan and every later command would take it for the user's.
+			var one placements
 			for _, t := range edit.placing(targets) {
-				inv.stagePlacement(m, libraryPlaceable(lib), t, lib.Path, false, edit.copiesOf(lib.Name), &done)
+				inv.stagePlacement(m, libraryPlaceable(lib), t, lib.Path, false, edit.copiesOf(lib.Name), &one)
 			}
+			edit.addCopies(lib.Name, one.copies)
+			done.placed = append(done.placed, one.placed...)
+			done.copies = append(done.copies, one.copies...)
+			done.adoptions = append(done.adoptions, one.adoptions...)
+			done.skipped = append(done.skipped, one.skipped...)
+			done.discarded = append(done.discarded, one.discarded...)
 		}
 		if err := edit.stage(m, inv.dirs.Home); err != nil {
 			m.Discard()
