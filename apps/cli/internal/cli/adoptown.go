@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -16,15 +17,15 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// agentx adopt --skill takes over an unmanaged skill no other tool
-// recorded, or one whose record agentx cannot use, as one of the user's
-// own. It is a fork in the skill's place with nothing to fork from, see
-// forkOf and makeFork: a branch of its own whose first commit holds the
-// skill as it is, its directory moved into the worktree, and the library
-// symlink to it. The skill is the library's, or a directory in an agent
-// client's own skills directory, which the library does not hold yet: that
-// one moves out of the client's directory, which gets the library's
-// symlink back, as a placement.
+// agentx adopt takes over an unmanaged skill, one no other tool recorded
+// or one whose record names nowhere agentx can install it from, as one of
+// the user's own. It is a fork in the skill's place with nothing to fork
+// from, see forkOf and makeFork: a branch of its own whose first commit
+// holds the skill as it is, its directory moved into the worktree, and the
+// library symlink to it. The skill is the library's, or a directory in an
+// agent client's own skills directory, which the library does not hold
+// yet: that one moves out of the client's directory, which gets the
+// library's symlink back, as a placement.
 
 // adoptPlace is one directory of a skill in an agent client's own skills
 // directory, as an adoption found it.
@@ -86,23 +87,202 @@ func (inv *invocation) planAdoption(ctx context.Context, name string, missing er
 	return fk, nil
 }
 
-// takeable reports whether c is a skill --skill takes over as it is: its
-// record is one agentx cannot use, its name is one a skill of the user's
-// own can have, and this machine holds a directory of it to move, the
-// library's, or, where the library holds nothing under the name, one in an
-// agent client's own skills directory. Another tool's symlink in the
-// library leaves no directory to take. It reads the machine and writes
-// nothing, as the preview that asks does, and what else can refuse the
-// adoption is found when it runs.
-func (inv *invocation) takeable(c *candidate) bool {
-	if !c.unusable || forkNameRefusal(c.rec.name) != "" {
-		return false
+// looseSkill is one unmanaged skill no tool recorded, as a preview lists
+// it and --all adopts it: an entry of the library no branch records, or a
+// folder in an agent client's own skills directory under a name the
+// library holds no unmanaged skill of.
+type looseSkill struct {
+	name string
+	path string // its folder: the library entry, or the folder in the client's skills directory
+	link string // for a library entry that is a symlink, the folder it leads to
+	// For a folder in a client's skills directory: managed says a skill
+	// agentx manages has its name, and blocked is what is at the library
+	// path, where its symlink would go, and is no skill.
+	managed bool
+	blocked string
+}
+
+// reason is why the skill cannot be adopted, as a row of a preview says
+// it, without the skill's name, and "" for one that can: what is read
+// without hashing a file or taking the lock. What else can refuse it, see
+// checkForking, is found when it is adopted. Pure.
+func (l looseSkill) reason() string {
+	switch {
+	case l.link != "":
+		return "a symlink to " + quotedPath(l.link) + ". To adopt it, move that folder to " + quotedPath(l.path)
+	case l.managed:
+		return quotedPath(l.path) + " has the name of a skill agentx already manages. To adopt it, rename that folder"
+	case l.blocked != "":
+		return quotedPath(l.blocked) + " is in the way and is not a skill. To adopt it, move " + quotedPath(l.blocked) + " somewhere else"
+	case forkNameRefusal(l.name) != "":
+		return "not a valid skill name. To adopt it, rename " + quotedPath(l.path)
 	}
-	if libPath := inv.libraryPath(c.rec.name); lexists(libPath) {
-		return isRealDirectory(libPath) && holdsSkillFile(libPath)
+	return ""
+}
+
+// skillFolders are the names of the entries of dir that are a skill, as a
+// scan lists a skills directory: every visible entry but node_modules that
+// is a directory, or leads to one, holding a SKILL.md. Nothing is hashed.
+func skillFolders(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
 	}
-	dirs, _ := inv.adoptSites(c.rec.name)
-	return len(dirs) > 0
+	var names []string
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") || name == "node_modules" {
+			continue
+		}
+		if info, err := os.Stat(filepath.Join(dir, name)); err == nil && info.IsDir() && holdsSkillFile(filepath.Join(dir, name)) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// looseSkills finds the unmanaged skills no tool recorded, in name order:
+// the entries of the library no branch records, then the folders in the
+// detected configurations' own skills directories, see adoptSites, under a
+// name the library holds no such entry of. A name a record of cands holds
+// is that record's to answer for. A folder copy_mode records is agentx's
+// own placement and no skill of its own. It reads the machine and writes
+// nothing.
+func (inv *invocation) looseSkills(cands []*candidate, records map[string]lineage.Record) ([]looseSkill, error) {
+	s, err := inv.loadSettings()
+	if err != nil {
+		return nil, err
+	}
+	modes, err := inv.copyModes(s)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	for _, c := range cands {
+		seen[c.rec.name] = true
+	}
+	var loose []looseSkill
+	for _, name := range skillFolders(inv.dirs.Library) {
+		if _, known := records[name]; known || seen[name] {
+			continue
+		}
+		seen[name] = true
+		l := looseSkill{name: name, path: inv.libraryPath(name)}
+		if info, err := os.Lstat(l.path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			l.link = linkedFolder(l.path)
+		}
+		loose = append(loose, l)
+	}
+	for _, t := range inv.detectedTargets() {
+		if t.dir == "" {
+			continue
+		}
+		for _, name := range skillFolders(t.dir) {
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			dirs, _ := inv.adoptSites(name)
+			dirs = slices.DeleteFunc(dirs, func(p adoptPlace) bool {
+				return slices.ContainsFunc(p.ids(), func(id string) bool { return slices.Contains(modes[name], id) })
+			})
+			if len(dirs) == 0 {
+				continue
+			}
+			l := looseSkill{name: name, path: dirs[0].path}
+			if _, l.managed = nameTaken(records, name, ""); !l.managed && lexists(inv.libraryPath(name)) {
+				l.blocked = inv.libraryPath(name)
+			}
+			loose = append(loose, l)
+		}
+	}
+	sort.Slice(loose, func(i, j int) bool { return loose[i].name < loose[j].name })
+	return loose, nil
+}
+
+// linkedFolder is where the symlink at link leads, as an absolute path: a
+// relative link is read against the directory it sits in.
+func linkedFolder(link string) string {
+	target, _ := os.Readlink(link)
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(link), target)
+	}
+	return filepath.Clean(target)
+}
+
+// symlinkRefusal refuses to adopt the skill called name, which this
+// machine holds as the symlink at link and no folder: the folder it leads
+// to is the user's to move. reason is the refusal as a row of a preview
+// says it, without the name.
+func symlinkRefusal(name, link string) (reason string, f *failure) {
+	target, at := quotedPath(linkedFolder(link)), quotedPath(link)
+	return "a symlink to " + target + ". To adopt it, move that folder to " + at,
+		refuse(exitRefused, sanitised(name)+" is a symlink to "+target+", and agentx adopts folders only",
+			"move "+target+" to "+at+", then run '"+adoptCommand(name)+"' again")
+}
+
+// asItIsRefusal is why the skill of rec, whose record names nowhere agentx
+// can install it from, cannot be adopted with its files as they are: nil
+// when this machine holds a folder of it to adopt, the library's, or,
+// where the library holds nothing under the name, one in an agent client's
+// own skills directory. reason is the refusal as a row of a preview says
+// it, without the skill's name; the failure is how a run asked to adopt it
+// answers. managed says an import branch holds the name, whose skill the
+// library no longer holds as a folder. It reads the machine and writes
+// nothing, as the preview that asks does; what else can refuse the
+// adoption, see checkForking, is found when it runs.
+func (inv *invocation) asItIsRefusal(rec record, managed bool) (reason string, f *failure) {
+	name, libPath := rec.name, inv.libraryPath(rec.name)
+	shown, again := sanitised(name), "run '"+adoptCommand(rec.name)+"' again"
+	refused := func(reason, message, hint string) (string, *failure) {
+		return reason, refuse(exitRefused, message, hint)
+	}
+	if managed {
+		remove := "'" + skillCommand("remove", name) + "'"
+		return refused("agentx already manages a skill of this name, whose folder "+quotedPath(libPath)+" is missing. To adopt this one, first run "+remove,
+			shown+" cannot be adopted: agentx already manages a skill of this name, whose folder "+quotedPath(libPath)+" is missing",
+			"run "+remove+", then "+again)
+	}
+	dir := libPath
+	switch info, err := os.Lstat(libPath); {
+	case err == nil && info.Mode()&os.ModeSymlink != 0:
+		return symlinkRefusal(name, libPath)
+	case err == nil && !info.IsDir():
+		return refused("a file, and a skill is a folder. To adopt it, put the skill's folder at "+quotedPath(libPath),
+			shown+" is a file, and agentx adopts folders only",
+			"put the skill's folder at "+quotedPath(libPath)+", then "+again)
+	case err == nil && !holdsSkillFile(libPath):
+		return refused("a folder with no SKILL.md file. To adopt it, add a SKILL.md to "+quotedPath(libPath),
+			shown+" has no SKILL.md file, so it is not a skill",
+			"add a SKILL.md to "+quotedPath(libPath)+", then "+again)
+	case err != nil:
+		dirs, links := inv.adoptSites(name)
+		switch {
+		case len(dirs) > 0:
+			dir = dirs[0].path
+		case len(links) > 0:
+			return symlinkRefusal(name, links[0])
+		case rec.tracked:
+			return refused("a whole repository that Skillshare tracks. Add it with 'agentx source add <url>', then install its skills",
+				shown+" is a repository Skillshare tracks as a whole, with skills inside it",
+				"add the repository with 'agentx source add <url>' and install its skills with 'agentx skill add'")
+		default:
+			return refused("only in "+quotedPath(rec.dir)+", where no agent looks for skills. To adopt it, move that folder to "+quotedPath(libPath),
+				shown+" is only in "+quotedPath(rec.dir)+", where no agent looks for skills",
+				"move "+quotedPath(rec.dir)+" to "+quotedPath(libPath)+", then "+again)
+		}
+	}
+	if forkNameRefusal(name) != "" {
+		return refused("not a valid skill name. To adopt it, rename "+quotedPath(dir),
+			forkNameRefusal(name),
+			"rename "+quotedPath(dir)+" to a valid name, then run 'agentx adopt --skill <new name>'")
+	}
+	if own := filepath.Join(dir, ".git"); lexists(own) {
+		return refused("a Git repository of its own. To adopt it, move "+quotedPath(own)+" out of the folder",
+			shown+" is a Git repository of its own, which agentx cannot adopt",
+			"move "+quotedPath(own)+" out of the folder, then "+again)
+	}
+	return "", nil
 }
 
 // adoptSourceOf finds the unmanaged skill called name. The library comes

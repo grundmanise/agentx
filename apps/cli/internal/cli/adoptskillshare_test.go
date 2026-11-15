@@ -163,8 +163,8 @@ func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 	for _, c := range []struct{ name, state, reason string }{
 		{"alpha", adoptAdopted, ""},
 		{"team__beta", adoptAdopted, ""},
-		{"_tracked", adoptRefused, "tracks as a whole"},
-		{"local", adoptRefused, "not a git repository agentx can fetch"},
+		{"_tracked", adoptRefused, "a whole repository that Skillshare tracks"},
+		{"local", adoptRefused, "only in " + filepath.Join(h.skillshareSkills(), "local") + ", where no agent looks for skills"},
 	} {
 		if states[c.name] != c.state {
 			t.Errorf("%s is %q, want %q", c.name, states[c.name], c.state)

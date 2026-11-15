@@ -429,8 +429,8 @@ func (inv *invocation) inPlaceRoom(fk *forking) error {
 	}
 	switch target, isLink := home.LinkTarget(state); {
 	case isLink && adopt:
-		return fail(exitRefused, fmt.Sprintf("%s is a symlink to %s; adopting %s moves the library directory into its worktree and would move the link rather than the files it leads to", quotedPath(from), quotedPath(target), sanitised(name)),
-			"replace the link with the directory it points to, then "+fk.again())
+		_, f := symlinkRefusal(name, from)
+		return f
 	case isLink:
 		return fail(exitRefused, fmt.Sprintf("%s is a symlink to %s; forking %s in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to", quotedPath(from), quotedPath(target), sanitised(name)),
 			"replace the link with the directory it points to, then "+fk.again()+beside)

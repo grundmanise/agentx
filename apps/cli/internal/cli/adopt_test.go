@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
@@ -211,10 +212,8 @@ func TestAdoptInstallsTheVersionTheSourceHoldsNow(t *testing.T) {
 	equal(t, "exit", preview.exit, 0)
 	equal(t, "state afterwards", h.one(preview.stdout, "adoption")["state"], adoptManaged)
 	human := h.run("adopt")
-	equal(t, "preview", human.stdout, "Found 1 skill installed by the Vercel skills CLI.\n\n"+
-		"Already managed by agentx (1)\n  alpha\n\n"+
-		"Nothing to adopt: agentx already manages every one.\n"+
-		"To take over an unmanaged skill no tool installed: agentx adopt --skill <name>\n")
+	equal(t, "preview", human.stdout, "Already managed by agentx (1)\n  alpha\n\n"+
+		"Nothing to adopt: this machine has no unmanaged skill.\n")
 	again := h.run("adopt", "--all")
 	equal(t, "exit", again.exit, 0)
 	contains(t, "stdout", again.stdout, "Already adopted.")
@@ -408,7 +407,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 		{"published", exitRefused, "your account remote already holds a skill called published"},
 		{"differs", exitRefused, "differs is a directory with different content in several configurations: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cursor, "differs") + " (cursor)"},
 		{"linked", exitRefused, "so there is no directory of linked to adopt"},
-		{"liblink", exitRefused, "adopting liblink moves the library directory into its worktree"},
+		{"liblink", exitRefused, "liblink is a symlink to " + filepath.Join(h.home, "elsewhere") + ", and agentx adopts folders only"},
 		{"cloned", exitRefused, "adopting it would move that repository into its worktree"},
 		{"held", exitRefused, "worktrees/held already exists"},
 		{"occupied", exitRefused, "the library already holds " + filepath.Join(h.library, "occupied")},
@@ -431,18 +430,19 @@ func TestAdoptRefusesAName(t *testing.T) {
 	equal(t, "the worktrees", names(t, filepath.Join(h.agentx, "worktrees")), worktrees)
 }
 
-// TestAdoptTakesOverAnUnmanagedSkill adopts, in one home, three skills no
-// record names or whose record agentx cannot use. One the library holds
-// becomes one of the user's own in its place: its content is the first
-// commit of a branch of its own, by the user and with a new fork id, its
-// directory moves into the worktree and the library holds a symlink to it.
-// One three clients hold the same directory of comes out of the first
+// TestAdoptTakesOverAnUnmanagedSkill adopts, in one home, three skills
+// with their files as they are. One the library holds, which no tool
+// recorded, becomes one of the user's own in its place: its content is the
+// first commit of a branch of its own, by the user and with a new fork id,
+// its directory moves into the worktree and the library holds a symlink to
+// it. One three clients hold the same directory of comes out of the first
 // client's skills directory: the library gets its symlink, the two clients
 // that do not read the library get a symlink to the library where their
-// directory was, and the one that reads it gets none. One the Vercel
-// skills CLI recorded as installed from no git repository is taken over as
-// it is, the user's edit included, and that tool's file is left as it was.
-// No run reports an adoption event: no record was adopted.
+// directory was, and the one that reads it gets none. Neither run reports
+// an adoption event. One the Vercel skills CLI recorded as installed from
+// no git repository is adopted the same way, the user's edit included, by
+// a run that names the tool: it reports the record as adopted, that tool's
+// file is left as it was, and the next run finds the skill managed.
 func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -496,57 +496,150 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"beta": {
 		Source: "owner/repo", SourceType: "well-known", SourceURL: s.url, SkillPath: "skills/beta/SKILL.md",
 	}})
-	out = h.run("--json", "adopt", "--skill", "beta")
-	equal(t, "a record agentx cannot use: exit", out.exit, 0)
+	out = h.run("--json", "adopt", "skills-cli", "--skill", "beta")
+	equal(t, "installed from no git repository: exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
-	equal(t, "a record agentx cannot use: adoption events", len(h.eventsOfType(out.stdout, "adoption")), 0)
-	equal(t, "a record agentx cannot use: the summary", h.one(out.stdout, "result")["summary"], "adopted beta")
-	equal(t, "a record agentx cannot use: the edit", fileBody(t, filepath.Join(h.agentx, "worktrees", "beta", "beta", "notes.md")), "an edit of mine\n")
-	equal(t, "a record agentx cannot use: the subject", h.accountGit("log", "-1", "--format=%s", h.ref(lineage.ForkRef("beta"))), "Adopt beta")
+	equal(t, "installed from no git repository: the events", strings.Join(h.types(h.events(out.stdout)), ", "), "library_skill, adoption, result")
+	equal(t, "installed from no git repository: the adoption", h.one(out.stdout, "adoption")["state"], adoptAdopted)
+	equal(t, "installed from no git repository: the summary", h.one(out.stdout, "result")["summary"], "adopted beta")
+	equal(t, "installed from no git repository: the edit", fileBody(t, filepath.Join(h.agentx, "worktrees", "beta", "beta", "notes.md")), "an edit of mine\n")
+	equal(t, "installed from no git repository: the subject", h.accountGit("log", "-1", "--format=%s", h.ref(lineage.ForkRef("beta"))), "Adopt beta")
+	again := h.run("--json", "adopt", "--all")
+	equal(t, "adopted already: exit", again.exit, 0)
+	equal(t, "adopted already: the adoption", h.one(again.stdout, "adoption")["state"], adoptManaged)
 }
 
-// TestChooseAdoptions sorts the names of a run into the records it installs
-// from their source and the skills it takes over as they are: one no
-// record holds, and one whose record agentx cannot use, whose refusal is
-// the answer when nothing of the skill is found. With a tool named or with
-// --all nothing is taken over, and such a record is left to be refused.
+// TestChooseAdoptions sorts the names of a run into the skills a record
+// holds, whatever the record says of them, and the ones none holds, which
+// are looked for as unmanaged skills, once each and in name order. With a
+// tool named, a name its records do not hold is not found.
 func TestChooseAdoptions(t *testing.T) {
 	t.Parallel()
-	unusable := refuse(exitRefused, "beta was installed from a local source", "")
 	cands := []*candidate{
 		{rec: record{name: "alpha"}, state: adoptCandidate},
-		{rec: record{name: "beta"}, state: adoptRefused, fail: unusable, unusable: true},
-		{rec: record{name: "gamma"}, state: adoptRefused, fail: refuse(exitRefused, "gamma is a skill of the account remote on this machine", "")},
+		{rec: record{name: "beta"}, state: adoptRefused},
 	}
-	names := []string{"gamma", "beta", "notes", "alpha", "beta"}
+	names := []string{"notes", "beta", "alpha", "beta"}
 	for _, tc := range []struct {
-		name          string
-		sel           adoptSelection
-		chosen, taken string
-		exit          int
+		name        string
+		sel         adoptSelection
+		chosen, own string
+		exit        int
 	}{
-		{"by name", adoptSelection{names: names}, "alpha gamma", "beta notes", 0},
-		{"by name, of one tool", adoptSelection{tool: toolVercel, names: []string{"beta", "alpha"}}, "alpha beta", "", 0},
-		{"a name the tool's records do not hold", adoptSelection{tool: toolVercel, names: names}, "", "", exitNotFound.exit},
-		{"every record", adoptSelection{all: true}, "alpha beta gamma", "", 0},
+		{"by name", adoptSelection{names: names}, "alpha beta", "notes", 0},
+		{"by name, of one tool", adoptSelection{tool: toolVercel, names: names}, "", "", exitNotFound.exit},
+		{"every record", adoptSelection{all: true}, "alpha beta", "", 0},
 	} {
 		chosen, own, err := (&invocation{}).chooseAdoptions(cands, nil, tc.sel)
-		var got, taken []string
+		var got []string
 		for _, c := range chosen {
 			got = append(got, c.rec.name)
-		}
-		for _, o := range own {
-			taken = append(taken, o.name)
-			if o.name == "beta" && o.missing != error(unusable) {
-				t.Errorf("%s: beta answers %v when nothing of it is found, want its record's refusal", tc.name, o.missing)
-			}
 		}
 		code := 0
 		if f := (*failure)(nil); errors.As(err, &f) {
 			code = f.status.exit
 		}
-		if strings.Join(got, " ") != tc.chosen || strings.Join(taken, " ") != tc.taken || code != tc.exit {
-			t.Errorf("%s: chosen %v, taken over %v, exit %d, want %q, %q, exit %d", tc.name, got, taken, code, tc.chosen, tc.taken, tc.exit)
+		if strings.Join(got, " ") != tc.chosen || strings.Join(own, " ") != tc.own || code != tc.exit {
+			t.Errorf("%s: chosen %v, own %v, exit %d, want %q, %q, exit %d", tc.name, got, own, code, tc.chosen, tc.own, tc.exit)
+		}
+	}
+}
+
+// TestAsItIsRefusal judges, in one home, every shape a skill can have on
+// this machine when it was installed from somewhere agentx cannot install
+// from: a folder in the library or in a client's skills directory is
+// adopted as it is, and anything else is refused in a row of the preview
+// that says what it is and what to do.
+func TestAsItIsRefusal(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	lib, claude, store := filepath.Join(root, ".agents", "skills"), filepath.Join(root, ".claude", "skills"), filepath.Join(root, "store")
+	inv := &invocation{dirs: home.Dirs{User: root, Home: filepath.Join(root, "agentx"), Library: lib, Config: filepath.Join(root, "config")}}
+	for _, dir := range []string{
+		filepath.Join(lib, "folder"), filepath.Join(claude, "client"), filepath.Join(lib, "Bad_Name"),
+		filepath.Join(lib, "cloned"), filepath.Join(root, "work", "linked"), filepath.Join(store, "apart"),
+	} {
+		writeFile(t, mkdirs(t, dir, "SKILL.md"), skill(filepath.Base(dir), "A skill"))
+	}
+	writeFile(t, mkdirs(t, filepath.Join(lib, "cloned", ".git"), "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, mkdirs(t, filepath.Join(lib, "bare"), "README.md"), "no skill\n")
+	writeFile(t, filepath.Join(lib, "file"), "no folder\n")
+	for link, target := range map[string]string{
+		filepath.Join(lib, "linked"):       filepath.Join(root, "work", "linked"),
+		filepath.Join(claude, "elsewhere"): "../../work/linked",
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := func(name string) string { return filepath.Join(lib, name) }
+	for _, tc := range []struct {
+		rec     record
+		managed bool
+		reason  string // "" for a skill adopted as it is
+	}{
+		{rec: record{name: "folder"}},
+		{rec: record{name: "client"}},
+		{rec: record{name: "linked"}, reason: "a symlink to " + filepath.Join(root, "work", "linked") + ". To adopt it, move that folder to " + at("linked")},
+		{rec: record{name: "elsewhere"}, reason: "a symlink to " + filepath.Join(root, "work", "linked") + ". To adopt it, move that folder to " + filepath.Join(claude, "elsewhere")},
+		{rec: record{name: "file"}, reason: "a file, and a skill is a folder. To adopt it, put the skill's folder at " + at("file")},
+		{rec: record{name: "bare"}, reason: "a folder with no SKILL.md file. To adopt it, add a SKILL.md to " + at("bare")},
+		{rec: record{name: "Bad_Name"}, reason: "not a valid skill name. To adopt it, rename " + at("Bad_Name")},
+		{rec: record{name: "cloned"}, reason: "a Git repository of its own. To adopt it, move " + filepath.Join(at("cloned"), ".git") + " out of the folder"},
+		{rec: record{name: "apart", dir: filepath.Join(store, "apart")}, reason: "only in " + filepath.Join(store, "apart") + ", where no agent looks for skills. To adopt it, move that folder to " + at("apart")},
+		{rec: record{name: "apart", dir: filepath.Join(store, "apart"), tracked: true},
+			reason: "a whole repository that Skillshare tracks. Add it with 'agentx source add <url>', then install its skills"},
+		{rec: record{name: "folder"}, managed: true,
+			reason: "agentx already manages a skill of this name, whose folder " + at("folder") + " is missing. To adopt this one, first run 'agentx skill remove folder'"},
+	} {
+		reason, f := inv.asItIsRefusal(tc.rec, tc.managed)
+		if reason != tc.reason || (f == nil) != (tc.reason == "") {
+			t.Errorf("%s: asItIsRefusal = %q, %v, want %q", tc.rec.name, reason, f, tc.reason)
+		}
+	}
+}
+
+// TestLooseSkillReason says, of an unmanaged skill no tool recorded, why a
+// preview lists it as one it cannot adopt, and nothing of one it can: a
+// folder of the library or of an agent client's skills directory.
+func TestLooseSkillReason(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		skill  looseSkill
+		reason string
+	}{
+		{"a folder of the library", looseSkill{name: "notes", path: "/lib/notes"}, ""},
+		{"a folder of a client", looseSkill{name: "jot", path: "/claude/jot"}, ""},
+		{"a symlink in the library", looseSkill{name: "linked", path: "/lib/linked", link: "/work/linked"},
+			"a symlink to /work/linked. To adopt it, move that folder to /lib/linked"},
+		{"a name that is no skill name", looseSkill{name: "My_Skill", path: "/lib/My_Skill"},
+			"not a valid skill name. To adopt it, rename /lib/My_Skill"},
+		{"a client's folder named as a managed skill", looseSkill{name: "pdf", path: "/claude/pdf", managed: true},
+			"/claude/pdf has the name of a skill agentx already manages. To adopt it, rename that folder"},
+		{"a client's folder whose library path is taken", looseSkill{name: "pdf", path: "/claude/pdf", blocked: "/lib/pdf"},
+			"/lib/pdf is in the way and is not a skill. To adopt it, move /lib/pdf somewhere else"},
+	} {
+		if got := tc.skill.reason(); got != tc.reason {
+			t.Errorf("%s: reason = %q, want %q", tc.name, got, tc.reason)
+		}
+	}
+}
+
+// TestPreviewSummary is what the result of a preview says it found.
+func TestPreviewSummary(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		ready, refused, managed, gone int
+		want                          string
+	}{
+		{0, 0, 0, 0, "nothing to adopt"},
+		{2, 1, 1, 1, "3 unmanaged skills, 2 to adopt, 1 that cannot be adopted, 1 already managed, 1 no longer on this machine"},
+		{1, 0, 0, 0, "1 unmanaged skill, 1 to adopt"},
+		{0, 0, 2, 0, "no unmanaged skill, 2 already managed"},
+	} {
+		if got := previewSummary(tc.ready, tc.refused, tc.managed, tc.gone); got != tc.want {
+			t.Errorf("previewSummary(%d, %d, %d, %d) = %q, want %q", tc.ready, tc.refused, tc.managed, tc.gone, got, tc.want)
 		}
 	}
 }
