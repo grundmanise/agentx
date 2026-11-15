@@ -1,7 +1,8 @@
 // AGENTS in the detail pane: one toggle chip per configuration that places skills in its own
 // directory, then Universal for the clients that read the library. A chip runs one command and
 // shows pending until the command ends and the next inventory arrives; the inventory then says
-// what the chip shows. A locked chip runs nothing and toasts why.
+// what the chip shows. A locked chip runs nothing and toasts why; the toast of an unmanaged
+// skill offers what unlocks it, Adopt or Fork.
 //
 // The chips that are on come first, then the rest by the popularity of the agent client. The
 // order is fixed when the pane opens, so a chip stays where it is when it is toggled. Collapsed,
@@ -14,17 +15,21 @@ import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentChip } from "#/components/agent-chip.tsx";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { notify } from "#/components/toast.tsx";
+import type { ToastAction } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { popularityOf } from "#/lib/agent-popularity.ts";
+import { adopt } from "#/screens/skills/actions.tsx";
+import { openFork } from "#/screens/skills/fork-dialog.tsx";
 import {
   chipLabel,
   chipStateOf,
   chipTitle,
   inertReason,
-  lockReason,
+  lockOf,
   removedFrom,
   universalTitle,
 } from "#/screens/skills/placements.ts";
+import type { Lock } from "#/screens/skills/placements.ts";
 import { UNIVERSAL } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
@@ -59,6 +64,39 @@ const toggle = (
   );
 };
 
+/** The action of a locked chip's toast: Adopt runs the adoption, Fork opens the Fork dialog. */
+const unlockAction = (row: SkillRow, lock: Lock): ToastAction | undefined => {
+  switch (lock.action) {
+    case "adopt": {
+      return {
+        label: "Adopt",
+        onClick: () => {
+          void adopt(row.name);
+        },
+      };
+    }
+    case "fork": {
+      return {
+        label: "Fork",
+        onClick: () => {
+          openFork(row);
+        },
+      };
+    }
+    case undefined: {
+      return undefined;
+    }
+    default: {
+      return undefined;
+    }
+  }
+};
+
+/** Toasts why the chips of `row` are locked, with what unlocks them. */
+const notifyLocked = (row: SkillRow, lock: Lock) => {
+  notify(lock.reason, unlockAction(row, lock));
+};
+
 const DirectChip = ({
   row,
   c,
@@ -69,7 +107,7 @@ const DirectChip = ({
   configurations: Configuration[];
 }) => {
   const state = chipStateOf(row, c, configurations);
-  const locked = lockReason(row);
+  const locked = lockOf(row);
   const pending = useSettling(chipLabel(row, c));
   return (
     <AgentChip
@@ -82,7 +120,7 @@ const DirectChip = ({
       pending={pending}
       onClick={() => {
         if (locked !== undefined) {
-          notify(locked);
+          notifyLocked(row, locked);
         } else if (!pending) {
           toggle(row, c, state === "off", removedFrom(row, c, configurations));
         }
@@ -193,7 +231,7 @@ export const AgentsSection = ({
 }) => {
   const direct = configurations.filter((c) => !c.reads_library);
   const universal = configurations.filter((c) => c.reads_library);
-  const locked = lockReason(row);
+  const locked = lockOf(row);
 
   const entries: Entry[] = direct.map((c) => ({
     chip: <DirectChip row={row} c={c} configurations={configurations} />,
@@ -213,7 +251,7 @@ export const AgentsSection = ({
           locked={locked !== undefined || !row.universal}
           onClick={() => {
             if (locked !== undefined) {
-              notify(locked);
+              notifyLocked(row, locked);
             } else if (row.universal) {
               onRemove();
             }

@@ -1,5 +1,6 @@
 // The Remove dialog (DESIGN.md §6 "Banner actions and dialogs"): what leaves the machine with the
-// skill, and for one of your own, whether its branch leaves the account remote too. Remove runs
+// skill, and for one of your own, whether its branch leaves the account remote too. Opened from the
+// Universal chip, it says why the skill leaves every agent: those agents read the library. Remove runs
 // `skill remove <name>`, with --remote when that is checked, and never offers an Undo: a skill of a
 // source is added again from its source, and unpublished edits of your own are gone.
 import { useId, useState } from "react";
@@ -49,12 +50,15 @@ export const RemoveDialog = ({
   row,
   configurations,
   open,
-  onOpenChange,
+  fromUniversal,
+  onClose,
 }: {
   row: SkillRow;
   configurations: Configuration[];
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  /** Whether the Universal chip opened it: the dialog then says why every agent loses the skill. */
+  fromUniversal: boolean;
+  onClose: () => void;
 }) => {
   const [remote, setRemote] = useState(false);
   const checkboxId = useId();
@@ -69,7 +73,7 @@ export const RemoveDialog = ({
   // the account remote's branch goes only when the box is ticked in the confirmation that removes.
   const close = () => {
     setRemote(false);
-    onOpenChange(false);
+    onClose();
   };
   const remove = () => {
     const args = ["skill", "remove", row.name];
@@ -86,9 +90,7 @@ export const RemoveDialog = ({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (next) {
-          onOpenChange(true);
-        } else {
+        if (!next) {
           close();
         }
       }}
@@ -97,7 +99,9 @@ export const RemoveDialog = ({
         <DialogHeader showCloseButton={false}>
           <DialogTitle>{`Remove ${row.name}?`}</DialogTitle>
           <DialogDescription>
-            It will be deleted from every agent on this machine:
+            {fromUniversal
+              ? "Universal agents read your library, where agentx keeps this skill. Removing it there deletes it from every agent on this machine:"
+              : "It will be deleted from every agent on this machine:"}
           </DialogDescription>
         </DialogHeader>
         <ul

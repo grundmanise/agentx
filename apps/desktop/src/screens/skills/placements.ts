@@ -9,6 +9,7 @@ import type {
 } from "#/cli/events.gen.ts";
 import type { AgentChipState } from "#/components/agent-chip.tsx";
 import { plural } from "#/lib/plural.ts";
+import { canFork } from "#/screens/skills/fork.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 /**
@@ -150,21 +151,38 @@ export const inertReason = (
   }
 };
 
+/** Why no chip of a skill can be changed, and the control that unlocks them when there is one. */
+export interface Lock {
+  reason: string;
+  /** What the toast of a locked chip offers: Adopt or Fork. */
+  action?: "adopt" | "fork";
+}
+
+const UNMANAGED = "This skill is not managed by agentx";
+
+/** An unmanaged skill: adopted when another tool installed it, forked when the library holds it. */
+const unmanagedLock = (row: SkillRow): Lock => {
+  if (row.adoption?.state === "candidate") {
+    return { action: "adopt", reason: `${UNMANAGED}. Adopt it to manage` };
+  }
+  return canFork(row)
+    ? { action: "fork", reason: `${UNMANAGED}. Fork it to manage` }
+    : { reason: UNMANAGED };
+};
+
 /**
  * Why no chip of the skill can be changed, or undefined when they can: a plugin's skill belongs
- * to its plugin, and an unmanaged skill is not agentx's to place until it is forked, or adopted
- * when another tool installed it.
+ * to its plugin, and an unmanaged skill is not agentx's to place until it is adopted, which
+ * `adopt` does for a skill another tool installed, or forked.
  */
-export const lockReason = (row: SkillRow): string | undefined => {
+export const lockOf = (row: SkillRow): Lock | undefined => {
   switch (row.kind) {
     case "plugin": {
       const plugin = row.plugin?.name ?? row.occurrences[0]?.plugin ?? "";
-      return `Comes with the ${plugin} plugin. Fork it to manage it here`;
+      return { reason: `Comes with the ${plugin} plugin. Fork to edit` };
     }
     case "disk": {
-      return row.adoption?.state === "candidate"
-        ? "Adopt it first, then agentx can place it"
-        : "agentx doesn't manage it. Fork it to manage it here";
+      return unmanagedLock(row);
     }
     case "source":
     case "yours": {
@@ -175,6 +193,10 @@ export const lockReason = (row: SkillRow): string | undefined => {
     }
   }
 };
+
+/** The reason of `lockOf`, for a chip's title. */
+export const lockReason = (row: SkillRow): string | undefined =>
+  lockOf(row)?.reason;
 
 /** The chip's title: what a click does, or why it does nothing. */
 export const chipTitle = (
