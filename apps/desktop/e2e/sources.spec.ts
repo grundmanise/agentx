@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { webUrl } from "#/screens/sources/projection.ts";
+import { skillPage, webUrl } from "#/screens/sources/projection.ts";
 
 import {
   ACME,
@@ -238,7 +238,7 @@ test("a source listing: selectable skills first, then each state with its label 
   ]);
 });
 
-test("opening a row reads its SKILL.md once and shows it under the description", async ({
+test("opening a row reads its SKILL.md once and links to the skill", async ({
   cli,
   page,
 }) => {
@@ -249,12 +249,11 @@ test("opening a row reads its SKILL.md once and shows it under the description",
   await row(page, "docx").click();
   await read.started;
   await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
-  await expect(opened(page, "docx")).toContainText(
-    "Create and edit Word documents"
-  );
   await expect(
     opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
   ).toContainText("# Word documents");
+  await opened(page, "docx").getByRole("link", { name: "View skill" }).click();
+  expect(cli.openedUrls).toEqual([`${ACME}/tree/3f2a9c1e8d7b6a/skills/docx`]);
   // The row opens and closes on a click; the check alone selects.
   await expect(bar(page)).toHaveCount(0);
   await row(page, "docx").click();
@@ -916,4 +915,27 @@ test("the repository link of a source URL", () => {
     ["/home/me/skills", undefined],
   ];
   expect(cases.map(([url]) => [url, webUrl(url)])).toEqual(cases);
+});
+
+test("the page of a skill in its source", () => {
+  const cases: [string, string, string, string | undefined][] = [
+    [ACME, "v2", "skills/docx", `${ACME}/tree/v2/skills/docx`],
+    [ACME, "release/1.x", "", `${ACME}/tree/release/1.x`],
+    [
+      "https://gitlab.com/group/sub/repo",
+      "HEAD",
+      "tools/a b",
+      "https://gitlab.com/group/sub/repo/-/tree/HEAD/tools/a%20b",
+    ],
+    ["https://git.example.com/team/skills", "HEAD", "x", undefined],
+    ["/home/me/skills", "HEAD", "x", undefined],
+  ];
+  expect(
+    cases.map(([url, ref, subpath]) => [
+      url,
+      ref,
+      subpath,
+      skillPage(url, ref, subpath),
+    ])
+  ).toEqual(cases);
 });

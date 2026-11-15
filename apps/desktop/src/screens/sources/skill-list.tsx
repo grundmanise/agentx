@@ -18,6 +18,7 @@ import {
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
+import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
 import { statusLabels } from "#/screens/sources/projection.ts";
 import type {
@@ -124,31 +125,58 @@ const SkillMd = ({
   );
 };
 
-/**
- * What an open row shows: the full description, why a skill that cannot be selected cannot be,
- * and its SKILL.md. One of your skills on the account remote has no SKILL.md to read here.
- */
-const Details = ({ card }: { card: SkillCard }) => (
-  <>
-    {(card.description !== "" || card.title !== undefined) && (
-      <div className="px-file-row flex flex-col gap-2 pb-3.5">
-        {card.description !== "" && (
-          <p className="type-body text-text-muted m-0 text-pretty">
-            {card.description}
-          </p>
-        )}
-        {card.title !== undefined && (
-          <p className="type-secondary text-text-hint m-0 text-pretty">
-            {card.title}
-          </p>
-        )}
-      </div>
-    )}
-    {card.skillMd !== undefined && (
-      <SkillMd cardKey={card.key} name={card.name} skillMd={card.skillMd} />
-    )}
-  </>
+/** "View skill": the skill's directory on its source's web page, opened in the browser. */
+const ViewSkill = ({ page }: { page: string }) => (
+  <a
+    href={page}
+    title={page}
+    className="type-secondary text-text-primary self-start font-medium hover:underline"
+    onClick={(e) => {
+      e.preventDefault();
+      void openInBrowser(page);
+    }}
+  >
+    View skill
+  </a>
 );
+
+/**
+ * What an open row shows: why a skill that cannot be selected cannot be, a link to the skill on
+ * its source's web page, and its SKILL.md, whose frontmatter holds the description. One of your
+ * skills on the account remote has no SKILL.md to read here, so its row shows its description.
+ */
+const Details = ({ card }: { card: SkillCard }) => {
+  const description =
+    card.skillMd === undefined && card.description !== ""
+      ? card.description
+      : undefined;
+  const header =
+    description !== undefined ||
+    card.title !== undefined ||
+    card.page !== undefined;
+  return (
+    <>
+      {header && (
+        <div className="px-file-row flex flex-col gap-2 pb-3.5">
+          {description !== undefined && (
+            <p className="type-body text-text-muted m-0 text-pretty">
+              {description}
+            </p>
+          )}
+          {card.title !== undefined && (
+            <p className="type-secondary text-text-hint m-0 text-pretty">
+              {card.title}
+            </p>
+          )}
+          {card.page !== undefined && <ViewSkill page={card.page} />}
+        </div>
+      )}
+      {card.skillMd !== undefined && (
+        <SkillMd cardKey={card.key} name={card.name} skillMd={card.skillMd} />
+      )}
+    </>
+  );
+};
 
 /**
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its

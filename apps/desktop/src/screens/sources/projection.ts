@@ -138,6 +138,42 @@ export const webUrl = (url: string): string | undefined => {
   return path === "" ? undefined : `https://${host}/${path}`;
 };
 
+/** Each `/`-separated part of a ref or a path, escaped for a URL. */
+const urlPath = (path: string) =>
+  path.split("/").map(encodeURIComponent).join("/");
+
+/**
+ * The web page of a skill's directory at `ref` in the source at `url`: GitHub's `/tree/` page, or
+ * GitLab's `/-/tree/` page on a host named for GitLab; undefined for any other host, whose pages
+ * agentx does not know.
+ */
+export const skillPage = (
+  url: string,
+  ref: string,
+  subpath: string
+): string | undefined => {
+  const page = webUrl(url);
+  if (page === undefined) {
+    return undefined;
+  }
+  const { host } = new URL(page);
+  let tree: string | undefined;
+  if (host === "github.com") {
+    tree = "tree";
+  } else if (host.split(".").includes("gitlab")) {
+    tree = "-/tree";
+  }
+  if (tree === undefined) {
+    return undefined;
+  }
+  const at = `${page}/${tree}/${urlPath(ref)}`;
+  return subpath === "" ? at : `${at}/${urlPath(subpath)}`;
+};
+
+/** The ref a source's pages are read at: the commit it was fetched at, else its pin, else HEAD. */
+export const pageRef = (source: SourceEvent | undefined): string =>
+  source?.commit ?? source?.pin ?? "HEAD";
+
 /**
  * The letter on a source's tile: the first letter or digit of its owner, the first part of the
  * URL's path, in upper case.
@@ -210,6 +246,8 @@ export interface SkillCard {
   title?: string;
   /** Where its SKILL.md is read from; absent for your skills on the account remote. */
   skillMd?: SkillMdRef;
+  /** The skill's directory on its source's web page, when agentx knows the host's pages. */
+  page?: string;
 }
 
 export const cardKey = (source: string, name: string) =>
@@ -220,7 +258,8 @@ const card = (
   name: string,
   description: string,
   status: CardStatus | undefined,
-  skillMd?: SkillMdRef
+  skillMd?: SkillMdRef,
+  page?: string
 ): SkillCard => {
   const c: SkillCard = {
     description,
@@ -230,6 +269,9 @@ const card = (
   };
   if (skillMd !== undefined) {
     c.skillMd = skillMd;
+  }
+  if (page !== undefined) {
+    c.page = page;
   }
   if (status !== undefined) {
     c.status = status;
@@ -275,7 +317,9 @@ const sourceSkillStatus = (
 export const listingCards = (
   listing: SourceSkillEvent[],
   url: string,
-  library: LibraryEntry[]
+  library: LibraryEntry[],
+  /** The ref the skills' pages are at: `pageRef` of the source. */
+  ref = "HEAD"
 ): SkillCard[] =>
   listing.map((s) =>
     card(
@@ -283,7 +327,8 @@ export const listingCards = (
       s.name,
       s.description,
       sourceSkillStatus(url, s.subpath, s.name, library),
-      { source: s.source, subpath: s.subpath, tree: s.tree }
+      { source: s.source, subpath: s.subpath, tree: s.tree },
+      skillPage(url, ref, s.subpath)
     )
   );
 
@@ -329,7 +374,9 @@ export const installableCards = (
 /** The cards of a search answer, whose `source` is each skill's source URL. */
 export const resultCards = (
   results: SearchResult[],
-  library: LibraryEntry[]
+  library: LibraryEntry[],
+  /** The ref a source's pages are at, by its URL: `pageRef` of the source. */
+  refOf: (url: string) => string = () => "HEAD"
 ): SkillCard[] =>
   results.map((r) =>
     card(
@@ -337,7 +384,8 @@ export const resultCards = (
       r.name,
       r.description,
       sourceSkillStatus(r.source, r.subpath, r.name, library),
-      { source: r.source, subpath: r.subpath, tree: r.tree }
+      { source: r.source, subpath: r.subpath, tree: r.tree },
+      skillPage(r.source, refOf(r.source), r.subpath)
     )
   );
 

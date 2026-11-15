@@ -22,6 +22,7 @@ import {
   groupCards,
   installableCards,
   listingCards,
+  pageRef,
   orderCards,
   planAdds,
   resultCards,
@@ -242,8 +243,15 @@ export const SourcesScreen = () => {
     }
     return listing === undefined || activePill.url === undefined
       ? noCards
-      : orderCards(listingCards(listing, activePill.url, library));
-  }, [activePill, installable, listing, library]);
+      : orderCards(
+          listingCards(
+            listing,
+            activePill.url,
+            library,
+            pageRef(sources.find((s) => s.id === activePill.key))
+          )
+        );
+  }, [activePill, installable, listing, library, sources]);
   // A search answer replaces the listing while it answers the query as it stands.
   const results =
     found !== undefined && found.query === query.trim()
@@ -253,8 +261,14 @@ export const SourcesScreen = () => {
     () =>
       results === undefined
         ? undefined
-        : groupCards(orderCards(resultCards(results, library))),
-    [results, library]
+        : groupCards(
+            orderCards(
+              resultCards(results, library, (url) =>
+                pageRef(sources.find((s) => s.url === url))
+              )
+            )
+          ),
+    [results, library, sources]
   );
   const groups: CardGroup[] =
     resultGroups ??
