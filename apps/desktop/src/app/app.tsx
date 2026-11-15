@@ -40,7 +40,7 @@ const screenVariants = cva(
     variants: {
       // The kept inventory is there with the first render: it does not fade in.
       enter: { fade: "animate-fade-in", none: "" },
-      // Washed out, and pulsing slowly, while it may not be this machine as it is now.
+      // Washed out, and pulsing, while it may not be this machine as it is now.
       loading: {
         false: "",
         true: "opacity-panel-loading animate-panel-loading motion-reduce:animate-none",

@@ -7,7 +7,7 @@ date: 2026-11-14
 
 A launch runs four steps before the app knows the machine: it reads the login shell's environment, runs `agentx version` and `agentx doctor`, then starts `agentx serve` and waits for its first inventory. Each step starts processes, and on macOS that takes long enough to see. Until now the main panel stayed empty for all of it.
 
-The app now keeps the last inventory it applied, with the slices it loads once the checks pass (the machine settings, the machine, the sources and the adoption preview), as the **kept inventory**. A launch that finds one fills its store from it before the first frame, so the screens show at once. The checks run as before, at the same time as the user reads. Until they pass, the screen in the main panel is washed out and pulses slowly, and nothing else says that they run. The title bar and the sidebar are as always, and the user can go to any screen and select anything in it.
+The app now keeps the last inventory it applied, with the slices it loads once the checks pass (the machine settings, the machine, the sources and the adoption preview), as the **kept inventory**. A launch that finds one fills its store from it before the first frame, so the screens show at once. The checks run as before, at the same time as the user reads. Until they pass, the screen in the main panel is washed out and pulses, and nothing else says that they run. The title bar and the sidebar are as always, and the user can go to any screen and select anything in it.
 
 The kept inventory is shown, never trusted:
 

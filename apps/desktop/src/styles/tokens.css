@@ -401,7 +401,7 @@
     }
   }
   /* The kept inventory before the startup checks pass: from `opacity-panel-loading` down and back. */
-  --animate-panel-loading: panel-loading 2.4s ease-in-out infinite;
+  --animate-panel-loading: panel-loading 1s ease-in-out infinite;
   @keyframes panel-loading {
     50% {
       opacity: 30%;
