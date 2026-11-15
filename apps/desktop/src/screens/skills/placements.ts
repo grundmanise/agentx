@@ -159,7 +159,7 @@ export const convertedText = (
   const summary = summaryOf(events);
   const converted = firstNumber(summary, /(?<n>\d+) skills? converted/u) ?? 0;
   const skipped = firstNumber(summary, /(?<n>\d+) skipped/u) ?? 0;
-  const text = `Converted ${plural(converted, "skill")} in ${agent} to ${mode}s`;
+  const text = `Converted ${plural(converted, "skill")} in ${agent} to ${mode === "copy" ? "copies" : "symlinks"}`;
   return skipped > 0
     ? `${text}. Kept ${skipped} edited ${skipped === 1 ? "copy" : "copies"}`
     : text;

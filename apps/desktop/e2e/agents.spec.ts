@@ -1,6 +1,6 @@
 // The Agents page: every configuration the scan detected, with its counts from the inventory's
 // edges, the Enabled switch, which runs `config enable|disable <id>` and offers Place all, the
-// Placement control, which runs `config placement <id> symlink|copy`, and Remove in the menu of a card and of a Universal column, which confirms and runs
+// Placement control, which runs `config placement <id> symlink|copy` and offers Convert, and Remove in the menu of a card and of a Universal column, which confirms and runs
 // `config remove <id> --yes`.
 import type { Locator, Page } from "@playwright/test";
 
@@ -164,7 +164,7 @@ test("turning an agent off runs config disable", async ({ cli, page }) => {
   expect(later(cli)).toEqual([["config", "disable", "cursor", "--json"]]);
 });
 
-test("choosing Copy on a card runs config placement, and the control follows the next inventory", async ({
+test("choosing Copy on a card runs config placement, the control follows the next inventory, and Convert converts the skills already there", async ({
   cli,
   page,
 }) => {
@@ -206,8 +206,39 @@ test("choosing Copy on a card runs config placement, and the control follows the
   ]);
   await expect(copy).toBeChecked();
   await expect(control).not.toHaveAttribute("aria-busy");
+
+  // The toast offers to convert the symlinks Cursor already holds.
+  cli.register(["config", "placement", "cursor", "copy", "--convert"], {
+    events: [
+      { type: "settings" },
+      {
+        ok: true,
+        summary: "cursor now places copies, 2 skills converted, 1 skipped",
+        type: "result",
+      },
+    ],
+  });
+  await toasts(page)
+    .getByRole("button", { name: /^Convert \d+$/u })
+    .click();
+  await expect.poll(() => cli.serveRequests.length).toBe(2);
+  await cli.serveEmit([
+    { ...inventory, scan_counter: 3 },
+    {
+      ok: true,
+      request_id: cli.requestIds.at(-1) ?? "",
+      scan_counter: 3,
+      type: "refresh_complete",
+    },
+  ]);
+  await expect(
+    toasts(page).getByText(
+      "Converted 2 skills in Cursor to copies. Kept 1 edited copy"
+    )
+  ).toBeVisible();
   expect(later(cli)).toEqual([
     ["config", "placement", "cursor", "copy", "--json"],
+    ["config", "placement", "cursor", "copy", "--convert", "--json"],
   ]);
 });
 

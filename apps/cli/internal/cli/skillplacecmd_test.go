@@ -517,7 +517,7 @@ func TestConfigPlacementPlacesCopies(t *testing.T) {
 	settings := h.one(out.stdout, "settings")["settings"].(map[string]any)
 	deep(t, "copy_configurations", settings["copy_configurations"], any([]any{"github-copilot"}))
 
-	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--to", "github-copilot")
+	h.mustRun("skill", "add", s.url, "--all", "--to", "cursor", "--to", "github-copilot")
 	if !isCopy(copilot) {
 		t.Errorf("the install placed no copy in github-copilot")
 	}
@@ -562,6 +562,36 @@ func TestConfigPlacementPlacesCopies(t *testing.T) {
 	if !isCopy(cursor) {
 		t.Errorf("config placement changed the copy in cursor")
 	}
+
+	// --convert turns what is already there into the mode in the same
+	// mutation: beta's symlink becomes a recorded copy, and alpha, already a
+	// copy, is no symlink to convert.
+	beta := filepath.Join(h.home, ".cursor", "skills", "beta")
+	before := mutationVersion(t, h)
+	out = h.run("--json", "config", "placement", "cursor", "copy", "--convert")
+	equal(t, "exit of --convert to copies", out.exit, 0)
+	equal(t, "mutations", mutationVersion(t, h)-before, 1)
+	equal(t, "events", strings.Join(h.types(h.events(out.stdout)), ","), "settings,library_skill,result")
+	equal(t, "the result", h.one(out.stdout, "result")["summary"], "cursor now places copies, 1 skill converted")
+	if !isCopy(beta) {
+		t.Errorf("--convert did not turn the symlink of beta in cursor into a copy")
+	}
+	equal(t, "copy_mode of beta", copyModeOf(t, h, "beta"), "cursor,github-copilot")
+
+	// Back to symlinks: the copy that holds the library's version becomes a
+	// symlink, and the one edited in place is kept, still recorded.
+	writeFile(t, filepath.Join(beta, "SKILL.md"), "---\nname: beta\ndescription: edited\n---\n\nedited\n")
+	out = h.run("config", "placement", "cursor", "symlink", "--convert")
+	equal(t, "exit of --convert to symlinks", out.exit, 0)
+	equal(t, "the first line", strings.SplitN(out.stdout, "\n", 2)[0], "✓ cursor now places symlinks, 1 skill converted, 1 skipped")
+	contains(t, "stderr", out.stderr, "cursor's copy of beta is different from the library, so it was kept as a copy")
+	contains(t, "the way to discard it", out.stderr, "agentx skill remove beta --from cursor && agentx skill place beta --to cursor")
+	if _, ok := isSymlink(t, cursor); !ok {
+		t.Errorf("--convert did not turn the copy of alpha in cursor into a symlink")
+	}
+	equal(t, "copy_mode of alpha", copyModeOf(t, h, "alpha"), "github-copilot")
+	contains(t, "the edited copy", fileBody(t, filepath.Join(beta, "SKILL.md")), "description: edited")
+	equal(t, "copy_mode of beta", copyModeOf(t, h, "beta"), "cursor,github-copilot")
 
 	for _, c := range []struct {
 		args []string

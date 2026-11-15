@@ -195,25 +195,31 @@ func (inv *invocation) printEnabled(id string, enabled bool) {
 
 // newPlacementCommand builds config placement, which chooses what agentx
 // places into one configuration from now on: a symlink to the library, or
-// a copy. It edits the copy_configurations list and nothing on disk: a
-// placement already made stays what it is until skill place makes it
-// again. A configuration whose client reads the library has no choice to
-// make, since the library entry is its placement.
+// a copy. On its own it edits the copy_configurations list and nothing on
+// disk: a placement already made stays what it is until skill place makes
+// it again. With --convert the same mutation also turns the placements
+// already there into the mode, see setPlacementAndConvert. A configuration
+// whose client reads the library has no choice to make, since the library
+// entry is its placement.
 func newPlacementCommand(inv *invocation) *cobra.Command {
-	return &cobra.Command{
+	var convert bool
+	cmd := &cobra.Command{
 		Use:         "placement <configuration> <symlink|copy>",
 		Short:       "Choose whether a client gets symlinks or copies",
 		Annotations: map[string]string{annotationSection: "settings", annotationSynopsis: "<id> <mode>"},
 		Long: "Choose what agentx places into one agent configuration from now on: symlink,\n" +
 			"a symlink to the library directory, which is the default, or copy, a copy of\n" +
-			"it, as --copy makes. Placements already on disk stay as they are; 'agentx\n" +
-			"skill place <name> --to <configuration>' turns a symlink into a copy. A\n" +
-			"client that reads the library has no choice to make: the library entry is\n" +
-			"its placement.",
+			"it, as --copy makes. Placements already on disk stay as they are unless\n" +
+			"--convert is given: then every symlink to the library there becomes a copy,\n" +
+			"or every copy agentx placed there that holds the library's version becomes\n" +
+			"a symlink. A copy that is different from the library is kept as it is. No\n" +
+			"skill is placed that was not placed there already. A client that reads the\n" +
+			"library has no choice to make: the library entry is its placement.",
 		Args: cobra.ExactArgs(2),
 		Example: examples(
 			"agentx config placement cursor copy", "skills placed in Cursor from now on are copies",
 			"agentx config placement cursor symlink", "and symlinks to the library again",
+			"agentx config placement cursor copy --convert", "and turn the symlinks already in Cursor into copies",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, mode := args[0], args[1]
@@ -227,31 +233,48 @@ func newPlacementCommand(inv *invocation) *cobra.Command {
 				return fail(exitUsage, id+" reads the library, so its placement is the library entry",
 					"it sees every library skill there; choose symlink or copy for a configuration that does not read the library")
 			}
+			if convert {
+				return inv.setPlacementAndConvert(cmd.Context(), id, mode == scan.PlacementCopy)
+			}
 			var s home.Settings
 			err := home.Mutate(inv.dirs.Home, inv.refs(cmd.Context()), func() error {
 				var err error
 				if s, err = inv.loadSettings(); err != nil {
 					return err
 				}
-				s.CopyConfigurations = slices.DeleteFunc(s.CopyConfigurations, func(x string) bool { return x == id })
-				if mode == scan.PlacementCopy {
-					s.CopyConfigurations = append(s.CopyConfigurations, id)
-					slices.Sort(s.CopyConfigurations)
-				}
+				setCopyConfiguration(&s, id, mode == scan.PlacementCopy)
 				return home.SaveSettings(inv.dirs.Home, s)
 			})
 			if err != nil {
 				return err
 			}
 			inv.emitSettings(s)
-			placed := "symlinks"
-			if mode == scan.PlacementCopy {
-				placed = "copies"
-			}
-			inv.out.done(inv.out.paint(label, id) + " now places " + inv.out.paint(heading, placed))
+			inv.out.done(inv.out.paint(label, id) + " now places " + inv.out.paint(heading, placedWord(mode == scan.PlacementCopy)))
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&convert, "convert", false,
+		"also turn the placements already in the configuration into the mode: symlinks to the library into copies, or unchanged copies into symlinks")
+	return cmd
+}
+
+// setCopyConfiguration puts id in copy_configurations when it places
+// copies and takes it out when it places symlinks.
+func setCopyConfiguration(s *home.Settings, id string, copies bool) {
+	s.CopyConfigurations = slices.DeleteFunc(s.CopyConfigurations, func(x string) bool { return x == id })
+	if copies {
+		s.CopyConfigurations = append(s.CopyConfigurations, id)
+		slices.Sort(s.CopyConfigurations)
+	}
+}
+
+// placedWord is what a configuration that places copies, or symlinks,
+// gets, in the words config placement confirms it with.
+func placedWord(copies bool) string {
+	if copies {
+		return "copies"
+	}
+	return "symlinks"
 }
 
 // configurationReadsLibrary reports whether the detected configuration id

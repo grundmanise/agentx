@@ -123,6 +123,14 @@ func (e *settingsEdit) enable(id string) {
 	e.changed = true
 }
 
+// setPlacement records whether the configuration places copies or
+// symlinks from now on. It is always a write, as config placement on its
+// own is.
+func (e *settingsEdit) setPlacement(id string, copies bool) {
+	setCopyConfiguration(&e.s, id, copies)
+	e.changed = true
+}
+
 // dropConfiguration takes a configuration that left the machine out of the
 // settings: out of disabled_configurations and copy_configurations, and out
 // of the copy modes of every skill, since the copies went with its
