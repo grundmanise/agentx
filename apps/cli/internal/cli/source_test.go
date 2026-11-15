@@ -405,6 +405,24 @@ func TestSourceSkills(t *testing.T) {
 	out = list("source", "skills", s.url+"/tools")
 	equal(t, "stdout", out.stdout, "1 skill in "+s.url+" under tools at "+head[:7]+"\n  gamma  tools/gamma  Outside skills\n")
 
+	// source read reads one skill's SKILL.md at the fetched commit, named
+	// by the subpath a source_skill event carries, from the account repo
+	// alone, whatever subpath the add was scoped to.
+	out = list("--json", "source", "read", id, "skills/beta")
+	equal(t, "exit", out.exit, 0)
+	events = h.events(out.stdout)
+	if got, want := h.types(events), []string{"skill_file", "result"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("event types = %v, want %v", got, want)
+	}
+	content := "---\n---\n\n# \n"
+	if got, want := events[0], (jsonEvent{"type": "skill_file", "schema_version": float64(schemaVersion), "name": "beta", "path": "SKILL.md",
+		"size": float64(len(content)), "binary": false, "lines": float64(4), "content": content}); !reflect.DeepEqual(got, want) {
+		t.Errorf("skill_file = %v\nwant %v", got, want)
+	}
+	out = list("source", "read", s.url, "tools/gamma")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "SKILL.md of gamma in "+s.url+" under tools/gamma at "+head[:7]+"\n  SKILL.md")
+
 	// Errors.
 	tests := []struct {
 		name string
@@ -413,6 +431,7 @@ func TestSourceSkills(t *testing.T) {
 		code string
 		hint string
 	}{
+		{"read no skill", []string{"source", "read", s.url, "skills"}, 5, "not_found", "agentx source skills " + s.url},
 		{"subpath missing", []string{"source", "skills", s.url + "/nope"}, 5, "not_found", "directory"},
 		{"subpath is a file", []string{"source", "skills", s.url + "/skills/README.md"}, 5, "not_found", "directory"},
 		{"unknown id", []string{"source", "skills", "0123456789abcdef"}, 5, "not_found", "agentx source list"},
