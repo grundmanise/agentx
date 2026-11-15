@@ -17,13 +17,14 @@ import (
 )
 
 // agentx adopt --skill takes over an unmanaged skill no other tool
-// recorded, as one of the user's own. It is a fork in the skill's place
-// with nothing to fork from, see forkOf and makeFork: a branch of its own
-// whose first commit holds the skill as it is, its directory moved into
-// the worktree, and the library symlink to it. The skill is the library's,
-// or a directory in an agent client's own skills directory, which the
-// library does not hold yet: that one moves out of the client's directory,
-// which gets the library's symlink back, as a placement.
+// recorded, or one whose record agentx cannot use, as one of the user's
+// own. It is a fork in the skill's place with nothing to fork from, see
+// forkOf and makeFork: a branch of its own whose first commit holds the
+// skill as it is, its directory moved into the worktree, and the library
+// symlink to it. The skill is the library's, or a directory in an agent
+// client's own skills directory, which the library does not hold yet: that
+// one moves out of the client's directory, which gets the library's
+// symlink back, as a placement.
 
 // adoptPlace is one directory of a skill in an agent client's own skills
 // directory, as an adoption found it.
@@ -83,6 +84,25 @@ func (inv *invocation) planAdoption(ctx context.Context, name string, missing er
 		return nil, err
 	}
 	return fk, nil
+}
+
+// takeable reports whether c is a skill --skill takes over as it is: its
+// record is one agentx cannot use, its name is one a skill of the user's
+// own can have, and this machine holds a directory of it to move, the
+// library's, or, where the library holds nothing under the name, one in an
+// agent client's own skills directory. Another tool's symlink in the
+// library leaves no directory to take. It reads the machine and writes
+// nothing, as the preview that asks does, and what else can refuse the
+// adoption is found when it runs.
+func (inv *invocation) takeable(c *candidate) bool {
+	if !c.unusable || forkNameRefusal(c.rec.name) != "" {
+		return false
+	}
+	if libPath := inv.libraryPath(c.rec.name); lexists(libPath) {
+		return isRealDirectory(libPath) && holdsSkillFile(libPath)
+	}
+	dirs, _ := inv.adoptSites(c.rec.name)
+	return len(dirs) > 0
 }
 
 // adoptSourceOf finds the unmanaged skill called name. The library comes

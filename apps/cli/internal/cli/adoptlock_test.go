@@ -13,7 +13,10 @@ import (
 // before any path is built from it, one that names no source agentx can
 // fetch is refused, and the file is the same afterwards. What the library
 // holds under the name does not decide: a symlink or a directory without a
-// SKILL.md is what that tool left there, and adopting replaces it.
+// SKILL.md is what that tool left there, and adopting replaces it. The
+// text lists a refused entry whose skill the library holds as a directory
+// as ready to take over, and one it holds as a symlink as one it cannot
+// adopt.
 func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	t.Parallel()
 	h, s, _, _ := adoptHarness(t)
@@ -43,6 +46,7 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 		"escaping":   escaping,
 		"newline":    newline,
 		"wellknown":  wellKnown,
+		"aliased":    wellKnown,
 		"sourceless": sourceless,
 		"../escape":  entry("skills/alpha"),
 		"gone":       entry("skills/gone"),
@@ -59,6 +63,10 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 			t.Fatal(err)
 		}
 		writeFile(t, filepath.Join(h.library, name, "SKILL.md"), skill(name, description))
+	}
+
+	if err := os.Symlink(filepath.Join(h.library, "wellknown"), filepath.Join(h.library, "aliased")); err != nil {
+		t.Fatal(err)
 	}
 
 	out := h.run("--json", "adopt")
@@ -80,6 +88,7 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 		{"escaping", adoptRefused, "which is not a directory of"},
 		{"newline", adoptRefused, "which is not a directory of"},
 		{"wellknown", adoptRefused, "not a git repository agentx can fetch"},
+		{"aliased", adoptRefused, "not a git repository agentx can fetch"},
 	} {
 		if states[c.name] != c.state {
 			t.Errorf("%s is %q, want %q", c.name, states[c.name], c.state)
@@ -102,7 +111,10 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	// Without --json the skills are grouped by what adopting would do.
 	human := h.run("adopt")
 	equal(t, "exit", human.exit, 0)
-	for _, want := range []string{"Found 6 skills installed by the Vercel skills CLI.", "agentx adopt --all", "adopt all 3"} {
+	for _, want := range []string{
+		"Found 7 skills installed by the Vercel skills CLI.", "agentx adopt --all", "adopt all 3",
+		"\nTo take over a skill as your own, one listed above or an unmanaged one no tool installed: agentx adopt --skill <name>\n",
+	} {
 		contains(t, "stdout", human.stdout, want)
 	}
 	groups := map[string]string{} // each group's title and the rows under it
@@ -111,8 +123,9 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 		groups[title] = rows
 	}
 	for title, names := range map[string][]string{
-		"Ready to adopt (3)": {"alpha", "linked", "notaskill"},
-		"Cannot adopt (3)":   {"escaping", "newline", "wellknown"},
+		"Ready to adopt (3)":                 {"alpha", "linked", "notaskill"},
+		"Ready to take over as your own (3)": {"escaping", "newline", "wellknown"},
+		"Cannot adopt (1)":                   {"aliased"},
 	} {
 		for _, name := range names {
 			contains(t, title, groups[title], "  "+name+" ")

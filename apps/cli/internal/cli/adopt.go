@@ -63,7 +63,6 @@ type adoptSelection struct {
 	tool  string // the tool whose records are read: vercel, skillshare, or "" for both
 	names []string
 	all   bool
-	asIs  bool // take the skills named over with their files as they are, whatever a record says of them
 }
 
 // adoptTools maps the argument that names a tool to that tool.
@@ -102,7 +101,6 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 			"agentx adopt skillshare --all", "adopt every skill Skillshare installed",
 			"agentx adopt --skill pdf --skill xlsx", "adopt two skills by name",
 			"agentx adopt --skill notes", "take over an unmanaged skill as one of your own",
-			"agentx adopt --skill pdf --as-is", "take over a recorded skill with its files as they are",
 		),
 		Long: "Take over the skills the Vercel skills CLI or Skillshare installed, so that agentx\n" +
 			"knows where each one came from and can update it. Run it with no flags to see\n" +
@@ -111,16 +109,16 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 			"Adopting a skill another tool recorded installs it from its source, as 'agentx\n" +
 			"skill add' does, at the version the source holds now, and places it in every\n" +
 			"enabled configuration. Whatever the library holds under the skill's name gives\n" +
-			"way to that version, an edit made to it included: adopt it with --as-is to keep\n" +
-			"one.\n\n" +
+			"way to that version, so an edit made to the other tool's copy is gone.\n\n" +
 			"--skill <name> also takes over an unmanaged skill no tool recorded: one the\n" +
 			"library holds, or a directory in an agent client's own skills directory. It\n" +
 			"becomes one of your own skills with its files as they are: a branch of its own,\n" +
 			"skills/<name>, in the account repo, checked out as a worktree in agentx home,\n" +
 			"and a symlink to it in the library. A directory in a client's skills directory\n" +
 			"moves there and a symlink to the library takes its place, so every client that\n" +
-			"reads the library sees the skill too. With --as-is, a skill another tool\n" +
-			"recorded is taken over the same way and is not installed from its source.",
+			"reads the library sees the skill too. A recorded skill whose record names no\n" +
+			"source agentx can install it from is taken over the same way, unless a tool is\n" +
+			"named.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
@@ -135,36 +133,28 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 	}
 	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to adopt, by its name in the library or in an agent client's skills directory; give it again for each")
 	cmd.Flags().BoolVar(&sel.all, "all", false, "adopt every recorded skill that can be adopted")
-	cmd.Flags().BoolVar(&sel.asIs, "as-is", false, "take the skills named with --skill over with their files as they are, whatever another tool recorded of them")
 	return cmd
 }
 
 // adopting reports whether the run was asked to change anything.
 func (s adoptSelection) adopting() bool { return s.all || len(s.names) > 0 }
 
-// check refuses a combination of flags that asks for two things at once,
-// and --as-is with no skill named or with a tool, whose records it sets
-// aside.
+// check refuses a combination of flags that asks for two things at once.
 func (s adoptSelection) check() error {
-	switch {
-	case s.all && len(s.names) > 0:
+	if s.all && len(s.names) > 0 {
 		return fail(exitUsage, "--all and --skill cannot both be given",
 			"--all adopts every recorded skill; drop it to adopt the ones you name")
-	case s.asIs && len(s.names) == 0:
-		return fail(exitUsage, "--as-is needs --skill", "name the skill to take over as it is with --skill <name>")
-	case s.asIs && s.tool != "":
-		return fail(exitUsage, "--as-is cannot be given with "+toolArg(s.tool),
-			"drop "+toolArg(s.tool)+": --as-is takes a skill over as this machine holds it, whichever tool installed it")
 	}
 	return nil
 }
 
 // adopt reads what the other tools installed and reports, or adopts, the
-// skills they recorded. A skill named that no record covers is an
-// unmanaged one, taken over as one of the user's own, see planAdoption;
-// every one of those is planned before anything changes and made first,
-// so that the answer of the recorded ones, which may adopt some and refuse
-// others, is the run's.
+// skills they recorded. A skill named that no record covers, or whose
+// record agentx cannot use, is taken over as one of the user's own with
+// its files as they are, see chooseAdoptions and planAdoption; every one
+// of those is planned before anything changes and made first, so that the
+// answer of the recorded ones, which may adopt some and refuse others, is
+// the run's.
 //
 // Without a flag it is a preview and writes nothing at all: it takes no
 // lock, creates neither agentx home nor the account repo, and reaches for
@@ -194,8 +184,8 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 		return err
 	}
 	var plans []*forking
-	for _, name := range own {
-		fk, err := inv.planAdoption(ctx, name, notAdoptable(name, records))
+	for _, t := range own {
+		fk, err := inv.planAdoption(ctx, t.name, t.missing)
 		if err != nil {
 			return err
 		}
@@ -368,6 +358,11 @@ type candidate struct {
 	state  string
 	reason string
 	fail   *failure // the refusal, which is how a run asked to adopt it answers
+	// unusable says the refusal is the record's alone: it names no source
+	// agentx can install the skill from, and no branch of the account repo
+	// holds the name. Such a skill is still unmanaged, and one named with
+	// --skill is taken over as it is, see chooseAdoptions.
+	unusable bool
 }
 
 // refuse records why the candidate cannot be adopted.
@@ -415,7 +410,8 @@ func (inv *invocation) adoptCandidates(records []record, lineage map[string]line
 // machine alone: what the account repo already knows about the name, what
 // the record rules out, and whether it names a source agentx can fetch.
 func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s home.Settings) {
-	switch rec, known := records[c.rec.name]; {
+	rec, known := records[c.rec.name]
+	switch {
 	case known && rec.Kind == lineage.KindFork:
 		c.refuse(refuse(exitRefused, c.rec.name+" is a skill of the account remote on this machine",
 			"it has a history of its own; adopting would take the place of it"))
@@ -431,11 +427,13 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 		return
 	case c.rec.refusal != nil:
 		c.refuse(c.rec.refusal)
+		c.unusable = !known
 		return
 	}
 	src, f := adoptSource(c.rec)
 	if f != nil {
 		c.refuse(f)
+		c.unusable = !known
 		return
 	}
 	if src.Stripped {
@@ -449,6 +447,7 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 		// directory the record does not.
 		c.refuse(refuse(exitRefused, fmt.Sprintf("%s names %q, which is not a directory of %s", c.rec.file, c.rec.subpath, src.URL),
 			"fix the entry, or install the skill with 'agentx skill add'"))
+		c.unusable = !known
 		return
 	}
 	c.src = src
@@ -457,7 +456,7 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 	} else {
 		c.reason = reasonNotAdded
 	}
-	if _, known := records[c.rec.name]; known {
+	if known {
 		// Managed, but the library no longer holds it as a directory: the
 		// other tool took it back, or the user removed it. Adopting again
 		// installs it again, and moves the branch when the source moved on.
@@ -514,16 +513,25 @@ func adoptSource(r record) (source.Source, *failure) {
 		"accepted forms: "+source.Forms)
 }
 
+// taking is one skill a run takes over as one of the user's own: its name,
+// and the answer when this machine holds nothing of it to take over.
+type taking struct {
+	name    string
+	missing error
+}
+
 // chooseAdoptions picks what a run covers: every candidate with --all, or
 // exactly those --skill names. A name a candidate holds is chosen, to be
-// installed from the source its record names, unless --as-is sets the
-// records aside. Any other name is own: an unmanaged skill to take over as
-// it is, looked for once every name is sorted. With a tool named, only
-// that tool's records are read, and a name none of them holds fails the
-// run before anything is fetched, the way a --skill that names no skill of
-// a source does. Both are returned in name order, whatever order the flags
-// were given in.
-func (inv *invocation) chooseAdoptions(cands []*candidate, records []record, sel adoptSelection) (chosen []*candidate, own []string, err error) {
+// installed from the source its record names. A name no candidate holds,
+// and one whose record agentx cannot use, see candidate.unusable, is own:
+// an unmanaged skill to take over as it is, looked for once every name is
+// sorted; where nothing of it is found, the unusable record's refusal is
+// the answer. With a tool named, only that tool's records are read and
+// nothing is taken over: a name none of them holds fails the run before
+// anything is fetched, the way a --skill that names no skill of a source
+// does, and a record that cannot be used is refused. Both are returned in
+// name order, whatever order the flags were given in.
+func (inv *invocation) chooseAdoptions(cands []*candidate, records []record, sel adoptSelection) (chosen []*candidate, own []taking, err error) {
 	if sel.all {
 		return cands, nil, nil
 	}
@@ -539,16 +547,18 @@ func (inv *invocation) chooseAdoptions(cands []*candidate, records []record, sel
 		seen[name] = true
 		c, ok := byName[name]
 		switch {
-		case ok && !sel.asIs:
+		case ok && sel.tool == "" && c.unusable:
+			own = append(own, taking{name, c.fail})
+		case ok:
 			chosen = append(chosen, c)
 		case sel.tool == "":
-			own = append(own, name)
+			own = append(own, taking{name, notAdoptable(name, records)})
 		default:
 			return nil, nil, noAdoptionNamed(name, cands, records, sel.tool)
 		}
 	}
 	sort.Slice(chosen, func(i, j int) bool { return chosen[i].rec.name < chosen[j].rec.name })
-	sort.Strings(own)
+	sort.Slice(own, func(i, j int) bool { return own[i].name < own[j].name })
 	return chosen, own, nil
 }
 
@@ -869,18 +879,25 @@ func (c *candidate) eventOf() adoptionEvent {
 	return ev
 }
 
+// previewTakeOver is the group a preview lists a refused record in when
+// --skill takes its skill over as it is, see takeable. It is a group of
+// the text and of the summary: the adoption event says refused, with the
+// reason, as the record is.
+const previewTakeOver = "take over"
+
 // previewAdoption reports what an adoption would do and changes nothing.
 // The skills are grouped by what an adoption would do with them: the ones
-// it would adopt first, with the source each comes from; then the ones it
-// cannot, with the reason; then the ones agentx manages already, as a list
-// of names, since there is nothing to do about them. It lists what the
-// other tools recorded and nothing else, and ends with the command that
-// takes over an unmanaged skill, see printOwnAdoption.
+// it would adopt first, with the source each comes from; then the ones
+// whose record it cannot use and --skill takes over as they are, and the
+// ones it cannot adopt, each with the reason; then the ones agentx manages
+// already, as a list of names, since there is nothing to do about them. It
+// lists what the other tools recorded and nothing else, and ends with the
+// command that takes over a skill, see printOwnAdoption.
 func (inv *invocation) previewAdoption(cands []*candidate, records int, tool string) {
 	out := inv.out
 	if len(cands) == 0 {
 		out.print("Nothing to adopt: no skill installed by ", toolNames(toolSet(tool), "or"), " is on this machine.")
-		inv.printOwnAdoption()
+		inv.printOwnAdoption(false)
 		inv.summary = "nothing to adopt"
 		return
 	}
@@ -889,8 +906,12 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int, tool str
 	tools := map[string]bool{}
 	for _, c := range cands {
 		out.emit(c.eventOf())
-		counts[c.state]++
-		groups[c.state] = append(groups[c.state], c)
+		group := c.state
+		if inv.takeable(c) {
+			group = previewTakeOver
+		}
+		counts[group]++
+		groups[group] = append(groups[group], c)
 		tools[c.rec.tool] = true
 	}
 	inv.summary = previewSummary(counts, records)
@@ -906,11 +927,18 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int, tool str
 		}
 		out.render(t, "  ")
 	}
-	if refused := groups[adoptRefused]; len(refused) > 0 {
+	for _, group := range []struct{ key, title string }{
+		{previewTakeOver, "Ready to take over as your own"},
+		{adoptRefused, "Cannot adopt"},
+	} {
+		listed := groups[group.key]
+		if len(listed) == 0 {
+			continue
+		}
 		out.print()
-		out.print(out.paint(heading, fmt.Sprintf("Cannot adopt (%d)", len(refused))))
+		out.print(out.paint(heading, fmt.Sprintf("%s (%d)", group.title, len(listed))))
 		t := &table{wrap: out.columns(out.stdout)}
-		for _, c := range refused {
+		for _, c := range listed {
 			t.add(c.rowOf(mixed)...)
 		}
 		out.render(t, "  ")
@@ -929,6 +957,8 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int, tool str
 
 	out.print()
 	switch n := counts[adoptCandidate]; {
+	case n == 0 && counts[previewTakeOver] > 0:
+		// Nothing a record adopts, and the last line says what --skill does.
 	case n == 0 && counts[adoptRefused] == 0:
 		out.print("Nothing to adopt: agentx already manages every one.")
 	case n == 0:
@@ -948,13 +978,20 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int, tool str
 		t.add(cell{text: command + "--skill <name>", style: label}, cell{text: "adopt one; give --skill again for each", style: muted})
 		out.render(t, "  ")
 	}
-	inv.printOwnAdoption()
+	inv.printOwnAdoption(counts[previewTakeOver] > 0)
 }
 
-// printOwnAdoption ends a preview with how to take over an unmanaged skill,
-// which no record names and the preview therefore never lists.
-func (inv *invocation) printOwnAdoption() {
-	inv.out.print("To take over an unmanaged skill no tool installed: ", inv.out.paint(label, "agentx adopt --skill <name>"))
+// printOwnAdoption ends a preview with how to take over a skill as it is:
+// an unmanaged one, which no record names and the preview therefore never
+// lists, and one of those it listed as ready to take over, when listed
+// says it listed any. The command names no tool, since a run that names
+// one takes nothing over.
+func (inv *invocation) printOwnAdoption(listed bool) {
+	what := "To take over an unmanaged skill no tool installed: "
+	if listed {
+		what = "To take over a skill as your own, one listed above or an unmanaged one no tool installed: "
+	}
+	inv.out.print(what, inv.out.paint(label, "agentx adopt --skill <name>"))
 }
 
 // toolSet is the tools a run reads: the one named, or both.
@@ -1003,13 +1040,14 @@ func (c *candidate) rowOf(mixed bool) []cell {
 
 // previewSummary is what the result event says a preview found.
 func previewSummary(counts map[string]int, records int) string {
-	found := counts[adoptCandidate] + counts[adoptManaged] + counts[adoptRefused]
+	found := counts[adoptCandidate] + counts[previewTakeOver] + counts[adoptManaged] + counts[adoptRefused]
 	parts := []string{plural(found, "skill") + " installed by another tool"}
 	for _, what := range []struct {
 		n    int
 		text string
 	}{
 		{counts[adoptCandidate], "to adopt"},
+		{counts[previewTakeOver], "to take over as your own"},
 		{counts[adoptManaged], "already managed"},
 		{counts[adoptRefused], "that cannot be adopted"},
 	} {

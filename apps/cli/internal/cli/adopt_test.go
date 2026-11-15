@@ -432,7 +432,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 }
 
 // TestAdoptTakesOverAnUnmanagedSkill adopts, in one home, three skills no
-// record names or that are taken as they are. One the library holds
+// record names or whose record agentx cannot use. One the library holds
 // becomes one of the user's own in its place: its content is the first
 // commit of a branch of its own, by the user and with a new fork id, its
 // directory moves into the worktree and the library holds a symlink to it.
@@ -440,9 +440,9 @@ func TestAdoptRefusesAName(t *testing.T) {
 // client's skills directory: the library gets its symlink, the two clients
 // that do not read the library get a symlink to the library where their
 // directory was, and the one that reads it gets none. One the Vercel
-// skills CLI recorded, taken with --as-is, keeps the edit an install from
-// its source would replace, and that tool's file is left as it was. No run
-// reports an adoption event: no record was adopted.
+// skills CLI recorded as installed from no git repository is taken over as
+// it is, the user's edit included, and that tool's file is left as it was.
+// No run reports an adoption event: no record was adopted.
 func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -494,16 +494,60 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	vercelInstall(t, h, s, "skills/beta", "beta")
 	editLibrary(t, h, "beta", "notes.md", "an edit of mine\n")
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"beta": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/beta/SKILL.md",
+		Source: "owner/repo", SourceType: "well-known", SourceURL: s.url, SkillPath: "skills/beta/SKILL.md",
 	}})
-	out = h.run("--json", "adopt", "--skill", "beta", "--as-is")
-	equal(t, "as it is: exit", out.exit, 0)
+	out = h.run("--json", "adopt", "--skill", "beta")
+	equal(t, "a record agentx cannot use: exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
-	equal(t, "as it is: adoption events", len(h.eventsOfType(out.stdout, "adoption")), 0)
-	equal(t, "as it is: the summary", h.one(out.stdout, "result")["summary"], "adopted beta")
-	equal(t, "as it is: the edit", fileBody(t, filepath.Join(h.agentx, "worktrees", "beta", "beta", "notes.md")), "an edit of mine\n")
-	if _, err := h.accountGitErr("rev-parse", "--verify", "-q", lineage.ManagedRef("beta")); err == nil {
-		t.Error("as it is: the skill was installed from its source")
+	equal(t, "a record agentx cannot use: adoption events", len(h.eventsOfType(out.stdout, "adoption")), 0)
+	equal(t, "a record agentx cannot use: the summary", h.one(out.stdout, "result")["summary"], "adopted beta")
+	equal(t, "a record agentx cannot use: the edit", fileBody(t, filepath.Join(h.agentx, "worktrees", "beta", "beta", "notes.md")), "an edit of mine\n")
+	equal(t, "a record agentx cannot use: the subject", h.accountGit("log", "-1", "--format=%s", h.ref(lineage.ForkRef("beta"))), "Adopt beta")
+}
+
+// TestChooseAdoptions sorts the names of a run into the records it installs
+// from their source and the skills it takes over as they are: one no
+// record holds, and one whose record agentx cannot use, whose refusal is
+// the answer when nothing of the skill is found. With a tool named or with
+// --all nothing is taken over, and such a record is left to be refused.
+func TestChooseAdoptions(t *testing.T) {
+	t.Parallel()
+	unusable := refuse(exitRefused, "beta was installed from a local source", "")
+	cands := []*candidate{
+		{rec: record{name: "alpha"}, state: adoptCandidate},
+		{rec: record{name: "beta"}, state: adoptRefused, fail: unusable, unusable: true},
+		{rec: record{name: "gamma"}, state: adoptRefused, fail: refuse(exitRefused, "gamma is a skill of the account remote on this machine", "")},
+	}
+	names := []string{"gamma", "beta", "notes", "alpha", "beta"}
+	for _, tc := range []struct {
+		name          string
+		sel           adoptSelection
+		chosen, taken string
+		exit          int
+	}{
+		{"by name", adoptSelection{names: names}, "alpha gamma", "beta notes", 0},
+		{"by name, of one tool", adoptSelection{tool: toolVercel, names: []string{"beta", "alpha"}}, "alpha beta", "", 0},
+		{"a name the tool's records do not hold", adoptSelection{tool: toolVercel, names: names}, "", "", exitNotFound.exit},
+		{"every record", adoptSelection{all: true}, "alpha beta gamma", "", 0},
+	} {
+		chosen, own, err := (&invocation{}).chooseAdoptions(cands, nil, tc.sel)
+		var got, taken []string
+		for _, c := range chosen {
+			got = append(got, c.rec.name)
+		}
+		for _, o := range own {
+			taken = append(taken, o.name)
+			if o.name == "beta" && o.missing != error(unusable) {
+				t.Errorf("%s: beta answers %v when nothing of it is found, want its record's refusal", tc.name, o.missing)
+			}
+		}
+		code := 0
+		if f := (*failure)(nil); errors.As(err, &f) {
+			code = f.status.exit
+		}
+		if strings.Join(got, " ") != tc.chosen || strings.Join(taken, " ") != tc.taken || code != tc.exit {
+			t.Errorf("%s: chosen %v, taken over %v, exit %d, want %q, %q, exit %d", tc.name, got, taken, code, tc.chosen, tc.taken, tc.exit)
+		}
 	}
 }
 
@@ -546,10 +590,6 @@ func TestAdoptSelectionCheck(t *testing.T) {
 		{"every skill", adoptSelection{all: true}, ""},
 		{"two skills", adoptSelection{names: []string{"alpha", "beta"}}, ""},
 		{"every skill and one", adoptSelection{all: true, names: []string{"alpha"}}, "--all and --skill"},
-		{"a skill as it is", adoptSelection{names: []string{"alpha"}, asIs: true}, ""},
-		{"as it is, with no skill", adoptSelection{asIs: true}, "--as-is needs --skill"},
-		{"every skill as it is", adoptSelection{all: true, asIs: true}, "--as-is needs --skill"},
-		{"as it is, of one tool", adoptSelection{tool: toolVercel, names: []string{"alpha"}, asIs: true}, "--as-is cannot be given with skills-cli"},
 	} {
 		err := tc.sel.check()
 		if tc.says == "" {
@@ -575,10 +615,6 @@ func TestAdoptFlagsThatAskForTwoThings(t *testing.T) {
 	out := h.run("--json", "adopt", "--all", "--skill", "alpha")
 	equal(t, "exit", out.exit, exitUsage.exit)
 	equal(t, "error.code", lastError(t, h.events(out.stdout))["code"], "usage")
-
-	out = h.run("--json", "adopt", "--as-is")
-	equal(t, "exit", out.exit, exitUsage.exit)
-	equal(t, "the hint", lastError(t, h.events(out.stdout))["hint"], "name the skill to take over as it is with --skill <name>")
 
 	// The argument names a tool; a skill name there is pointed at --skill.
 	out = h.run("--json", "adopt", "zoom;out")

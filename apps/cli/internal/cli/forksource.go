@@ -39,7 +39,7 @@ type forkMode int
 const (
 	modeFork   forkMode = iota // skill fork
 	modeRename                 // the first step of skill rename, which removes the source next
-	modeAdopt                  // agentx adopt, of an unmanaged skill no other tool recorded
+	modeAdopt                  // agentx adopt, which takes an unmanaged skill over as it is
 )
 
 // takesUnmanaged reports whether a run in this mode takes an unmanaged
