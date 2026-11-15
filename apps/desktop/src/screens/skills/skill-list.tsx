@@ -278,6 +278,18 @@ const PLACED = "absolute top-0 left-0 w-full";
 const PLACED_ROW = "absolute top-0 left-0 flex w-full";
 /** A row after the first of its group, `row.spacing` below the row before it. */
 const PLACED_ROW_AFTER = "pt-rows absolute top-0 left-0 flex w-full";
+/** A row of a plugin's subgroup, indented so its glyph sits under the plugin's name. */
+const PLACED_SUBROW = "pl-subgroup-indent absolute top-0 left-0 flex w-full";
+const PLACED_SUBROW_AFTER =
+  "pt-rows pl-subgroup-indent absolute top-0 left-0 flex w-full";
+
+/** Where a row is placed: after the first of its block, `row.spacing` lower; in a subgroup, indented. */
+const placedRow = (item: { at: number; subgroup?: Subgroup }) => {
+  if (item.subgroup === undefined) {
+    return item.at === 0 ? PLACED_ROW : PLACED_ROW_AFTER;
+  }
+  return item.at === 0 ? PLACED_SUBROW : PLACED_SUBROW_AFTER;
+};
 
 const NO_FORKS: SkillRow[] = [];
 
@@ -498,9 +510,7 @@ const SkillGroups = ({
                         data-index={index}
                         aria-posinset={item.at + 1}
                         aria-setsize={item.size}
-                        className={
-                          item.at === 0 ? PLACED_ROW : PLACED_ROW_AFTER
-                        }
+                        className={placedRow(item)}
                       >
                         <SkillRowItem
                           row={item.row}
