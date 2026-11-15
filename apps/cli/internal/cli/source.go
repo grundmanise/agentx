@@ -75,8 +75,17 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 		Short:       "List the installable skills of a source",
 		Annotations: map[string]string{annotationSection: "sources"},
 		Args:        cobra.ExactArgs(1),
-		Example:     examples("agentx source skills anthropics/skills", "the skills a source holds, as last fetched"),
-		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceSkills(cmd.Context(), args[0]) },
+		Example: examples(
+			"agentx source skills anthropics/skills", "the skills a source holds, as last fetched",
+			"agentx source skills https://github.com/owner/repo/tree/main/skills", "the skills under a link, added or not",
+		),
+		Long: "List the installable skills of a source, under the subpath of the URL when it\n" +
+			"has one. An added source is listed as it was last fetched, without the network.\n" +
+			"A URL that is not added is listed from its repository, at the ref of the URL\n" +
+			"or the remote's default branch, and nothing is added: install one of its\n" +
+			"skills with 'agentx skill add <url> --name <name>'. An id names an added\n" +
+			"source only.",
+		RunE: func(cmd *cobra.Command, args []string) error { return inv.sourceSkills(cmd.Context(), args[0]) },
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:   "read <url|id> <subpath>",
@@ -118,12 +127,14 @@ func newSourceAddCommand(inv *invocation) *cobra.Command {
 		),
 		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or\n" +
 			"owner/repo/subpath for GitHub, a GitHub or GitLab URL with an optional tree\n" +
-			"path, an SSH URL or host:path, a file:// URL or an absolute path, any of them\n" +
-			"with #ref to pin a branch or tag. A user or token in the URL is dropped. A\n" +
-			"source is fetched from and pushed to at that URL. A source holds skills in\n" +
-			"folders on one branch, unless --account adds it as the account remote, a\n" +
-			"repository of yours with one branch per skill of your own, which they are\n" +
-			"published to.",
+			"path or a link to a SKILL.md, an SSH URL or host:path, a file:// URL or an\n" +
+			"absolute path, any of them with #ref to pin a branch or tag. The branch of a\n" +
+			"tree or SKILL.md link pins it too, unless it is the source's default branch:\n" +
+			"then a new source is added unpinned and an added one keeps its pin. A user or\n" +
+			"token in the URL is dropped. A source is fetched from and pushed to at that\n" +
+			"URL. A source holds skills in folders on one branch, unless --account adds it\n" +
+			"as the account remote, a repository of yours with one branch per skill of\n" +
+			"your own, which they are published to.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.sourceAdd(cmd.Context(), args[0], account)
@@ -219,7 +230,13 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string, account bool) 
 	if err != nil {
 		return err
 	}
-	_, _, err = inv.addSource(ctx, src)
+	// A link at the default branch keeps the pin of a source already added,
+	// and adds a new one unpinned.
+	var entry home.Source
+	if i := s.FindSource(src.URL); i >= 0 {
+		entry = s.Sources[i]
+	}
+	_, _, err = inv.addSource(ctx, inv.linkPin(ctx, src, entry))
 	return err
 }
 
@@ -490,15 +507,20 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 }
 
 // sourceSkills lists the skills of a fetched source under the subpath of
-// the argument, from the account repo alone.
+// the argument, from the account repo alone. A URL the settings hold no
+// source for is listed from its repository instead, see listUnadded.
 func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	src, entry, err := inv.findSource(ctx, arg)
+	if errors.Is(err, errNotAdded) && !source.IsID(arg) {
+		return inv.listUnadded(ctx, src)
+	}
 	if err != nil {
 		return err
 	}
 	if entry.Account {
 		return forkSourceIs(entry.URL, entry)
 	}
+	src = inv.linkPin(ctx, src, entry)
 	if src.Ref != "" && src.Ref != entry.Pin {
 		return pinMismatch(src, entry)
 	}
@@ -517,10 +539,51 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	if err != nil {
 		return sourceFailure(err, pinned)
 	}
+	inv.printSourceSkills(entryEvent(entry), src, listing)
+	return nil
+}
+
+// listUnadded is source skills of a URL the settings hold no source for:
+// the skills of that repository under the subpath of the link, at the ref
+// it names or the remote's default branch, read from the network into a
+// repository of the run's own that goes with it, see source.ListUnadded.
+// Nothing is added, so the link's ref is only what to list and never a pin,
+// and a link at the default branch needs no look at the remote's HEAD. A URL
+// naming the account remote's repository is refused, exit 6, as source add
+// and skill add refuse it. The source event carries what the listing
+// found, the id, the canonical URL, the subpath, the commit and the count,
+// and nothing a settings entry would.
+func (inv *invocation) listUnadded(ctx context.Context, src source.Source) error {
+	s, err := inv.loadSettings()
+	if err != nil {
+		return err
+	}
+	if f := forkSourceRefusal(s, home.Source{URL: src.URL}, inv.sshHosts(ctx)); f != nil {
+		return f
+	}
+	listing, err := source.ListUnadded(ctx, inv.git, src)
+	switch {
+	case errors.Is(err, source.ErrIncomplete):
+		// A fetch again would be refused, the source not being added: the
+		// listing is what is run again.
+		return fail(exitNotFound, src.URL+": "+err.Error(), "run 'agentx source skills "+sourceAddArg(src.URL, src.Ref)+"' again")
+	case errors.Is(err, source.ErrRefNotFound), errors.Is(err, source.ErrNoSubpath), errors.Is(err, source.ErrUnreachable):
+		return sourceFailure(err, src)
+	case err != nil:
+		// A failure of the run's own repository, never of the account repo.
+		return err
+	}
+	inv.printSourceSkills(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL}, src, listing)
+	return nil
+}
+
+// printSourceSkills reports the listing of source skills: ev, the source
+// event, with the subpath, the commit and the count of the listing, then
+// one source_skill event per skill, and the heading line and the rows.
+func (inv *invocation) printSourceSkills(ev sourceEvent, src source.Source, listing source.Listing) {
 	out := inv.out
 	n := len(listing.Skills)
 	id := src.ID()
-	ev := entryEvent(entry)
 	ev.Subpath, ev.Commit, ev.Skills = src.Subpath, listing.Commit, &n
 	out.emit(ev)
 	out.print(out.paint(heading, plural(n, "skill")), " in ", out.paint(heading, src.URL), under(out, src.Subpath), " at ", short(listing.Commit))
@@ -538,7 +601,6 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 		t.add(c("  "+sanitised(sk.Name), label), c(sanitised(subpath), muted), c(sanitised(sk.Description), plain))
 	}
 	out.render(t, "")
-	return nil
 }
 
 // sourceRead reads the SKILL.md of the skill at subpath, from the root of
@@ -729,6 +791,42 @@ func (inv *invocation) removedSource(ctx context.Context, id string) string {
 		}
 	}
 	return ""
+}
+
+// linkPin is src with the ref in the path of its tree or SKILL.md link read
+// as the link means it. A link copied from a browser names the branch the
+// page showed, and when that is the source's default branch the link
+// expresses no pin: src takes the pin entry holds, the stored pin of an
+// added source, which the link then neither changes nor removes, and none
+// for a source the settings do not hold, whose entry is the zero Source. A
+// path ref that is the stored pin already, one at any other branch, and a
+// ref a #ref fragment names are left as they are. skill add, source add,
+// source skills and source fetch all read a link so.
+func (inv *invocation) linkPin(ctx context.Context, src source.Source, entry home.Source) source.Source {
+	if !src.RefFromPath || src.Ref == entry.Pin {
+		return src
+	}
+	if inv.isDefaultBranch(ctx, src, entry.DefaultBranch) {
+		src.Ref, src.RefFromPath = entry.Pin, false
+	}
+	return src
+}
+
+// isDefaultBranch reports whether the ref of src is the source's default
+// branch. recorded is the default branch the settings entry holds, "" for
+// none; git is asked, by ls-remote, when it is "" or names another branch,
+// since a remote's HEAD can move, and an answer that does not come leaves
+// the ref a pin.
+func (inv *invocation) isDefaultBranch(ctx context.Context, src source.Source, recorded string) bool {
+	if recorded != "" && src.Ref == recorded {
+		return true
+	}
+	branch, err := inv.git.DefaultBranch(ctx, src.URL)
+	if err != nil {
+		inv.out.debugf("reading the default branch of %s: %v", src.URL, err)
+		return false
+	}
+	return branch != "" && branch == src.Ref
 }
 
 // pinMismatch refuses an argument whose #ref is not the pin the settings

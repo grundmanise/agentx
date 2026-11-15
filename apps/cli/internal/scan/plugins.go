@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/weburl"
 )
 
 // pluginManifest is what a plugin.json manifest gives every client that
@@ -15,10 +17,15 @@ import (
 // The icon is named differently by each client: icon by Claude Code, logo
 // by Cursor, and by Codex under interface, which a root manifest in the
 // Agent Plugins format keeps with its hooks under extensions."com.openai".
+// Repository and homepage say where the plugin can be seen, see webURL;
+// each is read as raw JSON, so that a value of another type than the one
+// expected leaves the rest of the manifest readable.
 type pluginManifest struct {
 	Schema     string          `json:"$schema"`
 	Name       string          `json:"name"`
 	Version    string          `json:"version"`
+	Repository json.RawMessage `json:"repository"`
+	Homepage   json.RawMessage `json:"homepage"`
 	Skills     json.RawMessage `json:"skills"`
 	MCPServers json.RawMessage `json:"mcpServers"`
 	Hooks      json.RawMessage `json:"hooks"`
@@ -31,6 +38,26 @@ type pluginManifest struct {
 			Interface codexInterface  `json:"interface"`
 		} `json:"com.openai"`
 	} `json:"extensions"`
+}
+
+// webURL is where the plugin can be seen on the web: its repository, a
+// URL or an object with one in url as npm writes it, else its homepage,
+// each as weburl.Of reads it. A value of another type or shape is no URL,
+// and "" is none.
+func (m pluginManifest) webURL() string {
+	var repo struct {
+		URL string `json:"url"`
+	}
+	var one string
+	if json.Unmarshal(m.Repository, &one) != nil && json.Unmarshal(m.Repository, &repo) == nil {
+		one = repo.URL
+	}
+	if u := weburl.Of(one); u != "" {
+		return u
+	}
+	one = ""
+	_ = json.Unmarshal(m.Homepage, &one)
+	return weburl.Of(one)
 }
 
 // codexInterface is how a Codex plugin presents itself: of its fields, the

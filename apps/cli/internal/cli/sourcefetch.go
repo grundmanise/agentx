@@ -16,7 +16,9 @@ import (
 
 // progressEvent is one finished step of a run that does several, so that a
 // caller can follow a long command. Subject names what the step was about
-// and Current counts the steps done, this one included.
+// and Current counts the steps done, this one included. A fetch run also
+// emits one before its first step, Current 0 and no Subject, see
+// fetchSources.
 type progressEvent struct {
 	event
 	Phase   string `json:"phase"`
@@ -119,8 +121,9 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // fetched is its result's error, and turning that into a refusal is the
 // caller's, so that the serve child, which never exits for one, runs the
 // same fetch. wait takes the lock as the serve child does, waiting for a
-// holder rather than giving up, and progress reports one progress event per
-// source as its fetch ends. then, when it is not nil, runs in the worker of
+// holder rather than giving up, and progress reports one progress event
+// with current 0 before the first fetch starts, then one per source as its
+// fetch ends. then, when it is not nil, runs in the worker of
 // each target that fetched, with its index, before its progress event, see
 // source.FetchAll.
 //
@@ -156,6 +159,10 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 	}
 	var done func(source.Source, int)
 	if progress {
+		// The count before the first fetch starts, so that a caller shows
+		// the total at once and not only as the fetches end: with one
+		// source, the first event after this is already the last.
+		inv.out.emit(progressEvent{event: newEvent("progress"), Phase: phaseFetch, Current: 0, Total: len(targets)})
 		done = func(s source.Source, finished int) {
 			inv.out.emit(progressEvent{event: newEvent("progress"), Phase: phaseFetch, Subject: s.URL, Current: finished, Total: len(targets)})
 		}
@@ -468,7 +475,7 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 		if err != nil {
 			return nil, err
 		}
-		if src.Ref != "" && src.Ref != entry.Pin {
+		if src = inv.linkPin(ctx, src, entry); src.Ref != "" && src.Ref != entry.Pin {
 			return nil, pinMismatch(src, entry)
 		}
 		if seen[entry.URL] { // named twice, by URL and by id, or by two forms of one URL

@@ -64,7 +64,7 @@ const CheckMark = ({ checked }: { checked: boolean }) => (
   </svg>
 );
 
-const statusVariants = cva("type-secondary flex-none font-medium", {
+export const statusVariants = cva("type-secondary flex-none font-medium", {
   variants: {
     status: {
       added: "text-add-card-status-added",

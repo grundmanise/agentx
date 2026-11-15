@@ -277,7 +277,7 @@ export const adoption: AdoptionEvent[] = [
   {
     file: "/home/me/.agents/.skill-lock.json",
     name: "scratch",
-    schema_version: 2,
+    schema_version: 3,
     source: "https://github.com/vercel/skills",
     state: "candidate",
     subpath: "scratch",
@@ -291,32 +291,29 @@ const historyEvent = (
   time: string,
   subject: string,
   files: HistoryEvent["files"],
-  flags: Partial<Pick<HistoryEvent, "import" | "foreign" | "machine">> = {}
+  flags: Partial<Pick<HistoryEvent, "machine" | "origin">> = {}
 ): HistoryEvent => ({
   author: "Me <me@example.com>",
   commit,
   files,
-  foreign: false,
-  import: false,
   message: subject,
   name: "pdf-letters",
   parents: [],
-  schema_version: 2,
+  schema_version: 3,
   subject,
   time,
   type: "history",
   ...flags,
 });
 
-/** The history of pdf-letters, newest first: a commit made with Git, three of agentx's, the import. */
+/**
+ * The history of pdf-letters, newest first: a commit made with Git, three of agentx's, the last
+ * of them the fork's creation with the skill of acme/skills it came from, then the import.
+ */
 export const history: HistoryEvent[] = [
-  historyEvent(
-    "9b41c07aaaa",
-    "2026-10-02T14:03:00Z",
-    "Tighten the examples",
-    [{ path: "examples.md", status: "modified" }],
-    { foreign: true }
-  ),
+  historyEvent("9b41c07aaaa", "2026-10-02T14:03:00Z", "Tighten the examples", [
+    { path: "examples.md", status: "modified" },
+  ]),
   historyEvent(
     "4c2e9a1bbbb",
     "2026-10-02T11:20:00Z",
@@ -337,9 +334,19 @@ export const history: HistoryEvent[] = [
   historyEvent(
     "51f3a8edddd",
     "2026-09-30T12:00:00Z",
-    "Fork pdf as pdf-letters",
+    "Fork pdf-letters from https://github.com/acme/skills/pdf at 3f2a9c1",
     [{ path: "SKILL.md", status: "modified" }],
-    { machine: "machine-1" }
+    {
+      machine: "machine-1",
+      origin: {
+        kind: "source",
+        path: "pdf",
+        skill: "pdf",
+        skill_url: `${ACME}/tree/3f2a9c1e8d7/pdf`,
+        source: ACME,
+        url: ACME,
+      },
+    }
   ),
   historyEvent(
     "3f2a9c1e8d7",
@@ -348,8 +355,7 @@ export const history: HistoryEvent[] = [
     [
       { path: "SKILL.md", status: "added" },
       { path: "reference.md", status: "added" },
-    ],
-    { import: true }
+    ]
   ),
 ];
 
@@ -365,7 +371,7 @@ const skillFile = (
   binary: false,
   name,
   path,
-  schema_version: 2,
+  schema_version: 3,
   size: 0,
   type: "skill_file",
   ...fields,
@@ -414,7 +420,7 @@ const diffEvent = (
   name,
   patch,
   path,
-  schema_version: 2,
+  schema_version: 3,
   status,
   type: "diff",
 });

@@ -8,6 +8,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
+	"github.com/grundmanise/agentx/apps/cli/internal/weburl"
 )
 
 // kindPlugin is the kind of a skill a plugin provides, which the library
@@ -23,7 +24,10 @@ type forkSource struct {
 	lib    scan.LibrarySkill // its library entry, when held
 	held   bool              // the library holds it
 	plugin string            // the plugin that provides it
-	dir    string            // the directory its content is read from, for every kind but a fork
+	// marketplace is where the plugin was installed from, and url where
+	// it can be seen on the web, each "" when the scan does not know.
+	marketplace, url string
+	dir              string // the directory its content is read from, for every kind but a fork
 }
 
 // forkSourceOf finds the skill arg names. The library comes first, its
@@ -56,7 +60,35 @@ func (inv *invocation) forkSourceOf(arg string, records map[string]lineage.Recor
 	if err != nil {
 		return forkSource{}, err
 	}
-	return forkSource{kind: kindPlugin, name: filepath.Base(o.Path), plugin: o.Plugin, dir: o.ResolvedPath}, nil
+	src := forkSource{kind: kindPlugin, name: filepath.Base(o.Path), plugin: o.Plugin, dir: o.ResolvedPath}
+	for _, p := range inventory.Plugins {
+		if p.Name == o.Plugin && p.Configuration == o.Configuration && src.url == "" {
+			src.marketplace, src.url = p.Marketplace, p.URL
+		}
+	}
+	return src, nil
+}
+
+// origin is what the creation commit of a fork of src records of where it
+// came from: the skill's name, and for a plugin's skill the plugin, its
+// marketplace and its URL, each left out when a trailer cannot carry it.
+// A managed skill has none, since the import commit the fork starts from
+// records its source, and a name that cannot be recorded leaves none.
+func (src forkSource) origin() lineage.Origin {
+	if src.kind == lineage.KindManaged || !lineage.IsOriginName(src.name) {
+		return lineage.Origin{}
+	}
+	o := lineage.Origin{Skill: src.name}
+	if src.kind == kindPlugin && lineage.IsOriginName(src.plugin) {
+		o.Plugin = src.plugin
+		if lineage.IsOriginName(src.marketplace) {
+			o.Marketplace = src.marketplace
+		}
+		if weburl.Is(src.url) {
+			o.URL = src.url
+		}
+	}
+	return o
 }
 
 // pluginOccurrence is the plugin's skill arg names among what the scan

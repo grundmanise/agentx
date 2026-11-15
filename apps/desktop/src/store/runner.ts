@@ -12,6 +12,7 @@ import { notify, notifyAttention, notifyError } from "#/components/toast.tsx";
 import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
 import { skillNamesOf } from "#/lib/problem-text.ts";
+import { checksPass } from "#/startup/startup.ts";
 import { refresh } from "#/store/feed.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 import type { Problem, Tone } from "#/store/store.ts";
@@ -131,12 +132,23 @@ const setPending = (label: string, runId: string | undefined) => {
 export const usePending = (label: string) =>
   useAppStore((s) => Object.hasOwn(s.pending, label));
 
-/** Stops the command of the control named `label`; it ends with code 9. */
+/** The commands that wait for the startup checks, by the id their control is pending under. */
+const waits = new Set<string>();
+
+/**
+ * Stops the command of the control named `label`; it ends with code 9. One that still waits for
+ * the startup checks never starts.
+ */
 export const cancelCommand = async (label: string) => {
   const runId = useAppStore.getState().pending[label];
-  if (runId !== undefined) {
-    await cancel(runId);
+  if (runId === undefined) {
+    return;
   }
+  if (waits.delete(runId)) {
+    setPending(label, undefined);
+    return;
+  }
+  await cancel(runId);
 };
 
 const followProgress = async (
@@ -321,13 +333,48 @@ const report = (
 };
 
 /**
+ * Holds a command a control starts while the screens show the kept inventory, until the startup
+ * checks pass: the control shows as pending meanwhile. Resolves with whether the command may run:
+ * not one the user stopped while it waited.
+ */
+const afterChecks = async (
+  args: readonly string[],
+  label: string
+): Promise<boolean> => {
+  const waitId = `checks ${crypto.randomUUID()}`;
+  waits.add(waitId);
+  setPending(label, waitId);
+  const may = await checksPass(!isRead(args));
+  // Cancel took the wait away, and the control's mark with it.
+  if (!waits.delete(waitId)) {
+    return false;
+  }
+  if (!may && useAppStore.getState().pending[label] === waitId) {
+    setPending(label, undefined);
+  }
+  return may;
+};
+
+/**
  * Runs `agentx <args> --json` for the control named `options.label`, and returns how it ended
  * so that the caller can follow up. It never rejects: a CLI that could not start is an outcome.
+ * A command started while the screens show the kept inventory waits for the startup checks. One
+ * that may not run then (src/startup/startup.ts, `checksPass`), or that the user stopped while it
+ * waited, ends as a command the user stopped does, unreported.
  */
 export const runCommand = async (
   args: readonly string[],
   options: CommandOptions
 ): Promise<Outcome> => {
+  if (!(await afterChecks(args, options.label))) {
+    return {
+      cancelled: true,
+      events: [],
+      exitCode: null,
+      logs: [],
+      timedOut: false,
+    };
+  }
   const started = run(args, { deadlineMs: options.deadlineMs });
   setPending(options.label, started.runId);
   const progress =
