@@ -107,7 +107,7 @@ const table: [string, ReturnType<typeof rowOf>, string[] | undefined][] = [
   [
     "a library skill whose record the CLI refuses",
     rowOf("legacy", [record("legacy", "refused")], refusedInventory),
-    ["adopt", "--skill", "legacy", "--as-is"],
+    ["adopt", "--skill", "legacy"],
   ],
   [
     "a library skill whose record says agentx manages it",
@@ -123,11 +123,6 @@ const table: [string, ReturnType<typeof rowOf>, string[] | undefined][] = [
     "a directory whose name is not the skill's frontmatter name",
     rowOf("skill:h-meeting", [], inventory, [meetingNotes]),
     ["adopt", "--skill", "meeting-notes"],
-  ],
-  [
-    "a directory whose record the CLI refuses",
-    rowOf("skill:h-notes", [record("notes", "refused")]),
-    ["adopt", "--skill", "notes", "--as-is"],
   ],
   [
     "a directory under a name the library holds another skill by",

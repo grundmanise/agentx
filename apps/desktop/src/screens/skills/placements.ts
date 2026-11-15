@@ -32,17 +32,19 @@ export const chipStateOf = (
   return row.occurrences.some((o) => o.configuration === c.id) ? "on" : "off";
 };
 
-/** `adopt --skill <name>`, with `--as-is` to take the skill over with its files as they are. */
-const adoptLine = (name: string, asIs: boolean): string[] =>
-  asIs ? ["adopt", "--skill", name, "--as-is"] : ["adopt", "--skill", name];
+/**
+ * `adopt --skill <name>`. It names no tool, so the CLI decides by itself how it takes the skill
+ * over, whatever a record says of it.
+ */
+const adoptLine = (name: string): string[] => ["adopt", "--skill", name];
 
 /**
  * The `adopt` command line that takes over an unmanaged skill, or undefined when `adopt` has no
  * way to take it:
  *
  * - a skill another tool recorded, which the CLI can adopt, is installed from its source;
- * - a library skill no tool recorded becomes one of your own in its place, and one whose record
- *   the CLI refuses does so with `--as-is`, which sets the record aside;
+ * - a library skill no tool recorded, or one whose record the CLI cannot use, becomes one of
+ *   your own in its place;
  * - a skill a client holds as a real directory in its own skills directory is named by that
  *   directory, which moves into the library, unless the library holds another skill under that
  *   name.
@@ -54,22 +56,20 @@ export const adoptArgs = (row: SkillRow): string[] | undefined => {
   if (row.kind !== "disk") {
     return undefined;
   }
-  const record = row.adoption;
-  if (record?.state === "candidate") {
-    return adoptLine(row.name, false);
+  const state = row.adoption?.state;
+  if (state === "candidate") {
+    return adoptLine(row.name);
   }
-  const refused = record?.state === "refused";
   if (row.entry !== undefined) {
-    return record === undefined || refused
-      ? adoptLine(row.name, refused)
+    return state === undefined || state === "refused"
+      ? adoptLine(row.name)
       : undefined;
   }
   const occurrence = occurrenceOf(row);
   if (occurrence?.kind !== "directory" || row.nameInLibrary === true) {
     return undefined;
   }
-  const directory = directoryName(occurrence.path);
-  return adoptLine(directory, refused && record?.name === directory);
+  return adoptLine(directoryName(occurrence.path));
 };
 
 /** Why no chip of a skill can be changed, and the control that unlocks them when there is one. */

@@ -901,9 +901,9 @@ test.describe("settling a skill", () => {
     await adoptBanner.getByRole("button", { name: "Adopt" }).click();
     await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
 
-    // A skill whose record the CLI refuses is taken over with its files as they are.
+    // A skill whose record the CLI refuses is adopted by its name too, with no tool named.
     await row(page, "legacy").click();
-    cli.register(["adopt", "--skill", "legacy", "--as-is"]);
+    cli.register(["adopt", "--skill", "legacy"]);
     const unmanagedBanner = pane(page, "legacy").getByRole("note", {
       name: "Not managed by agentx",
     });
@@ -928,7 +928,7 @@ test.describe("settling a skill", () => {
 
     expect(ran(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
-      ["adopt", "--skill", "legacy", "--as-is", "--json"],
+      ["adopt", "--skill", "legacy", "--json"],
       ["source", "add", OLD, "--json"],
     ]);
   });
