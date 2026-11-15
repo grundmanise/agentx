@@ -437,7 +437,8 @@ func firstLine(text string) string {
 // read with ls-remote --symref in the user's environment, from a throwaway
 // repository, unattended and within AccessBudget as the access check is:
 // "" when the remote's HEAD is no branch, or names none. It is shown to the
-// user and decides nothing.
+// user, and decides only whether the branch a tree or SKILL.md link names
+// is a pin.
 func (r *Runner) DefaultBranch(ctx context.Context, url string) (string, error) {
 	gitDir, remove, err := throwawayRepo()
 	if err != nil {

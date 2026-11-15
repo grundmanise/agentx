@@ -223,14 +223,15 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | Token | Primitive | Element |
 | --- | --- | --- |
 | `filter.bg` | `gray-880` | Filter button at rest |
-| `filter.text` | `gray-300` |  |
+| `filter.text` | `gray-200` | Matches `filter.sort-text` |
 | `filter.active-bg` | `lime-400/12` | Filter button with any filter applied |
 | `filter.active-text` | `accent.primary` |  |
 | `filter.badge-bg` | `accent.primary` | Count badge (digits `on-accent`) |
 | `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
-| `filter.sort-text` | `gray-300` | Sort toggle (Default, A-Z, Z-A) |
+| `filter.sort-text` | `gray-200` | Sort toggle while it sorts by name (A-Z, Z-A) |
+| `filter.sort-off-text` | `text.caption` | Sort toggle while off |
 
 #### Lists and rows
 
@@ -245,8 +246,12 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `group.label` | `gray-300` | Source group caption |
 | `group.count` | `gray-500` | Count beside the caption |
 | `group.divider-label` | `gray-500` | Caption of the sub-group of skills in no agent client |
+| `subgroup.label` | `gray-400` | Caption of a plugin's subgroup under PLUGINS |
+| `subgroup.count` | `gray-500` | Count beside a plugin's caption |
+| `subgroup.hover` | `gray-920` | A plugin's header under the pointer |
 | `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows |
 | `table.header-text` | `gray-500` | Column captions |
+| `add-skill.row-hover` | `gray-880` | Hover on a skill row of the Add skill dialog |
 
 #### Skill glyph
 
@@ -552,6 +557,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
 | `group.padding` | 20 14 8 | `pt-group-top px-group pb-group-bottom` | Later group headers |
 | `group.gap` | 8 | `gap-group` | Label → count |
+| `subgroup.padding` | 6 14 | `py-subgroup-y px-subgroup-x` | A plugin's header under PLUGINS |
+| `subgroup.spacing` | 8 | `pt-subgroup-top` | Above a plugin's header, but the first in its group |
+| `subgroup.indent` | 22 | `pl-subgroup-indent` | Left inset of a plugin's rows: the row's glyph sits under the plugin's name |
 | `table.header-height` | 40 | `h-table-header` | Sticky header (servers) |
 | `table.row-padding` | 16 | `p-table-row` | Server rows |
 | `table.col-gap` | 24 | `gap-x-table-col` |  |
@@ -664,6 +672,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
 | `adopt.list-max-height` | 280 | `max-h-adopt-list` | The adopt dialog's list of skills; it scrolls past it |
 | `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The Choose agents dialog's list; it scrolls past it |
+| `add-skill.list-max-height` | 264 | `max-h-add-skill-list` | The Add skill dialog's list of skills found; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
 | `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
@@ -716,6 +725,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `agent-chip.radius` | 9999 | Agent client toggle chip |
 | `logo.radius` | 50% | Agent client logo |
 | `agent-picker.row-radius` | 10 | Row of the Choose agents dialog |
+| `add-skill.row-radius` | 10 | Skill row of the Add skill dialog |
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
 | `shell.status-radius` | 9999 | Account remote status |
@@ -812,9 +822,9 @@ The Universal chip, on, opens the Remove dialog: a universal client reads the li
 - Order: the chips that are on, then the rest by the popularity of the agent client (`src/lib/agent-popularity.ts`), the clients it does not rank by name. Universal stands where its most used client would. The order is fixed when the pane opens, so a chip stays in place when it is toggled.
 - A machine can have dozens of agent configurations, so the section shows two rows of chips, measured at the pane's width, and a small ghost button in the second row, centred on the chips, that shows the rest and hides them again. Every chip that is on, or was on since the pane opened, stays in view, in more rows when two cannot hold them. No button when every chip fits in two rows.
 
-### Agent picker (Add skills bar)
+### Agent picker (Add skills bar, Add skill dialog)
 
-The install targets in the floating bar of the Add skills screen are round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the Universal stack, then the rest, each group in inventory order. The order is fixed when the bar opens and again when the dialog closes, so a logo stays in place while it is toggled. With more than six configurations that take a placement, a small secondary button "+n" comes last, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo, and each member of the Universal stack, shows the client's name in a Tooltip; the Universal toggle keeps its explanation as its accessible description.
+The install targets in the floating bar of the Add skills screen, and under the skills found in the Add skill dialog, are "Add to" in `type.secondary` `text.muted`, then round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the Universal stack, then the rest, each group in inventory order. The order is fixed when the bar or the skills found appear and again when the Choose agents dialog closes, so a logo stays in place while it is toggled. The choice starts as the enabled configurations, where `skill add` installs when no agent is named (`src/screens/sources/agent-targets.tsx`). With more than six configurations that take a placement, a small secondary button "+n" comes last, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo, and each member of the Universal stack, shows the client's name in a Tooltip; the Universal toggle keeps its explanation as its accessible description.
 
 The "+n" button opens Choose agents, a dialog (§6 "Dialog") with a search field (§6 "Inputs") that filters by name, then every configuration that takes a placement, sorted by name, in a list that scrolls past `agent-picker.list-max-height`. A row is the whole hit target, `agent-picker.row-radius`, hover `agent-picker.row-hover`: a 28px logo, the name in `type.body` `text.primary` over the configuration's path in `type.technical-sm` `text.caption`, and the round checkbox (§6 "Checkbox (popover)") at the right. A row toggles the same targets as the bar. The footer counts the chosen targets in `type.secondary` `text.muted`, then a ghost Clear, which unchecks them all, and a primary Done, which closes the dialog.
 
@@ -849,15 +859,17 @@ The dot and fork glyphs say one thing: whether there is an action to take. `glyp
 - pencil – edited locally; `glyph.edited`.
 - fork – one of your own skills.
 
-Sort toggle, at the right end of the filter row, steps through three orders on each click:
+Sort toggle, at the right end of the filter row, always reads as a sort by name: A-Z or Z-A with the arrow (turned for Z-A). It steps through three states on each click:
 
-- Default – within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
-- A-Z, Z-A – by name alone, whatever the state, with the arrow (turned for Z-A).
+- Off – A-Z and the arrow in `filter.sort-off-text` with no fill, so the toggle reads as quiet beside the lighter, filled states and still reaches 4.5:1; hover brings back the ghost fill and `text.primary`. The list keeps its own order: within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
+- A-Z, Z-A – by name alone, whatever the state, in `filter.sort-text` on `button.ghost-bg`.
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)
 
 `type.caption` in `group.label`, then the count in `group.count`. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
+
+The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a plugin installed in several agent clients is one subgroup. Its header (`src/components/section-toggle.tsx`) is a flat, full-width row, not a button with a fill: `subgroup.padding`, `row.radius`, no fill at rest and `subgroup.hover` under the pointer; a `xs` chevron in `text.caption`, the plugin's name in `type.caption` `subgroup.label`, then the count in `type.technical-sm` `subgroup.count`, `group.gap` apart. Its chevron lines up with the group's caption above it. `subgroup.spacing` above each header but the first in its group. The plugin's rows are inset by `subgroup.indent`, so each row's glyph sits under the plugin's name and the rows read as inside its section; their hover and selected fill start at the inset. A click collapses or expands the plugin's rows (`aria-expanded`); the chevron turns 90° while they show, with no transition. A collapsed subgroup keeps its header and count, and j/k skip its rows. Every subgroup is open when the screen opens. Each row's place (`aria-posinset`, `aria-setsize`) is among its plugin's rows.
 
 ### Banner (detail pane)
 
@@ -911,6 +923,17 @@ The run stays in the dialog. Each row shows its state: nothing while waiting, a 
 ### Create skill dialog
 
 `src/screens/skills/create-dialog.tsx`. Two fields, each with its label in `type.secondary` `text.secondary` and its rule as a hint under it: Name, mono and focused on open, and Description. A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and the confirm is disabled. A name the CLI refuses shows the refusal under Name in place of the rule; any other refusal shows under Description. The dialog stays pending until the inventory that follows lists the new skill; it then selects the skill and opens its `SKILL.md` as Edit does (§6 "Edit (detail pane)").
+
+### Add skill dialog
+
+`src/screens/skills/add-skill-dialog.tsx`, which Add in the Skills header and the palette open. It works in two steps in one dialog, so the link and what it found stay in view together. The first step only reads: `source skills` lists the skills under the link, from the network for a source not added, and adds nothing. The second, Install, adds the source and installs the skills checked in one `skill add`. Closing the dialog between the two, by Cancel, Escape or a click outside, runs nothing, so a source is added only when a skill from it is installed.
+
+- One mono field for a link to a repository, a folder of skills or one skill, named by its placeholder and focused on open, with a secondary Find skills at its right, `gap-2` apart; a hint under them in `type.secondary` `text.hint`. The button keeps its place by the field because it acts on the field alone, and Find skills says what it does, a lookup, where Continue would say nothing of it and an Add verb would claim a change the lookup does not make. Enter in the field also runs it; it is disabled while the field is empty, and pending (§6) while `source skills` runs, Install being disabled meanwhile.
+- What it found shows under the field: the select-all row of Sources (§6 "Sources screen") when there are several, then the skills in a list that scrolls past `add-skill.list-max-height`. A row is the whole hit target, `add-skill.row-radius`, hover `add-skill.row-hover`: the name in `type.body` `text.primary` over the description in `type.secondary` `text.muted`, two lines at most, and the round checkbox (§6 "Checkbox (popover)") at the right. A skill this machine holds already is not selectable: its row has no hover and shows its card status (`add-card.status-*`, the words of the Add skills cards) in place of the checkbox, the selectable rows first. One skill found is checked; of several, none is. A skill is matched to the library by its source's canonical URL and its subpath, since a source not added has no id.
+- When none of the skills found can be installed, a line in `type.secondary` `text.hint` says so in place of the select-all row, above the rows and their statuses, and neither "Add to" nor its targets show.
+- Under the list, "Add to" and the targets of §6 "Agent picker", the same control as the Add skills bar, so the two places choose agents alike.
+- The footer's primary Install runs one `skill add` for the skills checked, disabled while none is or a lookup runs. The dialog stays pending until the inventory that follows lists them; it then closes and selects the first, and the toast names what was installed and its source. `skill add` changes the machine, so the sources are read again after it and Sources lists the source it added.
+- A change to the field clears what was found and any refusal, so Find skills looks the new link up. A refusal of either step shows under the field (§6 "Refusal under a field"), a source git cannot reach as the Add source dialog words it.
 
 ### Refusal under a field
 
@@ -983,7 +1006,7 @@ shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side
 
 ### Skills header
 
-The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose menu opens the Create skill dialog (§6 "Button group"). Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is pending (§6): `aria-busy`, with a `Spinner` in the refresh icon's place until the check ends, in the same square and ghost fill. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
+The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose action opens the Add skill dialog and whose menu opens the Create skill dialog (§6 "Button group"). The menu holds Create skill alone, as Sources sits under Skills in the sidebar. Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is pending (§6): `aria-busy`, with a `Spinner` in the refresh icon's place until the check ends, in the same square and ghost fill. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
 
 ### Skills list
 

@@ -113,6 +113,7 @@ test.describe("the list", () => {
       "ACME/SKILLS (2)",
       "ZETA/TOOLS (1)",
       "PLUGINS (1)",
+      "ACME-TOOLS (1)",
       "UNMANAGED (2)",
     ]);
     // A source's group shows the source's full URL when its label is pointed at.
@@ -295,6 +296,7 @@ test.describe("filters", () => {
     await show.getByRole("radio", { name: "Plugins 1" }).check();
     expect(await names(list(page).getByRole("region"))).toEqual([
       "PLUGINS (1)",
+      "ACME-TOOLS (1)",
     ]);
     await show.getByRole("radio", { name: "Unmanaged 2" }).check();
     expect(await rowNames(list(page))).toEqual(["notes", "scratch"]);
@@ -434,7 +436,7 @@ test.describe("filters", () => {
     ]);
   });
 
-  test("the sort toggle steps through Default, A-Z and Z-A", async ({
+  test("the sort toggle steps from enabled first through A-Z and Z-A", async ({
     cli,
     page,
   }) => {
@@ -449,9 +451,10 @@ test.describe("filters", () => {
       })),
     });
     const personal = group(page, "PERSONAL (3)");
-    // Default: enabled skills first, then disabled ones, each A to Z.
+    // Off: enabled skills first, then disabled ones, each A to Z.
     const toggle = page.getByRole("button", { name: /^Sort: /u });
     await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
+    await expect(toggle).toHaveText("A-Z");
     expect(await rowNames(personal)).toEqual([
       "pdf-letters",
       "release-notes",
@@ -477,7 +480,7 @@ test.describe("filters", () => {
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
       "PERSONAL (3)"
     );
-    // Back to Default.
+    // Off again.
     await toggle.click();
     await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
     expect(await rowNames(personal)).toEqual([
