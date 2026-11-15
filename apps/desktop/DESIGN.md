@@ -223,7 +223,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | Token | Primitive | Element |
 | --- | --- | --- |
 | `filter.bg` | `gray-880` | Filter button at rest |
-| `filter.text` | `gray-300` |  |
+| `filter.text` | `gray-200` | Matches `filter.sort-text` |
 | `filter.active-bg` | `lime-400/12` | Filter button with any filter applied |
 | `filter.active-text` | `accent.primary` |  |
 | `filter.badge-bg` | `accent.primary` | Count badge (digits `on-accent`) |
