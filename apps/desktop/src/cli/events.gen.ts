@@ -141,6 +141,16 @@ export interface ChangedFile {
   status: FileStatus;
 }
 
+export interface ForkOrigin {
+  kind: string;
+  skill: string;
+  plugin?: string;
+  marketplace?: string;
+  source?: string;
+  path?: string;
+  url?: string;
+}
+
 export interface ConflictFile {
   path: string;
   base: string | null;
@@ -427,6 +437,7 @@ export interface HistoryEvent {
   import: boolean;
   foreign: boolean;
   files: ChangedFile[];
+  origin?: ForkOrigin;
 }
 
 export interface ForkNoteEvent {

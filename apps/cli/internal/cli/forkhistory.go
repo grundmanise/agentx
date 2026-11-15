@@ -45,6 +45,21 @@ type historyEvent struct {
 	Import  bool          `json:"import"`
 	Foreign bool          `json:"foreign"`
 	Files   []changedFile `json:"files"`
+	Origin  *forkOrigin   `json:"origin,omitempty"`
+}
+
+// forkOrigin is where a fork came from, on the event of the commit that
+// created it: kind "plugin" for a plugin's skill, "source" for a skill of a
+// shared source, and "skill" for a skill of the library or another fork.
+// URL is where the origin can be seen on the web, when it is known.
+type forkOrigin struct {
+	Kind        string `json:"kind"`
+	Skill       string `json:"skill"`
+	Plugin      string `json:"plugin,omitempty"`
+	Marketplace string `json:"marketplace,omitempty"`
+	Source      string `json:"source,omitempty"`
+	Path        string `json:"path,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 // forkLogCommit is one commit of a fork's branch as git log wrote it.
