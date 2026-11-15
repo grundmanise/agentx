@@ -51,10 +51,11 @@ const openSkill = async (
   page: Page,
   name: string,
   key = name,
-  machine: InlineEvent = inventory
+  machine: InlineEvent = inventory,
+  records: InlineEvent[] = adoption
 ) => {
   cli.onServeStart({ events: [machine] });
-  cli.register(["adopt"], { events: adoption });
+  cli.register(["adopt"], { events: records });
   cli.register(["source", "list"], { events: sources });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
@@ -190,8 +191,7 @@ test.describe("chips", () => {
   test("locked chips toast the lock reason", async ({ cli, page }) => {
     await openSkill(cli, page, "commit-helper", "skill:h-commit");
     const plugin = pane(page, "commit-helper");
-    const reason =
-      "Comes with the acme-tools plugin. Fork it to manage it here";
+    const reason = "Comes with the acme-tools plugin. Fork to edit";
     await expect(chip(plugin, "Cursor")).toHaveAttribute("title", reason);
     await chip(plugin, "Cursor").click();
     await expect(toasts(page).getByText(reason)).toBeVisible();
@@ -204,21 +204,45 @@ test.describe("chips", () => {
       .getByRole("button", { exact: true, name: "scratch" })
       .click();
     const candidate = pane(page, "scratch");
-    const adopt = "Adopt it first, then agentx can place it";
+    const adopt = "This skill is not managed by agentx. Adopt it to manage";
     await expect(chip(candidate, "Claude Code")).toHaveAttribute(
       "title",
       adopt
     );
     await chip(candidate, "Claude Code").click();
     await expect(toasts(page).getByText(adopt)).toBeVisible();
+    // The toast offers what unlocks the chips: Adopt, for a skill another tool installed.
+    cli.register(["adopt", "--skill", "scratch"]);
+    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
 
     await page
       .getByRole("navigation", { name: "Skills" })
       .getByRole("button", { exact: true, name: "notes" })
       .click();
-    const unmanaged = "agentx doesn't manage it. Fork it to manage it here";
+    // A skill only an agent holds can be neither adopted nor forked: the toast has no action.
+    const unmanaged = "This skill is not managed by agentx";
     await chip(pane(page, "notes"), "Claude Code").click();
-    await expect(toasts(page).getByText(unmanaged)).toBeVisible();
+    await expect(
+      toasts(page).getByText(unmanaged, { exact: true })
+    ).toBeVisible();
+  });
+
+  test("an unmanaged library skill no tool recorded: the toast opens the Fork dialog", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "scratch", "scratch", inventory, []);
+    await chip(pane(page, "scratch"), "Claude Code").click();
+    await expect(
+      toasts(page).getByText(
+        "This skill is not managed by agentx. Fork it to manage"
+      )
+    ).toBeVisible();
+    await toasts(page).getByRole("button", { name: "Fork" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Fork scratch" })
+    ).toBeVisible();
   });
 
   test("a displaced chip says to reconnect it first", async ({ cli, page }) => {
@@ -449,7 +473,7 @@ test.describe("Remove", () => {
     // only with the library.
     await chip(article, "Universal").click();
     await expect(dialog).toContainText(
-      "It will be deleted from every agent on this machine:"
+      "Universal agents read your library, where agentx keeps this skill. Removing it there deletes it from every agent on this machine:"
     );
     await expect(
       dialog
@@ -470,6 +494,12 @@ test.describe("Remove", () => {
 
     cli.register(["skill", "remove", "pdf-letters", "--remote"]);
     await article.getByRole("button", { name: "Remove" }).click();
+    // The Remove button has no reason to give: the dialog says only what goes.
+    await expect(
+      dialog.getByText("It will be deleted from every agent on this machine:", {
+        exact: true,
+      })
+    ).toBeVisible();
     await remote.click();
     await expect(remote).toBeChecked();
     await dialog.getByRole("button", { name: "Remove" }).click();
