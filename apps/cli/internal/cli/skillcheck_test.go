@@ -1627,24 +1627,33 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 // happen to.
 func (p *serveProc) nextUpdate(match func(jsonEvent) bool) (jsonEvent, []jsonEvent) {
 	p.t.Helper()
+	return p.nextMatching("update_available", func(e jsonEvent) bool { return e["type"] == "update_available" && match(e) })
+}
+
+// nextMatching reads the child's events up to the first that match
+// accepts, what describing it, and returns it with every event it passed
+// over on the way.
+func (p *serveProc) nextMatching(what string, match func(jsonEvent) bool) (jsonEvent, []jsonEvent) {
+	p.t.Helper()
 	var passed []jsonEvent
 	deadline := time.After(serveDeadline)
 	for {
 		select {
 		case line, ok := <-p.lines:
 			if !ok {
-				p.t.Fatal("serve ended before the update")
+				p.t.Fatalf("serve ended before a matching %s", what)
 			}
 			var e jsonEvent
 			if err := json.Unmarshal([]byte(line), &e); err != nil {
 				p.t.Fatalf("not a JSON event: %q: %v", line, err)
 			}
-			if e["type"] == "update_available" && match(e) {
+			checkEvent(p.t, e)
+			if match(e) {
 				return e, passed
 			}
 			passed = append(passed, e)
 		case <-deadline:
-			p.t.Fatalf("no matching update_available within %s", serveDeadline)
+			p.t.Fatalf("no matching %s within %s", what, serveDeadline)
 		}
 	}
 }

@@ -1,47 +1,77 @@
 import { cva } from "class-variance-authority";
 
-import { Spinner } from "#/components/spinner.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 
 const dot = cva("rounded-shell-status-dot size-2 flex-none", {
   variants: {
     tone: {
       none: "bg-text-hint",
       pending: "bg-shell-status-pending shadow-status-pending",
-      published: "bg-shell-status-published shadow-status-published",
+      synced: "bg-shell-status-published shadow-status-published",
     },
   },
 });
 
-/** The dot's colour: no account remote, skills to publish, or everything published. */
-export type StatusTone = "none" | "pending" | "published";
+const noLines: readonly string[] = [];
+
+/** The dot's colour: no account remote, something to publish or take in, or synced. */
+export type StatusTone = "none" | "pending" | "synced";
 
 /**
- * The publish status at the right of the title bar (DESIGN.md §6 "Publish status"): a dot in the
- * state's colour, or a `Spinner` in its place while `turning`, and the label, on a pill that a
- * click runs. `busy` marks it `aria-busy` while its command runs.
+ * The sync status at the right of the title bar (DESIGN.md §6 "Publish status (title bar)"): a
+ * dot in the state's colour and the label, on a pill. `tooltip` holds the lines its tooltip
+ * shows, one each; none shows no tooltip. `busy` marks it `aria-busy` while its command runs. As
+ * the trigger of the popover it opens, it takes what the popover gives it (its state attributes,
+ * the click and the ref) and passes them to the button; its accessible name stays the label.
  */
 export const StatusButton = ({
   tone,
   label,
-  turning = false,
+  tooltip = noLines,
   busy = false,
-  onClick,
+  ...props
 }: {
   tone: StatusTone;
   label: string;
-  turning?: boolean;
+  tooltip?: readonly string[];
   busy?: boolean;
-  onClick: () => void;
+  onClick?: () => void;
 }) => (
-  <button
-    type="button"
-    aria-busy={busy ? true : undefined}
-    onClick={onClick}
-    className="rounded-shell-status type-status text-shell-topbar-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-secondary h-status flex flex-none items-center gap-2 px-3"
-  >
-    <span className="text-shell-topbar-text flex size-4 items-center justify-center">
-      {turning ? <Spinner /> : <span className={dot({ tone })} />}
-    </span>
-    {label}
-  </button>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button
+        type="button"
+        aria-busy={busy ? true : undefined}
+        className="rounded-shell-status type-status text-shell-topbar-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-secondary h-status flex flex-none items-center gap-2 px-3"
+        {...props}
+      >
+        <span className="text-shell-topbar-text flex size-4 items-center justify-center">
+          <span className={dot({ tone })} />
+        </span>
+        {label}
+      </button>
+    </TooltipTrigger>
+    {tooltip.length > 0 && (
+      <TooltipContent align="end">
+        {tooltip.map((line) => (
+          <span key={line} className="block">
+            {line}
+          </span>
+        ))}
+      </TooltipContent>
+    )}
+  </Tooltip>
+);
+
+/**
+ * The sync status for a screen reader: a polite live region beside the button, never inside it,
+ * where a live region may go unread. It holds the summary the button shows, so a change the
+ * background check brings is announced; the button keeps its own name.
+ */
+export const StatusAnnouncement = ({ text }: { text: string }) => (
+  <output className="sr-only">{text}</output>
 );

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,36 +66,37 @@ const phasePublish = "publish"
 func newSkillPublishCommand(inv *invocation) *cobra.Command {
 	var message string
 	cmd := &cobra.Command{
-		Use:         "publish [<name>]",
+		Use:         "publish [<name>...]",
 		Short:       "Publish edits to the source or the account remote",
 		Annotations: map[string]string{annotationSection: "updates"},
-		Long: "Publish the skill called <name>, or with no name every skill of your own the\n" +
-			"account remote holds: record the edits its directory holds as one commit on its\n" +
-			"branch, then push the branch to the account remote. Edits stay on this machine\n" +
-			"until you publish them. A bare publish never creates a branch: name a skill to\n" +
-			"publish it for the first time, or to put back one another machine removed; it\n" +
-			"names each skill it skipped. The commit's message names the skill and the files\n" +
-			"it changes, unless -m gives one; with -m, the edits an update recorded are\n" +
-			"published in that one commit too, unless a rename or an update from upstream\n" +
+		Long: "Publish the skills named, or with no name every skill of your own the account\n" +
+			"remote holds: record the edits each directory holds as one commit on its branch,\n" +
+			"then push the branches to the account remote in one push. Edits stay on this\n" +
+			"machine until you publish them. A bare publish never creates a branch: name a\n" +
+			"skill to publish it for the first time, or to put back one another machine\n" +
+			"removed; it names each skill it skipped. The commit's message names the skill and\n" +
+			"the files it changes, unless -m gives one; with -m, the edits an update recorded\n" +
+			"are published in that one commit too, unless a rename or an update from upstream\n" +
 			"lies between. Files git ignores are never published. When the account remote\n" +
 			"holds changes another machine published, nothing is recorded or pushed: run\n" +
 			"'agentx skill update <name>' to get them first, then publish again. A push the\n" +
 			"account remote's host declines, by a hook or a protected branch, is reported\n" +
 			"with its reason, never forced, and a branch of the same name that is another\n" +
 			"skill is never pushed over.\n\n" +
-			"A skill installed from a shared source is published only when you name it: its\n" +
-			"edits become one commit, under your own git identity, on the branch of the\n" +
-			"source it is installed from, changing its folder alone, and the commit is pushed\n" +
-			"there. No account remote is needed. When the source changed the skill since it\n" +
-			"was installed, nothing is pushed: run 'agentx skill update <name>' first, then\n" +
-			"publish again.",
+			"A skill installed from a shared source is published only when you name it on its\n" +
+			"own: its edits become one commit, under your own git identity, on the branch of\n" +
+			"the source it is installed from, changing its folder alone, and the commit is\n" +
+			"pushed there. No account remote is needed. When the source changed the skill\n" +
+			"since it was installed, nothing is pushed: run 'agentx skill update <name>'\n" +
+			"first, then publish again.",
 		Example: examples(
 			"agentx skill publish release-notes", "publish one of your own skills",
+			"agentx skill publish release-notes triage", "publish two, a new one included, in one push",
 			"agentx skill publish release-notes -m \"Cover reverted PRs\"", "with your own commit message",
 			"agentx skill publish", "every skill of your own the account remote holds",
 			"agentx skill publish pdf", "push edits of a shared source's skill to it",
 		),
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("message") && strings.TrimSpace(message) == "" {
 				return fail(exitUsage, "-m needs a message", "say what the edits do, or leave -m out for the message agentx writes")
@@ -102,11 +104,7 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 			if err := checkMessage(message); err != nil {
 				return err
 			}
-			name := ""
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return inv.publish(cmd.Context(), name, message)
+			return inv.publish(cmd.Context(), args, message)
 		},
 	}
 	cmd.Flags().StringVarP(&message, "message", "m", "", "the message of the commit that records the edits, in place of the one agentx writes; its first line is the subject")
@@ -136,8 +134,29 @@ func trailerInMessage() error {
 		"leave those lines out of the message, or move them out of its last paragraph")
 }
 
-// publishCommand is the command line that publishes the skill called name.
-func publishCommand(name string) string { return skillCommand("publish", name) }
+// publishCommand is the command line that publishes the skills called
+// names, in their order, or with none a bare publish.
+func publishCommand(names ...string) string {
+	if len(names) == 1 {
+		return skillCommand("publish", names[0])
+	}
+	words := []string{"agentx", "skill", "publish"}
+	if slices.ContainsFunc(names, func(n string) bool { return strings.HasPrefix(n, "-") }) {
+		words = append(words, "--")
+	}
+	for _, n := range names {
+		words = append(words, shellWord(n))
+	}
+	return strings.Join(words, " ")
+}
+
+// publishNames is the skills a publish was given, each once, in name
+// order, which is the order it reports them in. Pure.
+func publishNames(args []string) []string {
+	names := slices.Clone(args)
+	slices.Sort(names)
+	return slices.Compact(names)
+}
 
 // publishing is one skill of a publish: what was found of it and what the
 // publish did with it.
@@ -161,30 +180,34 @@ type publishing struct {
 	f           *failure
 }
 
-// publish publishes the skill called name, or with no name every skill of
-// your own on this machine whose branch the account remote holds, see
-// remoteSelection, naming each one it skips: a bare publish never creates
-// a branch there. A named skill is judged first from what this
-// machine holds, see publishable, so a skill a publish cannot cover is
-// refused before the account remote is looked up, and a managed skill of a
-// shared source is published to that source instead, see publishShared. Then the account remote
-// is fetched once, and each skill is judged against its branch there, as
-// the fetch left it, see judgePublish. The edits of every skill that goes
-// on are recorded, see recordEdits, after the fetch and every refusal, so
-// a remote out of reach or one that moved on records nothing. Then every
-// skill with something to push goes in one push, see pushForks, and a ref
-// the remote rejects is reported by what its answer means, never forced.
-// One progress event per skill follows, then its publish event, then the
-// library_skill event of each skill whose edits were recorded. Last, the
-// old name's branch of a skill renamed here, whose branch the push
-// created, goes, see dropRenamed.
-func (inv *invocation) publish(ctx context.Context, name, message string) error {
-	if name != "" {
-		switch shared, err := inv.publishable(ctx, name); {
+// publish publishes the skills called named, each once, or with none every
+// skill of your own on this machine whose branch the account remote holds,
+// see remoteSelection, naming each one it skips: a bare publish never
+// creates a branch there, and a named skill the account remote holds no
+// branch of is pushed as any other, its push creating the branch. Named
+// skills are judged first from what this machine holds, see publishable,
+// so a skill a publish cannot cover is refused before the account remote
+// is looked up, and the whole run with it; a managed skill of a shared
+// source named alone is published to that source instead, see
+// publishShared, and one named beside others is refused. Then the account
+// remote is fetched once, and each skill is judged against its branch
+// there, as the fetch left it, see judgePublish. The edits of every skill
+// that goes on are recorded, see recordEdits, after the fetch and every
+// refusal, so a remote out of reach or one that moved on records nothing.
+// Then every skill with something to push goes in one push, see
+// pushForks, and a ref the remote rejects is reported by what its answer
+// means, never forced. One progress event per skill follows, then its
+// publish event, in name order, then the library_skill event of each skill
+// whose edits were recorded. Last, the old name's branch of a skill renamed
+// here, whose branch the push created, goes, see dropRenamed.
+func (inv *invocation) publish(ctx context.Context, named []string, message string) error {
+	named = publishNames(named)
+	if len(named) > 0 {
+		switch shared, err := inv.publishable(ctx, named); {
 		case err != nil:
 			return err
 		case shared:
-			return inv.publishShared(ctx, name, message)
+			return inv.publishShared(ctx, named[0], message)
 		}
 	}
 	gitDir, entry, account, err := inv.accountRemote(ctx)
@@ -205,18 +228,21 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	names := []string{name}
-	if name == "" {
+	names := named
+	if len(named) == 0 {
 		names = ownSkills(records)
-	} else if records[name].Kind != lineage.KindFork {
-		// A journal finished above took the skill away.
-		return inv.noLibrarySkill(name)
+	}
+	for _, n := range named {
+		if records[n].Kind != lineage.KindFork {
+			// A journal finished above took the skill away.
+			return inv.noLibrarySkill(n)
+		}
 	}
 	remote, err := inv.walkRemoteForks(ctx, gitDir, account, tips, records, names)
 	if err != nil {
 		return err
 	}
-	if name == "" {
+	if len(named) == 0 {
 		var skipped []string
 		names, skipped = remoteSelection(records, remote)
 		for _, n := range skipped {
@@ -270,10 +296,10 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 	if message != "" && allJudged && !edited {
 		what := "no skill has edits to record"
 		switch {
-		case name != "" && recordedBefore:
-			what = "the edits of " + sanitised(name) + " were already recorded in commits of their own, which a rename or an update from upstream keeps"
-		case name != "":
-			what = sanitised(name) + " has no edits to record"
+		case len(named) == 1 && recordedBefore:
+			what = "the edits of " + sanitised(named[0]) + " were already recorded in commits of their own, which a rename or an update from upstream keeps"
+		case len(named) == 1:
+			what = sanitised(named[0]) + " has no edits to record"
 		}
 		inv.out.warn(what + ", so -m was not used")
 	}
@@ -296,8 +322,8 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 		}
 	}
 	if len(branches) > 0 {
-		if err := inv.pushForks(ctx, gitDir, account, entry.URL, name, list, branches); err != nil {
-			return inv.pushFailed(ctx, list, name, err)
+		if err := inv.pushForks(ctx, gitDir, account, entry.URL, named, list, branches); err != nil {
+			return inv.pushFailed(ctx, list, named, err)
 		}
 	}
 	err = inv.reportPublished(ctx, list, entry.URL)
@@ -308,9 +334,9 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 // pushFailed answers a push that failed, err, after edits may have been
 // recorded: the library_skill event of each skill whose edits were, and,
 // for a push git could not make at all, exit code 3, a hint that the next
-// publish pushes them. The publish of the skill called name, or with no
-// name every skill of your own.
-func (inv *invocation) pushFailed(ctx context.Context, list []*publishing, name string, err error) error {
+// publish pushes them. The publish of the skills called named, or with
+// none every skill of your own.
+func (inv *invocation) pushFailed(ctx context.Context, list []*publishing, named []string, err error) error {
 	var recorded []string
 	for _, p := range list {
 		if p.recorded {
@@ -323,10 +349,7 @@ func (inv *invocation) pushFailed(ctx context.Context, list []*publishing, name 
 	if rerr := inv.reportRecorded(ctx, recorded); rerr != nil {
 		return rerr
 	}
-	again := "agentx skill publish"
-	if name != "" {
-		again = publishCommand(name)
-	}
+	again := publishCommand(named...)
 	f := failureOf(err)
 	if f.status == exitSource {
 		f.hint += "; the edits were recorded, so run '" + again + "' again once the account remote can be reached"
@@ -334,15 +357,18 @@ func (inv *invocation) pushFailed(ctx context.Context, list []*publishing, name 
 	return f
 }
 
-// publishable judges a named skill from what this machine holds, before
-// the account remote is looked up or fetched: one of your own skills, a
-// fork branch's, passes; a managed skill of a shared source is shared, and
-// published to its source, see publishShared, with no account remote
-// needed; and a skill a publish cannot cover is refused: one this machine
-// does not hold, exit code 5, with the hint to install it when the account
-// remote held it at the last fetch, and an unmanaged skill, exit code 6,
-// which has no source to publish to.
-func (inv *invocation) publishable(ctx context.Context, name string) (shared bool, err error) {
+// publishable judges the named skills, in name order, from what this
+// machine holds, before the account remote is looked up or fetched: one of
+// your own skills, a fork branch's, passes; a managed skill of a shared
+// source is shared, and published to its source, see publishShared, with
+// no account remote needed, when it is the one skill named; and a skill a
+// publish cannot cover refuses the whole run: one this machine does not
+// hold, exit code 5, with the hint to install it when the account remote
+// held it at the last fetch, an unmanaged skill, exit code 6, which has no
+// source to publish to, and a skill of a shared source named beside
+// others, exit code 1, see sharedBesideOthers. The lineage is read once
+// for every name.
+func (inv *invocation) publishable(ctx context.Context, names []string) (shared bool, err error) {
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return false, accountRepoFailure(err)
@@ -355,9 +381,29 @@ func (inv *invocation) publishable(ctx context.Context, name string) (shared boo
 			return false, accountRepoFailure(err)
 		}
 	}
-	if rec, ok := records[name]; ok {
-		return rec.Kind != lineage.KindFork, nil
+	var others []string
+	for _, name := range names {
+		if rec, ok := records[name]; ok {
+			if rec.Kind != lineage.KindFork {
+				others = append(others, name)
+			}
+			continue
+		}
+		return false, inv.unpublishable(ctx, name)
 	}
+	switch {
+	case len(others) == 0:
+		return false, nil
+	case len(names) == 1:
+		return true, nil
+	}
+	return false, sharedBesideOthers(others)
+}
+
+// unpublishable is the refusal of a named skill that is no branch of the
+// account repo: an unmanaged skill, exit code 6, or one the library does
+// not hold, exit code 5, see publishable.
+func (inv *invocation) unpublishable(ctx context.Context, name string) error {
 	_, held := librarySkill(inv.dirs.Library, name)
 	// published is whether the account remote held a skill of the name at
 	// the last fetch, read without fetching: a fork of the name made here
@@ -373,13 +419,30 @@ func (inv *invocation) publishable(ctx context.Context, name string) (shared boo
 		if published {
 			hint += "; or move " + quotedPath(inv.libraryPath(name)) + " aside and install the one you published with '" + accountAddCommand(name) + "'"
 		}
-		return false, fail(exitRefused, sanitised(name)+" is not managed, so it has no source to publish to", hint)
+		return fail(exitRefused, sanitised(name)+" is not managed, so it has no source to publish to", hint)
 	case published:
 		f := failureOf(inv.noLibrarySkill(name))
 		f.hint = "it is one of your skills on the account remote; install it with '" + accountAddCommand(name) + "'"
-		return false, f
+		return f
 	}
-	return false, inv.noLibrarySkill(name)
+	return inv.noLibrarySkill(name)
+}
+
+// sharedBesideOthers refuses, exit code 1, a publish that names the skills
+// of shared sources called shared beside other skills: a skill of a shared
+// source is pushed to its own source, one at a time, and a publish of
+// several skills pushes your own to the account remote. Pure.
+func sharedBesideOthers(shared []string) *failure {
+	if len(shared) == 1 {
+		return refuse(exitUsage, sanitised(shared[0])+" is installed from a shared source, which a skill is published to only when it is named alone",
+			"publish it on its own with '"+publishCommand(shared[0])+"', and the other skills without it")
+	}
+	quoted := make([]string, len(shared))
+	for i, n := range shared {
+		quoted[i] = sanitised(n)
+	}
+	return refuse(exitUsage, strings.Join(quoted, ", ")+" are installed from shared sources, which a skill is published to only when it is named alone",
+		"publish each of them on its own with 'agentx skill publish <name>', and the other skills without them")
 }
 
 // judgePublish decides what the publish does with the skill whose branch
@@ -734,10 +797,10 @@ func commitSubject(name, label string, files []changedFile) string {
 // declined, by a hook, a protected branch or a rule of its own, is exit
 // code 6 naming the host's reason, and a push this machine's credentials
 // may not make is exit code 3; none is ever pushed again with force. The
-// hints name the run's command, the publish of the skill called name or
-// with no name of every skill of your own, and not each skill, so that a
+// hints name the run's command, the publish of the skills called named or
+// with none of every skill of your own, and not each skill, so that a
 // push refused for all of them alike ends with the one hint that fits.
-func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url, name string, list []*publishing, branches []string) error {
+func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url string, named []string, list []*publishing, branches []string) error {
 	statuses, stderr, exit, err := inv.git.Push(ctx, gitDir, remote, branches)
 	if err != nil {
 		return unreachableRemote(url, err)
@@ -755,11 +818,7 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url, name 
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	command := "agentx skill publish"
-	if name != "" {
-		command = publishCommand(name)
-	}
-	again := "run '" + command + "' again"
+	again := "run '" + publishCommand(named...) + "' again"
 	for _, p := range list {
 		if !p.push {
 			continue

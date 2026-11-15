@@ -10,7 +10,11 @@ const launchLines = [
 
 const value = (page: Page, term: string) =>
   page.getByLabel(term, { exact: true });
-const staleBar = (page: Page) => page.getByRole("status");
+
+// The title bar's sync status is a status region too, for screen readers alone: the bar is the
+// one on screen.
+const staleBar = (page: Page) =>
+  page.getByRole("status").and(page.locator(":not(.sr-only)"));
 
 /** Launches the app, waits for the store's reads, and shows the store. */
 const launch = async (cli: MockCli, page: Page) => {

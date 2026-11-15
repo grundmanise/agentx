@@ -10,12 +10,14 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
-// TestTheCheckRunsOnceAtLaunch drives Run with a check that reports at
-// once: it starts once the initial inventory is out, its report is made, and
-// no other check follows it, however many refreshes serve answers after it.
-// A second job holds on until serve stops, which stops it, and Run returns
-// only once it has.
-func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
+// TestTheChecksRunOneAtATime drives Run with a check that reports at once
+// and a recheck repeated every few milliseconds: the check starts once the
+// initial inventory is out, its report is made, and it never runs again,
+// however many refreshes serve answers after it; the recheck starts only
+// once the check's report is made, and runs again and again, never beside
+// itself or the check. A second job holds on until serve stops, which stops
+// it, and Run returns only once it has.
+func TestTheChecksRunOneAtATime(t *testing.T) {
 	t.Parallel()
 	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
@@ -24,7 +26,9 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 	defer stdinW.Close()
 	defer stdinR.Close()
 
-	var inventories, checks atomic.Int32
+	var inventories, checks, rechecks, running atomic.Int32
+	var overlapped, early atomic.Bool // a check ran beside another; the recheck ran before the check's report
+	var checkReported atomic.Bool
 	var held atomic.Bool           // the second job, still running when serve stops, ended
 	started := make(chan int32, 1) // the inventories out when the check started
 	reported := make(chan struct{}, 1)
@@ -41,11 +45,31 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 			BadRequest:      func(string, string) {},
 			Warn:            func(string) {},
 			Check: func(context.Context) func() {
+				if running.Add(1) > 1 {
+					overlapped.Store(true)
+				}
+				defer running.Add(-1)
 				if checks.Add(1) == 1 {
 					started <- inventories.Load()
 				}
-				return func() { reported <- struct{}{} }
+				return func() {
+					checkReported.Store(true)
+					reported <- struct{}{}
+				}
 			},
+			Recheck: func(context.Context) func() {
+				if running.Add(1) > 1 {
+					overlapped.Store(true)
+				}
+				defer running.Add(-1)
+				if !checkReported.Load() {
+					early.Store(true)
+				}
+				time.Sleep(time.Millisecond) // long enough for a recheck started beside it to show
+				rechecks.Add(1)
+				return nil
+			},
+			RecheckEvery: time.Millisecond,
 			Jobs: []Job{func(ctx context.Context) func() {
 				<-ctx.Done()
 				held.Store(true)
@@ -77,6 +101,13 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 			t.Fatalf("refresh %s was never acknowledged", id)
 		}
 	}
+	deadline := time.Now().Add(10 * time.Second)
+	for rechecks.Load() < 3 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d rechecks within 10s, want at least 3", rechecks.Load())
+		}
+		time.Sleep(time.Millisecond)
+	}
 	cancel()
 	select {
 	case err := <-done:
@@ -91,5 +122,11 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 	}
 	if n := checks.Load(); n != 1 {
 		t.Errorf("%d checks ran, want the one at launch", n)
+	}
+	if overlapped.Load() {
+		t.Error("two checks ran at once")
+	}
+	if early.Load() {
+		t.Error("the recheck ran before the check's report was made")
 	}
 }

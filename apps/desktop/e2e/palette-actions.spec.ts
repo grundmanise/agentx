@@ -67,14 +67,14 @@ test.describe("ACTIONS", () => {
       "Show activity log",
     ]);
     await expect(option(page, "Update all")).toContainText("1 skill");
-    await expect(option(page, "Publish all")).toContainText("2 skills");
+    await expect(option(page, "Publish all")).toContainText("3 skills");
   });
 
   test("with no update and nothing to publish: neither Update all nor Publish all", async ({
     cli,
     page,
   }) => {
-    launch(cli, "published", { update: false });
+    launch(cli, "synced", { update: false });
     await openPalette(page);
     await expect(group(page, "ACTIONS").getByRole("option")).toHaveText([
       "Add skill",
@@ -104,23 +104,24 @@ test.describe("ACTIONS", () => {
     expect(ran(cli, ["skill", "update", "--all"])).toBe(true);
   });
 
-  test("Publish all runs a bare skill publish", async ({ cli, page }) => {
+  test("Publish all runs skill publish with every skill the title bar counts", async ({
+    cli,
+    page,
+  }) => {
     launch(cli);
-    cli.register(["skill", "publish"], {
-      events: [
-        {
-          name: "changelog",
-          outcome: "pushed",
-          source: ACCOUNT,
-          type: "publish",
-        },
-        { name: "notes", outcome: "pushed", source: ACCOUNT, type: "publish" },
-      ],
+    const names = ["changelog", "draft", "notes"];
+    cli.register(["skill", "publish", ...names], {
+      events: names.map((name) => ({
+        name,
+        outcome: "pushed" as const,
+        source: ACCOUNT,
+        type: "publish" as const,
+      })),
     });
     await openPalette(page);
     await option(page, "Publish all").click();
-    await expect(toasts(page)).toContainText("Published 2 skills");
-    expect(ran(cli, ["skill", "publish"])).toBe(true);
+    await expect(toasts(page)).toContainText("Published 3 skills");
+    expect(ran(cli, ["skill", "publish", ...names])).toBe(true);
   });
 
   test("Check updates runs skill check-updates", async ({ cli, page }) => {

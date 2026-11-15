@@ -79,6 +79,12 @@ export interface AppState {
   reconciles: ReconcileEvent[];
   /** The update candidates, by skill name, from the last update check. */
   updates: Record<string, UpdateAvailableEvent>;
+  /**
+   * When an update check last ended well (RFC 3339): serve's own, by its `update_check` event, or
+   * a `skill check-updates` run, which reached every source or all but some (exit 3). Undefined
+   * until one did this session.
+   */
+  lastChecked: string | undefined;
   settings: Settings | undefined;
   /** This machine and where agentx keeps its files, from `machine`. */
   machine: MachineEvent | undefined;
@@ -183,6 +189,7 @@ export const useAppStore = create<AppState>()(() => ({
   histories: {},
   installable: undefined,
   inventory: undefined,
+  lastChecked: undefined,
   listings: {},
   machine: undefined,
   pending: {},
