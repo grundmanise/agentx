@@ -235,6 +235,9 @@
   --color-group-label: var(--gray-300);
   --color-group-count: var(--gray-500);
   --color-group-divider-label: var(--gray-500);
+  --color-subgroup-label: var(--gray-400);
+  --color-subgroup-count: var(--gray-500);
+  --color-subgroup-hover: var(--gray-920);
   --color-table-row-hover: var(--gray-930);
   --color-table-header-text: var(--gray-500);
 
@@ -583,6 +586,10 @@
   --padding-group-first-top: 4px;
   --padding-group-bottom: 8px;
   --gap-group: 8px;
+  --padding-subgroup-x: 14px;
+  --padding-subgroup-y: 6px;
+  --padding-subgroup-top: 8px;
+  --padding-subgroup-indent: 22px;
   --height-table-header: 40px;
   --padding-table-row: 16px;
   --gap-table-col: 24px;

@@ -246,6 +246,9 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `group.label` | `gray-300` | Source group caption |
 | `group.count` | `gray-500` | Count beside the caption |
 | `group.divider-label` | `gray-500` | Caption of the sub-group of skills in no agent client |
+| `subgroup.label` | `gray-400` | Caption of a plugin's subgroup under PLUGINS |
+| `subgroup.count` | `gray-500` | Count beside a plugin's caption |
+| `subgroup.hover` | `gray-920` | A plugin's header under the pointer |
 | `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows |
 | `table.header-text` | `gray-500` | Column captions |
 
@@ -557,6 +560,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
 | `group.padding` | 20 14 8 | `pt-group-top px-group pb-group-bottom` | Later group headers |
 | `group.gap` | 8 | `gap-group` | Label → count |
+| `subgroup.padding` | 6 14 | `py-subgroup-y px-subgroup-x` | A plugin's header under PLUGINS |
+| `subgroup.spacing` | 8 | `pt-subgroup-top` | Above a plugin's header, but the first in its group |
+| `subgroup.indent` | 22 | `pl-subgroup-indent` | Left inset of a plugin's rows: the row's glyph sits under the plugin's name |
 | `table.header-height` | 40 | `h-table-header` | Sticky header (servers) |
 | `table.row-padding` | 16 | `p-table-row` | Server rows |
 | `table.col-gap` | 24 | `gap-x-table-col` |  |
@@ -865,6 +871,8 @@ Sort toggle, at the right end of the filter row, always reads as a sort by name:
 ### Group header (lists)
 
 `type.caption` in `group.label`, then the count in `group.count`. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
+
+The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a plugin installed in several agent clients is one subgroup. Its header (`src/components/section-toggle.tsx`) is a flat, full-width row, not a button with a fill: `subgroup.padding`, `row.radius`, no fill at rest and `subgroup.hover` under the pointer; a `xs` chevron in `text.caption`, the plugin's name in `type.caption` `subgroup.label`, then the count in `type.technical-sm` `subgroup.count`, `group.gap` apart. Its chevron lines up with the group's caption above it. `subgroup.spacing` above each header but the first in its group. The plugin's rows are inset by `subgroup.indent`, so each row's glyph sits under the plugin's name and the rows read as inside its section; their hover and selected fill start at the inset. A click collapses or expands the plugin's rows (`aria-expanded`); the chevron turns 90° while they show, with no transition. A collapsed subgroup keeps its header and count, and j/k skip its rows. Every subgroup is open when the screen opens. Each row's place (`aria-posinset`, `aria-setsize`) is among its plugin's rows.
 
 ### Banner (detail pane)
 
