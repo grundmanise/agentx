@@ -444,7 +444,7 @@ func newSkillContext(ctx context.Context, inv *invocation, records map[string]li
 		sources:       sourceURLs(s),
 		account:       account.URL,
 		disabled:      s.DisabledConfigurations,
-		targets:       inv.detectedTargets(),
+		targets:       withCopies(inv.detectedTargets(), s.CopyConfigurations),
 		merges:        merges,
 		published:     published,
 		publishedRead: read,

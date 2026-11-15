@@ -28,7 +28,8 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 		Long: "Place a skill the library already holds into every enabled agent configuration,\n" +
 			"or into those named with --to. This is the placement half of 'agentx skill add'\n" +
 			"on its own, and it puts back the placements 'agentx skill list' shows as missing\n" +
-			"or displaced: a copy where copy_mode records one or --copy asks for one, a\n" +
+			"or displaced: a copy where copy_mode records one, where the configuration\n" +
+			"places copies ('agentx config placement') or where --copy asks for one, a\n" +
 			"symlink to the library directory everywhere else.\n\n" +
 			"A real directory where the symlink belongs is replaced by the placement when it\n" +
 			"holds exactly the library's content, and reported as adopted. When it holds\n" +
@@ -72,6 +73,7 @@ type placeTarget struct {
 	id           string
 	dir          string // the client's own skills directory
 	readsLibrary bool   // the library entry is the placement; a symlink would list the skill twice
+	copies       bool   // copy_configurations lists it, so a placement made there is a copy, see withCopies
 }
 
 // ownPlace is where this configuration's placement of the skill called name
@@ -193,9 +195,10 @@ func targetIDs(targets []placeTarget) []string {
 // drift reads, so what it changes is exactly what the listing says is
 // wrong there.
 //
-//   - A missing placement is made, a copy where copy_mode records one or
-//     --copy asks for one and a symlink everywhere else, and so is a copy
-//     where the library's own symlink displaced it.
+//   - A missing placement is made, a copy where copy_mode records one, a
+//     covered configuration places copies or --copy asks for one and a
+//     symlink everywhere else, and so is a copy where the library's own
+//     symlink displaced it, or where a covered configuration places copies.
 //   - A real directory where the symlink belongs is replaced by the
 //     expected placement when it holds exactly what the library directory
 //     holds, as git would record the two: nothing of the user's is lost,
@@ -274,7 +277,7 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 		if err != nil {
 			return err
 		}
-		detected := inv.detectedTargets()
+		detected := edit.placing(inv.detectedTargets())
 		var asked []string
 		for _, t := range detected {
 			if len(to) > 0 && containsString(to, t.id) || len(to) == 0 && !containsString(edit.s.DisabledConfigurations, t.id) {
@@ -355,6 +358,9 @@ func (inv *invocation) noLibrarySkill(name string) error {
 // client reads the library needs none: the library entry is the placement,
 // and a second entry would make that client list the skill twice.
 //
+// A configuration copy_configurations lists gets a copy, as if --copy were
+// given for it alone, see withCopies.
+//
 // A configuration recordedCopies names, the ones copy_mode records for the
 // skill, gets a copy whether or not this command was asked for one: its
 // client may not follow a symlink, and turning agentx's own copy into a
@@ -375,7 +381,7 @@ func (inv *invocation) stagePlacement(m *home.Mutation, p placeable, t placeTarg
 		return
 	}
 	recorded := containsString(recordedCopies, t.id)
-	asCopy = asCopy || recorded
+	asCopy = asCopy || recorded || t.copies
 	placePath := t.ownPlace(inv.dirs.Library, p.name)
 	state, err := home.State(placePath)
 	if err != nil {

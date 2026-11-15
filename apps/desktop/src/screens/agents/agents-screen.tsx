@@ -3,10 +3,12 @@
 // installs and creations go when no agent is named: `config enable <id>` and `config disable
 // <id>`, with Place all (`config enable <id> --place-all`) offered on the toast. The clients that
 // read the library share the Universal card and have no switch: they see the library whatever
-// their setting. Remove, in the menu of a card and of a Universal column, deletes the
+// their setting. A card's Placement control decides how later placements there are made, as a
+// symlink to the library or as a copy (`config placement <id> symlink|copy`); skills already placed
+// keep their kind, unless Convert on the toast converts them (`--convert`). Remove, in the menu of a card and of a Universal column, deletes the
 // configuration's directory after one confirm dialog (`config remove <id> --yes`): the user
 // decides what goes, and the cards follow the inventory that comes after the command.
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import type {
   CliEvent,
@@ -14,6 +16,7 @@ import type {
   InventoryEvent,
 } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
+import { Segmented } from "#/components/filter-controls.tsx";
 import { MoreIcon } from "#/components/icons/more.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -29,10 +32,11 @@ import { plural } from "#/lib/plural.ts";
 import {
   countsOf,
   libraryPathOf,
+  placedAsCount,
   unplacedCount,
 } from "#/screens/agents/counts.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
-import { placedAllText } from "#/screens/skills/placements.ts";
+import { convertedText, placedAllText } from "#/screens/skills/placements.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -53,6 +57,95 @@ const placeAll = (c: Configuration) => {
     label: switchLabel(c),
     success: (events) => placedAllText(events, c.name),
   });
+};
+
+/** The label of a configuration's Placement control: the runner's name for it. */
+const placementLabel = (c: Configuration) => `placement ${c.id}`;
+
+type Placement = "symlink" | "copy";
+
+const placements: { value: Placement; label: string }[] = [
+  { label: "Symlink", value: "symlink" },
+  { label: "Copy", value: "copy" },
+];
+
+/** What a card's Placement control decides, on hover. */
+const placementTitle = (c: Configuration) =>
+  `How new skills reach ${c.name}. Symlink: ${c.name} reads them from your shared library, so updates show at once. Copy: ${c.name} gets its own copy, for an agent client that doesn't follow symlinks. Skills already there stay as they are until you convert them.`;
+
+/**
+ * Converts the skills already in `c` to `mode`: `config placement <id> <mode> --convert`. The CLI
+ * keeps a copy edited in place, and the toast says how many it kept.
+ */
+const convert = (c: Configuration, mode: Placement) => {
+  void runUntilSettled(["config", "placement", c.id, mode, "--convert"], {
+    label: placementLabel(c),
+    success: (events) => convertedText(events, c.name, mode),
+  });
+};
+
+/**
+ * How later placements in the configuration are made: a symlink to the library (the default) or
+ * a copy. The control shows the inventory's `placement` and is pending until the inventory that
+ * follows the command arrives.
+ */
+const PlacementControl = ({
+  c,
+  inventory,
+  disabled,
+}: {
+  c: Configuration;
+  inventory: InventoryEvent;
+  disabled: boolean;
+}) => {
+  const id = useId();
+  const pending = useSettling(placementLabel(c));
+  const value: Placement = c.placement === "copy" ? "copy" : "symlink";
+  const onChange = (mode: Placement) => {
+    // The skills already there as the other kind, which the toast offers to convert.
+    const n = placedAsCount(inventory, c.id, value);
+    void runUntilSettled(["config", "placement", c.id, mode], {
+      action:
+        n > 0
+          ? {
+              label: "Convert existing",
+              onClick: () => {
+                convert(c, mode);
+              },
+            }
+          : undefined,
+      label: placementLabel(c),
+      success:
+        mode === "copy"
+          ? `${c.name} now gets copies of new skills`
+          : `${c.name} now gets symlinks to new skills`,
+    });
+  };
+  return (
+    <div className="mt-auto flex flex-col gap-2">
+      <span className="flex items-center justify-between gap-2">
+        <span id={id} className="type-caption text-text-caption">
+          Placement
+        </span>
+        {pending && (
+          <span className="text-text-hint flex">
+            <Spinner />
+          </span>
+        )}
+      </span>
+      <Segmented
+        group={`placement-${c.id}`}
+        options={placements}
+        value={value}
+        onChange={onChange}
+        labelledBy={id}
+        title={placementTitle(c)}
+        surface="card"
+        disabled={disabled}
+        busy={pending}
+      />
+    </div>
+  );
 };
 
 /** The label of a configuration's Remove: the runner's name for it. */
@@ -212,6 +305,7 @@ const AgentCard = ({
         {" · "}
         <Count n={counts.plugins} noun="plugin" />
       </p>
+      <PlacementControl c={c} inventory={inventory} disabled={pending} />
     </article>
   );
 };

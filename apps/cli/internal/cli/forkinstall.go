@@ -666,7 +666,7 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 		}
 		*done = placements{}
 		p := dirPlaceable(f.name, staged)
-		for _, t := range targets {
+		for _, t := range edit.placing(targets) {
 			inv.stagePlacement(m, p, t, f.libPath, asCopy, edit.copiesOf(f.name), done)
 		}
 		edit.addCopies(f.name, done.copies)

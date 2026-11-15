@@ -29,6 +29,7 @@ export const machine = (
 export const settings = (ignoreSystemFiles: boolean): InlineEvent => {
   const value: Settings = {
     accept_operations: false,
+    copy_configurations: [],
     copy_mode: {},
     disabled_configurations: [],
     ignore_system_files: ignoreSystemFiles,

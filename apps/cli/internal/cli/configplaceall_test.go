@@ -39,6 +39,29 @@ func TestConfigEnablePlaceAllPlacesEveryLibrarySkill(t *testing.T) {
 	contains(t, "the result", out.stdout, "cursor is now enabled, 2 skills placed")
 }
 
+// TestConfigEnablePlaceAllPlacesCopiesWhereTheConfigurationDoes: in a
+// configuration that places copies, the run turns every symlink there into
+// a copy and records each one in copy_mode, so that the rescan counts it as
+// agentx's own placement and a later skill place does not take it for the
+// user's directory.
+func TestConfigEnablePlaceAllPlacesCopiesWhereTheConfigurationDoes(t *testing.T) {
+	t.Parallel()
+	h, s := placementHarness(t)
+	h.mustRun("skill", "add", s.url, "--all", "--to", "cursor")
+	h.mustRun("config", "placement", "cursor", "copy")
+
+	out := h.run("--json", "config", "enable", "cursor", "--place-all")
+	equal(t, "exit", out.exit, 0)
+	for _, name := range []string{"alpha", "beta"} {
+		info, err := os.Lstat(filepath.Join(h.home, ".cursor", "skills", name))
+		if err != nil || !info.IsDir() {
+			t.Errorf("%s in cursor is not a copy: %v", name, err)
+		}
+		equal(t, "copy_mode of "+name, copyModeOf(t, h, name), "cursor")
+	}
+	contains(t, "the result", out.stdout, "cursor is now enabled, 2 skills placed")
+}
+
 // TestConfigEnableWithoutPlaceAllChangesOnlyTheDefault: enabling on its own
 // decides where future installs go and places nothing, which is what the
 // flag exists to change.
