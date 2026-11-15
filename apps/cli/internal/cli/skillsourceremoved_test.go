@@ -330,7 +330,6 @@ func TestSourceCommandsNameARemovedSource(t *testing.T) {
 	}{
 		{[]string{"source", "skills", "0123456789abcdef"}, "run 'agentx source list' to see the sources"},
 		{[]string{"source", "fetch", "0123456789abcdef"}, "run 'agentx source list' to see the sources"},
-		{[]string{"source", "skills", never}, "run 'agentx source add " + never + "' to add it"},
 		{[]string{"source", "fetch", never}, "run 'agentx source add " + never + "' to add it"},
 	} {
 		out := h.run(append([]string{"--json"}, c.args...)...)

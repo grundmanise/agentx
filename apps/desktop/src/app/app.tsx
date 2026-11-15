@@ -1,3 +1,4 @@
+import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router";
@@ -20,6 +21,7 @@ import { SettingsScreen } from "#/screens/settings/settings-screen.tsx";
 import { SkillsScreen } from "#/screens/skills/skills-screen.tsx";
 import { SourcesScreen } from "#/screens/sources/sources-screen.tsx";
 import { launch, useStartup } from "#/startup/startup.ts";
+import type { StartupState } from "#/startup/startup.ts";
 import { startLoaders } from "#/store/loaders.ts";
 
 /** The screens built so far, by route; the others show their placeholder. */
@@ -32,10 +34,33 @@ const built: Record<string, ReactElement> = {
   [SOURCES_PATH]: <SourcesScreen />,
 };
 
-/** The screen of the current route, faded in; nothing until the startup checks pass. */
-const Screen = ({ ready }: { ready: boolean }) =>
-  ready ? (
-    <div className="animate-fade-in flex min-h-0 flex-1 flex-col">
+const screenVariants = cva(
+  "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+  {
+    variants: {
+      // The kept inventory is there with the first render: it does not fade in.
+      enter: { fade: "animate-fade-in", none: "" },
+      // Washed out, and pulsing, while it may not be this machine as it is now.
+      loading: {
+        false: "",
+        true: "opacity-panel-loading animate-panel-loading motion-reduce:animate-none",
+      },
+    },
+  }
+);
+
+/**
+ * The screen of the current route. It mounts once the startup checks pass, faded in, or with the
+ * first render when the store holds the kept inventory: washed out and pulsing until they pass.
+ */
+const Screen = ({ cached, ready }: Pick<StartupState, "cached" | "ready">) =>
+  ready || cached ? (
+    <div
+      className={screenVariants({
+        enter: cached ? "none" : "fade",
+        loading: !ready,
+      })}
+    >
       <Outlet />
     </div>
   ) : null;
@@ -97,13 +122,17 @@ export const App = () => {
             aria-busy={!startup.ready}
             className="rounded-shell-panel border-shell-divider bg-shell-content-bg mr-panel mb-panel relative flex min-w-0 flex-1 flex-col overflow-hidden border"
           >
-            {!startup.ready && startup.slow && startup.step && (
+            {!(startup.ready || startup.cached) && startup.step && (
               <LaunchProgress step={startup.step} />
             )}
             {startup.ready && <StaleBar />}
             <Routes>
-              {/* No screen mounts until the checks pass: none runs a command before they do. */}
-              <Route element={<Screen ready={startup.ready} />}>
+              {/* No command runs until the checks pass: one a screen starts waits for them. */}
+              <Route
+                element={
+                  <Screen cached={startup.cached} ready={startup.ready} />
+                }
+              >
                 {allScreens.map((s) => (
                   <Route
                     key={s.path}

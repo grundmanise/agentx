@@ -333,6 +333,7 @@ export class MockCli {
   private openAnswer: string | null = null;
   private editors: { id: string; name: string }[] = [];
   private failingOpens = false;
+  private failingReveals = false;
   // The app's preferences file, which outlives a page reload as the file outlives a restart.
   private preferences: unknown = { editor: { kind: "system" } };
 
@@ -386,6 +387,11 @@ export class MockCli {
     await this.page.addInitScript(() => {
       Object.defineProperty(navigator, "platform", { get: () => "MacIntel" });
     });
+  }
+
+  /** Whether every later reveal fails, as when the path no longer exists. */
+  failReveals(fail = true) {
+    this.failingReveals = fail;
   }
 
   /** Whether every later open in an editor fails, as when the editor cannot start. */
@@ -606,6 +612,9 @@ export class MockCli {
         this.reveals.push(
           Array.isArray(paths) ? paths.map(String) : [String(paths)]
         );
+        if (this.failingReveals) {
+          throw new Error("No such file or directory");
+        }
         return null;
       }
       case "plugin:opener|open_url": {

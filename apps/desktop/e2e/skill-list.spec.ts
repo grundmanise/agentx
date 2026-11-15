@@ -1,15 +1,18 @@
 // The Skills list on a machine with hundreds of skills: only the rows near the part of the list
-// that shows are in the document, and the selected row comes into view.
+// that shows are in the document, the selected row comes into view, and each plugin's skills sit
+// in a subgroup that collapses.
 import type { Page } from "@playwright/test";
 
 import {
   fileReads,
   inventory,
+  listedPluginSkill,
   PLUGIN_SKILL_COUNT,
-  pluginSkillName,
   SKILL_COUNT,
+  SKILLS_PER_PLUGIN,
 } from "./fixtures/many-skills.ts";
 import { adoption } from "./fixtures/skills.ts";
+import type { MockCli } from "./harness/cli.ts";
 import { expect, test } from "./harness/cli.ts";
 
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
@@ -20,50 +23,86 @@ const pane = (page: Page, name: string) =>
     .getByRole("region", { name: "Skill details" })
     .getByRole("article", { name });
 
-test("a list of hundreds of skills holds only the rows near what shows, and brings the selected row into view", async ({
-  cli,
-  page,
-}) => {
+/** Opens the Skills screen on the machine with hundreds of skills, at the skill `name`. */
+const openAt = async (cli: MockCli, page: Page, name: string) => {
   cli.onServeStart({ events: [inventory] });
   cli.register(["adopt"], { events: adoption });
   for (const read of fileReads) {
     cli.register(["skill", "files", ...read.args], { events: read.events });
   }
   // The route names a skill far down the list, as when another screen opens it.
-  await page.goto(
-    `/#/skills/${encodeURIComponent(`skill:h-${pluginSkillName(400)}`)}`
-  );
+  await page.goto(`/#/skills/${encodeURIComponent(`skill:h-${name}`)}`);
   await expect(page.getByLabel(`${SKILL_COUNT} skills`)).toBeVisible();
-  const opened = row(page, pluginSkillName(400));
+};
+
+test("a list of hundreds of skills holds only the rows near what shows, and brings the selected row into view", async ({
+  cli,
+  page,
+}) => {
+  const start = listedPluginSkill(300);
+  await openAt(cli, page, start.name);
+  const opened = row(page, start.name);
   await expect(opened).toHaveAttribute("aria-current", "true");
   await expect(opened).toBeInViewport({ ratio: 1 });
-  // The group says how many rows it has, and each row its place among them.
-  const plugins = list(page).getByRole("region", {
-    name: `PLUGINS (${PLUGIN_SKILL_COUNT})`,
-  });
+  // The group and each plugin's subgroup say how many rows they have, and each row its place
+  // among its plugin's.
   await expect(
-    plugins.getByRole("listitem").filter({
-      has: page.getByRole("button", {
-        exact: true,
-        name: pluginSkillName(400),
-      }),
-    })
-  ).toHaveAttribute("aria-posinset", "401");
+    list(page).getByRole("region", { name: `PLUGINS (${PLUGIN_SKILL_COUNT})` })
+  ).toBeVisible();
+  await expect(
+    list(page)
+      .getByRole("region", {
+        name: `${start.plugin} (${SKILLS_PER_PLUGIN})`,
+      })
+      .getByRole("listitem")
+      .filter({
+        has: page.getByRole("button", { exact: true, name: start.name }),
+      })
+  ).toHaveAttribute("aria-posinset", String(start.posinset));
   const drawn = await list(page).getByRole("listitem").count();
   expect(drawn).toBeLessThan(50);
 
-  // The keys move the selection past the rows that were drawn, one key after the other, and
-  // the list follows.
-  for (let n = 401; n <= 420; n += 1) {
+  // The keys move the selection past the rows that were drawn and from one plugin to the next,
+  // one key after the other, and the list follows.
+  for (let i = 301; i <= 320; i += 1) {
     // oxlint-disable-next-line no-await-in-loop
     await page.keyboard.press("j");
     // oxlint-disable-next-line no-await-in-loop
-    await expect(row(page, pluginSkillName(n))).toHaveAttribute(
+    await expect(row(page, listedPluginSkill(i).name)).toHaveAttribute(
       "aria-current",
       "true"
     );
   }
-  await expect(row(page, pluginSkillName(420))).toBeInViewport({ ratio: 1 });
-  await expect(pane(page, pluginSkillName(420))).toBeVisible();
+  const last = listedPluginSkill(320).name;
+  await expect(row(page, last)).toBeInViewport({ ratio: 1 });
+  await expect(pane(page, last)).toBeVisible();
   expect(await list(page).getByRole("listitem").count()).toBeLessThan(50);
+});
+
+test("a plugin's subgroup collapses to its header, and the keys skip its rows", async ({
+  cli,
+  page,
+}) => {
+  // The first plugin's first skill, so its header is drawn beside it.
+  const first = listedPluginSkill(0);
+  await openAt(cli, page, first.name);
+  const plugin = list(page).getByRole("region", {
+    name: `${first.plugin} (${SKILLS_PER_PLUGIN})`,
+  });
+  const toggle = plugin.getByRole("button", {
+    exact: true,
+    name: `${first.plugin} ${SKILLS_PER_PLUGIN}`,
+  });
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(plugin.getByRole("listitem")).toHaveCount(0);
+  // The detail pane keeps the selected skill; the next key moves to the next plugin's first.
+  await expect(pane(page, first.name)).toBeVisible();
+  const next = listedPluginSkill(SKILLS_PER_PLUGIN).name;
+  await page.keyboard.press("j");
+  await expect(row(page, next)).toHaveAttribute("aria-current", "true");
+  // Expanded again, it lists its rows.
+  await toggle.click();
+  await expect(row(page, first.name)).toBeVisible();
 });

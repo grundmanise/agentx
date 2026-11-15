@@ -151,6 +151,9 @@ var valueLists = []valueList{
 	}, fields: []fieldRef{
 		{scan.HandshakeError{}, "Reason"},
 	}},
+	{name: "OriginKind", values: []string{originPlugin, originSource, originSkill}, fields: []fieldRef{
+		{forkOrigin{}, "Kind"},
+	}},
 	{name: "FileStatus", values: []string{diffAdded, diffModified, diffDeleted}, fields: []fieldRef{
 		{diffEvent{}, "Status"}, {changedFile{}, "Status"},
 	}},

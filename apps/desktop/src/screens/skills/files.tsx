@@ -9,6 +9,7 @@ import type {
 } from "#/cli/events.gen.ts";
 import { CodePane, codeLines } from "#/components/code-pane.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
+import { Spinner } from "#/components/spinner.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import {
   Accordion,
@@ -242,6 +243,109 @@ const Hint = ({ children }: { children: string }) => (
   <p className="type-secondary text-text-hint m-0">{children}</p>
 );
 
+/**
+ * A stand-in for a SKILL.md, long enough to fill the Code pane, shown blurred while the files are
+ * read. Its words are never read: it gives the blur the shape of a real file.
+ */
+const STAND_IN = `---
+name: skill-name
+description: What the skill does, and when an agent should use it.
+---
+
+# Skill name
+
+A short paragraph that says what this skill is for and when to reach for it.
+
+## When to use
+
+- The first situation where the skill helps
+- A second situation, described in a few words
+- A third one, with a little more detail than the others
+
+## How it works
+
+1. Read the input and decide what to do with it
+2. Do the work, one step at a time
+3. Check the result before handing it back
+
+## Notes
+
+Anything else the agent should keep in mind while it works.
+`;
+
+const loadingVariants = cva("bg-code-bg overflow-hidden", {
+  variants: {
+    leaving: {
+      false: "h-code relative",
+      true: "animate-code-loading-out pointer-events-none absolute inset-0",
+    },
+  },
+});
+
+/**
+ * The SKILL.md pane while the files are read: a stand-in file blurred like frosted glass with a
+ * spinner on top, at the Code pane's full height. `leaving`, it lies over the real SKILL.md as
+ * that comes in and fades out, hidden from assistive technology, then calls `onLeft`.
+ */
+const LoadingPane = ({
+  leaving = false,
+  onLeft,
+}: {
+  leaving?: boolean;
+  onLeft?: () => void;
+}) => (
+  <div
+    aria-busy={leaving ? undefined : true}
+    aria-hidden={leaving ? true : undefined}
+    inert={leaving}
+    className={loadingVariants({ leaving })}
+    onAnimationEnd={(event) => {
+      // The spinner turns inside; only the pane's own fade ends it.
+      if (event.target === event.currentTarget) {
+        onLeft?.();
+      }
+    }}
+  >
+    <div
+      aria-hidden
+      inert
+      className="blur-code-loading pointer-events-none select-none"
+    >
+      <CodePane path={SKILL_MD} label={SKILL_MD} content={STAND_IN} />
+    </div>
+    <output className="text-text-muted absolute inset-0 flex items-center justify-center">
+      <Spinner size="md" />
+      <span className="sr-only">Reading the files…</span>
+    </output>
+  </div>
+);
+
+/**
+ * The list while the files are read: the SKILL.md row every skill has, over the loading pane, so
+ * the list keeps its place when the files come in. It shares the list's open rows, so a row the
+ * user closes stays closed.
+ */
+const Reading = ({
+  open,
+  onOpenChange,
+}: {
+  open: string[];
+  onOpenChange: (open: string[]) => void;
+}) => (
+  <Accordion label="Files" value={open} onValueChange={onOpenChange}>
+    <AccordionItem value={SKILL_MD}>
+      <AccordionTrigger label={SKILL_MD} open={open.includes(SKILL_MD)}>
+        <span className={pathVariants({ open: open.includes(SKILL_MD) })}>
+          {SKILL_MD}
+        </span>
+      </AccordionTrigger>
+      <AccordionContent>
+        <LoadingPane />
+      </AccordionContent>
+    </AccordionItem>
+  </Accordion>
+);
+
 /** What the edits of a modified skill are compared with, by what the skill is. */
 const comparedWith = (row: SkillRow) =>
   row.kind === "yours"
@@ -282,6 +386,16 @@ export const FilesSection = ({
 
   const current =
     read !== undefined && read.version === version ? read : undefined;
+  // Files that come in while the loading pane shows cross-fade into it; files already read show
+  // at once. Set while rendering, from the read the last render showed.
+  const [shown, setShown] = useState(current);
+  const [revealing, setRevealing] = useState(false);
+  if (shown !== current) {
+    setShown(current);
+    setRevealing(
+      shown === undefined && current !== undefined && current.failed !== true
+    );
+  }
   const compared =
     current?.failed === undefined && current?.diffs !== undefined
       ? comparedWith(row)
@@ -291,7 +405,7 @@ export const FilesSection = ({
   if (request === undefined) {
     body = <Hint>No files to show</Hint>;
   } else if (current === undefined) {
-    body = <Hint>Reading the files…</Hint>;
+    body = <Reading open={open} onOpenChange={setOpen} />;
   } else if (current.failed === true) {
     body = <Hint>The files could not be read</Hint>;
   } else {
@@ -337,7 +451,21 @@ export const FilesSection = ({
                   )}
                 </AccordionTrigger>
                 <AccordionContent>
-                  <Pane row={file} />
+                  {revealing && file.path === SKILL_MD ? (
+                    <div className="relative">
+                      <div className="animate-code-reveal">
+                        <Pane row={file} />
+                      </div>
+                      <LoadingPane
+                        leaving
+                        onLeft={() => {
+                          setRevealing(false);
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <Pane row={file} />
+                  )}
                 </AccordionContent>
               </AccordionItem>
             );

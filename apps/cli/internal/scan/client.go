@@ -60,7 +60,7 @@ type MCPConfig struct {
 // a file that may not exist, and DisabledServers names those of them the
 // client records as turned off. Hooks are the hooks its manifest or hooks
 // file declares, and Icon its own icon as a data URL, "" when it has none
-// agentx carries.
+// agentx carries. URL is where it can be seen on the web, "" when unknown.
 type InstalledPlugin struct {
 	Name            string
 	Marketplace     string // where it was installed from; empty when unknown
@@ -72,6 +72,7 @@ type InstalledPlugin struct {
 	Enabled         *bool // nil for a client that records no enabled state
 	Hooks           []Hook
 	Icon            string
+	URL             string
 }
 
 // Detect returns the registered clients whose configuration directory

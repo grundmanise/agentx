@@ -2,7 +2,8 @@
 // It keeps shadcn's shape (`asChild` renders the child element with the button's look, through
 // Slot; `data-slot="button"`) with our variants and sizes. Disabled is 30% opacity and inert,
 // never a grey fill. A button is one line, except `sm-wrap`: a small button whose label wraps, as
-// tall as its lines, for a label that is a sentence (a commit's subject in the History sheet).
+// tall as its lines, for a label that is a sentence, and `inline`, a `plain` button as tall as its
+// text (a commit's subject in the History sheet).
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
@@ -21,6 +22,9 @@ const buttonVariants = cva(
         // A square as tall as a small button, as shadcn pairs `icon-sm` with `sm`.
         "icon-sm":
           "type-button-sm size-8.5 items-center justify-center p-0 whitespace-nowrap",
+        // As tall as its text, with no padding: a plain button inside a line of text, such as an
+        // entry of the History sheet, whose children set its type.
+        inline: "items-start justify-start p-0 text-left whitespace-normal",
         sm: "type-button-sm h-8.5 items-center justify-center px-3.5 whitespace-nowrap",
         "sm-wrap":
           "type-button-sm min-h-8.5 items-start justify-start px-3.5 py-1.5 text-left whitespace-normal",
@@ -30,6 +34,8 @@ const buttonVariants = cva(
           "text-button-danger-text bg-button-danger-bg hover:bg-button-danger-hover font-medium",
         ghost:
           "text-button-ghost-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary font-medium",
+        // No fill: a line of text that expands, such as an entry of the History sheet.
+        plain: "text-button-ghost-text hover:text-text-primary",
         primary:
           "bg-button-primary-bg text-button-primary-text hover:bg-button-primary-hover font-semibold",
         secondary:

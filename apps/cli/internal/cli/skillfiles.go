@@ -33,9 +33,10 @@ func newSkillFilesCommand(inv *invocation) *cobra.Command {
 			"<name> is a skill of the library, or a skill a plugin provides, named as\n" +
 			"'agentx skill fork' names it, <plugin>:<skill> when several plugins provide one\n" +
 			"of that name. A file git ignores in a library skill's directory is marked\n" +
-			"ignored, as 'agentx skill diff' leaves it out. With --configuration <id>, read\n" +
-			"instead the skill directory called <name> in that configuration's own skills\n" +
-			"directory, a plugin's left out.",
+			"ignored, as 'agentx skill diff' leaves it out. While ignore_system_files is on,\n" +
+			"the files an operating system or an editor leaves, such as .DS_Store, are left\n" +
+			"out. With --configuration <id>, read instead the skill directory called <name>\n" +
+			"in that configuration's own skills directory, a plugin's left out.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("configuration") && strings.TrimSpace(configuration) == "" {
@@ -135,7 +136,7 @@ func (inv *invocation) skillFiles(ctx context.Context, arg, configuration string
 		if err != nil {
 			return err
 		}
-		files, err := inv.readSkillDir(o.ResolvedPath, nil)
+		files, err := inv.readSkillDir(o.ResolvedPath, nil, inv.systemFilesIgnored())
 		if err != nil {
 			return err
 		}
@@ -156,7 +157,7 @@ func (inv *invocation) skillFiles(ctx context.Context, arg, configuration string
 			return err
 		}
 		dir = lib.ResolvedPath
-		files, err = inv.readSkillDir(dir, ignored)
+		files, err = inv.readSkillDir(dir, ignored, inv.systemFilesIgnored())
 		return err
 	})
 	if err != nil {
@@ -175,7 +176,7 @@ func (inv *invocation) skillFiles(ctx context.Context, arg, configuration string
 		return err
 	}
 	name := filepath.Base(o.Path)
-	if files, err = inv.readSkillDir(o.ResolvedPath, nil); err != nil {
+	if files, err = inv.readSkillDir(o.ResolvedPath, nil, inv.systemFilesIgnored()); err != nil {
 		return err
 	}
 	inv.reportSkillFiles(name, sanitised(name)+" of plugin "+sanitised(o.Plugin), o.ResolvedPath, files)
@@ -288,9 +289,10 @@ func (inv *invocation) libraryIgnored(ctx context.Context, name string, lib scan
 // part of the skill; a symlink that leads to a directory or nowhere, which
 // is not followed; a named pipe or a socket. Files are sorted by path, and
 // ignored marks the paths among them, relative to dir with / as the
-// separator. A directory this machine cannot read is refused as a library
-// it cannot use is.
-func (inv *invocation) readSkillDir(dir string, ignored map[string]bool) ([]skillFile, error) {
+// separator. With hideSystem, a system file is left out silently, see
+// hiddenSystemFile. A directory this machine cannot read is refused as a
+// library it cannot use is.
+func (inv *invocation) readSkillDir(dir string, ignored map[string]bool, hideSystem bool) ([]skillFile, error) {
 	var files []skillFile
 	leftOut := func(full, why string) {
 		inv.out.warn(quotedPath(full) + " " + why + " and is left out")
@@ -327,16 +329,20 @@ func (inv *invocation) readSkillDir(dir string, ignored map[string]bool) ([]skil
 			leftOut(full, "is neither a file nor a symlink to one")
 			return nil
 		}
-		f, err := readSkillFile(full, info.Size())
-		if err != nil {
-			return err
-		}
 		rel, err := filepath.Rel(dir, full)
 		if err != nil {
 			return err
 		}
-		f.path = filepath.ToSlash(rel)
-		f.ignored = ignored[f.path]
+		rel = filepath.ToSlash(rel)
+		if hideSystem && hiddenSystemFile(rel, ignored) {
+			return nil
+		}
+		f, err := readSkillFile(full, info.Size())
+		if err != nil {
+			return err
+		}
+		f.path = rel
+		f.ignored = ignored[rel]
 		files = append(files, f)
 		return nil
 	})
@@ -345,6 +351,25 @@ func (inv *invocation) readSkillDir(dir string, ignored map[string]bool) ([]skil
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].path < files[j].path })
 	return files, nil
+}
+
+// hiddenSystemFile is whether skill files leaves out the file at rel,
+// relative to the skill directory with / as the separator, while
+// ignore_system_files is on: a file one of whose path components is a
+// system file, such as .DS_Store or a file in .AppleDouble, which the
+// version the skill is compared with does not hold. ignored is the set of
+// files git ignores, nil when git was not asked, as for a plugin's skill,
+// and then every system file is left out. Pure.
+func hiddenSystemFile(rel string, ignored map[string]bool) bool {
+	if ignored != nil && !ignored[rel] {
+		return false
+	}
+	for _, name := range strings.Split(rel, "/") {
+		if home.IsSystemFile(name) {
+			return true
+		}
+	}
+	return false
 }
 
 // readSkillFile reads the file at full, whose size a stat gave, as far as
