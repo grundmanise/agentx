@@ -25,9 +25,14 @@ The agents on the **Universal** card read the library directly, so they have no 
 
 ## What changes
 
-The choice applies to the skills agentx places in that agent from now on: when you add, create or fork a skill, place a skill there, or select **Place all**. Skills already in the agent keep how they were placed.
+The choice applies to the skills agentx places in that agent from now on: when you add, create or fork a skill, place a skill there, or select **Place all**. Skills already in the agent keep how they were placed until you convert them.
 
-To change a skill that is already there, open the skill, turn the agent off under **Agents**, then turn it on again.
+## Convert the skills already in an agent
+
+1. Select **Symlink** or **Copy** on the agent's card.
+2. In the message that confirms the change, select **Convert**.
+
+agentx turns each skill already in the agent into the kind you chose. It keeps a copy you edited in place as a copy, so your edits stay, and says how many it kept. To discard those edits, open the skill, turn the agent off under **Agents**, then turn it on again.
 
 ## From the command line
 
@@ -35,6 +40,12 @@ To change a skill that is already there, open the skill, turn the agent off unde
 
 ```sh
 agentx config placement cursor copy
+```
+
+Add `--convert` to also convert the skills already in the agent:
+
+```sh
+agentx config placement cursor copy --convert
 ```
 
 See [`agentx config`](/cli/config).
