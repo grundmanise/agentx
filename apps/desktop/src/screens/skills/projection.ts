@@ -64,12 +64,22 @@ export interface SkillRow {
   forkedFrom?: string;
 }
 
+/** The skills of one plugin, under their own header in the PLUGINS group. */
+export interface Subgroup {
+  key: string;
+  label: string;
+  rows: SkillRow[];
+}
+
 export interface Group {
   key: string;
   label: string;
   /** The full URL of a source's group, which its header's tooltip shows. */
   source?: string;
+  /** Every row of the group, in the order the list shows them: subgroup by subgroup when it has them. */
   rows: SkillRow[];
+  /** The PLUGINS group's skills by plugin, A to Z by the plugin's name. */
+  subgroups?: Subgroup[];
 }
 
 /**
@@ -385,9 +395,42 @@ const comparer = (order: SortOrder) => {
     : (a: SkillRow, b: SkillRow) => compareNames(b, a);
 };
 
+/** The name of the plugin that provides a plugin's skill. */
+const pluginNameOf = (row: SkillRow) =>
+  row.plugin?.name ?? row.occurrences[0]?.plugin ?? "";
+
+/**
+ * The key of a plugin's subgroup: the plugin's name and its marketplace, so a plugin installed
+ * in several agent clients is one subgroup, and two marketplaces' plugins of one name are two.
+ */
+export const subgroupKey = (row: SkillRow) =>
+  `${GROUP_PLUGINS}:${pluginNameOf(row)}@${row.plugin?.marketplace ?? ""}`;
+
+/** Whether a row is in a plugin's subgroup that is collapsed, so the list hides it. */
+export const inCollapsed = (row: SkillRow, collapsed: ReadonlySet<string>) =>
+  row.group === GROUP_PLUGINS && collapsed.has(subgroupKey(row));
+
+/** A plugin group's skills by plugin, A to Z by the plugin's name; each keeps the order of `rows`. */
+const pluginSubgroups = (rows: SkillRow[]): Subgroup[] => {
+  const byKey = new Map<string, Subgroup>();
+  for (const row of rows) {
+    const key = subgroupKey(row);
+    let subgroup = byKey.get(key);
+    if (subgroup === undefined) {
+      subgroup = { key, label: pluginNameOf(row).toUpperCase(), rows: [] };
+      byKey.set(key, subgroup);
+    }
+    subgroup.rows.push(row);
+  }
+  return sorted(
+    [...byKey.values()],
+    (a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key)
+  );
+};
+
 /**
  * The rows in groups: PERSONAL, each source A to Z by its short form, PLUGINS, then UNMANAGED,
- * each sorted in `order`. A group with no row is left out.
+ * each sorted in `order`. PLUGINS holds one subgroup per plugin. A group with no row is left out.
  */
 export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
   const keys = [...new Set(rows.map((r) => r.group))];
@@ -399,14 +442,17 @@ export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
     (k) => keys.includes(k)
   );
   return ordered.map((key) => {
-    const inGroup = rows.filter((r) => r.group === key);
-    const group: Group = {
-      key,
-      label: groupLabel(key),
-      rows: sorted(inGroup, comparer(order)),
-    };
+    const inGroup = sorted(
+      rows.filter((r) => r.group === key),
+      comparer(order)
+    );
+    const group: Group = { key, label: groupLabel(key), rows: inGroup };
     if (key.startsWith(SOURCE_PREFIX)) {
       group.source = key.slice(SOURCE_PREFIX.length);
+    }
+    if (key === GROUP_PLUGINS) {
+      group.subgroups = pluginSubgroups(inGroup);
+      group.rows = group.subgroups.flatMap((s) => s.rows);
     }
     return group;
   });

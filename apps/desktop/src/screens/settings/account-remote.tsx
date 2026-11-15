@@ -1,13 +1,14 @@
 // The Account remote section of Settings: the Git repository your own skills publish to. With none
 // set, a URL field and Save, which runs `source add <url> --account`. With one set, its URL, how
-// many of your skills it holds and when it was fetched, whether you can write to it, and Change…
-// (a new URL, after the replace warning) and Detach (`source remove <url>`, after its warning).
+// many of your skills it holds and when it was fetched, a Read-only tag when access is limited, and
+// Change… (a new URL, after the replace warning) and Detach (`source remove <url>`, after its warning).
 // What it shows is the Sources slice, which `source list` fills again after each command; a
 // failure of Save shows under the field, in the CLI's words as one sentence-cased paragraph, a
 // hint that names a command put in the app's words (docs/help-center/cli/source.mdx).
 import { useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
+import { Pill } from "#/components/pill.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -25,11 +26,7 @@ import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { useNow } from "#/screens/settings/clock.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
-import {
-  accessLine,
-  accountLine,
-  accountRemote,
-} from "#/screens/settings/source-rows.ts";
+import { accountLine, accountRemote } from "#/screens/settings/source-rows.ts";
 import { runCommand, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
@@ -40,12 +37,13 @@ export const SAVE_ACCOUNT_LABEL = "save account remote";
 /** The pending label of `source remove <url>` of the account remote. */
 export const DETACH_ACCOUNT_LABEL = "detach account remote";
 
-/** A confirmation: its title, its warning, Cancel and the button that goes ahead. */
+/** A confirmation: its title, an optional URL, its warning, Cancel and the button that goes ahead. */
 const Confirm = ({
   open,
   onOpenChange,
   title,
   warning,
+  detail,
   action,
   danger = false,
   onConfirm,
@@ -54,6 +52,8 @@ const Confirm = ({
   onOpenChange: (open: boolean) => void;
   title: string;
   warning: string;
+  /** A URL, in `type.technical`, broken anywhere so a long one wraps inside the dialog. */
+  detail?: string;
   action: string;
   danger?: boolean;
   onConfirm: () => void;
@@ -62,6 +62,11 @@ const Confirm = ({
     <DialogContent>
       <DialogHeader showCloseButton={false}>
         <DialogTitle>{title}</DialogTitle>
+        {detail !== undefined && (
+          <p className="type-technical text-text-caption m-0 break-all">
+            {detail}
+          </p>
+        )}
         <DialogDescription>{warning}</DialogDescription>
       </DialogHeader>
       <DialogFooter>
@@ -216,15 +221,18 @@ const RemoteForm = ({
   );
 };
 
-/** The account remote set now: its URL, its skills and fetch, its access, Change… and Detach. */
+/**
+ * The account remote set now: its URL, a Read-only tag when access is limited, its skills and
+ * fetch, Change… and Detach. Like a source's card, it shows a tag only for a limit.
+ */
 const AccountRemoteRow = ({
   url,
   line,
-  access,
+  readOnly,
 }: {
   url: string;
   line: string;
-  access: string;
+  readOnly: boolean;
 }) => {
   const [changing, setChanging] = useState(false);
   const [detaching, setDetaching] = useState(false);
@@ -240,9 +248,14 @@ const AccountRemoteRow = ({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <p className="type-technical text-text-primary m-0 break-all">{url}</p>
+        {/* Baseline, not center: the mono URL then sits on the middle of the pill. */}
+        <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+          <p className="type-technical text-text-primary m-0 break-all">
+            {url}
+          </p>
+          {readOnly && <Pill tone="neutral">Read-only</Pill>}
+        </div>
         <p className="type-secondary text-text-muted m-0">{line}</p>
-        <p className="type-secondary text-text-hint m-0">{access}</p>
       </div>
       {changing ? (
         <RemoteForm
@@ -279,8 +292,9 @@ const AccountRemoteRow = ({
       <Confirm
         open={detaching}
         onOpenChange={setDetaching}
-        title={`Detach ${url}?`}
-        warning="Your skills stay on this machine, and nothing on the account remote changes."
+        title="Detach the account remote?"
+        warning="agentx stops publishing to this repository. Your skills and the repository stay as they are."
+        detail={url}
         action="Detach"
         danger
         onConfirm={detach}
@@ -306,7 +320,7 @@ export const AccountRemoteSection = () => {
           key={account.url}
           url={account.url}
           line={accountLine(account, now)}
-          access={accessLine(account.access)}
+          readOnly={account.access === "read-only"}
         />
       )}
     </SettingsSection>
