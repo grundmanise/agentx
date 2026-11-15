@@ -40,7 +40,7 @@ The fleet-wide identity of a skill or MCP server. For a skill of a shared source
 _Avoid_: skill id, key
 
 **Fork id**:
-The permanent identity assigned when one of the user's own skills is created, by `agentx skill new` or `agentx skill fork`, carried by the commit that creates it, which is never amended. Installing that published skill elsewhere preserves it, and so does renaming it; independently creating another skill assigns a different identity, even from the same upstream version.
+The permanent identity assigned when one of the user's own skills is created, by `agentx skill new` or `agentx skill fork`, or by `agentx adopt` of an unmanaged skill, carried by the commit that creates it, which is never amended. Installing that published skill elsewhere preserves it, and so does renaming it; independently creating another skill assigns a different identity, even from the same upstream version.
 
 **Physical asset**:
 One logical asset on one machine in one version, the version being the content hash for a skill and the tool signature for a server. The unit drift is evaluated on and machine views count.
@@ -94,7 +94,7 @@ Whether agentx keeps a skill: managed or unmanaged, and nothing else. Where a ma
 _Avoid_: fork, from-scratch skill, account skill (as kinds)
 
 **Managed skill**:
-A skill agentx keeps a branch of in the account repo, so it knows its source and can update it. Either a skill of a shared source, installed with `agentx skill add <source>`, whose base version is the import commit on its import branch; or one of the user's own skills, made with `agentx skill new` or `agentx skill fork` or installed from the account remote, whose source is the account remote and whose branch holds its history.
+A skill agentx keeps a branch of in the account repo, so it knows its source and can update it. Either a skill of a shared source, installed with `agentx skill add <source>` or adopted from another tool's record of it, whose base version is the import commit on its import branch; or one of the user's own skills, made with `agentx skill new` or `agentx skill fork`, adopted as it is with `agentx adopt`, or installed from the account remote, whose source is the account remote and whose branch holds its history.
 
 **Upstream-removed skill**:
 A managed skill whose subpath no longer holds a skill in its source, as the last update check found it: no directory there, or one without a SKILL.md. Kept as it is, never updated, shown with this state until a check finds it in the source again.
@@ -109,10 +109,14 @@ A skill whose source is gone from this machine. For a managed skill, the canonic
 _Avoid_: orphaned, detached
 
 **Unmanaged skill**:
-A skill found on disk whose upstream agentx cannot determine. Inventoried, never updated.
+A skill found on disk that agentx keeps no branch of, so it knows neither a source nor an upstream for it: a library entry no branch records, or a directory in an agent client's own skills directory. Inventoried, never updated. `agentx adopt` makes it one of the user's own skills.
+
+**Adopt**:
+An action, not a kind: `agentx adopt` brings a skill agentx does not manage under its management, in one of two ways. A skill another tool installed and recorded is installed from the source the record names, at the version that source holds now, and becomes a managed skill of that shared source; what the tool left in the library gives way to that version. An unmanaged skill no tool recorded becomes one of the user's own skills with its files as they are: a fork with no upstream, whose first commit holds them. One in the library is adopted in its place; a directory in an agent client's own skills directory moves into the library, and a symlink to the library takes its place. `--as-is` adopts a recorded skill the second way, which keeps its edits. An adoption makes a new managed skill, where an adopt candidate is taken into a fork that already exists; the `candidate` state of an `adoption` event, a record that can be adopted, is not an adopt candidate either.
+_Avoid_: import, migrate, claim, convert
 
 **Fork**:
-An action, not a kind: `agentx skill fork` makes one of the user's own skills from another skill, a managed skill whose source is the account remote and whose upstream is where it came from, keeping that skill's name unless given another. In the account repo and in this glossary, fork also names the branch and worktree that hold any of the user's own skills, one made with `agentx skill new` included. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Renaming one with `agentx skill rename` keeps its fork id and history under the new name on this machine; its first publish under the new name creates the new name's branch on the account remote and deletes the old one's when it is the same skill and the renamed skill holds all of it. Only that publish does: an old branch it keeps or cannot delete is never retried, and `agentx skill remove <old> --remote` deletes it. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; its edits stay on this machine until it is published; a publish, or an update, fork or rename of it, records them on its branch, and only a publish pushes them.
+An action, not a kind: `agentx skill fork` makes one of the user's own skills from another skill, a managed skill whose source is the account remote and whose upstream is where it came from, keeping that skill's name unless given another. In the account repo and in this glossary, fork also names the branch and worktree that hold any of the user's own skills, one made with `agentx skill new` or adopted as it is with `agentx adopt` included. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Skills of a shared source, plugin-owned skills and forks can all be forked with `agentx skill fork`; an unmanaged skill is adopted instead, with `agentx adopt`. Renaming one with `agentx skill rename` keeps its fork id and history under the new name on this machine; its first publish under the new name creates the new name's branch on the account remote and deletes the old one's when it is the same skill and the renamed skill holds all of it. Only that publish does: an old branch it keeps or cannot delete is never retried, and `agentx skill remove <old> --remote` deletes it. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; its edits stay on this machine until it is published; a publish, or an update, fork or rename of it, records them on its branch, and only a publish pushes them.
 _Avoid_: copy, variant, override
 
 **Account repo**:

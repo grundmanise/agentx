@@ -33,3 +33,5 @@ _Amendment, 2026-10-03:_ `skill revert` is removed. Where the text above names a
 
 _Amendment, 2026-10-03:_ sources have no layout. The account remote is the source whose settings entry carries the account flag, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
 
+_Amendment, 2026-11-15:_ an unmanaged skill is no longer forked before it is published. `agentx adopt --skill <name>` makes it one of the user's own skills, which the user then publishes, see [ADR 0014](0014-adopt-takes-over-an-unmanaged-skill-as-one-of-the-users-own.md).
+

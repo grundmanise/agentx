@@ -4,7 +4,9 @@ Status: accepted. Applies to commands that change lineage refs, worktrees, libra
 
 ## Adoption
 
-Install the skill from its source, as an install does, at the version the source holds at its pin, and record that version as the base. Whatever the other tool left under the skill's name in the library gives way to it through the journal, a directory retained until the mutation is verified; its content is never imported as if it came from upstream, and nothing of the other tool's files is written. The one thing kept is a directory that already holds exactly the version, which is adopted in place.
+Install a skill another tool recorded from its source, as an install does, at the version the source holds at its pin, and record that version as the base. Whatever the other tool left under the skill's name in the library gives way to it through the journal, a directory retained until the mutation is verified; its content is never imported as if it came from upstream, and nothing of the other tool's files is written. The one thing kept is a directory that already holds exactly the version, which is adopted in place.
+
+Take over an unmanaged skill no tool recorded, or a recorded one the user asked to keep as it is, with its files as they are: record them as the first commit of a branch of its own, with no upstream, and move the directory into that branch's worktree through the journal, so the skill never exists twice. When the directory comes out of an agent client's own skills directory, refuse unless every other directory of that name in the agent clients' own skills directories holds the same content, then remove the others through the journal, each retained until the mutation is verified.
 
 ## Mutation and recovery
 

@@ -1,9 +1,12 @@
 ---
 title: "agentx adopt"
-description: "Take over the skills the Vercel skills CLI or Skillshare installed, so agentx can update them."
+description: "Take over skills agentx does not manage yet: the ones the Vercel skills CLI or Skillshare installed, and unmanaged skills on this machine."
 ---
 
-The Vercel skills CLI and Skillshare both record where each skill they installed came from. `agentx adopt` reads those records and installs each skill from its source, the way [`agentx skill add`](/cli/skill#install-a-skill) does. Afterwards agentx manages the skill: it knows the source and can update it.
+`agentx adopt` takes over skills that agentx does not manage yet. It handles two kinds of skill:
+
+- **A skill another tool installed.** The Vercel skills CLI and Skillshare both record where each skill they installed came from. `agentx adopt` reads those records and installs each skill from its source, the way [`agentx skill add`](/cli/skill#install-a-skill) does. Afterwards agentx manages the skill: it knows the source and can update it.
+- **An unmanaged skill.** A skill no tool recorded, in your library or in a client's own skills folder, becomes [one of your own skills](/cli/fork), with its files as they are. See [Adopt an unmanaged skill](#adopt-an-unmanaged-skill).
 
 agentx only reads the other tool's files. They stay as they are.
 
@@ -28,9 +31,12 @@ Already managed by agentx (1)
 To adopt:
   agentx adopt --all           adopt it
   agentx adopt --skill <name>  adopt one; give --skill again for each
+To take over an unmanaged skill no tool installed: agentx adopt --skill <name>
 ```
 
 With no flags, the command only shows what it found. It writes nothing and makes no network calls.
+
+The preview lists the skills the other tools recorded. It does not list unmanaged skills: find those with [`agentx skill list`](/cli/skill#list-your-skills) and [`agentx scan`](/cli/scan). The last line names the command that adopts one.
 
 The skills are grouped by what adopting would do with them:
 
@@ -40,7 +46,7 @@ The skills are grouped by what adopting would do with them:
 | Cannot adopt | agentx cannot adopt it, and the row says why. See [Refused skills](#refused-skills) |
 | Already managed by agentx | agentx already manages it. There is nothing to do |
 
-The tool column shows only when both tools installed skills on this machine. When agentx already manages every skill, the preview ends with `Nothing to adopt: agentx already manages every one.`
+The tool column shows only when both tools installed skills on this machine. When agentx already manages every skill, the preview says `Nothing to adopt: agentx already manages every one.`
 
 To look at the skills of one tool only, name it: `skills-cli` for the Vercel skills CLI, or `skillshare`. This works with `--all` and `--skill` too:
 
@@ -49,7 +55,7 @@ agentx adopt skillshare
 agentx adopt skillshare --all
 ```
 
-## Adopt skills
+## Adopt skills another tool installed
 
 Adopt every skill that is ready:
 
@@ -92,14 +98,116 @@ agentx skill list
 
 Adopting replaces what the other tool left in the library with the version it installs. That covers the directory the Vercel skills CLI copied, the symlink Skillshare puts in `~/.agents/skills`, and any edit you made in there.
 
-To keep an edit, fork the skill first. A fork keeps your files and their history, under a name of your choice:
-
-```sh
-agentx skill fork pdf --name my-pdf
-agentx adopt --skill pdf
-```
+To keep an edit, adopt the skill with `--as-is` instead. See [Keep a skill as it is](#keep-a-skill-as-it-is).
 
 Skillshare keeps its own copy of each skill in its folder, `~/.config/skillshare/skills` by default. agentx never touches that folder, so your edits there stay.
+
+## Adopt an unmanaged skill
+
+An unmanaged skill is a skill agentx does not manage and no other tool recorded: a directory you put in your library, `~/.agents/skills`, or in a client's own skills folder, such as `~/.claude/skills`. Adopt it by name:
+
+```sh
+agentx adopt --skill notes
+```
+
+```text
+✓ adopted notes; it is now one of your own skills
+No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish notes' to publish it.
+```
+
+- The skill becomes [one of your own skills](/cli/fork), with its files as they are. agentx records them as the first commit of the skill's history.
+- agentx installs and fetches nothing. The skill has no upstream, so `agentx skill update` only takes what your other machines published.
+- [Publish it](/cli/fork#create-a-skill) as you publish a skill you create. The last output line shows only while no account remote is set.
+- [Files that stay local](/cli/fork#files-that-stay-local), such as a `.DS_Store`, move with the skill and are never published.
+- Give `--skill` once for each skill to adopt several.
+
+agentx looks for the name in this order:
+
+1. The other tools' records. A skill one of them recorded is [adopted from its source](#adopt-skills-another-tool-installed), unless you add [`--as-is`](#keep-a-skill-as-it-is).
+2. Your library.
+3. Each client's own skills folder.
+
+If you name a tool, such as `agentx adopt skillshare --skill notes`, agentx reads that tool's records only and adopts no unmanaged skill.
+
+### From your library
+
+`agentx skill list` shows an unmanaged skill in your library as `unmanaged`. agentx adopts it in its place:
+
+- The directory moves to `~/.agentx/worktrees/<name>`, and your library holds a symlink to it. See [Where your skills live](/cli/fork#where-your-skills-live).
+- Every client that saw the skill still sees it. agentx adds no placement.
+- To place the skill in your other clients, run [`agentx skill place <name>`](/cli/skill#place-a-skill-you-already-have).
+
+### From a client's folder
+
+When your library has no skill of that name, agentx adopts the directory of that name in a client's own skills folder:
+
+```sh
+agentx adopt --skill jot
+```
+
+```text
+✓ adopted jot from /home/me/.claude/skills/jot: 1 placement
+  claude-code  symlink  /home/me/.claude/skills/jot -> /home/me/.agents/skills/jot
+  always available to universal clients: codex, gemini-cli
+```
+
+- The directory moves into your library, and a symlink to the library takes its place. The client sees the skill as before.
+- Clients that read the library directly, such as Codex and Gemini CLI, now see the skill too. See [Clients that see every skill](/cli/skill#clients-that-see-every-skill).
+- If several clients hold a directory of that name with the same files, agentx moves the first one and replaces each of the others with a symlink. A client that reads the library directly gets no symlink: it sees the skill in the library.
+- If those directories hold different files, agentx stops with exit code 6 and names them. Keep one, remove or rename the others, then run the command again.
+- A client that held no directory of that name gets no placement. Run [`agentx skill place <name>`](/cli/skill#place-a-skill-you-already-have) to place the skill there.
+- agentx reads each client's own skills folder for your user, enabled or not. The directory must hold a `SKILL.md`. A skill inside a project is left alone, and so is a plugin's skill: [fork a plugin's skill](/cli/fork#fork-a-plugins-skill) instead.
+
+### When the name is taken
+
+If another skill already has the name, agentx stops with exit code 6 and changes nothing. The message says which skill holds the name:
+
+| What holds the name | What to do |
+|---|---|
+| A managed skill in your library, with nothing else of that name in a client's folder | Nothing: agentx already manages the skill. |
+| A managed skill in your library, while a client's folder holds another directory of that name | Rename the directory and adopt it under the new name. Or follow the hint to put the library's skill in its place, which discards what the directory holds. |
+| A skill agentx manages whose library directory is gone | Rename the directory and adopt it under the new name. Or follow the hint: put your own skill back with `agentx skill place <name>`, or stop managing the other skill with `agentx skill remove <name>`. |
+| A skill on your account remote, when you adopt from a client's folder | Move the directory aside and install the published skill with `agentx skill add --name <name>`. Or rename the directory and adopt it under the new name. |
+
+A name that differs from another skill's only by capital letters counts as taken.
+
+### When agentx cannot adopt the skill
+
+agentx also stops, and changes nothing, in these cases:
+
+| Cause | Exit code | What to do |
+|---|---|---|
+| No record, library skill or client folder has that name | 5 | Check the name with `agentx skill list` and `agentx scan`. |
+| The name breaks the [naming rule](/cli/fork#choose-a-name), such as `My_Skill` | 6 | Rename the directory to a valid name, then adopt it. |
+| The library entry, or the entry in the client's folder, is a symlink | 6 | Replace the link with the directory it points to. |
+| The skill holds its own `.git` | 6 | Move the `.git` out of the skill. |
+| `~/.agentx/worktrees/<name>` already exists | 6 | Move it aside. |
+| The directory and `~/.agentx` are on different file systems | 6 | Keep your library and `~/.agentx` on one file system. For a client's folder, move the directory into your library yourself, then adopt it. |
+| A plugin provides the skill | 6 | [Fork the plugin's skill](/cli/fork#fork-a-plugins-skill). |
+| The skill changed while the command ran | 6 | Run the command again. |
+
+## Keep a skill as it is
+
+Adopting a skill another tool installed replaces it with the version its source holds. To keep the files this machine holds, your edits included, add `--as-is`:
+
+```sh
+agentx adopt --skill pdf --as-is
+```
+
+```text
+✓ adopted pdf; it is now one of your own skills
+```
+
+- agentx takes the skill over as it takes over [an unmanaged skill](#adopt-an-unmanaged-skill): it becomes one of your own skills and is not installed from its source.
+- The skill has no upstream, so agentx does not update it from the source the other tool recorded.
+- `--as-is` needs `--skill`. You cannot combine it with a tool name such as `skillshare`.
+- Use it for a skill listed under `Cannot adopt` as well, such as one installed from a local path.
+- A skill Skillshare linked into your library is a symlink to Skillshare's folder, so agentx stops with exit code 6. Replace the link with the directory it points to, then run the command again.
+
+The other tool's record stays, since agentx never changes that tool's files. Afterwards:
+
+- `agentx adopt` lists the skill under `Cannot adopt`, as `<name> is a skill of the account remote on this machine`.
+- `agentx adopt --all` adopts the other skills, names this one as not adopted and exits with code 6.
 
 ## After adopting from the Vercel skills CLI
 
@@ -139,10 +247,10 @@ agentx skill rename frontend__ui ui
 | Reason | What to do |
 |---|---|
 | One of your own skills on this machine has the same name | Nothing: that skill already has its own history |
-| The record names no source agentx can fetch, such as a local path | Install the skill from a git source with [`agentx skill add`](/cli/skill) |
+| The record names no source agentx can fetch, such as a local path | Install the skill from a git source with [`agentx skill add`](/cli/skill), or adopt it [as it is](#keep-a-skill-as-it-is) |
 | Skillshare tracks the whole repository, as a `_name` folder with skills inside | Add the repository with `agentx source add` and install its skills with `agentx skill add` |
 | The record names a path outside the repository, or a path with a control character or a leading or trailing space | Fix the entry, or install the skill instead |
-| The source no longer holds a skill at that path | Leave it unmanaged, or install another skill |
+| The source no longer holds a skill at that path | Leave it unmanaged, adopt it [as it is](#keep-a-skill-as-it-is), or install another skill |
 | agentx cannot fetch the source | Check the URL and your credentials, then run again |
 
 A refused skill stays in your library as it is and keeps working in every client. `agentx skill list` shows it as `unmanaged`.
