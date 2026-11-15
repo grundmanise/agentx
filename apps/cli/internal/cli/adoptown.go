@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -100,6 +99,7 @@ type looseSkill struct {
 	// path, where its symlink would go, and is no skill.
 	managed bool
 	blocked string
+	repo    string // its .git, when the folder is a Git repository of its own
 }
 
 // reason is why the skill cannot be adopted, as a row of a preview says
@@ -111,13 +111,93 @@ func (l looseSkill) reason() string {
 	case l.link != "":
 		return "a symlink to " + quotedPath(l.link) + ". To adopt it, move that folder to " + quotedPath(l.path)
 	case l.managed:
-		return quotedPath(l.path) + " has the name of a skill agentx already manages. To adopt it, rename that folder"
+		return managedNameRow(l.path)
 	case l.blocked != "":
 		return quotedPath(l.blocked) + " is in the way and is not a skill. To adopt it, move " + quotedPath(l.blocked) + " somewhere else"
 	case forkNameRefusal(l.name) != "":
-		return "not a valid skill name. To adopt it, rename " + quotedPath(l.path)
+		return invalidNameRow(l.path)
+	case l.repo != "":
+		return ownRepoRow(l.repo)
 	}
 	return ""
+}
+
+// managedNameRow is the row of a skill whose folder, dir, has the name of
+// a skill agentx already manages. Pure.
+func managedNameRow(dir string) string {
+	return quotedPath(dir) + " has the name of a skill agentx already manages. To adopt it, rename that folder"
+}
+
+// invalidNameRow is the row of a skill whose folder, dir, has a name agentx
+// cannot give a skill. Pure.
+func invalidNameRow(dir string) string {
+	return "not a valid skill name. To adopt it, rename " + quotedPath(dir)
+}
+
+// ownRepoRow is the row of a skill whose folder is a Git repository of its
+// own, repo being its .git. Pure.
+func ownRepoRow(repo string) string {
+	return "a Git repository of its own. To adopt it, move " + quotedPath(repo) + " out of the folder"
+}
+
+// ownRepoRefusal refuses to adopt the skill called name, whose folder is a
+// Git repository of its own, repo being its .git: moved with the folder,
+// git run in the skill would find that repository and not agentx's.
+func ownRepoRefusal(name, repo string) *failure {
+	return refuse(exitRefused, sanitised(name)+" is a Git repository of its own, which agentx cannot adopt",
+		"move "+quotedPath(repo)+" out of the folder, then run '"+adoptCommand(name)+"' again").listed(ownRepoRow(repo))
+}
+
+// invalidNameRefusal refuses to adopt the skill whose folder, dir, has the
+// name name, which agentx cannot give a skill.
+func invalidNameRefusal(name, dir string) *failure {
+	return refuse(exitRefused, forkNameRefusal(name),
+		"rename "+quotedPath(dir)+" to a valid name, then run 'agentx adopt --skill <new name>'").listed(invalidNameRow(dir))
+}
+
+// adoptChanged refuses an adoption of the skill called name that found it
+// changed since it was planned.
+func adoptChanged(name string) *failure {
+	return refuse(exitRefused, sanitised(name)+" changed while it was being adopted, so nothing was changed", "run the command again").
+		listed("changed while it was being adopted, so nothing was changed. To adopt it, run the command again")
+}
+
+// adoptRootRefusal refuses an adoption of the skill called name that
+// something at root, where agentx keeps the skill once it is adopted, is
+// in the way of.
+func adoptRootRefusal(name, root string) *failure {
+	return refuse(exitRefused, quotedPath(root)+" is in the way: agentx keeps "+sanitised(name)+" there once it is adopted",
+		"move "+quotedPath(root)+" somewhere else, then run '"+adoptCommand(name)+"' again").
+		listed(quotedPath(root) + " is in the way: agentx keeps the skill there. To adopt it, move " + quotedPath(root) + " somewhere else")
+}
+
+// adoptNestedRepoRefusal refuses to adopt the skill called name whose
+// folder holds a Git repository at exposed, its .git relative to the
+// folder, that no ignore rule keeps out: git would record it as a link and
+// not as its files.
+func adoptNestedRepoRefusal(name, exposed string) *failure {
+	dir := strings.TrimSuffix(exposed, "/.git")
+	return refuse(exitRefused, sanitised(name)+" holds a Git repository of its own at "+quotedPath(dir)+", which agentx cannot adopt with the skill",
+		"add "+quotedPath(dir)+" to the skill's .gitignore to keep it on this machine only, or remove it, then run '"+adoptCommand(name)+"' again").
+		listed("holds a Git repository of its own at " + quotedPath(dir) + ". To adopt it, add " + quotedPath(dir) + " to the skill's .gitignore, or remove it")
+}
+
+// differentDiskRefusal refuses an adoption of the skill called name out of
+// from, a folder on another disk than agentx home, where it could only be
+// copied, not moved. One in the library is put right by keeping the two on
+// one disk; one in an agent client's skills directory by moving it into the
+// library.
+func (inv *invocation) differentDiskRefusal(name, from string, inLibrary bool) *failure {
+	home := quotedPath(inv.dirs.Home) + ", where agentx keeps the skills it manages"
+	if inLibrary {
+		library := quotedPath(inv.dirs.Library)
+		return refuse(exitRefused, "the library, "+library+", is on a different disk than "+home+", so "+sanitised(name)+" cannot be moved there",
+			"keep AGENTX_HOME and AGENTX_LIBRARY on one disk").
+			listed("in " + library + ", which is on a different disk than " + home + ". To adopt it, keep AGENTX_HOME and AGENTX_LIBRARY on one disk")
+	}
+	return refuse(exitRefused, sanitised(name)+" is on a different disk than "+home+", so it cannot be moved there",
+		"move "+quotedPath(from)+" into "+quotedPath(inv.dirs.Library)+" yourself, then run '"+adoptCommand(name)+"' again").
+		listed("on a different disk than " + home + ". To adopt it, move " + quotedPath(from) + " into " + quotedPath(inv.dirs.Library))
 }
 
 // skillFolders are the names of the entries of dir that are a skill, as a
@@ -170,6 +250,8 @@ func (inv *invocation) looseSkills(cands []*candidate, records map[string]lineag
 		l := looseSkill{name: name, path: inv.libraryPath(name)}
 		if info, err := os.Lstat(l.path); err == nil && info.Mode()&os.ModeSymlink != 0 {
 			l.link = linkedFolder(l.path)
+		} else {
+			l.repo = ownRepo(l.path)
 		}
 		loose = append(loose, l)
 	}
@@ -189,7 +271,7 @@ func (inv *invocation) looseSkills(cands []*candidate, records map[string]lineag
 			if len(dirs) == 0 {
 				continue
 			}
-			l := looseSkill{name: name, path: dirs[0].path}
+			l := looseSkill{name: name, path: dirs[0].path, repo: ownRepo(dirs[0].path)}
 			if _, l.managed = nameTaken(records, name, ""); !l.managed && lexists(inv.libraryPath(name)) {
 				l.blocked = inv.libraryPath(name)
 			}
@@ -198,6 +280,15 @@ func (inv *invocation) looseSkills(cands []*candidate, records map[string]lineag
 	}
 	sort.Slice(loose, func(i, j int) bool { return loose[i].name < loose[j].name })
 	return loose, nil
+}
+
+// ownRepo is the .git of the folder dir when it is a Git repository of
+// its own, a directory or a file, and "" when it is none.
+func ownRepo(dir string) string {
+	if own := filepath.Join(dir, ".git"); lexists(own) {
+		return own
+	}
+	return ""
 }
 
 // linkedFolder is where the symlink at link leads, as an absolute path: a
@@ -216,9 +307,9 @@ func linkedFolder(link string) string {
 // says it, without the name.
 func symlinkRefusal(name, link string) (reason string, f *failure) {
 	target, at := quotedPath(linkedFolder(link)), quotedPath(link)
-	return "a symlink to " + target + ". To adopt it, move that folder to " + at,
-		refuse(exitRefused, sanitised(name)+" is a symlink to "+target+", and agentx adopts folders only",
-			"move "+target+" to "+at+", then run '"+adoptCommand(name)+"' again")
+	reason = "a symlink to " + target + ". To adopt it, move that folder to " + at
+	return reason, refuse(exitRefused, sanitised(name)+" is a symlink to "+target+", and agentx adopts folders only",
+		"move "+target+" to "+at+", then run '"+adoptCommand(name)+"' again").listed(reason)
 }
 
 // asItIsRefusal is why the skill of rec, whose record names nowhere agentx
@@ -235,7 +326,7 @@ func (inv *invocation) asItIsRefusal(rec record, managed bool) (reason string, f
 	name, libPath := rec.name, inv.libraryPath(rec.name)
 	shown, again := sanitised(name), "run '"+adoptCommand(rec.name)+"' again"
 	refused := func(reason, message, hint string) (string, *failure) {
-		return reason, refuse(exitRefused, message, hint)
+		return reason, refuse(exitRefused, message, hint).listed(reason)
 	}
 	if managed {
 		remove := "'" + skillCommand("remove", name) + "'"
@@ -273,14 +364,10 @@ func (inv *invocation) asItIsRefusal(rec record, managed bool) (reason string, f
 		}
 	}
 	if forkNameRefusal(name) != "" {
-		return refused("not a valid skill name. To adopt it, rename "+quotedPath(dir),
-			forkNameRefusal(name),
-			"rename "+quotedPath(dir)+" to a valid name, then run 'agentx adopt --skill <new name>'")
+		return invalidNameRow(dir), invalidNameRefusal(name, dir)
 	}
-	if own := filepath.Join(dir, ".git"); lexists(own) {
-		return refused("a Git repository of its own. To adopt it, move "+quotedPath(own)+" out of the folder",
-			shown+" is a Git repository of its own, which agentx cannot adopt",
-			"move "+quotedPath(own)+" out of the folder, then "+again)
+	if own := ownRepo(dir); own != "" {
+		return ownRepoRow(own), ownRepoRefusal(name, own)
 	}
 	return "", nil
 }
@@ -322,7 +409,7 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 			// skill can take the directory's place in. One whose client reads
 			// the library has that skill already, and one of the user's own is
 			// never placed over a directory.
-			hint := "rename the directory and adopt it under the new name, or "
+			hint := "rename the folder and adopt it under the new name, or "
 			switch i := slices.IndexFunc(dirs[0].targets, func(t placeTarget) bool { return !t.readsLibrary }); {
 			case i < 0:
 				hint += "remove it"
@@ -331,13 +418,14 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 			default:
 				hint += "replace it with '" + skillCommand("place", name, "--to", dirs[0].targets[i].id, "--force") + "', which discards what it holds"
 			}
-			return forkSource{}, fail(exitRefused, fmt.Sprintf("the library already holds a skill called %s, %s, so %s cannot be adopted under that name", shown, what, quotedPath(dirs[0].path)), hint)
+			return forkSource{}, refuse(exitRefused, fmt.Sprintf("the library already holds a skill called %s, %s, so %s cannot be adopted under that name", shown, what, quotedPath(dirs[0].path)), hint).
+				listed(managedNameRow(dirs[0].path))
 		}
-		message := shown + " is already managed by agentx"
+		message, row := shown+" is already managed by agentx", "already managed by agentx"
 		if own {
-			message = shown + " is already one of your own skills"
+			message, row = shown+" is already one of your own skills", "already one of your own skills"
 		}
-		return forkSource{}, fail(exitRefused, message, "run 'agentx skill list' to see it")
+		return forkSource{}, refuse(exitRefused, message, "run 'agentx skill list' to see it").listed(row + ". To see it, run 'agentx skill list'")
 	}
 	dirs, links := inv.adoptSites(name)
 	switch {
@@ -346,8 +434,9 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 		return forkSource{kind: lineage.KindUnmanaged, name: name, dir: dirs[0].path}, nil
 	case len(links) > 0:
 		target, _ := os.Readlink(links[0])
-		return forkSource{}, fail(exitRefused, fmt.Sprintf("%s is a symlink to %s, so there is no directory of %s to adopt", quotedPath(links[0]), quotedPath(target), shown),
-			"replace the link with the directory it points to, then run '"+adoptCommand(name)+"' again")
+		return forkSource{}, refuse(exitRefused, fmt.Sprintf("%s is a symlink to %s, so there is no folder of %s to adopt", quotedPath(links[0]), quotedPath(target), shown),
+			"replace the link with the folder it points to, then run '"+adoptCommand(name)+"' again").
+			listed("a symlink to " + quotedPath(target) + ". To adopt it, replace " + quotedPath(links[0]) + " with the folder it points to")
 	}
 	inventory, err := fk.scanned()
 	if err != nil {
@@ -355,8 +444,9 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 	}
 	switch o, err := pluginOccurrence(inventory, name); {
 	case err == nil:
-		return forkSource{}, fail(exitRefused, shown+" comes with the plugin "+sanitised(o.Plugin)+", whose directory agentx never writes",
-			"fork it with '"+skillCommand("fork", name)+"'")
+		return forkSource{}, refuse(exitRefused, shown+" comes with the plugin "+sanitised(o.Plugin)+", whose folder agentx never changes",
+			"make a copy of your own with '"+skillCommand("fork", name)+"'").
+			listed("comes with the plugin " + sanitised(o.Plugin) + ", whose folder agentx never changes. To make a copy of your own, run '" + skillCommand("fork", name) + "'")
 	case failureOf(err).status != exitNotFound:
 		return forkSource{}, err // several plugins provide it, and the refusal names them
 	}
@@ -413,7 +503,7 @@ func (inv *invocation) adoptSites(name string) (dirs []adoptPlace, links []strin
 // may also be in the way of the skill the branch is, whose library entry
 // is gone: one of the user's own is put back, and any other let go of.
 func (fk *forking) adoptTakenHint(records map[string]lineage.Record) string {
-	rename := "rename the directory and adopt it under the new name"
+	rename := "rename the folder and adopt it under the new name"
 	rec, taken := nameTaken(records, fk.target, "")
 	switch {
 	case !taken || len(fk.places) == 0:
@@ -422,6 +512,23 @@ func (fk *forking) adoptTakenHint(records map[string]lineage.Record) string {
 		return rename + ", or put your skill back with '" + skillCommand("place", rec.Name) + "'"
 	}
 	return rename + ", or stop managing the other with '" + skillCommand("remove", rec.Name) + "'"
+}
+
+// adoptTaken refuses an adoption whose name the account repo already
+// holds a branch of, whatever its case, see nameTaken; nil when it holds
+// none. It is takenRefusal in an adoption's words: a branch is no word of
+// the user's, and the name is all there is to change.
+func (fk *forking) adoptTaken(records map[string]lineage.Record) error {
+	rec, taken := nameTaken(records, fk.target, fk.except())
+	if !taken {
+		return nil
+	}
+	message := "agentx already manages a skill called " + sanitised(rec.Name)
+	if rec.Name != fk.target {
+		message += ", whose name differs from " + sanitised(fk.target) + " only by case"
+	}
+	message += ", so " + quotedPath(fk.from) + " cannot be adopted under that name"
+	return refuse(exitRefused, message, fk.adoptTakenHint(records)).listed(managedNameRow(fk.from))
 }
 
 // adoptClash refuses an adoption out of an agent client's own skills
@@ -436,8 +543,9 @@ func (inv *invocation) adoptClash(ctx context.Context, fk *forking) error {
 	if _, remote, set, err := inv.accountSource(); err != nil || !set || !inv.remoteHolds(ctx, remote, fk.target) {
 		return nil
 	}
-	return fail(exitRefused, "your account remote already holds a skill called "+sanitised(fk.target),
-		"install it with '"+accountAddCommand(fk.target)+"' once "+quotedPath(fk.from)+" is moved aside, or rename the directory and adopt it under the new name")
+	return refuse(exitRefused, "you already published a skill called "+sanitised(fk.target)+", so "+quotedPath(fk.from)+" cannot be adopted under that name",
+		"install the published one with '"+accountAddCommand(fk.target)+"' once "+quotedPath(fk.from)+" is moved aside, or rename the folder and adopt it under the new name").
+		listed(quotedPath(fk.from) + " has the name of a skill you already published. To adopt it, rename that folder")
 }
 
 // adoptRoom refuses an adoption out of agent clients' own skills
@@ -450,13 +558,16 @@ func (inv *invocation) adoptRoom(fk *forking) error {
 		return nil
 	}
 	if libPath := inv.libraryPath(fk.src.name); lexists(libPath) {
-		return fail(exitRefused, "the library already holds "+quotedPath(libPath), "move it aside, then "+fk.again())
+		return refuse(exitRefused, quotedPath(libPath)+" is in the way: adopting "+sanitised(fk.src.name)+" puts the skill there",
+			"move "+quotedPath(libPath)+" somewhere else, then "+fk.again()).
+			listed(quotedPath(libPath) + " is in the way. To adopt it, move " + quotedPath(libPath) + " somewhere else")
 	}
 	for _, p := range fk.places {
 		dir := filepath.Dir(p.path)
 		if err := unix.Access(dir, unix.W_OK|unix.X_OK); err != nil {
-			return fail(exitRefused, "cannot adopt "+quotedPath(p.path)+": "+(&fs.PathError{Op: "access", Path: dir, Err: err}).Error(),
-				"make "+quotedPath(dir)+" writable, then "+fk.again())
+			return refuse(exitRefused, sanitised(fk.src.name)+" cannot be adopted: agentx cannot write to "+quotedPath(dir)+" ("+err.Error()+")",
+				"make "+quotedPath(dir)+" writable, then "+fk.again()).
+				listed("in " + quotedPath(dir) + ", which agentx cannot write to. To adopt it, make " + quotedPath(dir) + " writable")
 		}
 	}
 	return nil
@@ -488,8 +599,9 @@ func (inv *invocation) readAdoptPlaces(fk *forking) error {
 	for i, p := range fk.places {
 		found[i] = quotedPath(p.path) + " (" + strings.Join(p.ids(), ", ") + ")"
 	}
-	return fail(exitRefused, sanitised(fk.src.name)+" is a directory with different content in several configurations: "+strings.Join(found, ", "),
-		"keep one, remove or rename the others, then "+fk.again())
+	return refuse(exitRefused, sanitised(fk.src.name)+" is in several agents' skills folders, with different files: "+strings.Join(found, ", "),
+		"keep one of them, remove or rename the others, then "+fk.again()).
+		listed("in several agents' skills folders, with different files: " + strings.Join(found, ", ") + ". To adopt it, keep one and remove or rename the others")
 }
 
 // adoptPlacesHold reports, under the lock, whether the machine still holds

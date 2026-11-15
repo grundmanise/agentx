@@ -48,6 +48,11 @@ type failure struct {
 	message string
 	hint    string
 	cause   error // what a caller matches with errors.Is, when it has to
+	// row is the refusal as a list of the skills a run could not do says
+	// it, without the skill's name: what is in the way and what to do, as
+	// a preview says it of a skill it cannot adopt. "" for one no list
+	// words on its own, see adoptRow.
+	row string
 }
 
 func (f *failure) Error() string { return f.message }
@@ -55,6 +60,10 @@ func (f *failure) Unwrap() error { return f.cause }
 
 // wrap records the cause a caller may match on and returns f.
 func (f *failure) wrap(cause error) *failure { f.cause = cause; return f }
+
+// listed records the row a list of the skills a run could not do shows f
+// as, see row, and returns f.
+func (f *failure) listed(row string) *failure { f.row = row; return f }
 
 func fail(st status, message, hint string) error {
 	return refuse(st, message, hint)

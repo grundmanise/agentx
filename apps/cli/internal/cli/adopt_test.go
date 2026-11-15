@@ -403,17 +403,17 @@ func TestAdoptRefusesAName(t *testing.T) {
 		{"shared", exitRefused, "shared is already managed by agentx"},
 		{"mine", exitRefused, "mine is already one of your own skills"},
 		{"dup", exitRefused, "the library already holds a skill called dup, a skill of a shared source, so " + filepath.Join(claude, "dup") + " cannot be adopted under that name"},
-		{"lost", exitRefused, "the account repo already holds lost as a skill of a shared source"},
-		{"published", exitRefused, "your account remote already holds a skill called published"},
-		{"differs", exitRefused, "differs is a directory with different content in several configurations: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cursor, "differs") + " (cursor)"},
-		{"linked", exitRefused, "so there is no directory of linked to adopt"},
+		{"lost", exitRefused, "agentx already manages a skill called lost, so " + filepath.Join(claude, "lost") + " cannot be adopted under that name"},
+		{"published", exitRefused, "you already published a skill called published, so " + filepath.Join(claude, "published") + " cannot be adopted under that name"},
+		{"differs", exitRefused, "differs is in several agents' skills folders, with different files: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cursor, "differs") + " (cursor)"},
+		{"linked", exitRefused, "so there is no folder of linked to adopt"},
 		{"liblink", exitRefused, "liblink is a symlink to " + filepath.Join(h.home, "elsewhere") + ", and agentx adopts folders only"},
-		{"cloned", exitRefused, "adopting it would move that repository into its worktree"},
-		{"held", exitRefused, "worktrees/held already exists"},
-		{"occupied", exitRefused, "the library already holds " + filepath.Join(h.library, "occupied")},
-		{"locked", exitRefused, "cannot adopt " + filepath.Join(gemini, "locked") + ": access " + gemini + ": permission denied"},
+		{"cloned", exitRefused, "cloned is a Git repository of its own, which agentx cannot adopt"},
+		{"held", exitRefused, filepath.Join(h.agentx, "worktrees", "held") + " is in the way: agentx keeps held there once it is adopted"},
+		{"occupied", exitRefused, filepath.Join(h.library, "occupied") + " is in the way: adopting occupied puts the skill there"},
+		{"locked", exitRefused, "locked cannot be adopted: agentx cannot write to " + gemini + " (permission denied)"},
 		{"My_Skill", exitRefused, "My_Skill is not a valid skill name"},
-		{"tidy", exitRefused, "tidy comes with the plugin formatter, whose directory agentx never writes"},
+		{"tidy", exitRefused, "tidy comes with the plugin formatter, whose folder agentx never changes"},
 	} {
 		if c.name == "locked" && os.Geteuid() == 0 {
 			continue
@@ -423,11 +423,23 @@ func TestAdoptRefusesAName(t *testing.T) {
 		e := lastError(t, h.events(out.stdout))
 		contains(t, c.name+": the error", e["message"].(string), c.want)
 		if c.name == "dup" {
-			equal(t, "dup: the hint", e["hint"], "rename the directory and adopt it under the new name, or replace it with 'agentx skill place dup --to claude-code --force', which discards what it holds")
+			equal(t, "dup: the hint", e["hint"], "rename the folder and adopt it under the new name, or replace it with 'agentx skill place dup --to claude-code --force', which discards what it holds")
 		}
 	}
 	equal(t, "the refs", h.accountGit("for-each-ref"), refs)
 	equal(t, "the worktrees", names(t, filepath.Join(h.agentx, "worktrees")), worktrees)
+
+	// Adopting every skill lists, in the preview's words, each one that
+	// only the run finds cannot be adopted, and succeeds.
+	all := h.run("--json", "adopt", "--all")
+	equal(t, "every skill: exit", all.exit, 0)
+	for _, row := range []string{
+		"published could not be adopted: " + filepath.Join(claude, "published") + " has the name of a skill you already published. To adopt it, rename that folder",
+		"differs could not be adopted: in several agents' skills folders, with different files: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cursor, "differs") + " (cursor). To adopt it, keep one and remove or rename the others",
+		"held could not be adopted: " + filepath.Join(h.agentx, "worktrees", "held") + " is in the way: agentx keeps the skill there. To adopt it, move " + filepath.Join(h.agentx, "worktrees", "held") + " somewhere else",
+	} {
+		contains(t, "every skill: stderr", all.stderr, row)
+	}
 }
 
 // TestAdoptTakesOverAnUnmanagedSkill adopts, in one home, three skills
@@ -615,6 +627,8 @@ func TestLooseSkillReason(t *testing.T) {
 			"a symlink to /work/linked. To adopt it, move that folder to /lib/linked"},
 		{"a name that is no skill name", looseSkill{name: "My_Skill", path: "/lib/My_Skill"},
 			"not a valid skill name. To adopt it, rename /lib/My_Skill"},
+		{"a folder that is a Git repository", looseSkill{name: "cloned", path: "/lib/cloned", repo: "/lib/cloned/.git"},
+			"a Git repository of its own. To adopt it, move /lib/cloned/.git out of the folder"},
 		{"a client's folder named as a managed skill", looseSkill{name: "pdf", path: "/claude/pdf", managed: true},
 			"/claude/pdf has the name of a skill agentx already manages. To adopt it, rename that folder"},
 		{"a client's folder whose library path is taken", looseSkill{name: "pdf", path: "/claude/pdf", blocked: "/lib/pdf"},

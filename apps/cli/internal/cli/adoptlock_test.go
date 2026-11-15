@@ -146,11 +146,11 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 // commit cannot record: the subpath never reaches git, so no run can be
 // talked into reading outside the source, and the run reports the record
 // as adopted, with no import branch. One no tool recorded is adopted, with
-// no adoption event. Two more cannot be adopted, a symlink, as the preview
-// says of it, and a folder that is itself a Git repository, which the run
-// finds out: each is a warning, the result counts them, and the run
-// succeeds. Run again, with nothing left to adopt, it lists the two and
-// succeeds.
+// no adoption event. Two more cannot be adopted, as the preview says of
+// them: a symlink, and a folder that is a Git repository of its own. The
+// run lists them after the skills it adopted, and says once that those are
+// not published yet. Run again, with nothing left to adopt, it lists the
+// two, each a warning, counts them in the result, and succeeds.
 func TestAdoptAllAdoptsFoldersAsTheyAre(t *testing.T) {
 	t.Parallel()
 	h, s, _, _ := adoptHarness(t)
@@ -167,36 +167,33 @@ func TestAdoptAllAdoptsFoldersAsTheyAre(t *testing.T) {
 	if err := os.Symlink(work, filepath.Join(h.library, "shortcut")); err != nil {
 		t.Fatal(err)
 	}
-	cloned := "cloned is itself a Git repository, at " + git + "; adopting it would move that repository into its worktree, where git would take it for the skill's branch; " +
-		"move its .git out of the skill, then run 'agentx adopt --skill cloned' again"
+	cloned := "a Git repository of its own. To adopt it, move " + git + " out of the folder"
 	shortcut := "a symlink to " + work + ". To adopt it, move that folder to " + filepath.Join(h.library, "shortcut")
 
-	out := h.run("--json", "adopt", "--all")
+	out := h.run("adopt", "--all")
 	equal(t, "exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
-	equal(t, "the events", strings.Join(h.types(h.events(out.stdout)), ", "), "library_skill, library_skill, adoption, result")
-	equal(t, "the summary", h.one(out.stdout, "result")["summary"], "adopted 2 skills; 2 could not be adopted")
-	for _, warning := range []string{"cloned could not be adopted: " + cloned, "shortcut could not be adopted: " + shortcut} {
-		contains(t, "stderr", out.stderr, warning)
-	}
-	var adopted []string
-	for _, ev := range h.eventsOfType(out.stdout, "library_skill") {
-		adopted = append(adopted, ev["name"].(string)+" "+ev["kind"].(string))
-	}
-	equal(t, "the skills adopted", strings.Join(adopted, ", "), "alpha managed, notes managed")
-	adoption := h.one(out.stdout, "adoption")
-	equal(t, "the adoption", adoption["name"].(string)+" "+adoption["state"].(string), "alpha "+adoptAdopted)
+	equal(t, "stdout", out.stdout, "✓ adopted alpha\n"+
+		"✓ adopted notes\n"+
+		"Adopted skills stay on this machine until you publish them: run 'agentx source add <url> --account', then 'agentx skill publish <name>'.\n\n"+
+		"Could not adopt (2)\n"+
+		"  cloned    "+cloned+"\n"+
+		"  shortcut  "+shortcut+"\n\n"+
+		"Adopted 2 skills; 2 could not be adopted.\n")
 	equal(t, "the notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes\n")
 	if _, err := h.accountGitErr("rev-parse", "--verify", "-q", "refs/heads/managed/alpha"); err == nil {
 		t.Error("alpha has an import branch")
 	}
 
-	again := h.run("adopt", "--all")
+	again := h.run("--json", "adopt", "--all")
 	equal(t, "again: exit", again.exit, 0)
-	equal(t, "again: stdout", again.stdout, "Could not adopt (2)\n"+
-		"  cloned    "+cloned+"\n"+
-		"  shortcut  "+shortcut+"\n\n"+
-		"Adopted no skill; 2 could not be adopted.\n")
+	equal(t, "again: the events", strings.Join(h.types(h.events(again.stdout)), ", "), "adoption, result")
+	adoption := h.one(again.stdout, "adoption")
+	equal(t, "again: the adoption", adoption["name"].(string)+" "+adoption["state"].(string), "alpha "+adoptManaged)
+	equal(t, "again: the summary", h.one(again.stdout, "result")["summary"], "no skills adopted; 2 could not be adopted")
+	for _, warning := range []string{"cloned could not be adopted: " + cloned, "shortcut could not be adopted: " + shortcut} {
+		contains(t, "again: stderr", again.stderr, warning)
+	}
 }
 
 // TestAdoptDropsACredentialInTheURL: a token someone put in the lock file's

@@ -674,6 +674,7 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, lo
 	b := newBatch(inv, selected)
 	b.verb, b.mixed = "adopted", "run 'agentx adopt' to see what is left, and adopt the rest one at a time"
 	b.listsRefused = all
+	inv.publishHintOnce = all
 	for _, c := range judged {
 		b.drop(c.rec.name, stepsPerSkill, c.fail)
 	}
@@ -689,6 +690,11 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, lo
 		summaries = append(summaries, inv.summary)
 	}
 	inv.summary = strings.Join(summaries, "; ")
+	if inv.publishHintDue {
+		out := inv.out
+		out.print("Adopted skills stay on this machine until you publish them: run ", out.paint(label, "'agentx source add <url> --account'"),
+			", then ", out.paint(label, "'agentx skill publish <name>'"), ".")
+	}
 	inv.reportAdopted(b, covered, kept)
 	adopted := len(b.done) + len(kept)
 	if all {
@@ -700,11 +706,7 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, lo
 				failed = append(failed, broken)
 				continue
 			}
-			reason := broken.fail.message
-			if broken.fail.hint != "" {
-				reason += "; " + broken.fail.hint
-			}
-			left = append(left, unadopted{broken.subject, tools[broken.subject], reason})
+			left = append(left, unadopted{broken.subject, tools[broken.subject], adoptRow(broken.fail)})
 			selected--
 		}
 		b.broken = failed
@@ -716,6 +718,19 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, lo
 		return f
 	}
 	return nil // a typed nil would be an error the caller cannot see through
+}
+
+// adoptRow is how the list a run that adopts every skill ends with shows
+// the refusal f: its own row, see failure.row, and for one that has none,
+// a refusal of an install among them, its message and what to do.
+func adoptRow(f *failure) string {
+	switch {
+	case f.row != "":
+		return f.row
+	case f.hint == "":
+		return f.message
+	}
+	return f.message + ". To adopt it, " + f.hint
 }
 
 // toolsOf are the tools whose records cands are.
@@ -750,7 +765,7 @@ func (inv *invocation) reportUnadopted(left []unadopted, adopted int, mixed bool
 	out.render(t, "  ")
 	inv.summary = "adopted " + plural(adopted, "skill")
 	if adopted == 0 {
-		inv.summary = "adopted no skill"
+		inv.summary = "no skills adopted"
 	}
 	inv.summary += fmt.Sprintf("; %d could not be adopted", len(left))
 	out.print()
@@ -766,8 +781,7 @@ func (inv *invocation) reportUnadopted(left []unadopted, adopted int, mixed bool
 func (inv *invocation) adoptAsItIs(ctx context.Context, b *batch, names []string) (kept map[string]bool, summaries []string, err error) {
 	kept = map[string]bool{}
 	for _, name := range names {
-		gone := fail(exitRefused, sanitised(name)+" changed while it was being adopted, so nothing was changed", "run the command again")
-		fk, err := inv.planAdoption(ctx, name, gone)
+		fk, err := inv.planAdoption(ctx, name, adoptChanged(name))
 		if err == nil {
 			err = inv.makeFork(ctx, fk)
 		}

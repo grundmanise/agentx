@@ -27,6 +27,10 @@ type invocation struct {
 	instance string // the instance_id inventories carry, fixed once per run
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 	summary  string // what the result event says about a run that succeeded
+	// publishHintOnce says a run over many skills says once, once they are
+	// done, that the skills it made the user's own are not published, see
+	// noAccountRemoteHint; publishHintDue says one of them needs it said.
+	publishHintOnce, publishHintDue bool
 
 	excludes     sync.Once // reads excludesPath, the user's core.excludesFile; see excludesFile
 	excludesPath string

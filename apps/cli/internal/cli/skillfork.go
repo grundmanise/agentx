@@ -315,14 +315,20 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 			"fork it under a new name with '"+skillCommand("fork", src.name, "--name", "<new>")+"'")
 	}
 	if refusal := forkNameRefusal(fk.target); refusal != "" {
+		if fk.mode == modeAdopt {
+			return invalidNameRefusal(fk.target, fk.from)
+		}
 		hint := "choose a name such as my-skill"
-		switch {
-		case fk.mode == modeAdopt:
-			hint = "rename the directory to a valid name, then adopt it"
-		case !named:
+		if !named {
 			hint = "fork it under a valid name with '" + skillCommand("fork", src.name, "--name", "<new>") + "'"
 		}
 		return fail(exitRefused, refusal, hint)
+	}
+	if fk.mode == modeAdopt {
+		// Said in an adoption's words before checkForkName says it in a fork's.
+		if err := fk.adoptTaken(records); err != nil {
+			return err
+		}
 	}
 	if err := inv.checkForkName(ctx, records, fk.target, fk.except(), fk.takenHint(records)); err != nil {
 		return err
@@ -387,7 +393,28 @@ func (fk *forking) takenHint(records map[string]lineage.Record) string {
 // changed is the refusal of a fork whose source is not what it was planned
 // from any more.
 func (fk *forking) changed() error {
+	if fk.mode == modeAdopt {
+		return adoptChanged(fk.src.name)
+	}
 	return fail(exitRefused, sanitised(fk.src.name)+" changed while it was being "+fk.mode.done()+", so nothing was changed", "run the command again")
+}
+
+// taken is the refusal of a fork whose name the account repo already
+// holds a branch of, nil when it holds none, in the words of its mode.
+func (fk *forking) taken(records map[string]lineage.Record) error {
+	if fk.mode == modeAdopt {
+		return fk.adoptTaken(records)
+	}
+	return takenRefusal(records, fk.target, fk.except(), fk.takenHint(records))
+}
+
+// rootTaken is the refusal of a fork in its place whose worktree path,
+// root, is taken, in the words of its mode.
+func (fk *forking) rootTaken(root string) error {
+	if fk.mode == modeAdopt {
+		return adoptRootRefusal(fk.src.name, root)
+	}
+	return fail(exitRefused, quotedPath(root)+" already exists", "move it aside, then "+fk.again())
 }
 
 // again is the hint that names the command to run once what refused the
@@ -440,15 +467,15 @@ func (inv *invocation) inPlaceRoom(fk *forking) error {
 	// A skill that is itself a Git repository would take its .git into the
 	// worktree with it, ignored or not, and git run in the skill would find
 	// that repository rather than the fork's branch.
-	if own := filepath.Join(from, ".git"); lexists(own) {
-		message := sanitised(name) + " is itself a Git repository, at " + quotedPath(own) + "; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork"
+	if own := ownRepo(from); own != "" {
 		if adopt {
-			message = sanitised(name) + " is itself a Git repository, at " + quotedPath(own) + "; adopting it would move that repository into its worktree, where git would take it for the skill's branch"
+			return ownRepoRefusal(name, own)
 		}
-		return fail(exitRefused, message, "move its .git out of the skill, then "+fk.again()+beside)
+		return fail(exitRefused, sanitised(name)+" is itself a Git repository, at "+quotedPath(own)+"; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork",
+			"move its .git out of the skill, then "+fk.again()+beside)
 	}
 	if root := inv.worktreeRoot(name); lexists(root) {
-		return fail(exitRefused, quotedPath(root)+" already exists", "move it aside, then "+fk.again())
+		return fk.rootTaken(root)
 	}
 	same, err := home.SameDevice(filepath.Dir(from), existingAncestor(inv.worktreesDir()))
 	if err != nil {
@@ -456,12 +483,8 @@ func (inv *invocation) inPlaceRoom(fk *forking) error {
 	}
 	switch {
 	case same:
-	case len(fk.places) > 0:
-		return fail(exitRefused, quotedPath(filepath.Dir(from))+" and agentx home are on different file systems, so "+sanitised(name)+" cannot be moved into its worktree",
-			"move it into "+quotedPath(inv.dirs.Library)+" yourself, then "+fk.again())
 	case adopt:
-		return fail(exitRefused, "the library and agentx home are on different file systems, so "+sanitised(name)+" cannot be moved into its worktree",
-			"keep AGENTX_HOME and AGENTX_LIBRARY on one file system")
+		return inv.differentDiskRefusal(name, from, len(fk.places) == 0)
 	default:
 		return fail(exitRefused, "the library and agentx home are on different file systems, so "+sanitised(name)+" cannot be moved into its fork's worktree",
 			"keep AGENTX_HOME and AGENTX_LIBRARY on one file system"+beside)
@@ -525,6 +548,8 @@ func (inv *invocation) forkContent(ctx context.Context, fk *forking) (string, []
 	switch {
 	case err != nil:
 		return "", nil, accountRepoFailure(err)
+	case len(j.exposed) > 0 && fk.mode == modeAdopt:
+		return "", nil, adoptNestedRepoRefusal(src.name, j.exposed[0])
 	case len(j.exposed) > 0:
 		return "", nil, nestedRepoRefusal(src.name, j.exposed)
 	case j.written == "":
@@ -735,7 +760,7 @@ func (inv *invocation) applyFork(ctx context.Context, fk *forking, done *placeme
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	if err := takenRefusal(records, fk.target, fk.except(), fk.takenHint(records)); err != nil {
+	if err := fk.taken(records); err != nil {
 		return err
 	}
 	changed := fk.changed()
@@ -787,7 +812,7 @@ func (inv *invocation) forkInPlace(ctx context.Context, fk *forking, rec lineage
 		return changed
 	}
 	if lexists(root) {
-		return fail(exitRefused, quotedPath(root)+" already exists", "move it aside, then "+fk.again())
+		return fk.rootTaken(root)
 	}
 	if len(fk.places) > 0 && !inv.adoptPlacesHold(fk) {
 		return changed

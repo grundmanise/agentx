@@ -278,9 +278,14 @@ func (inv *invocation) reportCreated(ctx context.Context, name string, targets [
 // set, when none is: its source, the account remote, is then empty, and
 // names the publish of the skill, since a bare publish never publishes it
 // for the first time. skill publish refuses it until one is set; nothing
-// else needs one.
+// else needs one. A run over many skills says it once they are done, see
+// publishHintOnce.
 func (inv *invocation) noAccountRemoteHint(ev librarySkillEvent) {
 	if ev.Kind != lineage.KindManaged || ev.Source != "" {
+		return
+	}
+	if inv.publishHintOnce {
+		inv.publishHintDue = true
 		return
 	}
 	out := inv.out
