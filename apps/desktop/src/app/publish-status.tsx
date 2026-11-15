@@ -78,9 +78,12 @@ export const useSyncState = (): SyncState | undefined => {
   if (accountRemote === undefined) {
     return { kind: "no-account-remote" };
   }
-  // Only what another machine published to this account remote, for a skill still in the library:
-  // a skill removed since, or an update from an account remote set before this one, is not incoming.
-  const installed = new Set(rows.map((row) => row.name));
+  // Only what another machine published to this account remote, for one of your own skills still
+  // in the library: a skill removed since, a plugin's or a client's skill of the same name, or an
+  // update from an account remote set before this one, is not incoming.
+  const installed = new Set(
+    rows.filter((row) => row.kind === "yours").map((row) => row.name)
+  );
   const incoming = Object.values(updates).filter(
     (update) =>
       fromAnotherMachine(update) &&
