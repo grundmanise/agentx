@@ -6,8 +6,8 @@ import type { Page } from "@playwright/test";
 
 import type { PublishOutcome } from "#/cli/events.gen.ts";
 
-import { launch } from "./fixtures/palette-publish.ts";
-import { ACCOUNT } from "./fixtures/skills.ts";
+import { launch, syncedLibrary } from "./fixtures/palette-publish.ts";
+import { ACCOUNT, configurations, skills } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
@@ -101,15 +101,24 @@ test.describe("states", () => {
     await expect(page.getByRole("status")).toHaveText("1 incoming");
   });
 
-  test("an update from another machine for a skill not in the library, or from another remote, is not incoming", async ({
+  test("an update from another machine for a skill not in the library, a plugin's skill of its name, or from another remote, is not incoming", async ({
     cli,
     page,
   }) => {
     launch(cli, "synced");
     await page.goto("/");
     await expect(status(page)).toHaveText("Synced");
+    const pluginSkill = skills.find((node) => node.name === "commit-helper");
     await cli.serveEmit([
+      {
+        configurations,
+        library: syncedLibrary,
+        scan_counter: 2,
+        skills: pluginSkill === undefined ? [] : [pluginSkill],
+        type: "inventory",
+      },
       fromAnotherMachine("gone", ACCOUNT),
+      fromAnotherMachine("commit-helper", ACCOUNT),
       fromAnotherMachine("notes", "https://github.com/me/old-skills.git"),
     ]);
     await expect(status(page)).toHaveText("Synced");
