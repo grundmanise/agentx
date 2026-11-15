@@ -57,6 +57,8 @@ const detail = (page: Page) =>
   page.getByRole("region", { name: "Skill details" });
 const pane = (page: Page, name: string) =>
   detail(page).getByRole("article", { name });
+const toasts = (page: Page) =>
+  page.getByRole("region", { name: /^Notifications/u });
 const filters = (page: Page) => page.getByRole("dialog", { name: "Filters" });
 /** The alert triangles in `where`: a row's triangle carries its banner's title as its label and tooltip. */
 const alertTriangles = (where: Locator) => where.locator("[aria-label][title]");
@@ -551,7 +553,8 @@ test.describe("the detail pane", () => {
         - region "Details":
           - heading "Details" [level=2]
           - term: Source
-          - definition: https://github.com/acme/skills/pdf
+          - definition:
+            - link "https://github.com/acme/skills/pdf"
           - term: Version
           - definition: 3f2a9c1
           - term: State
@@ -595,13 +598,15 @@ test.describe("the detail pane", () => {
         - region "Details":
           - heading "Details" [level=2]
           - term: Forked from
-          - definition: https://github.com/acme/skills/pdf
+          - definition:
+            - link "https://github.com/acme/skills/pdf"
           - term: Based on
           - definition: 3f2a9c1
           - term: Published to
           - definition: git@github.com:me/account.git
           - term: Files
-          - definition: /home/me/.agentx/worktrees/pdf-letters/pdf-letters
+          - definition:
+            - link "/home/me/.agentx/worktrees/pdf-letters/pdf-letters"
           - term: Id
           - definition: f0f0f0f
         - region "History":
@@ -613,6 +618,33 @@ test.describe("the detail pane", () => {
             - listitem:
               - button "Show all 5"
     `);
+
+    // A URL opens in the browser, the skill's files show in the file manager.
+    const details = article.getByRole("region", { name: "Details" });
+    await details
+      .getByRole("link", { name: "https://github.com/acme/skills/pdf" })
+      .click();
+    expect(cli.openedUrls).toEqual(["https://github.com/acme/skills"]);
+    await details
+      .getByRole("link", {
+        name: "/home/me/.agentx/worktrees/pdf-letters/pdf-letters",
+      })
+      .click();
+    expect(cli.reveals).toEqual([
+      ["/home/me/.agentx/worktrees/pdf-letters/pdf-letters"],
+    ]);
+    // A folder that is gone says so.
+    cli.failReveals();
+    await details
+      .getByRole("link", {
+        name: "/home/me/.agentx/worktrees/pdf-letters/pdf-letters",
+      })
+      .click();
+    await expect(
+      toasts(page).getByText(
+        '"/home/me/.agentx/worktrees/pdf-letters/pdf-letters" doesn\'t exist'
+      )
+    ).toBeVisible();
 
     await article.getByRole("button", { name: "Show all 5" }).click();
     const sheet = page.getByRole("dialog", { name: "History" });
@@ -722,7 +754,8 @@ test.describe("the detail pane", () => {
         - region "Details":
           - heading "Details" [level=2]
           - term: Found at
-          - definition: /home/me/.agents/skills/scratch
+          - definition:
+            - link "/home/me/.agents/skills/scratch"
           - term: Installed by
           - definition: Skills CLI · https://github.com/vercel/skills
         - region "History":
@@ -826,9 +859,6 @@ test.describe("the detail pane", () => {
     );
   });
 });
-
-const toasts = (page: Page) =>
-  page.getByRole("region", { name: /^Notifications/u });
 
 /** The command lines the controls ran: everything but the launch, the store's and the pane's reads. */
 const ran = (cli: MockCli) =>
