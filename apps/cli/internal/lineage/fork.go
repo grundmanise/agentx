@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/weburl"
 )
@@ -57,7 +59,16 @@ type Origin struct {
 // 1 to 255 characters, none of them whitespace or a control character,
 // which is every name agentx gives or reads of a skill, a plugin or a
 // marketplace. A name of another shape is left out of the trailers.
-func IsOriginName(s string) bool { return originName.MatchString(s) }
+func IsOriginName(s string) bool {
+	n := 0
+	for _, r := range s {
+		if unicode.IsSpace(r) || unicode.IsControl(r) || r == utf8.RuneError {
+			return false
+		}
+		n++
+	}
+	return n >= 1 && n <= 255
+}
 
 // ForkTrailers are the trailers of one commit on a fork's branch, "" for
 // each it does not carry.
@@ -75,9 +86,6 @@ var ErrForkTrailer = errors.New("unreadable fork trailers")
 var (
 	forkID    = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	machineID = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	// originName is a name of 1 to 255 characters with no whitespace and
-	// no control character.
-	originName = regexp.MustCompile(`^[^\s[:cntrl:]]{1,255}$`)
 	// trailerLine is a line git reads as a trailer, "<token>: <value>".
 	trailerLine = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*:[ \t]`)
 )

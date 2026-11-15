@@ -42,6 +42,7 @@ func TestParseForkAndForkMessage(t *testing.T) {
 		{"a marketplace without its plugin", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: format\nAgentx-Origin-Marketplace: acme\n", ForkTrailers{}, true},
 		{"an origin's skill given twice", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\nAgentx-Origin-Skill: b\n", ForkTrailers{}, true},
 		{"an origin name with a space", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\nAgentx-Origin-Plugin: two words\n", ForkTrailers{}, true},
+		{"an origin name with a Unicode line break", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\u0085b\n", ForkTrailers{}, true},
 		{"an origin name too long", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: " + strings.Repeat("a", 256) + "\n", ForkTrailers{}, true},
 		{"an origin URL that is no web URL", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\nAgentx-Origin-URL: ssh://git@github.com/acme/formatter\n", ForkTrailers{}, true},
 		{"an origin URL with a password", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\nAgentx-Origin-URL: https://me:secret@github.com/acme/formatter\n", ForkTrailers{}, true},
@@ -270,5 +271,28 @@ func TestWalkCacheIsSharedByGoroutines(t *testing.T) {
 	none.put(map[string]ForkLineage{"a": {}})
 	if _, ok := none.get("a"); ok {
 		t.Error("a nil cache kept a lineage")
+	}
+}
+
+func TestIsOriginName(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		want bool
+	}{
+		{"format", true},
+		{"My_Skill.v2", true},
+		{strings.Repeat("é", 255), true},
+		{"", false},
+		{"two words", false},
+		{"\u00a0alpha", false},
+		{"a\u0085b", false},
+		{"a\x7fb", false},
+		{"a\xffb", false},
+		{strings.Repeat("a", 256), false},
+	} {
+		if got := IsOriginName(tc.name); got != tc.want {
+			t.Errorf("IsOriginName(%q) = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
