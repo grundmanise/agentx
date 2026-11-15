@@ -1,6 +1,4 @@
-import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 
 import type { ForkOrigin, HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
@@ -21,54 +19,7 @@ import { useAppStore } from "#/store/store.ts";
 /** How many entries the timeline shows before "Show all". */
 const SHOWN = 3;
 
-const dotVariants = cva("size-timeline-dot rounded-pill block", {
-  variants: {
-    kind: {
-      foreign: "bg-timeline-dot-update",
-      import: "bg-timeline-dot-install",
-      yours: "bg-timeline-dot-yours",
-    },
-  },
-});
-
-const kindOf = (e: HistoryEvent) => {
-  if (e.import) {
-    return "import";
-  }
-  return e.foreign ? "foreign" : "yours";
-};
-
 const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
-
-/**
- * The dot column of a timeline entry: `children` (the dot) centred in a box as high as the
- * entry's first line, a line of text or the first line of a wrapping small button, then the
- * connector down to the next entry, so every dot sits on its entry's first line and the line
- * stays continuous.
- */
-const DotColumn = ({
-  button,
-  last,
-  children,
-}: {
-  /** The first line beside the dot is the first line of a wrapping small button, not plain text. */
-  button: boolean;
-  last: boolean;
-  children: ReactNode;
-}) => (
-  <span className="flex flex-col items-center">
-    <span
-      className={
-        button
-          ? "h-timeline-button-line flex flex-none items-center"
-          : "h-timeline-line flex flex-none items-center"
-      }
-    >
-      {children}
-    </span>
-    {!last && <span className="bg-timeline-connector w-px flex-1" />}
-  </span>
-);
 
 /** What the meta line of an entry says: the date, the files, and how the commit came about. */
 export const metaOf = (e: HistoryEvent) => {
@@ -186,49 +137,51 @@ const Entry = ({
   const linked =
     originPage(entry) !== undefined && originParts(entry) !== undefined;
   return (
-    <li className="grid-cols-timeline grid gap-x-3">
-      <DotColumn button={false} last={last}>
-        <span className={dotVariants({ kind: kindOf(entry) })} />
-      </DotColumn>
+    <li
+      className={last ? "flex min-w-0 flex-col" : "flex min-w-0 flex-col pb-4"}
+    >
+      {expandable && linked && (
+        // A link cannot sit inside the button, so the button holds the chevron alone.
+        <div className="flex items-start gap-2">
+          <Button
+            variant="plain"
+            size="inline"
+            aria-expanded={open}
+            aria-label={`Show the files of ${entry.subject}`}
+            onClick={() => {
+              setOpen((o) => !o);
+            }}
+          >
+            <Chevron open={open} />
+          </Button>
+          <Subject entry={entry} />
+        </div>
+      )}
+      {expandable && !linked && (
+        // A block, so the button shrinks to fit the list and its subject wraps inside it.
+        <div>
+          <Button
+            variant="plain"
+            size="inline"
+            aria-expanded={open}
+            onClick={() => {
+              setOpen((o) => !o);
+            }}
+          >
+            <Chevron open={open} />
+            <Subject entry={entry} />
+          </Button>
+        </div>
+      )}
+      {!expandable && <Subject entry={entry} />}
+      {/* The meta line and the files sit under the subject, past the chevron, which hangs outside. */}
       <div
         className={
-          last ? "flex min-w-0 flex-col" : "flex min-w-0 flex-col pb-4"
+          expandable
+            ? "pl-timeline-indent flex min-w-0 flex-col"
+            : "flex min-w-0 flex-col"
         }
       >
-        {expandable && linked && (
-          // A link cannot sit inside the button, so the button holds the chevron alone.
-          <div className="flex items-start gap-2">
-            <Button
-              variant="plain"
-              size="inline"
-              aria-expanded={open}
-              aria-label={`Show the files of ${entry.subject}`}
-              onClick={() => {
-                setOpen((o) => !o);
-              }}
-            >
-              <Chevron open={open} />
-            </Button>
-            <Subject entry={entry} />
-          </div>
-        )}
-        {expandable && !linked && (
-          // A block, so the button shrinks to fit the column and its subject wraps inside it.
-          <div>
-            <Button
-              variant="plain"
-              size="inline"
-              aria-expanded={open}
-              onClick={() => {
-                setOpen((o) => !o);
-              }}
-            >
-              <Chevron open={open} />
-              <Subject entry={entry} />
-            </Button>
-          </div>
-        )}
-        {!expandable && <Subject entry={entry} />}
         <span className="type-timeline-meta text-timeline-meta">
           {metaOf(entry)}
         </span>
@@ -348,35 +301,16 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
           />
         ))}
         {more && (
-          <li className="grid-cols-timeline grid gap-x-3">
-            <DotColumn button last>
-              <svg
-                viewBox="0 0 8 8"
-                aria-hidden
-                focusable="false"
-                className="size-timeline-dot block"
-              >
-                <circle
-                  cx="4"
-                  cy="4"
-                  r="3.25"
-                  fill="none"
-                  strokeWidth="1.5"
-                  className="stroke-timeline-more-ring"
-                />
-              </svg>
-            </DotColumn>
-            <div className="flex">
-              <Button
-                variant="ghost"
-                size="sm-wrap"
-                onClick={() => {
-                  setSheetOpen(true);
-                }}
-              >
-                {`Show all ${entries.length}`}
-              </Button>
-            </div>
+          <li className="-ml-3.5 flex">
+            <Button
+              variant="ghost"
+              size="sm-wrap"
+              onClick={() => {
+                setSheetOpen(true);
+              }}
+            >
+              {`Show all ${entries.length}`}
+            </Button>
           </li>
         )}
       </ol>

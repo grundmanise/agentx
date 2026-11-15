@@ -121,7 +121,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `text.hint` | `gray-400` | Helper text, Details keys, overflow counts |
 | `text.caption` | `gray-500` | Uppercase mono captions, chevrons, line counts |
 | `text.disabled` | `gray-600` | Disabled text and glyphs, inactive dots |
-| `text.faint` | `gray-700` | Line numbers, hollow timeline ring |
+| `text.faint` | `gray-700` | Line numbers |
 
 #### Window and shell
 
@@ -384,14 +384,9 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 #### Timeline (History)
 
-| Token | Primitive | Element |
-| --- | --- | --- |
-| `timeline.dot-install` | `gray-600` | Added / found / created entries |
-| `timeline.dot-update` | `accent.primary` | Updated, adopted, put back |
-| `timeline.dot-yours` | `accent.yours` | Published, forked |
-| `timeline.connector` | `gray-890` | 1px line between dots |
+| Token           | Primitive  | Element                      |
+| --------------- | ---------- | ---------------------------- |
 | `timeline.meta` | `gray-500` | Relative time under an entry |
-| `timeline.more-ring` | `gray-700` | Hollow dot ring of the item that opens the full history |
 
 #### Startup checks
 
@@ -478,7 +473,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
 | `type.source-name` | sans | 16 | 500 |  |  |  | Source name on the card of the open source (`source-card.name`) |
 | `type.agent-card-name` | sans | 16 | 600 |  |  |  | Agent client name on an Agents page card, and the Universal card's title |
-| `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
+| `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the chevron beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
 | `type.server-name` | sans | 14.5 | 500 |  |  |  | Server name in a server row (`text.primary`) |
@@ -695,11 +690,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `hunk.pane-margin` | 4 8 | `my-hunk-pane-y mx-hunk-pane` | Around the two panes |
 | `diff.segment` | 56 4 | `w-diff-segment h-diff-segment` | Progress segment w h |
 | `diff.segment-gap` | 4 | `gap-diff-segment` |  |
-| `timeline.col` | 12 | `grid-cols-timeline` (with the text column) | Dot column |
-| `timeline.gap` | 12–16 |  | Dot → text |
-| `timeline.dot` | 7 | `size-timeline-dot` |  |
-| `timeline.line` | 20 | `h-timeline-line` | The box the dot is centred in beside a plain entry: the line height of `type.timeline-entry` |
-| `timeline.button-line` | 32 | `h-timeline-button-line` | The box the dot is centred in beside an entry whose first line is a small wrapping button: the button's top padding (6) plus one `timeline.line` |
+| `timeline.line` | 20 | `h-timeline-line` | The box the chevron is centred in: the line height of `type.timeline-entry` |
+| `timeline.indent` | 22 | `pl-timeline-indent` | The meta line and files of a History sheet entry, past its chevron: the `xs` icon (14) plus `button.icon-gap` (8) |
 | `timeline.entry-gap` | 16–20 |  | Bottom padding per entry |
 | `log.time-width` | 8ch | `w-log-time` | Time column of an activity log line, which a line of output leaves empty |
 | `check.column-width` | 480 | `w-check-column` | Startup column |
@@ -776,7 +768,7 @@ Finder in this file means the platform's file manager. `src/lib/reveal.ts` names
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert, never a grey fill.
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / `button.ghost-bg`, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
-- **Small, wrapping** – for a label that is a sentence, such as a commit subject in the History sheet: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
+- **Small, wrapping** – for a label that may wrap, such as Show all under HISTORY: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
 - **Plain, inline** – no fill, no padding, no radius, as tall as its text; `button.ghost-text`, hover `text.primary`. Only for a line of text that expands, such as an entry of the History sheet.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
@@ -978,7 +970,7 @@ Under the product name in the sidebar: `type.machine-label`, `text.muted`, one l
 
 ### Timeline (history)
 
-Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote. The dot is centred in a box as high as the entry's first line (`timeline.line` beside text, `timeline.button-line` beside a small button), with a 1px `timeline.connector` from that box to the next entry. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. In the subject of the commit that created a fork, the origin's name (the plugin, the source with its path, or the skill) is a link when the CLI knows its https page: same type and colour, always underlined, the URL as its tooltip; it opens the page in the browser. The rest of the subject is text. When the list is cut short, the last item is a hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button that opens the History sheet.
+A list of entries, no dots or connector. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. In the subject of the commit that created a fork, the origin's name (the plugin, the source with its path, or the skill) is a link when the CLI knows its https page: same type and colour, always underlined, the URL as its tooltip; it opens the page in the browser. The rest of the subject is text. When the list is cut short, the last item is a ghost button that opens the History sheet, its label aligned with the subjects.
 
 ### Menu
 
@@ -1009,7 +1001,7 @@ shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for
 
 ### Sheet (History)
 
-`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
+`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. The chevron hangs outside the entry: the meta line and the files start under the subject, `timeline.indent` in. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
 
 ### Sheet (What's new)
 
