@@ -36,6 +36,22 @@ const plugins: Plugin[] = numbers(PLUGINS).map((n) => ({
 
 const pluginOf = (n: number) => pluginName(((n - 1) % PLUGINS) + 1);
 
+/** How many skills each generated plugin has. */
+export const SKILLS_PER_PLUGIN = PLUGIN_SKILLS / PLUGINS;
+/**
+ * The generated plugin skill at place `i` (from 0) in the list, which shows them plugin by plugin,
+ * A to Z by name in each: its name, its plugin's caption and its place in the plugin.
+ */
+export const listedPluginSkill = (i: number) => {
+  const plugin = Math.floor(i / SKILLS_PER_PLUGIN) + 1;
+  const at = i % SKILLS_PER_PLUGIN;
+  return {
+    name: pluginSkillName(plugin + PLUGINS * at),
+    plugin: pluginName(plugin).toUpperCase(),
+    posinset: at + 1,
+  };
+};
+
 const pluginSkills: SkillNode[] = numbers(PLUGIN_SKILLS).map((n) => {
   const name = pluginSkillName(n);
   const path = `/home/me/.claude-code/plugins/${pluginOf(n)}/skills/${name}`;

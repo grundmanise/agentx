@@ -130,7 +130,7 @@ func checkMessage(message string) error {
 // trailerInMessage is the usage error of a message -m gives that ends in a
 // trailer agentx writes itself.
 func trailerInMessage() error {
-	return fail(exitUsage, "-m may not end in a trailer agentx writes itself: "+lineage.TrailerBase+", "+lineage.TrailerForkID+" or "+lineage.TrailerMachine,
+	return fail(exitUsage, "-m may not end in a trailer agentx writes itself: "+lineage.TrailerBase+", "+lineage.TrailerForkID+", "+lineage.TrailerMachine+" or one of the Agentx-Origin- trailers",
 		"leave those lines out of the message, or move them out of its last paragraph")
 }
 

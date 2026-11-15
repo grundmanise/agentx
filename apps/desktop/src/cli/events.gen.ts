@@ -5,7 +5,7 @@
 
 // The output schema version this app reads. An event of another version is
 // refused.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // What every event starts with.
 export interface Envelope {
@@ -36,6 +36,7 @@ export type HandshakeReason =
   | "not_found"
   | "timeout"
   | "failed";
+export type OriginKind = "plugin" | "source" | "skill";
 export type FileStatus = "added" | "modified" | "deleted";
 export type DoctorStatus = "ok" | "warn" | "fail" | "info";
 export type UpdateState = "current" | "available" | "updated";
@@ -140,6 +141,17 @@ export interface LibraryEntry {
 export interface ChangedFile {
   path: string;
   status: FileStatus;
+}
+
+export interface ForkOrigin {
+  kind: OriginKind;
+  skill: string;
+  plugin?: string;
+  marketplace?: string;
+  source?: string;
+  path?: string;
+  url?: string;
+  skill_url?: string;
 }
 
 export interface ConflictFile {
@@ -254,6 +266,7 @@ export interface Plugin {
   enabled?: boolean;
   hooks: Hook[];
   icon?: string;
+  url?: string;
 }
 
 export interface Edge {
@@ -425,9 +438,8 @@ export interface HistoryEvent {
   subject: string;
   message: string;
   machine?: string;
-  import: boolean;
-  foreign: boolean;
   files: ChangedFile[];
+  origin?: ForkOrigin;
 }
 
 export interface ForkNoteEvent {

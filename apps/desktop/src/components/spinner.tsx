@@ -12,7 +12,7 @@ const spinnerVariants = cva("animate-check-spin block flex-none", {
 });
 
 /**
- * A turning ring in the parent's text colour, for a button whose action runs or a slow launch: one
+ * A turning ring in the parent's text colour, for a button whose action runs or a launch: one
  * rotation a second, linear (DESIGN.md §8). Show it only while something runs; nothing turns forever.
  * `sm` (16px) in a control; `md` (20px) alone over a pane, such as the files being read.
  */

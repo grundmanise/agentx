@@ -8,6 +8,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/mcp"
+	"github.com/grundmanise/agentx/apps/cli/internal/weburl"
 )
 
 type geminiCLI struct{}
@@ -52,7 +53,8 @@ func (c geminiCLI) disabled(d home.Dirs) func(string) bool {
 // Plugins are Gemini's extensions: every ~/.gemini/extensions/<dir> holding a
 // gemini-extension.json, which names the extension and declares its servers.
 // The marketplace is the source recorded by the install metadata next to it,
-// or empty for an extension without one.
+// or empty for an extension without one; a source installed from git or a
+// GitHub release is its URL too.
 func (c geminiCLI) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 	root := filepath.Join(c.ConfigDir(d), "extensions")
 	entries, err := os.ReadDir(root)
@@ -78,6 +80,7 @@ func (c geminiCLI) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 		}
 		var install struct {
 			Source string `json:"source"`
+			Type   string `json:"type"`
 		}
 		readJSON(filepath.Join(dir, ".gemini-extension-install.json"), &install, warn)
 		p := InstalledPlugin{
@@ -92,6 +95,9 @@ func (c geminiCLI) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 				Vars:     map[string]string{"extensionPath": dir, "/": string(filepath.Separator), "pathSeparator": string(filepath.Separator)},
 				Disabled: c.disabled(d),
 			},
+		}
+		if install.Type == "git" || install.Type == "github-release" {
+			p.URL = weburl.Of(install.Source)
 		}
 		if p.Name == "" {
 			p.Name = e.Name()

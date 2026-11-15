@@ -193,6 +193,7 @@
   --color-input-bg: var(--gray-980);
   --color-input-border: var(--gray-860);
   --color-input-border-focus: var(--gray-700);
+  --color-input-border-invalid: var(--color-accent-danger);
   --color-input-text: var(--gray-50);
   --color-input-placeholder: var(--gray-500);
   --color-switch-on-track: var(--color-accent-primary);
@@ -214,14 +215,15 @@
 
   /* Filter row */
   --color-filter-bg: var(--gray-880);
-  --color-filter-text: var(--gray-300);
+  --color-filter-text: var(--gray-200);
   --color-filter-active-bg: rgb(212 255 79 / 0.12);
   --color-filter-active-text: var(--color-accent-primary);
   --color-filter-badge-bg: var(--color-accent-primary);
   --color-filter-chip-bg: var(--gray-920);
   --color-filter-chip-text: var(--gray-150);
   --color-filter-chip-hover: var(--gray-880);
-  --color-filter-sort-text: var(--gray-300);
+  --color-filter-sort-text: var(--gray-200);
+  --color-filter-sort-off-text: var(--color-text-caption);
 
   /* Lists and rows */
   --color-row-hover: var(--gray-920);
@@ -233,8 +235,12 @@
   --color-group-label: var(--gray-300);
   --color-group-count: var(--gray-500);
   --color-group-divider-label: var(--gray-500);
+  --color-subgroup-label: var(--gray-400);
+  --color-subgroup-count: var(--gray-500);
+  --color-subgroup-hover: var(--gray-920);
   --color-table-row-hover: var(--gray-930);
   --color-table-header-text: var(--gray-500);
+  --color-add-skill-row-hover: var(--gray-880);
 
   /* Skill glyph */
   --color-glyph-idle: var(--gray-400);
@@ -354,12 +360,8 @@
   --color-diff-progress-pending: var(--gray-850);
 
   /* Timeline */
-  --color-timeline-dot-install: var(--gray-600);
-  --color-timeline-dot-update: var(--color-accent-primary);
-  --color-timeline-dot-yours: var(--color-accent-yours);
-  --color-timeline-connector: var(--gray-890);
+  --color-timeline-connector: var(--gray-800);
   --color-timeline-meta: var(--gray-500);
-  --color-timeline-more-ring: var(--gray-700);
 
   /* Startup checks */
   --color-check-pass-bg: rgb(212 255 79 / 0.12);
@@ -393,6 +395,13 @@
   @keyframes fade-in {
     from {
       opacity: 0;
+    }
+  }
+  /* The kept inventory before the startup checks pass: from `opacity-panel-loading` down and back. */
+  --animate-panel-loading: panel-loading 1s ease-in-out infinite;
+  @keyframes panel-loading {
+    50% {
+      opacity: 30%;
     }
   }
   --animate-code-reveal: code-reveal 0.3s ease-out;
@@ -435,6 +444,7 @@
   --radius-agent-chip: 9999px;
   --radius-logo: 50%;
   --radius-agent-picker-row: 10px;
+  --radius-add-skill-row: 10px;
   --radius-shell-nav: 10px;
   --radius-shell-logo: 8px;
   --radius-shell-status: 9999px;
@@ -522,6 +532,8 @@
 @theme static {
   /* A skill row in no agent client, washed out. */
   --opacity-row-off: 50%;
+  /* The screen in the main panel while it shows the kept inventory, before the startup checks pass. */
+  --opacity-panel-loading: 50%;
 
   /* Window and shell */
   --height-titlebar: 50px;
@@ -581,6 +593,10 @@
   --padding-group-first-top: 4px;
   --padding-group-bottom: 8px;
   --gap-group: 8px;
+  --padding-subgroup-x: 14px;
+  --padding-subgroup-y: 6px;
+  --padding-subgroup-top: 8px;
+  --padding-subgroup-indent: 22px;
   --height-table-header: 40px;
   --padding-table-row: 16px;
   --gap-table-col: 24px;
@@ -665,6 +681,7 @@
   --max-height-palette-list: 420px;
   --max-height-adopt-list: 280px;
   --max-height-agent-picker-list: 320px;
+  --max-height-add-skill-list: 264px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
   --min-height-toast: 44px;
@@ -695,10 +712,8 @@
   --width-diff-segment: 56px;
   --height-diff-segment: 4px;
   --gap-diff-segment: 4px;
-  --grid-template-columns-timeline: 12px 1fr;
-  --size-timeline-dot: 7px;
   --height-timeline-line: 20px;
-  --height-timeline-button-line: 32px;
+  --spacing-timeline-indent: 22px;
   --width-check-column: 480px;
   --gap-check-block: 36px;
   --gap-check-row: 22px;

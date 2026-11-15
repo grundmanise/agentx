@@ -3,9 +3,16 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // Tauri serves the dev build from a fixed port and expects it to fail rather than move.
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   build: { outDir: "dist", target: "safari16" },
   clearScreen: false,
+  // Names the build, so that a launch reads only the inventory its own build kept
+  // (src/store/launch-cache.ts). The dev server keeps one name: what it kept outlives a restart.
+  define: {
+    "import.meta.env.APP_BUILD": JSON.stringify(
+      command === "build" ? Date.now().toString(36) : "dev"
+    ),
+  },
   envPrefix: ["VITE_", "TAURI_ENV_"],
   // The Tauri API is first imported by the CLI transport, which the app does not load at start.
   // Bundled up front, so that the dev server does not find it mid-session and reload every page,
@@ -13,4 +20,4 @@ export default defineConfig({
   optimizeDeps: { include: ["@tauri-apps/api/core", "@tauri-apps/api/event"] },
   plugins: [react(), tailwindcss()],
   server: { port: 1420, strictPort: true },
-});
+}));
