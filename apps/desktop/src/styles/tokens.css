@@ -360,12 +360,8 @@
   --color-diff-progress-pending: var(--gray-850);
 
   /* Timeline */
-  --color-timeline-dot-install: var(--gray-600);
-  --color-timeline-dot-update: var(--color-accent-primary);
-  --color-timeline-dot-yours: var(--color-accent-yours);
-  --color-timeline-connector: var(--gray-890);
+  --color-timeline-connector: var(--gray-800);
   --color-timeline-meta: var(--gray-500);
-  --color-timeline-more-ring: var(--gray-700);
 
   /* Startup checks */
   --color-check-pass-bg: rgb(212 255 79 / 0.12);
@@ -707,10 +703,8 @@
   --width-diff-segment: 56px;
   --height-diff-segment: 4px;
   --gap-diff-segment: 4px;
-  --grid-template-columns-timeline: 12px 1fr;
-  --size-timeline-dot: 7px;
   --height-timeline-line: 20px;
-  --height-timeline-button-line: 32px;
+  --spacing-timeline-indent: 22px;
   --width-check-column: 480px;
   --gap-check-block: 36px;
   --gap-check-row: 22px;

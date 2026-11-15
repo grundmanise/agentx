@@ -336,7 +336,7 @@ test("the places of a skill come from the inventory, the library first", () => {
     instance_id: "instance-1",
     machine: { id: "machine-1", label: "studio-mac" },
     mcp_servers: [],
-    schema_version: 2,
+    schema_version: 3,
     warnings: [],
     ...inventory,
   };

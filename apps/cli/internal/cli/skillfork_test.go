@@ -190,17 +190,24 @@ func TestSkillForkOfAnUnmanagedSkill(t *testing.T) {
 
 // pluginHome gives h's user a plugin called formatter, which provides a
 // skill called format to Claude Code and to Codex, and another, linter,
-// which provides a skill of the same name to Claude Code alone. It returns
-// the directories the two Claude Code plugins are installed in.
+// which provides a skill of the same name to Claude Code alone. Both come
+// from the marketplace acme, a GitHub repository; formatter's manifest
+// names a repository of its own, linter's none. It returns the
+// directories the two Claude Code plugins are installed in.
 func pluginHome(t *testing.T, h *harness) []string {
 	t.Helper()
 	formatter := filepath.Join(h.home, ".claude", "plugins", "cache", "acme", "formatter", "1.0.0")
 	linter := filepath.Join(h.home, ".claude", "plugins", "cache", "acme", "linter", "2.0.0")
 	writeFile(t, mkdirs(t, filepath.Join(h.home, ".claude", "plugins"), "installed_plugins.json"),
 		`{"version": 2, "plugins": {"formatter@acme": [{"installPath": "`+formatter+`", "version": "1.0.0"}], "linter@acme": [{"installPath": "`+linter+`", "version": "2.0.0"}]}}`)
-	for dir, name := range map[string]string{formatter: "formatter", linter: "linter"} {
-		writeFile(t, mkdirs(t, filepath.Join(dir, ".claude-plugin"), "plugin.json"), `{"name": "`+name+`", "version": "1.0.0"}`)
-		writeFile(t, mkdirs(t, filepath.Join(dir, "skills", "format"), "SKILL.md"), skill("format", "Format the code with "+name))
+	writeFile(t, filepath.Join(h.home, ".claude", "plugins", "known_marketplaces.json"),
+		`{"acme": {"source": {"source": "github", "repo": "acme/plugins"}, "installLocation": "/nowhere"}}`)
+	for dir, manifest := range map[string]string{
+		formatter: `{"name": "formatter", "version": "1.0.0", "repository": {"type": "git", "url": "git+https://github.com/acme/formatter.git"}}`,
+		linter:    `{"name": "linter", "version": "1.0.0"}`,
+	} {
+		writeFile(t, mkdirs(t, filepath.Join(dir, ".claude-plugin"), "plugin.json"), manifest)
+		writeFile(t, mkdirs(t, filepath.Join(dir, "skills", "format"), "SKILL.md"), skill("format", "Format the code with "+filepath.Base(filepath.Dir(dir))))
 	}
 	codex := filepath.Join(h.home, ".codex", "plugins", "cache", "acme", "formatter", "1.0.0")
 	writeFile(t, mkdirs(t, filepath.Join(codex, ".codex-plugin"), "plugin.json"), `{"name": "formatter", "version": "1.0.0"}`)
@@ -216,7 +223,10 @@ func pluginHome(t *testing.T, h *harness) []string {
 // treats the fork beside the plugin's copy, the client that reads the
 // library without the plugin included. With the one configuration that
 // has the plugin disabled, the fork has no placement. Every plugin
-// directory is left byte for byte as it was.
+// directory is left byte for byte as it was. The history of each fork
+// says where it came from: the plugin, its marketplace, the original
+// skill's name under a new name too, and the URL of the plugin's
+// repository, else of its marketplace.
 func TestSkillForkOfAPluginSkill(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
@@ -256,6 +266,13 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 	text := h.mustRun("skill", "fork", "linter:format", "--name", "lint-format")
 	contains(t, "the text output", text.stdout, "• codex: it reads the library, so it sees lint-format whether or not it has linter\n")
 	contains(t, "the text output", text.stdout, "✓ forked format from plugin linter as lint-format: 0 placements; the plugin's copy stays as it was\n")
+	for name, want := range map[string]map[string]any{
+		"format":      {"kind": "plugin", "skill": "format", "plugin": "formatter", "marketplace": "acme", "url": "https://github.com/acme/formatter"},
+		"lint-format": {"kind": "plugin", "skill": "format", "plugin": "linter", "marketplace": "acme", "url": "https://github.com/acme/plugins"},
+	} {
+		events := h.eventsOfType(h.mustRun("--json", "skill", "history", name).stdout, "history")
+		equal(t, name+": the creation commit's origin", fmt.Sprint(events[len(events)-1]["origin"]), fmt.Sprint(want))
+	}
 }
 
 // TestSkillForkOfAFork forks a fork, which only a new name can do: with
@@ -305,6 +322,7 @@ func TestSkillForkOfAFork(t *testing.T) {
 	if a, b := h.trailer(source+"^^", lineage.TrailerForkID), h.trailer(tip, lineage.TrailerForkID); a == b || b == "" {
 		t.Errorf("the fork ids are %q and %q", a, b)
 	}
+	equal(t, "the origin", h.trailer(tip, lineage.TrailerOriginSkill), "alpha")
 	equal(t, "what the creation commit changes", h.accountGit("diff-tree", "-r", "--name-status", source, tip), "D\tREADME.md\nM\talpha/SKILL.md")
 	contains(t, "SKILL.md", h.accountGit("cat-file", "blob", tip+":alpha/SKILL.md"), "name: alpha-two\n")
 	equal(t, "the upstream", h.listed("alpha-two")["upstream_commit"], h.listed("alpha")["upstream_commit"])
