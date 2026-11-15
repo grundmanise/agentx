@@ -32,9 +32,9 @@ var ErrWatch = errors.New("cannot watch for changes")
 // how to report. Search, and BadRequest for a search, are called from the
 // goroutine that reads stdin, so that a search is answered while a scan
 // runs; the two are never called at once, and neither is called once Run
-// has returned. Check runs on a goroutine of its own, and the report it
-// returns is called from the loop's goroutine, as every other report
-// function is.
+// has returned. Check and Recheck run on a goroutine of their own, and the
+// report each returns is called from the loop's goroutine, as every other
+// report function is.
 type Options struct {
 	Scan  func(ctx context.Context) (scan.Inventory, error)                              // one whole scan; ctx bounds its wait for the lock
 	Index func(ctx context.Context, prev *source.Index) (*source.Index, []string, error) // the source index after a scan, prev being the last one built; nil indexes nothing
@@ -45,9 +45,16 @@ type Options struct {
 
 	// Check is the update check, run once, off the loop's goroutine, after
 	// the initial inventory; it returns what reports its outcome, nil for
-	// nothing to report. nil checks nothing, and so does Once. It is the
-	// first of the jobs, see Job.
+	// nothing to report. nil checks nothing, and so does Once. It starts
+	// with the jobs, see Job.
 	Check Job
+	// Recheck is the check serve repeats while it runs, off the loop's
+	// goroutine as Check is: RecheckEvery after the report of Check is
+	// made, or after the initial inventory when Check is nil, and again
+	// RecheckEvery after each report of its own. So it never runs beside
+	// itself or beside Check. nil repeats nothing, and so does Once.
+	Recheck      Job
+	RecheckEvery time.Duration
 	// Jobs are the other jobs serve runs once at start, such as the account
 	// repo's maintenance.
 	Jobs []Job
@@ -59,8 +66,9 @@ type Options struct {
 	Warn            func(message string)
 }
 
-// Job is one job serve runs once, off the loop's goroutine, once the initial
-// inventory is out; jobs run beside each other. The report a run returns, nil
+// Job is one job serve runs off the loop's goroutine, once the initial
+// inventory is out: each of Jobs once, beside each other, and the checks,
+// see Check and Recheck. The report a run returns, nil
 // for nothing to report, is made on the loop's goroutine, where every other
 // report is. Under Once no job runs, and Run waits for a run still going,
 // stopped by its context, before it returns.
@@ -110,25 +118,33 @@ func Run(ctx context.Context, o Options) error {
 	// check waits on the network for as long as its sources take and a
 	// rescan may not wait for it: each once, now that the initial inventory
 	// is out. The report of one that ended comes back over ended and is made
-	// here, where every other report is.
-	jobs := o.Jobs
-	if o.Check != nil {
-		jobs = append([]Job{o.Check}, jobs...)
-	}
-	ended := make(chan func())
-	for _, job := range jobs {
-		if job == nil {
-			continue
-		}
+	// here, where every other report is. The checks, Check and then Recheck
+	// over and over, report over checked instead, which is what times the
+	// next one: one check at a time, the next timed from the report of the
+	// last.
+	ended, checked := make(chan func()), make(chan func())
+	start := func(job Job, done chan<- func()) {
 		checking.Add(1)
 		go func() {
 			defer checking.Done()
 			report := job(ctx)
 			select {
-			case ended <- report:
+			case done <- report:
 			case <-ctx.Done():
 			}
 		}()
+	}
+	var recheckC <-chan time.Time
+	switch {
+	case o.Check != nil:
+		start(o.Check, checked)
+	case o.Recheck != nil:
+		recheckC = time.After(o.RecheckEvery)
+	}
+	for _, job := range o.Jobs {
+		if job != nil {
+			start(job, ended)
+		}
 	}
 
 	// A change starts the debounce timer and, unless one is running, the
@@ -188,6 +204,16 @@ func Run(ctx context.Context, o Options) error {
 			if report != nil {
 				report()
 			}
+		case report := <-checked:
+			if report != nil {
+				report()
+			}
+			if o.Recheck != nil {
+				recheckC = time.After(o.RecheckEvery)
+			}
+		case <-recheckC:
+			recheckC = nil
+			start(o.Recheck, checked)
 		}
 	}
 }

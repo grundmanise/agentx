@@ -1,9 +1,9 @@
 // The launch sequence and the state of the startup layer. On launch the app resolves the CLI, runs
-// `version`, then `doctor`, then starts the serve child and waits for its first inventory. All of
-// that runs out of sight: the screens mount once it passes, and the layer shows only when a check
-// fails, when a command exits with code 8, and in manual mode. A launch that runs over 2 seconds
-// says what it does in the empty panel. The only commands it runs are `version`, `doctor` and `serve`: it
-// changes nothing on disk.
+// `version` and `doctor` at the same time, then starts the serve child and waits for its first
+// inventory. The layer shows only when a check fails, when a command exits with code 8, and in
+// manual mode. Until the checks pass, the panel shows the kept inventory, washed out
+// (src/store/launch-cache.ts), or, on a launch with none, that it loads. The
+// only commands it runs are `version`, `doctor` and `serve`: it changes nothing on disk.
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -17,32 +17,38 @@ import type { RunResult } from "#/cli/transport.ts";
 import { readChecks } from "#/startup/checks.ts";
 import type { Findings, Problem } from "#/startup/checks.ts";
 import { connect, startServe } from "#/store/feed.ts";
+import {
+  keepLaunch,
+  restoreLaunch,
+  stillAsShown,
+} from "#/store/launch-cache.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { ServeEnd } from "#/store/store.ts";
 
 /** How long a check may take before it fails. A launch normally takes well under a second. */
 export const CHECK_DEADLINE_MS = 30_000;
 const deadline = `${CHECK_DEADLINE_MS / 1000} seconds`;
-/** How long the checks run out of sight before the empty panel says that they run. */
-const SLOW_AFTER_MS = 2000;
-
-/** What the sequence waits for, and since when (`Date.now()`): a check's deadline counts from then. */
+/**
+ * Since when (`Date.now()`) the sequence waits for what it waits for now: first the CLI, `version`
+ * and `doctor`, then serve's first inventory. A check's deadline counts from then.
+ */
 export interface Step {
-  /** "machine" while the CLI, `version` and `doctor` run; "inventory" while serve scans. */
-  kind: "machine" | "inventory";
   startedAt: number;
 }
 
 export interface StartupState {
   /** Whether the layer shows. */
   open: boolean;
-  /** The checks passed once: the screens may mount. */
+  /** The checks passed once: the screens show this machine as it is, and commands run. */
   ready: boolean;
+  /**
+   * The store holds the kept inventory: the screens mount before the checks pass, and no command
+   * runs until they do.
+   */
+  cached: boolean;
   /** "launch" closes the layer once the checks pass; "manual" waits for Open agentx. */
   mode: "launch" | "manual";
   running: boolean;
-  /** The sequence has run for over SLOW_AFTER_MS. */
-  slow: boolean;
   /** What the running sequence waits for. */
   step: Step | undefined;
   /** The sequence runs again after a failure. */
@@ -52,6 +58,7 @@ export interface StartupState {
 
 /** The startup state. Outside React, getState() reads it and setState() changes it. */
 export const useStartup = create<StartupState>()(() => ({
+  cached: false,
   findings: {},
   mode: "launch",
   open: false,
@@ -59,7 +66,6 @@ export const useStartup = create<StartupState>()(() => ({
   retrying: false,
   // The launch sequence starts with the app.
   running: true,
-  slow: false,
   step: undefined,
 }));
 
@@ -178,6 +184,12 @@ const oneShot = async (
 // Each sequence gets a number; a later one makes the earlier one's findings stale.
 let generation = 0;
 
+/**
+ * The checks passed and the machine is no longer as the kept inventory showed it: a change a
+ * control started against that inventory does not run.
+ */
+let moved = false;
+
 const sequence = async () => {
   generation += 1;
   const mine = generation;
@@ -188,18 +200,13 @@ const sequence = async () => {
       update({ findings });
     }
   };
-  const stepTo = (kind: Step["kind"]) => {
+  const nextStep = () => {
     if (mine === generation) {
-      update({ step: { kind, startedAt: Date.now() } });
+      update({ step: { startedAt: Date.now() } });
     }
   };
-  update({ findings, running: true, slow: false });
-  stepTo("machine");
-  const slowTimer = setTimeout(() => {
-    if (mine === generation) {
-      update({ slow: true });
-    }
-  }, SLOW_AFTER_MS);
+  update({ findings, running: true });
+  nextStep();
   try {
     const resolution = await resolveCli().catch(() => ({ path: null }));
     found({ cli: { path: resolution.path } });
@@ -207,8 +214,12 @@ const sequence = async () => {
       return;
     }
 
-    stepTo("machine");
-    const version = await oneShot(["version"]);
+    // Both read the machine and neither waits for the other: doctor's rows count only once the
+    // version is known.
+    nextStep();
+    const versioning = oneShot(["version"]);
+    const checking = oneShot(["doctor"]);
+    const version = await versioning;
     if ("error" in version) {
       found({ version });
       return;
@@ -227,8 +238,7 @@ const sequence = async () => {
     }
     found({ version: { cliVersion: cliVersion.cli_version } });
 
-    stepTo("machine");
-    const doctor = await oneShot(["doctor"]);
+    const doctor = await checking;
     if ("error" in doctor) {
       found({ doctor: { error: doctor.error, exitCode: null, rows: [] } });
       return;
@@ -256,7 +266,7 @@ const sequence = async () => {
       return;
     }
 
-    stepTo("inventory");
+    nextStep();
     let childId: number;
     try {
       childId = await startServe();
@@ -266,18 +276,23 @@ const sequence = async () => {
     }
     found({ serve: await serveOutcome(childId) });
   } finally {
-    clearTimeout(slowTimer);
     if (mine === generation) {
       const { passed } = readChecks(findings, false);
+      const { cached, ready } = useStartup.getState();
+      if (passed && cached && !ready) {
+        moved = !stillAsShown();
+      }
       update({
         // A failure shows the layer; a pass closes it at once, except in manual mode.
         open: !passed || useStartup.getState().mode === "manual",
         ready: useStartup.getState().ready || passed,
         retrying: false,
         running: false,
-        slow: false,
         step: undefined,
       });
+      if (passed) {
+        keepLaunch();
+      }
     }
   }
 };
@@ -306,6 +321,56 @@ const listen = async () => {
       accountRepoLost();
     }
   });
+};
+
+/**
+ * Fills the store with the kept inventory, if there is one, so that the screens mount with the
+ * first render. Called once, before that render.
+ */
+export const showKept = () => {
+  if (restoreLaunch()) {
+    update({ cached: true });
+  }
+};
+
+/**
+ * Waits for the checks while the screens show the kept inventory: a command a control starts then
+ * runs once they pass. Resolves with whether the command may run. A command that changes
+ * something runs only on the machine the user saw. It does not run when the serve child's first
+ * inventory differs from the kept one: the name it was given may now be another skill's. It does
+ * not outlive a failed check either: the startup layer has replaced the control that started it,
+ * so it does not run after a Retry.
+ */
+export const checksPass = async (changes: boolean): Promise<boolean> => {
+  const { cached, ready } = useStartup.getState();
+  if (ready || !cached) {
+    return true;
+  }
+  const answer = (state: StartupState) => {
+    if (state.ready) {
+      return !(changes && moved);
+    }
+    return changes && !state.running ? false : undefined;
+  };
+  let unsubscribe: (() => void) | undefined;
+  const answers = new ReadableStream<boolean>({
+    start: (controller) => {
+      const check = (state: StartupState) => {
+        const may = answer(state);
+        if (may !== undefined) {
+          controller.enqueue(may);
+        }
+      };
+      unsubscribe = useStartup.subscribe(check);
+      check(useStartup.getState());
+    },
+  });
+  try {
+    const { value } = await answers.getReader().read();
+    return value ?? false;
+  } finally {
+    unsubscribe?.();
+  }
 };
 
 let launched = false;

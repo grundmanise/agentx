@@ -8,6 +8,7 @@ import {
   filterRows,
   forksOf,
   groupRows,
+  inCollapsed,
   noFilters,
   projectRows,
 } from "#/screens/skills/projection.ts";
@@ -28,6 +29,26 @@ const steps: Record<string, number> = {
   ArrowUp: -1,
   j: 1,
   k: -1,
+};
+
+/**
+ * The row a key press moves the selection to: the nearest shown row after the one at `at` for a
+ * step down, before it for a step up, and the first shown row when no row is selected. A row of a
+ * collapsed subgroup is not shown.
+ */
+const nextShown = (
+  flat: SkillRow[],
+  at: number,
+  step: number,
+  collapsed: ReadonlySet<string>
+) => {
+  const by = at === -1 ? 1 : step;
+  const from = at === -1 ? 0 : at + step;
+  const count = by > 0 ? flat.length - from : from + 1;
+  return Array.from(
+    { length: Math.max(0, count) },
+    (_, n) => flat[from + n * by]
+  ).find((row) => row !== undefined && !inCollapsed(row, collapsed));
 };
 
 /** Whether a key press belongs to a field or an overlay, which the list then leaves alone. */
@@ -51,6 +72,19 @@ export const SkillsScreen = () => {
   const adoption = useAppStore((s) => s.adoption);
   const [filters, setFilters] = useState<Filters>(noFilters);
   const [order, setOrder] = useState<SortOrder>("default");
+  // The keys of the plugin subgroups the user collapsed.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const toggle = (key: string) => {
+    setCollapsed((keys) => {
+      const next = new Set(keys);
+      if (!next.delete(key)) {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const rows = useMemo(
     () =>
@@ -68,7 +102,9 @@ export const SkillsScreen = () => {
     (routeKey === undefined
       ? undefined
       : (rows.find((r) => r.key === routeKey) ??
-        rows.find((r) => r.name === routeKey))) ?? flat[0];
+        rows.find((r) => r.name === routeKey))) ??
+    flat.find((r) => !inCollapsed(r, collapsed)) ??
+    flat[0];
   const configurations = inventory?.configurations ?? [];
 
   // The key the next key press moves from: the last selection made, which the route may not show
@@ -83,7 +119,8 @@ export const SkillsScreen = () => {
     void navigate(skillPath(row.key));
   };
 
-  // j/k and the arrows move the selection through the visible rows, in group order.
+  // j/k and the arrows move the selection through the visible rows, in group order, past the
+  // rows of a collapsed subgroup.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || inField(e.target)) {
@@ -95,10 +132,7 @@ export const SkillsScreen = () => {
       }
       e.preventDefault();
       const at = flat.findIndex((r) => r.key === current.current);
-      const next =
-        at === -1
-          ? (flat[0] ?? flat.at(-1))
-          : flat[Math.min(flat.length - 1, Math.max(0, at + step))];
+      const next = nextShown(flat, at, step, collapsed);
       if (next !== undefined && next.key !== current.current) {
         select(next);
       }
@@ -121,6 +155,8 @@ export const SkillsScreen = () => {
         onOrder={setOrder}
         selectedKey={selected?.key}
         onSelect={select}
+        collapsed={collapsed}
+        onToggle={toggle}
       />
       <section
         aria-label="Skill details"

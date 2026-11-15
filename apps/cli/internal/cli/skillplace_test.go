@@ -284,6 +284,23 @@ func TestSkillAddAddsASourceThatIsNotAdded(t *testing.T) {
 	equal(t, "exit", none.exit, 5)
 	contains(t, "stdout", none.stdout, "added source "+s.url)
 	equal(t, "the source kept", third.one(third.run("--json", "source", "list").stdout, "source")["url"], s.url)
+
+	// A link copied from the browser names the default branch in its path:
+	// that is no pin, for the source it adds and for one already added
+	// unpinned, and a link to the SKILL.md reads as its directory.
+	linked := newHarness(t)
+	linked.build(t, fixture{dirs: []string{".claude"}})
+	linked.rewrite(s, "https://github.com/owner/repo")
+	tree := linked.run("--json", "skill", "add", "https://github.com/owner/repo/tree/main/skills/beta")
+	equal(t, "exit of a tree link", tree.exit, 0)
+	equal(t, "the pin of the source it added", linked.one(tree.stdout, "source")["pin"], nil)
+	blob := linked.run("skill", "add", "https://github.com/owner/repo/blob/main/skills/alpha/SKILL.md")
+	equal(t, "exit of a SKILL.md link to the added source", blob.exit, 0)
+	for _, name := range []string{"alpha", "beta"} {
+		if _, err := os.Stat(filepath.Join(linked.library, name, "SKILL.md")); err != nil {
+			t.Errorf("%s was not installed from its link: %v", name, err)
+		}
+	}
 }
 
 // TestSkillAddResolvesAnAddedSource covers what skill add does not add: an

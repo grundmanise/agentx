@@ -60,24 +60,24 @@ test.describe("ACTIONS", () => {
     await expect(group(page, "ACTIONS").getByRole("option")).toHaveText([
       /^Update all/u,
       /^Publish all/u,
-      "Add skills",
+      "Add skill",
       "Create skill",
       "Check updates",
       "Rescan this machine",
       "Show activity log",
     ]);
     await expect(option(page, "Update all")).toContainText("1 skill");
-    await expect(option(page, "Publish all")).toContainText("2 skills");
+    await expect(option(page, "Publish all")).toContainText("3 skills");
   });
 
   test("with no update and nothing to publish: neither Update all nor Publish all", async ({
     cli,
     page,
   }) => {
-    launch(cli, "published", { update: false });
+    launch(cli, "synced", { update: false });
     await openPalette(page);
     await expect(group(page, "ACTIONS").getByRole("option")).toHaveText([
-      "Add skills",
+      "Add skill",
       "Create skill",
       "Check updates",
       "Rescan this machine",
@@ -104,23 +104,24 @@ test.describe("ACTIONS", () => {
     expect(ran(cli, ["skill", "update", "--all"])).toBe(true);
   });
 
-  test("Publish all runs a bare skill publish", async ({ cli, page }) => {
+  test("Publish all runs skill publish with every skill the title bar counts", async ({
+    cli,
+    page,
+  }) => {
     launch(cli);
-    cli.register(["skill", "publish"], {
-      events: [
-        {
-          name: "changelog",
-          outcome: "pushed",
-          source: ACCOUNT,
-          type: "publish",
-        },
-        { name: "notes", outcome: "pushed", source: ACCOUNT, type: "publish" },
-      ],
+    const names = ["changelog", "draft", "notes"];
+    cli.register(["skill", "publish", ...names], {
+      events: names.map((name) => ({
+        name,
+        outcome: "pushed" as const,
+        source: ACCOUNT,
+        type: "publish" as const,
+      })),
     });
     await openPalette(page);
     await option(page, "Publish all").click();
-    await expect(toasts(page)).toContainText("Published 2 skills");
-    expect(ran(cli, ["skill", "publish"])).toBe(true);
+    await expect(toasts(page)).toContainText("Published 3 skills");
+    expect(ran(cli, ["skill", "publish", ...names])).toBe(true);
   });
 
   test("Check updates runs skill check-updates", async ({ cli, page }) => {
@@ -132,13 +133,15 @@ test.describe("ACTIONS", () => {
     expect(ran(cli, ["skill", "check-updates"])).toBe(true);
   });
 
-  test("Add skills goes to Sources", async ({ cli, page }) => {
+  test("Add skill opens the Add skill dialog", async ({ cli, page }) => {
     launch(cli);
     await openPalette(page);
-    await option(page, "Add skills").click();
+    await option(page, "Add skill").click();
+    const dialog = page.getByRole("dialog", { name: "Add skill" });
+    await expect(dialog).toBeVisible();
     await expect(
-      page.getByRole("heading", { level: 1, name: "Sources" })
-    ).toBeVisible();
+      dialog.getByRole("textbox", { name: "Link to skills" })
+    ).toBeFocused();
   });
 
   test("Create skill opens the Create skill dialog", async ({ cli, page }) => {

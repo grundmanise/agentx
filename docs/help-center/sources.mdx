@@ -1,6 +1,6 @@
 ---
 title: "Sources in the app"
-description: "Browse the sources you added, add skills from them, and refresh or remove a source in the desktop app."
+description: "Browse the sources you added, add skills from them or from a link, and refresh or remove a source in the desktop app."
 ---
 
 A source is a git repository that holds skills. In the desktop app, open **Skills**, then **Sources** under it, to see every source you added and add skills from them.
@@ -27,6 +27,17 @@ To look in every source at once, type in **Search all sources**. The card hides 
 3. Select **Add**.
 
 Skills this machine already has are marked, and you cannot select them. The count at the right of the checkbox says how many.
+
+## Add skills from a link
+
+1. In **Skills**, select **Add**.
+2. Paste a link to a repository, a folder of skills or one skill on GitHub or GitLab, such as `https://github.com/anthropics/skills/tree/main/skills`. A skill's folder or its `SKILL.md` works too, and for GitHub, `owner/name` or `owner/name/path`.
+3. Select **Find skills**, or press Enter. agentx lists the skills under the link.
+4. Select the skills you want. A single skill is selected for you. Skills this machine already has are marked, and you cannot select them.
+5. Under **Add to**, choose the agents to install them in. The enabled agents are chosen to start with.
+6. Select **Install**.
+
+agentx adds the source to **Sources** only when you install a skill from it. Select **Cancel** to close the dialog without changing anything. Once the skills are installed, the first one is selected in the list.
 
 ## Add a source
 

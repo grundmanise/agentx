@@ -5,7 +5,7 @@
 
 // The output schema version this app reads. An event of another version is
 // refused.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // What every event starts with.
 export interface Envelope {
@@ -36,6 +36,7 @@ export type HandshakeReason =
   | "not_found"
   | "timeout"
   | "failed";
+export type OriginKind = "plugin" | "source" | "skill";
 export type FileStatus = "added" | "modified" | "deleted";
 export type DoctorStatus = "ok" | "warn" | "fail" | "info";
 export type UpdateState = "current" | "available" | "updated";
@@ -79,6 +80,7 @@ export type ImportAction =
   | "kept"
   | "skipped";
 export type MachineDerivation = "platform" | "random";
+export type UpdateCheckScope = "all" | "account";
 export type SourceAccess = "writable" | "read-only" | "unknown";
 export type ProgressPhase =
   | "fetch"
@@ -139,6 +141,17 @@ export interface LibraryEntry {
 export interface ChangedFile {
   path: string;
   status: FileStatus;
+}
+
+export interface ForkOrigin {
+  kind: OriginKind;
+  skill: string;
+  plugin?: string;
+  marketplace?: string;
+  source?: string;
+  path?: string;
+  url?: string;
+  skill_url?: string;
 }
 
 export interface ConflictFile {
@@ -253,6 +266,7 @@ export interface Plugin {
   enabled?: boolean;
   hooks: Hook[];
   icon?: string;
+  url?: string;
 }
 
 export interface Edge {
@@ -424,9 +438,8 @@ export interface HistoryEvent {
   subject: string;
   message: string;
   machine?: string;
-  import: boolean;
-  foreign: boolean;
   files: ChangedFile[];
+  origin?: ForkOrigin;
 }
 
 export interface ForkNoteEvent {
@@ -619,6 +632,16 @@ export interface SearchEvent {
   results: SearchResult[];
 }
 
+export interface UpdateCheckEvent {
+  type: "update_check";
+  schema_version: number;
+  instance_id: string;
+  scope: UpdateCheckScope;
+  checked_at: string;
+  ok: boolean;
+  fetched: boolean;
+}
+
 // Reserved by the contract and never emitted: known, and not rendered.
 export interface OperationEvent {
   type: "operation";
@@ -662,6 +685,7 @@ export type CliEvent =
   | DriftEvent
   | RefreshCompleteEvent
   | SearchEvent
+  | UpdateCheckEvent
   | OperationEvent
   | FleetEvent;
 export type CliEventType = CliEvent["type"];

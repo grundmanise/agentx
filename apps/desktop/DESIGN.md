@@ -121,7 +121,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `text.hint` | `gray-400` | Helper text, Details keys, overflow counts |
 | `text.caption` | `gray-500` | Uppercase mono captions, chevrons, line counts |
 | `text.disabled` | `gray-600` | Disabled text and glyphs, inactive dots |
-| `text.faint` | `gray-700` | Line numbers, hollow timeline ring |
+| `text.faint` | `gray-700` | Line numbers |
 
 #### Window and shell
 
@@ -190,20 +190,21 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 #### Inputs, switches, checkboxes
 
-| Token                 | Primitive        | Element                           |
-| --------------------- | ---------------- | --------------------------------- |
-| `input.bg`            | `gray-980`       | Text inputs, search fields        |
-| `input.border`        | `gray-860`       |                                   |
-| `input.border-focus`  | `gray-700`       |                                   |
-| `input.text`          | `gray-50`        |                                   |
-| `input.placeholder`   | `gray-500`       | Placeholder text and leading icon |
-| `switch.on-track`     | `accent.primary` | Switch on (full and compact)      |
-| `switch.on-knob`      | `on-accent`      |                                   |
-| `switch.off-track`    | `gray-850`       | Switch off                        |
-| `switch.off-knob`     | `gray-400`       |                                   |
-| `checkbox.ring`       | `gray-700`       | Unchecked popover checkbox        |
-| `checkbox.checked-bg` | `accent.primary` |                                   |
-| `checkbox.check`      | `on-accent`      |                                   |
+| Token | Primitive | Element |
+| --- | --- | --- |
+| `input.bg` | `gray-980` | Text inputs, search fields |
+| `input.border` | `gray-860` |  |
+| `input.border-focus` | `gray-700` |  |
+| `input.border-invalid` | `accent.danger` | A field marked `aria-invalid`, focused or not |
+| `input.text` | `gray-50` |  |
+| `input.placeholder` | `gray-500` | Placeholder text and leading icon |
+| `switch.on-track` | `accent.primary` | Switch on (full and compact) |
+| `switch.on-knob` | `on-accent` |  |
+| `switch.off-track` | `gray-850` | Switch off |
+| `switch.off-knob` | `gray-400` |  |
+| `checkbox.ring` | `gray-700` | Unchecked popover checkbox |
+| `checkbox.checked-bg` | `accent.primary` |  |
+| `checkbox.check` | `on-accent` |  |
 
 #### Segmented control (Update review, filter State)
 
@@ -222,14 +223,15 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | Token | Primitive | Element |
 | --- | --- | --- |
 | `filter.bg` | `gray-880` | Filter button at rest |
-| `filter.text` | `gray-300` |  |
+| `filter.text` | `gray-200` | Matches `filter.sort-text` |
 | `filter.active-bg` | `lime-400/12` | Filter button with any filter applied |
 | `filter.active-text` | `accent.primary` |  |
 | `filter.badge-bg` | `accent.primary` | Count badge (digits `on-accent`) |
 | `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
-| `filter.sort-text` | `gray-300` | Sort toggle (Default, A-Z, Z-A) |
+| `filter.sort-text` | `gray-200` | Sort toggle while it sorts by name (A-Z, Z-A) |
+| `filter.sort-off-text` | `text.caption` | Sort toggle while off |
 
 #### Lists and rows
 
@@ -244,8 +246,12 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `group.label` | `gray-300` | Source group caption |
 | `group.count` | `gray-500` | Count beside the caption |
 | `group.divider-label` | `gray-500` | Caption of the sub-group of skills in no agent client |
+| `subgroup.label` | `gray-400` | Caption of a plugin's subgroup under PLUGINS |
+| `subgroup.count` | `gray-500` | Count beside a plugin's caption |
+| `subgroup.hover` | `gray-920` | A plugin's header under the pointer |
 | `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows |
 | `table.header-text` | `gray-500` | Column captions |
+| `add-skill.row-hover` | `gray-880` | Hover on a skill row of the Add skill dialog |
 
 #### Skill glyph
 
@@ -348,6 +354,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `dialog.subtitle` | `gray-400` |  |
 | `sheet.bg` | `gray-960` | History sheet body |
 | `sheet.border` | `gray-850` |  |
+| `sheet.handle` | `gray-700` | A resizable sheet's handle on hover and while it drags |
 | `toast.text` | `gray-50` |  |
 
 #### Code, file tree and diffs
@@ -384,12 +391,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `timeline.dot-install` | `gray-600` | Added / found / created entries |
-| `timeline.dot-update` | `accent.primary` | Updated, adopted, put back |
-| `timeline.dot-yours` | `accent.yours` | Published, forked |
-| `timeline.connector` | `gray-890` | 1px line between dots |
+| `timeline.connector` | `gray-800` | 1px line between the chevrons of the History sheet |
 | `timeline.meta` | `gray-500` | Relative time under an entry |
-| `timeline.more-ring` | `gray-700` | Hollow dot ring of the item that opens the full history |
 
 #### Startup checks
 
@@ -476,7 +479,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
 | `type.source-name` | sans | 16 | 500 |  |  |  | Source name on the card of the open source (`source-card.name`) |
 | `type.agent-card-name` | sans | 16 | 600 |  |  |  | Agent client name on an Agents page card, and the Universal card's title |
-| `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
+| `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the chevron beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
 | `type.server-name` | sans | 14.5 | 500 |  |  |  | Server name in a server row (`text.primary`) |
@@ -509,6 +512,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `shell.command-height` | 32 | `h-command` |  |
 | `shell.status-height` | 30 | `h-status` | Account remote status pill |
 | `shell.panel-inset` | 10 | `mr-panel mb-panel` | Main panel inset from the right and bottom |
+| `shell.panel-loading` | 50% | `opacity-panel-loading` | Opacity of the screen in the main panel while it shows the kept inventory, before the startup checks pass: where its pulse starts and ends (§8) |
 | `stale-bar.height` | 36 | `h-stale-bar` | Stale bar at the top of the main panel |
 | `stale-bar.padding` | 0 16 | `px-stale-bar` |  |
 | `shell.focus-ring-width` | 2 | none: `index.css` sets it on every element | Keyboard focus outline |
@@ -554,6 +558,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
 | `group.padding` | 20 14 8 | `pt-group-top px-group pb-group-bottom` | Later group headers |
 | `group.gap` | 8 | `gap-group` | Label → count |
+| `subgroup.padding` | 6 14 | `py-subgroup-y px-subgroup-x` | A plugin's header under PLUGINS |
+| `subgroup.spacing` | 8 | `pt-subgroup-top` | Above a plugin's header, but the first in its group |
+| `subgroup.indent` | 22 | `pl-subgroup-indent` | Left inset of a plugin's rows: the row's glyph sits under the plugin's name |
 | `table.header-height` | 40 | `h-table-header` | Sticky header (servers) |
 | `table.row-padding` | 16 | `p-table-row` | Server rows |
 | `table.col-gap` | 24 | `gap-x-table-col` |  |
@@ -653,7 +660,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
-| `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room, and the Activity log sheet, for its lines |
+| `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room |
+| `sheet.log-width` | the width the user dragged it to, else 1120 | `w-sheet-dragged` | Activity log sheet, twice `sheet.width-wide`, for its lines. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet-log` |
+| `sheet.log-min-width` | 420 | `min-w-sheet-log` | The narrowest the Activity log sheet drags to: `sheet.width` |
+| `sheet.log-max-width` | 90% of the window | `max-w-sheet-log` | The widest the Activity log sheet drags to, and opens at in a narrow window |
+| `sheet.handle-width` | 8 | `w-sheet-handle` | The drag handle on a resizable sheet's left edge |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
 | `sheet.padding` | 28 32 | `py-sheet-y px-sheet` |  |
 | `palette.width` | 640 | `w-palette` |  |
@@ -662,6 +673,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
 | `adopt.list-max-height` | 280 | `max-h-adopt-list` | The adopt dialog's list of skills; it scrolls past it |
 | `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The Choose agents dialog's list; it scrolls past it |
+| `add-skill.list-max-height` | 264 | `max-h-add-skill-list` | The Add skill dialog's list of skills found; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
 | `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
@@ -680,6 +692,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
 | `code.gap` | 12 | `gap-x-code` | Between gutter and text |
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
+| `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
 | `file-row.height` | 44 | `h-file-row` | File tree row |
 | `file-row.padding-x` | 16 | `px-file-row`, `right-file-row` for the control at the row's end |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
@@ -687,11 +701,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `hunk.pane-margin` | 4 8 | `my-hunk-pane-y mx-hunk-pane` | Around the two panes |
 | `diff.segment` | 56 4 | `w-diff-segment h-diff-segment` | Progress segment w h |
 | `diff.segment-gap` | 4 | `gap-diff-segment` |  |
-| `timeline.col` | 12 | `grid-cols-timeline` (with the text column) | Dot column |
-| `timeline.gap` | 12–16 |  | Dot → text |
-| `timeline.dot` | 7 | `size-timeline-dot` |  |
-| `timeline.line` | 20 | `h-timeline-line` | The box the dot is centred in beside a plain entry: the line height of `type.timeline-entry` |
-| `timeline.button-line` | 32 | `h-timeline-button-line` | The box the dot is centred in beside an entry whose first line is a small wrapping button: the button's top padding (6) plus one `timeline.line` |
+| `timeline.line` | 20 | `h-timeline-line` | The box the chevron is centred in: the line height of `type.timeline-entry` |
+| `timeline.indent` | 22 | `pl-timeline-indent` | The meta line and files of a History sheet entry, past its chevron: the `xs` icon (14) plus `button.icon-gap` (8) |
 | `timeline.entry-gap` | 16–20 |  | Bottom padding per entry |
 | `log.time-width` | 8ch | `w-log-time` | Time column of an activity log line, which a line of output leaves empty |
 | `check.column-width` | 480 | `w-check-column` | Startup column |
@@ -715,6 +726,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `agent-chip.radius` | 9999 | Agent client toggle chip |
 | `logo.radius` | 50% | Agent client logo |
 | `agent-picker.row-radius` | 10 | Row of the Choose agents dialog |
+| `add-skill.row-radius` | 10 | Skill row of the Add skill dialog |
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
 | `shell.status-radius` | 9999 | Account remote status |
@@ -768,12 +780,13 @@ Finder in this file means the platform's file manager. `src/lib/reveal.ts` names
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert, never a grey fill.
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / `button.ghost-bg`, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
-- **Small, wrapping** – for a label that is a sentence, such as a commit subject in the History sheet: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
+- **Small, wrapping** – for a label that may wrap, such as Show all under HISTORY: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
+- **Plain, inline** – no fill, no padding, no radius, as tall as its text; `button.ghost-text`, hover `text.primary`. Only for a line of text that expands, such as an entry of the History sheet.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
 - **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
 
-Every button has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
+Every button but the plain inline one has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
 
 Two buttons side by side: `button.gap`, primary on the right.
 
@@ -814,9 +827,9 @@ The chip of an agent whose folder another agent reads names both in its title an
 - Order: the chips that are on, then the rest by the popularity of the agent client (`src/lib/agent-popularity.ts`), the clients it does not rank by name. Universal stands where its most used client would. The order is fixed when the pane opens, so a chip stays in place when it is toggled.
 - A machine can have dozens of agent configurations, so the section shows two rows of chips, measured at the pane's width, and a small ghost button in the second row, centred on the chips, that shows the rest and hides them again. Every chip that is on, or was on since the pane opened, stays in view, in more rows when two cannot hold them. No button when every chip fits in two rows.
 
-### Agent picker (Add skills bar)
+### Agent picker (Add skills bar, Add skill dialog)
 
-The install targets in the floating bar of the Add skills screen are round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the Universal stack, then the rest, each group in inventory order. The order is fixed when the bar opens and again when the dialog closes, so a logo stays in place while it is toggled. With more than six configurations that take a placement, a small secondary button "+n" comes last, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo, and each member of the Universal stack, shows the client's name in a Tooltip; the Universal toggle keeps its explanation as its accessible description.
+The install targets in the floating bar of the Add skills screen, and under the skills found in the Add skill dialog, are "Add to" in `type.secondary` `text.muted`, then round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the Universal stack, then the rest, each group in inventory order. The order is fixed when the bar or the skills found appear and again when the Choose agents dialog closes, so a logo stays in place while it is toggled. The choice starts as the enabled configurations, where `skill add` installs when no agent is named (`src/screens/sources/agent-targets.tsx`). With more than six configurations that take a placement, a small secondary button "+n" comes last, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo, and each member of the Universal stack, shows the client's name in a Tooltip; the Universal toggle keeps its explanation as its accessible description.
 
 The "+n" button opens Choose agents, a dialog (§6 "Dialog") with a search field (§6 "Inputs") that filters by name, then every configuration that takes a placement, sorted by name, in a list that scrolls past `agent-picker.list-max-height`. A row is the whole hit target, `agent-picker.row-radius`, hover `agent-picker.row-hover`: a 28px logo, the name in `type.body` `text.primary` over the configuration's path in `type.technical-sm` `text.caption`, and the round checkbox (§6 "Checkbox (popover)") at the right. A row toggles the same targets as the bar. The footer counts the chosen targets in `type.secondary` `text.muted`, then a ghost Clear, which unchecks them all, and a primary Done, which closes the dialog.
 
@@ -851,15 +864,17 @@ The dot and fork glyphs say one thing: whether there is an action to take. `glyp
 - pencil – edited locally; `glyph.edited`.
 - fork – one of your own skills.
 
-Sort toggle, at the right end of the filter row, steps through three orders on each click:
+Sort toggle, at the right end of the filter row, always reads as a sort by name: A-Z or Z-A with the arrow (turned for Z-A). It steps through three states on each click:
 
-- Default – within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
-- A-Z, Z-A – by name alone, whatever the state, with the arrow (turned for Z-A).
+- Off – A-Z and the arrow in `filter.sort-off-text` with no fill, so the toggle reads as quiet beside the lighter, filled states and still reaches 4.5:1; hover brings back the ghost fill and `text.primary`. The list keeps its own order: within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
+- A-Z, Z-A – by name alone, whatever the state, in `filter.sort-text` on `button.ghost-bg`.
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)
 
 `type.caption` in `group.label`, then the count in `group.count`. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
+
+The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a plugin installed in several agent clients is one subgroup. Its header (`src/components/section-toggle.tsx`) is a flat, full-width row, not a button with a fill: `subgroup.padding`, `row.radius`, no fill at rest and `subgroup.hover` under the pointer; a `xs` chevron in `text.caption`, the plugin's name in `type.caption` `subgroup.label`, then the count in `type.technical-sm` `subgroup.count`, `group.gap` apart. Its chevron lines up with the group's caption above it. `subgroup.spacing` above each header but the first in its group. The plugin's rows are inset by `subgroup.indent`, so each row's glyph sits under the plugin's name and the rows read as inside its section; their hover and selected fill start at the inset. A click collapses or expands the plugin's rows (`aria-expanded`); the chevron turns 90° while they show, with no transition. A collapsed subgroup keeps its header and count, and j/k skip its rows. Every subgroup is open when the screen opens. Each row's place (`aria-posinset`, `aria-setsize`) is among its plugin's rows.
 
 ### Banner (detail pane)
 
@@ -913,6 +928,17 @@ The run stays in the dialog. Each row shows its state: nothing while waiting, a 
 ### Create skill dialog
 
 `src/screens/skills/create-dialog.tsx`. Two fields, each with its label in `type.secondary` `text.secondary` and its rule as a hint under it: Name, mono and focused on open, and Description. A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and the confirm is disabled. A name the CLI refuses shows the refusal under Name in place of the rule; any other refusal shows under Description. The dialog stays pending until the inventory that follows lists the new skill; it then selects the skill and opens its `SKILL.md` as Edit does (§6 "Edit (detail pane)").
+
+### Add skill dialog
+
+`src/screens/skills/add-skill-dialog.tsx`, which Add in the Skills header and the palette open. It works in two steps in one dialog, so the link and what it found stay in view together. The first step only reads: `source skills` lists the skills under the link, from the network for a source not added, and adds nothing. The second, Install, adds the source and installs the skills checked in one `skill add`. Closing the dialog between the two, by Cancel, Escape or a click outside, runs nothing, so a source is added only when a skill from it is installed.
+
+- One mono field for a link to a repository, a folder of skills or one skill, named by its placeholder and focused on open, with a secondary Find skills at its right, `gap-2` apart; a hint under them in `type.secondary` `text.hint`. The button keeps its place by the field because it acts on the field alone, and Find skills says what it does, a lookup, where Continue would say nothing of it and an Add verb would claim a change the lookup does not make. Enter in the field also runs it; it is disabled while the field is empty, and pending (§6) while `source skills` runs, Install being disabled meanwhile.
+- What it found shows under the field: the select-all row of Sources (§6 "Sources screen") when there are several, then the skills in a list that scrolls past `add-skill.list-max-height`. A row is the whole hit target, `add-skill.row-radius`, hover `add-skill.row-hover`: the name in `type.body` `text.primary` over the description in `type.secondary` `text.muted`, two lines at most, and the round checkbox (§6 "Checkbox (popover)") at the right. A skill this machine holds already is not selectable: its row has no hover and shows its card status (`add-card.status-*`, the words of the Add skills cards) in place of the checkbox, the selectable rows first. One skill found is checked; of several, none is. A skill is matched to the library by its source's canonical URL and its subpath, since a source not added has no id.
+- When none of the skills found can be installed, a line in `type.secondary` `text.hint` says so in place of the select-all row, above the rows and their statuses, and neither "Add to" nor its targets show.
+- Under the list, "Add to" and the targets of §6 "Agent picker", the same control as the Add skills bar, so the two places choose agents alike.
+- The footer's primary Install runs one `skill add` for the skills checked, disabled while none is or a lookup runs. The dialog stays pending until the inventory that follows lists them; it then closes and selects the first, and the toast names what was installed and its source. `skill add` changes the machine, so the sources are read again after it and Sources lists the source it added.
+- A change to the field clears what was found and any refusal, so Find skills looks the new link up. A refusal of either step shows under the field (§6 "Refusal under a field"), a source git cannot reach as the Add source dialog words it.
 
 ### Refusal under a field
 
@@ -973,7 +999,7 @@ Under the product name in the sidebar: `type.machine-label`, `text.muted`, one l
 
 ### Timeline (history)
 
-Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote. The dot is centred in a box as high as the entry's first line (`timeline.line` beside text, `timeline.button-line` beside a small button), with a 1px `timeline.connector` from that box to the next entry. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. When the list is cut short, the last item is a hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button that opens the History sheet.
+A list of entries, no dots or connector. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. In the subject of the commit that created a fork, the origin's name (the plugin, the source with its path, or the skill) is a link when the CLI knows its https page: same type and colour, always underlined, the URL as its tooltip; it opens the page in the browser. For a fork of a source's skill, the fork's name after "Fork" is a link the same way, to the page of the skill's directory at the forked commit, when the CLI knows it. The rest of the subject is text. When the list is cut short, the last item is a ghost button that opens the History sheet, its label aligned with the subjects.
 
 ### Menu
 
@@ -985,7 +1011,7 @@ shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side
 
 ### Skills header
 
-The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose menu opens the Create skill dialog (§6 "Button group"). Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is pending (§6): `aria-busy`, with a `Spinner` in the refresh icon's place until the check ends, in the same square and ghost fill. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
+The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose action opens the Add skill dialog and whose menu opens the Create skill dialog (§6 "Button group"). The menu holds Create skill alone, as Sources sits under Skills in the sidebar. Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is pending (§6): `aria-busy`, with a `Spinner` in the refresh icon's place until the check ends, in the same square and ghost fill. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
 
 ### Skills list
 
@@ -1004,7 +1030,7 @@ shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for
 
 ### Sheet (History)
 
-`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a small wrapping ghost button with a chevron that expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`.
+`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. The chevron hangs outside the entry: the meta line and the files start under the subject, `timeline.indent` in. A 1px `timeline.connector` runs from under each chevron, 4px below its line, to 4px above the next entry's chevron, so the entries read as one history. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
 
 ### Sheet (What's new)
 
@@ -1015,7 +1041,9 @@ The History sheet's frame at `sheet.width-wide`, for what an update changes befo
 
 ### Sheet (Activity log)
 
-The History sheet's frame at `sheet.width-wide` (`src/app/activity-log.tsx`): the last lines of what the app ran and what the background scan reported, as a terminal shows them. A sheet, since the log is looked at beside the screen whose action it explains, and from any screen; Settings and the palette open it.
+The History sheet's frame at `sheet.log-width` (`src/app/activity-log.tsx`): the last lines of what the app ran and what the background scan reported, as a terminal shows them. A sheet, since the log is looked at beside the screen whose action it explains, and from any screen; Settings and the palette open it.
+
+- The sheet is resizable: a `sheet.handle-width` handle on its left edge drags its width between `sheet.log-min-width` and `sheet.log-max-width`. The handle shows `sheet.handle` on hover and while it drags, and `shell.focus-ring` on focus. The arrow keys move it 40 at a time, and a double click or Home brings back the default. The sheet opens at the width the user left it at until the app quits.
 
 - One block of lines, oldest first: `code.bg` with 1px `code.border`, `log.output-radius`, `type.technical-sm`, long lines wrapped. A line is its time in a `log.time-width` column, its text, and a note at the right: how long a command ran, and how it ended when it did not succeed. No rows to open, no dots and no filter: the log is read as a terminal is.
 - Red is the one colour, and it means failed. A command that failed is `tone.danger.fg` with its last 5 lines of output under it, in the same colour and with no time. A command that succeeded keeps its line only, in `text.secondary` with its time and note in `text.caption`. What the background scan reported and a command's debug lines are `text.caption`, so the commands stand out. A scan the app restarts on purpose is no failure.
@@ -1035,6 +1063,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file
 
 - A row: a chevron (turns 90° when open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` status for a file the user changed, and the meta (line count, binary, or size) in `file-row.meta` at the right. An open row shows the file in the Code pane below it.
 - SKILL.md comes first and open; the rest follow by path, a file the user removed among them.
+- While the files are read, the card shows the SKILL.md row alone, open and with no meta, over a Code pane at `code.height` that holds a stand-in SKILL.md, blurred by `code.loading-blur` like frosted glass, with a `md` (20px) `Spinner` in `text.muted` at its centre. When the files come in, the stand-in fades out over the real SKILL.md, which fades in from the same blur to sharp (§8). Every skill has a SKILL.md, so the list keeps its place when the files come in. The stand-in is hidden from assistive technology; the spinner's status says the files are being read.
 - A file on disk has a Show in Finder button group (§6 "Button group") over the meta, beside the trigger, never inside it. While the row is hovered, focused or has its menu open, the meta fades out and the button fades in at the same spot. The meta stays laid out, so the row never shifts, and the button stays in the tab order throughout. A removed file has no button.
 - The button opens the file at the skill's first place: the library when it holds the skill, else the first placement in the row's agent order. The chevron's menu lists every other placement, the path as the inventory carries it. A skill with one place has no chevron.
 
@@ -1055,17 +1084,22 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
+- Account remote, once set, shows its URL in `type.technical` with a neutral Read-only pill beside it when access is limited, as a source card does (§6 "Source card"); a remote you can write to has no tag.
 - Adopt skills sits after Account remote: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
 - A choice that replaces something (an existing export file, the machine's settings on import) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The import result is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
 
 ### Publish status (title bar)
 
-At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/components/status-button.tsx`): a pill `shell.status-height` high, `shell.status-radius`, with the ghost button's fill (`button.ghost-bg`, hover `button.ghost-hover` with the label in `text.secondary`), since it is a button and every button has a resting shape. An 8px dot (`shell.status-dot-radius`) in a 16px box, then the label in `type.status` `shell.topbar-text`.
+At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/components/status-button.tsx`): a pill `shell.status-height` high, `shell.status-radius`, with the ghost button's fill (`button.ghost-bg`, hover `button.ghost-hover` with the label in `text.secondary`), since it is a button and every button has a resting shape. An 8px dot (`shell.status-dot-radius`) in a 16px box, then the label in `type.status` `shell.topbar-text`. It shows how this machine stands with the account remote, and never runs a check: serve checks on its own, and Check updates in the Skills header (§6 "Skills header") is the one check by hand.
 
-- Three states, from the inventory's library and the Sources slice: no account remote (dot `text.hint`; goes to Settings), skills to publish (`shell.status-pending` with `shell.status-pending-halo`; publishes them all), and everything published (`shell.status-published` with `shell.status-published-halo`; checks for updates).
-- It counts your own skills edited since they were published, with the predicate the Skills screen's banner uses (`hasEditsToPublish` in `src/screens/skills/banners.ts`), so the title bar and the Skills screen never disagree. A skill never published is not counted: a bare publish leaves it out, and its own banner publishes it.
-- While the publish runs, and until the inventory that follows arrives, the label counts its progress and the pill is `aria-busy`. While the check runs, a `Spinner` takes the dot's place; it is the Skills screen's check, so only one runs at a time.
+- States, from the inventory's library, the Sources slice and the update candidates: no account remote (dot `text.hint`; goes to Settings); something to publish, incoming, or both, the two counts side by side (`shell.status-pending` with `shell.status-pending-halo`); and synced, nothing either way (`shell.status-published` with `shell.status-published-halo`). Every state but the first opens the popover.
+- To publish counts your own skills edited since they were published and those never published, with the predicates the Skills screen's banners use (`hasEditsToPublish` and `notPublished` in `src/screens/skills/banners.ts`), so the title bar and the Skills screen never disagree. Incoming counts the update candidates of your own skills that another machine published (`fromAnotherMachine`) to the account remote set now, for skills still in the library. Serve's own checks add to the candidates, and Check updates replaces them.
+- A tooltip (§6 "Tooltip"), aligned to the pill's end, says what the counts hold, one line for each, or for synced, when the account remote was last checked. The pill keeps its label as its accessible name. No tooltip while the popover is open or a publish runs.
+- Beside the pill, never inside it, a visually hidden polite live region (an `output`, whose role is `status`: `StatusAnnouncement`) holds the summary label, so a screen reader announces a change a background check brings. It never holds the publish's progress.
+- The popover (§6 "Popover (Filter)" for its frame, `popover.padding` for grouped content) opens below the pill, aligned to its end. A group for each count, with its caption in `popover.caption`: rows of `popover.row-radius` with the skill's name in `type.secondary` `text.primary` and what the group says of it in `text.muted` at the right. To publish says edited or new for each row and ends with a small primary Publish all, which publishes every row in one command and closes the popover. An incoming row is a button, `popover.row-hover` on hover, that opens the skill, whose banner offers Update. With nothing either way, one `type.secondary` `text.muted` line says so. The footer names the account remote in its short form, `type.technical-sm` `text.caption`, and when it was last checked at the right, `type.secondary` `text.hint`. The popover holds no check.
+- Last checked is when serve's last update check ended well, or Check updates reached every source or all but some; until either, the popover and tooltip say it was not checked yet. It reads as a relative time that keeps time while the app is open, once a minute.
+- While the publish runs, and until the inventory that follows arrives, the label counts its progress and the pill is `aria-busy`; so is Publish all, with a `Spinner`.
 - Hidden while the startup layer shows, and until the inventory and the sources are read, so it never guesses a state.
 
 ### Sidebar
@@ -1085,7 +1119,7 @@ The Sources screen (`src/screens/sources`), under Skills: the serif page title w
 
 The ⌘K palette (`src/app/command-palette.tsx`): ACTIONS, GO TO, SKILLS, in that order, each under its caption. A row is its icon in `palette.icon`, its label in `type.body` and an optional hint in `type.palette-hint`; typing keeps the rows whose label holds the text.
 
-- ACTIONS shows an action only when it has something to act on: Update all while an update is offered, Publish all while the publish status counts skills to publish. The action that opens the activity log is last.
+- ACTIONS shows an action only when it has something to act on: Update all while an update is offered, Publish all while the publish status counts skills to publish, for the same skills as the status's Publish all. The action that opens the activity log is last.
 - SKILLS lists every skill in the Skills list's order, its origin as the hint; while nothing is typed, only the first four, so the actions and screens stay in view.
 
 ## 7. Iconography
@@ -1100,16 +1134,18 @@ The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-
 
 ## 8. Motion
 
-Nothing loops forever, and nothing waits on purpose. The one loop is the `Spinner` of a pending control (§6) or of a running check: it turns only while its command runs and stops when the command ends.
+Nothing loops forever, and nothing waits on purpose. Two things loop, each only while something runs. The `Spinner` of a pending control (§6), of a running check, or of a read the screen waits on, such as a skill's files, turns only while its command runs and stops when the command ends. The kept inventory pulses only until the startup checks pass.
 
 - Hover and background changes: no transition, or at most `.2s`.
 - Switches: the track changes colour in `.2s`; the knob moves with no transition.
 - File list chevron: `rotate(90deg)` in `.15s`. The History sheet's chevron turns with no transition.
 - File row: the meta and the Show in Finder button swap by opacity in `.15s`.
+- Files read (`animate-code-reveal`, `animate-code-loading-out`): when a skill's files come in, the blurred stand-in SKILL.md and its spinner fade out while the real SKILL.md fades in, its blur going from `code.loading-blur` to none, both `.3s ease-out`. A skill whose files are already read shows them at once.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0` and opacity 0 → 1, `.22s ease`, when it appears.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; a control with a leading icon, such as Check updates or Check tools, shows it in the icon's place, so a long check reads as busy past its first second.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass; a passing launch shows no startup layer.
-- A launch whose checks run over 2s shows a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way; while serve scans, its status lines turn every 1.5s. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
+- A launch with a kept inventory shows its screens with the first frame, with no fade, washed out and pulsing (`animate-panel-loading`): opacity `shell.panel-loading` → 30% → `shell.panel-loading` every `1s`, `ease-in-out`, as often as the `Spinner` turns, so that a launch of a second or two shows a whole pulse. The wash alone could pass for a disabled screen; the pulse says that it loads. Nothing else does: no spinner and no text. The title bar and the sidebar stay at full opacity, and the sidebar navigates. When the checks pass, the pulse stops and the screen goes to full opacity in `.2s`. With reduced motion, the screen is washed out and does not pulse.
+- A launch with no kept inventory shows, from its first frame, a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way. The line says only that the app loads, not which check runs. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
 - Button enable and disable, every variant: `opacity .2s`.

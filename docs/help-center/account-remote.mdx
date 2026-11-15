@@ -44,3 +44,20 @@ agentx source add git@github.com:you/agentx-account.git --account
 In the desktop app, open **Settings**, paste the URL under **Account remote** and select **Save**. **Change…** replaces it with another repository, and **Detach** removes it. Your skills stay on the machine either way.
 
 Each machine can use its own URL for the same repository, such as SSH on your computer and HTTPS for a cloud agent. For the details, see [Add your account remote](/cli/source#add-your-account-remote). For how import treats two URLs of one repository, see [Import onto another machine](/cli/export#import-onto-another-machine).
+
+## See what is waiting to sync
+
+In the desktop app, the status at the right of the title bar shows how this machine stands with your account remote. Point at it to see what it counts.
+
+| Status | What it means | Select it to |
+|---|---|---|
+| **Set up sync** | No account remote is set. | Open **Settings** and add one. |
+| **3 to publish** | Your own skills with edits you have not published, or that you never published. | See each skill, marked edited or new, and publish them all with **Publish all**. |
+| **1 incoming** | Your own skills that changed on your other machines. | See each skill. Select one to open it, then select **Update** on its banner. |
+| **Synced** | Nothing to publish and nothing incoming. | See when agentx last checked your account remote. |
+
+With something both ways, the status shows both counts, such as **3 to publish · 1 incoming**.
+
+**Publish all** publishes every skill in the list in one go, the ones you never published included. To publish one skill, open it and select **Publish** on its banner.
+
+While the app is open, agentx checks your account remote in the background, and the status shows when it last did. To check now, select **Check updates** above the **Skills** list.
