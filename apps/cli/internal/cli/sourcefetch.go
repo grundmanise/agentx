@@ -468,7 +468,7 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 		if err != nil {
 			return nil, err
 		}
-		if src.Ref != "" && src.Ref != entry.Pin {
+		if src = inv.linkPin(ctx, src, entry); src.Ref != "" && src.Ref != entry.Pin {
 			return nil, pinMismatch(src, entry)
 		}
 		if seen[entry.URL] { // named twice, by URL and by id, or by two forms of one URL

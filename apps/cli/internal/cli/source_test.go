@@ -63,9 +63,13 @@ func TestSourceAddNormalisesEveryURLForm(t *testing.T) {
 		commit  string
 		skills  float64
 	}{
+		// A link at the default branch adds the source unpinned.
+		{"https://github.com/owner/repo/tree/main/skills", "https://github.com/owner/repo", "skills", "", head, 2},
 		{"owner/repo", "https://github.com/owner/repo", "", "", head, 2},
-		{"https://github.com/owner/repo/tree/v1/skills/beta", "https://github.com/owner/repo", "skills/beta", "v1", v1, 1},
 		{"https://someone:s3cret-token@github.com/owner/repo#main", "https://github.com/owner/repo", "", "main", head, 2},
+		{"https://github.com/owner/repo/tree/v1/skills/beta", "https://github.com/owner/repo", "skills/beta", "v1", v1, 1},
+		// A link at the default branch keeps the pin of an added source.
+		{"https://github.com/owner/repo/tree/main/skills/beta", "https://github.com/owner/repo", "skills/beta", "v1", v1, 1},
 		{"file://localhost" + s.gitDir + "/", s.url, "", "", head, 2},
 	}
 	for _, tt := range tests {
@@ -110,16 +114,25 @@ func TestSourceAddNormalisesEveryURLForm(t *testing.T) {
 			t.Errorf("%s carries the credential:\n%s", what, text)
 		}
 	}
-	// One entry per canonical URL, whatever forms were added, pinned as the last add said.
+	// One entry per canonical URL, whatever forms were added, pinned as the last pin said.
 	sources := readSettingsFile(t, h)["sources"].([]any)
 	if len(sources) != 2 {
 		t.Fatalf("sources = %v, want two entries", sources)
 	}
 	equal(t, "sources[1].url", sources[1].(map[string]any)["url"], "https://github.com/owner/repo")
-	equal(t, "sources[1].pin", sources[1].(map[string]any)["pin"], "main")
+	equal(t, "sources[1].pin", sources[1].(map[string]any)["pin"], "v1")
 	if _, ok := sources[1].(map[string]any)["alias"]; ok {
 		t.Errorf("alias written although unused: %v", sources[1])
 	}
+
+	// source skills takes a link at the default branch whatever the pin,
+	// and lists what its path scopes.
+	out := h.run("--json", "source", "skills", "https://github.com/owner/repo/tree/main/skills/beta")
+	equal(t, "exit of source skills", out.exit, 0)
+	src, skills := sourceEvents(t, h.events(out.stdout))
+	equal(t, "subpath listed", src["subpath"], "skills/beta")
+	equal(t, "commit listed", src["commit"], v1)
+	equal(t, "skills listed", len(skills), 1)
 }
 
 func anyOrNil(s string) any {

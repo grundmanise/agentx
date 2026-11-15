@@ -104,12 +104,14 @@ func newSourceAddCommand(inv *invocation) *cobra.Command {
 		),
 		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or\n" +
 			"owner/repo/subpath for GitHub, a GitHub or GitLab URL with an optional tree\n" +
-			"path, an SSH URL or host:path, a file:// URL or an absolute path, any of them\n" +
-			"with #ref to pin a branch or tag. A user or token in the URL is dropped. A\n" +
-			"source is fetched from and pushed to at that URL. A source holds skills in\n" +
-			"folders on one branch, unless --account adds it as the account remote, a\n" +
-			"repository of yours with one branch per skill of your own, which they are\n" +
-			"published to.",
+			"path or a link to a SKILL.md, an SSH URL or host:path, a file:// URL or an\n" +
+			"absolute path, any of them with #ref to pin a branch or tag. The branch of a\n" +
+			"tree or SKILL.md link pins it too, unless it is the source's default branch:\n" +
+			"then a new source is added unpinned and an added one keeps its pin. A user or\n" +
+			"token in the URL is dropped. A source is fetched from and pushed to at that\n" +
+			"URL. A source holds skills in folders on one branch, unless --account adds it\n" +
+			"as the account remote, a repository of yours with one branch per skill of\n" +
+			"your own, which they are published to.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.sourceAdd(cmd.Context(), args[0], account)
@@ -205,7 +207,13 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string, account bool) 
 	if err != nil {
 		return err
 	}
-	_, _, err = inv.addSource(ctx, src)
+	// A link at the default branch keeps the pin of a source already added,
+	// and adds a new one unpinned.
+	var entry home.Source
+	if i := s.FindSource(src.URL); i >= 0 {
+		entry = s.Sources[i]
+	}
+	_, _, err = inv.addSource(ctx, inv.linkPin(ctx, src, entry))
 	return err
 }
 
@@ -485,6 +493,7 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	if entry.Account {
 		return forkSourceIs(entry.URL, entry)
 	}
+	src = inv.linkPin(ctx, src, entry)
 	if src.Ref != "" && src.Ref != entry.Pin {
 		return pinMismatch(src, entry)
 	}
@@ -662,6 +671,42 @@ func (inv *invocation) removedSource(ctx context.Context, id string) string {
 		}
 	}
 	return ""
+}
+
+// linkPin is src with the ref in the path of its tree or SKILL.md link read
+// as the link means it. A link copied from a browser names the branch the
+// page showed, and when that is the source's default branch the link
+// expresses no pin: src takes the pin entry holds, the stored pin of an
+// added source, which the link then neither changes nor removes, and none
+// for a source the settings do not hold, whose entry is the zero Source. A
+// path ref that is the stored pin already, one at any other branch, and a
+// ref a #ref fragment names are left as they are. skill add, source add,
+// source skills and source fetch all read a link so.
+func (inv *invocation) linkPin(ctx context.Context, src source.Source, entry home.Source) source.Source {
+	if !src.RefFromPath || src.Ref == entry.Pin {
+		return src
+	}
+	if inv.isDefaultBranch(ctx, src, entry.DefaultBranch) {
+		src.Ref, src.RefFromPath = entry.Pin, false
+	}
+	return src
+}
+
+// isDefaultBranch reports whether the ref of src is the source's default
+// branch. recorded is the default branch the settings entry holds, "" for
+// none; git is asked, by ls-remote, when it is "" or names another branch,
+// since a remote's HEAD can move, and an answer that does not come leaves
+// the ref a pin.
+func (inv *invocation) isDefaultBranch(ctx context.Context, src source.Source, recorded string) bool {
+	if recorded != "" && src.Ref == recorded {
+		return true
+	}
+	branch, err := inv.git.DefaultBranch(ctx, src.URL)
+	if err != nil {
+		inv.out.debugf("reading the default branch of %s: %v", src.URL, err)
+		return false
+	}
+	return branch != "" && branch == src.Ref
 }
 
 // pinMismatch refuses an argument whose #ref is not the pin the settings

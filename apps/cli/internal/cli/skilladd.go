@@ -114,9 +114,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		if entry.Account {
 			return forkSourceIs(entry.URL, entry)
 		}
-		if src.RefFromPath && src.Ref != entry.Pin && inv.isDefaultBranch(ctx, src, entry.DefaultBranch) {
-			src.Ref, src.RefFromPath = "", false
-		}
+		src = inv.linkPin(ctx, src, entry)
 		if src.Ref != "" && src.Ref != entry.Pin {
 			return pinMismatch(src, entry)
 		}
@@ -134,8 +132,8 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	// A source this run adds from a link at its default branch is added
 	// unpinned; git is asked which branch that is once the arguments are
 	// known to be good, since asking is network.
-	if add && src.RefFromPath && inv.isDefaultBranch(ctx, src, "") {
-		src.Ref, src.RefFromPath = "", false
+	if add {
+		src = inv.linkPin(ctx, src, home.Source{})
 	}
 	// A source this run adds, or fetches because --fetch asked, is fetched
 	// once, outside the lock, and the install reads the listing that fetch
@@ -184,26 +182,6 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		return err
 	}
 	return inv.installSkills(ctx, gitDir, src, entry.LastFetched, listing.Commit, skills, targets, asCopy)
-}
-
-// isDefaultBranch reports whether the ref a tree or SKILL.md link carries in
-// its path is the source's default branch, the branch a browser shows a
-// repository at, which skill add reads as no pin: a link copied from the
-// browser names a skill, and the branch in it was only what the page showed.
-// recorded is the default branch the settings entry holds, "" for none;
-// git is asked when it is "" or names another branch, since a remote's HEAD
-// can move, and an answer that does not come leaves the ref a pin. A link at
-// any other branch, and a ref a #ref fragment names, stays a pin.
-func (inv *invocation) isDefaultBranch(ctx context.Context, src source.Source, recorded string) bool {
-	if recorded != "" && src.Ref == recorded {
-		return true
-	}
-	branch, err := inv.git.DefaultBranch(ctx, src.URL)
-	if err != nil {
-		inv.out.debugf("reading the default branch of %s: %v", src.URL, err)
-		return false
-	}
-	return branch != "" && branch == src.Ref
 }
 
 // installSkills is the install of skill add once the source is fetched and
