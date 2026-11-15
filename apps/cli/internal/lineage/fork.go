@@ -105,7 +105,7 @@ func ParseFork(message string) (ForkTrailers, error) {
 		}
 		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
 		var field *string
-		shape := func(string) bool { return false }
+		var shape func(string) bool
 		switch key {
 		case TrailerBase:
 			field, shape = &t.Base, objectID.MatchString
