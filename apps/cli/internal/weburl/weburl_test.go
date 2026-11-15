@@ -72,3 +72,24 @@ func TestIs(t *testing.T) {
 		}
 	}
 }
+
+func TestTree(t *testing.T) {
+	t.Parallel()
+	const commit = "3f2a9c1e8d7b6a5f4e3d2c1b0a9f8e7d6c5b4a39"
+	for _, tc := range []struct{ repo, path, want string }{
+		{"https://github.com/acme/skills", "skills/pdf", "https://github.com/acme/skills/tree/" + commit + "/skills/pdf"},
+		{"https://github.com/acme/skills", "", "https://github.com/acme/skills/tree/" + commit},
+		{"https://gitlab.com/acme/skills", "pdf", "https://gitlab.com/acme/skills/-/tree/" + commit + "/pdf"},
+		{"https://bitbucket.org/acme/skills", "pdf", "https://bitbucket.org/acme/skills/src/" + commit + "/pdf"},
+		{"https://github.com/acme/skills", "two words/a#b", "https://github.com/acme/skills/tree/" + commit + "/two%20words/a%23b"},
+		{"https://git.example.com/acme/skills", "pdf", ""},
+		{"", "pdf", ""},
+	} {
+		if got := Tree(tc.repo, commit, tc.path); got != tc.want {
+			t.Errorf("Tree(%q, %q) = %q, want %q", tc.repo, tc.path, got, tc.want)
+		}
+	}
+	if got := Tree("https://github.com/acme/skills", "", "pdf"); got != "" {
+		t.Errorf("Tree with no commit = %q, want none", got)
+	}
+}

@@ -11,17 +11,17 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
-// TestSkillHistoryMarksImportsAndForeignCommits forks an edited managed
+// TestSkillHistoryListsEveryCommit forks an edited managed
 // skill, records an edit as a publish does and commits one more with git directly
 // in the worktree, beside the skill directory too, and lists the fork's
-// history: every commit newest first, the one made with git foreign, with
+// history: every commit newest first, the one made with git without a machine, with
 // its author and its whole message, the two agentx wrote carrying the
 // machine, and the import at the root, with every file it holds added.
 // Paths are relative to the skill's directory, a file beside it starting
 // with ../. The creation commit alone names where the fork came from, the
 // source of the import it was made from. A managed skill, an unmanaged one
 // and a name the library does not hold are refused, each in its own words.
-func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
+func TestSkillHistoryListsEveryCommit(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta")
@@ -55,12 +55,11 @@ func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 	}
 	for i, want := range []struct {
 		commit, parents, subject, machine, files string
-		imported, foreign                        bool
 	}{
-		{foreign, committed, "By hand", "", "../README.md added,extra.md modified", false, true},
-		{committed, created, "alpha: add extra.md (test-host)", machine, "extra.md added", false, false},
-		{created, imported, h.accountGit("log", "-1", "--format=%s", created), machine, "SKILL.md modified", false, false},
-		{imported, "", h.accountGit("log", "-1", "--format=%s", imported), "", strings.Join(importFiles, ","), true, false},
+		{foreign, committed, "By hand", "", "../README.md added,extra.md modified"},
+		{committed, created, "alpha: add extra.md (test-host)", machine, "extra.md added"},
+		{created, imported, h.accountGit("log", "-1", "--format=%s", created), machine, "SKILL.md modified"},
+		{imported, "", h.accountGit("log", "-1", "--format=%s", imported), "", strings.Join(importFiles, ",")},
 	} {
 		ev := events[i]
 		equal(t, "event "+want.subject+": commit", ev["commit"], want.commit)
@@ -70,8 +69,6 @@ func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 		}
 		equal(t, want.subject+": parents", strings.Join(parents, " "), want.parents)
 		equal(t, want.subject+": subject", ev["subject"], want.subject)
-		equal(t, want.subject+": import", ev["import"], want.imported)
-		equal(t, want.subject+": foreign", ev["foreign"], want.foreign)
 		if want.machine == "" {
 			if _, ok := ev["machine"]; ok {
 				t.Errorf("%s: machine %v, want none", want.subject, ev["machine"])
@@ -171,8 +168,9 @@ func TestParseForkLog(t *testing.T) {
 func TestHistoryOrigin(t *testing.T) {
 	t.Parallel()
 	const forkID = "01234567-89ab-4def-8123-456789abcdef"
+	upstream := strings.Repeat("a", 40)
 	imported := func(src, path string) *lineage.Commit {
-		i := lineage.Import{Source: src, Path: path, Commit: strings.Repeat("a", 40), Hash: strings.Repeat("b", 64)}
+		i := lineage.Import{Source: src, Path: path, Commit: upstream, Hash: strings.Repeat("b", 64)}
 		return &lineage.Commit{ID: "i", Message: i.Message()}
 	}
 	created := lineage.ForkTrailers{ForkID: forkID}
@@ -187,9 +185,11 @@ func TestHistoryOrigin(t *testing.T) {
 		{"another skill", lineage.ForkTrailers{ForkID: forkID, Origin: lineage.Origin{Skill: "alpha"}}, &lineage.Commit{ID: "f", Parents: []string{"i"}, Message: "x\n"},
 			&forkOrigin{Kind: originSkill, Skill: "alpha"}},
 		{"a source's skill", created, imported("https://github.com/acme/skills", "skills/pdf"),
-			&forkOrigin{Kind: originSource, Skill: "pdf", Source: "https://github.com/acme/skills", Path: "skills/pdf", URL: "https://github.com/acme/skills"}},
+			&forkOrigin{Kind: originSource, Skill: "pdf", Source: "https://github.com/acme/skills", Path: "skills/pdf", URL: "https://github.com/acme/skills",
+				SkillURL: "https://github.com/acme/skills/tree/" + upstream + "/skills/pdf"}},
 		{"a skill at an SSH source's root", created, imported("ssh://git@gitlab.com/acme/pdf", ""),
-			&forkOrigin{Kind: originSource, Skill: "pdf", Source: "ssh://git@gitlab.com/acme/pdf", URL: "https://gitlab.com/acme/pdf"}},
+			&forkOrigin{Kind: originSource, Skill: "pdf", Source: "ssh://git@gitlab.com/acme/pdf", URL: "https://gitlab.com/acme/pdf",
+				SkillURL: "https://gitlab.com/acme/pdf/-/tree/" + upstream}},
 		{"a local source's skill", created, imported("file:///srv/skills", "pdf"),
 			&forkOrigin{Kind: originSource, Skill: "pdf", Source: "file:///srv/skills", Path: "pdf"}},
 		{"no fork id", lineage.ForkTrailers{Machine: strings.Repeat("0", 32)}, imported("https://github.com/acme/skills", "pdf"), nil},

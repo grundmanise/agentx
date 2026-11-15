@@ -42,7 +42,7 @@ test("a one-shot streams its events as they arrive", async ({ cli, page }) => {
   expect(await items(page)).toEqual([
     {
       value: {
-        event: { cli_version: "1.2.0", schema_version: 2, type: "version" },
+        event: { cli_version: "1.2.0", schema_version: 3, type: "version" },
         kind: "event",
       },
       what: "line",
@@ -121,7 +121,7 @@ test("serve's events arrive in order, with their child id", async ({
     {
       value: {
         childId: 1,
-        event: { schema_version: 2, type: "search" },
+        event: { schema_version: 3, type: "search" },
         kind: "event",
       },
       what: "serve",
@@ -129,7 +129,7 @@ test("serve's events arrive in order, with their child id", async ({
     {
       value: {
         childId: 1,
-        event: { schema_version: 2, type: "refresh_complete" },
+        event: { schema_version: 3, type: "refresh_complete" },
         kind: "event",
       },
       what: "serve",
@@ -140,7 +140,7 @@ test("serve's events arrive in order, with their child id", async ({
         event: {
           level: "warn",
           message: "careful",
-          schema_version: 2,
+          schema_version: 3,
           type: "log",
         },
         kind: "log",

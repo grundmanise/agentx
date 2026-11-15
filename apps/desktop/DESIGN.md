@@ -971,7 +971,7 @@ Under the product name in the sidebar: `type.machine-label`, `text.muted`, one l
 
 ### Timeline (history)
 
-A list of entries, no dots or connector. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. In the subject of the commit that created a fork, the origin's name (the plugin, the source with its path, or the skill) is a link when the CLI knows its https page: same type and colour, always underlined, the URL as its tooltip; it opens the page in the browser. The rest of the subject is text. When the list is cut short, the last item is a ghost button that opens the History sheet, its label aligned with the subjects.
+A list of entries, no dots or connector. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. In the subject of the commit that created a fork, the origin's name (the plugin, the source with its path, or the skill) is a link when the CLI knows its https page: same type and colour, always underlined, the URL as its tooltip; it opens the page in the browser. For a fork of a source's skill, the fork's name after "Fork" is a link the same way, to the page of the skill's directory at the forked commit, when the CLI knows it. The rest of the subject is text. When the list is cut short, the last item is a ghost button that opens the History sheet, its label aligned with the subjects.
 
 ### Menu
 

@@ -37,10 +37,8 @@ const versionOf = (row: SkillRow) =>
  * The page of the skill a fork came from, on the commit that created the fork, when the CLI knows
  * one: an https URL alone, since the window opens nothing else.
  */
-export const originPage = (e: HistoryEvent) => {
-  const url = e.origin?.url;
-  return url?.startsWith("https://") === true ? url : undefined;
-};
+export const originPage = (e: HistoryEvent) =>
+  e.origin?.url?.startsWith("https://") === true ? e.origin.url : undefined;
 
 /**
  * Text as the CLI writes it into a commit's subject: a control character as a space, runs of
@@ -85,38 +83,89 @@ export const originParts = (e: HistoryEvent) => {
       };
 };
 
+/** An https URL, which the window opens; undefined for anything else. */
+const https = (url: string | undefined) =>
+  url?.startsWith("https://") === true ? url : undefined;
+
+/** A run of an entry's subject, with the page it links to, if any. */
+interface Segment {
+  text: string;
+  page?: string;
+}
+
 /**
- * An entry's subject. On the commit that created a fork, the name of its origin links to the
- * origin's page when the CLI knows one; the rest is text.
+ * An entry's subject in runs, of text and of links. On the commit that created a fork, the
+ * origin's name links to its page, and for a fork of a source's skill, the fork's name, after
+ * "Fork", links to the page of the skill's directory at the commit it was forked from, each when
+ * the CLI knows it.
  */
-const Subject = ({ entry }: { entry: HistoryEvent }) => {
-  const page = originPage(entry);
-  const parts = page === undefined ? undefined : originParts(entry);
-  if (page === undefined || parts === undefined) {
-    return (
-      <span className="type-timeline-entry text-text-primary min-w-0 wrap-break-word">
-        {entry.subject}
-      </span>
-    );
+export const subjectSegments = (e: HistoryEvent): Segment[] => {
+  const links: { at: number; end: number; page: string }[] = [];
+  const skillPage =
+    e.origin?.kind === "source" ? https(e.origin.skill_url) : undefined;
+  const from = e.subject.indexOf(" from ");
+  if (
+    skillPage !== undefined &&
+    e.subject.startsWith("Fork ") &&
+    from > "Fork ".length
+  ) {
+    links.push({ at: "Fork ".length, end: from, page: skillPage });
   }
-  return (
-    <span className="type-timeline-entry text-text-primary min-w-0 wrap-break-word">
-      {parts.before}
-      <a
-        href={page}
-        title={page}
-        className="underline underline-offset-2"
-        onClick={(e) => {
-          e.preventDefault();
-          void openInBrowser(page);
-        }}
-      >
-        {parts.name}
-      </a>
-      {parts.after}
-    </span>
-  );
+  const page = originPage(e);
+  const parts = page === undefined ? undefined : originParts(e);
+  if (page !== undefined && parts !== undefined) {
+    const at = parts.before.length;
+    links.push({ at, end: at + parts.name.length, page });
+  }
+  const segments: Segment[] = [];
+  let done = 0;
+  for (const link of links) {
+    if (link.at < done) {
+      continue;
+    }
+    if (link.at > done) {
+      segments.push({ text: e.subject.slice(done, link.at) });
+    }
+    segments.push({
+      page: link.page,
+      text: e.subject.slice(link.at, link.end),
+    });
+    done = link.end;
+  }
+  if (done < e.subject.length) {
+    segments.push({ text: e.subject.slice(done) });
+  }
+  return segments;
 };
+
+/** Whether an entry's subject holds a link, which cannot sit inside its button. */
+const hasLink = (e: HistoryEvent) =>
+  subjectSegments(e).some((s) => s.page !== undefined);
+
+/** An entry's subject, its links underlined. */
+const Subject = ({ entry }: { entry: HistoryEvent }) => (
+  <span className="type-timeline-entry text-text-primary min-w-0 wrap-break-word">
+    {subjectSegments(entry).map(({ text, page }, i) =>
+      page === undefined ? (
+        text
+      ) : (
+        <a
+          // The runs of one subject never change order.
+          key={i}
+          href={page}
+          title={page}
+          className="underline underline-offset-2"
+          onClick={(ev) => {
+            ev.preventDefault();
+            void openInBrowser(page);
+          }}
+        >
+          {text}
+        </a>
+      )
+    )}
+  </span>
+);
 
 const Chevron = ({ open }: { open: boolean }) => (
   <span className="h-timeline-line flex flex-none items-center">
@@ -137,8 +186,7 @@ const Entry = ({
   expandable?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
-  const linked =
-    originPage(entry) !== undefined && originParts(entry) !== undefined;
+  const linked = hasLink(entry);
   return (
     <li
       className={

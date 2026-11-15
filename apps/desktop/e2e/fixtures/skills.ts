@@ -277,7 +277,7 @@ export const adoption: AdoptionEvent[] = [
   {
     file: "/home/me/.agents/.skill-lock.json",
     name: "scratch",
-    schema_version: 2,
+    schema_version: 3,
     source: "https://github.com/vercel/skills",
     state: "candidate",
     subpath: "scratch",
@@ -291,19 +291,15 @@ const historyEvent = (
   time: string,
   subject: string,
   files: HistoryEvent["files"],
-  flags: Partial<
-    Pick<HistoryEvent, "import" | "foreign" | "machine" | "origin">
-  > = {}
+  flags: Partial<Pick<HistoryEvent, "machine" | "origin">> = {}
 ): HistoryEvent => ({
   author: "Me <me@example.com>",
   commit,
   files,
-  foreign: false,
-  import: false,
   message: subject,
   name: "pdf-letters",
   parents: [],
-  schema_version: 2,
+  schema_version: 3,
   subject,
   time,
   type: "history",
@@ -315,13 +311,9 @@ const historyEvent = (
  * of them the fork's creation with the skill of acme/skills it came from, then the import.
  */
 export const history: HistoryEvent[] = [
-  historyEvent(
-    "9b41c07aaaa",
-    "2026-10-02T14:03:00Z",
-    "Tighten the examples",
-    [{ path: "examples.md", status: "modified" }],
-    { foreign: true }
-  ),
+  historyEvent("9b41c07aaaa", "2026-10-02T14:03:00Z", "Tighten the examples", [
+    { path: "examples.md", status: "modified" },
+  ]),
   historyEvent(
     "4c2e9a1bbbb",
     "2026-10-02T11:20:00Z",
@@ -350,8 +342,9 @@ export const history: HistoryEvent[] = [
         kind: "source",
         path: "pdf",
         skill: "pdf",
+        skill_url: `${ACME}/tree/3f2a9c1e8d7/pdf`,
         source: ACME,
-        url: `${ACME}/tree/main/pdf`,
+        url: ACME,
       },
     }
   ),
@@ -362,8 +355,7 @@ export const history: HistoryEvent[] = [
     [
       { path: "SKILL.md", status: "added" },
       { path: "reference.md", status: "added" },
-    ],
-    { import: true }
+    ]
   ),
 ];
 
@@ -379,7 +371,7 @@ const skillFile = (
   binary: false,
   name,
   path,
-  schema_version: 2,
+  schema_version: 3,
   size: 0,
   type: "skill_file",
   ...fields,
@@ -428,7 +420,7 @@ const diffEvent = (
   name,
   patch,
   path,
-  schema_version: 2,
+  schema_version: 3,
   status,
   type: "diff",
 });

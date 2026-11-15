@@ -5,7 +5,7 @@
 
 // The output schema version this app reads. An event of another version is
 // refused.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // What every event starts with.
 export interface Envelope {
@@ -150,6 +150,7 @@ export interface ForkOrigin {
   source?: string;
   path?: string;
   url?: string;
+  skill_url?: string;
 }
 
 export interface ConflictFile {
@@ -436,8 +437,6 @@ export interface HistoryEvent {
   subject: string;
   message: string;
   machine?: string;
-  import: boolean;
-  foreign: boolean;
   files: ChangedFile[];
   origin?: ForkOrigin;
 }

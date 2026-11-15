@@ -43,8 +43,6 @@ type historyEvent struct {
 	Subject string        `json:"subject"`
 	Message string        `json:"message"`
 	Machine string        `json:"machine,omitempty"`
-	Import  bool          `json:"import"`
-	Foreign bool          `json:"foreign"`
 	Files   []changedFile `json:"files"`
 	Origin  *forkOrigin   `json:"origin,omitempty"`
 }
@@ -55,7 +53,10 @@ type historyEvent struct {
 // Skill is the original skill's name; Plugin and Marketplace name the
 // plugin of a plugin's skill, Source and Path the canonical URL and the
 // directory of a source's skill, Path "" for the root. URL is where the
-// origin can be seen on the web, an http or https URL, when it is known.
+// origin can be seen on the web, an http or https URL, when it is known,
+// and SkillURL, for a source's skill on a host whose web pages agentx
+// knows, the page of the skill's directory at the upstream commit the fork
+// was made from.
 type forkOrigin struct {
 	Kind        string `json:"kind"`
 	Skill       string `json:"skill"`
@@ -64,6 +65,7 @@ type forkOrigin struct {
 	Source      string `json:"source,omitempty"`
 	Path        string `json:"path,omitempty"`
 	URL         string `json:"url,omitempty"`
+	SkillURL    string `json:"skill_url,omitempty"`
 }
 
 // The kinds of a fork's origin.
@@ -95,7 +97,9 @@ func historyOrigin(t lineage.ForkTrailers, parent *lineage.Commit) *forkOrigin {
 	if err != nil {
 		return nil
 	}
-	return &forkOrigin{Kind: originSource, Skill: imp.Dir(), Source: imp.Source, Path: imp.Path, URL: weburl.Of(imp.Source)}
+	web := weburl.Of(imp.Source)
+	return &forkOrigin{Kind: originSource, Skill: imp.Dir(), Source: imp.Source, Path: imp.Path, URL: web,
+		SkillURL: weburl.Tree(web, imp.Commit, imp.Path)}
 }
 
 // forkLogCommit is one commit of a fork's branch as git log wrote it.
@@ -114,11 +118,10 @@ const historyFormat = "--format=%x01%H%x00%P%x00%aI%x00%an <%ae>%x00%B%x00"
 // one git log of its branch: every commit reachable from the tip, the
 // imports a merge took in as its second parent included, each with the
 // files it changes against its first parent, a root commit against
-// nothing, so an import lists every file it holds as added. A commit is an
-// import when it has no parent and carries the import trailers, and
-// foreign when it is not one and carries no Agentx-Machine, which every
-// commit agentx writes on a fork's branch carries: it was made with git
-// directly. Every path is relative to the skill's directory. Nothing is
+// nothing, so an import lists every file it holds as added. A commit
+// with no Agentx-Machine, which every commit agentx writes on a fork's
+// branch carries, was made with git directly. Every path is relative to
+// the skill's directory. Nothing is
 // written, and the fork needs no worktree on this machine.
 func (inv *invocation) skillHistory(ctx context.Context, name string) error {
 	gitDir, rec, held, err := inv.accountRecord(ctx, name)
@@ -211,8 +214,8 @@ func (inv *invocation) reportHistory(name, dir string, commits []forkLogCommit) 
 		ev := historyEvent{event: newEvent("history"), Name: name, Commit: c.id, Parents: c.parents, Time: c.time, Author: c.author,
 			Message: strings.TrimRight(c.message, "\n"), Files: []changedFile{}}
 		ev.Subject, _, _ = strings.Cut(ev.Message, "\n")
-		ev.Import = lineage.IsImport(lineage.Commit{ID: c.id, Parents: c.parents, Message: c.message})
-		if t, err := lineage.ParseFork(c.message); err == nil && !ev.Import {
+		imported := lineage.IsImport(lineage.Commit{ID: c.id, Parents: c.parents, Message: c.message})
+		if t, err := lineage.ParseFork(c.message); err == nil && !imported {
 			ev.Machine = t.Machine
 			var parent *lineage.Commit
 			if len(c.parents) > 0 {
@@ -222,7 +225,6 @@ func (inv *invocation) reportHistory(name, dir string, commits []forkLogCommit) 
 			}
 			ev.Origin = historyOrigin(t, parent)
 		}
-		ev.Foreign = !ev.Import && ev.Machine == ""
 		for _, f := range c.files {
 			f.Path = historyPath(f.Path, dir)
 			ev.Files = append(ev.Files, f)

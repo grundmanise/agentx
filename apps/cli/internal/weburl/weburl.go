@@ -100,6 +100,42 @@ func GitHub(repo string) string {
 	return "https://github.com/" + strings.TrimSuffix(repo, ".git")
 }
 
+// Tree is the web page of the directory path, "" for the root, of the
+// repository whose web URL is repo, at commit, on a host whose page of a
+// directory agentx knows: GitHub, GitLab and Bitbucket. Each segment of
+// the path is escaped. "" for another host or a repo that is not a web
+// URL. Pure.
+func Tree(repo, commit, path string) string {
+	if !Is(repo) || commit == "" {
+		return ""
+	}
+	u, err := url.Parse(repo)
+	if err != nil {
+		return ""
+	}
+	var at string
+	switch strings.ToLower(u.Hostname()) {
+	case "github.com":
+		at = "/tree/"
+	case "gitlab.com":
+		at = "/-/tree/"
+	case "bitbucket.org":
+		at = "/src/"
+	default:
+		return ""
+	}
+	page := strings.TrimSuffix(repo, "/") + at + url.PathEscape(commit)
+	for _, segment := range strings.Split(path, "/") {
+		if segment != "" {
+			page += "/" + url.PathEscape(segment)
+		}
+	}
+	if !Is(page) {
+		return ""
+	}
+	return page
+}
+
 // Is reports whether s is a web URL agentx writes down: an http or https
 // URL, the scheme in lowercase, of a DNS name or an IP address, with no
 // user or password, no whitespace and no control character, of at most

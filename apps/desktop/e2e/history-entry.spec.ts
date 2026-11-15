@@ -2,7 +2,11 @@
 // and collapses again, and the subject of the commit that created a fork links to its origin's page.
 import type { Page } from "@playwright/test";
 
-import { originPage, originParts } from "#/screens/skills/history.tsx";
+import {
+  originPage,
+  originParts,
+  subjectSegments,
+} from "#/screens/skills/history.tsx";
 
 import {
   ACME,
@@ -62,7 +66,7 @@ test("an entry expands to its files and collapses again", async ({
   await expect(filesOf(page)).toHaveCount(0);
 });
 
-test("the subject of a fork's first commit links to the page it came from", async ({
+test("the subject of a fork's first commit links to the skill and the page it came from", async ({
   cli,
   page,
 }) => {
@@ -75,10 +79,14 @@ test("the subject of a fork's first commit links to the page it came from", asyn
   await files.click();
   await expect(files).toHaveAttribute("aria-expanded", "true");
 
-  const link = sheet(page).getByRole("link");
-  await expect(link).toHaveText(`${ACME}/pdf`);
-  await link.click();
-  await expect.poll(() => cli.openedUrls).toEqual([`${ACME}/tree/main/pdf`]);
+  // The fork's name leads to the skill's folder at the forked commit, the source to its page.
+  const links = sheet(page).getByRole("link");
+  await expect(links).toHaveText(["pdf-letters", `${ACME}/pdf`]);
+  await links.first().click();
+  await links.last().click();
+  await expect
+    .poll(() => cli.openedUrls)
+    .toEqual([`${ACME}/tree/3f2a9c1e8d7/pdf`, ACME]);
 });
 
 test("a fork's origin links its name, and only to an https page", () => {
@@ -123,6 +131,9 @@ test("a fork's origin links its name, and only to an https page", () => {
     })?.name
   ).toBe("https://github.com/acme/skills/tools/two words");
   expect(originParts({ ...fork, subject: "Rename it" })).toBeUndefined();
+  // Only a fork of a source's skill links the fork's name.
+  expect(subjectSegments(fork).map((r) => r.page)).toEqual([undefined, url]);
+
   expect(originPage({ ...fork, origin })).toBeUndefined();
   expect(
     originPage({ ...fork, origin: { ...origin, url: "http://example.com" } })
