@@ -813,9 +813,13 @@ Pill button: `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent
 | Hover | border `agent-chip.hover-border` |
 | Pending | `cursor:wait`, a `Spinner` in place of the switch |
 | Locked | 45% opacity, `cursor:not-allowed`; a click toasts the reason |
-| Displaced | a `type.technical-sm` line in `tone.attention.fg` under the name; a click runs nothing and toasts why |
+| Displaced | on, with a `type.technical-sm` line in `tone.attention.fg` under the name; inert |
+| Inherited | on, seen only through another agent's placement, as Cursor reads Claude Code's skills folder; inert |
+| Inert | the switch at 50% opacity, `cursor:default`, no hover border; a click runs nothing, and the Tooltip (§6 "Tooltip") says why and how to change it. The chip keeps focus, so the keyboard opens the Tooltip too |
 
 The Universal chip, on, opens the Remove dialog: a universal client reads the library, so a skill leaves it only by leaving the machine.
+
+The chip of an agent whose folder another agent reads names both in its title and its toast: "Remove from Claude Code and Cursor".
 
 - Order: the chips that are on, then the rest by the popularity of the agent client (`src/lib/agent-popularity.ts`), the clients it does not rank by name. Universal stands where its most used client would. The order is fixed when the pane opens, so a chip stays in place when it is toggled.
 - A machine can have dozens of agent configurations, so the section shows two rows of chips, measured at the pane's width, and a small ghost button in the second row, centred on the chips, that shows the rest and hides them again. Every chip that is on, or was on since the pane opened, stays in view, in more rows when two cannot hold them. No button when every chip fits in two rows.
@@ -1016,7 +1020,7 @@ The rows of the Skills list column, in their groups (§6 "Group header"). Only t
 
 ### Tooltip
 
-shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, or shows the full text of a shortened label, such as a source group's URL: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs.
+shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, shows the full text of a shortened label, such as a source group's URL, or says why an inert agent chip does nothing: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs, but for an inert agent chip, whose reason it describes.
 
 ### Popover (Filter)
 

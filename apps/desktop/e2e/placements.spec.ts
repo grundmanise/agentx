@@ -3,7 +3,12 @@
 // and shows pending until the command ends and serve answers the refresh that follows.
 import type { Locator, Page } from "@playwright/test";
 
-import { inventory, manyAgentsInventory, sources } from "./fixtures/agents.ts";
+import {
+  inventory,
+  LIBRARY,
+  manyAgentsInventory,
+  sources,
+} from "./fixtures/agents.ts";
 import {
   adoption,
   fileReads,
@@ -245,16 +250,74 @@ test.describe("chips", () => {
     ).toBeVisible();
   });
 
-  test("a displaced chip says to reconnect it first", async ({ cli, page }) => {
+  test("a displaced chip runs nothing, and its tooltip says to reconnect it", async ({
+    cli,
+    page,
+  }) => {
     await openSkill(cli, page, "release-notes");
     const cursor = chip(pane(page, "release-notes"), "Cursor, displaced");
     await expect(cursor).toBeChecked();
-    await cursor.click();
+    await expect(cursor).toHaveAttribute("aria-disabled", "true");
+    await cursor.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "Cursor owns a copy of release-notes, so your library changes don't reach it. Reconnect it from the banner to manage it here"
+    );
+    await cursor.click({ force: true });
+    expect(later(cli)).toEqual([]);
+  });
+
+  test("an agent that sees the skill through another's folder: its chip runs nothing, and the other's removes it from both", async ({
+    cli,
+    page,
+  }) => {
+    // Cursor reads Claude Code's skills directory, so it sees pdf through Claude Code's placement.
+    const path = "/home/me/.claude-code/skills/pdf";
+    const throughClaude = {
+      ...inventory,
+      skills: inventory.skills.map((node) =>
+        node.name === "pdf"
+          ? {
+              ...node,
+              occurrences: [
+                ...node.occurrences,
+                {
+                  configuration: "cursor",
+                  id: `cursor:${path}`,
+                  kind: "symlink" as const,
+                  path,
+                  resolved_path: `${LIBRARY}/pdf`,
+                  scope: "user" as const,
+                },
+              ],
+            }
+          : node
+      ),
+    } satisfies InlineEvent;
+    await openSkill(cli, page, "pdf", "pdf", throughClaude);
+    const article = pane(page, "pdf");
+    const cursor = chip(article, "Cursor");
+    await expect(cursor).toBeChecked();
+    await expect(cursor).toHaveAttribute("aria-disabled", "true");
+    await cursor.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "Cursor reads Claude Code's skills folder, so it sees pdf there. Remove it from Claude Code to remove it from both"
+    );
+    await cursor.click({ force: true });
+    expect(later(cli)).toEqual([]);
+
+    const claude = chip(article, "Claude Code");
+    await expect(claude).toHaveAttribute(
+      "title",
+      "Remove from Claude Code and Cursor"
+    );
+    cli.register(["skill", "remove", "pdf", "--from", "claude-code"]);
+    await claude.click();
     await expect(
-      toasts(page).getByText(
-        "Reconnect it first, then manage it from your library"
-      )
+      toasts(page).getByText("Removed pdf from Claude Code and Cursor")
     ).toBeVisible();
+    expect(later(cli)).toEqual([
+      ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
+    ]);
   });
 });
 
