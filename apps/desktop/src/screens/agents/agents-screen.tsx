@@ -108,7 +108,7 @@ const PlacementControl = ({
       action:
         n > 0
           ? {
-              label: `Convert ${n}`,
+              label: "Convert existing",
               onClick: () => {
                 convert(c, mode);
               },

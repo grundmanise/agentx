@@ -218,9 +218,7 @@ test("choosing Copy on a card runs config placement, the control follows the nex
       },
     ],
   });
-  await toasts(page)
-    .getByRole("button", { name: /^Convert \d+$/u })
-    .click();
+  await toasts(page).getByRole("button", { name: "Convert existing" }).click();
   await expect.poll(() => cli.serveRequests.length).toBe(2);
   await cli.serveEmit([
     { ...inventory, scan_counter: 3 },
