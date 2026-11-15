@@ -452,6 +452,7 @@ test.describe("filters", () => {
     // Off: enabled skills first, then disabled ones, each A to Z.
     const toggle = page.getByRole("button", { name: /^Sort: /u });
     await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
+    await expect(toggle).toHaveText("A-Z");
     expect(await rowNames(personal)).toEqual([
       "pdf-letters",
       "release-notes",
