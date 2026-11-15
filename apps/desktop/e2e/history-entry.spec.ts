@@ -108,6 +108,20 @@ test("a fork's origin links its name, and only to an https page", () => {
       subject: "Fork alpha-2 from alpha",
     })
   ).toEqual({ after: "", before: "Fork alpha-2 from ", name: "alpha" });
+  // A source's path as the CLI writes it into the subject, its runs of spaces as one.
+  expect(
+    originParts({
+      ...first,
+      origin: {
+        kind: "source",
+        path: "tools/two  words",
+        skill: "words",
+        source: "https://github.com/acme/skills",
+      },
+      subject:
+        "Fork words from https://github.com/acme/skills/tools/two words at 3f2a9c1",
+    })?.name
+  ).toBe("https://github.com/acme/skills/tools/two words");
   expect(originParts({ ...fork, subject: "Rename it" })).toBeUndefined();
   expect(originPage({ ...fork, origin })).toBeUndefined();
   expect(

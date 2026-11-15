@@ -42,6 +42,16 @@ export const originPage = (e: HistoryEvent) => {
   return url?.startsWith("https://") === true ? url : undefined;
 };
 
+/**
+ * Text as the CLI writes it into a commit's subject: a control character as a space, runs of
+ * spaces as one, none at either end.
+ */
+const displayed = (text: string) =>
+  text
+    .replaceAll(/\p{Cc}/gu, " ")
+    .replaceAll(/ +/gu, " ")
+    .trim();
+
 const originName = (origin: ForkOrigin) => {
   if (origin.kind === "plugin" && origin.plugin !== undefined) {
     return origin.plugin;
@@ -60,7 +70,7 @@ const originName = (origin: ForkOrigin) => {
  * writes them after "from". Undefined when the subject does not name it.
  */
 export const originParts = (e: HistoryEvent) => {
-  const name = e.origin === undefined ? "" : originName(e.origin);
+  const name = e.origin === undefined ? "" : displayed(originName(e.origin));
   const from = e.subject.indexOf(" from ");
   const at =
     name === "" || from === -1
@@ -84,13 +94,13 @@ const Subject = ({ entry }: { entry: HistoryEvent }) => {
   const parts = page === undefined ? undefined : originParts(entry);
   if (page === undefined || parts === undefined) {
     return (
-      <span className="type-timeline-entry text-text-primary">
+      <span className="type-timeline-entry text-text-primary min-w-0 wrap-break-word">
         {entry.subject}
       </span>
     );
   }
   return (
-    <span className="type-timeline-entry text-text-primary">
+    <span className="type-timeline-entry text-text-primary min-w-0 wrap-break-word">
       {parts.before}
       <a
         href={page}
