@@ -496,8 +496,7 @@ func TestSourceSkillsListsAURLNotAdded(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stdout", out.stdout, "2 skills in "+s.url+" under skills at "+head[:7]+"\n"+
 		"  alpha  skills/alpha  The first skill\n"+
-		"  beta   skills/beta   The second skill\n"+
-		"Not added as a source. Install a skill with agentx skill add "+s.url+" --name <name>.\n")
+		"  beta   skills/beta   The second skill\n")
 	after, err := os.ReadFile(settingsFile)
 	if err != nil {
 		t.Fatal(err)

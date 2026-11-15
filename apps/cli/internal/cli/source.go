@@ -560,8 +560,6 @@ func (inv *invocation) listUnadded(ctx context.Context, src source.Source) error
 		return err
 	}
 	inv.printSourceSkills(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL}, src, listing)
-	out := inv.out
-	out.print("Not added as a source. Install a skill with ", out.paint(label, "agentx skill add "+sourceAddArg(src.URL, src.Ref)+" --name <name>"), ".")
 	return nil
 }
 
