@@ -12,7 +12,8 @@ import (
 // holds, beside the upstream's files, a nested script, a binary file, a
 // file over the limit, a file git ignores, a file with control characters
 // and a byte that is not UTF-8, and a symlink to a file: one event per
-// file sorted by path, each as the golden fixture pins it, the binary and
+// file sorted by path, each as the golden fixture pins it, the system files
+// Finder leaves left out, the binary and
 // the oversized file described and never dumped, the ignored file marked,
 // the control characters passed through JSON escaping alone. A symlink to
 // a directory is left out with a warning. The library is only read.
@@ -27,6 +28,8 @@ func TestSkillFilesReadsEveryFileOfALibrarySkill(t *testing.T) {
 	writeFile(t, filepath.Join(lib, "notes.md"), "tab\there, an escape \x1b[31m, caf\xe9 and no newline at the end")
 	writeFile(t, filepath.Join(lib, "empty.md"), "")
 	link(t, "a.md", filepath.Join(lib, "alias.md"))
+	writeFile(t, filepath.Join(lib, ".DS_Store"), "\x00\x00\x00\x01Bud1")
+	writeFile(t, filepath.Join(lib, "bin", ".DS_Store"), "\x00\x00\x00\x01Bud1")
 	before := libraryEntries(t, h)
 	edited := libraryTree(t, lib)
 
@@ -92,7 +95,8 @@ func TestSkillFilesReadsEveryFileOfALibrarySkill(t *testing.T) {
 // TestSkillFilesReadsAPluginSkillAndAConfigurationSkill reads a skill a
 // plugin provides, named as skill fork names it, and a skill directory of
 // a configuration's own, which the library does not hold and no plugin
-// provides, whose symlink to a directory is left out with a warning, and
+// provides, whose symlink to a directory is left out with a warning and
+// whose .DS_Store is left out silently, and
 // refuses what none of them holds: a name no plugin
 // provides, a configuration that is not detected, a skill the configuration
 // does not hold and an empty --configuration.
@@ -104,6 +108,7 @@ func TestSkillFilesReadsAPluginSkillAndAConfigurationSkill(t *testing.T) {
 	writeFile(t, mkdirs(t, commit, "SKILL.md"), skill("commit", "Write a commit message"))
 	writeFile(t, mkdirs(t, filepath.Join(commit, "ref"), "a.md"), "a reference\n")
 	link(t, "ref", filepath.Join(commit, "docs"))
+	writeFile(t, filepath.Join(commit, ".DS_Store"), "\x00\x00\x00\x01Bud1")
 
 	out := h.mustRun("--json", "skill", "files", "formatter:format")
 	ev := h.one(out.stdout, "skill_file")
@@ -169,5 +174,28 @@ func TestFileFacts(t *testing.T) {
 		binary, truncated, lines := fileFacts([]byte(tc.data), tc.size)
 		got := fmt.Sprintf("%t %t %d", binary, truncated, lines)
 		equal(t, tc.name, got, fmt.Sprintf("%t %t %d", tc.binary, tc.truncated, tc.lines))
+	}
+}
+
+// TestHiddenSystemFile: while ignore_system_files is on, a system file is
+// left out wherever it is in the skill, unless git was asked and does not
+// ignore it, as when the version the skill is compared with holds it.
+func TestHiddenSystemFile(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		rel     string
+		ignored map[string]bool
+		want    bool
+	}{
+		{".DS_Store", nil, true},
+		{"ref/.DS_Store", nil, true},
+		{".AppleDouble/a.md", nil, true},
+		{"notes.md~", nil, true},
+		{"SKILL.md", nil, false},
+		{".DS_Store", map[string]bool{".DS_Store": true}, true},
+		{".DS_Store", map[string]bool{}, false},
+		{"node_modules/a.js", map[string]bool{"node_modules/a.js": true}, false},
+	} {
+		equal(t, fmt.Sprintf("%s with %v", tc.rel, tc.ignored), hiddenSystemFile(tc.rel, tc.ignored), tc.want)
 	}
 }

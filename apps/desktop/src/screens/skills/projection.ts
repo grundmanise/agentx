@@ -64,12 +64,22 @@ export interface SkillRow {
   forkedFrom?: string;
 }
 
+/** The skills of one plugin, under their own header in the PLUGINS group. */
+export interface Subgroup {
+  key: string;
+  label: string;
+  rows: SkillRow[];
+}
+
 export interface Group {
   key: string;
   label: string;
   /** The full URL of a source's group, which its header's tooltip shows. */
   source?: string;
+  /** Every row of the group, in the order the list shows them: subgroup by subgroup when it has them. */
   rows: SkillRow[];
+  /** The PLUGINS group's skills by plugin, A to Z by the plugin's name. */
+  subgroups?: Subgroup[];
 }
 
 /**
@@ -385,9 +395,42 @@ const comparer = (order: SortOrder) => {
     : (a: SkillRow, b: SkillRow) => compareNames(b, a);
 };
 
+/** The name of the plugin that provides a plugin's skill. */
+const pluginNameOf = (row: SkillRow) =>
+  row.plugin?.name ?? row.occurrences[0]?.plugin ?? "";
+
+/**
+ * The key of a plugin's subgroup: the plugin's name and its marketplace, so a plugin installed
+ * in several agent clients is one subgroup, and two marketplaces' plugins of one name are two.
+ */
+export const subgroupKey = (row: SkillRow) =>
+  `${GROUP_PLUGINS}:${pluginNameOf(row)}@${row.plugin?.marketplace ?? ""}`;
+
+/** Whether a row is in a plugin's subgroup that is collapsed, so the list hides it. */
+export const inCollapsed = (row: SkillRow, collapsed: ReadonlySet<string>) =>
+  row.group === GROUP_PLUGINS && collapsed.has(subgroupKey(row));
+
+/** A plugin group's skills by plugin, A to Z by the plugin's name; each keeps the order of `rows`. */
+const pluginSubgroups = (rows: SkillRow[]): Subgroup[] => {
+  const byKey = new Map<string, Subgroup>();
+  for (const row of rows) {
+    const key = subgroupKey(row);
+    let subgroup = byKey.get(key);
+    if (subgroup === undefined) {
+      subgroup = { key, label: pluginNameOf(row).toUpperCase(), rows: [] };
+      byKey.set(key, subgroup);
+    }
+    subgroup.rows.push(row);
+  }
+  return sorted(
+    [...byKey.values()],
+    (a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key)
+  );
+};
+
 /**
  * The rows in groups: PERSONAL, each source A to Z by its short form, PLUGINS, then UNMANAGED,
- * each sorted in `order`. A group with no row is left out.
+ * each sorted in `order`. PLUGINS holds one subgroup per plugin. A group with no row is left out.
  */
 export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
   const keys = [...new Set(rows.map((r) => r.group))];
@@ -399,14 +442,17 @@ export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
     (k) => keys.includes(k)
   );
   return ordered.map((key) => {
-    const inGroup = rows.filter((r) => r.group === key);
-    const group: Group = {
-      key,
-      label: groupLabel(key),
-      rows: sorted(inGroup, comparer(order)),
-    };
+    const inGroup = sorted(
+      rows.filter((r) => r.group === key),
+      comparer(order)
+    );
+    const group: Group = { key, label: groupLabel(key), rows: inGroup };
     if (key.startsWith(SOURCE_PREFIX)) {
       group.source = key.slice(SOURCE_PREFIX.length);
+    }
+    if (key === GROUP_PLUGINS) {
+      group.subgroups = pluginSubgroups(inGroup);
+      group.rows = group.subgroups.flatMap((s) => s.rows);
     }
     return group;
   });
@@ -623,18 +669,22 @@ export interface SkillLocation {
   key: string;
   /** "Library", or the agent client's name, with the plugin for a plugin's copy. */
   label: string;
-  /** The path as the inventory carries it, shown as written. */
+  /** The path as the inventory carries it: for a symlink, the link itself. */
   path: string;
   /** The directory Finder opens: where the place resolves. */
   directory: string;
+  /** Whether the place is a symlink, which the menu shows by where it leads, `directory`. */
+  symlink: boolean;
 }
 
 /**
  * Every place a skill is on disk, the one Show in Finder opens first: for a skill the library
  * holds, the library entry, `<library>/<name>`, then each placement in a client's own skills
  * directory; for a skill a client holds on its own, or a plugin's, each occurrence. Placements
- * and occurrences come in the order the row lists its agents, then by path. `library` is where
- * agentx keeps the library, from `machine`; without it a library skill's placements are all.
+ * and occurrences come in the order the row lists its agents, then by path. A symlink that leads
+ * where an earlier symlink of the same agent client leads is left out, as the menu would show the
+ * same row twice. `library` is where agentx keeps the library, from `machine`; without it a library
+ * skill's placements are all.
  */
 export const locationsOf = (
   row: SkillRow,
@@ -648,12 +698,25 @@ export const locationsOf = (
     return at === -1 ? row.agents.length : at;
   };
   const locations: SkillLocation[] = [];
+  const add = (location: SkillLocation) => {
+    const shown = locations.some(
+      (l) =>
+        location.symlink &&
+        l.symlink &&
+        l.label === location.label &&
+        l.directory === location.directory
+    );
+    if (!shown) {
+      locations.push(location);
+    }
+  };
   if (row.entry !== undefined && library !== undefined) {
-    locations.push({
+    add({
       directory: `${library}/${row.name}`,
       key: "library",
       label: "Library",
       path: `${library}/${row.name}`,
+      symlink: false,
     });
   }
   if (row.entry === undefined) {
@@ -664,7 +727,7 @@ export const locationsOf = (
         a.path.localeCompare(b.path)
     );
     for (const o of occurrences) {
-      locations.push({
+      add({
         directory: o.resolved_path,
         key: o.id,
         label:
@@ -672,6 +735,7 @@ export const locationsOf = (
             ? name(o.configuration)
             : `${name(o.configuration)} (${o.plugin} plugin)`,
         path: o.path,
+        symlink: o.kind === "symlink",
       });
     }
     return locations;
@@ -686,11 +750,12 @@ export const locationsOf = (
     const through = row.occurrences.find(
       (o) => o.configuration === p.configuration && o.path === p.path
     );
-    locations.push({
+    add({
       directory: through?.resolved_path ?? p.path,
       key: `${p.configuration}:${p.path}`,
       label: name(p.configuration),
       path: p.path,
+      symlink: p.kind === "symlink",
     });
   }
   return locations;

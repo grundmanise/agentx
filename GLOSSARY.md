@@ -52,6 +52,10 @@ One placement of a physical asset inside one agent configuration.
 The complete result of one scan of one machine: its agent configurations with their skills, MCP servers and plugins. Replaced whole on every rescan, never edited. A snapshot is an inventory saved with the machine settings, which, unlike a scan's, may be partial.
 _Avoid_: scan result, state
 
+**Kept inventory**:
+The last inventory the desktop app applied, kept in the app's own storage with the settings, machine, sources and adoption preview it loaded. A launch shows it, washed out and pulsing, until the startup checks pass; no command runs against it, and the serve child's first inventory replaces it.
+_Avoid_: cached snapshot, last session, offline inventory
+
 **Snapshot**:
 An inventory saved with the machine settings, in a file or on the account remote, where each machine has at most one. Leaves out what only describes the machine it was taken on: absolute paths, state and drift, scan counters and physical ids. Import applies it: it installs and places the skills it lists, each at its version or, for an entry with no version, which follows, at the latest; it skips a skill it cannot install, such as an unmanaged skill, and ignores MCP servers and plugins for now. A computer takes its own as a backup, with every entry exact; the cloud machine's is written by `skill place` and `skill remove` naming it, from the desktop app or the CLI, or by the web app, and may be partial. A scan's inventory is always complete.
 _Avoid_: machine snapshot, machine document, export file, profile, manifest, pinned (for an entry's version)

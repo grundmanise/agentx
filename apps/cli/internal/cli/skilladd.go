@@ -46,7 +46,9 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 			"'agentx source add' would; an added source is installed from as it was last\n" +
 			"fetched, unless --fetch fetches it again. Name the skills with --name, once for\n" +
 			"each, or take the whole source with --all and leave out what you do not want\n" +
-			"with --except.\n\n" +
+			"with --except. A path that holds one skill needs no --name, so a link to a\n" +
+			"skill's folder or to its SKILL.md, copied from GitHub or GitLab, installs it;\n" +
+			"a link at the source's default branch pins nothing.\n\n" +
 			"With no source, install your own skills from the account remote, which is\n" +
 			"fetched every time: the ones you name with --name, or with --all every one this\n" +
 			"machine lacks. Each is the same skill, with its history, that you publish back\n" +
@@ -55,6 +57,7 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 			"placements; any other directory the library holds of the name is refused.",
 		Example: examples(
 			"agentx skill add anthropics/skills --name pdf", "install one skill from a GitHub repository",
+			"agentx skill add https://github.com/anthropics/skills/tree/main/skills/pdf", "install one skill from a link to its folder",
 			"agentx skill add anthropics/skills --all --except pdf", "install every other skill of the source",
 			"agentx skill add owner/repo#v2 --name pdf --to cursor", "install from a pinned tag, into one client",
 			"agentx skill add anthropics/skills --name pdf --fetch", "fetch the source again first",
@@ -111,6 +114,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		if entry.Account {
 			return forkSourceIs(entry.URL, entry)
 		}
+		src = inv.linkPin(ctx, src, entry)
 		if src.Ref != "" && src.Ref != entry.Pin {
 			return pinMismatch(src, entry)
 		}
@@ -124,6 +128,12 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	targets, err := inv.placementTargets(to)
 	if err != nil {
 		return err
+	}
+	// A source this run adds from a link at its default branch is added
+	// unpinned; git is asked which branch that is once the arguments are
+	// known to be good, since asking is network.
+	if add {
+		src = inv.linkPin(ctx, src, home.Source{})
 	}
 	// A source this run adds, or fetches because --fetch asked, is fetched
 	// once, outside the lock, and the install reads the listing that fetch

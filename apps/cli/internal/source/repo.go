@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"slices"
 	"sort"
@@ -490,6 +491,46 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing
 		return Listing{}, err
 	}
 	return Listing{Commit: commit, Skills: skills}, nil
+}
+
+// ListUnadded builds the listing of s straight from its repository, for a
+// URL the settings hold no source for, and leaves nothing of it in agentx
+// home: no remote, no ref, and no account repo where there was none. It
+// makes the fetch Fetch makes, the commit and its trees without blobs, then
+// the SKILL.md blobs in one batch, into a bare repository of its own in the
+// temporary directory, which goes when the listing is built, whether it was
+// or not, a stop included: a stop cancels the git in flight and the run
+// unwinds through here. The repository is this run's alone, so the
+// listing takes no lock and never blocks a scan. It holds a remote by the
+// source's own name, the one Fetch fetches through, and nothing else, so
+// that the user's configuration applies to this source as it would once
+// added. Of that remote only its URL is written: the refspec, the promisor
+// settings and --no-tags are on the command line of every fetch Fetch
+// makes. The listing has no Previous and no Trees: nothing was there before
+// and nothing keeps them.
+func ListUnadded(ctx context.Context, r *gitx.Runner, s Source) (Listing, error) {
+	dir, err := os.MkdirTemp("", "agentx-listing-*")
+	if err != nil {
+		return Listing{}, err
+	}
+	defer os.RemoveAll(dir)
+	for _, args := range [][]string{
+		{"init", "--bare", "--quiet"},
+		{"config", "remote." + RemoteName(s.ID()) + ".url", s.URL},
+		// No maintenance: a fetch can start an automatic gc in the
+		// background, which would still be writing into the directory as
+		// it is removed.
+		{"config", "gc.auto", "0"},
+	} {
+		if _, err := r.Isolated(ctx, dir, args...); err != nil {
+			return Listing{}, err
+		}
+	}
+	listing, err := Fetch(ctx, r, dir, s)
+	if err != nil {
+		return Listing{}, err
+	}
+	return Listing{Commit: listing.Commit, Skills: listing.Skills}, nil
 }
 
 // Configured reports whether the account repo holds the remote of the

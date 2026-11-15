@@ -1,6 +1,7 @@
 import { cva } from "class-variance-authority";
 import { useId } from "react";
 
+import { Checkbox } from "#/components/ui/checkbox.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import { statusLabels } from "#/screens/sources/projection.ts";
 import type { CardGroup, SkillCard } from "#/screens/sources/projection.ts";
@@ -49,6 +50,15 @@ const statusVariants = cva("type-secondary flex-none font-medium", {
   },
 });
 
+/** What a card or row is described by: its status, if any, then its description. */
+const cardDescription = (card: SkillCard) =>
+  [
+    card.status === undefined ? undefined : statusLabels[card.status],
+    card.description,
+  ]
+    .filter((part) => part !== undefined && part !== "")
+    .join(". ");
+
 /**
  * One skill of a source as a card (DESIGN.md §2.2 "Cards and banners", `add-card.*`): its name,
  * its description and the round check, or, for a skill this machine holds already, its status in
@@ -67,9 +77,7 @@ const SkillCardItem = ({
   const descriptionId = useId();
   const status =
     card.status === undefined ? undefined : statusLabels[card.status];
-  const description = [status, card.description]
-    .filter((part) => part !== undefined && part !== "")
-    .join(". ");
+  const description = cardDescription(card);
   return (
     <Toggle
       kind="card"
@@ -148,4 +156,90 @@ export const SkillCards = ({
       </section>
     ))}
   </div>
+);
+
+/**
+ * One skill as a row of the Add skill dialog's list: its name over its description, then the
+ * round checkbox, or, for a skill this machine holds already, its status in the card's colour in
+ * place of the checkbox. A selectable row is the whole hit target.
+ */
+const SkillRow = ({
+  card,
+  checked,
+  onToggle,
+}: {
+  card: SkillCard;
+  checked: boolean;
+  onToggle: () => void;
+}) => {
+  const id = useId();
+  const descriptionId = useId();
+  const text = (
+    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="type-body text-text-primary truncate">{card.name}</span>
+      {card.description !== "" && (
+        <span
+          id={descriptionId}
+          className="type-secondary text-text-muted line-clamp-2"
+        >
+          {card.description}
+        </span>
+      )}
+    </span>
+  );
+  if (card.status !== undefined) {
+    return (
+      <li title={card.title} className="flex items-center gap-3 px-3 py-2">
+        {text}
+        <span className={statusVariants({ status: card.status })}>
+          {statusLabels[card.status]}
+        </span>
+      </li>
+    );
+  }
+  return (
+    <li>
+      <label
+        htmlFor={id}
+        className="rounded-add-skill-row hover:bg-add-skill-row-hover has-focus-visible:outline-shell-focus-ring flex cursor-pointer items-center gap-3 px-3 py-2 has-focus-visible:outline-2 has-focus-visible:-outline-offset-2"
+      >
+        {text}
+        <Checkbox
+          id={id}
+          aria-label={card.name}
+          aria-describedby={card.description === "" ? undefined : descriptionId}
+          checked={checked}
+          onCheckedChange={onToggle}
+        />
+      </label>
+    </li>
+  );
+};
+
+/** The skills of a listing as a list of rows to check, which scrolls past `add-skill.list-max-height`. */
+export const SkillRows = ({
+  cards,
+  selected,
+  onToggle,
+}: {
+  cards: SkillCard[];
+  /** The keys of the selected cards. */
+  selected: ReadonlySet<string>;
+  onToggle: (card: SkillCard) => void;
+}) => (
+  <ul
+    aria-label="Skills"
+    className="max-h-add-skill-list m-0 flex list-none flex-col overflow-auto p-0"
+  >
+    {cards.map((card) => (
+      <SkillRow
+        key={card.key}
+        card={card}
+        checked={selected.has(card.key)}
+        onToggle={() => {
+          onToggle(card);
+        }}
+      />
+    ))}
+  </ul>
 );

@@ -18,6 +18,7 @@ import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { count, YOUR_SKILLS_LABEL } from "#/screens/sources/projection.ts";
 import { runCommand, usePending } from "#/store/runner.ts";
+import type { Outcome } from "#/store/runner.ts";
 import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -25,12 +26,36 @@ import { useAppStore } from "#/store/store.ts";
  * The hints of `source add` that name a command, in the app's words: the account remote's skills
  * are the ones under Personal.
  */
-const addSourceHintRules: HintRule[] = [
+export const addSourceHintRules: HintRule[] = [
   {
     app: () => `see and install its skills under ${YOUR_SKILLS_LABEL}`,
     cli: /^run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one$/u,
   },
 ];
+
+/**
+ * What went wrong with a command run on a link the user typed, such as `source add`, in
+ * the CLI's words: a source git cannot reach as "Couldn't reach {link}", and the CLI's hint in the
+ * app's words by `rules`.
+ */
+export const linkProblem = (
+  outcome: Outcome,
+  {
+    command,
+    rules,
+    typed,
+  }: { command: string; rules: readonly HintRule[]; typed: string }
+): Problem => {
+  const error = outcome.events.find((e) => e.type === "error");
+  const message =
+    outcome.exitCode === EXIT_CODES.source
+      ? `Couldn't reach ${typed}`
+      : (error?.message ??
+        outcome.startError ??
+        `agentx ${command} exited with code ${outcome.exitCode ?? "none"}`);
+  const hint = rewriteHint(error?.hint, rules);
+  return hint === undefined ? { message } : { hint, message };
+};
 
 /** The pending label of `source add` from this dialog. */
 export const ADD_SOURCE_LABEL = "add source";
@@ -71,15 +96,13 @@ const AddSourceForm = ({
       onClose();
       return;
     }
-    const error = outcome.events.find((e) => e.type === "error");
-    const message =
-      outcome.exitCode === EXIT_CODES.source
-        ? `Couldn't reach ${typed}`
-        : (error?.message ??
-          outcome.startError ??
-          `agentx source add exited with code ${outcome.exitCode ?? "none"}`);
-    const hint = rewriteHint(error?.hint, addSourceHintRules);
-    setProblem(hint === undefined ? { message } : { hint, message });
+    setProblem(
+      linkProblem(outcome, {
+        command: "source add",
+        rules: addSourceHintRules,
+        typed,
+      })
+    );
     setRefused(typed);
   };
 

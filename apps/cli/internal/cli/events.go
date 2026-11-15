@@ -12,7 +12,7 @@ import (
 
 // schemaVersion is the output schema every event carries. Bump it when an
 // event changes incompatibly.
-const schemaVersion = 2
+const schemaVersion = 3
 
 // event is the envelope every JSON line starts with. Event structs embed it.
 type event struct {
