@@ -1,11 +1,12 @@
 // AGENTS in the detail pane: one toggle chip per configuration that places skills in its own
 // directory, then Universal for the clients that read the library. A chip runs one command and
 // shows pending until the command ends and the next inventory arrives; the inventory then says
-// what the chip shows. A locked or displaced chip runs nothing and toasts why.
+// what the chip shows. A locked chip runs nothing and toasts why.
 //
 // The chips that are on come first, then the rest by the popularity of the agent client. The
 // order is fixed when the pane opens, so a chip stays where it is when it is toggled. Collapsed,
-// the section shows the chips that fit in two rows, and every chip that is on.
+// the section shows the chips that fit in two rows, and every chip that is on. A displaced or
+// inherited chip runs nothing: its switch is disabled, and its Tooltip says why.
 import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -19,8 +20,9 @@ import {
   chipLabel,
   chipStateOf,
   chipTitle,
-  DISPLACED_REASON,
+  inertReason,
   lockReason,
+  removedFrom,
   universalTitle,
 } from "#/screens/skills/placements.ts";
 import { UNIVERSAL } from "#/screens/skills/projection.ts";
@@ -29,9 +31,15 @@ import { runUntilSettled, useSettling } from "#/store/settle.ts";
 
 /**
  * Adds or removes the skill's placement in `c`, with an Undo that does the opposite. Off: `skill
- * place <name> --to <id>`; on: `skill remove <name> --from <id>`.
+ * place <name> --to <id>`; on: `skill remove <name> --from <id>`. `removed` names every agent the
+ * removal takes the skill from: `c` and those that see it only through `c`'s directory.
  */
-const toggle = (row: SkillRow, c: Configuration, add: boolean) => {
+const toggle = (
+  row: SkillRow,
+  c: Configuration,
+  add: boolean,
+  removed: string
+) => {
   void runUntilSettled(
     add
       ? ["skill", "place", row.name, "--to", c.id]
@@ -40,19 +48,27 @@ const toggle = (row: SkillRow, c: Configuration, add: boolean) => {
       action: {
         label: "Undo",
         onClick: () => {
-          toggle(row, c, !add);
+          toggle(row, c, !add, removed);
         },
       },
       label: chipLabel(row, c),
       success: add
         ? `Added ${row.name} to ${c.name}`
-        : `Removed ${row.name} from ${c.name}`,
+        : `Removed ${row.name} from ${removed}`,
     }
   );
 };
 
-const DirectChip = ({ row, c }: { row: SkillRow; c: Configuration }) => {
-  const state = chipStateOf(row, c);
+const DirectChip = ({
+  row,
+  c,
+  configurations,
+}: {
+  row: SkillRow;
+  c: Configuration;
+  configurations: Configuration[];
+}) => {
+  const state = chipStateOf(row, c, configurations);
   const locked = lockReason(row);
   const pending = useSettling(chipLabel(row, c));
   return (
@@ -60,16 +76,15 @@ const DirectChip = ({ row, c }: { row: SkillRow; c: Configuration }) => {
       logo={<AgentLogo client={c} size={28} />}
       name={c.name}
       state={state}
-      title={chipTitle(row, c, state)}
+      title={chipTitle(row, c, state, configurations)}
+      inert={inertReason(row, c, state, configurations)}
       locked={locked !== undefined}
       pending={pending}
       onClick={() => {
         if (locked !== undefined) {
           notify(locked);
-        } else if (state === "displaced") {
-          notify(DISPLACED_REASON);
         } else if (!pending) {
-          toggle(row, c, state === "off");
+          toggle(row, c, state === "off", removedFrom(row, c, configurations));
         }
       }}
     />
@@ -181,10 +196,10 @@ export const AgentsSection = ({
   const locked = lockReason(row);
 
   const entries: Entry[] = direct.map((c) => ({
-    chip: <DirectChip row={row} c={c} />,
+    chip: <DirectChip row={row} c={c} configurations={configurations} />,
     id: c.id,
     name: c.name,
-    on: chipStateOf(row, c) !== "off",
+    on: chipStateOf(row, c, configurations) !== "off",
     rank: popularityOf(c.id),
   }));
   if (universal.length > 0) {

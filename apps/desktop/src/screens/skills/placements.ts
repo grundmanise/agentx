@@ -11,23 +11,117 @@ import type { AgentChipState } from "#/components/agent-chip.tsx";
 import { plural } from "#/lib/plural.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
-/** What a click on a displaced chip toasts: the placement is reconnected from its banner. */
-export const DISPLACED_REASON =
-  "Reconnect it first, then manage it from your library";
+/**
+ * The configurations whose own directory holds `path`: a client that reads another client's skills
+ * directory, as Cursor reads Claude Code's, sees a skill through that client's placement.
+ */
+const ownersOf = (path: string, configurations: Configuration[]) =>
+  configurations.filter((c) => path.startsWith(`${c.path}/`));
+
+/**
+ * The configurations `c` sees the skill through and nothing else: one entry per other client whose
+ * directory holds what `c` sees, in inventory order, or none when `c` sees it at a place of its
+ * own, or not at all. A plugin's skill and a project's are not placements, so they never count.
+ */
+export const inheritedFrom = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+): Configuration[] => {
+  const seen = row.occurrences.filter(
+    (o) =>
+      o.configuration === c.id && o.scope === "user" && o.plugin === undefined
+  );
+  const others = configurations.filter((other) => other.id !== c.id);
+  if (
+    seen.length === 0 ||
+    seen.some((o) => ownersOf(o.path, others).length === 0)
+  ) {
+    return [];
+  }
+  return others.filter((other) =>
+    seen.some((o) => o.path.startsWith(`${other.path}/`))
+  );
+};
 
 /**
  * Whether a configuration sees the skill: through its placement, displaced when the placement's
- * kind on disk is not the one agentx keeps for it (drift `displaced`), or through an occurrence.
+ * kind on disk is not the one agentx keeps for it (drift `displaced`), inherited when it sees the
+ * skill only through another client's placement, or through an occurrence of its own.
  */
 export const chipStateOf = (
   row: SkillRow,
-  c: Configuration
+  c: Configuration,
+  configurations: Configuration[]
 ): AgentChipState => {
   const placement = row.entry?.placements.find((p) => p.configuration === c.id);
   if (placement !== undefined) {
     return placement.kind === placement.mode ? "on" : "displaced";
   }
-  return row.occurrences.some((o) => o.configuration === c.id) ? "on" : "off";
+  if (!row.occurrences.some((o) => o.configuration === c.id)) {
+    return "off";
+  }
+  return inheritedFrom(row, c, configurations).length > 0 ? "inherited" : "on";
+};
+
+/** `a`, `a and b`, `a, b and c`. */
+const andList = (words: string[]) =>
+  words.length < 2
+    ? words.join("")
+    : `${words.slice(0, -1).join(", ")} and ${words.at(-1) ?? ""}`;
+
+/**
+ * The configurations that lose the skill with `c`'s placement: those that see it only through
+ * `c`'s directory, as Cursor sees a skill placed in Claude Code alone.
+ */
+export const dependantsOf = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+): Configuration[] =>
+  configurations.filter((other) => {
+    const from = inheritedFrom(row, other, configurations);
+    return from.length === 1 && from[0]?.id === c.id;
+  });
+
+/** The names a removal from `c` takes the skill from: `c` and every agent that sees it through `c`. */
+export const removedFrom = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+) => andList([c, ...dependantsOf(row, c, configurations)].map((d) => d.name));
+
+/**
+ * Why the switch of a chip in `state` is disabled, or undefined when a click changes what the agent
+ * sees: a displaced placement is put back from the banner first, and an inherited one goes with
+ * the placement it comes through.
+ */
+export const inertReason = (
+  row: SkillRow,
+  c: Configuration,
+  state: AgentChipState,
+  configurations: Configuration[]
+): string | undefined => {
+  switch (state) {
+    case "displaced": {
+      return `${c.name} owns a copy of ${row.name}, so your library changes don't reach it. Reconnect it from the banner to manage it here`;
+    }
+    case "inherited": {
+      const from = inheritedFrom(row, c, configurations);
+      const names = andList(from.map((f) => f.name));
+      const folders = from.length > 1 ? "skills folders" : "skills folder";
+      const all = from.length > 1 ? "all of them" : "both";
+      const owners = andList(from.map((f) => `${f.name}'s`));
+      return `${c.name} reads ${owners} ${folders}, so it sees ${row.name} there. Remove it from ${names} to remove it from ${all}`;
+    }
+    case "off":
+    case "on": {
+      return undefined;
+    }
+    default: {
+      return undefined;
+    }
+  }
 };
 
 /**
@@ -60,26 +154,20 @@ export const lockReason = (row: SkillRow): string | undefined => {
 export const chipTitle = (
   row: SkillRow,
   c: Configuration,
-  state: AgentChipState
+  state: AgentChipState,
+  configurations: Configuration[]
 ): string => {
   const locked = lockReason(row);
   if (locked !== undefined) {
     return locked;
   }
-  switch (state) {
-    case "displaced": {
-      return DISPLACED_REASON;
-    }
-    case "off": {
-      return `Add to ${c.name}`;
-    }
-    case "on": {
-      return `Remove from ${c.name}`;
-    }
-    default: {
-      return `Remove from ${c.name}`;
-    }
+  if (state === "off") {
+    return `Add to ${c.name}`;
   }
+  return (
+    inertReason(row, c, state, configurations) ??
+    `Remove from ${removedFrom(row, c, configurations)}`
+  );
 };
 
 /** The Universal chip's title: a universal client reads the library, so removal is removal. */

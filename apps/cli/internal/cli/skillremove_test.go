@@ -141,6 +141,12 @@ func TestSkillRemoveFromOneConfiguration(t *testing.T) {
 		equal(t, "the placement Cursor still sees", p.(map[string]any)["path"], filepath.Join(h.home, ".claude", "skills", "alpha"))
 	}
 	contains(t, "the result", out.stdout, "removed alpha from cursor: 1 placement")
+	// The run warns that Cursor keeps the skill, at warn level, which the
+	// desktop app shows.
+	warning := h.one(out.stderr, "log")
+	equal(t, "the warning level", warning["level"], "warn")
+	contains(t, "the warning", warning["message"].(string), "cursor still sees alpha through claude-code's placement at "+
+		filepath.Join(h.home, ".claude", "skills", "alpha")+"; remove it from claude-code to take it from both")
 }
 
 // TestSkillRemoveTakesTheSkillOffTheMachine removes every placement, the

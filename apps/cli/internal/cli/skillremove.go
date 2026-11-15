@@ -35,6 +35,10 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"A placement is deleted only when it is a symlink into the library or a copy this\n" +
 			"machine recorded. Anything else at a placement path is left where it is and\n" +
 			"named in the output: agentx never removes what it did not create.\n\n" +
+			"A client that reads another client's skills directory, as Cursor reads Claude\n" +
+			"Code's, keeps seeing the skill through that client's placement after --from\n" +
+			"removes its own, and the removal warns: remove the skill from that client too to\n" +
+			"take it from both.\n\n" +
 			"A managed skill whose library directory was deleted outside agentx can still be\n" +
 			"removed without --from: its import branch and the placements agentx made go.\n\n" +
 			"Removing one of your own skills also deletes its worktree, with any unpublished\n" +
@@ -764,9 +768,7 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 		}
 		inv.out.emit(sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(targets)))
 	}
-	if plan.whole {
-		inv.warnStillSeen(inventory, plan, targetIDs(targets))
-	}
+	inv.warnStillSeen(inventory, plan, targetIDs(targets))
 	if !plan.quiet {
 		inv.printRemoved(plan)
 	}
@@ -786,12 +788,23 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 // said it did not, and a whole removal emits no skill event, so nothing
 // else would ever correct the claim.
 //
+// A removal with --from takes only the covered configurations' own
+// placements, and a client that reads another client's skills directory,
+// as Cursor reads Claude Code's, keeps seeing the skill through that
+// client's placement. The run reports the covered configuration as done,
+// so the warning names whose placement it still sees the skill through and
+// which removal takes it from both.
+//
 // A placement the run already reported as left in place is not named twice:
 // its own warning said the configuration still sees it.
 func (inv *invocation) warnStillSeen(inventory scan.Inventory, plan removalPlan, covered []string) {
 	said := make(map[string]bool, len(plan.kept))
 	for _, s := range plan.kept {
 		said[s.path] = true
+	}
+	var owners []placeTarget
+	if !plan.whole {
+		owners = inv.detectedTargets()
 	}
 	var left []string
 	for _, node := range inventory.Skills {
@@ -802,6 +815,11 @@ func (inv *invocation) warnStillSeen(inventory scan.Inventory, plan removalPlan,
 			if o.Plugin != "" || o.Scope != "user" || said[o.Path] || !containsString(covered, o.Configuration) {
 				continue // a plugin's skill and a project's are not placements of the library
 			}
+			if owner := placementOwner(owners, o.Configuration, o.Path, plan.name); owner != "" {
+				left = append(left, o.Configuration+" still sees "+plan.name+" through "+owner+"'s placement at "+o.Path+
+					"; remove it from "+owner+" to take it from both")
+				continue
+			}
 			left = append(left, o.Configuration+" still sees "+plan.name+" at "+o.Path+", which agentx did not place there")
 		}
 	}
@@ -809,6 +827,23 @@ func (inv *invocation) warnStillSeen(inventory scan.Inventory, plan removalPlan,
 	for _, message := range left {
 		inv.out.warn(message)
 	}
+}
+
+// placementOwner is the configuration other than id among targets whose
+// own skills directory holds path as the placement of the skill called
+// name, and "" when there is none. A client that reads the library owns no
+// such path: its placement is the library entry, which a removal with
+// --from leaves.
+func placementOwner(targets []placeTarget, id, path, name string) string {
+	for _, t := range targets {
+		if t.id == id || t.readsLibrary || t.dir == "" {
+			continue
+		}
+		if own := filepath.Join(t.dir, name); own == filepath.Clean(path) || canonicalPath(own) == canonicalPath(path) {
+			return t.id
+		}
+	}
+	return ""
 }
 
 // keptLibrary reports whether a fork's removal left what its library path
