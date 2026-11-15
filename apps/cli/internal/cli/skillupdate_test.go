@@ -801,7 +801,7 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 						h.mustRun("skill", "new", "forky")
 					},
 					message: "forky has no upstream to update from",
-					hint:    "a skill created with 'agentx skill new', or forked from an unmanaged or a plugin's skill, has no upstream version; its versions are its own commits",
+					hint:    "a skill created with 'agentx skill new', adopted with 'agentx adopt', or forked from a plugin's skill, has no upstream version; its versions are its own commits",
 				},
 				{
 					name: "an edited skill with no update", skill: "alpha", exit: 0,

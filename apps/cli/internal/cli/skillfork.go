@@ -24,15 +24,15 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 		Use:         "fork <name>",
 		Short:       "Fork a skill into one of your own, with a history",
 		Annotations: map[string]string{annotationSection: "skills"},
-		Long: "Fork the skill called <name>: a skill of a shared source, an unmanaged one, a\n" +
-			"skill a plugin provides, or one of your own. The fork is one of your own skills:\n" +
-			"a managed skill whose source is your account remote, which 'agentx skill\n" +
-			"publish <name>' publishes it to; no account remote needs to be set until then.\n" +
-			"It gets its own branch, skills/<name>, in the account repo, whose first commit\n" +
-			"holds the skill as it is now, edits included, checked out as a worktree in\n" +
-			"agentx home, and the library holds a symlink to it. The fork of a skill of a\n" +
-			"shared source keeps that source as its upstream, so newer versions can be\n" +
-			"merged in.\n\n" +
+		Long: "Fork the skill called <name>: a skill of a shared source, a skill a plugin\n" +
+			"provides, or one of your own. The fork is one of your own skills: a managed\n" +
+			"skill whose source is your account remote, which 'agentx skill publish <name>'\n" +
+			"publishes it to; no account remote needs to be set until then. It gets its own\n" +
+			"branch, skills/<name>, in the account repo, whose first commit holds the skill\n" +
+			"as it is now, edits included, checked out as a worktree in agentx home, and the\n" +
+			"library holds a symlink to it. The fork of a skill of a shared source keeps that\n" +
+			"source as its upstream, so newer versions can be merged in. An unmanaged skill\n" +
+			"is taken over with 'agentx adopt --skill <name>'.\n\n" +
 			"Without --name the fork takes the skill's place: its library directory moves\n" +
 			"into the fork's worktree and every placement stays as it was. With --name <new>\n" +
 			"the fork is made beside the skill, under the new name, which it also writes into\n" +
@@ -72,17 +72,25 @@ type forkNoteEvent struct {
 // forking is one run of skill fork, as it is planned before the lock.
 type forking struct {
 	src     forkSource
-	target  string // the fork's name
-	inPlace bool   // the fork takes the source's place: its library directory moves into the worktree
-	rename  bool   // the fork is the first step of skill rename, which removes the source next
+	target  string   // the fork's name
+	inPlace bool     // the fork takes the source's place: its directory moves into the worktree
+	mode    forkMode // what the run is for: skill fork, the first step of skill rename, or agentx adopt
+	// from is the directory a fork in its source's place moves into the
+	// worktree: the library entry, or, for an adoption out of an agent
+	// client's own skills directory, that directory.
+	from string
+	// places are the directories of an adoption out of agent clients' own
+	// skills directories, the one that moves first, see adoptPlace; nil for
+	// every other fork.
+	places []adoptPlace
 	// renamed reports a rename once its source is removed, in one line
 	// that names both names; reportForked sets it for a rename, in place
 	// of its own line.
 	renamed func()
 	gitDir  string
 	dir     string // the skill's directory in the fork's branch, which never changes
-	// captured is what the source's library directory held before git read
-	// it, for a fork in its place: the content the journal moves.
+	// captured is what the directory from held before git read it, for a
+	// fork in its place: the content the journal moves.
 	captured string
 	site     forkSite   // a fork's, when the source is one
 	judged   siteJudged // how the source fork's directory compared with its tip
@@ -106,8 +114,9 @@ type forking struct {
 // the lock, and holds the skill as it is now, as git records it under the
 // ignore rules every fork follows: for a managed skill on its import
 // commit, so that its edits are exactly what the commit changes, for a
-// fork on its tip, so that its history is kept, and for an unmanaged
-// skill or a plugin's as a branch of its own. It carries a new fork id
+// fork on its tip, so that its history is kept, and for a plugin's skill,
+// or an unmanaged one agentx adopt takes over, as a branch of its own. It
+// carries a new fork id
 // even when it changes nothing, but for skill rename's, which keeps the
 // id of the skill it renames when its history records one, and nothing
 // points at it until one journaled mutation creates the branch.
@@ -121,7 +130,7 @@ type forking struct {
 // the configurations the source is placed in, or, for a plugin's skill,
 // into the enabled configurations that have the plugin.
 func (inv *invocation) skillFork(ctx context.Context, arg, newName string) error {
-	fk, err := inv.planFork(ctx, arg, newName, false)
+	fk, err := inv.planFork(ctx, arg, newName, modeFork)
 	if err != nil {
 		return err
 	}
@@ -129,24 +138,43 @@ func (inv *invocation) skillFork(ctx context.Context, arg, newName string) error
 }
 
 // planFork finds the skill arg names and runs every refusal of its fork
-// under newName, see checkForking, before anything is written: the part of
-// a fork that skill rename runs before either of its steps, saying so in
-// rename.
-func (inv *invocation) planFork(ctx context.Context, arg, newName string, rename bool) (*forking, error) {
-	if err := inv.finishJournals(ctx); err != nil {
+// under newName, see forkOf, before anything is written: the part of a
+// fork that skill rename runs before either of its steps, saying so in
+// mode.
+func (inv *invocation) planFork(ctx context.Context, arg, newName string, mode forkMode) (*forking, error) {
+	fk, records, err := inv.beginFork(ctx, mode)
+	if err != nil {
 		return nil, err
+	}
+	src, err := inv.forkSourceOf(arg, records, fk.scanned, mode)
+	if err != nil {
+		return nil, err
+	}
+	if err := inv.forkOf(ctx, fk, src, newName, records); err != nil {
+		return nil, err
+	}
+	return fk, nil
+}
+
+// beginFork finishes any unfinished journal and reads what a fork is
+// planned from, before its source is found: the account repo's branches,
+// empty when this machine has no account repo yet, and a scan run the
+// first time it is asked for.
+func (inv *invocation) beginFork(ctx context.Context, mode forkMode) (*forking, map[string]lineage.Record, error) {
+	if err := inv.finishJournals(ctx); err != nil {
+		return nil, nil, err
 	}
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, nil, accountRepoFailure(err)
 	}
 	records := map[string]lineage.Record{}
 	if exists {
 		if records, err = inv.listLineage(ctx, gitDir); err != nil {
-			return nil, accountRepoFailure(err)
+			return nil, nil, accountRepoFailure(err)
 		}
 	}
-	fk := &forking{gitDir: gitDir, rename: rename}
+	fk := &forking{gitDir: gitDir, mode: mode}
 	fk.scanned = func() (scan.Inventory, error) {
 		if fk.inventory == nil {
 			s, err := inv.scan(ctx, lockWait, "", false)
@@ -157,19 +185,25 @@ func (inv *invocation) planFork(ctx context.Context, arg, newName string, rename
 		}
 		return *fk.inventory, nil
 	}
-	src, err := inv.forkSourceOf(arg, records, fk.scanned)
-	if err != nil {
-		return nil, err
-	}
+	return fk, records, nil
+}
+
+// forkOf makes fk the fork of src, under newName when it is given, and
+// runs every refusal of it, see checkForking. The fork takes the place of
+// a managed skill forked under its own name, and of an unmanaged one in a
+// mode that takes one, see forkMode.takesUnmanaged; the directory that
+// moves is the library entry unless the caller set another.
+func (inv *invocation) forkOf(ctx context.Context, fk *forking, src forkSource, newName string, records map[string]lineage.Record) error {
 	fk.src, fk.target = src, src.name
 	if newName != "" {
 		fk.target = newName
 	}
-	fk.inPlace = fk.target == src.name && (src.kind == lineage.KindManaged || src.kind == lineage.KindUnmanaged)
-	if err := inv.checkForking(ctx, fk, records, newName != ""); err != nil {
-		return nil, err
+	fk.inPlace = fk.target == src.name &&
+		(src.kind == lineage.KindManaged || src.kind == lineage.KindUnmanaged && fk.mode.takesUnmanaged())
+	if fk.inPlace && fk.from == "" {
+		fk.from = inv.libraryPath(src.name)
 	}
-	return fk, nil
+	return inv.checkForking(ctx, fk, records, newName != "")
 }
 
 // makeFork writes the creation commit of the fork planFork planned and
@@ -202,13 +236,13 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 			return err
 		}
 	}
-	message := forkMessage{subject: forkSubject(src, fk.target), trailers: lineage.ForkTrailers{ForkID: lineage.NewForkID()}}
+	message := forkMessage{subject: forkSubject(src, fk.target, fk.mode), trailers: lineage.ForkTrailers{ForkID: lineage.NewForkID()}}
 	if !fk.inPlace {
 		// A fork in its source's place is that skill from now on, so it
 		// records no origin; a managed skill's import commit records one.
 		message.trailers.Origin = src.origin()
 	}
-	if fk.rename {
+	if fk.mode == modeRename {
 		// A rename's commit carries no fork id, so the renamed skill keeps
 		// the one its history records: the same skill under a new name,
 		// whose first publish deletes the old name's branch, see
@@ -250,10 +284,13 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 	var done placements
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error { return inv.applyFork(ctx, fk, &done) })
 	if errors.Is(err, home.ErrMovedBeforeApply) {
-		return fail(exitRefused, sanitised(src.name)+" changed while it was being forked, so nothing was changed", "run the command again")
+		return fk.changed()
 	}
 	if err != nil {
 		return mutationFailure(err)
+	}
+	if fk.mode == modeAdopt {
+		return inv.reportAdoptedOwn(ctx, fk, done)
 	}
 	return inv.reportForked(ctx, fk, done)
 }
@@ -272,19 +309,25 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 	src := fk.src
 	if src.kind == lineage.KindFork && fk.target == src.name {
 		if named {
-			return fail(exitRefused, "the fork is already called "+sanitised(src.name), fk.takenHint())
+			return fail(exitRefused, "the fork is already called "+sanitised(src.name), fk.takenHint(records))
 		}
 		return fail(exitRefused, sanitised(src.name)+" is already one of your own skills",
 			"fork it under a new name with '"+skillCommand("fork", src.name, "--name", "<new>")+"'")
 	}
 	if refusal := forkNameRefusal(fk.target); refusal != "" {
 		hint := "choose a name such as my-skill"
-		if !named {
+		switch {
+		case fk.mode == modeAdopt:
+			hint = "rename the directory to a valid name, then adopt it"
+		case !named:
 			hint = "fork it under a valid name with '" + skillCommand("fork", src.name, "--name", "<new>") + "'"
 		}
 		return fail(exitRefused, refusal, hint)
 	}
-	if err := inv.checkForkName(ctx, records, fk.target, fk.except(), fk.takenHint()); err != nil {
+	if err := inv.checkForkName(ctx, records, fk.target, fk.except(), fk.takenHint(records)); err != nil {
+		return err
+	}
+	if err := inv.adoptClash(ctx, fk); err != nil {
 		return err
 	}
 	if src.kind == lineage.KindManaged && !src.rec.HasImport {
@@ -328,12 +371,32 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 }
 
 // takenHint is the hint of a name the fork cannot take because a skill
-// already has it, in the words of the command that gave the name.
-func (fk *forking) takenHint() string {
-	if fk.rename {
+// already has it, in the words of the command that gave the name. records
+// are the account repo's branches, which say what an adoption, which has no
+// flag to give another name with, can do about the one in its way.
+func (fk *forking) takenHint(records map[string]lineage.Record) string {
+	switch fk.mode {
+	case modeRename:
 		return "choose another name with '" + skillCommand("rename", fk.src.name, "<new>") + "'"
+	case modeAdopt:
+		return fk.adoptTakenHint(records)
 	}
 	return "choose another name with --name <new>"
+}
+
+// changed is the refusal of a fork whose source is not what it was planned
+// from any more.
+func (fk *forking) changed() error {
+	return fail(exitRefused, sanitised(fk.src.name)+" changed while it was being "+fk.mode.done()+", so nothing was changed", "run the command again")
+}
+
+// again is the hint that names the command to run once what refused the
+// fork in its place is out of the way.
+func (fk *forking) again() string {
+	if fk.mode == modeAdopt {
+		return "run '" + adoptCommand(fk.src.name) + "' again"
+	}
+	return "run '" + skillCommand("fork", fk.src.name) + "' again"
 }
 
 // except is the branch the fork's name may already be held by: a managed
@@ -349,39 +412,61 @@ func (fk *forking) except() string {
 // worktree cannot make: a library entry that is a symlink of the user's,
 // which the move would take for the directory and which leads to files
 // that are not the library's to move, a skill directory that is itself a
-// Git repository, a worktree path that is taken, and a library on another
-// file system than agentx home, where the directory could only be copied,
-// not moved.
+// Git repository, a worktree path that is taken, and a directory on another
+// file system than agentx home, where it could only be copied, not moved.
+// The directory is fk.from, and an adoption says each in its own words: it
+// has no --name to fork beside the skill with. One out of an agent client's
+// own skills directory needs more, see adoptRoom.
 func (inv *invocation) inPlaceRoom(fk *forking) error {
-	name, libPath := fk.src.name, inv.libraryPath(fk.src.name)
-	state, err := home.State(libPath)
+	name, from, adopt := fk.src.name, fk.from, fk.mode == modeAdopt
+	state, err := home.State(from)
 	if err != nil {
-		return libraryFailure(inv.dirs.Library, err)
+		return libraryFailure(filepath.Dir(from), err)
 	}
-	beside := "fork it beside the skill with '" + skillCommand("fork", name, "--name", "<new>") + "'"
-	if target, isLink := home.LinkTarget(state); isLink {
-		return fail(exitRefused, fmt.Sprintf("%s is a symlink to %s; forking %s in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to", quotedPath(libPath), quotedPath(target), sanitised(name)),
-			"replace the link with the directory it points to, then run '"+skillCommand("fork", name)+"' again, or "+beside)
+	beside := ", or fork it beside the skill with '" + skillCommand("fork", name, "--name", "<new>") + "'"
+	if adopt {
+		beside = ""
+	}
+	switch target, isLink := home.LinkTarget(state); {
+	case isLink && adopt:
+		return fail(exitRefused, fmt.Sprintf("%s is a symlink to %s; adopting %s moves the library directory into its worktree and would move the link rather than the files it leads to", quotedPath(from), quotedPath(target), sanitised(name)),
+			"replace the link with the directory it points to, then "+fk.again())
+	case isLink:
+		return fail(exitRefused, fmt.Sprintf("%s is a symlink to %s; forking %s in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to", quotedPath(from), quotedPath(target), sanitised(name)),
+			"replace the link with the directory it points to, then "+fk.again()+beside)
+	case !home.IsDir(state):
+		return fk.changed() // the directory the fork was planned from is gone
 	}
 	// A skill that is itself a Git repository would take its .git into the
 	// worktree with it, ignored or not, and git run in the skill would find
 	// that repository rather than the fork's branch.
-	if own := filepath.Join(libPath, ".git"); lexists(own) {
-		return fail(exitRefused, sanitised(name)+" is itself a Git repository, at "+quotedPath(own)+"; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork",
-			"move its .git out of the skill, then run '"+skillCommand("fork", name)+"' again, or "+beside)
+	if own := filepath.Join(from, ".git"); lexists(own) {
+		message := sanitised(name) + " is itself a Git repository, at " + quotedPath(own) + "; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork"
+		if adopt {
+			message = sanitised(name) + " is itself a Git repository, at " + quotedPath(own) + "; adopting it would move that repository into its worktree, where git would take it for the skill's branch"
+		}
+		return fail(exitRefused, message, "move its .git out of the skill, then "+fk.again()+beside)
 	}
 	if root := inv.worktreeRoot(name); lexists(root) {
-		return fail(exitRefused, quotedPath(root)+" already exists", "move it aside, then run '"+skillCommand("fork", name)+"' again")
+		return fail(exitRefused, quotedPath(root)+" already exists", "move it aside, then "+fk.again())
 	}
-	same, err := home.SameDevice(filepath.Dir(libPath), existingAncestor(inv.worktreesDir()))
+	same, err := home.SameDevice(filepath.Dir(from), existingAncestor(inv.worktreesDir()))
 	if err != nil {
-		return libraryFailure(inv.dirs.Library, err)
+		return libraryFailure(filepath.Dir(from), err)
 	}
-	if !same {
+	switch {
+	case same:
+	case len(fk.places) > 0:
+		return fail(exitRefused, quotedPath(filepath.Dir(from))+" and agentx home are on different file systems, so "+sanitised(name)+" cannot be moved into its worktree",
+			"move it into "+quotedPath(inv.dirs.Library)+" yourself, then "+fk.again())
+	case adopt:
+		return fail(exitRefused, "the library and agentx home are on different file systems, so "+sanitised(name)+" cannot be moved into its worktree",
+			"keep AGENTX_HOME and AGENTX_LIBRARY on one file system")
+	default:
 		return fail(exitRefused, "the library and agentx home are on different file systems, so "+sanitised(name)+" cannot be moved into its fork's worktree",
-			"keep AGENTX_HOME and AGENTX_LIBRARY on one file system, or "+beside)
+			"keep AGENTX_HOME and AGENTX_LIBRARY on one file system"+beside)
 	}
-	return nil
+	return inv.adoptRoom(fk)
 }
 
 // existingAncestor is path, or the nearest of its parents that exists.
@@ -395,8 +480,9 @@ func existingAncestor(path string) string {
 // forkContent judges what the fork's creation commit holds and returns the
 // root tree of that commit, before any rename, and its parents. A managed
 // skill's directory is judged against its import commit and keeps the
-// upstream's directory name; an unmanaged skill's and a plugin's are
-// judged against nothing and named after the fork; a fork is forked from
+// upstream's directory name; an unmanaged skill's, read where an adoption
+// found it, and a plugin's are judged against nothing and named after the
+// fork; a fork is forked from
 // its tip, or from the commit that records its edits, which checkForking
 // wrote on the tip, its skill directory alone, see skillDirAlone. Git's ignore rules decide what is
 // recorded, and a repository nested in the directory that they do not
@@ -415,12 +501,17 @@ func (inv *invocation) forkContent(ctx context.Context, fk *forking) (string, []
 		return root, []string{tip.Commit}, nil
 	}
 	if fk.inPlace {
-		// What the library directory holds is captured before git reads it,
-		// so that an edit made while git reads it shows as a directory that
-		// no longer holds what was captured, and refuses the fork.
-		state, err := home.State(inv.libraryPath(src.name))
+		// What the directory holds is captured before git reads it, so that
+		// an edit made while git reads it shows as a directory that no longer
+		// holds what was captured, and refuses the fork.
+		state, err := home.State(fk.from)
 		if err != nil {
-			return "", nil, libraryFailure(inv.dirs.Library, err)
+			return "", nil, libraryFailure(filepath.Dir(fk.from), err)
+		}
+		// The directories an adoption removes were compared with what this
+		// one held then, see readAdoptPlaces.
+		if len(fk.places) > 0 && state != fk.places[0].state {
+			return "", nil, fk.changed()
 		}
 		fk.captured = state
 	}
@@ -519,8 +610,12 @@ func (inv *invocation) renameSkill(ctx context.Context, gitDir, root, dir, name 
 
 // forkSubject is the subject of a fork's creation commit, which names
 // where the fork came from: a managed skill's upstream, with the version,
-// a plugin, or the skill it was forked from.
-func forkSubject(src forkSource, target string) string {
+// a plugin, or the skill it was forked from. An adoption came from nowhere
+// agentx knows, and its commit says what it did.
+func forkSubject(src forkSource, target string, mode forkMode) string {
+	if mode == modeAdopt {
+		return "Adopt " + target
+	}
 	from := sanitised(src.name)
 	switch src.kind {
 	case lineage.KindManaged:
@@ -640,10 +735,10 @@ func (inv *invocation) applyFork(ctx context.Context, fk *forking, done *placeme
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	if err := takenRefusal(records, fk.target, fk.except(), fk.takenHint()); err != nil {
+	if err := takenRefusal(records, fk.target, fk.except(), fk.takenHint(records)); err != nil {
 		return err
 	}
-	changed := fail(exitRefused, sanitised(src.name)+" changed while it was being forked, so nothing was changed", "run the command again")
+	changed := fk.changed()
 	if src.kind == lineage.KindManaged || src.kind == lineage.KindFork {
 		if rec, ok := records[src.name]; !ok || rec.Kind != src.kind || rec.Commit != src.rec.Commit {
 			return changed
@@ -666,34 +761,41 @@ func (inv *invocation) applyFork(ctx context.Context, fk *forking, done *placeme
 		}
 		return inv.createFork(ctx, fk.gitDir, fk.target, fk.dir, fk.commit, copiesOf, fk.targets, done)
 	}
-	return inv.forkInPlace(ctx, fk, records[src.name], changed)
+	return inv.forkInPlace(ctx, fk, records[src.name], changed, done)
 }
 
 // forkInPlace records and applies a fork that takes its source's place:
 // the fork's branch at the creation commit, the managed skill's import
 // branch and upstream-removed marker deleted once everything else is done,
-// the fork's worktree, the library directory moved into it, and the
-// library symlink to it where the directory was. The update candidate a
+// the fork's worktree, the directory fk.from moved into it, and the
+// library symlink to it at the library path, where the directory was
+// unless an adoption found it in an agent client's own skills directory,
+// whose places follow, see stageAdoptPlaces. The update candidate a
 // check pinned for a managed skill stays, since the fork can still take
 // that version in. Placements and copy_mode are left as they are: they
 // name the library path, which leads to the fork. rec is the source's
 // branch as read under the lock.
-func (inv *invocation) forkInPlace(ctx context.Context, fk *forking, rec lineage.Record, changed error) error {
+func (inv *invocation) forkInPlace(ctx context.Context, fk *forking, rec lineage.Record, changed error, done *placements) error {
 	name := fk.src.name
 	libPath, root := inv.libraryPath(name), inv.worktreeRoot(name)
-	live, err := home.State(libPath)
+	live, err := home.State(fk.from)
 	if err != nil {
-		return libraryFailure(inv.dirs.Library, err)
+		return libraryFailure(filepath.Dir(fk.from), err)
 	}
 	fp, isDir := home.DirFingerprint(fk.captured)
 	if !isDir || live != fk.captured {
 		return changed
 	}
 	if lexists(root) {
-		return fail(exitRefused, quotedPath(root)+" already exists", "move it aside, then run '"+skillCommand("fork", name)+"' again")
+		return fail(exitRefused, quotedPath(root)+" already exists", "move it aside, then "+fk.again())
 	}
-	if err := os.MkdirAll(inv.worktreesDir(), 0o755); err != nil {
-		return libraryFailure(inv.worktreesDir(), err)
+	if len(fk.places) > 0 && !inv.adoptPlacesHold(fk) {
+		return changed
+	}
+	for _, parent := range []string{filepath.Dir(libPath), inv.worktreesDir()} {
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			return libraryFailure(parent, err)
+		}
 	}
 	skillDir := filepath.Join(root, fk.dir)
 	link, err := inv.forkLink(libPath, skillDir)
@@ -709,8 +811,9 @@ func (inv *invocation) forkInPlace(ctx context.Context, fk *forking, rec lineage
 		}
 	}
 	m.Worktree(fk.gitDir, root, strings.TrimPrefix(lineage.ForkRef(name), "refs/heads/"))
-	m.Move(libPath, skillDir, fp)
+	m.Move(fk.from, skillDir, fp)
 	m.Link(libPath, link)
+	stageAdoptPlaces(m, fk, libPath, done)
 	return m.Apply(inv.refs(ctx))
 }
 
@@ -757,7 +860,7 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 		what, stays = name+" from plugin "+sanitised(src.plugin), "the plugin's copy stays as it was"
 	}
 	rows := inv.ownPlacements(fk.target, done.placed, ev.Placements)
-	if fk.rename {
+	if fk.mode == modeRename {
 		// The rename is one step to the user: the source's removal comes
 		// next, and the line that names both names follows it.
 		fk.renamed = func() {

@@ -17,6 +17,7 @@ export const GLOBAL_FLAGS: CliFlags = {
 export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   adopt: {
     all: false,
+    "as-is": false,
     skill: true,
   },
   "config disable": {},

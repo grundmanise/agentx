@@ -15,11 +15,12 @@ import (
 // does not hold and no branch records.
 const kindPlugin = "plugin"
 
-// forkSource is the skill skill fork makes a fork of: a managed skill, a
-// fork, an unmanaged skill of the library, or a skill a plugin provides.
+// forkSource is the skill a fork is made of: a managed skill, a fork or a
+// skill a plugin provides, for skill fork, and an unmanaged skill, of the
+// library or of an agent client's own skills directory, for agentx adopt.
 type forkSource struct {
 	kind   string            // lineage.KindManaged, lineage.KindFork, lineage.KindUnmanaged or kindPlugin
-	name   string            // its name: its library entry's, or its directory's in the plugin
+	name   string            // its name: its library entry's, or its directory's in the plugin or the client
 	rec    lineage.Record    // its branch, for a managed skill or a fork
 	lib    scan.LibrarySkill // its library entry, when held
 	held   bool              // the library holds it
@@ -30,18 +31,63 @@ type forkSource struct {
 	dir              string // the directory its content is read from, for every kind but a fork
 }
 
+// forkMode is what a run of the fork machinery is for. It decides the
+// wording of a refusal, the hints, the subject of the creation commit and
+// the report, and whether an unmanaged skill is taken.
+type forkMode int
+
+const (
+	modeFork   forkMode = iota // skill fork
+	modeRename                 // the first step of skill rename, which removes the source next
+	modeAdopt                  // agentx adopt, of an unmanaged skill no other tool recorded
+)
+
+// takesUnmanaged reports whether a run in this mode takes an unmanaged
+// skill: adopt does, and skill fork and skill rename send it to adopt.
+// Every place that decides it asks here.
+func (m forkMode) takesUnmanaged() bool { return m == modeAdopt }
+
+// done is what the mode does to a skill, as a refusal says it of one it
+// did not do it to.
+func (m forkMode) done() string {
+	if m == modeAdopt {
+		return "adopted"
+	}
+	return "forked"
+}
+
+// adoptCommand is the agentx adopt command a line tells the user to run on
+// the skill called name, quoted for a shell.
+func adoptCommand(name string) string {
+	return "agentx adopt --skill " + shellWord(name)
+}
+
+// unmanagedRefusal refuses the unmanaged skill called name for a mode that
+// does not take one, in the words of the command that named it.
+func unmanagedRefusal(name string, mode forkMode) error {
+	message := sanitised(name) + " is not managed by agentx, so it cannot be forked"
+	if mode == modeRename {
+		message = sanitised(name) + " is not a skill of the account remote, so it cannot be renamed"
+	}
+	return fail(exitRefused, message, "adopt it first with '"+adoptCommand(name)+"'")
+}
+
 // forkSourceOf finds the skill arg names. The library comes first, its
 // entry's branch saying what it is; then the account repo, for a fork
 // whose library entry is gone, which is forked from its branch all the
 // same; then the plugins the scan found. A plugin's skill is named by its
 // directory, or, where several plugins provide one of that name, as
 // <plugin>:<skill>. scanned is the scan the plugins are read from, run
-// only when the name is none of the library's or the account repo's.
-func (inv *invocation) forkSourceOf(arg string, records map[string]lineage.Record, scanned func() (scan.Inventory, error)) (forkSource, error) {
+// only when the name is none of the library's or the account repo's. A
+// library entry no branch records is unmanaged, and refused unless mode
+// takes one, see forkMode.takesUnmanaged.
+func (inv *invocation) forkSourceOf(arg string, records map[string]lineage.Record, scanned func() (scan.Inventory, error), mode forkMode) (forkSource, error) {
 	if lib, ok := librarySkill(inv.dirs.Library, arg); ok {
 		src := forkSource{kind: lineage.KindUnmanaged, name: arg, lib: lib, held: true, dir: lib.ResolvedPath}
 		if rec, ok := records[arg]; ok {
 			src.kind, src.rec = rec.Kind, rec
+		} else if !mode.takesUnmanaged() {
+			return forkSource{}, unmanagedRefusal(arg, mode)
 		}
 		return src, nil
 	}
