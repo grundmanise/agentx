@@ -57,6 +57,8 @@ const detail = (page: Page) =>
   page.getByRole("region", { name: "Skill details" });
 const pane = (page: Page, name: string) =>
   detail(page).getByRole("article", { name });
+const toasts = (page: Page) =>
+  page.getByRole("region", { name: /^Notifications/u });
 const filters = (page: Page) => page.getByRole("dialog", { name: "Filters" });
 /** The alert triangles in `where`: a row's triangle carries its banner's title as its label and tooltip. */
 const alertTriangles = (where: Locator) => where.locator("[aria-label][title]");
@@ -629,6 +631,18 @@ test.describe("the detail pane", () => {
     expect(cli.reveals).toEqual([
       ["/home/me/.agentx/worktrees/pdf-letters/pdf-letters"],
     ]);
+    // A folder that is gone says so.
+    cli.failReveals();
+    await details
+      .getByRole("link", {
+        name: "/home/me/.agentx/worktrees/pdf-letters/pdf-letters",
+      })
+      .click();
+    await expect(
+      toasts(page).getByText(
+        '"/home/me/.agentx/worktrees/pdf-letters/pdf-letters" doesn\'t exist'
+      )
+    ).toBeVisible();
 
     await article.getByRole("button", { name: "Show all 5" }).click();
     const sheet = page.getByRole("dialog", { name: "History" });
@@ -843,9 +857,6 @@ test.describe("the detail pane", () => {
     );
   });
 });
-
-const toasts = (page: Page) =>
-  page.getByRole("region", { name: /^Notifications/u });
 
 /** The command lines the controls ran: everything but the launch, the store's and the pane's reads. */
 const ran = (cli: MockCli) =>
