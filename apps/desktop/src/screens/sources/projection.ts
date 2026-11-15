@@ -379,6 +379,46 @@ export const universalTitle = (names: string[]) => {
 const sameSet = (a: string[], b: string[]) =>
   a.length === b.length && a.every((id) => b.includes(id));
 
+/**
+ * The `--to` flags of a `skill add` for the chosen `targets`, in their order: none when they are
+ * the `enabled` configurations, where `skill add` installs by default.
+ */
+export const toFlags = (targets: string[], enabled: string[]): string[] =>
+  sameSet(targets, enabled) ? [] : targets.flatMap((id) => ["--to", id]);
+
+/** One `--name` flag per skill a `skill add` installs, in their order. */
+export const nameFlags = (names: string[]): string[] =>
+  names.flatMap((name) => ["--name", name]);
+
+/**
+ * The `skill add` of the skills `selected` under a link the user gave, which this machine
+ * fetched: the link, one `--name` per card in card order, and `--to` as `planAdds` gives it.
+ */
+export const linkAdd = ({
+  link,
+  selected,
+  targets,
+  enabled,
+}: {
+  link: string;
+  selected: SkillCard[];
+  targets: string[];
+  enabled: string[];
+}): AddPlan => {
+  const names = orderCards(selected).map((c) => c.name);
+  return {
+    args: [
+      "skill",
+      "add",
+      link,
+      ...nameFlags(names),
+      ...toFlags(targets, enabled),
+    ],
+    names,
+    source: link,
+  };
+};
+
 export interface AddPlan {
   /** The command line, without --json. */
   args: string[];
@@ -412,9 +452,7 @@ export const planAdds = ({
   targets,
   enabled,
 }: PlanInput): AddPlan[] => {
-  const to = sameSet(targets, enabled)
-    ? []
-    : targets.flatMap((id) => ["--to", id]);
+  const to = toFlags(targets, enabled);
   return groupCards(selected).map(({ source, cards: chosen }) => {
     const cards = orderCards(chosen);
     const names = cards.map((c) => c.name);
@@ -426,7 +464,7 @@ export const planAdds = ({
               cards.some((s) => s.key === c.key) ? [] : ["--except", c.name]
             ),
           ]
-        : names.flatMap((name) => ["--name", name]);
+        : nameFlags(names);
     return {
       args: [
         "skill",

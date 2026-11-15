@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
-  Configuration,
   LibraryEntry,
   ProgressEvent,
   SearchResult,
@@ -15,10 +14,10 @@ import { Input } from "#/components/ui/input.tsx";
 import { skillNamesOf } from "#/lib/problem-text.ts";
 import { ActionBar } from "#/screens/sources/action-bar.tsx";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
+import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
 import {
   count,
-  directConfigurations,
   groupCards,
   installableCards,
   listingCards,
@@ -26,7 +25,6 @@ import {
   planAdds,
   resultCards,
   sourcePills,
-  universalConfigurations,
   YOUR_SKILLS,
 } from "#/screens/sources/projection.ts";
 import type {
@@ -55,7 +53,6 @@ export const ADD_LABEL = "add skills";
 const SEARCH_DEBOUNCE_MS = 150;
 
 const noEntries: LibraryEntry[] = [];
-const noConfigurations: Configuration[] = [];
 const noCards: SkillCard[] = [];
 
 type Selection = ReadonlyMap<string, SkillCard>;
@@ -165,8 +162,6 @@ export const SourcesScreen = () => {
   const listings = useAppStore((s) => s.listings);
   const installable = useAppStore((s) => s.installable);
   const library = useAppStore((s) => s.inventory?.library) ?? noEntries;
-  const configurations =
-    useAppStore((s) => s.inventory?.configurations) ?? noConfigurations;
   const adding = usePending(ADD_LABEL);
 
   // The pill the user opened; before any, the first pill is open.
@@ -176,7 +171,6 @@ export const SourcesScreen = () => {
   const [selection, setSelection] = useState<Selection>(noSelection);
   // The user started from Select all or the preselection: the listing's source takes `--all`.
   const [allMode, setAllMode] = useState(false);
-  const [targets, setTargets] = useState<string[] | undefined>();
   const [progress, setProgress] = useState<ProgressEvent | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -323,17 +317,14 @@ export const SourcesScreen = () => {
     setAllMode(false);
   };
 
-  const direct = directConfigurations(configurations);
-  const universal = universalConfigurations(configurations);
-  const enabled = direct.filter((c) => c.enabled).map((c) => c.id);
-  const chosen = direct
-    .map((c) => c.id)
-    .filter((id) => (targets ?? enabled).includes(id));
-  const toggleTarget = (id: string) => {
-    setTargets(
-      chosen.includes(id) ? chosen.filter((t) => t !== id) : [...chosen, id]
-    );
-  };
+  const {
+    chosen,
+    clear: clearTargets,
+    direct,
+    enabled,
+    toggle: toggleTarget,
+    universal,
+  } = useAgentTargets();
 
   /** Runs the plans one after another, `addedBefore` skills having landed so far. */
   const runPlans = async (
@@ -522,9 +513,7 @@ export const SourcesScreen = () => {
           universal={universal}
           targets={chosen}
           onToggleTarget={toggleTarget}
-          onClearTargets={() => {
-            setTargets([]);
-          }}
+          onClearTargets={clearTargets}
           adding={adding}
           progress={progress}
           onAdd={() => {

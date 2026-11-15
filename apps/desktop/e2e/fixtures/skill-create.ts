@@ -1,6 +1,8 @@
 // The Create skill tests: the Skills fixture's machine before `skill new`, and the inventory the
 // scan after it reports, with the new skill of your own in the library, placed in every enabled
-// agent: a symlink in Claude Code and Cursor, the library itself for the two that read it.
+// agent: a symlink in Claude Code and Cursor, the library itself for the two that read it. And the
+// Add skill tests: a folder of a source that holds four skills, one of them installed already,
+// what Find skills reads of it, and the machine after two more are installed.
 import type {
   LibraryEntry,
   LibraryPlacement,
@@ -94,71 +96,108 @@ export const createdEvents: InlineEvent[] = [
   },
 ];
 
-/** The source the Add skill tests link into, which this machine has not added yet. */
+/** The source the Add skill tests link into. */
 export const ANTHROPIC = "https://github.com/anthropics/skills";
-/** The skill the Add skill tests install, and the link to its folder they paste. */
-export const ADDED_SKILL = "docx";
-export const ADD_LINK = `${ANTHROPIC}/tree/main/skills/${ADDED_SKILL}`;
+/** The link the Add skill tests paste: a folder of the source that holds several skills. */
+export const ADD_LINK = `${ANTHROPIC}/tree/main/skills`;
+/** The skills under the link, with their descriptions. */
+const descriptions: Record<string, string> = {
+  docx: "Read and write Word documents",
+  "frontend-design": "Build distinctive web interfaces",
+  pptx: "Read and write slide decks",
+  xlsx: "Read and write spreadsheets",
+};
+/** The skill under the link this machine installed before the tests start. */
+export const ALREADY_ADDED = "pptx";
+/** The two skills the happy path installs. */
+export const ADDED_SKILLS = ["docx", "xlsx"];
 
-/** The library entry `skill add` made: a managed skill of the source, placed like the new skill. */
-const added: LibraryEntry = {
-  base_hash: "h-docx",
-  content_hash: "h-docx",
+/** A managed skill of the source, placed like the new skill. */
+const addedEntry = (name: string): LibraryEntry => ({
+  base_hash: `h-${name}`,
+  content_hash: `h-${name}`,
   kind: "managed",
-  name: ADDED_SKILL,
+  name,
   placements: placements.map((p) => ({
     ...p,
-    path: p.path.replace(NEW_SKILL, ADDED_SKILL),
+    path: p.path.replace(NEW_SKILL, name),
   })),
   source: ANTHROPIC,
   state: "current",
-  subpath: `skills/${ADDED_SKILL}`,
+  subpath: `skills/${name}`,
   universal,
   upstream_commit: "c0ffee1234567",
+});
+
+/** The skill node of a managed skill of the source. */
+const addedNode = (name: string): SkillNode => ({
+  ...node,
+  content_hash: `h-${name}`,
+  description: descriptions[name] ?? "",
+  logical_id: `skill:h-${name}`,
+  name,
+  occurrences: node.occurrences.map((o) => ({
+    ...o,
+    id: o.id.replace(NEW_SKILL, name),
+    path: o.path.replace(NEW_SKILL, name),
+    resolved_path: `${LIBRARY}/${name}`,
+  })),
+  physical_id: `skill:h-${name}`,
+});
+
+/** The Skills fixture's machine with these skills of the source installed. */
+const withAdded = (names: string[], scanCounter: number) => {
+  const entries = [...library, ...names.map(addedEntry)];
+  // Sorted by name, as an inventory lists it.
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    ...inventory,
+    library: entries,
+    scan_counter: scanCounter,
+    skills: [...skills, ...names.map(addedNode)],
+  } satisfies InlineEvent;
 };
 
-/** The scan after `skill add`: the Skills fixture's machine with the skill it installed. */
-export const inventoryAfterAdd = {
-  ...inventory,
-  // Sorted by name, as an inventory lists it: docx comes after draft.
-  library: [
-    ...library.filter((e) => e.name < ADDED_SKILL),
-    added,
-    ...library.filter((e) => e.name > ADDED_SKILL),
-  ],
-  scan_counter: 2,
-  skills: [
-    ...skills,
-    {
-      ...node,
-      content_hash: "h-docx",
-      description: "Read and write Word documents",
-      logical_id: "skill:h-docx",
-      name: ADDED_SKILL,
-      occurrences: node.occurrences.map((o) => ({
-        ...o,
-        id: o.id.replace(NEW_SKILL, ADDED_SKILL),
-        path: o.path.replace(NEW_SKILL, ADDED_SKILL),
-        resolved_path: `${LIBRARY}/${ADDED_SKILL}`,
-      })),
-      physical_id: "skill:h-docx",
-    },
-  ],
-} satisfies InlineEvent;
+/** The machine before Add skill: the Skills fixture's, with one skill of the source installed. */
+export const inventoryBeforeAdd = withAdded([ALREADY_ADDED], 1);
 
-/** What `skill add` writes when it adds the source and installs the skill its link names. */
+/** The scan after `skill add`: the two skills it installed besides. */
+export const inventoryAfterAdd = withAdded([ALREADY_ADDED, ...ADDED_SKILLS], 2);
+
+/** The `source` event `source add` and `source skills` write for the link. */
+const sourceEvent: InlineEvent = {
+  id: "anthropics-skills",
+  skills: Object.keys(descriptions).length,
+  subpath: "skills",
+  type: "source",
+  url: ANTHROPIC,
+};
+
+/** What `source add` writes for the link: the source, added or fetched again. */
+export const sourceAddedEvents: InlineEvent[] = [sourceEvent];
+
+/** What `source skills` writes for the link: the source, then one event per skill under it. */
+export const sourceSkillEvents: InlineEvent[] = [
+  sourceEvent,
+  ...Object.entries(descriptions).map(([name, description]): InlineEvent => ({
+    description,
+    name,
+    source: "anthropics-skills",
+    subpath: `skills/${name}`,
+    tree: `tree-${name}`,
+    type: "source_skill",
+  })),
+];
+
+/** What `skill add` writes when it installs the two skills. */
 export const addedEvents: InlineEvent[] = [
-  {
-    id: "anthropics-skills",
-    skills: 1,
-    subpath: `skills/${ADDED_SKILL}`,
-    type: "source",
-    url: ANTHROPIC,
-  },
-  { type: "library_skill", ...added },
+  ...ADDED_SKILLS.map((name): InlineEvent => ({
+    type: "library_skill",
+    ...addedEntry(name),
+  })),
   {
     ok: true,
-    summary: `installed ${ADDED_SKILL} in 4 configurations`,
+    summary: "installed 2 skills in 4 configurations",
     type: "result",
   },
 ];

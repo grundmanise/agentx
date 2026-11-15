@@ -26,7 +26,7 @@ import { useAppStore } from "#/store/store.ts";
  * The hints of `source add` that name a command, in the app's words: the account remote's skills
  * are the ones under Personal.
  */
-const addSourceHintRules: HintRule[] = [
+export const addSourceHintRules: HintRule[] = [
   {
     app: () => `see and install its skills under ${YOUR_SKILLS_LABEL}`,
     cli: /^run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one$/u,

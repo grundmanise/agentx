@@ -139,7 +139,7 @@ test.describe("ACTIONS", () => {
     const dialog = page.getByRole("dialog", { name: "Add skill" });
     await expect(dialog).toBeVisible();
     await expect(
-      dialog.getByRole("textbox", { name: "Link to a skill" })
+      dialog.getByRole("textbox", { name: "Link to skills" })
     ).toBeFocused();
   });
 
