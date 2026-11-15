@@ -450,7 +450,7 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "notes"), "SKILL.md"), skill("notes", "Take notes"))
 	text := h.mustRun("adopt", "--skill", "notes")
 	// No account remote is set, so the adoption ends with how to publish it.
-	equal(t, "the text output", text.stdout, "✓ adopted notes; it is now one of your own skills\n"+
+	equal(t, "the text output", text.stdout, "✓ adopted notes\n"+
 		"No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish notes' to publish it.\n")
 	tip := h.ref(lineage.ForkRef("notes"))
 	equal(t, "the history", h.accountGit("rev-list", "--parents", lineage.ForkRef("notes")), tip)
@@ -500,7 +500,7 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	equal(t, "as it is: exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
 	equal(t, "as it is: adoption events", len(h.eventsOfType(out.stdout, "adoption")), 0)
-	equal(t, "as it is: the summary", h.one(out.stdout, "result")["summary"], "adopted beta; it is now one of your own skills")
+	equal(t, "as it is: the summary", h.one(out.stdout, "result")["summary"], "adopted beta")
 	equal(t, "as it is: the edit", fileBody(t, filepath.Join(h.agentx, "worktrees", "beta", "beta", "notes.md")), "an edit of mine\n")
 	if _, err := h.accountGitErr("rev-parse", "--verify", "-q", lineage.ManagedRef("beta")); err == nil {
 		t.Error("as it is: the skill was installed from its source")

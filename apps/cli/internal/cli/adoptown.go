@@ -357,8 +357,8 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, nil)
 	out.emit(ev)
 	if len(fk.places) == 0 {
-		inv.summary = "adopted " + name + "; it is now one of your own skills"
-		out.done("adopted " + out.paint(heading, name) + "; it is now one of your own skills")
+		inv.summary = "adopted " + name
+		out.done("adopted " + out.paint(heading, name))
 		inv.noAccountRemoteHint(ev)
 		return nil
 	}

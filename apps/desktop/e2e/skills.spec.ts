@@ -908,7 +908,7 @@ test.describe("settling a skill", () => {
       name: "Not managed by agentx",
     });
     await expect(unmanagedBanner).toContainText(
-      "Adopt to make it one of your skills"
+      "Adopt to manage it from agentx"
     );
     await unmanagedBanner.getByRole("button", { name: "Adopt" }).click();
     await expect(toasts(page).getByText("Adopted legacy skill")).toBeVisible();

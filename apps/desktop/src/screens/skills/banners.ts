@@ -205,7 +205,7 @@ const table: BannerRule[] = [
     // An unmanaged skill no tool recorded, or one whose record the CLI refuses.
     banner: () => ({
       action: { kind: "adopt" },
-      text: "Adopt to make it one of your skills",
+      text: "Adopt to manage it from agentx",
       title: "Not managed by agentx",
       tone: "neutral",
     }),
