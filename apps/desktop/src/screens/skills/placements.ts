@@ -12,35 +12,54 @@ import { plural } from "#/lib/plural.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 /**
- * The configurations whose own directory holds `path`: a client that reads another client's skills
- * directory, as Cursor reads Claude Code's, sees a skill through that client's placement.
+ * The configurations whose own directory is the most specific one that holds `path`: usually one,
+ * two when they share a directory, as Zencoder and Zenflow do, and none when it is in no agent's
+ * own directory. The most specific wins, since one agent's directory can sit inside another's, as
+ * Antigravity's `~/.gemini/antigravity` sits inside Gemini CLI's `~/.gemini`. A client that reads
+ * the library places nothing in its own directory, so it owns no path, as the CLI judges it.
  */
-const ownersOf = (path: string, configurations: Configuration[]) =>
-  configurations.filter((c) => path.startsWith(`${c.path}/`));
+const ownersOf = (path: string, configurations: Configuration[]) => {
+  const holding = configurations.filter(
+    (c) => !c.reads_library && path.startsWith(`${c.path}/`)
+  );
+  const depth = Math.max(0, ...holding.map((c) => c.path.length));
+  return holding.filter((c) => c.path.length === depth);
+};
+
+/** The owners of each place `c` sees the skill at, at user scope and outside any plugin. */
+const ownersSeenBy = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+) =>
+  row.occurrences
+    .filter(
+      (o) =>
+        o.configuration === c.id && o.scope === "user" && o.plugin === undefined
+    )
+    .map((o) => ownersOf(o.path, configurations));
 
 /**
- * The configurations `c` sees the skill through and nothing else: one entry per other client whose
+ * The configurations `c` sees the skill through and nothing else: every other client whose
  * directory holds what `c` sees, in inventory order, or none when `c` sees it at a place of its
- * own, or not at all. A plugin's skill and a project's are not placements, so they never count.
+ * own, at a place no agent owns, or not at all. Cursor reads Claude Code's skills directory, so a
+ * skill placed in Claude Code alone is inherited from it. A plugin's skill and a project's are not
+ * placements, so they never count.
  */
 export const inheritedFrom = (
   row: SkillRow,
   c: Configuration,
   configurations: Configuration[]
 ): Configuration[] => {
-  const seen = row.occurrences.filter(
-    (o) =>
-      o.configuration === c.id && o.scope === "user" && o.plugin === undefined
-  );
-  const others = configurations.filter((other) => other.id !== c.id);
+  const owners = ownersSeenBy(row, c, configurations);
   if (
-    seen.length === 0 ||
-    seen.some((o) => ownersOf(o.path, others).length === 0)
+    owners.length === 0 ||
+    owners.some((each) => each.length === 0 || each.some((o) => o.id === c.id))
   ) {
     return [];
   }
-  return others.filter((other) =>
-    seen.some((o) => o.path.startsWith(`${other.path}/`))
+  return configurations.filter((other) =>
+    owners.some((each) => each.some((o) => o.id === other.id))
   );
 };
 
@@ -72,7 +91,8 @@ const andList = (words: string[]) =>
 
 /**
  * The configurations that lose the skill with `c`'s placement: those that see it only through
- * `c`'s directory, as Cursor sees a skill placed in Claude Code alone.
+ * `c`'s directory, as Cursor sees a skill placed in Claude Code alone, or Zenflow one in the
+ * directory it shares with Zencoder.
  */
 export const dependantsOf = (
   row: SkillRow,
@@ -80,8 +100,14 @@ export const dependantsOf = (
   configurations: Configuration[]
 ): Configuration[] =>
   configurations.filter((other) => {
-    const from = inheritedFrom(row, other, configurations);
-    return from.length === 1 && from[0]?.id === c.id;
+    if (other.id === c.id || other.reads_library) {
+      return false;
+    }
+    const owners = ownersSeenBy(row, other, configurations);
+    return (
+      owners.length > 0 &&
+      owners.every((each) => each.some((o) => o.id === c.id))
+    );
   });
 
 /** The names a removal from `c` takes the skill from: `c` and every agent that sees it through `c`. */
