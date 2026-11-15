@@ -2,7 +2,7 @@
 // and collapses again, and the subject of the commit that created a fork links to its origin's page.
 import type { Page } from "@playwright/test";
 
-import { originPage } from "#/screens/skills/history.tsx";
+import { originPage, originParts } from "#/screens/skills/history.tsx";
 
 import {
   ACME,
@@ -75,18 +75,43 @@ test("the subject of a fork's first commit links to the page it came from", asyn
   await files.click();
   await expect(files).toHaveAttribute("aria-expanded", "true");
 
-  await sheet(page).getByRole("link", { name: subject }).click();
+  const link = sheet(page).getByRole("link");
+  await expect(link).toHaveText(`${ACME}/pdf`);
+  await link.click();
   await expect.poll(() => cli.openedUrls).toEqual([`${ACME}/tree/main/pdf`]);
 });
 
-test("a fork's origin page is a link only when it is an https page", () => {
+test("a fork's origin links its name, and only to an https page", () => {
   const [first] = history;
-  const origin = { kind: "plugin" as const, plugin: "p", skill: "s" };
+  const origin = {
+    kind: "plugin" as const,
+    plugin: "chrome-devtools-mcp",
+    skill: "a11y-debugging",
+  };
   const url = "https://github.com/ChromeDevTools/chrome-devtools-mcp";
-  expect(originPage({ ...first, origin: { ...origin, url } })).toBe(url);
-  expect(originPage({ ...first, origin })).toBeUndefined();
+  const fork = {
+    ...first,
+    origin: { ...origin, url },
+    subject: "Fork a11y-debugging from plugin chrome-devtools-mcp",
+  };
+  expect(originPage(fork)).toBe(url);
+  expect(originParts(fork)).toEqual({
+    after: "",
+    before: "Fork a11y-debugging from plugin ",
+    name: "chrome-devtools-mcp",
+  });
+  // The skill a fork of a fork came from, named after "from" even when the fork shares the word.
   expect(
-    originPage({ ...first, origin: { ...origin, url: "http://example.com" } })
+    originParts({
+      ...first,
+      origin: { kind: "skill", skill: "alpha" },
+      subject: "Fork alpha-2 from alpha",
+    })
+  ).toEqual({ after: "", before: "Fork alpha-2 from ", name: "alpha" });
+  expect(originParts({ ...fork, subject: "Rename it" })).toBeUndefined();
+  expect(originPage({ ...fork, origin })).toBeUndefined();
+  expect(
+    originPage({ ...fork, origin: { ...origin, url: "http://example.com" } })
   ).toBeUndefined();
   expect(originPage(first)).toBeUndefined();
 });

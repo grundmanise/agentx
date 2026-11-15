@@ -777,11 +777,12 @@ Finder in this file means the platform's file manager. `src/lib/reveal.ts` names
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / `button.ghost-bg`, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
 - **Small, wrapping** – for a label that is a sentence, such as a commit subject in the History sheet: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
+- **Plain, inline** – no fill, no padding, no radius, as tall as its text; `button.ghost-text`, hover `text.primary`. Only for a line of text that expands, such as an entry of the History sheet.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
 - **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
 
-Every button has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
+Every button but the plain inline one has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
 
 Two buttons side by side: `button.gap`, primary on the right.
 
@@ -977,7 +978,7 @@ Under the product name in the sidebar: `type.machine-label`, `text.muted`, one l
 
 ### Timeline (history)
 
-Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote. The dot is centred in a box as high as the entry's first line (`timeline.line` beside text, `timeline.button-line` beside a small button), with a 1px `timeline.connector` from that box to the next entry. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. The subject of the commit that created a fork is a link when the CLI knows the https page of the fork's origin: same type and colour, underlined on hover, the URL as its tooltip; it opens the page in the browser. When the list is cut short, the last item is a hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button that opens the History sheet.
+Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot`, round: `timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote. The dot is centred in a box as high as the entry's first line (`timeline.line` beside text, `timeline.button-line` beside a small button), with a 1px `timeline.connector` from that box to the next entry. Subject `type.timeline-entry` `text.primary`, meta `type.timeline-meta` `timeline.meta`. In the subject of the commit that created a fork, the origin's name (the plugin, the source with its path, or the skill) is a link when the CLI knows its https page: same type and colour, always underlined, the URL as its tooltip; it opens the page in the browser. The rest of the subject is text. When the list is cut short, the last item is a hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button that opens the History sheet.
 
 ### Menu
 
@@ -1008,7 +1009,7 @@ shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for
 
 ### Sheet (History)
 
-`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a small wrapping ghost button with a chevron that expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. An entry whose subject is a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the link follows it where the subject would be.
+`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
 
 ### Sheet (What's new)
 

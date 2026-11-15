@@ -657,7 +657,7 @@ test.describe("the detail pane", () => {
       name: "pdf-letters: edit SKILL.md and add examples.md (studio-mac)",
     });
     const line = await long.evaluate((el) => el.getBoundingClientRect().height);
-    expect(line).toBeGreaterThan(40);
+    expect(line).toBeGreaterThan(20);
     const sideways = async () =>
       await sheet.getByRole("list", { name: "All history" }).evaluate((el) => {
         const box = el.parentElement;

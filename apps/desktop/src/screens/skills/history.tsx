@@ -2,7 +2,7 @@ import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { HistoryEvent } from "#/cli/events.gen.ts";
+import type { ForkOrigin, HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -98,23 +98,71 @@ export const originPage = (e: HistoryEvent) => {
   return url?.startsWith("https://") === true ? url : undefined;
 };
 
-/** An entry's subject: a link to the page of the fork's origin when it has one, else text. */
-const Subject = ({ subject, page }: { subject: string; page?: string }) =>
-  page === undefined ? (
-    <span className="type-timeline-entry text-text-primary">{subject}</span>
-  ) : (
-    <a
-      href={page}
-      title={page}
-      className="type-timeline-entry text-text-primary hover:underline"
-      onClick={(e) => {
-        e.preventDefault();
-        void openInBrowser(page);
-      }}
-    >
-      {subject}
-    </a>
+const originName = (origin: ForkOrigin) => {
+  if (origin.kind === "plugin" && origin.plugin !== undefined) {
+    return origin.plugin;
+  }
+  if (origin.kind === "source" && origin.source !== undefined) {
+    return origin.path === undefined || origin.path === ""
+      ? origin.source
+      : `${origin.source}/${origin.path}`;
+  }
+  return origin.skill;
+};
+
+/**
+ * The subject of the commit that created a fork, split around the name of its origin, the part
+ * that links to the origin's page: the plugin, the source with its path, or the skill, as the CLI
+ * writes them after "from". Undefined when the subject does not name it.
+ */
+export const originParts = (e: HistoryEvent) => {
+  const name = e.origin === undefined ? "" : originName(e.origin);
+  const from = e.subject.indexOf(" from ");
+  const at =
+    name === "" || from === -1
+      ? -1
+      : e.subject.indexOf(name, from + " from ".length);
+  return at === -1
+    ? undefined
+    : {
+        after: e.subject.slice(at + name.length),
+        before: e.subject.slice(0, at),
+        name,
+      };
+};
+
+/**
+ * An entry's subject. On the commit that created a fork, the name of its origin links to the
+ * origin's page when the CLI knows one; the rest is text.
+ */
+const Subject = ({ entry }: { entry: HistoryEvent }) => {
+  const page = originPage(entry);
+  const parts = page === undefined ? undefined : originParts(entry);
+  if (page === undefined || parts === undefined) {
+    return (
+      <span className="type-timeline-entry text-text-primary">
+        {entry.subject}
+      </span>
+    );
+  }
+  return (
+    <span className="type-timeline-entry text-text-primary">
+      {parts.before}
+      <a
+        href={page}
+        title={page}
+        className="underline underline-offset-2"
+        onClick={(e) => {
+          e.preventDefault();
+          void openInBrowser(page);
+        }}
+      >
+        {parts.name}
+      </a>
+      {parts.after}
+    </span>
   );
+};
 
 const Chevron = ({ open }: { open: boolean }) => (
   <span className="h-timeline-line flex flex-none items-center">
@@ -135,10 +183,11 @@ const Entry = ({
   expandable?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
-  const page = originPage(entry);
+  const linked =
+    originPage(entry) !== undefined && originParts(entry) !== undefined;
   return (
     <li className="grid-cols-timeline grid gap-x-3">
-      <DotColumn button={expandable} last={last}>
+      <DotColumn button={false} last={last}>
         <span className={dotVariants({ kind: kindOf(entry) })} />
       </DotColumn>
       <div
@@ -146,13 +195,12 @@ const Entry = ({
           last ? "flex min-w-0 flex-col" : "flex min-w-0 flex-col pb-4"
         }
       >
-        {expandable && page !== undefined && (
-          // The subject is a link of its own, so the button holds the chevron alone and the
-          // link starts where the button's subject would.
-          <div className="-ml-3.5 flex items-start">
+        {expandable && linked && (
+          // A link cannot sit inside the button, so the button holds the chevron alone.
+          <div className="flex items-start gap-2">
             <Button
-              variant="ghost"
-              size="sm-wrap"
+              variant="plain"
+              size="inline"
               aria-expanded={open}
               aria-label={`Show the files of ${entry.subject}`}
               onClick={() => {
@@ -161,30 +209,26 @@ const Entry = ({
             >
               <Chevron open={open} />
             </Button>
-            <span className="-ml-1.5 min-w-0 py-1.5">
-              <Subject subject={entry.subject} page={page} />
-            </span>
+            <Subject entry={entry} />
           </div>
         )}
-        {expandable && page === undefined && (
+        {expandable && !linked && (
           // A block, so the button shrinks to fit the column and its subject wraps inside it.
-          <div className="-ml-3.5">
+          <div>
             <Button
-              variant="ghost"
-              size="sm-wrap"
+              variant="plain"
+              size="inline"
               aria-expanded={open}
               onClick={() => {
                 setOpen((o) => !o);
               }}
             >
               <Chevron open={open} />
-              <span className="type-timeline-entry text-text-primary">
-                {entry.subject}
-              </span>
+              <Subject entry={entry} />
             </Button>
           </div>
         )}
-        {!expandable && <Subject subject={entry.subject} page={page} />}
+        {!expandable && <Subject entry={entry} />}
         <span className="type-timeline-meta text-timeline-meta">
           {metaOf(entry)}
         </span>
@@ -250,8 +294,9 @@ const HistorySheet = ({
 
 /**
  * HISTORY in the detail pane. For one of your own skills, the latest commits of its branch from
- * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. The subject
- * of the commit that created a fork links to the page it came from, when the CLI knows one. Other
+ * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. In the
+ * subject of the commit that created a fork, the origin's name links to its page, when the CLI
+ * knows one. Other
  * skills have no history of their own.
  */
 export const HistorySection = ({ row }: { row: SkillRow }) => {
