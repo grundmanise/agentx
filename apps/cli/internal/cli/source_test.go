@@ -63,9 +63,13 @@ func TestSourceAddNormalisesEveryURLForm(t *testing.T) {
 		commit  string
 		skills  float64
 	}{
+		// A link at the default branch adds the source unpinned.
+		{"https://github.com/owner/repo/tree/main/skills", "https://github.com/owner/repo", "skills", "", head, 2},
 		{"owner/repo", "https://github.com/owner/repo", "", "", head, 2},
-		{"https://github.com/owner/repo/tree/v1/skills/beta", "https://github.com/owner/repo", "skills/beta", "v1", v1, 1},
 		{"https://someone:s3cret-token@github.com/owner/repo#main", "https://github.com/owner/repo", "", "main", head, 2},
+		{"https://github.com/owner/repo/tree/v1/skills/beta", "https://github.com/owner/repo", "skills/beta", "v1", v1, 1},
+		// A link at the default branch keeps the pin of an added source.
+		{"https://github.com/owner/repo/tree/main/skills/beta", "https://github.com/owner/repo", "skills/beta", "v1", v1, 1},
 		{"file://localhost" + s.gitDir + "/", s.url, "", "", head, 2},
 	}
 	for _, tt := range tests {
@@ -110,16 +114,25 @@ func TestSourceAddNormalisesEveryURLForm(t *testing.T) {
 			t.Errorf("%s carries the credential:\n%s", what, text)
 		}
 	}
-	// One entry per canonical URL, whatever forms were added, pinned as the last add said.
+	// One entry per canonical URL, whatever forms were added, pinned as the last pin said.
 	sources := readSettingsFile(t, h)["sources"].([]any)
 	if len(sources) != 2 {
 		t.Fatalf("sources = %v, want two entries", sources)
 	}
 	equal(t, "sources[1].url", sources[1].(map[string]any)["url"], "https://github.com/owner/repo")
-	equal(t, "sources[1].pin", sources[1].(map[string]any)["pin"], "main")
+	equal(t, "sources[1].pin", sources[1].(map[string]any)["pin"], "v1")
 	if _, ok := sources[1].(map[string]any)["alias"]; ok {
 		t.Errorf("alias written although unused: %v", sources[1])
 	}
+
+	// source skills takes a link at the default branch whatever the pin,
+	// and lists what its path scopes.
+	out := h.run("--json", "source", "skills", "https://github.com/owner/repo/tree/main/skills/beta")
+	equal(t, "exit of source skills", out.exit, 0)
+	src, skills := sourceEvents(t, h.events(out.stdout))
+	equal(t, "subpath listed", src["subpath"], "skills/beta")
+	equal(t, "commit listed", src["commit"], v1)
+	equal(t, "skills listed", len(skills), 1)
 }
 
 func anyOrNil(s string) any {
@@ -416,7 +429,7 @@ func TestSourceSkills(t *testing.T) {
 		{"subpath missing", []string{"source", "skills", s.url + "/nope"}, 5, "not_found", "directory"},
 		{"subpath is a file", []string{"source", "skills", s.url + "/skills/README.md"}, 5, "not_found", "directory"},
 		{"unknown id", []string{"source", "skills", "0123456789abcdef"}, 5, "not_found", "agentx source list"},
-		{"unknown url", []string{"source", "skills", "owner/other"}, 5, "not_found", "agentx source add https://github.com/owner/other"},
+		{"unreachable url", []string{"source", "skills", "file://" + filepath.Join(filepath.Dir(h.home), "never.git")}, 3, "source", "check the URL"},
 		{"other pin", []string{"source", "skills", s.url + "#v2"}, 1, "usage", "agentx source add " + s.url + "#v2"},
 		{"bad url", []string{"source", "skills", "nope"}, 1, "usage", "owner/repo"},
 	}
@@ -432,6 +445,65 @@ func TestSourceSkills(t *testing.T) {
 			contains(t, "error.hint", events[0]["hint"].(string), tt.hint)
 		})
 	}
+}
+
+// TestSourceSkillsListsAURLNotAdded lists the skills under a subpath of a
+// repository the settings hold no source for. The listing comes from the
+// network and adds nothing: on a fresh home it creates no account repo and
+// no settings, and on a home with another source the settings, the account
+// repo's remotes and its refs under refs/agentx are as they were.
+func TestSourceSkillsListsAURLNotAdded(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s := h.newSourceRepo("unadded", true)
+	s.skill("skills/alpha", "alpha", "The first skill", nil)
+	s.skill("skills/beta", "beta", "The second skill", nil)
+	s.skill("tools/gamma", "gamma", "Outside skills", nil)
+	head := s.commit("skills")
+	settingsFile := home.SettingsPath(h.agentx)
+
+	out := h.run("--json", "source", "skills", s.url+"/skills")
+	equal(t, "exit", out.exit, 0)
+	events := h.events(out.stdout)
+	if got, want := h.types(events), []string{"source", "source_skill", "source_skill", "result"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("event types = %v, want %v", got, want)
+	}
+	want := jsonEvent{"type": "source", "schema_version": float64(schemaVersion), "id": source.ID(s.url), "url": s.url, "subpath": "skills", "commit": head, "skills": float64(2)}
+	if !reflect.DeepEqual(events[0], want) {
+		t.Errorf("source event = %v\nwant %v", events[0], want)
+	}
+	equal(t, "first skill", events[1]["name"], "alpha")
+	equal(t, "second skill", events[2]["subpath"], "skills/beta")
+	if _, err := os.Stat(gitx.AccountRepoPath(h.agentx)); err == nil {
+		t.Error("the listing created the account repo")
+	}
+	if _, err := os.Stat(settingsFile); err == nil {
+		t.Error("the listing wrote the settings")
+	}
+
+	other := h.newSourceRepo("other", true)
+	other.skill("skills/delta", "delta", "", nil)
+	other.commit("one skill")
+	h.mustRun("source", "add", other.url)
+	settings, err := os.ReadFile(settingsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remotes := h.accountGit("remote")
+	refs := h.accountGit("for-each-ref", "refs/agentx")
+
+	out = h.run("source", "skills", s.url+"/skills")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "stdout", out.stdout, "2 skills in "+s.url+" under skills at "+head[:7]+"\n"+
+		"  alpha  skills/alpha  The first skill\n"+
+		"  beta   skills/beta   The second skill\n")
+	after, err := os.ReadFile(settingsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equal(t, "settings", string(after), string(settings))
+	equal(t, "remotes", h.accountGit("remote"), remotes)
+	equal(t, "refs", h.accountGit("for-each-ref", "refs/agentx"), refs)
 }
 
 func TestSourceListAndRemove(t *testing.T) {

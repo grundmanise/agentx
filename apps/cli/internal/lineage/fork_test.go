@@ -34,6 +34,18 @@ func TestParseForkAndForkMessage(t *testing.T) {
 		{"an uppercase fork id", "s\n\nAgentx-Fork-ID: " + strings.ToUpper(aForkID) + "\n", ForkTrailers{}, true},
 		{"a machine of the wrong length", "s\n\nAgentx-Machine: abc\n", ForkTrailers{}, true},
 		{"a base that is no object id", "s\n\nAgentx-Base: main\n", ForkTrailers{}, true},
+		{"a plugin's origin", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: format\nAgentx-Origin-Plugin: formatter\nAgentx-Origin-Marketplace: acme\nAgentx-Origin-URL: https://github.com/acme/formatter\n",
+			ForkTrailers{ForkID: aForkID, Origin: Origin{Skill: "format", Plugin: "formatter", Marketplace: "acme", URL: "https://github.com/acme/formatter"}}, false},
+		{"a skill's origin", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: My_Skill.v2\n", ForkTrailers{ForkID: aForkID, Origin: Origin{Skill: "My_Skill.v2"}}, false},
+		{"an origin without a fork id", "s\n\nAgentx-Origin-Skill: format\n", ForkTrailers{}, true},
+		{"an origin without its skill", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Plugin: formatter\n", ForkTrailers{}, true},
+		{"a marketplace without its plugin", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: format\nAgentx-Origin-Marketplace: acme\n", ForkTrailers{}, true},
+		{"an origin's skill given twice", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\nAgentx-Origin-Skill: b\n", ForkTrailers{}, true},
+		{"an origin name with a space", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\nAgentx-Origin-Plugin: two words\n", ForkTrailers{}, true},
+		{"an origin name with a Unicode line break", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\u0085b\n", ForkTrailers{}, true},
+		{"an origin name too long", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: " + strings.Repeat("a", 256) + "\n", ForkTrailers{}, true},
+		{"an origin URL that is no web URL", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\nAgentx-Origin-URL: ssh://git@github.com/acme/formatter\n", ForkTrailers{}, true},
+		{"an origin URL with a password", "s\n\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Origin-Skill: a\nAgentx-Origin-URL: https://me:secret@github.com/acme/formatter\n", ForkTrailers{}, true},
 	} {
 		got, err := ParseFork(tc.message)
 		if (err != nil) != tc.err || got != tc.want {
@@ -54,6 +66,9 @@ func TestParseForkAndForkMessage(t *testing.T) {
 		{"a body ending in a trailer of its own", "s", "Agentx-Machine: " + aMachine, ForkTrailers{}, true},
 		{"a body ending in the user's trailers", "s", "why\n\nSigned-off-by: Ada <ada@example.com>\n  continued", ForkTrailers{Machine: aMachine}, false},
 		{"a value git would not read back", "s", "", ForkTrailers{Machine: "not hex"}, true},
+		{"a fork of a plugin's skill", "Fork format from plugin formatter", "",
+			ForkTrailers{ForkID: aForkID, Origin: Origin{Skill: "format", Plugin: "formatter", Marketplace: "acme", URL: "https://github.com/acme/formatter"}, Machine: aMachine}, false},
+		{"an origin URL that is no web URL", "s", "", ForkTrailers{ForkID: aForkID, Origin: Origin{Skill: "format", URL: "file:///plugins/formatter"}}, true},
 	} {
 		m, err := ForkMessage(tc.subject, tc.body, tc.t)
 		if (err != nil) != tc.err {
@@ -69,6 +84,10 @@ func TestParseForkAndForkMessage(t *testing.T) {
 	}
 	if m, _ := ForkMessage("Create pdf", "", ForkTrailers{ForkID: aForkID, Machine: aMachine}); m != "Create pdf\n\nAgentx-Fork-ID: "+aForkID+"\nAgentx-Machine: "+aMachine+"\n" {
 		t.Errorf("a creation message reads %q", m)
+	}
+	if m, _ := ForkMessage("s", "", ForkTrailers{ForkID: aForkID, Origin: Origin{Skill: "f", Plugin: "p", Marketplace: "m", URL: "https://example.com/p"}, Machine: aMachine}); m != "s\n\nAgentx-Fork-ID: "+aForkID+
+		"\nAgentx-Origin-Skill: f\nAgentx-Origin-Plugin: p\nAgentx-Origin-Marketplace: m\nAgentx-Origin-URL: https://example.com/p\nAgentx-Machine: "+aMachine+"\n" {
+		t.Errorf("a fork's message with an origin reads %q", m)
 	}
 	// The user's trailers and agentx's make one block, which git reads as a
 	// whole; a paragraph that only looks like one in part stays apart.
@@ -252,5 +271,28 @@ func TestWalkCacheIsSharedByGoroutines(t *testing.T) {
 	none.put(map[string]ForkLineage{"a": {}})
 	if _, ok := none.get("a"); ok {
 		t.Error("a nil cache kept a lineage")
+	}
+}
+
+func TestIsOriginName(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		want bool
+	}{
+		{"format", true},
+		{"My_Skill.v2", true},
+		{strings.Repeat("é", 255), true},
+		{"", false},
+		{"two words", false},
+		{"\u00a0alpha", false},
+		{"a\u0085b", false},
+		{"a\x7fb", false},
+		{"a\xffb", false},
+		{strings.Repeat("a", 256), false},
+	} {
+		if got := IsOriginName(tc.name); got != tc.want {
+			t.Errorf("IsOriginName(%q) = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

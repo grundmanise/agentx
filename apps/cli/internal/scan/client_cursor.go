@@ -91,7 +91,7 @@ func (c cursor) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 // it names, else mcp.json, else .mcp.json, with ${CURSOR_PLUGIN_ROOT} and
 // ${CLAUDE_PLUGIN_ROOT} standing for dir. Hooks are what the manifest's
 // hooks declares, else hooks/hooks.json; the icon is the manifest's logo,
-// else, for a Claude Code manifest, its icon.
+// else, for a Claude Code manifest, its icon. Its URL is the manifest's.
 func cursorPlugin(name, marketplace, version, dir string, warn func(string)) InstalledPlugin {
 	var m pluginManifest
 	manifest := firstFile(dir, ".cursor-plugin/plugin.json", ".claude-plugin/plugin.json", "plugin.json")
@@ -119,6 +119,7 @@ func cursorPlugin(name, marketplace, version, dir string, warn func(string)) Ins
 	} else {
 		p.Icon = pluginIcon(m.Icon, manifest, "icon", dir, true, warn)
 	}
+	p.URL = m.webURL()
 	if p.Name == "" {
 		p.Name = name
 	}

@@ -160,6 +160,7 @@ func (s *Scan) addPlugin(conf Configuration, p InstalledPlugin) {
 		Enabled:       p.Enabled,
 		Hooks:         p.Hooks,
 		Icon:          p.Icon,
+		URL:           p.URL,
 	}
 	if node.Hooks == nil {
 		node.Hooks = []Hook{}
