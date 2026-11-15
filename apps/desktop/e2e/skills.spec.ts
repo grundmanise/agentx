@@ -436,7 +436,7 @@ test.describe("filters", () => {
     ]);
   });
 
-  test("the sort toggle steps through Default, A-Z and Z-A", async ({
+  test("the sort toggle steps from enabled first through A-Z and Z-A", async ({
     cli,
     page,
   }) => {
@@ -451,9 +451,10 @@ test.describe("filters", () => {
       })),
     });
     const personal = group(page, "PERSONAL (3)");
-    // Default: enabled skills first, then disabled ones, each A to Z.
+    // Off: enabled skills first, then disabled ones, each A to Z.
     const toggle = page.getByRole("button", { name: /^Sort: /u });
     await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
+    await expect(toggle).toHaveText("A-Z");
     expect(await rowNames(personal)).toEqual([
       "pdf-letters",
       "release-notes",
@@ -479,7 +480,7 @@ test.describe("filters", () => {
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
       "PERSONAL (3)"
     );
-    // Back to Default.
+    // Off again.
     await toggle.click();
     await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
     expect(await rowNames(personal)).toEqual([

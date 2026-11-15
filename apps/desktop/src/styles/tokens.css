@@ -215,14 +215,15 @@
 
   /* Filter row */
   --color-filter-bg: var(--gray-880);
-  --color-filter-text: var(--gray-300);
+  --color-filter-text: var(--gray-200);
   --color-filter-active-bg: rgb(212 255 79 / 0.12);
   --color-filter-active-text: var(--color-accent-primary);
   --color-filter-badge-bg: var(--color-accent-primary);
   --color-filter-chip-bg: var(--gray-920);
   --color-filter-chip-text: var(--gray-150);
   --color-filter-chip-hover: var(--gray-880);
-  --color-filter-sort-text: var(--gray-300);
+  --color-filter-sort-text: var(--gray-200);
+  --color-filter-sort-off-text: var(--color-text-caption);
 
   /* Lists and rows */
   --color-row-hover: var(--gray-920);
