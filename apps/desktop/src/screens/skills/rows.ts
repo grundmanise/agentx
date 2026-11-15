@@ -1,4 +1,4 @@
-// The Skills screen's rows outside the Skills screen: the title bar's publish status and the
+// The Skills screen's rows outside the Skills screen: the title bar's sync status and the
 // palette read every skill through the same projection (src/screens/skills/projection.ts), so
 // they count and name skills as the list does.
 import { useMemo } from "react";

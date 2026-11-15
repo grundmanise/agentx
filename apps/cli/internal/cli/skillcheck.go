@@ -173,6 +173,9 @@ type checkReport struct {
 	removed   []removedSkill
 	failures  []checkFailure
 	notes     []string // what a candidate the check moved leaves out or calls otherwise
+	// accountFetched is set when the check fetched the account remote, and
+	// accountFailed when it set out to and could not reach it.
+	accountFetched, accountFailed bool
 }
 
 // skillCheckUpdates is agentx skill check-updates: the update check,
@@ -342,7 +345,11 @@ func checkRefusal(failures []checkFailure) error {
 // check covers, as a publish to that source runs it, see publishShared:
 // that source alone is fetched, whether or not a skill of it is held, and
 // the account remote is neither fetched nor checked, so it can neither
-// fail nor slow that run. "" is every source, as above.
+// fail nor slow that run. The account remote's URL is the account remote
+// alone, as the serve child's periodic check runs it, see
+// serveChecks.account: it is fetched whether or not one of your own skills
+// is placed here, no shared source is, and a machine with no account repo
+// is idle. "" is every source, as above.
 func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only string) (checkReport, error) {
 	var rep checkReport
 	s, err := inv.loadSettings()
@@ -353,11 +360,13 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 		rep.idle = true
 		return rep, nil
 	}
+	account, _ := accountEntry(s)
+	accountOnly := only != "" && only == account.URL
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return rep, accountRepoFailure(err)
 	}
-	if !exists && !serving { // no managed skill, and nothing a source was fetched into
+	if !exists && (!serving || accountOnly) { // no managed skill, and nothing a source was fetched into
 		rep.idle = true
 		return rep, nil
 	}
@@ -388,8 +397,8 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 		}
 	}
 	var acc accountCheck
-	if only == "" {
-		if acc, err = inv.accountDue(own); err != nil {
+	if only == "" || accountOnly {
+		if acc, err = inv.accountDue(own, accountOnly); err != nil {
 			return rep, err
 		}
 	}
@@ -458,6 +467,8 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 			rep.failures = append(rep.failures, cf)
 		}
 	}
+	rep.accountFetched = acc.fetched && added[acc.entry.URL]
+	rep.accountFailed = acc.entry.URL != "" && !acc.fetched && added[acc.entry.URL]
 	if len(rep.refreshed) == 0 && len(rep.failures) == 0 { // every source it set out to check was removed meanwhile
 		rep.idle = true
 		return rep, nil
@@ -498,7 +509,6 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	}
 	sort.Slice(announced, func(i, j int) bool { return announced[i].Name < announced[j].Name })
 	sort.Slice(rep.removed, func(i, j int) bool { return rep.removed[i].name < rep.removed[j].name })
-	account, _ := accountEntry(s)
 	if rep.updates, err = inv.describeCandidates(ctx, gitDir, account.URL, announced); err != nil {
 		return rep, err
 	}
@@ -536,8 +546,10 @@ type accountCheck struct {
 // fetched: the user's own skills, the forks of own placed on this machine,
 // and the account remote's entry, whose fetch is then one target of the
 // check's, after the shared sources, see fetchSources. Nothing is due when
-// no account remote is set or none of those skills is placed here.
-func (inv *invocation) accountDue(own map[string]lineage.Record) (accountCheck, error) {
+// no account remote is set, or, unless always, none of those skills is
+// placed here: a check of the account remote alone fetches it all the same,
+// so that its remote-tracking branches hold what it holds.
+func (inv *invocation) accountDue(own map[string]lineage.Record, always bool) (accountCheck, error) {
 	var ac accountCheck
 	entry, _, ok, err := inv.accountSource()
 	if err != nil || !ok {
@@ -548,7 +560,7 @@ func (inv *invocation) accountDue(own map[string]lineage.Record) (accountCheck, 
 			ac.placed = append(ac.placed, rec)
 		}
 	}
-	if len(ac.placed) == 0 {
+	if len(ac.placed) == 0 && !always {
 		return ac, nil
 	}
 	sort.Slice(ac.placed, func(i, j int) bool { return ac.placed[i].Name < ac.placed[j].Name })

@@ -1,13 +1,13 @@
 // Publishing your own skills: what the Publish dialog of one skill (publish-dialog.tsx) and the
-// publish of every skill at once share. Publish all is a bare `skill publish`, which the title
-// bar's publish status and the palette run: it covers your own skills edited since they were
-// published, and leaves out each one never published, which a warning names
-// (docs/spec/cli-contract.md, "Publishing"). One toast says how it went, in the words the dialog
-// uses for one skill; the list redraws from the inventory that follows.
+// publish of every skill at once share. Publish all, which the title bar's sync popover and the
+// palette run, is one `skill publish <name>…` naming every skill to publish: your own skills
+// edited since they were published and those never published (docs/spec/cli-contract.md,
+// "Publishing"). One toast says how it went, in the words the dialog uses for one skill; the list
+// redraws from the inventory that follows.
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { LogEvent, PublishEvent } from "#/cli/events.gen.ts";
+import type { PublishEvent } from "#/cli/events.gen.ts";
 import { notify } from "#/components/toast.tsx";
 import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
@@ -16,8 +16,8 @@ import { navigateTo } from "#/lib/navigate.ts";
 import {
   accountRemoteOf,
   hasEditsToPublish,
+  notPublished,
 } from "#/screens/skills/banners.ts";
-import { openSkill } from "#/screens/skills/open.ts";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { currentRows } from "#/screens/skills/rows.ts";
@@ -26,13 +26,13 @@ import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 
-/** The label of Publish all, which shows as pending while the bare publish runs. */
+/** The label of Publish all, which shows as pending while its publish runs. */
 export const PUBLISH_ALL = "publish all";
 
 /**
  * The hints of `skill publish` that name a command, matched whole, and the app's words for each:
- * those of one skill, which the Publish dialog shows, and those of a bare publish, which Publish
- * all shows. A hint no rule matches shows as the CLI wrote it.
+ * those of one skill, which the Publish dialog shows, and those of a publish of several, which
+ * Publish all shows. A hint no rule matches shows as the CLI wrote it.
  */
 const publishHintRules: HintRule[] = [
   {
@@ -156,20 +156,29 @@ export const notifyNoAccountRemote = () => {
   });
 };
 
-/** Your own skills a bare publish covers: those edited since they were published. */
-export const toPublish = (rows: SkillRow[]) => rows.filter(hasEditsToPublish);
+/** One of your own skills to publish: edited since it was published, or never published. */
+export interface ToPublish {
+  name: string;
+  kind: "edited" | "new";
+}
+
+/**
+ * What Publish all publishes, in name order: each of your own skills edited since it was
+ * published (edited) or never published (new). Read only while an account remote is set.
+ */
+export const toPublish = (rows: SkillRow[]): ToPublish[] => {
+  const skills = rows.flatMap((row): ToPublish[] => {
+    if (hasEditsToPublish(row)) {
+      return [{ kind: "edited", name: row.name }];
+    }
+    return notPublished(row) ? [{ kind: "new", name: row.name }] : [];
+  });
+  skills.sort((a, b) => a.name.localeCompare(b.name));
+  return skills;
+};
 
 const plural = (n: number, one: string, many: string) =>
   n === 1 ? `${n} ${one}` : `${n} ${many}`;
-
-const NOT_PUBLISHED = /^(?<name>\S+) is not published:/u;
-
-/** The skills a bare publish left out as never published, by the warnings that name them. */
-const leftOut = (logs: LogEvent[]) =>
-  logs
-    .filter((log) => log.level === "warn")
-    .map((log) => NOT_PUBLISHED.exec(log.message)?.groups?.name)
-    .filter((name) => name !== undefined);
 
 /** The last `progress` event of phase `publish` of the running Publish all: how far it got. */
 interface Progress {
@@ -195,14 +204,6 @@ const updateAction = (name: string): ToastAction | undefined => {
       };
 };
 
-/** Show, which opens the first skill the publish left out. */
-const showAction = (name: string): ToastAction => ({
-  label: "Show",
-  onClick: () => {
-    openSkill(name);
-  },
-});
-
 /**
  * The toast of a Publish all that ended. A skill the account remote declined, or one this machine
  * may not push, keeps the runner's error toast, in the CLI's words; so does any other failure.
@@ -220,15 +221,12 @@ const reportPublishAll = (outcome: Outcome) => {
   const moved = results.find(
     (e) => e.outcome === "moved" || e.outcome === "behind"
   );
-  const skipped = leftOut(outcome.logs);
-  const suffix =
-    skipped.length === 0 ? "" : ` · ${skipped.length} not published yet`;
   const ok = outcome.exitCode === EXIT_CODES.ok;
   if (failed || (!ok && moved === undefined)) {
     return;
   }
   if (moved !== undefined) {
-    const text = `${changedElsewhere(moved.name)}${suffix}`;
+    const text = changedElsewhere(moved.name);
     notify(text, updateAction(moved.name));
     // A refused publish is in the activity list already, in the CLI's words.
     if (ok) {
@@ -237,22 +235,27 @@ const reportPublishAll = (outcome: Outcome) => {
     return;
   }
   const pushed = results.filter((e) => e.outcome === "pushed").length;
-  const text = `${pushed === 0 ? nonePublished(results.length) : `Published ${plural(pushed, "skill", "skills")}`}${suffix}`;
-  const [first] = skipped;
-  notify(text, first === undefined ? undefined : showAction(first));
+  const text =
+    pushed === 0
+      ? nonePublished(results.length)
+      : `Published ${plural(pushed, "skill", "skills")}`;
+  notify(text);
   addActivity(pushed === 0 ? "attention" : "success", text);
 };
 
 /**
- * Publish all: a bare `skill publish`, one run at a time. Its progress shows in the title bar
- * while it runs, then one toast says how it went.
+ * Publish all: one `skill publish <name>…` naming each skill in `names`, one run at a time. Its
+ * progress shows in the title bar while it runs, then one toast says how it went.
  */
-export const publishAll = async () => {
-  if (Object.hasOwn(useAppStore.getState().pending, PUBLISH_ALL)) {
+export const publishAll = async (names: readonly string[]) => {
+  if (
+    names.length === 0 ||
+    Object.hasOwn(useAppStore.getState().pending, PUBLISH_ALL)
+  ) {
     return;
   }
   useProgressStore.setState({ progress: undefined });
-  const outcome = await runUntilSettled(["skill", "publish"], {
+  const outcome = await runUntilSettled(["skill", "publish", ...names], {
     failure: (ended) => publishFailure(ended),
     label: PUBLISH_ALL,
     onProgress: (event) => {

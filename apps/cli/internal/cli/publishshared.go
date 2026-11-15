@@ -136,7 +136,7 @@ func (inv *invocation) publishShared(ctx context.Context, name, message string) 
 	rec, ok := records[name]
 	switch {
 	case ok && rec.Kind == lineage.KindFork: // a journal finished above made it one of your own
-		return inv.publish(ctx, name, message)
+		return inv.publish(ctx, []string{name}, message)
 	case !ok:
 		return inv.noLibrarySkill(name)
 	}
