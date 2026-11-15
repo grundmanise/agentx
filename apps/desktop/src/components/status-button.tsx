@@ -66,3 +66,12 @@ export const StatusButton = ({
     )}
   </Tooltip>
 );
+
+/**
+ * The sync status for a screen reader: a polite live region beside the button, never inside it,
+ * where a live region may go unread. It holds the summary the button shows, so a change the
+ * background check brings is announced; the button keeps its own name.
+ */
+export const StatusAnnouncement = ({ text }: { text: string }) => (
+  <output className="sr-only">{text}</output>
+);

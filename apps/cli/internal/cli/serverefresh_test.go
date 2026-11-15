@@ -439,7 +439,11 @@ func TestServeChecksTheAccountRemoteWhileItRuns(t *testing.T) {
 	if err := os.Rename(remote, away); err != nil {
 		t.Fatal(err)
 	}
-	for range 3 {
+	// A check that began before the rename can still report ok: wait for the first that failed.
+	p.nextMatching("an account check of the remote out of reach", func(e jsonEvent) bool {
+		return e["type"] == "update_check" && e["scope"] == checkScopeAccount && e["ok"] == false
+	})
+	for range 2 {
 		equal(t, "an account remote out of reach: ok", checked(checkScopeAccount)["ok"], false)
 	}
 	if err := os.Rename(away, remote); err != nil {

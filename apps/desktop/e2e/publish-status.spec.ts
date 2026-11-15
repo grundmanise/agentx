@@ -25,6 +25,20 @@ const pane = (page: Page, name: string) =>
     .getByRole("region", { name: "Skill details" })
     .getByRole("article", { name });
 
+/** An update another of your machines published to `name`, as serve reports it from `source`. */
+const fromAnotherMachine = (name: string, source: string): InlineEvent => ({
+  base_hash: "",
+  candidate: "c0ffee",
+  candidate_hash: "",
+  candidate_upstream_commit: "",
+  files: [{ path: "SKILL.md", status: "modified" }],
+  kind: "managed",
+  name,
+  source,
+  type: "update_available",
+  upstream_commit: "",
+});
+
 /** Every skill to publish on the fixture machine, as Publish all names them. */
 const OUTGOING = ["changelog", "draft", "notes"];
 
@@ -77,10 +91,28 @@ test.describe("states", () => {
     await expect(page.getByRole("tooltip")).toHaveText("2 edited · 1 new");
   });
 
-  test("changed on another machine: 1 incoming", async ({ cli, page }) => {
+  test("changed on another machine: 1 incoming, which a screen reader is told", async ({
+    cli,
+    page,
+  }) => {
     launch(cli, "synced", { incoming: true });
     await page.goto("/");
     await expect(status(page)).toHaveText("1 incoming");
+    await expect(page.getByRole("status")).toHaveText("1 incoming");
+  });
+
+  test("an update from another machine for a skill not in the library, or from another remote, is not incoming", async ({
+    cli,
+    page,
+  }) => {
+    launch(cli, "synced");
+    await page.goto("/");
+    await expect(status(page)).toHaveText("Synced");
+    await cli.serveEmit([
+      fromAnotherMachine("gone", ACCOUNT),
+      fromAnotherMachine("notes", "https://github.com/me/old-skills.git"),
+    ]);
+    await expect(status(page)).toHaveText("Synced");
   });
 
   test("both: 3 to publish · 1 incoming", async ({ cli, page }) => {

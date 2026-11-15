@@ -10,7 +10,10 @@ import { useState } from "react";
 
 import type { UpdateAvailableEvent } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
-import { StatusButton } from "#/components/status-button.tsx";
+import {
+  StatusAnnouncement,
+  StatusButton,
+} from "#/components/status-button.tsx";
 import type { StatusTone } from "#/components/status-button.tsx";
 import {
   SyncFooter,
@@ -75,7 +78,15 @@ export const useSyncState = (): SyncState | undefined => {
   if (accountRemote === undefined) {
     return { kind: "no-account-remote" };
   }
-  const incoming = Object.values(updates).filter(fromAnotherMachine);
+  // Only what another machine published to this account remote, for a skill still in the library:
+  // a skill removed since, or an update from an account remote set before this one, is not incoming.
+  const installed = new Set(rows.map((row) => row.name));
+  const incoming = Object.values(updates).filter(
+    (update) =>
+      fromAnotherMachine(update) &&
+      update.source === accountRemote.url &&
+      installed.has(update.name)
+  );
   incoming.sort((a, b) => a.name.localeCompare(b.name));
   return {
     incoming,
@@ -143,14 +154,17 @@ export const PublishStatus = () => {
   }
   if (state.kind === "no-account-remote") {
     return (
-      <StatusButton
-        tone="none"
-        label="Set up sync"
-        tooltip={["Connect an account remote to sync skills"]}
-        onClick={() => {
-          navigateTo("/settings");
-        }}
-      />
+      <>
+        <StatusButton
+          tone="none"
+          label="Set up sync"
+          tooltip={["Connect an account remote to sync skills"]}
+          onClick={() => {
+            navigateTo("/settings");
+          }}
+        />
+        <StatusAnnouncement text="Set up sync" />
+      </>
     );
   }
   const { incoming, outgoing, url } = state;
@@ -158,66 +172,74 @@ export const PublishStatus = () => {
     lastChecked === undefined ? undefined : formatAgo(lastChecked, now);
   const shown = describe(outgoing, incoming, checked);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <StatusButton
-          tone={shown.tone}
-          label={publishing ? publishingLabel(progress) : shown.label}
-          // The tooltip would cover the popover, and says nothing while the publish runs.
-          tooltip={publishing || open ? [] : shown.tooltip}
-          busy={publishing}
-        />
-      </PopoverTrigger>
-      <PopoverContent aria-label="Sync" align="end">
-        {outgoing.length === 0 && incoming.length === 0 && (
-          <SyncNote>Everything is synced</SyncNote>
-        )}
-        {outgoing.length > 0 && (
-          <SyncGroup caption="To publish">
-            <SyncRows>
-              {outgoing.map((skill) => (
-                <SyncRow key={skill.name} name={skill.name} meta={skill.kind} />
-              ))}
-            </SyncRows>
-            <div className="mt-2 flex px-2">
-              <Button
-                variant="primary"
-                size="sm"
-                aria-busy={publishing}
-                onClick={() => {
-                  setOpen(false);
-                  void publishAll(outgoing.map((skill) => skill.name));
-                }}
-              >
-                {publishing && <Spinner />}
-                Publish all
-              </Button>
-            </div>
-          </SyncGroup>
-        )}
-        {incoming.length > 0 && (
-          <SyncGroup caption="Incoming">
-            <SyncRows>
-              {incoming.map((update) => (
-                <SyncRow
-                  key={update.name}
-                  name={update.name}
-                  onOpen={() => {
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <StatusButton
+            tone={shown.tone}
+            label={publishing ? publishingLabel(progress) : shown.label}
+            // The tooltip would cover the popover, and says nothing while the publish runs.
+            tooltip={publishing || open ? [] : shown.tooltip}
+            busy={publishing}
+          />
+        </PopoverTrigger>
+        <PopoverContent aria-label="Sync" align="end">
+          {outgoing.length === 0 && incoming.length === 0 && (
+            <SyncNote>Everything is synced</SyncNote>
+          )}
+          {outgoing.length > 0 && (
+            <SyncGroup caption="To publish">
+              <SyncRows>
+                {outgoing.map((skill) => (
+                  <SyncRow
+                    key={skill.name}
+                    name={skill.name}
+                    meta={skill.kind}
+                  />
+                ))}
+              </SyncRows>
+              <div className="mt-2 flex px-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  aria-busy={publishing}
+                  onClick={() => {
                     setOpen(false);
-                    openSkill(update.name);
+                    void publishAll(outgoing.map((skill) => skill.name));
                   }}
-                />
-              ))}
-            </SyncRows>
-          </SyncGroup>
-        )}
-        <SyncFooter
-          remote={shortSource(url)}
-          checked={
-            checked === undefined ? "Not checked yet" : `Checked ${checked}`
-          }
-        />
-      </PopoverContent>
-    </Popover>
+                >
+                  {publishing && <Spinner />}
+                  Publish all
+                </Button>
+              </div>
+            </SyncGroup>
+          )}
+          {incoming.length > 0 && (
+            <SyncGroup caption="Incoming">
+              <SyncRows>
+                {incoming.map((update) => (
+                  <SyncRow
+                    key={update.name}
+                    name={update.name}
+                    onOpen={() => {
+                      setOpen(false);
+                      openSkill(update.name);
+                    }}
+                  />
+                ))}
+              </SyncRows>
+            </SyncGroup>
+          )}
+          <SyncFooter
+            remote={shortSource(url)}
+            checked={
+              checked === undefined ? "Not checked yet" : `Checked ${checked}`
+            }
+          />
+        </PopoverContent>
+      </Popover>
+      {/* The summary alone, never the publish's progress, so a screen reader hears each change once. */}
+      <StatusAnnouncement text={shown.label} />
+    </>
   );
 };
