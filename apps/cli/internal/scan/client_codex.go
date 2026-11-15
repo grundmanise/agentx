@@ -120,7 +120,8 @@ func pluginKey(key string) (name, marketplace string, ok bool) {
 // the file it names, else .mcp.json, else mcp.json. Hooks are what the
 // manifest's hooks declares, else hooks/hooks.json; the icon is the
 // interface's logo, else its composer icon. An agent-plugins manifest
-// keeps both under extensions."com.openai" when it has that object.
+// keeps both under extensions."com.openai" when it has that object. Its
+// URL is the manifest's.
 func codexPlugin(name, marketplace, dir string, warn func(string)) InstalledPlugin {
 	p := InstalledPlugin{Name: name, Marketplace: marketplace, Version: filepath.Base(dir), Path: dir}
 	var m pluginManifest
@@ -153,6 +154,7 @@ func codexPlugin(name, marketplace, dir string, warn func(string)) InstalledPlug
 	p.Hooks = manifestHooks(hooks, manifest, dir, false, false, warn)
 	icon, field := iface.icon()
 	p.Icon = pluginIcon(icon, manifest, field, dir, false, warn)
+	p.URL = m.webURL()
 	return p
 }
 

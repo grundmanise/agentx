@@ -4,6 +4,7 @@ import { HashRouter } from "react-router";
 
 import { App } from "#/app/app.tsx";
 import { TooltipProvider } from "#/components/ui/tooltip.tsx";
+import { showKept } from "#/startup/startup.ts";
 
 import "#/styles/index.css";
 
@@ -12,6 +13,7 @@ if (!root) {
   throw new Error("index.html has no #root element");
 }
 
+showKept();
 createRoot(root).render(
   <StrictMode>
     <HashRouter>

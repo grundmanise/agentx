@@ -80,7 +80,7 @@ test("an event keeps no file content and no patch, only their length", () => {
     content: "API_KEY=sk-live-123\nmore",
     name: "pdf",
     path: ".env",
-    schema_version: 2,
+    schema_version: 3,
     size: 24,
     type: "skill_file",
   } satisfies CliEvent;
@@ -91,7 +91,7 @@ test("an event keeps no file content and no patch, only their length", () => {
     name: "pdf",
     patch: "@@ -1 +1 @@\n-token: old\n+token: new\n",
     path: "SKILL.md",
-    schema_version: 2,
+    schema_version: 3,
     status: "modified",
     type: "diff",
   } satisfies CliEvent;
@@ -103,7 +103,7 @@ test("an event keeps no file content and no patch, only their length", () => {
 const log = (level: LogEvent["level"], message: string): LogEvent => ({
   level,
   message,
-  schema_version: 2,
+  schema_version: 3,
   type: "log",
 });
 
@@ -138,14 +138,14 @@ test("a command that failed keeps its last 5 lines, which say how the run ended"
   const progress: CliEvent[] = Array.from({ length: 260 }, (_, i) => ({
     current: i + 1,
     phase: "fetch",
-    schema_version: 2,
+    schema_version: 3,
     total: 260,
     type: "progress",
   }));
   const error = {
     code: "source",
     message: "cannot fetch acme/skills",
-    schema_version: 2,
+    schema_version: 3,
     type: "error",
   } satisfies CliEvent;
   const failed = record(3, [...progress, error], []);

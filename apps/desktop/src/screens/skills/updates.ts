@@ -1,23 +1,13 @@
 // Updates on the Skills screen: Check updates (`skill check-updates`), the Update of one skill
 // (`skill update <name>`, from its banner) and Update all (`skill update --all`,
-// from the toast of a check that found more than one). The title bar's publish status runs the same
-// check, one at a time with Check updates, and words its toast by what your other machines
-// published (checkOtherMachines). Each runs one command through the runner
+// from the toast of a check that found more than one). Each runs one command through the runner
 // and says what happened by what the CLI emitted; the list redraws from the inventory and the
 // update check that follow, never from a result predicted here.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type {
-  CliEvent,
-  ErrorEvent,
-  UpdateAvailableEvent,
-} from "#/cli/events.gen.ts";
+import type { CliEvent, ErrorEvent } from "#/cli/events.gen.ts";
 import { notify } from "#/components/toast.tsx";
 import type { ToastAction } from "#/components/toast.tsx";
-import { openSkill } from "#/screens/skills/open.ts";
-import {
-  fromAnotherMachine,
-  shortSource,
-} from "#/screens/skills/projection.ts";
+import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { cancelCommand, runCommand, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
@@ -173,7 +163,8 @@ const checking = (current?: number, total?: number) =>
 
 /**
  * Check updates: `skill check-updates`, which fetches each source and lists every update it finds.
- * Its toast says how far it got, one source fetched at a time, then what it found: how many skills
+ * Its toast says how far it got, from 0 of the total before the first fetch and then one source
+ * fetched at a time, then what it found: how many skills
  * have an update, with Update all when there is more than one. A source it could not reach
  * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere are
  * listed all the same (src/store/loaders.ts).
@@ -216,61 +207,5 @@ export const checkUpdates = async () => {
       }
       return n === 1 ? "1 skill has an update" : `${n} skills have updates`;
     },
-  });
-};
-
-/** The updates a check found, in name order: what another machine published, or from a source. */
-const foundIn = (events: CliEvent[]) => {
-  const found = events.filter(
-    (e): e is UpdateAvailableEvent => e.type === "update_available"
-  );
-  return {
-    fromMachines: found.filter(fromAnotherMachine),
-    fromSources: found.filter((e) => !fromAnotherMachine(e)),
-  };
-};
-
-/**
- * What a check found on your other machines, then how many updates from sources, or that it
- * found nothing.
- */
-const otherMachinesText = (events: CliEvent[]) => {
-  const { fromMachines, fromSources } = foundIn(events);
-  const sources =
-    fromSources.length === 0
-      ? undefined
-      : `${plural(fromSources.length, "update", "updates")} from sources`;
-  if (fromMachines.length === 0) {
-    return sources ?? "No new updates available";
-  }
-  const changed = `${plural(fromMachines.length, "skill", "skills")} changed on your other machines`;
-  return sources === undefined ? changed : `${changed}, ${sources}`;
-};
-
-/**
- * The check the title bar's publish status runs once everything is published: the same
- * `skill check-updates` as Check updates, and never beside it, which the status shows with a
- * spinner in place of its dot. Its toast says what your other machines published, with Review,
- * which opens the first skill they changed, and how many updates came from sources.
- */
-export const checkOtherMachines = async () => {
-  if (checkRunning()) {
-    return;
-  }
-  await runCommand(["skill", "check-updates"], {
-    action: (events) => {
-      const [first] = foundIn(events).fromMachines;
-      return first === undefined
-        ? undefined
-        : {
-            label: "Review",
-            onClick: () => {
-              openSkill(first.name);
-            },
-          };
-    },
-    failure: unreachableFailure,
-    label: CHECK_UPDATES,
-    success: otherMachinesText,
   });
 };

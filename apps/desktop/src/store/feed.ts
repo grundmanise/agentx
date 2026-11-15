@@ -3,7 +3,8 @@
 // the events of a child that ended or was replaced are dropped. Within one serve instance an
 // inventory applies only when its scan counter goes up; a new instance applies whatever it sends
 // first, since counters are never compared across instances. What serve notices goes to the
-// activity list: its drift, reconcile and update events, and the warnings it logs on stderr. The
+// activity list: its drift, reconcile and update events, and the warnings it logs on stderr. Its
+// `update_check` events say when the last update check ended, which the title bar shows. The
 // activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
 // exit of the active child.
 import type {
@@ -269,6 +270,15 @@ const apply = (childId: number, event: CliEvent) => {
     set((s) => ({ updates: { ...s.updates, [event.name]: event } }));
     addActivity("success", `Update available for ${event.name}`);
     logBackground(`update available for ${event.name}`);
+  } else if (event.type === "update_check") {
+    // The check's update_available events came before it, and stay: a check of the account
+    // remote alone adds to what the last full check found.
+    if (event.ok) {
+      set({ lastChecked: event.checked_at });
+      logBackground("update check finished");
+    } else {
+      logBackground("update check failed", { failed: true });
+    }
   } else if (event.type === "drift") {
     addActivity("attention", driftText(event));
     logBackground(driftText(event));

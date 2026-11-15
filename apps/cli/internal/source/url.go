@@ -23,6 +23,11 @@ type Source struct {
 	Subpath  string // a directory inside the repository, "" for the whole of it
 	Ref      string // the pinned branch, tag or commit, "" for the remote's default branch
 	Stripped bool   // a user or token was removed from the input
+	// RefFromPath says Ref came from the path of a tree or SKILL.md link
+	// alone, the branch a browser was showing, and no #ref fragment named
+	// it. skill add, source add, source skills and source fetch read such a
+	// ref that is the source's default branch as no pin.
+	RefFromPath bool
 }
 
 // ID is the source's id: the first 16 hex characters of the SHA-256 of its
@@ -41,7 +46,7 @@ func IsID(s string) bool { return idPattern.MatchString(s) }
 var idPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 // The forms Parse accepts, for the hint of a usage error.
-const Forms = "owner/repo, owner/repo/subpath, a GitHub or GitLab URL with an optional tree path, an SSH URL or [user@]host:path, a file:// URL or an absolute path, each with an optional #ref"
+const Forms = "owner/repo, owner/repo/subpath, a GitHub or GitLab URL with an optional tree path or a link to a SKILL.md, an SSH URL or [user@]host:path, a file:// URL or an absolute path, each with an optional #ref"
 
 // ErrForm is the error of an input that is not a source URL.
 var ErrForm = errors.New("not a source URL")
@@ -67,19 +72,21 @@ var githubPages = map[string]bool{
 // Parse normalises input to a Source. It accepts owner/repo and
 // owner/repo/subpath (GitHub), https and http URLs, GitHub tree URLs
 // (/tree/<ref>/<subpath>), GitLab tree URLs (/-/tree/<ref>/<subpath>),
-// ssh:// and git:// URLs, git+ssh:// and ssh+git:// read as ssh://, the
-// [user@]host:path SSH shorthand, file:// URLs and absolute paths, which
-// read as file:// URLs, and any of these with a #ref fragment. A ref of
-// HEAD names the remote's default branch, which is what no ref follows, so
-// it is no pin. On GitHub the repository is owner/repo and what follows is
-// the subpath; elsewhere the repository path ends at /-/ or at a segment
-// named *.git, and what follows is the subpath. The host is lowercased and
-// loses its trailing dot and a port that is its scheme's default, a .git
-// suffix and a trailing slash are dropped, the path keeps its percent
-// escapes, and an embedded user or token is removed. Anything else is an
-// ErrForm. The canonical URL of what Parse accepts parses back to itself:
-// it is the source's identity, printed by source list and read back by
-// source remove and source skills.
+// links to a SKILL.md on either (/blob/<ref>/<subpath>/SKILL.md and
+// /-/blob/<ref>/<subpath>/SKILL.md), which read as the tree of the
+// directory that holds it, ssh:// and git:// URLs, git+ssh:// and
+// ssh+git:// read as ssh://, the [user@]host:path SSH shorthand, file://
+// URLs and absolute paths, which read as file:// URLs, and any of these
+// with a #ref fragment. A ref of HEAD names the remote's default branch,
+// which is what no ref follows, so it is no pin. On GitHub the repository
+// is owner/repo and what follows is the subpath; elsewhere the repository
+// path ends at /-/ or at a segment named *.git, and what follows is the
+// subpath. The host is lowercased and loses its trailing dot and a port
+// that is its scheme's default, a .git suffix and a trailing slash are
+// dropped, the path keeps its percent escapes, and an embedded user or
+// token is removed. Anything else is an ErrForm. The canonical URL of what
+// Parse accepts parses back to itself: it is the source's identity, printed
+// by source list and read back by source remove and source skills.
 func Parse(input string) (Source, error) {
 	var s Source
 	raw := strings.TrimSpace(input)
@@ -139,7 +146,7 @@ func Parse(input string) (Source, error) {
 		return s, fmt.Errorf("%w: %s", ErrForm, safe)
 	}
 	if s.Ref == "HEAD" {
-		s.Ref = ""
+		s.Ref, s.RefFromPath = "", false
 	}
 	return s, nil
 }
@@ -204,7 +211,8 @@ func ValidRef(ref string) bool {
 }
 
 // fromURL fills s from a URL with a scheme. The tree ref of a GitHub or
-// GitLab URL becomes the pin unless a fragment already named one.
+// GitLab URL, or the ref of a link to a SKILL.md, becomes the pin unless a
+// fragment already named one.
 func (s *Source) fromURL(raw, display string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -307,16 +315,16 @@ func (s *Source) fromURL(raw, display string) error {
 		}
 		repo, rest = segments[:2], segments[2:]
 		if len(rest) > 0 && githubPages[rest[0]] {
-			if rest[0] != "tree" {
+			if rest[0] == "blob" && !skillLink(rest) {
+				return fmt.Errorf("%w: a GitHub blob URL; use the repository, a tree URL or a link to a SKILL.md", ErrForm)
+			}
+			if rest[0] != "tree" && rest[0] != "blob" {
 				return fmt.Errorf("%w: a GitHub %s URL; use the repository or a tree URL", ErrForm, rest[0])
 			}
-			if len(rest) < 2 {
-				return fmt.Errorf("%w: a tree URL needs a ref", ErrForm)
-			}
-			if err := s.treeRef(rest[1]); err != nil {
+			var err error
+			if rest, err = s.pathRef(rest); err != nil {
 				return err
 			}
-			rest = rest[2:]
 		}
 	default:
 		// Elsewhere the repository path ends at the /-/ separator of a
@@ -326,13 +334,13 @@ func (s *Source) fromURL(raw, display string) error {
 		for i, seg := range segments {
 			if seg == "-" {
 				repo, rest = segments[:i], segments[i+1:]
-				if len(rest) < 2 || rest[0] != "tree" {
-					return fmt.Errorf("%w: only a tree URL is accepted after /-/", ErrForm)
+				if len(rest) == 0 || (rest[0] != "tree" && !skillLink(rest)) {
+					return fmt.Errorf("%w: only a tree URL or a link to a SKILL.md is accepted after /-/", ErrForm)
 				}
-				if err := s.treeRef(rest[1]); err != nil {
+				var err error
+				if rest, err = s.pathRef(rest); err != nil {
 					return err
 				}
-				rest = rest[2:]
 				break
 			}
 			if strings.HasSuffix(seg, ".git") && len(seg) > len(".git") {
@@ -380,8 +388,33 @@ func (s *Source) fromURL(raw, display string) error {
 	return nil
 }
 
+// skillLink reports whether the path segments after owner/repo, or after
+// GitLab's /-/, are a link to a SKILL.md: blob, a ref, and a path whose
+// last segment is SKILL.md.
+func skillLink(rest []string) bool {
+	return len(rest) >= 3 && rest[0] == "blob" && rest[len(rest)-1] == "SKILL.md"
+}
+
+// pathRef reads the ref of a tree URL or of a link to a SKILL.md, rest
+// starting at tree or blob, and returns the segments of the subpath: what
+// follows the ref, less the SKILL.md of a blob link, so that the link reads
+// as the tree of the directory holding the file.
+func (s *Source) pathRef(rest []string) ([]string, error) {
+	if len(rest) < 2 {
+		return nil, fmt.Errorf("%w: a tree URL needs a ref", ErrForm)
+	}
+	if err := s.treeRef(rest[1]); err != nil {
+		return nil, err
+	}
+	sub := rest[2:]
+	if rest[0] == "blob" {
+		sub = sub[:len(sub)-1]
+	}
+	return sub, nil
+}
+
 // treeRef records the ref of a tree URL, which a fragment overrides only
-// when both name the same ref.
+// when both name the same ref. A ref the path alone names is marked so.
 func (s *Source) treeRef(ref string) error {
 	if !ValidRef(ref) {
 		return fmt.Errorf("%w: the URL names ref %q, which git does not accept", ErrForm, ref)
@@ -389,6 +422,7 @@ func (s *Source) treeRef(ref string) error {
 	if s.Ref != "" && s.Ref != ref {
 		return fmt.Errorf("%w: the URL names ref %q and the fragment %q", ErrForm, ref, s.Ref)
 	}
+	s.RefFromPath = s.Ref == ""
 	s.Ref = ref
 	return nil
 }

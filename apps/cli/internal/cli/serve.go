@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -25,6 +28,33 @@ type refreshCompleteEvent struct {
 	ScanCounter int    `json:"scan_counter,omitempty"` // absent when the scan failed: no freshness is claimed
 	Error       string `json:"error,omitempty"`
 }
+
+// updateCheckEvent ends the report of one update check of the serve child,
+// after its update_available events: which check it was, when it ended,
+// whether it reached what it set out to check, and whether it fetched.
+type updateCheckEvent struct {
+	event
+	InstanceID string `json:"instance_id"`
+	Scope      string `json:"scope"`      // checkScopeAll or checkScopeAccount
+	CheckedAt  string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
+	OK         bool   `json:"ok"`         // false when the check failed as a whole or could not reach the account remote
+	Fetched    bool   `json:"fetched"`    // whether the check fetched anything
+}
+
+// The scopes of an update_check event: the full check serve runs at start,
+// and the check of the account remote alone it repeats while it runs.
+const (
+	checkScopeAll     = "all"
+	checkScopeAccount = "account"
+)
+
+// accountCheckInterval is how long the serve child waits, once the report
+// of one check is made, before it checks the account remote again, see
+// serveChecks.account. accountCheckEvery is what serve waits, which a test
+// shortens.
+const accountCheckInterval = 10 * time.Minute
+
+var accountCheckEvery = accountCheckInterval
 
 // searchEvent answers one search request: every skill of every source
 // whose name or description matches, each naming its source by the
@@ -138,15 +168,18 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			// drift is told against. Inventories are reported from the loop's
 			// goroutine alone, so nothing else touches it.
 			var library map[string]scan.LibraryEntry
+			checks := &serveChecks{inv: inv}
 			err = serve.Run(cmd.Context(), serve.Options{
-				Scan:  func(ctx context.Context) (scan.Inventory, error) { return inv.inventory(ctx, 0, "", false) },
-				Index: inv.sourceIndex,
-				Watch: dirs,
-				Trees: trees,
-				Once:  once,
-				Stdin: cmd.InOrStdin(),
-				Check: inv.serveCheck,
-				Jobs:  []serve.Job{inv.maintenanceJob},
+				Scan:         func(ctx context.Context) (scan.Inventory, error) { return inv.inventory(ctx, 0, "", false) },
+				Index:        inv.sourceIndex,
+				Watch:        dirs,
+				Trees:        trees,
+				Once:         once,
+				Stdin:        cmd.InOrStdin(),
+				Check:        checks.startup,
+				Recheck:      checks.account,
+				RecheckEvery: accountCheckEvery,
+				Jobs:         []serve.Job{inv.maintenanceJob},
 				Inventory: func(inventory scan.Inventory) {
 					inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
 					inv.out.print(inv.out.paint(heading, fmt.Sprintf("inventory %d", inventory.ScanCounter)), ": ",
@@ -185,33 +218,121 @@ func newServeCommand(inv *invocation) *cobra.Command {
 	return cmd
 }
 
-// serveCheck is the serve child's update check, run once, off its loop,
-// as soon as its initial inventory is out: after that, updates are checked
-// for only when the user asks, with skill check-updates. It is the check
-// skill check-updates runs, the account remote included, over every source
-// of the settings rather than only the sources a managed skill came from,
-// so that one pass fetches each source once, whether or not a skill was
+// serveChecks are the update checks of the serve child: the full check it
+// runs once, as soon as its initial inventory is out, see startup, and the
+// check of the account remote alone it repeats while it runs, see account.
+// serve runs one at a time and makes each report on its loop's goroutine,
+// so failing needs no lock.
+type serveChecks struct {
+	inv *invocation
+	// failing is set while the checks fail to reach the account remote, or
+	// fail as a whole: the check that starts failing warns, and those after
+	// it stay quiet until one succeeds again.
+	failing bool
+}
+
+// startup is the serve child's update check at start: the check skill
+// check-updates runs, the account remote included, over every source of
+// the settings rather than only the sources a managed skill came from, so
+// that one pass fetches each source once, whether or not a skill was
 // installed from it, and the source index follows what they hold now. It
 // waits for the lock rather than giving up on it, since it runs in the
 // background and a command holding the lock for a moment is no reason to
 // drop what it fetched. It reports nothing as it goes and never ends serve:
 // the report it returns is made on the loop's goroutine and carries one
-// update_available per update, with this process's instance id, and a
-// warning for each thing the check could not check. A machine with no source
-// runs no git at all, and neither does one with no account repo; a source
-// an import wrote stays a source not fetched, account repo or not, until
-// source add adds it. The rescan its write of the version file sets off
-// brings the candidates and markers it wrote into the next inventory, and
-// every source ref it moved into the source index.
-func (inv *invocation) serveCheck(ctx context.Context) func() {
-	rep, err := inv.checkUpdates(ctx, true, "")
-	return func() { inv.reportServeCheck(rep, err) }
+// update_available per update, with this process's instance id, a warning
+// for each thing the check could not check, and its update_check. A
+// machine with no source runs no git at all, and neither does one with no
+// account repo; a source an import wrote stays a source not fetched,
+// account repo or not, until source add adds it. The rescan its write of
+// the version file sets off brings the candidates and markers it wrote
+// into the next inventory, and every source ref it moved into the source
+// index.
+func (c *serveChecks) startup(ctx context.Context) func() {
+	rep, err := c.inv.checkUpdates(ctx, true, "")
+	at := time.Now()
+	return func() {
+		if err == nil && rep.idle {
+			return // nothing to check, and nothing was
+		}
+		c.inv.reportServeCheck(rep, err)
+		ok := err == nil && !rep.accountFailed
+		c.failing = !ok
+		c.inv.reportUpdateCheck(checkScopeAll, at, ok, err == nil && len(rep.refreshed) > 0)
+	}
 }
 
-// reportServeCheck reports what the serve child's update check found, every
-// warning prefixed "update check: ": the failure that ended the whole check,
-// or each source or skill it could not check, each note, and then one
-// update_available per update.
+// account is the check the serve child repeats while it runs, see
+// accountCheckEvery: what another machine published to your own skills
+// since the last fetch of the account remote. With no account remote set,
+// or no account repo, it runs no git and reports nothing. Otherwise one
+// git ls-remote asks the account remote for its fork branches, see
+// gitx.Runner.ForkTips, and when they are what the remote-tracking
+// branches the last fetch left hold, read in one for-each-ref, it fetches
+// nothing, takes no lock and writes nothing. When they differ, it runs the
+// update check of the account remote alone, see checkUpdates: one fetch of
+// it, outside the lock, the comparison of your own skills placed here with
+// what it holds, and one write of its last_fetched, under the lock, waited
+// for as the check at start waits. Its report is that check's: one
+// update_available per update, then its update_check. A failure is a
+// warning prefixed "update check: " when the checks start failing, and
+// none while they go on failing, see serveChecks.failing.
+func (c *serveChecks) account(ctx context.Context) func() {
+	inv := c.inv
+	entry, remote, set, err := inv.accountSource()
+	if err == nil && !set {
+		return nil
+	}
+	if err == nil {
+		if _, err := os.Stat(gitx.AccountRepoPath(inv.dirs.Home)); err != nil {
+			return nil // no account repo yet: nothing was ever fetched into one
+		}
+	}
+	var rep checkReport
+	if err == nil {
+		rep, err = inv.checkAccountRemote(ctx, entry.URL, remote)
+	}
+	at := time.Now()
+	return func() {
+		if err == nil && rep.idle {
+			return
+		}
+		ok := err == nil && !rep.accountFailed
+		if ok || !c.failing {
+			inv.reportServeCheck(rep, err)
+		}
+		c.failing = !ok
+		inv.reportUpdateCheck(checkScopeAccount, at, ok, err == nil && rep.accountFetched)
+	}
+}
+
+// checkAccountRemote is the account check of the serve child, see
+// serveChecks.account, of the account remote at url, the git remote
+// called remote in the account repo: an empty report, neither idle nor
+// fetched, when the account remote holds the fork branches its
+// remote-tracking branches hold, and otherwise the report of the update
+// check of the account remote alone. An ls-remote that fails is reported
+// as a fetch of the account remote that failed.
+func (inv *invocation) checkAccountRemote(ctx context.Context, url, remote string) (checkReport, error) {
+	theirs, err := inv.git.ForkTips(ctx, url)
+	if err != nil {
+		f := uncheckedAccount(url, fmt.Errorf("%w: %v", source.ErrUnreachable, err))
+		return checkReport{accountFailed: true, failures: []checkFailure{{source: url, fetch: true, f: f}}}, nil
+	}
+	ours, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), remote)
+	if err != nil {
+		return checkReport{}, accountRepoFailure(err)
+	}
+	if maps.Equal(theirs, ours) {
+		return checkReport{}, nil
+	}
+	return inv.checkUpdates(ctx, true, url)
+}
+
+// reportServeCheck reports what an update check of the serve child found,
+// every warning prefixed "update check: ": the failure that ended the whole
+// check, or each source or skill it could not check, each note, and then
+// one update_available per update.
 func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 	if err != nil {
 		inv.out.warn("update check: " + err.Error())
@@ -230,6 +351,24 @@ func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 		inv.out.print(inv.out.paint(heading, "update "+sanitised(ev.Name)), ": ",
 			short(from), " -> ", short(to), ", ", plural(len(ev.Files), "file"))
 	}
+}
+
+// reportUpdateCheck emits the update_check event that ends the report of
+// a check of scope that ended at at, and its line without --json.
+func (inv *invocation) reportUpdateCheck(scope string, at time.Time, ok, fetched bool) {
+	inv.out.emit(updateCheckEvent{
+		event: newEvent("update_check"), InstanceID: inv.instanceID(), Scope: scope,
+		CheckedAt: at.UTC().Format(time.RFC3339), OK: ok, Fetched: fetched,
+	})
+	status, style := "ok", okStyle
+	if !ok {
+		status, style = "failed", failStyle
+	}
+	line := []string{inv.out.paint(heading, "check "+scope), ": ", inv.out.paint(style, status)}
+	if fetched {
+		line = append(line, ", fetched")
+	}
+	inv.out.print(line...)
 }
 
 // watchedDirs are the directories a change signal can come from, most

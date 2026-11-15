@@ -1,7 +1,7 @@
 // The slices that one-shot reads fill: settings, sources and the adoption preview. Each loads
 // once the startup checks pass, and again after the commands that change it. The update check of
-// `skill check-updates` replaces the update candidates serve found, and `skill update` takes away
-// those of the skills it updated.
+// `skill check-updates` replaces the update candidates serve found and sets when the last check
+// ended, and `skill update` takes away those of the skills it updated.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent } from "#/cli/events.gen.ts";
 import { onFinished, runCommand } from "#/store/runner.ts";
@@ -295,6 +295,7 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
     (exitCode === EXIT_CODES.ok || exitCode === EXIT_CODES.source)
   ) {
     useAppStore.setState({
+      lastChecked: new Date().toISOString(),
       updates: Object.fromEntries(
         events
           .filter((e) => e.type === "update_available")

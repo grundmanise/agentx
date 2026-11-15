@@ -1,8 +1,6 @@
-import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 
-import type { HistoryEvent } from "#/cli/events.gen.ts";
+import type { ForkOrigin, HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -13,6 +11,7 @@ import {
   SheetTitle,
 } from "#/components/ui/sheet.tsx";
 import { formatDate } from "#/lib/dates.ts";
+import { openInBrowser } from "#/lib/open-url.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -20,65 +19,11 @@ import { useAppStore } from "#/store/store.ts";
 /** How many entries the timeline shows before "Show all". */
 const SHOWN = 3;
 
-const dotVariants = cva("size-timeline-dot rounded-pill block", {
-  variants: {
-    kind: {
-      foreign: "bg-timeline-dot-update",
-      import: "bg-timeline-dot-install",
-      yours: "bg-timeline-dot-yours",
-    },
-  },
-});
-
-const kindOf = (e: HistoryEvent) => {
-  if (e.import) {
-    return "import";
-  }
-  return e.foreign ? "foreign" : "yours";
-};
-
 const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
 
-/**
- * The dot column of a timeline entry: `children` (the dot) centred in a box as high as the
- * entry's first line, a line of text or the first line of a wrapping small button, then the
- * connector down to the next entry, so every dot sits on its entry's first line and the line
- * stays continuous.
- */
-const DotColumn = ({
-  button,
-  last,
-  children,
-}: {
-  /** The first line beside the dot is the first line of a wrapping small button, not plain text. */
-  button: boolean;
-  last: boolean;
-  children: ReactNode;
-}) => (
-  <span className="flex flex-col items-center">
-    <span
-      className={
-        button
-          ? "h-timeline-button-line flex flex-none items-center"
-          : "h-timeline-line flex flex-none items-center"
-      }
-    >
-      {children}
-    </span>
-    {!last && <span className="bg-timeline-connector w-px flex-1" />}
-  </span>
-);
-
-/** What the meta line of an entry says: the date, the files, and how the commit came about. */
-export const metaOf = (e: HistoryEvent) => {
-  const parts = [formatDate(e.time), files(e.files.length)];
-  if (e.foreign) {
-    parts.push("made with Git");
-  } else if (e.import) {
-    parts.push("from the original");
-  }
-  return parts.join(" · ");
-};
+/** What the meta line of an entry says: the date and the number of files. */
+const metaOf = (e: HistoryEvent) =>
+  [formatDate(e.time), files(e.files.length)].join(" · ");
 
 /** The version a skill's history is read for: a new read when the skill changed. */
 const versionOf = (row: SkillRow) =>
@@ -87,6 +32,148 @@ const versionOf = (row: SkillRow) =>
     row.entry?.state ?? "",
     ...(row.entry?.drift ?? []),
   ].join(":");
+
+/**
+ * The page of the skill a fork came from, on the commit that created the fork, when the CLI knows
+ * one: an https URL alone, since the window opens nothing else.
+ */
+export const originPage = (e: HistoryEvent) =>
+  e.origin?.url?.startsWith("https://") === true ? e.origin.url : undefined;
+
+/**
+ * Text as the CLI writes it into a commit's subject: a control character as a space, runs of
+ * spaces as one, none at either end.
+ */
+const displayed = (text: string) =>
+  text
+    .replaceAll(/\p{Cc}/gu, " ")
+    .replaceAll(/ +/gu, " ")
+    .trim();
+
+const originName = (origin: ForkOrigin) => {
+  if (origin.kind === "plugin" && origin.plugin !== undefined) {
+    return origin.plugin;
+  }
+  if (origin.kind === "source" && origin.source !== undefined) {
+    return origin.path === undefined || origin.path === ""
+      ? origin.source
+      : `${origin.source}/${origin.path}`;
+  }
+  return origin.skill;
+};
+
+/**
+ * The subject of the commit that created a fork, split around the name of its origin, the part
+ * that links to the origin's page: the plugin, the source with its path, or the skill, as the CLI
+ * writes them after "from". Undefined when the subject does not name it.
+ */
+export const originParts = (e: HistoryEvent) => {
+  const name = e.origin === undefined ? "" : displayed(originName(e.origin));
+  const from = e.subject.indexOf(" from ");
+  const at =
+    name === "" || from === -1
+      ? -1
+      : e.subject.indexOf(name, from + " from ".length);
+  return at === -1
+    ? undefined
+    : {
+        after: e.subject.slice(at + name.length),
+        before: e.subject.slice(0, at),
+        name,
+      };
+};
+
+/** An https URL, which the window opens; undefined for anything else. */
+const https = (url: string | undefined) =>
+  url?.startsWith("https://") === true ? url : undefined;
+
+/** A run of an entry's subject, with the page it links to, if any. */
+interface Segment {
+  text: string;
+  page?: string;
+}
+
+/**
+ * An entry's subject in runs, of text and of links. On the commit that created a fork, the
+ * origin's name links to its page, and for a fork of a source's skill, the fork's name, after
+ * "Fork", links to the page of the skill's directory at the commit it was forked from, each when
+ * the CLI knows it.
+ */
+export const subjectSegments = (e: HistoryEvent): Segment[] => {
+  const links: { at: number; end: number; page: string }[] = [];
+  const skillPage =
+    e.origin?.kind === "source" ? https(e.origin.skill_url) : undefined;
+  const from = e.subject.indexOf(" from ");
+  if (
+    skillPage !== undefined &&
+    e.subject.startsWith("Fork ") &&
+    from > "Fork ".length
+  ) {
+    links.push({ at: "Fork ".length, end: from, page: skillPage });
+  }
+  const page = originPage(e);
+  const parts = page === undefined ? undefined : originParts(e);
+  if (page !== undefined && parts !== undefined) {
+    const at = parts.before.length;
+    links.push({ at, end: at + parts.name.length, page });
+  }
+  const segments: Segment[] = [];
+  let done = 0;
+  for (const link of links) {
+    if (link.at < done) {
+      continue;
+    }
+    if (link.at > done) {
+      segments.push({ text: e.subject.slice(done, link.at) });
+    }
+    segments.push({
+      page: link.page,
+      text: e.subject.slice(link.at, link.end),
+    });
+    done = link.end;
+  }
+  if (done < e.subject.length) {
+    segments.push({ text: e.subject.slice(done) });
+  }
+  return segments;
+};
+
+/** Whether an entry's subject holds a link, which cannot sit inside its button. */
+const hasLink = (e: HistoryEvent) =>
+  subjectSegments(e).some((s) => s.page !== undefined);
+
+/** An entry's subject, its links underlined. */
+const Subject = ({ entry }: { entry: HistoryEvent }) => (
+  <span className="type-timeline-entry text-text-primary min-w-0 wrap-break-word">
+    {subjectSegments(entry).map(({ text, page }, i) =>
+      page === undefined ? (
+        text
+      ) : (
+        <a
+          // The runs of one subject never change order.
+          key={i}
+          href={page}
+          title={page}
+          className="underline underline-offset-2"
+          onClick={(ev) => {
+            ev.preventDefault();
+            void openInBrowser(page);
+          }}
+        >
+          {text}
+        </a>
+      )
+    )}
+  </span>
+);
+
+const Chevron = ({ open }: { open: boolean }) => (
+  <span className="h-timeline-line flex flex-none items-center">
+    <span className={open ? "flex rotate-90" : "flex"}>
+      <ChevronIcon size="xs" />
+    </span>
+  </span>
+);
 
 const Entry = ({
   entry,
@@ -99,42 +186,65 @@ const Entry = ({
   expandable?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
+  const linked = hasLink(entry);
   return (
-    <li className="grid-cols-timeline grid gap-x-3">
-      <DotColumn button={expandable} last={last}>
-        <span className={dotVariants({ kind: kindOf(entry) })} />
-      </DotColumn>
+    <li
+      className={
+        last
+          ? "relative flex min-w-0 flex-col"
+          : "relative flex min-w-0 flex-col pb-4"
+      }
+    >
+      {expandable && !last && (
+        // The line from this entry's chevron down to the next one's, so the sheet reads as one
+        // history.
+        <span
+          aria-hidden
+          className="bg-timeline-connector absolute top-6 bottom-1 left-1.5 w-px"
+        />
+      )}
+      {expandable && linked && (
+        // A link cannot sit inside the button, so the button holds the chevron alone.
+        <div className="flex items-start gap-2">
+          <Button
+            variant="plain"
+            size="inline"
+            aria-expanded={open}
+            aria-label={`Show the files of ${entry.subject}`}
+            onClick={() => {
+              setOpen((o) => !o);
+            }}
+          >
+            <Chevron open={open} />
+          </Button>
+          <Subject entry={entry} />
+        </div>
+      )}
+      {expandable && !linked && (
+        // A block, so the button shrinks to fit the list and its subject wraps inside it.
+        <div>
+          <Button
+            variant="plain"
+            size="inline"
+            aria-expanded={open}
+            onClick={() => {
+              setOpen((o) => !o);
+            }}
+          >
+            <Chevron open={open} />
+            <Subject entry={entry} />
+          </Button>
+        </div>
+      )}
+      {!expandable && <Subject entry={entry} />}
+      {/* The meta line and the files sit under the subject, past the chevron, which hangs outside. */}
       <div
         className={
-          last ? "flex min-w-0 flex-col" : "flex min-w-0 flex-col pb-4"
+          expandable
+            ? "pl-timeline-indent flex min-w-0 flex-col"
+            : "flex min-w-0 flex-col"
         }
       >
-        {expandable ? (
-          // A block, so the button shrinks to fit the column and its subject wraps inside it.
-          <div className="-ml-3.5">
-            <Button
-              variant="ghost"
-              size="sm-wrap"
-              aria-expanded={open}
-              onClick={() => {
-                setOpen((o) => !o);
-              }}
-            >
-              <span className="h-timeline-line flex flex-none items-center">
-                <span className={open ? "flex rotate-90" : "flex"}>
-                  <ChevronIcon size="xs" />
-                </span>
-              </span>
-              <span className="type-timeline-entry text-text-primary">
-                {entry.subject}
-              </span>
-            </Button>
-          </div>
-        ) : (
-          <span className="type-timeline-entry text-text-primary">
-            {entry.subject}
-          </span>
-        )}
         <span className="type-timeline-meta text-timeline-meta">
           {metaOf(entry)}
         </span>
@@ -200,7 +310,9 @@ const HistorySheet = ({
 
 /**
  * HISTORY in the detail pane. For one of your own skills, the latest commits of its branch from
- * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. Other
+ * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. In the
+ * subject of the commit that created a fork, the origin's name links to its page, when the CLI
+ * knows one. Other
  * skills have no history of their own.
  */
 export const HistorySection = ({ row }: { row: SkillRow }) => {
@@ -252,35 +364,16 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
           />
         ))}
         {more && (
-          <li className="grid-cols-timeline grid gap-x-3">
-            <DotColumn button last>
-              <svg
-                viewBox="0 0 8 8"
-                aria-hidden
-                focusable="false"
-                className="size-timeline-dot block"
-              >
-                <circle
-                  cx="4"
-                  cy="4"
-                  r="3.25"
-                  fill="none"
-                  strokeWidth="1.5"
-                  className="stroke-timeline-more-ring"
-                />
-              </svg>
-            </DotColumn>
-            <div className="flex">
-              <Button
-                variant="ghost"
-                size="sm-wrap"
-                onClick={() => {
-                  setSheetOpen(true);
-                }}
-              >
-                {`Show all ${entries.length}`}
-              </Button>
-            </div>
+          <li className="-ml-3.5 flex">
+            <Button
+              variant="ghost"
+              size="sm-wrap"
+              onClick={() => {
+                setSheetOpen(true);
+              }}
+            >
+              {`Show all ${entries.length}`}
+            </Button>
           </li>
         )}
       </ol>

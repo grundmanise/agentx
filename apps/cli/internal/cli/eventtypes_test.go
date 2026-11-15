@@ -64,6 +64,7 @@ var eventTypes = []struct {
 	{"drift", driftEvent{}},
 	{"refresh_complete", refreshCompleteEvent{}},
 	{"search", searchEvent{}},
+	{"update_check", updateCheckEvent{}},
 }
 
 // reservedEventTypes are event types the contract reserves and no command
@@ -151,6 +152,9 @@ var valueLists = []valueList{
 	}, fields: []fieldRef{
 		{scan.HandshakeError{}, "Reason"},
 	}},
+	{name: "OriginKind", values: []string{originPlugin, originSource, originSkill}, fields: []fieldRef{
+		{forkOrigin{}, "Kind"},
+	}},
 	{name: "FileStatus", values: []string{diffAdded, diffModified, diffDeleted}, fields: []fieldRef{
 		{diffEvent{}, "Status"}, {changedFile{}, "Status"},
 	}},
@@ -194,6 +198,9 @@ var valueLists = []valueList{
 	}},
 	{name: "MachineDerivation", values: []string{home.DerivedPlatform, home.DerivedRandom}, fields: []fieldRef{
 		{machineEvent{}, "Derivation"},
+	}},
+	{name: "UpdateCheckScope", values: []string{checkScopeAll, checkScopeAccount}, fields: []fieldRef{
+		{updateCheckEvent{}, "Scope"},
 	}},
 	{name: "SourceAccess", values: []string{home.AccessWritable, home.AccessReadOnly, home.AccessUnknown}, fields: []fieldRef{
 		{sourceEvent{}, "Access"}, {home.Source{}, "Access"},

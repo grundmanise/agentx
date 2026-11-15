@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { usePublishState } from "#/app/publish-status.tsx";
-import { allScreens, SOURCES_PATH } from "#/app/screens.ts";
+import { useSyncState } from "#/app/publish-status.tsx";
+import { allScreens } from "#/app/screens.ts";
 import { AddIcon } from "#/components/icons/add.tsx";
 import { ArrowDownIcon } from "#/components/icons/arrow-down.tsx";
 import { ArrowUpIcon } from "#/components/icons/arrow-up.tsx";
@@ -22,6 +22,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "#/components/ui/command.tsx";
+import { AddSkillDialog } from "#/screens/skills/add-skill-dialog.tsx";
 import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { openSkill } from "#/screens/skills/open.ts";
 import { groupRows, originOf } from "#/screens/skills/projection.ts";
@@ -87,7 +88,8 @@ const skillItems = (rows: SkillRow[]): PaletteItem[] =>
 
 /**
  * The ⌘K palette: ACTIONS, GO TO and SKILLS. Update all shows while the store holds an update,
- * Publish all while the title bar says there are skills to publish. With nothing typed, SKILLS
+ * Publish all while the title bar counts skills to publish, and publishes the same skills as the
+ * title bar's Publish all. With nothing typed, SKILLS
  * lists the first four skills.
  */
 export const CommandPalette = ({
@@ -99,6 +101,7 @@ export const CommandPalette = ({
 }) => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [adding, setAdding] = useState(false);
   const [creating, setCreating] = useState(false);
   // The palette opens empty: what was typed goes when it closes, however it closes.
   const [wasOpen, setWasOpen] = useState(open);
@@ -107,7 +110,8 @@ export const CommandPalette = ({
     setSearch("");
   }
   const rows = useSkillRows();
-  const publishState = usePublishState();
+  const sync = useSyncState();
+  const outgoing = sync?.kind === "account-remote" ? sync.outgoing : [];
   const updates = rows.filter((r) => r.update !== undefined).length;
 
   const actions: PaletteItem[] = [];
@@ -123,15 +127,15 @@ export const CommandPalette = ({
       },
     });
   }
-  if (publishState?.kind === "to-publish") {
+  if (outgoing.length > 0) {
     actions.push({
       group: "ACTIONS",
-      hint: skillsWord(publishState.count),
+      hint: skillsWord(outgoing.length),
       icon: ArrowUpIcon,
       id: "action:publish-all",
       label: "Publish all",
       run: () => {
-        void publishAll();
+        void publishAll(outgoing.map((skill) => skill.name));
       },
     });
   }
@@ -139,10 +143,10 @@ export const CommandPalette = ({
     {
       group: "ACTIONS",
       icon: AddIcon,
-      id: "action:add-skills",
-      label: "Add skills",
+      id: "action:add-skill",
+      label: "Add skill",
       run: () => {
-        void navigate(SOURCES_PATH);
+        setAdding(true);
       },
     },
     {
@@ -255,6 +259,7 @@ export const CommandPalette = ({
           </span>
         </div>
       </CommandDialog>
+      <AddSkillDialog open={adding} onOpenChange={setAdding} />
       <CreateSkillDialog open={creating} onOpenChange={setCreating} />
     </>
   );
