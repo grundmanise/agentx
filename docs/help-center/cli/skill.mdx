@@ -78,7 +78,7 @@ error: 1 of 3 skills could not be installed: xlsx: the library already holds xls
 hint: remove it with 'agentx skill remove xlsx', then install again; or, to keep it, adopt it with 'agentx adopt --skill xlsx' and rename it with 'agentx skill rename xlsx <new>', then install again
 ```
 
-The hint depends on the skill that holds the name. To keep an unmanaged skill, as here, [adopt it](/cli/adopt#adopt-an-unmanaged-skill), then rename it:
+The hint depends on the skill that holds the name. To keep an unmanaged skill, as here, [adopt it](/cli/adopt#skills-adopted-as-they-are), then rename it:
 
 ```sh
 agentx adopt --skill xlsx
@@ -324,8 +324,8 @@ Each row shows the skill, its kind, whether it holds edits you have not publishe
 
 | Kind | What it means |
 |---|---|
-| `managed` | A skill agentx keeps: one installed from a source, or one of your own, which you created with [`agentx skill new`](/cli/fork#create-a-skill), forked with [`agentx skill fork`](/cli/fork#fork-a-skill), adopted as it was with [`agentx adopt`](/cli/adopt#adopt-an-unmanaged-skill) or installed from your account remote. |
-| `unmanaged` | A directory in the library that agentx does not manage. agentx lists it and otherwise leaves it alone. To make it one of your own skills, [adopt it](/cli/adopt#adopt-an-unmanaged-skill). |
+| `managed` | A skill agentx keeps: one installed from a source, or one of your own, which you created with [`agentx skill new`](/cli/fork#create-a-skill), forked with [`agentx skill fork`](/cli/fork#fork-a-skill), adopted as it was with [`agentx adopt`](/cli/adopt#skills-adopted-as-they-are) or installed from your account remote. |
+| `unmanaged` | A directory in the library that agentx does not manage. agentx lists it and otherwise leaves it alone. To have agentx manage it, [adopt it](/cli/adopt). |
 
 The source column shows where the skill is published to:
 
@@ -738,7 +738,7 @@ agentx skill publish release-notes -m "Cover reverted pull requests"
   - A host SSH does not trust yet: connect to it once with `ssh` to add its key to `known_hosts`.
   - An organisation that requires single sign-on or an IP allow list: authorise your token or key for the organisation, or allow this machine's IP address.
 - Publishing needs an [account remote](/account-remote). Without one, it stops with exit code 6 and names `agentx source add <url> --account`.
-- A skill agentx does not manage has no source to publish to: [adopt it](/cli/adopt#adopt-an-unmanaged-skill) with `agentx adopt --skill <name>` to make it one of your own.
+- A skill agentx does not manage has no source to publish to: [adopt it](/cli/adopt#skills-adopted-as-they-are) with `agentx adopt --skill <name>` to make it one of your own.
 - To delete a skill's branch from the remote, remove the skill with [`agentx skill remove <name> --remote`](/cli/fork#remove-a-skill-of-your-own).
 
 ### Publish edits to a shared source
@@ -918,7 +918,7 @@ Add `--copy` to give those configurations a copy instead of a symlink, as on thi
 agentx skill place pdf --machine cloud --to cursor --copy
 ```
 
-The cloud machine always takes the latest version of the skill: the account remote's for one of your own skills, and the source's for a skill of a source. Publish your own skills first. If the account remote does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine. [Adopt it](/cli/adopt#adopt-an-unmanaged-skill) and publish it first.
+The cloud machine always takes the latest version of the skill: the account remote's for one of your own skills, and the source's for a skill of a source. Publish your own skills first. If the account remote does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine. [Adopt it](/cli/adopt#skills-adopted-as-they-are) and publish it first.
 
 Take a skill away from some configurations, or off the cloud machine:
 

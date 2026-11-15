@@ -3,7 +3,7 @@ title: "Your own skills"
 description: "Create skills of your own, or fork installed ones, each with a history in the account repo."
 ---
 
-Your own skills are the skills you create with `agentx skill new`, fork with `agentx skill fork` or [adopt as they are](/cli/adopt#adopt-an-unmanaged-skill) with `agentx adopt`. agentx keeps the history of each one in the [account repo](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) on this machine, `~/.agentx/account.git`. To use them on your other machines, publish them to your [account remote](/account-remote), a Git repository you own. You need an account remote only when you publish. Every client sees your own skills like any other skill.
+Your own skills are the skills you create with `agentx skill new`, fork with `agentx skill fork` or [adopt as they are](/cli/adopt#skills-adopted-as-they-are) with `agentx adopt`. agentx keeps the history of each one in the [account repo](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) on this machine, `~/.agentx/account.git`. To use them on your other machines, publish them to your [account remote](/account-remote), a Git repository you own. You need an account remote only when you publish. Every client sees your own skills like any other skill.
 
 A skill you fork from an installed skill keeps its upstream, the skill it came from, so you can take in newer versions later. A skill you create or adopt has no upstream.
 
@@ -71,7 +71,7 @@ error: notes is not managed by agentx, so it cannot be forked
 hint: adopt it first with 'agentx adopt --skill notes'
 ```
 
-Adopting makes it one of your own skills, with its files as they are. See [Adopt an unmanaged skill](/cli/adopt#adopt-an-unmanaged-skill).
+Adopting makes it one of your own skills, with its files as they are. See [Skills adopted as they are](/cli/adopt#skills-adopted-as-they-are).
 
 agentx cannot fork a skill in its place, and stops with exit code 6, when:
 
@@ -314,7 +314,7 @@ A rename works on this machine alone. The old name's folder, worktree and branch
 - The renamed skill is the same skill: it keeps its id and every commit of the old one. Its `SKILL.md` carries the new name.
 - It is placed where the old one was, as a copy wherever the old one was a copy.
 - If the new name is taken or a merge is waiting, the rename stops and nothing changes. Your unpublished edits move to the renamed skill. See [Unpublished edits are kept](#unpublished-edits-are-kept).
-- Only your own skills can be renamed. A skill you installed from a shared source, or one agentx does not manage, stops with exit code 6. [Adopt](/cli/adopt#adopt-an-unmanaged-skill) an unmanaged skill first.
+- Only your own skills can be renamed. A skill you installed from a shared source, or one agentx does not manage, stops with exit code 6. [Adopt](/cli/adopt#skills-adopted-as-they-are) an unmanaged skill first.
 - Only the skill folder moves. Files Git ignores, such as a local `.env`, and files beside the skill folder in the worktree are deleted. Copy the ones you want first.
 - The renamed skill shows as `modified` until you publish it under its new name.
 
@@ -379,7 +379,7 @@ For what each code means, see [Exit codes](/cli/output#exit-codes). For `agentx 
 | 4 | The skill you fork, rename or remove has a merge pending, or `skill update` left a merge for you to [resolve](#resolve-a-conflict). | Finish the merge, or give it up with `agentx skill update <name> --abort`. |
 | 5 | agentx cannot find the skill you named in your library or in a plugin. For `skill remove --remote`, the account remote does not hold it either. `skill place` finds no `SKILL.md`. `skill update` names a forked skill whose upstream source you removed. | Check the name. Add a `SKILL.md`, or add the source again. |
 | 6 | The name breaks the [naming rule](#choose-a-name), or a skill or folder already has it. | Choose another name. |
-| 6 | The skill cannot be forked, renamed, updated or removed as it is. For example: it is not one of your own skills; agentx does not manage it, in which case [adopt it](/cli/adopt#adopt-an-unmanaged-skill) first; an installed skill is missing from the library, so there is nothing to fork; several plugins provide the name; the skill holds a Git repository its `.gitignore` does not cover; Git is running in its worktree; the account remote holds [another skill](/cli/skill#two-skills-with-one-name) of that name; or the skill has no upstream and no account remote is set. | Read the message, then see the section for that command. |
+| 6 | The skill cannot be forked, renamed, updated or removed as it is. For example: it is not one of your own skills; agentx does not manage it, in which case [adopt it](/cli/adopt#skills-adopted-as-they-are) first; an installed skill is missing from the library, so there is nothing to fork; several plugins provide the name; the skill holds a Git repository its `.gitignore` does not cover; Git is running in its worktree; the account remote holds [another skill](/cli/skill#two-skills-with-one-name) of that name; or the skill has no upstream and no account remote is set. | Read the message, then see the section for that command. |
 | 6 | A folder is in the way, or `--force` is given with nothing in the way. | See [Something in the way](#something-in-the-way). |
 | 6 | The skill changed while the command ran. | Run the command again. |
 | 7 | Another agentx command is running. | Retry when it finishes. |

@@ -32,7 +32,7 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 			"as it is now, edits included, checked out as a worktree in agentx home, and the\n" +
 			"library holds a symlink to it. The fork of a skill of a shared source keeps that\n" +
 			"source as its upstream, so newer versions can be merged in. An unmanaged skill\n" +
-			"is taken over with 'agentx adopt --skill <name>'.\n\n" +
+			"is adopted with 'agentx adopt --skill <name>'.\n\n" +
 			"Without --name the fork takes the skill's place: its library directory moves\n" +
 			"into the fork's worktree and every placement stays as it was. With --name <new>\n" +
 			"the fork is made beside the skill, under the new name, which it also writes into\n" +

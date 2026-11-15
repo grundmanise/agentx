@@ -40,7 +40,7 @@ The fleet-wide identity of a skill or MCP server. For a skill of a shared source
 _Avoid_: skill id, key
 
 **Fork id**:
-The permanent identity assigned when one of the user's own skills is created, by `agentx skill new` or `agentx skill fork`, or by `agentx adopt` of an unmanaged skill, carried by the commit that creates it, which is never amended. Installing that published skill elsewhere preserves it, and so does renaming it; independently creating another skill assigns a different identity, even from the same upstream version.
+The permanent identity assigned when one of the user's own skills is created, by `agentx skill new` or `agentx skill fork`, or by `agentx adopt` of a skill with its files as they are, carried by the commit that creates it, which is never amended. Installing that published skill elsewhere preserves it, and so does renaming it; independently creating another skill assigns a different identity, even from the same upstream version.
 
 **Physical asset**:
 One logical asset on one machine in one version, the version being the content hash for a skill and the tool signature for a server. The unit drift is evaluated on and machine views count.
@@ -109,10 +109,10 @@ A skill whose source is gone from this machine. For a managed skill, the canonic
 _Avoid_: orphaned, detached
 
 **Unmanaged skill**:
-A skill found on disk that agentx keeps no branch of, so it knows neither a source nor an upstream for it: a library entry no branch records, or a directory in an agent client's own skills directory. Inventoried, never updated. `agentx adopt` makes it one of the user's own skills.
+A skill found on disk that agentx keeps no branch of, so it knows neither a source nor an upstream for it: a library entry no branch records, or a directory in an agent client's own skills directory. Inventoried, never updated. `agentx adopt` adopts it: from its source when another tool recorded one agentx can install from, and otherwise as one of the user's own skills.
 
 **Adopt**:
-An action, not a kind: `agentx adopt` brings a skill agentx does not manage under its management, in one of two ways. A skill another tool installed and recorded is installed from the source the record names, at the version that source holds now, and becomes a managed skill of that shared source; what the tool left in the library gives way to that version. An unmanaged skill no tool recorded becomes one of the user's own skills with its files as they are: a fork with no upstream, whose first commit holds them. One in the library is adopted in its place; a directory in an agent client's own skills directory moves into the library, and a symlink to the library takes its place. A recorded skill whose record names no source agentx can install it from is adopted the second way, when the user names it. An adoption makes a new managed skill, where an adopt candidate is taken into a fork that already exists; the `candidate` state of an `adoption` event, a record that can be adopted, is not an adopt candidate either.
+An action, not a kind: `agentx adopt` brings an unmanaged skill under agentx's management, in one of two ways, which the skill decides and no flag does. A skill another tool recorded as installed from a source agentx can install from is installed from that source, at the version it holds now, and becomes a managed skill of that shared source; what the tool left in the library gives way to that version, an edit included. Any other unmanaged skill, one no tool recorded or one whose record names nowhere agentx can install it from, such as a local folder, becomes one of the user's own skills with its files as they are: a fork with no upstream, whose first commit holds them. One in the library is adopted in its place; a directory in an agent client's own skills directory moves into the library, and a symlink to the library takes its place. A skill that cannot be adopted, such as a symlink or a folder that is a Git repository of its own, stays unmanaged, and agentx says why and what to do. An adoption makes a new managed skill, where an adopt candidate is taken into a fork that already exists; the `candidate` state of an `adoption` event, a record that can be adopted, is not an adopt candidate either.
 _Avoid_: import, migrate, claim, convert
 
 **Fork**:

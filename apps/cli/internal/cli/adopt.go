@@ -101,10 +101,11 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 			"agentx adopt --skill pdf --skill xlsx", "adopt two skills by name",
 			"agentx adopt --skill notes", "adopt an unmanaged skill no tool installed",
 		),
-		Long: "Take over the skills the Vercel skills CLI or Skillshare installed, so that agentx\n" +
-			"knows where each one came from and can update it. Run it with no flags to see\n" +
-			"what it would adopt; nothing is written and the other tool's files are never\n" +
-			"touched. Name skills-cli or skillshare to look at the skills of that tool alone.\n\n" +
+		Long: "Adopt the unmanaged skills on this machine, so that agentx manages them: the\n" +
+			"skills the Vercel skills CLI or Skillshare installed, and those no tool installed.\n" +
+			"Run it with no flags to see what it would adopt; nothing is written and the other\n" +
+			"tool's files are never touched. Name skills-cli or skillshare to look at the\n" +
+			"skills of that tool alone.\n\n" +
 			"Adopting a skill installs it from its source, as 'agentx skill add' does, at the\n" +
 			"version the source holds now, and places it in every enabled configuration.\n" +
 			"Whatever the library holds under the skill's name gives way to that version, so\n" +
