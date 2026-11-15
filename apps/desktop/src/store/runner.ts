@@ -25,6 +25,7 @@ const READS = new Set([
   "config list",
   "config get",
   "source list",
+  "source read",
   "source skills",
   "skill list",
   "skill diff",

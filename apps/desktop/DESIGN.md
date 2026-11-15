@@ -301,23 +301,21 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `card.bg` | `gray-950` | Inbox card, agent client card, plugin card, file-tree card, expanded review file card |
+| `card.bg` | `gray-950` | Inbox card, agent client card, plugin card, file-tree card, expanded review file card, a skill's card on the Sources list |
 | `card.border` | `gray-870` |  |
 | `card.title` | `gray-50` |  |
 | `card.text` | `gray-300` |  |
 | `card.tag` | `gray-500` | Mono tag beside a card title |
 | `card.subrow-hover` | `gray-930` | Sub-rows inside the Updates card |
-| `add-card.bg` | `gray-930` | Add skills card |
-| `add-card.border` | `gray-870` |  |
-| `add-card.hover-border` | `gray-700` |  |
-| `add-card.selected-bg` | `lime-400/6` |  |
+| `add-card.hover-border` | `gray-700` | Border of a skill's card on the Sources list while hovered (the card is `card.bg` with a `card.border`) |
+| `add-card.selected-bg` | `lime-400/6` | A selected skill's card |
 | `add-card.selected-border` | `lime-400/50` |  |
-| `add-card.check-bg` | `accent.primary` | Check tile on a selected card (check `on-accent`) |
-| `add-card.status-added` | `gray-400` | Card status: already added |
-| `add-card.status-forked` | `accent.yours` | Card status: forked |
-| `add-card.status-disk` | `accent.attention` | Card status: already in the library |
-| `add-card.status-in-use` | `gray-400` | Card status: name in use |
-| `add-card.check-ring` | `gray-700` | Ring of the round check on a card that is not selected |
+| `add-card.check-bg` | `accent.primary` | Fill of the round check of a selected skill (check `on-accent`) |
+| `add-card.status-added` | `accent.primary` | Skill status: already added |
+| `add-card.status-forked` | `accent.yours` | Skill status: forked |
+| `add-card.status-disk` | `accent.attention` | Skill status: already in the library |
+| `add-card.status-in-use` | `gray-400` | Skill status: name in use |
+| `add-card.check-ring` | `gray-700` | Ring of the round check of a skill that is not selected |
 | `source-card.bg` | `gray-950` | Card of the open source on Sources |
 | `source-card.border` | `gray-870` |  |
 | `source-card.divider` | `gray-870` | Rule above the facts strip, and between its facts |
@@ -451,8 +449,6 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.body` | sans | 14 | 400 |  |  |  | Body, palette rows |
 | `type.input` | sans | 14 | 400 |  |  |  | Text inputs and search fields |
 | `type.input-mono` | mono | 14 | 400 |  |  |  | Inputs that take a URL or a command |
-| `type.add-card-name` | sans | 15 | 500 |  |  |  | Skill name on an Add skills card |
-| `type.add-card-desc` | sans | 13.5 | 400 | 1.5 |  |  | Description on an Add skills card (`add-card.text`: `text.muted`) |
 | `type.row-name` | sans | 14 | 500 |  |  |  | Row name |
 | `type.row-desc` | sans | 12.5 | 400 |  |  |  | Row description (`text.muted`, single line, ellipsis) |
 | `type.secondary` | sans | 13 | 400 |  |  |  | Secondary line (`text.hint`) |
@@ -639,8 +635,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `plugin-card.row-height` | 36 | `h-plugin-card-row` | Tree rows |
 | `plugin-card.gap` | 12 | `gap-plugin-card` | Between the masonry columns; each card's wrapper adds 12 below |
 | `plugin-card.tile` | 40 | `size-plugin-card-tile` | Plugin icon or monogram tile |
-| `add-card.gap` | 12 | `gap-add-card` | Grid gap |
-| `add-card.min-height` | 120 | `min-h-add-card` |  |
+| `add-card.spacing` | 6 | `pt-add-card` | Between the skills' cards of the Sources list: on each card after the first of its source, which the list places itself |
 
 ### Overlays
 
@@ -747,7 +742,8 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `banner.radius` | 18 |  |
 | `agent-card.radius` | 20 | Agents page cards |
 | `plugin-card.radius` | 20 |  |
-| `add-card.radius` | 18 |  |
+| `add-card.radius` | 16 | A skill's card on the Sources list, and its row's focus outline |
+| `add-card.check-radius` | 50% | Hit area and focus outline of a skill's round check |
 | `source-card.radius` | 18 | Card of the open source on Sources |
 | `source-card.tile-radius` | 10 | Its owner tile |
 | `hunk.radius` | 14 | Hunk block |
@@ -817,9 +813,13 @@ Pill button: `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent
 | Hover | border `agent-chip.hover-border` |
 | Pending | `cursor:wait`, a `Spinner` in place of the switch |
 | Locked | 45% opacity, `cursor:not-allowed`; a click toasts the reason, with the adopt action when adopting the skill unlocks its chips |
-| Displaced | a `type.technical-sm` line in `tone.attention.fg` under the name; a click runs nothing and toasts why |
+| Displaced | on, with a `type.technical-sm` line in `tone.attention.fg` under the name; inert |
+| Inherited | on, seen only through another agent's placement, as Cursor reads Claude Code's skills folder; inert |
+| Inert | the switch at 50% opacity, `cursor:default`, no hover border; a click runs nothing, and the Tooltip (§6 "Tooltip") says why and how to change it. The chip keeps focus, so the keyboard opens the Tooltip too |
 
 The Universal chip, on, opens the Remove dialog: a universal client reads the library, so a skill leaves it only by leaving the machine.
+
+The chip of an agent whose folder another agent reads names both in its title and its toast: "Remove from Claude Code and Cursor".
 
 - Order: the chips that are on, then the rest by the popularity of the agent client (`src/lib/agent-popularity.ts`), the clients it does not rank by name. Universal stands where its most used client would. The order is fixed when the pane opens, so a chip stays in place when it is toggled.
 - A machine can have dozens of agent configurations, so the section shows two rows of chips, measured at the pane's width, and a small ghost button in the second row, centred on the chips, that shows the rest and hides them again. Every chip that is on, or was on since the pane opened, stays in view, in more rows when two cannot hold them. No button when every chip fits in two rows.
@@ -1021,7 +1021,7 @@ The rows of the Skills list column, in their groups (§6 "Group header"). Only t
 
 ### Tooltip
 
-shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, or shows the full text of a shortened label, such as a source group's URL: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs.
+shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, shows the full text of a shortened label, such as a source group's URL, or says why an inert agent chip does nothing: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs, but for an inert agent chip, whose reason it describes.
 
 ### Popover (Filter)
 
@@ -1110,11 +1110,15 @@ The nav items in sidebar order, `shell.nav-gap` apart. A screen nested under ano
 
 ### Sources screen
 
-The Sources screen (`src/screens/sources`), under Skills: the serif page title with Add source, the search field, the source pills, the card of the open source, then the select-all row and the skill cards.
+The Sources screen (`src/screens/sources`), under Skills: the serif page title with Add source, the search field, the source pills, the card of the open source, then the select-all row and the skill list.
 
 - A source pill (`source-pill.*`, `pill.radius`) holds the attention dot of a stale source, the source's short name, and its skill count in `type.technical-sm` (`source-pill.count`, `source-pill.active-count` on the active pill) once it is known.
 - The card of the open source: `source-card.bg`, a 1px `source-card.border`, `source-card.radius`. Its top row is a 36px owner tile (`source-card.tile-*`, `source-card.tile-radius`, the owner's initial in `type.source-name`), the name in `type.source-name`, which opens the repository in the browser, then a neutral Read-only pill when access is limited, and under them the full URL with its `#pin` in `type.technical-sm` `text.muted`; at its right, Refresh (secondary) and Remove (danger), `button.gap` apart. Under it, after a 1px `source-card.divider` rule, a strip of four facts, each a `type.secondary` `source-card.fact-label` label over a `type.technical-sm` value in `source-card.fact-value`, a never-fetched source's Fetched in `tone.attention.fg`. The card shows tags only for limits: a source you can write to has none. It hides while a search runs, since a search looks across every source; Personal's card has no Remove, since Settings manages the account remote.
 - The select-all row: one checkbox (§6 "Checkbox (popover)"), checked, mixed or not as the selection is, its label in `type.secondary` `text.secondary` counting the selection; at the right, how many skills this machine already has in `type.secondary` `text.hint`.
+- The skill list: one column, a card per skill, `add-card.spacing` apart, selectable skills first, then by name. A search answer groups them by source, each group under its source's `type.caption` `group.label` caption. Each card is an accordion item (`src/components/ui/accordion.tsx`, variant `list`): `card.bg`, a 1px `card.border`, `add-card.radius`, `add-card.hover-border` on hover; a selected skill's card `add-card.selected-bg` and `add-card.selected-border`.
+- A closed card is one row of `file-row.height`, `file-row.padding-x`: a chevron in `file-row.meta` (turns 90° when open, as in the File list), the name in `type.row-name` `text.primary`, then one line of the description in `type.row-desc` `text.muted`, both truncated, the description filling the rest of the row. At the end, the round check: a 20px ring in `add-card.check-ring`, filled with `add-card.check-bg` and an `on-accent` check when selected, in a 32px hit area (`add-card.check-radius`). A skill this machine holds already has its status there instead, in `type.secondary` 500: Added (`add-card.status-added`), Forked (`add-card.status-forked`), Already in library (`add-card.status-disk`), Name in use (`add-card.status-in-use`).
+- The row opens and closes on a click anywhere but the check, and several can be open at once; only the check selects. The row and the check each draw the focus outline inside the card. While open, the row's description line hides, since the frontmatter of SKILL.md holds it, and under the row come, for a skill that cannot be selected, why in `type.secondary` `text.hint`, wrapped, and View skill, a link in `type.secondary` `text.primary`, medium, underlined on hover, which opens the skill's directory on its source's web page at the commit the source was fetched at (GitHub's `/tree/` page, GitLab's `/-/tree/`; no link for another host), both `file-row.padding-x` in, then the skill's SKILL.md in the Code pane, edge to edge, read when the row first opens. While it is read, or when it cannot be, one `type.secondary` `text.hint` line on `code.bg` takes its place. Your skills on the account remote have no SKILL.md to read here: they open to their description alone.
+- Only the cards near what shows are in the document, so a source of thousands of skills stays quick; the list scrolls with the screen, and an open card takes its measured height.
 - Remove opens a dialog (§6 "Dialog") with no line under its title. When this machine has skills from the source, a checkbox offers to remove them too, unticked, their names listed under it in `type.technical` `text.muted`; the confirm is a danger button.
 
 ### Command palette

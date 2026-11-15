@@ -1,6 +1,6 @@
 // shadcn/ui Toggle (`pnpm dlx shadcn@latest add toggle`), on our tokens. It keeps shadcn's shape
 // (Radix Toggle, `data-slot="toggle"`, `pressed` and `onPressedChange`) and takes no `className`:
-// its look is its `kind`, each a control of the Add skills screen that is on or off. Its pressed
+// its look is its `kind`, each a control of the Sources screen that is on or off. Its pressed
 // look follows `aria-pressed`, which Radix sets.
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
@@ -12,11 +12,10 @@ const toggleVariants = cva("inline-flex shrink-0 outline-none", {
   defaultVariants: { kind: "source-pill" },
   variants: {
     kind: {
-      // An Add skills card (DESIGN.md §2.2 "Cards and banners", `add-card.*`): `add-card.bg` with a
-      // 1px `add-card.border`, `add-card.radius`, `add-card.min-height`; hover `add-card.hover-border`;
-      // selected `add-card.selected-bg` and `add-card.selected-border`. A card that cannot be
-      // selected sits at 60%.
-      card: "rounded-add-card border-add-card-border bg-add-card-bg hover:border-add-card-hover-border aria-pressed:border-add-card-selected-border aria-pressed:bg-add-card-selected-bg min-h-add-card disabled:hover:border-add-card-border w-full items-start gap-3 border p-4 text-left disabled:cursor-default disabled:opacity-60",
+      // The round check of a skill on the Sources list (DESIGN.md §6 "Sources screen"): a hit area
+      // round the check its child draws, which draws its focus outline inside.
+      check:
+        "rounded-add-card-check focus-visible:outline-shell-focus-ring size-8 items-center justify-center focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-solid",
       // An agent client logo as an install target: a 28px logo, or the Universal stack of them, at
       // 55% when off, with an `accent.primary` ring when on. The ring takes `pill.radius`, not
       // `logo.radius`: a 50% radius on the stack's 48x28 box is an ellipse that cuts into the

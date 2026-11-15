@@ -13,23 +13,143 @@ import { plural } from "#/lib/plural.ts";
 import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
-/** What a click on a displaced chip toasts: the placement is reconnected from its banner. */
-export const DISPLACED_REASON =
-  "Reconnect it first, then manage it from your library";
+/**
+ * The configurations whose own directory is the most specific one that holds `path`: usually one,
+ * two when they share a directory, as Zencoder and Zenflow do, and none when it is in no agent's
+ * own directory. The most specific wins, since one agent's directory can sit inside another's, as
+ * Antigravity's `~/.gemini/antigravity` sits inside Gemini CLI's `~/.gemini`. A client that reads
+ * the library places nothing in its own directory, so it owns no path, as the CLI judges it.
+ */
+const ownersOf = (path: string, configurations: Configuration[]) => {
+  const holding = configurations.filter(
+    (c) => !c.reads_library && path.startsWith(`${c.path}/`)
+  );
+  const depth = Math.max(0, ...holding.map((c) => c.path.length));
+  return holding.filter((c) => c.path.length === depth);
+};
+
+/** The owners of each place `c` sees the skill at, at user scope and outside any plugin. */
+const ownersSeenBy = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+) =>
+  row.occurrences
+    .filter(
+      (o) =>
+        o.configuration === c.id && o.scope === "user" && o.plugin === undefined
+    )
+    .map((o) => ownersOf(o.path, configurations));
+
+/**
+ * The configurations `c` sees the skill through and nothing else: every other client whose
+ * directory holds what `c` sees, in inventory order, or none when `c` sees it at a place of its
+ * own, at a place no agent owns, or not at all. Cursor reads Claude Code's skills directory, so a
+ * skill placed in Claude Code alone is inherited from it. A plugin's skill and a project's are not
+ * placements, so they never count.
+ */
+export const inheritedFrom = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+): Configuration[] => {
+  const owners = ownersSeenBy(row, c, configurations);
+  if (
+    owners.length === 0 ||
+    owners.some((each) => each.length === 0 || each.some((o) => o.id === c.id))
+  ) {
+    return [];
+  }
+  return configurations.filter((other) =>
+    owners.some((each) => each.some((o) => o.id === other.id))
+  );
+};
 
 /**
  * Whether a configuration sees the skill: through its placement, displaced when the placement's
- * kind on disk is not the one agentx keeps for it (drift `displaced`), or through an occurrence.
+ * kind on disk is not the one agentx keeps for it (drift `displaced`), inherited when it sees the
+ * skill only through another client's placement, or through an occurrence of its own.
  */
 export const chipStateOf = (
   row: SkillRow,
-  c: Configuration
+  c: Configuration,
+  configurations: Configuration[]
 ): AgentChipState => {
   const placement = row.entry?.placements.find((p) => p.configuration === c.id);
   if (placement !== undefined) {
     return placement.kind === placement.mode ? "on" : "displaced";
   }
-  return row.occurrences.some((o) => o.configuration === c.id) ? "on" : "off";
+  if (!row.occurrences.some((o) => o.configuration === c.id)) {
+    return "off";
+  }
+  return inheritedFrom(row, c, configurations).length > 0 ? "inherited" : "on";
+};
+
+/** `a`, `a and b`, `a, b and c`. */
+const andList = (words: string[]) =>
+  words.length < 2
+    ? words.join("")
+    : `${words.slice(0, -1).join(", ")} and ${words.at(-1) ?? ""}`;
+
+/**
+ * The configurations that lose the skill with `c`'s placement: those that see it only through
+ * `c`'s directory, as Cursor sees a skill placed in Claude Code alone, or Zenflow one in the
+ * directory it shares with Zencoder.
+ */
+export const dependantsOf = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+): Configuration[] =>
+  configurations.filter((other) => {
+    if (other.id === c.id || other.reads_library) {
+      return false;
+    }
+    const owners = ownersSeenBy(row, other, configurations);
+    return (
+      owners.length > 0 &&
+      owners.every((each) => each.some((o) => o.id === c.id))
+    );
+  });
+
+/** The names a removal from `c` takes the skill from: `c` and every agent that sees it through `c`. */
+export const removedFrom = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+) => andList([c, ...dependantsOf(row, c, configurations)].map((d) => d.name));
+
+/**
+ * Why the switch of a chip in `state` is disabled, or undefined when a click changes what the agent
+ * sees: a displaced placement is put back from the banner first, and an inherited one goes with
+ * the placement it comes through.
+ */
+export const inertReason = (
+  row: SkillRow,
+  c: Configuration,
+  state: AgentChipState,
+  configurations: Configuration[]
+): string | undefined => {
+  switch (state) {
+    case "displaced": {
+      return `${c.name} owns a copy of ${row.name}, so your library changes don't reach it. Reconnect it from the banner to manage it here`;
+    }
+    case "inherited": {
+      const from = inheritedFrom(row, c, configurations);
+      const names = andList(from.map((f) => f.name));
+      const folders = from.length > 1 ? "skills folders" : "skills folder";
+      const all = from.length > 1 ? "all of them" : "both";
+      const owners = andList(from.map((f) => `${f.name}'s`));
+      return `${c.name} reads ${owners} ${folders}, so it sees ${row.name} there. Remove it from ${names} to remove it from ${all}`;
+    }
+    case "off":
+    case "on": {
+      return undefined;
+    }
+    default: {
+      return undefined;
+    }
+  }
 };
 
 /** `adopt --skill <name>`. It names no tool, so the CLI decides by itself how it adopts the skill. */
@@ -112,26 +232,20 @@ export const lockReason = (row: SkillRow): string | undefined =>
 export const chipTitle = (
   row: SkillRow,
   c: Configuration,
-  state: AgentChipState
+  state: AgentChipState,
+  configurations: Configuration[]
 ): string => {
   const locked = lockReason(row);
   if (locked !== undefined) {
     return locked;
   }
-  switch (state) {
-    case "displaced": {
-      return DISPLACED_REASON;
-    }
-    case "off": {
-      return `Add to ${c.name}`;
-    }
-    case "on": {
-      return `Remove from ${c.name}`;
-    }
-    default: {
-      return `Remove from ${c.name}`;
-    }
+  if (state === "off") {
+    return `Add to ${c.name}`;
   }
+  return (
+    inertReason(row, c, state, configurations) ??
+    `Remove from ${removedFrom(row, c, configurations)}`
+  );
 };
 
 /** The Universal chip's title: a universal client reads the library, so removal is removal. */

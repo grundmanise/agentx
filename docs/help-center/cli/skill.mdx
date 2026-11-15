@@ -886,6 +886,24 @@ After a removal, agentx checks each client again. If a client still sees the ski
 warning: codex still sees pdf at /home/me/.codex/skills/pdf, which agentx did not place there
 ```
 
+A client that reads another client's skills directory, as Cursor reads Claude Code's, keeps seeing the skill through that client's placement after `--from` removes its own. agentx warns and names the client to remove it from:
+
+```text
+warning: cursor still sees pdf through claude-code's placement at /home/me/.claude/skills/pdf; remove it from claude-code to take it from both
+✓ removed pdf from cursor: 1 placement
+  cursor  symlink  /home/me/.cursor/skills/pdf
+```
+
+To take the skill from both, name both clients: `agentx skill remove pdf --from cursor --from claude-code`.
+
+Two clients that share one skills directory, as Zencoder and Zenflow share `~/.zencoder/skills`, share each placement in it. Removing the skill from one takes it from both, and agentx warns:
+
+```text
+warning: zencoder shares /home/me/.zencoder/skills with zenflow, so removing pdf from zenflow took it from zencoder too
+✓ removed pdf from zenflow: 1 placement
+  zenflow  symlink  /home/me/.zencoder/skills/pdf
+```
+
 ### Your own skills
 
 Removing one of your own skills from the machine also deletes its local history. Add `--remote` to delete it from your account remote too. See [Remove a skill of your own](/cli/fork#remove-a-skill-of-your-own).

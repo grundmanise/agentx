@@ -32,6 +32,7 @@ SOURCES
   source add <url>                Fetch a git repository and add it as a source
   source list                     List the sources of this machine
   source skills <url|id>          List the installable skills of a source
+  source read <url|id> <subpath>  Read the SKILL.md of a skill in a source
   source fetch [<url|id>...]      Fetch sources again and report what moved
   source remove <url|id>          Remove a source and what was fetched from it
 

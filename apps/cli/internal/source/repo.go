@@ -69,6 +69,7 @@ var (
 	ErrIncomplete  = errors.New("the fetched source is incomplete") // an object the listing needs is not in the account repo
 	ErrUnsafePath  = errors.New("unsafe path in the source")        // a tree entry that could be laid out outside its directory
 	ErrNotABranch  = errors.New("the source is not on a branch")    // a tag, a commit, or a remote HEAD that names no branch
+	ErrNoSkill     = errors.New("no skill at the subpath")          // the subpath holds no SKILL.md file at the fetched commit
 )
 
 // NotFetched is ErrNotFetched naming the source at url, the one way a
@@ -491,6 +492,66 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing
 		return Listing{}, err
 	}
 	return Listing{Commit: commit, Skills: skills}, nil
+}
+
+// SkillFile is the SKILL.md of one skill of a fetched source: the commit it
+// was read at, the skill's name as a listing names it, and the file's bytes.
+type SkillFile struct {
+	Commit  string
+	Name    string
+	Content string
+}
+
+// ReadSkill reads the SKILL.md of the skill in dir, the skill directory from
+// the repository root as a listing's Subpath carries it, "" for the root, at
+// the commit the source ref of s holds, from the account repo alone: no
+// network. A fetch brings every SKILL.md blob, so this is one tree lookup and
+// one blob read. A dir CheckPath refuses, one the commit holds no directory
+// at, and one without a SKILL.md regular file are ErrNoSkill.
+func ReadSkill(ctx context.Context, r *gitx.Runner, gitDir string, s Source, dir string) (SkillFile, error) {
+	if dir != "" && CheckPath(dir) != nil {
+		return SkillFile{}, fmt.Errorf("%w: %q", ErrNoSkill, dir)
+	}
+	_, commit, err := staged(ctx, r, gitDir, Ref(s.ID()))
+	if err != nil {
+		return SkillFile{}, err // the account repo itself, as for a listing
+	}
+	if commit == "" {
+		return SkillFile{}, NotFetched(s.URL)
+	}
+	tree, err := subtree(ctx, r, gitDir, commit, dir)
+	if errors.Is(err, ErrNoSubpath) {
+		return SkillFile{}, fmt.Errorf("%w: %q", ErrNoSkill, dir)
+	} else if err != nil {
+		return SkillFile{}, err
+	}
+	out, err := r.Isolated(ctx, gitDir, "ls-tree", "-z", tree, "SKILL.md")
+	if err != nil {
+		return SkillFile{}, err
+	}
+	entries, err := ParseTree(out)
+	if err != nil {
+		return SkillFile{}, err
+	}
+	blob := ""
+	for _, e := range entries {
+		if e.Path == "SKILL.md" && IsFileMode(e.Mode) {
+			blob = e.OID
+		}
+	}
+	if blob == "" {
+		return SkillFile{}, fmt.Errorf("%w: %q", ErrNoSkill, dir)
+	}
+	blobs, err := ReadBlobs(ctx, r, gitDir, []string{blob})
+	if err != nil {
+		return SkillFile{}, err
+	}
+	content, ok := blobs[blob]
+	if !ok {
+		return SkillFile{}, fmt.Errorf("%w: %s is not in the account repo", ErrIncomplete, path.Join(dir, "SKILL.md"))
+	}
+	name, _, _ := scan.SkillFrontmatter(content)
+	return SkillFile{Commit: commit, Name: skillName(name, dir, s.URL), Content: content}, nil
 }
 
 // ListUnadded builds the listing of s straight from its repository, for a
@@ -1072,16 +1133,24 @@ func readSkills(ctx context.Context, r *gitx.Runner, gitDir, canonical string, e
 		if !ok {
 			return nil, fmt.Errorf("%w: %s/SKILL.md is not in the account repo", ErrIncomplete, e.dir)
 		}
-		name, description, _ := scan.SkillFrontmatter(content) // an unusable frontmatter names the skill after its directory
-		if name == "" {
-			name = path.Base(e.dir)
-			if e.dir == "" {
-				name = RepoName(canonical)
-			}
-		}
-		skills = append(skills, Skill{Subpath: e.dir, Name: name, Description: description, Tree: e.tree})
+		name, description, _ := scan.SkillFrontmatter(content)
+		skills = append(skills, Skill{Subpath: e.dir, Name: skillName(name, e.dir, canonical), Description: description, Tree: e.tree})
 	}
 	return skills, nil
+}
+
+// skillName is the name of the skill in dir whose SKILL.md frontmatter
+// names it name: that name, else its directory's, else, for a skill at the
+// root of the repository at canonical, the repository's. An unusable
+// frontmatter names no skill, so its skill is named after its directory.
+func skillName(name, dir, canonical string) string {
+	if name != "" {
+		return name
+	}
+	if dir == "" {
+		return RepoName(canonical)
+	}
+	return path.Base(dir)
 }
 
 // parseBatch reads cat-file --batch output: "<id> <type> <size>\n" followed

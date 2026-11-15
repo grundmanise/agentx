@@ -87,6 +87,20 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 			"source only.",
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.sourceSkills(cmd.Context(), args[0]) },
 	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "read <url|id> <subpath>",
+		Short: "Read the SKILL.md of a skill in a source",
+		Long: "Read the SKILL.md of the skill at <subpath> in a fetched source, before it is\n" +
+			"installed: its size, whether it is binary, how many lines it has and, for a\n" +
+			"text file within " + skillFileLimitText + ", its content. <subpath> is the skill directory\n" +
+			"from the repository root, as 'agentx source skills' prints it, '.' for a skill\n" +
+			"at the root. The command reads what the last add or fetch stored and makes no\n" +
+			"network calls.",
+		Annotations: map[string]string{annotationSection: "sources"},
+		Args:        cobra.ExactArgs(2),
+		Example:     examples("agentx source read anthropics/skills skills/pdf", "the SKILL.md of one skill, as last fetched"),
+		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceRead(cmd.Context(), args[0], args[1]) },
+	})
 	cmd.AddCommand(newSourceFetchCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:         "remove <url|id>",
@@ -587,6 +601,59 @@ func (inv *invocation) printSourceSkills(ev sourceEvent, src source.Source, list
 		t.add(c("  "+sanitised(sk.Name), label), c(sanitised(subpath), muted), c(sanitised(sk.Description), plain))
 	}
 	out.render(t, "")
+}
+
+// sourceRead reads the SKILL.md of the skill at subpath, from the root of
+// a fetched source, from the account repo alone, and reports it as skill
+// files reports a file. It is refused as source skills is, and a subpath
+// that holds no skill is exit code 5.
+func (inv *invocation) sourceRead(ctx context.Context, arg, subpath string) error {
+	src, entry, err := inv.findSource(ctx, arg)
+	if err != nil {
+		return err
+	}
+	if entry.Account {
+		return forkSourceIs(entry.URL, entry)
+	}
+	if src.Ref != "" && src.Ref != entry.Pin {
+		return pinMismatch(src, entry)
+	}
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	pinned := src
+	pinned.Ref = entry.Pin
+	if !exists {
+		return sourceFailure(source.NotFetched(src.URL), pinned)
+	}
+	dir := subpath
+	if dir == "." {
+		dir = ""
+	}
+	read, err := source.ReadSkill(ctx, inv.git, gitDir, src, dir)
+	if errors.Is(err, source.ErrNoSkill) {
+		return fail(exitNotFound, src.URL+" holds no skill at "+quotedPath(subpath), "run 'agentx source skills "+src.URL+"' to see its skills")
+	} else if err != nil {
+		return sourceFailure(err, pinned)
+	}
+	data := []byte(read.Content)
+	f := skillFile{path: "SKILL.md", size: int64(len(data))}
+	f.binary, f.truncated, f.lines = fileFacts(data, f.size)
+	if !f.binary && !f.truncated {
+		f.content = read.Content
+	}
+	out := inv.out
+	out.emit(f.event(read.Name))
+	// The name and the subpath come from the source's own repository, so
+	// they are sanitised for the terminal, as source skills sanitises them.
+	name := sanitised(read.Name)
+	inv.summary = "SKILL.md of " + name
+	out.print("SKILL.md of ", out.paint(heading, name), " in ", out.paint(heading, src.URL), under(out, sanitised(dir)), " at ", short(read.Commit))
+	t := &table{}
+	f.row(t)
+	out.render(t, "  ")
+	return nil
 }
 
 // sourceRemove deletes the remote, the ref and the settings entry. The git

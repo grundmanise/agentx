@@ -423,29 +423,40 @@ func readHead(full string, n int) ([]byte, error) {
 func (inv *invocation) reportSkillFiles(name, subject, dir string, files []skillFile) {
 	out := inv.out
 	for _, f := range files {
-		ev := skillFileEvent{event: newEvent("skill_file"), Name: name, Path: f.path, Size: f.size, Binary: f.binary, Truncated: f.truncated, Ignored: f.ignored}
-		if !f.binary && !f.truncated {
-			lines, content := f.lines, f.content
-			ev.Lines, ev.Content = &lines, &content
-		}
-		out.emit(ev)
+		out.emit(f.event(name))
 	}
 	inv.summary = subject + " has " + plural(len(files), "file")
 	out.print(out.paint(heading, subject), " has ", out.paint(noteStyle, plural(len(files), "file")), " in ", quotedPath(dir))
 	t := &table{}
 	for _, f := range files {
-		what := plural(f.lines, "line")
-		switch {
-		case f.binary:
-			what = "binary"
-		case f.truncated:
-			what = "over " + skillFileLimitText
-		}
-		flag := ""
-		if f.ignored {
-			flag = "ignored"
-		}
-		t.add(c(quotedPath(f.path), plain), c(plural(int(f.size), "byte"), muted), c(what, muted), c(flag, muted))
+		f.row(t)
 	}
 	out.render(t, "  ")
+}
+
+// event is the skill_file event of f, a file of the skill called name.
+func (f skillFile) event(name string) skillFileEvent {
+	ev := skillFileEvent{event: newEvent("skill_file"), Name: name, Path: f.path, Size: f.size, Binary: f.binary, Truncated: f.truncated, Ignored: f.ignored}
+	if !f.binary && !f.truncated {
+		lines, content := f.lines, f.content
+		ev.Lines, ev.Content = &lines, &content
+	}
+	return ev
+}
+
+// row adds f to t: its path, its size, what it is, binary, over the limit
+// or so many lines, and whether git ignores it.
+func (f skillFile) row(t *table) {
+	what := plural(f.lines, "line")
+	switch {
+	case f.binary:
+		what = "binary"
+	case f.truncated:
+		what = "over " + skillFileLimitText
+	}
+	flag := ""
+	if f.ignored {
+		flag = "ignored"
+	}
+	t.add(c(quotedPath(f.path), plain), c(plural(int(f.size), "byte"), muted), c(what, muted), c(flag, muted))
 }
