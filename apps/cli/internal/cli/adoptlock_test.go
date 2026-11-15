@@ -112,8 +112,11 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	human := h.run("adopt")
 	equal(t, "exit", human.exit, 0)
 	for _, want := range []string{
-		"Found 7 skills installed by the Vercel skills CLI.", "agentx adopt --all", "adopt all 3",
-		"\nTo take over a skill as your own, one listed above or an unmanaged one no tool installed: agentx adopt --skill <name>\n",
+		"Found 7 skills installed by the Vercel skills CLI.",
+		"\nTo adopt:\n" +
+			"  agentx adopt --all           every skill under \"Ready to adopt\"\n" +
+			"  agentx adopt --skill <name>  one skill, also one under \"Ready to take over as your own\"\n" +
+			"                               or an unmanaged skill no tool installed\n",
 	} {
 		contains(t, "stdout", human.stdout, want)
 	}

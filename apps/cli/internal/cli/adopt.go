@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -964,19 +963,28 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int, tool str
 	case n == 0:
 		out.print("Nothing to adopt.")
 	default:
-		all := "adopt all " + strconv.Itoa(n)
-		if n == 1 {
-			all = "adopt it"
-		}
 		out.print("To adopt:")
 		command := "agentx adopt "
 		if tool != "" {
 			command += toolArg(tool) + " "
 		}
 		t := &table{}
-		t.add(cell{text: command + "--all", style: label}, cell{text: all, style: muted})
-		t.add(cell{text: command + "--skill <name>", style: label}, cell{text: "adopt one; give --skill again for each", style: muted})
+		t.add(cell{text: command + "--all", style: label}, cell{text: `every skill under "Ready to adopt"`, style: muted})
+		// A run that names a tool takes nothing over, so only the command
+		// without one also names the skills --skill takes over.
+		switch {
+		case tool != "":
+			t.add(cell{text: command + "--skill <name>", style: label}, cell{text: "one skill", style: muted})
+		case counts[previewTakeOver] > 0:
+			t.add(cell{text: command + "--skill <name>", style: label}, cell{text: `one skill, also one under "Ready to take over as your own"`, style: muted})
+			t.add(cell{}, cell{text: "or an unmanaged skill no tool installed", style: muted})
+		default:
+			t.add(cell{text: command + "--skill <name>", style: label}, cell{text: "one skill, also an unmanaged skill no tool installed", style: muted})
+		}
 		out.render(t, "  ")
+		if tool == "" {
+			return
+		}
 	}
 	inv.printOwnAdoption(counts[previewTakeOver] > 0)
 }
@@ -989,7 +997,7 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int, tool str
 func (inv *invocation) printOwnAdoption(listed bool) {
 	what := "To take over an unmanaged skill no tool installed: "
 	if listed {
-		what = "To take over a skill as your own, one listed above or an unmanaged one no tool installed: "
+		what = `To take over a skill under "Ready to take over as your own", or an unmanaged skill no tool installed: `
 	}
 	inv.out.print(what, inv.out.paint(label, "agentx adopt --skill <name>"))
 }
