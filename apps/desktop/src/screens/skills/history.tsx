@@ -131,8 +131,20 @@ const Entry = ({
     originPage(entry) !== undefined && originParts(entry) !== undefined;
   return (
     <li
-      className={last ? "flex min-w-0 flex-col" : "flex min-w-0 flex-col pb-4"}
+      className={
+        last
+          ? "relative flex min-w-0 flex-col"
+          : "relative flex min-w-0 flex-col pb-4"
+      }
     >
+      {expandable && !last && (
+        // The line from this entry's chevron down to the next one's, so the sheet reads as one
+        // history.
+        <span
+          aria-hidden
+          className="bg-timeline-connector absolute top-6 bottom-1 left-1.5 w-px"
+        />
+      )}
       {expandable && linked && (
         // A link cannot sit inside the button, so the button holds the chevron alone.
         <div className="flex items-start gap-2">

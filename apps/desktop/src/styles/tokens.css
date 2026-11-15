@@ -355,6 +355,7 @@
   --color-diff-progress-pending: var(--gray-850);
 
   /* Timeline */
+  --color-timeline-connector: var(--gray-800);
   --color-timeline-meta: var(--gray-500);
 
   /* Startup checks */

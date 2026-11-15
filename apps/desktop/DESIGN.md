@@ -384,8 +384,9 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 #### Timeline (History)
 
-| Token           | Primitive  | Element                      |
-| --------------- | ---------- | ---------------------------- |
+| Token | Primitive | Element |
+| --- | --- | --- |
+| `timeline.connector` | `gray-800` | 1px line between the chevrons of the History sheet |
 | `timeline.meta` | `gray-500` | Relative time under an entry |
 
 #### Startup checks
@@ -1001,7 +1002,7 @@ shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for
 
 ### Sheet (History)
 
-`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. The chevron hangs outside the entry: the meta line and the files start under the subject, `timeline.indent` in. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
+`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. The chevron hangs outside the entry: the meta line and the files start under the subject, `timeline.indent` in. A 1px `timeline.connector` runs from under each chevron, 4px below its line, to 4px above the next entry's chevron, so the entries read as one history. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
 
 ### Sheet (What's new)
 
