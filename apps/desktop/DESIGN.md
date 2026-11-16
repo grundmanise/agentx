@@ -353,7 +353,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `dialog.subtitle` | `gray-400` |  |
 | `sheet.bg` | `gray-960` | History sheet body |
 | `sheet.border` | `gray-850` |  |
-| `sheet.handle` | `gray-700` | A resizable sheet's handle on hover and while it drags |
+| `sheet.handle` | `gray-700` | A sheet's handle on hover and while it drags |
 | `toast.text` | `gray-50` |  |
 
 #### Code, file tree and diffs
@@ -655,12 +655,10 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
-| `sheet.width` | 420 | `w-sheet` | History sheet |
-| `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room |
-| `sheet.log-width` | the width the user dragged it to, else 1120 | `w-sheet-dragged` | Activity log sheet, twice `sheet.width-wide`, for its lines. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet-log` |
-| `sheet.log-min-width` | 420 | `min-w-sheet-log` | The narrowest the Activity log sheet drags to: `sheet.width` |
-| `sheet.log-max-width` | 90% of the window | `max-w-sheet-log` | The widest the Activity log sheet drags to, and opens at in a narrow window |
-| `sheet.handle-width` | 8 | `w-sheet-handle` | The drag handle on a resizable sheet's left edge |
+| `sheet.width` | the width the user dragged a sheet to, else 1120 | `w-sheet-dragged` | Every sheet: History, What's new and Activity log. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet` |
+| `sheet.min-width` | 420 | `min-w-sheet` | The narrowest a sheet drags to |
+| `sheet.max-width` | 90% of the window | `max-w-sheet` | The widest a sheet drags to, and opens at in a narrow window |
+| `sheet.handle-width` | 8 | `w-sheet-handle` | The drag handle on a sheet's left edge |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
 | `sheet.padding` | 28 32 | `py-sheet-y px-sheet` |  |
 | `palette.width` | 640 | `w-palette` |  |
@@ -1030,22 +1028,27 @@ shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for
 - The popover never leaves the window: it is at most `popover.max-height` high and scrolls inside that.
 - AGENTS lists the checked agents first, then the rest by the popularity of the agent client (`src/lib/agent-popularity.ts`), Universal where its most used client would stand; the order is fixed when the popover opens. A machine can have dozens of agent configurations, so the group shows six rows, plus every row that is checked or was since the popover opened, and a small ghost button under them that shows the rest and hides them again. With seven rows or fewer it shows them all and no button.
 
+### Sheet
+
+Every sheet (History, What's new, Activity log) has the same frame and the same width.
+
+- `sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too.
+- A `sheet.handle-width` handle on its left edge drags its width between `sheet.min-width` and `sheet.max-width`. The handle shows `sheet.handle` on hover and while it drags, and `shell.focus-ring` on focus. The arrow keys move it 40 at a time, and a double click or Home brings back the default. Every sheet opens at the width the user last left a sheet at, until the app quits.
+
 ### Sheet (History)
 
-`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. The chevron hangs outside the entry: the meta line and the files start under the subject, `timeline.indent` in. A 1px `timeline.connector` runs from under each chevron, 4px below its line, to 4px above the next entry's chevron, so the entries read as one history. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
+The sheet frame (§6 "Sheet"). Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. The chevron hangs outside the entry: the meta line and the files start under the subject, `timeline.indent` in. A 1px `timeline.connector` runs from under each chevron, 4px below its line, to 4px above the next entry's chevron, so the entries read as one history. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
 
 ### Sheet (What's new)
 
-The History sheet's frame at `sheet.width-wide`, for what an update changes before the user takes it. Under the skill's name, the base and newer version in `type.technical-sm` `text.caption`, each by its date when the CLI dates it, else by its short id. Below, the File list (§6) with every row open: status `type.technical-sm` `text.caption` (`accent.danger` for a deleted file), path `type.technical` `file-row.path`, and the patch in the Code pane with the diff tints, its hunks alone, numbered as in the newer version.
+The sheet frame (§6 "Sheet"), for what an update changes before the user takes it. Under the skill's name, the base and newer version in `type.technical-sm` `text.caption`, each by its date when the CLI dates it, else by its short id. Below, the File list (§6) with every row open: status `type.technical-sm` `text.caption` (`accent.danger` for a deleted file), path `type.technical` `file-row.path`, and the patch in the Code pane with the diff tints, its hunks alone, numbered as in the newer version.
 
 - A patch with no lines to show, a read in progress and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
 - An update from another machine cannot be diffed before it is taken: the sheet lists its files in the same card, status and path, with no chevron.
 
 ### Sheet (Activity log)
 
-The History sheet's frame at `sheet.log-width` (`src/app/activity-log.tsx`): the last lines of what the app ran and what the background scan reported, as a terminal shows them. A sheet, since the log is looked at beside the screen whose action it explains, and from any screen; Settings and the palette open it.
-
-- The sheet is resizable: a `sheet.handle-width` handle on its left edge drags its width between `sheet.log-min-width` and `sheet.log-max-width`. The handle shows `sheet.handle` on hover and while it drags, and `shell.focus-ring` on focus. The arrow keys move it 40 at a time, and a double click or Home brings back the default. The sheet opens at the width the user left it at until the app quits.
+The sheet frame (§6 "Sheet") (`src/app/activity-log.tsx`): the last lines of what the app ran and what the background scan reported, as a terminal shows them. A sheet, since the log is looked at beside the screen whose action it explains, and from any screen; Settings and the palette open it.
 
 - One block of lines, oldest first: `code.bg` with 1px `code.border`, `log.output-radius`, `type.technical-sm`, long lines wrapped. A line is its time in a `log.time-width` column, its text, and a note at the right: how long a command ran, and how it ended when it did not succeed. No rows to open, no dots and no filter: the log is read as a terminal is.
 - Red is the one colour, and it means failed. A command that failed is `tone.danger.fg` with its last 5 lines of output under it, in the same colour and with no time. A command that succeeded keeps its line only, in `text.secondary` with its time and note in `text.caption`. What the background scan reported and a command's debug lines are `text.caption`, so the commands stand out. A scan the app restarts on purpose is no failure.

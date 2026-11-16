@@ -146,7 +146,7 @@ test("Open serve.log shows the serve log file in the file manager", async ({
   await expect.poll(() => cli.reveals).toEqual([[serveLogPath]]);
 });
 
-test("the log opens twice as wide as the What's new sheet, and its left edge drags its width up to 90% of the window", async ({
+test("the log opens 1120 wide, and its left edge drags its width up to 90% of the window", async ({
   page,
 }) => {
   await page.goto("/");
