@@ -677,6 +677,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` | From the bottom edge |
 | `toast.detail-width` | 440 | `w-toast-detail` | Error toast |
 | `toast.detail-padding` | 12 6 12 18 | `py-toast-detail pr-1.5 pl-toast` |  |
+| `toast.count-min-width` | 1ch | `min-w-toast-count` | A number of a progress toast, in `tabular-nums`: the dash that stands in for it until the count comes takes the room of the digit that replaces it |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
 

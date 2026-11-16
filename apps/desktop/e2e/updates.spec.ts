@@ -26,8 +26,8 @@ import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
 declare global {
   interface Window {
-    /** The texts the toasts showed, in order, as a test records them. */
-    toastTexts?: string[];
+    /** The texts the toast showed, in order, with its width, as a test records them. */
+    toastTexts?: { text: string; width: number }[];
   }
 }
 
@@ -379,83 +379,71 @@ test.describe("Check updates", () => {
     ]);
   });
 
-  test("opens its toast with the source count, not without it first", async ({
-    cli,
-    page,
-  }) => {
-    await open(cli, page, "pdf", []);
-    // Every text the toasts show, as the page draws them.
-    await page.evaluate(() => {
-      const seen: string[] = [];
-      window.toastTexts = seen;
-      new MutationObserver(() => {
-        for (const toast of document.querySelectorAll("[data-sonner-toast]")) {
-          const text = toast.querySelector("[data-title]")?.textContent;
-          if (text !== null && text !== undefined && seen.at(-1) !== text) {
-            seen.push(text);
+  for (const { total, count } of [
+    { count: "0 of 2 sources", total: 2 },
+    { count: "0 of 1 source", total: 1 },
+  ]) {
+    test(`opens with a dash for each number, and keeps its width as "${count}" comes`, async ({
+      cli,
+      page,
+    }) => {
+      await open(cli, page, "pdf", []);
+      // Each text the toast shows, with its width, as the page draws them.
+      await page.evaluate(() => {
+        const seen: { text: string; width: number }[] = [];
+        window.toastTexts = seen;
+        new MutationObserver(() => {
+          const toast = document.querySelector("[data-sonner-toast]");
+          const title = toast?.querySelector("[data-title]");
+          // The text that is read: without what is hidden from it.
+          const read = title?.cloneNode(true);
+          if (read instanceof Element) {
+            for (const hidden of read.querySelectorAll("[aria-hidden]")) {
+              hidden.remove();
+            }
           }
-        }
-      }).observe(document.body, {
-        characterData: true,
-        childList: true,
-        subtree: true,
+          const text = read?.textContent ?? "";
+          if (toast !== null && text !== "" && seen.at(-1)?.text !== text) {
+            seen.push({ text, width: toast.getBoundingClientRect().width });
+          }
+        }).observe(document.body, {
+          characterData: true,
+          childList: true,
+          subtree: true,
+        });
       });
+      const run = cli.register(["skill", "check-updates"], {
+        events: [
+          { current: 0, phase: "fetch", total, type: "progress" },
+          {
+            current: 1,
+            phase: "fetch",
+            subject: ACME,
+            total,
+            type: "progress",
+          },
+        ],
+        holdAfter: 1,
+      });
+      await checkButton(page).click();
+      await run.started;
+      await expect(
+        toasts(page).getByText(`Checking for updates · ${count}`)
+      ).toBeVisible();
+      run.release();
+      await expect(
+        toasts(page).getByText("All skills are up to date")
+      ).toBeVisible();
+      const seen = (await page.evaluate(() => window.toastTexts)) ?? [];
+      const checking = seen.filter((s) => s.text.startsWith("Checking"));
+      expect(checking.map((s) => s.text)).toEqual([
+        "Checking for updates · – of – sources",
+        `Checking for updates · ${count}`,
+        `Checking for updates · ${count.replace("0", "1")}`,
+      ]);
+      expect(new Set(checking.map((s) => s.width)).size).toBe(1);
     });
-    const run = cli.register(["skill", "check-updates"], {
-      events: [{ current: 0, phase: "fetch", total: 2, type: "progress" }],
-      holdAfter: 1,
-    });
-    await checkButton(page).click();
-    await run.started;
-    await expect(
-      toasts(page).getByText("Checking for updates · 0 of 2 sources")
-    ).toBeVisible();
-    run.release();
-    await expect(
-      toasts(page).getByText("All skills are up to date")
-    ).toBeVisible();
-    const seen = await page.evaluate(() => window.toastTexts);
-    expect(seen).not.toContain("Checking for updates");
-  });
-
-  test("opens without a count when the CLI is slow to emit one, then with the last count", async ({
-    cli,
-    page,
-  }) => {
-    await open(cli, page, "pdf", []);
-    const slow = cli.register(["skill", "check-updates"], {
-      events: [{ current: 0, phase: "fetch", total: 2, type: "progress" }],
-      holdAfter: 0,
-    });
-    await checkButton(page).click();
-    await slow.started;
-    await expect(
-      toasts(page).getByText("Checking for updates", { exact: true })
-    ).toBeVisible();
-    slow.release();
-    await expect(
-      toasts(page).getByText("All skills are up to date")
-    ).toBeVisible();
-    // The toast of the first check has left.
-    await expect(toasts(page).getByText(/^Checking for updates/u)).toHaveCount(
-      0
-    );
-
-    // The next check knows how many sources there are before the CLI says so.
-    const next = cli.register(["skill", "check-updates"], {
-      events: [{ current: 0, phase: "fetch", total: 2, type: "progress" }],
-      holdAfter: 0,
-    });
-    await checkButton(page).click();
-    await next.started;
-    await expect(
-      toasts(page).getByText("Checking for updates · 0 of 2 sources")
-    ).toBeVisible();
-    next.release();
-    await expect(
-      toasts(page).getByText("All skills are up to date")
-    ).toBeVisible();
-  });
+  }
 
   test("is an icon button that shows its name in a tooltip, and is busy while the check runs", async ({
     cli,

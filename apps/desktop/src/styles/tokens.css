@@ -689,6 +689,7 @@
   --padding-toast-y: 10px;
   --width-toast-detail: 440px;
   --padding-toast-detail: 12px;
+  --min-width-toast-count: 1ch;
   --height-stale-bar: 36px;
   --padding-stale-bar: 16px;
   --inset-floating-bar: 24px;
