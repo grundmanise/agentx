@@ -146,7 +146,8 @@ test("Open serve.log shows the serve log file in the file manager", async ({
   await expect.poll(() => cli.reveals).toEqual([[serveLogPath]]);
 });
 
-test("the log opens twice as wide as the What's new sheet, and its left edge drags its width up to 90% of the window", async ({
+test("the log opens 1120 wide, its left edge drags its width up to 90% of the window, and it keeps that width", async ({
+  cli,
   page,
 }) => {
   await page.goto("/");
@@ -168,11 +169,20 @@ test("the log opens twice as wide as the What's new sheet, and its left edge dra
   await page.mouse.up();
   expect(await width()).toBe(1152);
 
-  // An arrow key narrows it, and the sheet opens again at the width it was left at.
-  await handle.press("ArrowRight");
-  expect(await width()).toBe(1112);
+  // The sheet keeps its own width, apart from the other sheets', and opens again at it, also after
+  // the app restarts.
+  const kept = await page.evaluate(() =>
+    localStorage.getItem("agentx.sheet-widths")
+  );
+  expect(kept).toBe(JSON.stringify({ "activity-log": 1152 }));
   await page.keyboard.press("Escape");
   await expect(log(page)).toBeHidden();
   await openFromPalette(page);
-  expect(await width()).toBe(1112);
+  expect(await width()).toBe(1152);
+  cli.restart();
+  await page.reload();
+  // The kept inventory shows at once, and ⌘K opens nothing until the startup checks pass.
+  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
+  await openFromPalette(page);
+  expect(await width()).toBe(1152);
 });
