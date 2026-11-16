@@ -9,7 +9,7 @@ import type {
   LibraryPlacement,
 } from "#/cli/events.gen.ts";
 import type { AgentChipState } from "#/components/agent-chip.tsx";
-import { plural } from "#/lib/plural.ts";
+import { andList, plural } from "#/lib/plural.ts";
 import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
@@ -84,12 +84,6 @@ export const chipStateOf = (
   }
   return inheritedFrom(row, c, configurations).length > 0 ? "inherited" : "on";
 };
-
-/** `a`, `a and b`, `a, b and c`. */
-const andList = (words: string[]) =>
-  words.length < 2
-    ? words.join("")
-    : `${words.slice(0, -1).join(", ")} and ${words.at(-1) ?? ""}`;
 
 /**
  * The configurations that lose the skill with `c`'s placement: those that see it only through

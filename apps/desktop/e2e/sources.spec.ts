@@ -41,6 +41,9 @@ const grid = (page: Page, name: string) =>
 /** The row of a skill, which opens and closes it. */
 const row = (page: Page, name: string) =>
   page.getByRole("heading").getByRole("button", { exact: true, name });
+/** What the row of a skill shows: its name, description or status, over the button. */
+const rowLine = (page: Page, name: string) =>
+  page.locator("[data-slot=accordion-row]").filter({ has: row(page, name) });
 /** The round check that selects a skill. */
 const check = (page: Page, name: string) =>
   page.getByRole("button", { exact: true, name: `Select ${name}` });
@@ -223,7 +226,9 @@ test("a source listing: selectable skills first, then each state with its label 
       expect(row(page, name)).toHaveAccessibleDescription(
         new RegExp(`^${label}\\.`, "u")
       ),
-      expect(row(page, name).getByText(label, { exact: true })).toBeVisible(),
+      expect(
+        rowLine(page, name).getByText(label, { exact: true })
+      ).toBeVisible(),
     ])
   );
   // An open row says why its skill cannot be selected.
@@ -252,21 +257,32 @@ test("a source listing: selectable skills first, then each state with its label 
   ]);
 });
 
-test("opening a row reads its SKILL.md once and links to the skill", async ({
+test("opening a row reads its SKILL.md once, then opens, and links to the skill", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
   const read = cli.register(["source", "read", ACME_ID, "skills/docx"], {
     events: [skillMd("docx", "---\nname: docx\n---\n# Word documents\n")],
+    holdAfter: 0,
   });
   await row(page, "docx").click();
   await read.started;
+  // The row waits closed, with a spinner, until SKILL.md is read.
+  await expect(row(page, "docx")).toHaveAttribute("aria-busy", "true");
+  await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "false");
+  const spinner = page
+    .getByRole("status")
+    .filter({ hasText: "Loading skill…" });
+  await expect(spinner).toBeVisible();
+  await spinner.locator("[data-slot=tooltip-trigger]").hover();
+  await expect(page.getByRole("tooltip")).toHaveText("Loading skill…");
+  read.release();
   await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
   await expect(
     opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
   ).toContainText("# Word documents");
-  await opened(page, "docx").getByRole("link", { name: "View skill" }).click();
+  await page.getByRole("link", { name: "View skill" }).click();
   expect(cli.openedUrls).toEqual([`${ACME}/tree/3f2a9c1e8d7b6a/skills/docx`]);
   // The row opens and closes on a click; the check alone selects.
   await expect(bar(page)).toHaveCount(0);
@@ -308,7 +324,9 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   );
   await check(page, "docx").click();
   await check(page, "artifacts").click();
-  await expect(bar(page)).toContainText("2 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 2" })
+  ).toBeVisible();
   // The enabled agents are preselected; the disabled one is off.
   await expect(target(page, "Claude Code")).toHaveAttribute(
     "aria-pressed",
@@ -348,14 +366,14 @@ test("names and targets: two cards and one enabled agent turned off", async ({
     },
   ]);
   await expect(
-    row(page, "docx").getByText("Added", { exact: true })
+    rowLine(page, "docx").getByText("Added", { exact: true })
   ).toBeVisible();
   expect(commandLines(cli)).toContain(
     `skill add ${ACME} --name artifacts --name docx --to claude-code`
   );
 });
 
-test("many agents: five logos and +n, Choose agents toggles a target, two-letter monograms", async ({
+test("many agents: five logos and +n, the agent picker toggles a target, two-letter monograms", async ({
   cli,
   page,
 }) => {
@@ -388,17 +406,9 @@ test("many agents: five logos and +n, Choose agents toggles a target, two-letter
     { events: [{ name: "docx", type: "library_skill" }] }
   );
   await check(page, "docx").click();
-  // The chosen agents first, then the rest, five in all, with Universal after the chosen ones; the other three behind +3, last.
+  // The chosen agents first, then the rest, five in all; the other three behind +3, last.
   expect(await names(bar(page).getByRole("group", { name: "Add to" }))).toEqual(
-    [
-      "Claude Code",
-      "Cursor",
-      "Universal",
-      "Windsurf",
-      "Kilo Code",
-      "Aider",
-      "3 more agents",
-    ]
+    ["Claude Code", "Cursor", "Windsurf", "Kilo Code", "Aider", "3 more agents"]
   );
   // A client with no bundled logo draws two letters: its initials, or a one-word name's first two.
   await expect(target(page, "Kilo Code").locator("img")).toHaveAttribute(
@@ -413,8 +423,35 @@ test("many agents: five logos and +n, Choose agents toggles a target, two-letter
   await expect(page.getByRole("tooltip")).toHaveText("Kilo Code");
 
   await target(page, "3 more agents").click();
-  const picker = page.getByRole("dialog", { name: "Choose agents" });
+  const picker = page.getByRole("dialog", { name: "Where to install" });
+  await expect(picker).toHaveAccessibleDescription(
+    "Choose agents to add the skill to. It is always available to universal agents."
+  );
+  // The term explains itself on hover.
+  await picker.getByRole("button", { name: "universal agents" }).hover();
+  await expect(page.getByRole("tooltip")).toHaveText(
+    "Universal agents read your skills library, ~/.agents/skills, so every skill you add reaches them."
+  );
+  // Every agent by name, the universal ones among them, locked on with the Universal pill.
   const agents = picker.getByRole("list", { name: "Agents" });
+  await expect(agents.getByRole("listitem")).toHaveText([
+    /^Aider/u,
+    /^Amp/u,
+    /^Claude Code/u,
+    /^Cline/u,
+    "CodexUniversal/home/me/.codexAlways on",
+    /^Cursor/u,
+    "Gemini CLIUniversal/home/me/.gemini-cliAlways on",
+    /^Kilo Code/u,
+    /^Windsurf/u,
+    /^Zed/u,
+  ]);
+  // The Universal pill says the same, from the keyboard too.
+  await page.mouse.move(0, 0);
+  await agents.getByRole("button", { name: "Universal" }).first().focus();
+  await expect(page.getByRole("tooltip")).toContainText(
+    "Universal agents read your skills library"
+  );
   expect(
     await agents
       .getByRole("checkbox")
@@ -429,11 +466,14 @@ test("many agents: five logos and +n, Choose agents toggles a target, two-letter
     "Windsurf",
     "Zed",
   ]);
-  await expect(picker).toContainText("2 agents");
-  await picker.getByRole("searchbox", { name: "Search agents" }).fill("ze");
+  const search = picker.getByRole("searchbox", { name: "Search agents" });
+  await search.fill("gem");
+  await expect(agents.getByRole("listitem")).toHaveText([
+    "Gemini CLIUniversal/home/me/.gemini-cliAlways on",
+  ]);
+  await search.fill("ze");
   await agents.getByText("Zed", { exact: true }).click();
   await expect(agents.getByRole("checkbox", { name: "Zed" })).toBeChecked();
-  await expect(picker).toContainText("3 agents");
   await picker.getByRole("button", { name: "Done" }).click();
   await expect(picker).toHaveCount(0);
 
@@ -478,21 +518,19 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
   await selectAll(page).click();
   await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
   await expect(selectAll(page)).toHaveAttribute("aria-checked", "true");
-  await expect(bar(page)).toContainText("4 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 4" })
+  ).toBeVisible();
   await check(page, "docx").click();
   await check(page, "forms").click();
-  await expect(bar(page)).toContainText("2 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 2" })
+  ).toBeVisible();
   await expect(selectAll(page)).toHaveAccessibleName("2 of 4 selected");
   await expect(selectAll(page)).toHaveAttribute("aria-checked", "mixed");
-  // The Universal stack is on and stays on.
-  await expect(target(page, "Universal")).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
-  await target(page, "Universal").click();
-  await expect(target(page, "Universal")).toHaveAttribute(
-    "aria-pressed",
-    "true"
+  // The Universal stack is always on: a locked mark, not a toggle.
+  await expect(bar(page)).toContainText(
+    "Skills are always added to universal agents: Codex and Gemini CLI"
   );
   await bar(page).getByRole("button", { name: "Add 2" }).click();
   await add.started;
@@ -529,7 +567,9 @@ test("progress shows from the progress events, and Cancel stops the run", async 
   ).toBeVisible();
   expect(cli.cancels).toHaveLength(1);
   // The selection stays, for another try.
-  await expect(bar(page)).toContainText("2 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 2" })
+  ).toBeVisible();
 });
 
 test("a partial failure lists what was added, the error, its hint and each skipped skill", async ({
@@ -566,7 +606,9 @@ test("a partial failure lists what was added, the error, its hint and each skipp
   await expect(toast).toContainText(error.hint);
   await expect(toast).toContainText(warning);
   // The skill that landed leaves the selection; the skipped one stays.
-  await expect(bar(page)).toContainText("1 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 1" })
+  ).toBeVisible();
   await expect(check(page, "docx")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "artifacts")).toHaveAttribute(
     "aria-pressed",
@@ -673,7 +715,9 @@ test("Add source runs source add, then opens the new source fully preselected", 
   await expect(pill(page, "acme/more")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "review")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "triage")).toHaveAttribute("aria-pressed", "true");
-  await expect(bar(page)).toContainText("2 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 2" })
+  ).toBeVisible();
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
     "source add acme/more",
@@ -754,7 +798,7 @@ test("Personal lists the account remote's installable skills and adds by name", 
     "my-pdf",
     "release-notes",
   ]);
-  await expect(row(page, "my-pdf")).toContainText("from acme/skills");
+  await expect(rowLine(page, "my-pdf")).toContainText("from acme/skills");
   // Your skills on the account remote open to their description alone.
   await row(page, "release-notes").click();
   await expect(opened(page, "release-notes")).toHaveText("personal skill");
