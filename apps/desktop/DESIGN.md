@@ -188,6 +188,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `pill.disabled-text` | `accent.attention` |  |
 | `pill.version-bg` | `gray-880` | Plugin version |
 | `pill.version-text` | `gray-300` |  |
+| `pill.universal-bg` | `gray-850` | Universal pill on a universal agent's row in the agent picker |
+| `pill.universal-text` | `gray-250` | 5.8:1 on `pill.universal-bg` |
 
 #### Inputs, switches, checkboxes
 
@@ -296,7 +298,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `monogram.9-bg` | `pink-900` |  |
 | `monogram.9-text` | `pink-200` |  |
 | `agent-picker.badge-bg` | `accent.primary` | Count of chosen targets the Add skills bar hides, on its "+n" button (digits `on-accent`) |
-| `agent-picker.row-hover` | `gray-880` | Row hover in the Choose agents dialog |
+| `agent-picker.row-hover` | `gray-880` | Row hover in the agent picker |
 
 #### Cards and banners
 
@@ -655,6 +657,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
+| `tooltip.text-max-width` | 280 | `max-w-tooltip-text` | A tooltip that explains a term (`size="text"`); past it the sentence wraps |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
 | `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room |
 | `sheet.log-width` | the width the user dragged it to, else 1120 | `w-sheet-dragged` | Activity log sheet, twice `sheet.width-wide`, for its lines. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet-log` |
@@ -668,7 +671,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.top` | 112 | `top-palette` | From the window top |
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
 | `adopt.list-max-height` | 280 | `max-h-adopt-list` | The adopt dialog's list of skills; it scrolls past it |
-| `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The Choose agents dialog's list; it scrolls past it |
+| `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The agent picker's list; it scrolls past it |
 | `add-skill.list-max-height` | 264 | `max-h-add-skill-list` | The Add skill dialog's list of skills found; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
@@ -722,7 +725,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `segmented.radius` | 9999 | Track and segments |
 | `agent-chip.radius` | 9999 | Agent client toggle chip |
 | `logo.radius` | 50% | Agent client logo |
-| `agent-picker.row-radius` | 10 | Row of the Choose agents dialog |
+| `agent-picker.row-radius` | 10 | Row of the agent picker |
 | `add-skill.row-radius` | 10 | Skill row of the Add skill dialog |
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
@@ -796,6 +799,7 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a 
 - Disabled (plugin): `pill.disabled-*`.
 - Version (plugin): `pill.version-*`.
 - Fork: `pill.neutral-*`, hover `pill.neutral-hover`, the 12px fork glyph then the fork's name. In the detail header of the original of a fork made under a new name, one per fork; it opens the fork.
+- Universal: `pill.universal-*`, after the name of a universal agent in the agent picker (§6 "Agent picker"). It does nothing on a click: it is a button only so that its tooltip, which says what universal agents are, opens from the keyboard too.
 
 A skill row whose banner (§6 "Banner (detail pane)") has tone `attention` or `danger` shows an `AlertTriangleIcon` (`xs`) in `tone.attention.fg` after the name and pill, whatever the banner's tone; its accessible name is the banner's title. The banner tile keeps the circled `AlertIcon`. Other banner tones put nothing on the row.
 
@@ -827,13 +831,13 @@ The chip of an agent whose folder another agent reads names both in its title an
 
 ### Agent picker (Add skills bar, Add skill dialog)
 
-The install targets in the floating bar of the Add skills screen, and under the skills found in the Add skill dialog, are "Add to" in `type.secondary` `text.muted`, then round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the Universal stack, then the rest, each group in inventory order. The order is fixed when the bar or the skills found appear and again when the Choose agents dialog closes, so a logo stays in place while it is toggled. The choice starts as the enabled configurations, where `skill add` installs when no agent is named (`src/screens/sources/agent-targets.tsx`). With more than six configurations that take a placement, a small secondary button "+n" comes last, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo, and each member of the Universal stack, shows the client's name in a Tooltip; the Universal toggle keeps its explanation as its accessible description.
+The install targets in the floating bar of the Add skills screen, and under the skills found in the Add skill dialog, start with the Universal stack when any configuration reads the library: its 28px logos in the chosen ring of a logo toggle (2px `accent.primary`, offset 2px), with the lock mark (§6 "Checkbox (popover)") on its bottom-right corner, ringed in `overlay.bg`. It is no control: universal clients read the library, so every skill reaches them. Its Tooltip says so, a screen reader also hears the clients' names, and a divider separates it from the rest. Then "Add to" in `type.secondary` `text.muted`, then round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the rest, each group in inventory order. The order is fixed when the bar or the skills found appear and again when the agent picker closes, so a logo stays in place while it is toggled. The choice starts as the enabled configurations, where `skill add` installs when no agent is named (`src/screens/sources/agent-targets.tsx`). With more than six configurations that take a placement, a small secondary button "+n" comes last, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo shows the client's name in a Tooltip. The bar does not count the selected skills: its Add button does. While the install runs, its progress comes first, before the targets.
 
-The "+n" button opens Choose agents, a dialog (§6 "Dialog") with a search field (§6 "Inputs") that filters by name, then every configuration that takes a placement, sorted by name, in a list that scrolls past `agent-picker.list-max-height`. A row is the whole hit target, `agent-picker.row-radius`, hover `agent-picker.row-hover`: a 28px logo, the name in `type.body` `text.primary` over the configuration's path in `type.technical-sm` `text.caption`, and the round checkbox (§6 "Checkbox (popover)") at the right. A row toggles the same targets as the bar. The footer counts the chosen targets in `type.secondary` `text.muted`, then a ghost Clear, which unchecks them all, and a primary Done, which closes the dialog.
+The "+n" button opens the agent picker, a dialog (§6 "Dialog") titled by where the skills go, with no count. Its subtitle asks for the agents and words the skills as one or several; when configurations read the library, it adds that universal agents always have them, and that term is a help term (§6 "Tooltip") whose tooltip says they read the library, the path in `type.technical-sm`. Then a search field (§6 "Inputs") that filters by name, then every configuration that takes a placement and every universal one, sorted by name together, in a list that scrolls past `agent-picker.list-max-height`. A row has a 28px logo and the name in `type.body` `text.primary` over the configuration's path in `type.technical-sm` `text.caption`. A row that takes a placement is the whole hit target, `agent-picker.row-radius`, hover `agent-picker.row-hover`, with the round checkbox (§6 "Checkbox (popover)") at the right; it toggles the same targets as the bar. A universal row is no control and has no hover: the Universal pill (§6 "Pills (status)") after the name, with the same tooltip, and the lock mark where a row has its checkbox, which a screen reader hears as always on. The search filters both kinds alike. The footer has a ghost Clear, which unchecks every target that takes a placement, and a primary Done, which closes the dialog. The search field has the focus when the dialog opens.
 
 ### Checkbox (popover)
 
-16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark; mixed, for a box that stands for several of which some are checked: the same fill with a `checkbox.check` dash. In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
+16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark; mixed, for a box that stands for several of which some are checked: the same fill with a `checkbox.check` dash; locked, for a target that is always on: the same fill with a `checkbox.check` lock (`LockMark`). In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
 
 ### Radio group
 
@@ -847,7 +851,7 @@ On a card the track is `segmented.card-track-bg`. A control whose command runs i
 
 ### Agent client logo chip
 
-Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo names its client on hover: as its `title`, or, in the Add skills bar and the Choose agents dialog, in the Tooltip (§6 "Tooltip"), which opens at once.
+Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo names its client on hover: as its `title`, or, in the Add skills bar and the agent picker, in the Tooltip (§6 "Tooltip"), which opens at once.
 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
@@ -1022,7 +1026,9 @@ The rows of the Skills list column, in their groups (§6 "Group header"). Only t
 
 ### Tooltip
 
-shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, shows the full text of a shortened label, such as a source group's URL, or says why an inert agent chip does nothing: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs, but for an inert agent chip, whose reason it describes.
+shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, shows the full text of a shortened label, such as a source group's URL, or says why an inert agent chip does nothing: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs, but for an inert agent chip, whose reason it describes, and a help term.
+
+A help term (`src/components/help-term.tsx`) is a word in running text that explains itself: it keeps the text's type and colour with a dotted underline and the help cursor, and is a button that does nothing on a click, so its tooltip opens from the keyboard too. The punctuation that follows it sits inside the button, outside the underline, so a screen reader reads no space before it. Its tooltip, and the Universal pill's, take `size="text"`: the sentence wraps past `tooltip.text-max-width`.
 
 ### Popover (Filter)
 
