@@ -86,7 +86,7 @@ const LaunchVeil = ({ ready, step }: { ready: boolean; step?: Step }) => {
     <div
       data-launch-veil
       className={cn(
-        "bg-shell-content-bg/40 backdrop-blur-panel-loading absolute inset-0 z-10 flex",
+        "bg-shell-loading-veil backdrop-blur-panel-loading absolute inset-0 z-10 flex",
         ready && "animate-code-loading-out pointer-events-none"
       )}
       onAnimationEnd={(event) => {

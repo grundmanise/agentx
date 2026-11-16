@@ -148,14 +148,19 @@ const veil = (page: Page) =>
  * restarts the app with `doctor` held. Returns the held doctor and the command lines of the
  * restart, the reads of the skill included.
  */
-const relaunch = async (cli: MockCli, page: Page) => {
+const relaunch = async (cli: MockCli, page: Page, more: string[] = []) => {
   cli.onServeStart({
     events: [
-      { ...firstInventory(), library: [skill("notes", { fork_id: "f1" })] },
+      {
+        ...firstInventory(),
+        library: ["notes", ...more].map((n) => skill(n, { fork_id: n })),
+      },
     ],
   });
-  cli.register(["skill", "files", "notes"], { events: filesOf("notes") });
-  cli.register(["skill", "history", "notes"], { events: [] });
+  for (const n of ["notes", ...more]) {
+    cli.register(["skill", "files", n], { events: filesOf(n) });
+    cli.register(["skill", "history", n], { events: [] });
+  }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
   await launched(cli);
@@ -232,6 +237,24 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
     );
   expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
   expect(cli.serveStarts).toBe(2);
+});
+
+test("the arrows do not move the selection under the launch pane", async ({
+  cli,
+  page,
+}) => {
+  const { doctor } = await relaunch(cli, page, ["todo"]);
+  const detail = (name: string) =>
+    page.getByRole("heading", { exact: true, level: 1, name });
+  await expect(detail("notes")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+
+  // Once the checks pass, notes is still selected, and the arrows work again.
+  doctor.release();
+  await expect(veil(page)).toHaveCount(0);
+  await expect(detail("notes")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await expect(detail("todo")).toBeVisible();
 });
 
 test("a change started on a kept inventory does not run on a machine that is no longer as it showed", async ({

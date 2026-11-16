@@ -129,6 +129,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | --- | --- | --- |
 | `shell.bg` | `gray-990` | Window body, sidebar, startup layer |
 | `shell.content-bg` | `gray-970` | Content area, both split columns, command field |
+| `shell.loading-veil` | `gray-970` at 40% | The frosted pane over the kept inventory while the startup checks run (§8) |
 | `shell.divider` | `gray-890` | Split column divider, section dividers, table header rule |
 | `shell.scrim` | `black/50` | Behind the history sheet |
 | `shell.scrim-strong` | `black/55` | Behind dialogs and the palette |
@@ -1151,7 +1152,7 @@ Nothing loops forever, and nothing waits on purpose. Two things loop, each only 
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; a control with a leading icon, such as Check updates or Check tools, shows it in the icon's place, so a long check reads as busy past its first second.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass; a passing launch shows no startup layer.
-- A launch with a kept inventory shows its screens with the first frame, with no fade, under a frosted pane: `shell.content-bg` at 40% with a `shell.panel-loading-blur` backdrop blur, and on top the launch progress of an empty panel (the `Spinner`, Loading, and from 5 seconds how much longer the check keeps trying). The pane takes every click and key, and the screen under it is inert, so nothing in the main panel starts before the checks pass. The title bar and the sidebar stay as always, and the sidebar navigates. When the checks pass, the pane fades out in `.3s` (`animate-code-loading-out`).
+- A launch with a kept inventory shows its screens with the first frame, with no fade, under a frosted pane: `shell.loading-veil` with a `shell.panel-loading-blur` backdrop blur, and on top the launch progress of an empty panel (the `Spinner`, Loading, and from 5 seconds how much longer the check keeps trying). The pane takes every click and key, the screen under it is inert, and a screen's own shortcuts, such as the arrows of the skill list, wait for the checks, so nothing in the main panel starts before they pass. The title bar and the sidebar stay as always, and the sidebar navigates. When the checks pass, the pane fades out in `.3s` (`animate-code-loading-out`).
 - A launch with no kept inventory shows, from its first frame, a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way. The line says only that the app loads, not which check runs. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
 - Button enable and disable, every variant: `opacity .2s`.
