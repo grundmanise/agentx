@@ -272,7 +272,7 @@ test.describe("filters", () => {
     await page.getByRole("button", { name: "Filter" }).click();
     await filters(page)
       .getByRole("group", { name: "Show" })
-      .getByRole("radio", { name: "Personal 3" })
+      .getByRole("radio", { name: "Personal 1" })
       .check();
     await page.keyboard.press("Escape");
     expect(await rowNames(list(page))).toEqual(["pdf-letters"]);
