@@ -16,7 +16,8 @@ const read = (): Partial<Record<SheetName, number>> => {
     }
     return Object.fromEntries(
       Object.entries(parsed).filter(
-        ([, width]) => typeof width === "number" && width > 0
+        ([, width]) =>
+          typeof width === "number" && Number.isFinite(width) && width > 0
       )
     );
   } catch {
