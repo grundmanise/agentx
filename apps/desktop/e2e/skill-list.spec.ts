@@ -113,7 +113,8 @@ test("while the list scrolls, the header of its group and of its plugin stay pin
 }) => {
   const start = listedPluginSkill(300);
   await openAt(cli, page, start.name);
-  const top = (await list(page).boundingBox())?.y ?? 0;
+  const listBox = await list(page).boundingBox();
+  const top = listBox?.y ?? 0;
   // Far into PLUGINS, its header sits at the top of the list and the plugin's header under it.
   const group = list(page).getByText("PLUGINS", { exact: true });
   const toggle = list(page).getByRole("button", {
