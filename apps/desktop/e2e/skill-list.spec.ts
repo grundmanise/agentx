@@ -115,25 +115,50 @@ test("while the list scrolls, the header of its group and of its plugin stay pin
   await openAt(cli, page, start.name);
   const listBox = await list(page).boundingBox();
   const top = listBox?.y ?? 0;
-  // Far into PLUGINS, its header sits at the top of the list and the plugin's header under it.
   const group = list(page).getByText("PLUGINS", { exact: true });
-  const toggle = list(page).getByRole("button", {
-    exact: true,
-    name: `${start.plugin} ${SKILLS_PER_PLUGIN}`,
-  });
-  await expect(group).toBeInViewport();
-  await expect(toggle).toBeInViewport();
-  const groupBox = await group.boundingBox();
-  const toggleBox = await toggle.boundingBox();
-  expect(groupBox?.y ?? 0).toBeLessThan(top + 20);
-  expect(toggleBox?.y ?? 0).toBeGreaterThan(groupBox?.y ?? 0);
-  expect(toggleBox?.y ?? 0).toBeLessThan(top + 60);
+  const header = (plugin: string) =>
+    list(page).getByRole("button", {
+      exact: true,
+      name: `${plugin} ${SKILLS_PER_PLUGIN}`,
+    });
+  /** How far below the top of the list an element is, in px. */
+  const below = async (element: ReturnType<typeof header>) => {
+    const box = await element.boundingBox();
+    return (box?.y ?? 0) - top;
+  };
+  // Far into PLUGINS, its header sits at the top of the list and the plugin's header under it.
+  expect(await below(group)).toBeGreaterThanOrEqual(0);
+  expect(await below(group)).toBeLessThan(20);
+  expect(await below(header(start.plugin))).toBeGreaterThan(20);
+  expect(await below(header(start.plugin))).toBeLessThan(40);
   // The selected row comes into view below them.
   const opened = await row(page, start.name).boundingBox();
-  expect(opened?.y ?? 0).toBeGreaterThanOrEqual(
-    (toggleBox?.y ?? 0) + (toggleBox?.height ?? 0)
+  expect((opened?.y ?? 0) - top).toBeGreaterThanOrEqual(50);
+
+  // Moved to the next plugin and scrolled into it, its header takes the pinned place.
+  const firstOfNext = Math.ceil(301 / SKILLS_PER_PLUGIN) * SKILLS_PER_PLUGIN;
+  const next = listedPluginSkill(firstOfNext).plugin;
+  for (let i = 300; i < firstOfNext; i += 1) {
+    // oxlint-disable-next-line no-await-in-loop
+    await page.keyboard.press("j");
+  }
+  await expect(row(page, listedPluginSkill(firstOfNext).name)).toHaveAttribute(
+    "aria-current",
+    "true"
   );
-  // A click on the pinned plugin's header collapses it.
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  // Scrolled past its header, by more than the header's distance from the top.
+  const distance = await below(header(next));
+  await list(page).evaluate((nav, by) => {
+    nav.scrollBy(0, by);
+  }, distance + 100);
+  await expect.poll(async () => (await below(header(next))) < 40).toBe(true);
+  expect(await below(group)).toBeGreaterThanOrEqual(0);
+  expect(await below(group)).toBeLessThan(20);
+  expect(await below(header(next))).toBeGreaterThan(20);
+
+  // A click on the pinned plugin's header collapses it, and the plugin stays at the top.
+  await header(next).click();
+  await expect(header(next)).toHaveAttribute("aria-expanded", "false");
+  await expect(header(next)).toBeInViewport();
+  expect(await below(header(next))).toBeLessThan(40);
 });
