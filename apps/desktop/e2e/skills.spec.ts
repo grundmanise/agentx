@@ -560,9 +560,6 @@ test.describe("the detail pane", () => {
           - definition: 3f2a9c1
           - term: State
           - definition: current
-        - region "History":
-          - heading "History" [level=2]
-          - paragraph: History is kept for your own skills
     `);
     // The fork pill opens the fork.
     await article
@@ -733,9 +730,6 @@ test.describe("the detail pane", () => {
           - definition: acme-marketplace
           - term: Agent
           - definition: Claude Code
-        - region "History":
-          - heading "History" [level=2]
-          - paragraph: History is kept for your own skills
     `);
 
     await row(page, "scratch").click();
@@ -759,9 +753,6 @@ test.describe("the detail pane", () => {
             - link "/home/me/.agents/skills/scratch"
           - term: Installed by
           - definition: Skills CLI · https://github.com/vercel/skills
-        - region "History":
-          - heading "History" [level=2]
-          - paragraph: History is kept for your own skills
     `);
   });
 

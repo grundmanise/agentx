@@ -257,10 +257,13 @@ export const SkillDetail = ({
             ))}
           </dl>
         </section>
-        <section aria-label="History" className="flex flex-col gap-3">
-          <Caption>History</Caption>
-          <HistorySection row={row} />
-        </section>
+        {/* Only your own skills keep a history; other skills show no section. */}
+        {row.kind === "yours" && (
+          <section aria-label="History" className="flex flex-col gap-3">
+            <Caption>History</Caption>
+            <HistorySection row={row} />
+          </section>
+        )}
       </div>
     </article>
   );
