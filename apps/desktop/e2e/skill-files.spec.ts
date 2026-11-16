@@ -286,6 +286,39 @@ test("files that cannot be read say so, and are read again on the next selection
   );
 });
 
+test("a skill that changes while selected keeps its files until the new ones are read", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page, "/#/skills/pdf");
+  const section = files(page, "pdf");
+  const skillMd = content(section, "SKILL.md");
+  await expect(skillMd).toContainText("Use this skill to pdf.");
+  // An update gives pdf a new version, whose files take a moment to read.
+  const read = cli.register(["skill", "files", "pdf"], {
+    events: filesOf("pdf", "Use this skill to read PDF files."),
+    holdAfter: 0,
+  });
+  await cli.serveEmit([
+    {
+      ...inventory,
+      library: inventory.library.map((e) =>
+        e.name === "pdf" ? { ...e, content_hash: "h-pdf-next" } : e
+      ),
+      scan_counter: 2,
+      skills: inventory.skills.map((n) =>
+        n.name === "pdf" ? { ...n, content_hash: "h-pdf-next" } : n
+      ),
+    },
+  ]);
+  await read.started;
+  // The files read before stay, with no loading pane, until the new ones replace them.
+  await expect(skillMd).toContainText("Use this skill to pdf.");
+  await expect(section.getByRole("status")).toHaveCount(0);
+  read.release();
+  await expect(skillMd).toContainText("Use this skill to read PDF files.");
+});
+
 test("each file on disk can be shown in the file manager from its row", async ({
   cli,
   page,

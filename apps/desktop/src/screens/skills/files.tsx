@@ -20,6 +20,7 @@ import {
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
+import { useKeptRead } from "#/screens/skills/kept-read.ts";
 import {
   filesRequestOf,
   filesVersionOf,
@@ -384,18 +385,15 @@ export const FilesSection = ({
     }
   }, [row, version]);
 
-  const current =
-    read !== undefined && read.version === version ? read : undefined;
-  // Files that come in while the loading pane shows cross-fade into it; files already read show
-  // at once. Set while rendering, from the read the last render showed.
-  const [shown, setShown] = useState(current);
+  // Files that come in while the loading pane shows cross-fade into it; files read before stay
+  // until the new ones replace them.
   const [revealing, setRevealing] = useState(false);
-  if (shown !== current) {
-    setShown(current);
-    setRevealing(
-      shown === undefined && current !== undefined && current.failed !== true
-    );
-  }
+  const current = useKeptRead(
+    read !== undefined && read.version === version ? read : undefined,
+    (first) => {
+      setRevealing(first.failed !== true);
+    }
+  );
   const compared =
     current?.failed === undefined && current?.diffs !== undefined
       ? comparedWith(row)
