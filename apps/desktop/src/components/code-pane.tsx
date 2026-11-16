@@ -4,19 +4,223 @@ import { cva } from "class-variance-authority";
 // text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it. The tints
 // of a change: an added line with "+" in `accent.primary` on `diff.added-bg`, the palette's green,
 // a removed line with "−" in `accent.danger` on
-// `diff.removed-bg` and no number. A patch with no file content shows its hunks alone. The whole rendering of a file and of a diff is here, from the
-// file's content and the unified diff git wrote, so that another renderer could take its place
-// without touching a screen.
+// `diff.removed-bg` and no number. A removed line and the added line that replaced it also mark
+// the words that changed between them, on `diff.removed-word` and `diff.added-word`. A patch with
+// no file content shows its hunks alone. The whole rendering of a file and of a diff is here, from
+// the file's content and the unified diff git wrote, so that another renderer could take its
+// place without touching a screen.
 
 /** How a line is shown: as it is, added, or removed. */
 export type LineKind = "plain" | "added" | "removed";
+
+/** A run of a changed line's text: kept from the other line of its pair, or changed. */
+export interface Segment {
+  changed: boolean;
+  text: string;
+}
 
 export interface CodeLine {
   kind: LineKind;
   /** The line's number in the file shown; a removed line has none. */
   number?: number;
   text: string;
+  /**
+   * The line's text cut where it differs from the line it pairs with: a removed line and the
+   * added line that replaced it. Absent for a line with no pair, or one too unlike its pair.
+   */
+  segments?: Segment[];
 }
+
+/** A word, a run of white space, or one other character: what the word diff compares. */
+const TOKEN = /[\p{L}\p{N}_]+|\s+|[^\p{L}\p{N}_\s]/gu;
+const SPACE = /^\s+$/u;
+/** The token pairs above which a line pair is too long to compare and keeps its line tint. */
+const MAX_CELLS = 250_000;
+/**
+ * The share of the shorter line, in characters other than white space, a pair must keep for its
+ * changed words to be marked: under it, the lines are unlike, and the whole line is the change.
+ */
+const MIN_KEPT = 0.5;
+
+/** The characters of `tokens` other than white space, counting only those `keep` marks. */
+const nonSpaceLength = (
+  tokens: readonly string[],
+  keep: (i: number) => boolean
+) => {
+  let sum = 0;
+  for (const [i, token] of tokens.entries()) {
+    if (keep(i) && !SPACE.test(token)) {
+      sum += token.length;
+    }
+  }
+  return sum;
+};
+
+/** Joins runs of tokens with the same flag into segments. */
+const segmentsOf = (
+  tokens: readonly string[],
+  changed: readonly boolean[]
+): Segment[] => {
+  const out: Segment[] = [];
+  for (const [i, token] of tokens.entries()) {
+    const flag = changed[i] ?? false;
+    const last = out.at(-1);
+    if (last?.changed === flag) {
+      last.text += token;
+    } else {
+      out.push({ changed: flag, text: token });
+    }
+  }
+  return out;
+};
+
+/** Marks white space kept between two changed tokens as changed, so a change reads as one run. */
+const joinGaps = (tokens: readonly string[], changed: boolean[]) => {
+  for (let i = 1; i < tokens.length - 1; i += 1) {
+    if (
+      !changed[i] &&
+      changed[i - 1] &&
+      changed[i + 1] &&
+      SPACE.test(tokens[i] ?? "")
+    ) {
+      changed[i] = true;
+    }
+  }
+};
+
+/** How many tokens `a` and `b` share at their start, and then at their end. */
+const commonEnds = (a: readonly string[], b: readonly string[]) => {
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) {
+    start += 1;
+  }
+  let end = 0;
+  while (
+    end < a.length - start &&
+    end < b.length - start &&
+    a[a.length - 1 - end] === b[b.length - 1 - end]
+  ) {
+    end += 1;
+  }
+  return { end, start };
+};
+
+/**
+ * Which tokens of `a` and of `b` are not in their longest common subsequence: the changed ones.
+ * Undefined when the two are too long to compare.
+ */
+const changedTokens = (
+  a: readonly string[],
+  b: readonly string[]
+): [boolean[], boolean[]] | undefined => {
+  const n = a.length;
+  const m = b.length;
+  if (n * m > MAX_CELLS) {
+    return undefined;
+  }
+  // lcs[i * w + j]: the length of the longest common subsequence of a[i..] and b[j..].
+  const w = m + 1;
+  const lcs = new Uint32Array((n + 1) * w);
+  const at = (i: number, j: number) => lcs[i * w + j] ?? 0;
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      lcs[i * w + j] =
+        a[i] === b[j]
+          ? at(i + 1, j + 1) + 1
+          : Math.max(at(i + 1, j), at(i, j + 1));
+    }
+  }
+  const changedA = a.map(() => true);
+  const changedB = b.map(() => true);
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      changedA[i] = false;
+      changedB[j] = false;
+      i += 1;
+      j += 1;
+    } else if (at(i + 1, j) >= at(i, j + 1)) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+  return [changedA, changedB];
+};
+
+/**
+ * The words that differ between a removed line and the added line that replaced it: the longest
+ * common run of tokens is kept, the rest changed. Undefined when the lines are too long to compare
+ * or too unlike to mark.
+ */
+export const wordDiff = (
+  before: string,
+  after: string
+): [Segment[], Segment[]] | undefined => {
+  const a = before.match(TOKEN) ?? [];
+  const b = after.match(TOKEN) ?? [];
+  const { start, end } = commonEnds(a, b);
+  const middle = changedTokens(
+    a.slice(start, a.length - end),
+    b.slice(start, b.length - end)
+  );
+  if (middle === undefined) {
+    return undefined;
+  }
+  const changedA = a.map((_, i) => middle[0][i - start] ?? false);
+  const changedB = b.map((_, j) => middle[1][j - start] ?? false);
+  const kept = nonSpaceLength(a, (i) => !changedA[i]);
+  const shorter = Math.min(
+    nonSpaceLength(a, () => true),
+    nonSpaceLength(b, () => true)
+  );
+  if (kept === 0 || kept < shorter * MIN_KEPT) {
+    return undefined;
+  }
+  joinGaps(a, changedA);
+  joinGaps(b, changedB);
+  return [segmentsOf(a, changedA), segmentsOf(b, changedB)];
+};
+
+/**
+ * The lines with the changed words of each pair marked. A run of removed lines followed by a run
+ * of added lines is one change: its first removed line pairs with its first added line, and so
+ * on, as git lays a replaced line out.
+ */
+const withWordDiffs = (lines: readonly CodeLine[]): CodeLine[] => {
+  const out = [...lines];
+  let i = 0;
+  while (i < out.length) {
+    if (out[i]?.kind !== "removed") {
+      i += 1;
+      continue;
+    }
+    let added = i;
+    while (out[added]?.kind === "removed") {
+      added += 1;
+    }
+    let end = added;
+    while (out[end]?.kind === "added") {
+      end += 1;
+    }
+    const pairs = Math.min(added - i, end - added);
+    for (let k = 0; k < pairs; k += 1) {
+      const removed = out[i + k];
+      const replacement = out[added + k];
+      if (removed === undefined || replacement === undefined) {
+        continue;
+      }
+      const diff = wordDiff(removed.text, replacement.text);
+      if (diff !== undefined) {
+        out[i + k] = { ...removed, segments: diff[0] };
+        out[added + k] = { ...replacement, segments: diff[1] };
+      }
+    }
+    i = Math.max(end, i + 1);
+  }
+  return out;
+};
 
 /** One line of a unified diff's hunk. */
 interface PatchLine {
@@ -219,6 +423,34 @@ const markers: Record<LineKind, string> = {
   removed: "−",
 };
 
+// A changed word's text is `code.strong`: the line's own tone falls under 4.5:1 on the word tints
+// (DESIGN.md §6 "Code pane").
+const wordVariants = cva("text-code-strong", {
+  variants: {
+    kind: {
+      added: "bg-diff-added-word",
+      plain: "",
+      removed: "bg-diff-removed-word",
+    },
+  },
+});
+
+/** A changed line's text, its changed words marked when it pairs with the line it replaced. */
+const LineText = ({ line, text }: { line: CodeLine; text: string }) => {
+  if (line.segments === undefined) {
+    return text;
+  }
+  return line.segments.map((segment, i) =>
+    segment.changed ? (
+      <mark key={i} className={wordVariants({ kind: line.kind })}>
+        {segment.text}
+      </mark>
+    ) : (
+      segment.text
+    )
+  );
+};
+
 const Line = ({ line, tone }: { line: CodeLine; tone: Tone }) => {
   const text = line.text === "" ? " " : line.text;
   return (
@@ -230,10 +462,14 @@ const Line = ({ line, tone }: { line: CodeLine; tone: Tone }) => {
         {markers[line.kind]}
       </span>
       {line.kind === "added" && (
-        <ins className={textVariants({ kind: "added", tone })}>{text}</ins>
+        <ins className={textVariants({ kind: "added", tone })}>
+          <LineText line={line} text={text} />
+        </ins>
       )}
       {line.kind === "removed" && (
-        <del className={textVariants({ kind: "removed", tone })}>{text}</del>
+        <del className={textVariants({ kind: "removed", tone })}>
+          <LineText line={line} text={text} />
+        </del>
       )}
       {line.kind === "plain" && (
         <span className={textVariants({ kind: "plain", tone })}>{text}</span>
@@ -271,14 +507,16 @@ export const codeLines = ({
     return patch === undefined ? [] : removedLines(patch);
   }
   if (content === undefined) {
-    return patch === undefined || tint !== undefined ? [] : hunkLines(patch);
+    return patch === undefined || tint !== undefined
+      ? []
+      : withWordDiffs(hunkLines(patch));
   }
   if (tint === "added") {
     return numbered(content, "added");
   }
   return patch === undefined
     ? numbered(content, "plain")
-    : editedLines(content, patch);
+    : withWordDiffs(editedLines(content, patch));
 };
 
 export const CodePane = (props: CodePaneProps) => {

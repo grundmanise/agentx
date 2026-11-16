@@ -377,6 +377,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `file-row.edited-label` | `accent.attention` | Status of a file the user changed |
 | `diff.added-bg` | `lime-400/12` | Added line tint (marker `accent.primary`) |
 | `diff.removed-bg` | `red-400/8` | Removed line tint (marker `accent.danger`) |
+| `diff.added-word` | `lime-400/24` | Changed words of an added line, over its tint (text `code.strong`: 5.2:1) |
+| `diff.removed-word` | `red-400/24` | Changed words of a removed line, over its tint (text `code.strong`: 8.3:1) |
 | `diff.yours-label` | `accent.yours` | Your side's label, dot and chosen-pane ring |
 | `diff.yours-bg` | `violet-400/6` | Your side's pane ground |
 | `diff.theirs-label` | `accent.theirs` | Base version or update side's label, dot and chosen-pane ring |
@@ -1058,6 +1060,9 @@ The History sheet's frame at `sheet.log-width` (`src/app/activity-log.tsx`): the
 ### Code pane
 
 `code.bg`, `type.code`, grid `code.gutter 1fr`: line number in `code.line-number`, right-aligned · marker · text. Front matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: an added line on `diff.added-bg`, a removed line on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
+
+- Changed words: a removed line and the added line that replaced it also mark the words that differ between them, as other editors do. A run of removed lines followed by a run of added lines pairs them in order, first with first. The words that differ sit on `diff.removed-word` and `diff.added-word` in `code.strong`, since a line's own tone falls under 4.5:1 on those tints. White space between two changed words is marked with them, so a change reads as one run.
+- A pair keeps its line tint alone when the lines are unlike, that is, when they keep less than half of the shorter line, or too long to compare.
 
 ### File list (detail pane FILES)
 
