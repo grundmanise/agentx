@@ -19,6 +19,11 @@ import {
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
 import { statusLabels } from "#/screens/sources/projection.ts";
@@ -145,7 +150,7 @@ const ViewSkill = ({ page }: { page: string }) => (
   <a
     href={page}
     title={page}
-    className="type-secondary text-text-primary pointer-events-auto flex-none font-medium hover:underline"
+    className="type-secondary text-text-primary pointer-events-auto flex-none font-medium underline underline-offset-2"
     onClick={(e) => {
       e.preventDefault();
       void openInBrowser(page);
@@ -189,11 +194,23 @@ const Details = ({ card }: { card: SkillCard }) => {
   );
 };
 
-/** The line in the description's place while the row's SKILL.md is read, before the row opens. */
+const LOADING = "Loading skill…";
+
+/**
+ * A spinner in the description's place while the row's SKILL.md is read, before the row opens.
+ * The read is often quick, so it has no text; its tooltip says what it waits for.
+ */
 const Loading = () => (
-  <output className="type-row-desc text-text-muted flex min-w-0 flex-1 items-center gap-2">
-    <Spinner size="sm" />
-    <span className="truncate">Loading skill…</span>
+  <output className="text-text-muted flex min-w-0 flex-1 items-center">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="pointer-events-auto flex flex-none">
+          <Spinner size="sm" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{LOADING}</TooltipContent>
+    </Tooltip>
+    <span className="sr-only">{LOADING}</span>
   </output>
 );
 
@@ -269,13 +286,16 @@ const SkillItem = ({
           ) : undefined
         }
       >
-        <span
-          aria-hidden
-          className="type-row-name text-text-primary min-w-0 flex-initial truncate"
-        >
-          {card.name}
+        {/* The name and View skill share a baseline, as their sizes differ. */}
+        <span className="flex min-w-0 flex-initial items-baseline gap-3">
+          <span
+            aria-hidden
+            className="type-row-name text-text-primary min-w-0 flex-initial truncate"
+          >
+            {card.name}
+          </span>
+          {open && card.page !== undefined && <ViewSkill page={card.page} />}
         </span>
-        {open && card.page !== undefined && <ViewSkill page={card.page} />}
         {loading ? (
           <Loading />
         ) : (

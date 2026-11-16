@@ -257,9 +257,12 @@ test("opening a row reads its SKILL.md once, then opens, and links to the skill"
   // The row waits closed, with a spinner, until SKILL.md is read.
   await expect(row(page, "docx")).toHaveAttribute("aria-busy", "true");
   await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "false");
-  await expect(
-    page.getByRole("status").filter({ hasText: "Loading skill…" })
-  ).toBeVisible();
+  const spinner = page
+    .getByRole("status")
+    .filter({ hasText: "Loading skill…" });
+  await expect(spinner).toBeVisible();
+  await spinner.locator("[data-slot=tooltip-trigger]").hover();
+  await expect(page.getByRole("tooltip")).toHaveText("Loading skill…");
   read.release();
   await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
   await expect(
