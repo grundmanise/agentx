@@ -4,6 +4,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -44,6 +45,12 @@ import type {
   SortOrder,
   Subgroup,
 } from "#/screens/skills/projection.ts";
+import {
+  isRail,
+  railHeight,
+  sizeRails,
+  useRailHeader,
+} from "#/screens/skills/section-rails.ts";
 import { SkillRowItem } from "#/screens/skills/skill-row.tsx";
 import { checkUpdates, useCheckingUpdates } from "#/screens/skills/updates.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -142,24 +149,16 @@ const GroupHeader = ({
   label,
   source,
   count,
-  first,
   action,
 }: {
   label: string;
   /** The full URL of a source's group, which the tooltip on its label shows. */
   source?: string;
   count: number;
-  first: boolean;
   /** A control at the header's right end, such as the Unmanaged group's Adopt all. */
   action?: ReactNode;
 }) => (
-  <div
-    className={
-      first
-        ? "pt-group-first-top px-group pb-group-bottom gap-group flex items-center"
-        : "pt-group-top px-group pb-group-bottom gap-group flex items-center"
-    }
-  >
+  <div className="pt-group-top px-group pb-group-bottom gap-group min-h-group-header flex items-center">
     <span className="gap-group flex min-w-0 flex-1 items-baseline">
       <GroupLabel label={label} source={source} />
       <span className="type-technical-sm text-group-count">{count}</span>
@@ -186,19 +185,24 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
 };
 
 /**
- * One thing the list places at its own offset: a group's header, a plugin's header, or a row,
- * with its place among the rows of its group or plugin.
+ * One thing the list places at its own offset: the space above a group or a plugin, a group's
+ * header, a plugin's header, or a row, with its place among the rows of its group or plugin.
  */
 type Item =
-  | { kind: "header"; key: string; group: Group; first: boolean }
+  | {
+      kind: "gap";
+      key: string;
+      group: Group;
+      /** The space above a group (`group.spacing`) or above a plugin (`subgroup.spacing`). */
+      above: "group" | "subgroup";
+    }
+  | { kind: "header"; key: string; group: Group }
   | {
       kind: "subheader";
       key: string;
       group: Group;
       subgroup: Subgroup;
       open: boolean;
-      /** The first subgroup of its group, right under the group's header. */
-      first: boolean;
     }
   | {
       kind: "row";
@@ -222,17 +226,39 @@ const rowItems = (group: Group, rows: SkillRow[], subgroup?: Subgroup) =>
     ...(subgroup === undefined ? {} : { subgroup }),
   }));
 
-/** The headers and rows in the order the list shows them; a collapsed plugin shows its header only. */
+/**
+ * The headers and rows in the order the list shows them, with the space above each group and
+ * plugin but the first; a collapsed plugin shows its header only.
+ */
 const itemsOf = (groups: Group[], collapsed: ReadonlySet<string>): Item[] =>
   groups.flatMap((group, i): Item[] => [
-    { first: i === 0, group, key: `group:${group.key}`, kind: "header" },
+    ...(i === 0
+      ? []
+      : [
+          {
+            above: "group",
+            group,
+            key: `gap:group:${group.key}`,
+            kind: "gap",
+          } satisfies Item,
+        ]),
+    { group, key: `group:${group.key}`, kind: "header" },
     ...(group.subgroups === undefined
       ? rowItems(group, group.rows)
       : group.subgroups.flatMap((subgroup, at): Item[] => {
           const open = !collapsed.has(subgroup.key);
           return [
+            ...(at === 0
+              ? []
+              : [
+                  {
+                    above: "subgroup",
+                    group,
+                    key: `gap:subgroup:${subgroup.key}`,
+                    kind: "gap",
+                  } satisfies Item,
+                ]),
             {
-              first: at === 0,
               group,
               key: `subgroup:${subgroup.key}`,
               kind: "subheader",
@@ -245,16 +271,54 @@ const itemsOf = (groups: Group[], collapsed: ReadonlySet<string>): Item[] =>
   ]);
 
 /**
+ * The headers each item is under, by their index: its group's header, then in PLUGINS its
+ * plugin's header. A header is under itself; the space above a group or plugin is under none.
+ */
+const headersOf = (items: Item[]): number[][] => {
+  let header = -1;
+  let subheader = -1;
+  return items.map((item, index) => {
+    if (item.kind === "gap") {
+      return [];
+    }
+    if (item.kind === "header") {
+      header = index;
+      subheader = -1;
+      return [index];
+    }
+    if (item.kind === "subheader") {
+      subheader = index;
+      return [header, index];
+    }
+    return item.subgroup === undefined ? [header] : [header, subheader];
+  });
+};
+
+/** Each header's section, by the header's index: the index of the last item under it. */
+const sectionsOf = (headers: number[][]) => {
+  const sections = new Map<number, number>();
+  for (const [index, under] of headers.entries()) {
+    for (const header of under) {
+      sections.set(header, index);
+    }
+  }
+  return sections;
+};
+
+/**
  * The height the list assumes for an item it has not drawn yet, in px, close to what the tokens
  * give: a group's header, and a row with `row.spacing` above it, with or without its description
  * line. Each item takes its measured height once it is drawn.
  */
 const estimatedHeight = (item: Item | undefined) => {
+  if (item?.kind === "gap") {
+    return item.above === "group" ? 16 : 8;
+  }
   if (item?.kind === "header") {
-    return item.first ? 30 : 46;
+    return 30;
   }
   if (item?.kind === "subheader") {
-    return item.first ? 28 : 36;
+    return 28;
   }
   return item?.row.description === "" ? 44 : 66;
 };
@@ -265,15 +329,34 @@ const estimatedHeight = (item: Item | undefined) => {
  * none overlaps the next.
  */
 const measuredHeight = (element: Element, entry?: ResizeObserverEntry) =>
-  Math.ceil(
-    entry?.borderBoxSize[0]?.blockSize ?? element.getBoundingClientRect().height
-  );
+  isRail(element)
+    ? railHeight(element)
+    : Math.ceil(
+        entry?.borderBoxSize[0]?.blockSize ??
+          element.getBoundingClientRect().height
+      );
 
 /** How many items the list keeps drawn beyond each edge of what shows. */
 const OVERSCAN = 8;
 
-/** A drawn item: the list sets its offset from the top. */
-const PLACED = "absolute top-0 left-0 w-full";
+/** A drawn space above a group or plugin: the list sets its offset from the top. */
+const PLACED_GAP_GROUP = "pt-group-spacing absolute top-0 left-0 w-full";
+const PLACED_GAP_SUBGROUP = "pt-subgroup-top absolute top-0 left-0 w-full";
+/**
+ * A group's rail: the list sets its offset from the top. It keeps no height; its span covers the
+ * group, lets the pointer through to the rows under it, and holds the group's header, which pins
+ * at the top of the list while the span shows. Its layer is above a plugin's rail, so a plugin's
+ * header slides under the group's.
+ */
+const RAIL_GROUP = "absolute top-0 left-0 z-10 h-0 w-full";
+/** A plugin's rail, whose span covers the plugin and holds its header, pinned under the group's. */
+const RAIL_SUBGROUP = "absolute top-0 left-0 z-5 h-0 w-full";
+/** The span of a rail: the list sets its height to cover the section. */
+const RAIL_SPAN = "pointer-events-none absolute top-0 left-0 w-full";
+/** A header in its rail: the list's background behind it, and the pointer on it. */
+const PINNED_GROUP = "bg-shell-content-bg pointer-events-auto sticky top-0";
+const PINNED_SUBGROUP =
+  "bg-shell-content-bg top-group-header pointer-events-auto sticky flex";
 const PLACED_ROW = "absolute top-0 left-0 flex w-full";
 /** A row after the first of its group, `row.spacing` below the row before it. */
 const PLACED_ROW_AFTER = "pt-rows absolute top-0 left-0 flex w-full";
@@ -317,6 +400,8 @@ interface DrawnPart {
 interface DrawnGroup {
   group: Group;
   header?: { index: number; item: Item & { kind: "header" } };
+  /** The drawn spaces above the group and above its plugins. */
+  gaps: { index: number; item: Item & { kind: "gap" } }[];
   parts: DrawnPart[];
 }
 
@@ -330,11 +415,15 @@ const drawnGroups = (items: Item[], indexes: number[]): DrawnGroup[] => {
     }
     let last = drawn.at(-1);
     if (last?.group !== item.group) {
-      last = { group: item.group, parts: [] };
+      last = { gaps: [], group: item.group, parts: [] };
       drawn.push(last);
     }
     if (item.kind === "header") {
       last.header = { index, item };
+      continue;
+    }
+    if (item.kind === "gap") {
+      last.gaps.push({ index, item });
       continue;
     }
     let part = last.parts.at(-1);
@@ -407,6 +496,11 @@ const SkillGroups = ({
       ),
     [items, selectedKey]
   );
+  // The headers each item is under, and the end of each header's section.
+  const headers = useMemo(() => headersOf(items), [items]);
+  const sections = useMemo(() => sectionsOf(headers), [headers]);
+  // The height of the headers pinned above the selected row, which it comes into view below.
+  const [pinnedHeight, setPinnedHeight] = useState(0);
   // The virtualizer's functions return new values while they stay the same functions, which
   // React Compiler cannot memoize. The app is built without it, and this component reads them
   // on every render and passes none of them to a memoized component.
@@ -426,23 +520,62 @@ const SkillGroups = ({
     ),
     getScrollElement: () => scroller.current,
     measureElement: measuredHeight,
+    // An item measured or drawn can change where a section ends.
+    onChange: (instance) => {
+      sizeRails(instance, sections);
+    },
     overscan: OVERSCAN,
-    // The selected row stays drawn wherever the list is scrolled to, so it keeps the focus a
-    // click gave it.
+    // The headers of what shows stay drawn, so they pin; and the selected row stays drawn
+    // wherever the list is scrolled to, so it keeps the focus a click gave it.
     rangeExtractor: useCallback(
       (range: Range) => {
-        const indexes = defaultRangeExtractor(range);
-        if (selectedIndex === -1 || indexes.includes(selectedIndex)) {
-          return indexes;
+        const shown = defaultRangeExtractor(range);
+        const indexes = new Set(shown);
+        for (const index of shown) {
+          for (const header of headers[index] ?? []) {
+            indexes.add(header);
+          }
         }
-        // The drawn indexes are one run, so the selected row is before or after all of them.
-        return selectedIndex < (indexes[0] ?? 0)
-          ? [selectedIndex, ...indexes]
-          : [...indexes, selectedIndex];
+        if (selectedIndex !== -1) {
+          indexes.add(selectedIndex);
+        }
+        const drawn = [...indexes];
+        drawn.sort((a, b) => a - b);
+        return drawn;
       },
-      [selectedIndex]
+      [headers, selectedIndex]
     ),
+    scrollPaddingStart: pinnedHeight,
   });
+  const railHeader = useRailHeader(virtualizer);
+  useLayoutEffect(() => {
+    sizeRails(virtualizer, sections);
+  });
+  useLayoutEffect(() => {
+    const pinned = (headers[selectedIndex] ?? [])
+      .filter((header) => header !== selectedIndex)
+      .reduce(
+        (sum, header) =>
+          sum + (virtualizer.measurementsCache[header]?.size ?? 0),
+        0
+      );
+    setPinnedHeight(pinned);
+  }, [headers, selectedIndex, virtualizer]);
+
+  // A plugin's header that is pinned stays at the top when a click collapses or expands it: the
+  // list scrolls back to where the header pins.
+  const toggle = (index: number, key: string) => {
+    const header = virtualizer.measurementsCache[index];
+    const group = virtualizer.measurementsCache[headers[index]?.[0] ?? -1];
+    const offset = virtualizer.scrollOffset ?? 0;
+    if (header !== undefined && group !== undefined) {
+      const place = header.start - group.size;
+      if (offset > place) {
+        virtualizer.scrollToOffset(place);
+      }
+    }
+    onToggle(key);
+  };
 
   // The selected row comes into view when the selection changes (a key press, a click, or a route
   // another screen opened) and when the filters list it again. A list that changes around the
@@ -474,29 +607,46 @@ const SkillGroups = ({
         </p>
       ) : (
         <div ref={virtualizer.containerRef} className="relative">
-          {drawn.map(({ group, header, parts }) => (
+          {drawn.map(({ group, header, gaps, parts }) => (
             <section
               key={group.key}
               aria-label={`${group.label} (${group.rows.length})`}
               className="contents"
             >
+              {gaps.map(({ index, item }) => (
+                <div
+                  key={item.key}
+                  ref={virtualizer.measureElement}
+                  data-index={index}
+                  aria-hidden="true"
+                  className={
+                    item.above === "group"
+                      ? PLACED_GAP_GROUP
+                      : PLACED_GAP_SUBGROUP
+                  }
+                />
+              ))}
               {header !== undefined && (
                 <div
                   ref={virtualizer.measureElement}
                   data-index={header.index}
-                  className={PLACED}
+                  data-rail=""
+                  className={RAIL_GROUP}
                 >
-                  <GroupHeader
-                    label={group.label}
-                    source={group.source}
-                    count={group.rows.length}
-                    first={header.item.first}
-                    action={
-                      group.key === GROUP_DISK ? (
-                        <AdoptAll onOpen={onAdoptAll} />
-                      ) : undefined
-                    }
-                  />
+                  <div className={RAIL_SPAN}>
+                    <div ref={railHeader} className={PINNED_GROUP}>
+                      <GroupHeader
+                        label={group.label}
+                        source={group.source}
+                        count={group.rows.length}
+                        action={
+                          group.key === GROUP_DISK ? (
+                            <AdoptAll onOpen={onAdoptAll} />
+                          ) : undefined
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
               {parts.map(({ subgroup, subheader, rows: partRows }) => {
@@ -536,23 +686,20 @@ const SkillGroups = ({
                       <div
                         ref={virtualizer.measureElement}
                         data-index={subheader.index}
-                        className={PLACED}
+                        data-rail=""
+                        className={RAIL_SUBGROUP}
                       >
-                        <div
-                          className={
-                            subheader.item.first
-                              ? "flex"
-                              : "pt-subgroup-top flex"
-                          }
-                        >
-                          <SectionToggle
-                            label={subgroup.label}
-                            count={subgroup.rows.length}
-                            open={subheader.item.open}
-                            onToggle={() => {
-                              onToggle(subgroup.key);
-                            }}
-                          />
+                        <div className={RAIL_SPAN}>
+                          <div ref={railHeader} className={PINNED_SUBGROUP}>
+                            <SectionToggle
+                              label={subgroup.label}
+                              count={subgroup.rows.length}
+                              open={subheader.item.open}
+                              onToggle={() => {
+                                toggle(subheader.index, subgroup.key);
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
