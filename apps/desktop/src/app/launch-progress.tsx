@@ -33,7 +33,7 @@ export const LaunchProgress = ({ step }: { step: Step }) => {
   return (
     <output className="animate-fade-in flex flex-1 flex-col items-center justify-center gap-1">
       <span className="sr-only">
-        Loading
+        Starting the app…
         {late && ". Taking longer than usual"}
       </span>
       <span
@@ -41,7 +41,7 @@ export const LaunchProgress = ({ step }: { step: Step }) => {
         className="type-secondary text-text-muted flex items-center gap-2"
       >
         <Spinner />
-        Loading
+        Starting the app…
       </span>
       {late && (
         <span aria-hidden className="type-row-desc text-text-hint">

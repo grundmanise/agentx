@@ -129,6 +129,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | --- | --- | --- |
 | `shell.bg` | `gray-990` | Window body, sidebar, startup layer |
 | `shell.content-bg` | `gray-970` | Content area, both split columns, command field |
+| `shell.loading-veil` | `gray-970` at 40% | The frosted pane over the kept inventory while the startup checks run (§8) |
 | `shell.divider` | `gray-890` | Split column divider, section dividers, table header rule |
 | `shell.scrim` | `black/50` | Behind the history sheet |
 | `shell.scrim-strong` | `black/55` | Behind dialogs and the palette |
@@ -509,7 +510,6 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `shell.command-height` | 32 | `h-command` |  |
 | `shell.status-height` | 30 | `h-status` | Account remote status pill |
 | `shell.panel-inset` | 10 | `mr-panel mb-panel` | Main panel inset from the right and bottom |
-| `shell.panel-loading` | 50% | `opacity-panel-loading` | Opacity of the screen in the main panel while it shows the kept inventory, before the startup checks pass: where its pulse starts and ends (§8) |
 | `stale-bar.height` | 36 | `h-stale-bar` | Stale bar at the top of the main panel |
 | `stale-bar.padding` | 0 16 | `px-stale-bar` |  |
 | `shell.focus-ring-width` | 2 | none: `index.css` sets it on every element | Keyboard focus outline |
@@ -690,6 +690,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
 | `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
 | `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
+| `shell.panel-loading-blur` | 12 | `backdrop-blur-panel-loading` | The frosted pane over the kept inventory while the startup checks run (§8) |
 | `file-row.height` | 44 | `h-file-row` | File tree row |
 | `file-row.padding-x` | 16 | `px-file-row`, `right-file-row` for the control at the row's end |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
@@ -1140,7 +1141,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-
 
 ## 8. Motion
 
-Nothing loops forever, and nothing waits on purpose. Two things loop, each only while something runs. The `Spinner` of a pending control (§6), of a running check, or of a read the screen waits on, such as a skill's files, turns only while its command runs and stops when the command ends. The kept inventory pulses only until the startup checks pass.
+Nothing loops forever, and nothing waits on purpose. Two things loop, each only while something runs. The `Spinner` of a pending control (§6), of a running check, or of a read the screen waits on, such as a skill's files, turns only while its command runs and stops when the command ends.
 
 - Hover and background changes: no transition, or at most `.2s`.
 - Switches: the track changes colour in `.2s`; the knob moves with no transition.
@@ -1151,7 +1152,7 @@ Nothing loops forever, and nothing waits on purpose. Two things loop, each only 
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; a control with a leading icon, such as Check updates or Check tools, shows it in the icon's place, so a long check reads as busy past its first second.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass; a passing launch shows no startup layer.
-- A launch with a kept inventory shows its screens with the first frame, with no fade, washed out and pulsing (`animate-panel-loading`): opacity `shell.panel-loading` → 30% → `shell.panel-loading` every `1s`, `ease-in-out`, as often as the `Spinner` turns, so that a launch of a second or two shows a whole pulse. The wash alone could pass for a disabled screen; the pulse says that it loads. Nothing else does: no spinner and no text. The title bar and the sidebar stay at full opacity, and the sidebar navigates. When the checks pass, the pulse stops and the screen goes to full opacity in `.2s`. With reduced motion, the screen is washed out and does not pulse.
+- A launch with a kept inventory shows its screens with the first frame, with no fade, under a frosted pane: `shell.loading-veil` with a `shell.panel-loading-blur` backdrop blur, and on top the launch progress of an empty panel (the `Spinner`, Starting the app…, and from 5 seconds how much longer the check keeps trying). The pane takes every click and key, the screen under it is inert, and a screen's own shortcuts, such as the arrows of the skill list, wait for the checks, so nothing in the main panel starts before they pass. The sidebar, the command field and the sync status look as always but are inert, and ⌘K opens nothing, until the checks pass; the title bar still drags the window. This holds on a launch with no kept inventory too. When the checks pass, the pane fades out in `.3s` (`animate-code-loading-out`).
 - A launch with no kept inventory shows, from its first frame, a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way. The line says only that the app loads, not which check runs. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
 - Button enable and disable, every variant: `opacity .2s`.
