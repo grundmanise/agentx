@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 
 import { useRouteKey } from "#/lib/route-key.ts";
@@ -10,17 +10,19 @@ import {
   groupRows,
   GROUP_PLUGINS,
   inCollapsed,
-  noFilters,
   projectRows,
   subgroupKey,
 } from "#/screens/skills/projection.ts";
-import type {
-  Filters,
-  SkillRow,
-  SortOrder,
-} from "#/screens/skills/projection.ts";
+import type { SkillRow } from "#/screens/skills/projection.ts";
 import { SkillDetail } from "#/screens/skills/skill-detail.tsx";
 import { SkillList } from "#/screens/skills/skill-list.tsx";
+import {
+  setFilters,
+  setOrder,
+  setExpanded,
+  toggleExpanded,
+  useSkillsView,
+} from "#/screens/skills/view.ts";
 import { useStartup } from "#/startup/startup.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -73,21 +75,10 @@ export const SkillsScreen = () => {
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
-  const [filters, setFilters] = useState<Filters>(noFilters);
-  const [order, setOrder] = useState<SortOrder>("default");
-  // The keys of the plugin subgroups that are open; every other one is collapsed.
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
-    () => new Set()
-  );
-  const toggle = (key: string) => {
-    setExpanded((keys) => {
-      const next = new Set(keys);
-      if (!next.delete(key)) {
-        next.add(key);
-      }
-      return next;
-    });
-  };
+  // The search, filters, sort order and open subgroups stay while another screen shows.
+  const filters = useSkillsView((s) => s.filters);
+  const order = useSkillsView((s) => s.order);
+  const expanded = useSkillsView((s) => s.expanded);
 
   const rows = useMemo(
     () =>
@@ -107,7 +98,7 @@ export const SkillsScreen = () => {
       groups
         .find((g) => g.key === GROUP_PLUGINS)
         ?.subgroups?.map((s) => s.key) ?? [];
-    setExpanded(open ? new Set(keys) : new Set());
+    setExpanded(open ? keys : []);
   };
   const selected =
     (routeKey === undefined
@@ -118,13 +109,19 @@ export const SkillsScreen = () => {
     flat[0];
   // A newly selected row in a collapsed subgroup, such as a plugin's skill another screen opens,
   // opens its subgroup so the list shows it. Collapsing that subgroup later keeps it collapsed.
-  const [shownKey, setShownKey] = useState<string>();
-  if (selected !== undefined && selected.key !== shownKey) {
-    setShownKey(selected.key);
-    if (inCollapsed(selected, expanded)) {
-      setExpanded(new Set(expanded).add(subgroupKey(selected)));
+  const reveal = useEffectEvent((key: string | undefined) => {
+    if (
+      selected !== undefined &&
+      selected.key === key &&
+      inCollapsed(selected, expanded)
+    ) {
+      setExpanded([...expanded, subgroupKey(selected)]);
     }
-  }
+  });
+  const shownKey = selected?.key;
+  useEffect(() => {
+    reveal(shownKey);
+  }, [shownKey]);
   const configurations = inventory?.configurations ?? [];
 
   // The key the next key press moves from: the last selection made, which the route may not show
@@ -182,7 +179,7 @@ export const SkillsScreen = () => {
         selectedKey={selected?.key}
         onSelect={select}
         expanded={expanded}
-        onToggle={toggle}
+        onToggle={toggleExpanded}
         onToggleAll={toggleAll}
       />
       <section
