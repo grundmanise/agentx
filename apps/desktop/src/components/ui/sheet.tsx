@@ -1,7 +1,7 @@
 // shadcn/ui Sheet (`pnpm dlx shadcn@latest add sheet`), on our tokens: DESIGN.md §6 "Sheet".
 // The design has one sheet, at the right edge, so there is no `side`. Its parts keep shadcn's
 // names and `data-slot` attributes and take no `className`; the close is our ghost Button, in the
-// header. Every sheet has a handle on its left edge that drags its width, which all sheets share.
+// header. Every sheet has a handle on its left edge that drags its width, which each sheet keeps.
 import { Dialog as SheetPrimitive } from "radix-ui";
 import { useLayoutEffect, useRef } from "react";
 import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
@@ -9,7 +9,8 @@ import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import type { OwnProps } from "#/lib/utils.ts";
-import { setSheetWidth, useSheetWidth } from "#/store/sheet.ts";
+import { setSheetWidth, useSheetWidths } from "#/store/sheet.ts";
+import type { SheetName } from "#/store/sheet.ts";
 
 const Sheet = ({ ...props }: OwnProps<typeof SheetPrimitive.Root>) => (
   <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -50,8 +51,6 @@ const SHEET_CONTENT =
 
 /** The CSS variable that `w-sheet-dragged` reads, set on the sheet. */
 const DRAGGED_WIDTH = "--sheet-dragged-width";
-/** How far an arrow key moves the handle, in pixels. */
-const KEY_STEP = 40;
 
 /** The width a sheet takes as drawn, which its minimum and maximum width have clamped. */
 const drawnWidth = (sheet: HTMLElement) =>
@@ -72,8 +71,7 @@ const setWidth = (sheet: HTMLElement, width: number | null) => {
 
 /**
  * The handle on a sheet's left edge, `sheet.handle-width` wide: dragging it moves the
- * sheet's left edge, an arrow key moves it `KEY_STEP` pixels, and a double click or Home brings
- * back the default width. It shows `sheet.handle` on hover, and the focus ring colour on focus.
+ * sheet's left edge, and a double click or Home brings back the default width. It shows `sheet.handle` on hover, and the focus ring colour on focus.
  * The sheet takes the new width at once; `onWidthChange` hears it, clamped, when the drag ends,
  * and null for the default.
  */
@@ -96,11 +94,6 @@ const ResizeHandle = ({
       setWidth(el, width);
     }
   }, [width]);
-
-  const resize = (el: HTMLElement, next: number) => {
-    setWidth(el, next);
-    onWidthChange(drawnWidth(el));
-  };
 
   const reset = () => {
     const el = sheet();
@@ -142,19 +135,13 @@ const ResizeHandle = ({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    resize(el, drawnWidth(el));
+    const dragged = drawnWidth(el);
+    setWidth(el, dragged);
+    onWidthChange(dragged);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const el = sheet();
-    if (el === undefined) {
-      return;
-    }
-    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      event.preventDefault();
-      const step = event.key === "ArrowLeft" ? KEY_STEP : -KEY_STEP;
-      resize(el, drawnWidth(el) + step);
-    } else if (event.key === "Home") {
+    if (event.key === "Home") {
       event.preventDefault();
       reset();
     }
@@ -180,12 +167,16 @@ const ResizeHandle = ({
   );
 };
 
-/** A column: the header, then the content, which scrolls down only; the handle on its left edge. */
+/**
+ * A column: the header, then the content, which scrolls down only; the handle on its left edge.
+ * `name` is the sheet whose width the drag keeps.
+ */
 const SheetContent = ({
+  name,
   children,
   ...props
-}: OwnProps<typeof SheetPrimitive.Content>) => {
-  const width = useSheetWidth((s) => s.width);
+}: OwnProps<typeof SheetPrimitive.Content> & { name: SheetName }) => {
+  const width = useSheetWidths((s) => s[name] ?? null);
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -195,7 +186,12 @@ const SheetContent = ({
         {...props}
       >
         {children}
-        <ResizeHandle width={width} onWidthChange={setSheetWidth} />
+        <ResizeHandle
+          width={width}
+          onWidthChange={(next) => {
+            setSheetWidth(name, next);
+          }}
+        />
       </SheetPrimitive.Content>
     </SheetPortal>
   );

@@ -283,7 +283,7 @@ const HistorySheet = ({
   onOpenChange: (open: boolean) => void;
 }) => (
   <Sheet open={open} onOpenChange={onOpenChange}>
-    <SheetContent>
+    <SheetContent name="history">
       <SheetHeader>
         <SheetTitle>History</SheetTitle>
         <SheetDescription>{name}</SheetDescription>

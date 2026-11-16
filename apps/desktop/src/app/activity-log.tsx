@@ -183,7 +183,7 @@ export const ActivityLogSheet = () => {
   const dropped = useActivityLog((s) => s.dropped);
   return (
     <Sheet open={open} onOpenChange={openActivityLog}>
-      <SheetContent>
+      <SheetContent name="activity-log">
         <SheetHeader>
           <SheetTitle>Activity log</SheetTitle>
           <SheetDescription>

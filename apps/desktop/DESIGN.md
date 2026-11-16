@@ -655,7 +655,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
-| `sheet.width` | the width the user dragged a sheet to, else 1120 | `w-sheet-dragged` | Every sheet: History, What's new and Activity log. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet` |
+| `sheet.width` | the width the user dragged the sheet to, else 1120 | `w-sheet-dragged` | Every sheet: History, What's new and Activity log. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet` |
 | `sheet.min-width` | 420 | `min-w-sheet` | The narrowest a sheet drags to |
 | `sheet.max-width` | 90% of the window | `max-w-sheet` | The widest a sheet drags to, and opens at in a narrow window |
 | `sheet.handle-width` | 8 | `w-sheet-handle` | The drag handle on a sheet's left edge |
@@ -1030,10 +1030,10 @@ shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for
 
 ### Sheet
 
-Every sheet (History, What's new, Activity log) has the same frame and the same width.
+Every sheet (History, What's new, Activity log) has the same frame and the same default width.
 
 - `sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too.
-- A `sheet.handle-width` handle on its left edge drags its width between `sheet.min-width` and `sheet.max-width`. The handle shows `sheet.handle` on hover and while it drags, and `shell.focus-ring` on focus. The arrow keys move it 40 at a time, and a double click or Home brings back the default. Every sheet opens at the width the user last left a sheet at, until the app quits.
+- A `sheet.handle-width` handle on its left edge drags its width between `sheet.min-width` and `sheet.max-width`. The handle shows `sheet.handle` on hover and while it drags, and `shell.focus-ring` on focus. A double click or Home brings back the default. Each sheet keeps the width the user left it at in localStorage, so it opens at that width after the app restarts too.
 
 ### Sheet (History)
 
