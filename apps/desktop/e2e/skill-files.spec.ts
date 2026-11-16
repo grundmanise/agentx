@@ -164,19 +164,26 @@ test("the name, the description and a file's text can be selected and copied", a
 }) => {
   await openSkills(cli, page, "/#/skills/pdf");
   const article = pane(page, "pdf");
+  const selection = async () =>
+    await page.evaluate(() => window.getSelection()?.toString().trim());
   const selected = async (target: Locator) => {
     await target.click({ clickCount: 3 });
-    return await page.evaluate(() => window.getSelection()?.toString().trim());
+    return await selection();
   };
-  expect(await selected(article.getByRole("heading", { name: "pdf" }))).toBe(
-    "pdf"
-  );
+  // A line of the file: its text, without its line number. Selected as SKILL.md fades in, it
+  // stays selected once the loading pane over it has gone.
+  const section = files(page, "pdf");
+  expect(
+    await selected(content(section, "SKILL.md").getByText("name: pdf"))
+  ).toBe("name: pdf");
+  await expect(section.getByText("Reading the files…")).toHaveCount(0);
+  expect(await selection()).toBe("name: pdf");
+  expect(
+    await selected(article.getByRole("heading", { exact: true, name: "pdf" }))
+  ).toBe("pdf");
   expect(await selected(article.getByText("Read and convert PDF files"))).toBe(
     "Read and convert PDF files"
   );
-  // A line of the file: its text, without its line number.
-  const skillMd = content(files(page, "pdf"), "SKILL.md");
-  expect(await selected(skillMd.getByText("name: pdf"))).toBe("name: pdf");
 });
 
 test("a modified skill of a source: its edits labelled and tinted, against the version installed", async ({
