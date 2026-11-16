@@ -181,7 +181,8 @@ test("the log opens 1120 wide, its left edge drags its width up to 90% of the wi
   expect(await width()).toBe(1152);
   cli.restart();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  // The kept inventory shows at once, and ⌘K opens nothing until the startup checks pass.
+  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await openFromPalette(page);
   expect(await width()).toBe(1152);
 });

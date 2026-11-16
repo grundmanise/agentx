@@ -13,8 +13,8 @@ Each source has a pill at the top of the page, with the number of skills it hold
 
 Select a pill to open the source. Its card shows:
 
-- Its name. Select it to open the repository in your browser.
-- Its full URL under the name, with the [pin](/cli/source#pin-a-source) it follows after `#`.
+- Its name.
+- Its full URL under the name, with the [pin](/cli/source#pin-a-source) it follows after `#`. Select it to open the repository in your browser.
 - **Read-only** when you cannot write to it.
 - **Skills**, **Branch**, **Commit** and **Fetched**: how many skills it holds, the branch it follows, the commit of its last fetch and when that was.
 
@@ -31,7 +31,7 @@ For a skill you cannot add, the open row says why. A skill under **Personal** sh
 ## Add skills
 
 1. Select the round check at the end of each skill you want, or select the checkbox above them to select every skill you do not have yet. Select it again once all are selected to clear the selection.
-2. In the bar at the bottom, choose the agents to add them to.
+2. In the bar at the bottom, choose the agents to add them to. Universal agents, marked with a lock, always get them.
 3. Select **Add**.
 
 Skills this machine already has show their status in place of the check, such as **Added**, and you cannot select them. The count at the right of the checkbox says how many.
@@ -42,7 +42,7 @@ Skills this machine already has show their status in place of the check, such as
 2. Paste a link to a repository, a folder of skills or one skill on GitHub or GitLab, such as `https://github.com/anthropics/skills/tree/main/skills`. A skill's folder or its `SKILL.md` works too, and for GitHub, `owner/name` or `owner/name/path`.
 3. Select **Find skills**, or press Enter. agentx lists the skills under the link.
 4. Select the skills you want. A single skill is selected for you. Skills this machine already has are marked, and you cannot select them.
-5. Under **Add to**, choose the agents to install them in. The enabled agents are chosen to start with.
+5. Under **Add to**, choose the agents to install them in. The enabled agents are chosen to start with. Universal agents, marked with a lock, always get the skills.
 6. Select **Install**.
 
 agentx adds the source to **Sources** only when you install a skill from it. Select **Cancel** to close the dialog without changing anything. Once the skills are installed, the first one is selected in the list.
