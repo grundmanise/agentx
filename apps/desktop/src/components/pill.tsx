@@ -19,6 +19,11 @@ const pillVariants = cva(
         clickable: true,
         tone: "neutral",
       },
+      {
+        className: "hover:bg-pill-update-hover",
+        clickable: true,
+        tone: "update",
+      },
     ],
     defaultVariants: { face: "sans", size: "row" },
     variants: {
@@ -76,8 +81,9 @@ export const Pill = ({ tone, size, face, icon, children }: PillProps) => (
 );
 
 /**
- * A pill that opens something: the fork pill on the original of a fork made under a new name.
- * `label` is its accessible name and `title` its tooltip; the text is what shows.
+ * A pill that opens something: the fork pill on the original of a fork made under a new name, and
+ * the update pill of the sidebar, which opens the Update skills dialog. `label` is its accessible
+ * name and `title` its tooltip; the text is what shows.
  */
 export const PillButton = ({
   tone,
@@ -87,9 +93,17 @@ export const PillButton = ({
   label,
   title,
   onClick,
+  id,
   children,
-}: PillProps & { label: string; title: string; onClick: () => void }) => (
+}: PillProps & {
+  label: string;
+  title: string;
+  onClick: () => void;
+  /** For a control that moves the focus to the pill. */
+  id?: string;
+}) => (
   <button
+    id={id}
     type="button"
     aria-label={label}
     title={title}

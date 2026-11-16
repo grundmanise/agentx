@@ -179,6 +179,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | --- | --- | --- |
 | `pill.update-bg` | `accent.primary` | Update pill |
 | `pill.update-text` | `on-accent` |  |
+| `pill.update-hover` | `accent.primary-hover` | The sidebar's update pill under the pointer |
 | `pill.neutral-bg` | `gray-860` | Not-published pill, fork pill, Read-only |
 | `pill.neutral-hover` | `gray-800` |  |
 | `pill.neutral-text` | `gray-200` |  |
@@ -250,12 +251,13 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `group.label` | `gray-300` | Source group caption |
 | `group.count` | `gray-500` | Count beside the caption |
 | `group.divider-label` | `gray-500` | Caption of the sub-group of skills in no agent client |
-| `subgroup.label` | `gray-400` | Caption of a plugin's subgroup under PLUGINS |
+| `subgroup.label` | `gray-400` | Caption of a section toggle: a plugin's subgroup under PLUGINS, a source in the Update skills dialog |
 | `subgroup.count` | `gray-500` | Count beside a plugin's caption |
-| `subgroup.hover` | `gray-920` | A plugin's header under the pointer |
+| `subgroup.hover` | `gray-920` | A section toggle under the pointer: a plugin's header, a source's header in the Update skills dialog |
 | `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows |
 | `table.header-text` | `gray-500` | Column captions |
 | `add-skill.row-hover` | `gray-880` | Hover on a skill row of the Add skill dialog |
+| `update-skills.row-hover` | `gray-880` | Hover on a skill row of the Update skills dialog, before its run |
 
 #### Skill glyph
 
@@ -560,9 +562,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `group.spacing` | 16 | `pt-group-spacing` | Above each group but the first, outside its pinned header |
 | `group.header-height` | 30 | `min-h-group-header`, `top-group-header` | Least height of a group header; a plugin's header pins this far down, under its group's |
 | `group.gap` | 8 | `gap-group` | Label → count |
-| `subgroup.padding` | 6 14 | `py-subgroup-y px-subgroup-x` | A plugin's header under PLUGINS |
+| `subgroup.padding` | 6 14 | `py-subgroup-y px-subgroup-x` | A section toggle: a plugin's header under PLUGINS, a source's header in the Update skills dialog |
 | `subgroup.spacing` | 8 | `pt-subgroup-top` | Above a plugin's header, but the first in its group |
-| `subgroup.indent` | 22 | `pl-subgroup-indent` | Left inset of a plugin's rows: the row's glyph sits under the plugin's name |
+| `subgroup.indent` | 22 | `pl-subgroup-indent` | Left inset of the rows under a section toggle: a plugin's rows, whose glyph sits under the plugin's name, and a source's rows in the Update skills dialog |
 | `table.header-height` | 40 | `h-table-header` | Sticky header (servers) |
 | `table.row-padding` | 16 | `p-table-row` | Server rows |
 | `table.col-gap` | 24 | `gap-x-table-col` |  |
@@ -674,6 +676,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `adopt.list-max-height` | 280 | `max-h-adopt-list` | The adopt dialog's list of skills; it scrolls past it |
 | `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The agent picker's list; it scrolls past it |
 | `add-skill.list-max-height` | 264 | `max-h-add-skill-list` | The Add skill dialog's list of skills found; it scrolls past it |
+| `update-skills.list-max-height` | 280 | `max-h-update-skills-list` | The Update skills dialog's list of skills; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
 | `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
@@ -729,6 +732,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `logo.radius` | 50% | Agent client logo |
 | `agent-picker.row-radius` | 10 | Row of the agent picker |
 | `add-skill.row-radius` | 10 | Skill row of the Add skill dialog |
+| `update-skills.row-radius` | 10 | Skill row of the Update skills dialog |
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
 | `shell.status-radius` | 9999 | Account remote status |
@@ -785,6 +789,7 @@ Finder in this file means the platform's file manager. `src/lib/reveal.ts` names
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / `button.ghost-bg`, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
 - **Small, wrapping** – for a label that may wrap, such as Show all under HISTORY: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
 - **Plain, inline** – no fill, no padding, no radius, as tall as its text; `button.ghost-text`, hover `text.primary`. Only for a line of text that expands, such as an entry of the History sheet.
+- **Link, inline** – the plain inline shape in `text.secondary`, 500, hover `text.primary` and underlined. Only for a link-like action inside a line of text that opens something, such as See changes on a row of the Update skills dialog.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
 - **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
@@ -802,6 +807,7 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a 
 - Version (plugin): `pill.version-*`.
 - Fork: `pill.neutral-*`, hover `pill.neutral-hover`, the 12px fork glyph then the fork's name. In the detail header of the original of a fork made under a new name, one per fork; it opens the fork.
 - Universal: `pill.universal-*`, after the name of a universal agent in the agent picker (§6 "Agent picker"). It does nothing on a click: it is a button only so that its tooltip, which says what universal agents are, opens from the keyboard too.
+- Update (sidebar): `pill.update-*`, hover `pill.update-hover`, 20 high, the `2xs` arrow-up icon then how many updates the app offers. §6 "Sidebar" places it.
 
 A skill row whose banner (§6 "Banner (detail pane)") has tone `attention` or `danger` shows an `AlertTriangleIcon` (`xs`) in `tone.attention.fg` after the name and pill, whatever the banner's tone; its accessible name is the banner's title. The banner tile keeps the circled `AlertIcon`. Other banner tones put nothing on the row.
 
@@ -882,6 +888,8 @@ Sort toggle, at the right end of the filter row, always reads as a sort by name:
 
 The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a plugin installed in several agent clients is one subgroup. Its header (`src/components/section-toggle.tsx`) is a flat, full-width row, not a button with a fill: `subgroup.padding`, `row.radius`, no fill at rest and `subgroup.hover` under the pointer; a `xs` chevron in `text.caption`, the plugin's name in `type.caption` `subgroup.label`, then the count in `type.technical-sm` `subgroup.count`, `group.gap` apart. Its chevron lines up with the group's caption above it. `subgroup.spacing` above each header but the first in its group, outside its pinned header. The plugin's rows are inset by `subgroup.indent`, so each row's glyph sits under the plugin's name and the rows read as inside its section; their hover and selected fill start at the inset. A click collapses or expands the plugin's rows (`aria-expanded`); the chevron turns 90° while they show, with no transition. A collapsed subgroup keeps its header and count, and j/k skip its rows. Every subgroup is collapsed when the app starts, and the list keeps which are open while another screen shows. The subgroup of a skill that is selected while collapsed, such as one another screen opens, opens so the list shows the skill. Collapsing it again keeps it collapsed. Each row's place (`aria-posinset`, `aria-setsize`) is among its plugin's rows.
 
+The section toggle also heads a source in the Update skills dialog (§6 "Update skills dialog"), with no count. There it can end with one control at its right end, `subgroup.padding` from the edge, beside the toggle and outside it, so a click on the control toggles nothing; the whole row then takes `subgroup.hover`.
+
 ### Banner (detail pane)
 
 `banner.radius`, `banner.padding`, `tone.*.bg` with a 1px `tone.*.border`; a `banner.tile` icon tile in `tone.*.fg` (the `RefreshIcon` for an update, the `AlertIcon` otherwise); title `type.banner-title` `banner.title`, text `type.secondary` `banner.text`; actions on the right.
@@ -931,6 +939,17 @@ Under the subtitle, an optional message field, then FILES (`type.caption` `text.
 A bulk adopt confirms in a dialog that lists the skills by name, grouped by tool under a `type.caption` caption when it covers two (`src/screens/skills/adopt-dialog.tsx`). A record the preview refuses is in the list from the start, marked as not adoptable with the CLI's reason under its name. The list scrolls past `adopt.list-max-height`.
 
 The run stays in the dialog. Each row shows its state: nothing while waiting, a `Spinner` once a step of the run names it, a check in `text.hint` once it is installed; then its result, a check in `tone.primary.fg` or a cross in `tone.danger.fg` with the reason under the name in `type.notice` `tone.danger.fg`. The footer's left side counts the skills started, from the run's `blobs` steps, then sums the result. The dialog cannot be dismissed while it runs, and one primary button closes it afterwards. It shows the result, so no toast does; the activity list still logs each run. A run that fails as a whole is a refusal paragraph (§6 "Refusal under a field") above the footer. A warning the run logs is a `type.notice` `tone.attention.fg` paragraph above the footer, except one about a skill the run did not adopt, whose row says why.
+
+### Update skills dialog
+
+`src/screens/skills/update-dialog.tsx`, which the sidebar's update pill opens (§6 "Sidebar"), and so does Check updates (§6 "Skills header", §6 "Command palette") when the check ends with an update offered: its progress toast then goes, so no toast and the dialog show together. It lists every skill the last update check found an update for, all selected; a skill with a pending merge is left out, since its banner finishes the merge first. Its structure follows the Adopt dialog: title, subtitle, the select-all row of Sources (§6 "Sources screen") when the list holds two groups or more, the list, the footer.
+
+- The list scrolls past `update-skills.list-max-height`. It groups the skills by where the update comes from, the upstream for a fork, else the skill's source, one group per URL even when two share a short form, A to Z by the source's short form, the rows of each A to Z by name. Each group is a section that collapses: its header is the section toggle (§6 "Group header (lists)", `src/components/section-toggle.tsx`), a `xs` chevron and the short form in `type.caption` `subgroup.label`, the full URL as its tooltip, no count. A click on it collapses or expands the group's rows (`aria-expanded`); every group is open when the dialog opens, and Update opens them all again. Before the run, every group's header ends with a link inline button (§6 "Buttons") in `type.secondary` at its right end, outside the toggle: Select all while any of its skills is left out, which selects them all, and Deselect all once all are selected, which clears them. A text button and not a checkbox, so the header reads as a heading and the right-hand column holds only the rows' checkboxes. During and after the run the header holds the toggle alone. The rows sit `subgroup.indent` in from the header, as a plugin's rows do under theirs, so they read as inside their source's section; their hover starts at the inset. Groups sit 12 apart.
+- A row is the whole hit target, `update-skills.row-radius`, hover `update-skills.row-hover`, with the round checkbox (§6 "Checkbox (popover)") at the right. Its first line is the name in `type.body` `text.primary`, then, `·` apart in `type.secondary` `text.caption`, when the newer version was published in `type.secondary` `text.hint` (relative within a month, its full date and time as the tooltip; left out when the CLI dates it not) and See changes, a link inline button (§6 "Buttons"). A row is two lines at most, so it keeps its height through the run: under the first, one `type.notice` line at most, truncated with an ellipsis and its full text as the native tooltip. Before and during the run, a skill with local edits says there that the update merges with the edits, in `tone.attention.fg`.
+- The name is a label of the checkbox whose hit area covers the row; See changes and the checkbox sit above it, so a click on See changes toggles nothing. It opens the What's new sheet (§6 "Sheet (What's new)") of that update, on the dialog's layer and above it: Escape closes the sheet first, then the dialog. The sheet has no trigger, so on close it puts the focus back on that See changes, or on the confirm when the row is gone.
+- The footer's left side says when the last check ran, in `type.secondary` `text.hint`. The confirm counts the selection: "Update all N" when every one of two or more is selected, else the number of skills, and plain and disabled at none. Enter confirms; on open the confirm has the focus.
+- The run stays in the dialog, as the Adopt dialog's does: one `skill update <name>` per selected skill, one after another, since the CLI takes one name or every update at once. The rows left out leave the list, and a group with none selected goes with them. Each selected row drops its checkbox, and the group headers drop their button. The row's state leads its name instead, on the name's line, centred on it and `gap-2` before it (`button.icon-gap`, as an icon before a label), in a 16 slot that stays while the state shows nothing, so the names keep one column; the note under the name starts under it. The state is nothing while the row waits, a `Spinner` in `text.muted` while its command runs, then a check in `tone.primary.fg` when it is updated, merged with its edits or was up to date already with no warning, an `AlertIcon` in `tone.attention.fg` when the merge conflicts with its edits or the CLI logged a warning for it, or a cross in `tone.danger.fg`. A warning is not a clean success, so it takes the conflict's mark; the footer still counts the skill as updated, since it was. A screen reader hears the state before the name, "with a warning" added for one. Once its command ended, the row's note says what the user must act on, the first that applies: the conflict and where to resolve it in `tone.attention.fg`, or the CLI's reason in `tone.danger.fg`; then the first warning the CLI logged for it, such as a placement it skipped, in `tone.attention.fg`, every warning in the tooltip; else the note on local edits stays. A conflict replaces that note rather than adding a line. Once the run ended, the list keeps only the rows with something to say, a conflict, an error or a warning, under their groups, and a group with none of them goes; a skill updated with no warning leaves the list. When no row has anything to say, the list goes and the footer's sum says it all. A run with a skill not updated, or a warning, makes its activity entry ask for attention. A conflict opens no skill. On close, the focus goes back to the pill, or to Skills once no update is left and the pill is gone.
+- The footer's left side counts the run ("Updating 2 of 4…"), then says how many of the selected skills it updated. The dialog cannot be dismissed while it runs, and one primary Done closes it afterwards. It shows the result, so no toast does; the activity list logs one entry for the run. A command that ended with no word from the CLI stops the run, as a refusal paragraph (§6 "Refusal under a field") above the footer. The lock, the account repo and a cancel are the runner's to say, and put the dialog back as it was before the run.
 
 ### Create skill dialog
 
@@ -1021,7 +1040,7 @@ shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side
 
 ### Skills header
 
-The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose action opens the Add skill dialog and whose menu opens the Create skill dialog (§6 "Button group"). The menu holds Create skill alone, as Sources sits under Skills in the sidebar. Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is pending (§6): `aria-busy`, with a `Spinner` in the refresh icon's place until the check ends, in the same square and ghost fill. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
+The Skills list column's header: the page title and the skill count on the left; on the right, `button.gap` apart, Check updates and Add, a button group whose action opens the Add skill dialog and whose menu opens the Create skill dialog (§6 "Button group"). The menu holds Create skill alone, as Sources sits under Skills in the sidebar. Check updates is a ghost `icon-sm` button with the refresh icon, as tall as the group, named by its label, which its tooltip shows (§6 "Tooltip"); while the check runs it is pending (§6): `aria-busy`, with a `Spinner` in the refresh icon's place until the check ends, in the same square and ghost fill. Its progress is a toast with Cancel; when the check ends with an update the app offers, the toast goes and the Update skills dialog opens (§6 "Update skills dialog"), else a toast says there is none. Icon-only keeps the header controls inside the header's right padding, ending where the filter row ends, with room for a three-digit count at every window size, down to the minimum window.
 
 ### Skills list
 
@@ -1055,7 +1074,7 @@ The sheet frame (§6 "Sheet"). Content scrolls down only: a long line wraps, nev
 
 ### Sheet (What's new)
 
-The sheet frame (§6 "Sheet"), for what an update changes before the user takes it. Under the skill's name, the base and newer version in `type.technical-sm` `text.caption`, each by its date when the CLI dates it, else by its short id. Below, the File list (§6) with every row open: status `type.technical-sm` `text.caption` (`accent.danger` for a deleted file), path `type.technical` `file-row.path`, and the patch in the Code pane with the diff tints, its hunks alone, numbered as in the newer version.
+The sheet frame (§6 "Sheet"), for what an update changes before the user takes it. Opened from the Update skills dialog, it and its scrim take the dialog's layer, later in the document, so they sit above the dialog.
 
 - A patch with no lines to show, a read in progress and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
 - An update from another machine cannot be diffed before it is taken: the sheet lists its files in the same card, status and path, with no chevron.
@@ -1128,6 +1147,8 @@ At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/c
 
 The nav items in sidebar order, `shell.nav-gap` apart. A screen nested under another, Sources under Skills, sits under its parent, indented to its parent's icon, behind a 1px `shell.nav-tree` rule, 32 high. A parent is active on its own routes and not on its nested screen's: Skills is active on a skill and on Update review, Sources alone on its page.
 
+While the last update check found an update the app offers (one with no pending merge), the Skills item shows the update pill (§6 "Pills (status)") at its right end, 8 in and centred on it. The pill is a sibling of the link laid over it, never inside it, so a click opens the Update skills dialog (§6 "Update skills dialog") and goes nowhere. It goes once no update is left.
+
 ### Sources screen
 
 The Sources screen (`src/screens/sources`), under Skills: the serif page title with Add source, the search field, the source pills, the card of the open source, then the select-all row and the skill list.
@@ -1145,7 +1166,7 @@ The Sources screen (`src/screens/sources`), under Skills: the serif page title w
 
 The ⌘K palette (`src/app/command-palette.tsx`): ACTIONS, GO TO, SKILLS, in that order, each under its caption. A row is its icon in `palette.icon`, its label in `type.body` and an optional hint in `type.palette-hint`; typing keeps the rows whose label holds the text.
 
-- ACTIONS shows an action only when it has something to act on: Update all while an update is offered, Publish all while the publish status counts skills to publish, for the same skills as the status's Publish all. The action that opens the activity log is last.
+- ACTIONS shows an action only when it has something to act on: Publish all while the publish status counts skills to publish, for the same skills as the status's Publish all. The palette's check for updates is Check updates of the Skills header (§6 "Skills header"). The action that opens the activity log is last.
 - SKILLS lists every skill in the Skills list's order, its origin as the hint; while nothing is typed, only the first four, so the actions and screens stay in view.
 
 ## 7. Iconography
@@ -1154,7 +1175,7 @@ Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps and joins. Fil
 
 An icon is a hand-written React component that takes the text colour; an illustration (such as the agentx mark) is an SVG file in `src/assets` shown as `<img>`.
 
-Sizes: `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
+Sizes: `2xs` 12px (in a pill), `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
 
 The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-ring` ring: 30px with `shell.logo-radius` in the sidebar (the height of the product name and machine label beside it), 40px with `startup.logo-radius` on the startup layer. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 

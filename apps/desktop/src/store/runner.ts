@@ -52,8 +52,11 @@ export const isRead = (args: readonly string[]) => {
 export interface CommandOptions {
   /** Names the control: it shows as pending while the command runs, and Cancel stops it. */
   label: string;
-  /** The toast and activity entry when the command exits 0. */
-  success?: string | ((events: CliEvent[]) => string);
+  /**
+   * The toast and activity entry when the command exits 0; none when the events say the control
+   * shows the outcome itself.
+   */
+  success?: string | ((events: CliEvent[]) => string | undefined);
   /** An action on the success toast, such as Undo, or what the events say it is, if any. */
   action?: ToastAction | ((events: CliEvent[]) => ToastAction | undefined);
   onProgress?: (event: ProgressEvent) => void;
@@ -70,6 +73,11 @@ export interface CommandOptions {
    * words of what it shows; undefined leaves the runner's own danger entry.
    */
   ownActivity?: (outcome: Outcome) => ActivityText | undefined;
+  /**
+   * The control shows a merge the command left pending itself, where it happened: exit 4 then
+   * opens no skill, so a run of several commands stays where it is.
+   */
+  stayOnConflict?: boolean;
   /**
    * The error toast for a failure the control words itself, such as a check that could not reach
    * a source, with an action that answers it; undefined leaves the runner's own.
@@ -322,7 +330,11 @@ const report = (
   }
   // Exit 4: the skill with the pending merge opens, where the merge is finished or cancelled.
   const conflict = events.find((e) => e.type === "conflict");
-  if (exitCode === EXIT_CODES.pending_merge && conflict !== undefined) {
+  if (
+    exitCode === EXIT_CODES.pending_merge &&
+    conflict !== undefined &&
+    options.stayOnConflict !== true
+  ) {
     navigateTo(`/skills/${encodeURIComponent(conflict.name)}`);
     return;
   }

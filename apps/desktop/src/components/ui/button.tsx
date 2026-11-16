@@ -34,6 +34,9 @@ const buttonVariants = cva(
           "text-button-danger-text bg-button-danger-bg hover:bg-button-danger-hover font-medium",
         ghost:
           "text-button-ghost-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary font-medium",
+        // A link inside a line of text that opens something, such as See changes on a row of the
+        // Update skills dialog: underlined on hover.
+        link: "text-text-secondary hover:text-text-primary font-medium hover:underline",
         // No fill: a line of text that expands, such as an entry of the History sheet.
         plain: "text-button-ghost-text hover:text-text-primary",
         primary:

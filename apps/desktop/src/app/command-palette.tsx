@@ -4,7 +4,6 @@ import { useNavigate } from "react-router";
 import { useSyncState } from "#/app/publish-status.tsx";
 import { allScreens } from "#/app/screens.ts";
 import { AddIcon } from "#/components/icons/add.tsx";
-import { ArrowDownIcon } from "#/components/icons/arrow-down.tsx";
 import { ArrowUpIcon } from "#/components/icons/arrow-up.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
 import type { IconComponent } from "#/components/icons/icon-props.ts";
@@ -29,7 +28,7 @@ import { groupRows, originOf } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { publishAll } from "#/screens/skills/publish.ts";
 import { useSkillRows } from "#/screens/skills/rows.ts";
-import { checkUpdates, updateAll } from "#/screens/skills/updates.ts";
+import { checkUpdates } from "#/screens/skills/updates.ts";
 import { openActivityLog } from "#/store/activity-log.ts";
 import { rescan } from "#/store/feed.ts";
 
@@ -87,10 +86,10 @@ const skillItems = (rows: SkillRow[]): PaletteItem[] =>
     }));
 
 /**
- * The ⌘K palette: ACTIONS, GO TO and SKILLS. Update all shows while the store holds an update,
- * Publish all while the title bar counts skills to publish, and publishes the same skills as the
- * title bar's Publish all. With nothing typed, SKILLS
- * lists the first four skills.
+ * The ⌘K palette: ACTIONS, GO TO and SKILLS. Publish all shows while the title bar counts skills
+ * to publish, and publishes the same skills as the title bar's Publish all. Check skills for
+ * updates runs Check updates, which opens the Update skills dialog when it finds one. With nothing
+ * typed, SKILLS lists the first four skills.
  */
 export const CommandPalette = ({
   open,
@@ -112,21 +111,8 @@ export const CommandPalette = ({
   const rows = useSkillRows();
   const sync = useSyncState();
   const outgoing = sync?.kind === "account-remote" ? sync.outgoing : [];
-  const updates = rows.filter((r) => r.update !== undefined).length;
 
   const actions: PaletteItem[] = [];
-  if (updates > 0) {
-    actions.push({
-      group: "ACTIONS",
-      hint: skillsWord(updates),
-      icon: ArrowDownIcon,
-      id: "action:update-all",
-      label: "Update all",
-      run: () => {
-        void updateAll();
-      },
-    });
-  }
   if (outgoing.length > 0) {
     actions.push({
       group: "ACTIONS",
@@ -162,7 +148,7 @@ export const CommandPalette = ({
       group: "ACTIONS",
       icon: RefreshIcon,
       id: "action:check-updates",
-      label: "Check updates",
+      label: "Check skills for updates",
       run: () => {
         void checkUpdates();
       },

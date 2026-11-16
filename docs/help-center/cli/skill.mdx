@@ -570,6 +570,19 @@ agentx skill update --all
 
 If no check has found an update for the skill, the command says it is up to date as of the last check and changes nothing. Run `agentx skill check-updates` to look again.
 
+### Update skills in the desktop app
+
+When the last update check found updates, a pill next to **Skills** in the sidebar says how many, such as **3 updates**. It leaves out a skill whose update waits for you to resolve a merge: finish that one on the skill's page.
+
+To check now, select **Check updates** above the **Skills** list, or press `⌘K` (`Ctrl+K` on Linux) and run **Check skills for updates**. A notification shows the progress; select **Cancel** to stop the check. When the check finds updates, the **Update skills** dialog opens. Otherwise, the app says that all skills are up to date. If a source can't be reached, a notification names it, and the dialog still lists the updates found in the other sources.
+
+1. Select the pill, or check for updates. The **Update skills** dialog lists every skill with an update, all selected, grouped by the source the update comes from, with when its newer version was published. To hide or show a source's skills, select the source's name.
+2. To read an update first, select **See changes** on its row. Press Escape to go back to the list.
+3. Select a skill's row to leave it out. To select or clear every skill of a source, select **Select all** or **Deselect all** at the right of the source's name. To select all of them or none, use the checkbox above the list.
+4. Select **Update all**, or **Update** with the number of skills selected, or press Enter.
+
+The dialog lists only the selected skills, updates them one after another, and marks each row updated with a check before its name, or with a warning sign when the update came with a warning. A skill with local changes is merged with your edits. When the run ends, the dialog says how many of the selected skills it updated, and lists only the skills that need your attention, under their sources: a merge conflict, an error, or a warning. For a conflict, open the skill to resolve the merge, see [When your edits conflict](#when-your-edits-conflict). When every skill updated without a warning, the dialog lists none. Select **Done** to close it. The pill then counts only the updates that are left.
+
 A copy placement is handled on its own:
 
 - A copy that holds the version you are replacing gets the new version, and keeps the files your ignore rules name in it.

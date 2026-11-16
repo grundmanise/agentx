@@ -2,12 +2,14 @@
 // The design has one sheet, at the right edge, so there is no `side`. Its parts keep shadcn's
 // names and `data-slot` attributes and take no `className`; the close is our ghost Button, in the
 // header. Every sheet has a handle on its left edge that drags its width, which each sheet keeps.
+import { cva } from "class-variance-authority";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import { useLayoutEffect, useRef } from "react";
 import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { cn } from "#/lib/utils.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 import { keepSheetWidth, sheetWidth } from "#/store/sheet.ts";
 import type { SheetName } from "#/store/sheet.ts";
@@ -30,13 +32,31 @@ const SheetPortal = ({ ...props }: OwnProps<typeof SheetPrimitive.Portal>) => (
   <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
 );
 
+/**
+ * What a sheet opens over: the page, under any dialog, or a dialog, such as the What's new sheet
+ * of the Update skills dialog. Over a dialog, the sheet and its scrim take the dialog's layer,
+ * later in the document, so they sit above it.
+ */
+type SheetLayer = "page" | "dialog";
+
+const layerVariants = cva("", {
+  defaultVariants: { over: "page" },
+  variants: {
+    over: {
+      dialog: "z-50",
+      page: "z-40",
+    },
+  },
+});
+
 /** `shell.scrim` behind the sheet. */
 const SheetOverlay = ({
+  over,
   ...props
-}: OwnProps<typeof SheetPrimitive.Overlay>) => (
+}: OwnProps<typeof SheetPrimitive.Overlay> & { over?: SheetLayer }) => (
   <SheetPrimitive.Overlay
     data-slot="sheet-overlay"
-    className="bg-shell-scrim fixed inset-0 z-40"
+    className={cn("bg-shell-scrim fixed inset-0", layerVariants({ over }))}
     {...props}
   />
 );
@@ -47,7 +67,7 @@ const SheetOverlay = ({
  * `overlay.shadow` and `sheet.padding`.
  */
 const SHEET_CONTENT =
-  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet w-sheet-dragged min-w-sheet max-w-sheet fixed z-40 flex flex-col gap-6 overflow-hidden border outline-none";
+  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet w-sheet-dragged min-w-sheet max-w-sheet fixed flex flex-col gap-6 overflow-hidden border outline-none";
 
 /** The CSS variable that `w-sheet-dragged` reads, set on the sheet. */
 const DRAGGED_WIDTH = "--sheet-dragged-width";
@@ -162,14 +182,18 @@ const ResizeHandle = ({ name }: { name: SheetName }) => {
  */
 const SheetContent = ({
   name,
+  over,
   children,
   ...props
-}: OwnProps<typeof SheetPrimitive.Content> & { name: SheetName }) => (
+}: OwnProps<typeof SheetPrimitive.Content> & {
+  name: SheetName;
+  over?: SheetLayer;
+}) => (
   <SheetPortal>
-    <SheetOverlay />
+    <SheetOverlay over={over} />
     <SheetPrimitive.Content
       data-slot="sheet-content"
-      className={SHEET_CONTENT}
+      className={cn(SHEET_CONTENT, layerVariants({ over }))}
       {...props}
     >
       {children}

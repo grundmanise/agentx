@@ -2,7 +2,7 @@
 // follows; a Reconnect the CLI refuses because the folder holds another version opens a confirm
 // dialog, whose Replace runs the same command with --force. Abort, on a pending merge, asks first
 // too. Show folder runs no command: it shows the merge folder in Finder.
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LibraryPlacement } from "#/cli/events.gen.ts";
@@ -241,6 +241,7 @@ export const UpdateButton = ({ row }: { row: SkillRow }) => {
  */
 export const SeeChanges = ({ row }: { row: SkillRow }) => {
   const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
   const { update } = row;
   if (update === undefined) {
     return null;
@@ -248,6 +249,7 @@ export const SeeChanges = ({ row }: { row: SkillRow }) => {
   return (
     <>
       <Button
+        ref={button}
         variant="ghost"
         size="sm"
         onClick={() => {
@@ -261,6 +263,11 @@ export const SeeChanges = ({ row }: { row: SkillRow }) => {
         versions={updateVersions(update)}
         open={open}
         onOpenChange={setOpen}
+        onCloseAutoFocus={(e) => {
+          // The sheet has no trigger: the focus goes back to See changes.
+          e.preventDefault();
+          button.current?.focus();
+        }}
       />
     </>
   );
