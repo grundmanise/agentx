@@ -125,14 +125,21 @@ export const SkillsScreen = () => {
   const configurations = inventory?.configurations ?? [];
 
   // The key the next key press moves from: the last selection made, which the route may not show
-  // yet when keys come fast.
+  // yet when keys come fast. While a selection made here is on its way, a route that shows an
+  // earlier one is stale and leaves it alone; a route another screen opens takes over.
   const current = useRef(selected?.key);
+  const pending = useRef<string | null>(null);
   const selectedKey = selected?.key;
   useEffect(() => {
-    current.current = selectedKey;
+    if (pending.current === null) {
+      current.current = selectedKey;
+    } else if (pending.current === selectedKey) {
+      pending.current = null;
+    }
   }, [selectedKey]);
   const select = (row: SkillRow) => {
     current.current = row.key;
+    pending.current = row.key === selectedKey ? null : row.key;
     void navigate(skillPath(row.key));
   };
 
