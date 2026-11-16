@@ -393,15 +393,35 @@ test("many agents: five logos and +n, the agent picker toggles a target, two-let
   await expect(page.getByRole("tooltip")).toHaveText("Kilo Code");
 
   await target(page, "3 more agents").click();
-  const picker = page.getByRole("dialog", { name: "Add 1 skill to" });
-  // The Universal agents come first, locked on, outside the search.
+  const picker = page.getByRole("dialog", { name: "Where to install" });
   await expect(picker).toHaveAccessibleDescription(
-    "Skills are always available to universal agents. Choose other agents to install them to."
+    "Choose agents to add the skill to. It is always available to universal agents."
   );
-  await expect(picker).toContainText(
-    "Universal agentsCodex, Gemini CLIAlways on"
+  // The term explains itself on hover.
+  await picker.getByRole("button", { name: "universal agents" }).hover();
+  await expect(page.getByRole("tooltip")).toHaveText(
+    "Universal agents read your skills library, ~/.agents/skills, so every skill you add reaches them."
   );
+  // Every agent by name, the universal ones among them, locked on with the Universal pill.
   const agents = picker.getByRole("list", { name: "Agents" });
+  await expect(agents.getByRole("listitem")).toHaveText([
+    /^Aider/u,
+    /^Amp/u,
+    /^Claude Code/u,
+    /^Cline/u,
+    "CodexUniversal/home/me/.codexAlways on",
+    /^Cursor/u,
+    "Gemini CLIUniversal/home/me/.gemini-cliAlways on",
+    /^Kilo Code/u,
+    /^Windsurf/u,
+    /^Zed/u,
+  ]);
+  // The Universal pill says the same, from the keyboard too.
+  await page.mouse.move(0, 0);
+  await agents.getByRole("button", { name: "Universal" }).first().focus();
+  await expect(page.getByRole("tooltip")).toContainText(
+    "Universal agents read your skills library"
+  );
   expect(
     await agents
       .getByRole("checkbox")
@@ -416,13 +436,14 @@ test("many agents: five logos and +n, the agent picker toggles a target, two-let
     "Windsurf",
     "Zed",
   ]);
-  await expect(picker).toContainText("2 agents");
-  await picker
-    .getByRole("searchbox", { name: "Search other agents" })
-    .fill("ze");
+  const search = picker.getByRole("searchbox", { name: "Search agents" });
+  await search.fill("gem");
+  await expect(agents.getByRole("listitem")).toHaveText([
+    "Gemini CLIUniversal/home/me/.gemini-cliAlways on",
+  ]);
+  await search.fill("ze");
   await agents.getByText("Zed", { exact: true }).click();
   await expect(agents.getByRole("checkbox", { name: "Zed" })).toBeChecked();
-  await expect(picker).toContainText("3 agents");
   await picker.getByRole("button", { name: "Done" }).click();
   await expect(picker).toHaveCount(0);
 
@@ -479,7 +500,7 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
   await expect(selectAll(page)).toHaveAttribute("aria-checked", "mixed");
   // The Universal stack is always on: a locked mark, not a toggle.
   await expect(bar(page)).toContainText(
-    "Skills are always added to universal agents"
+    "Skills are always added to universal agents: Codex and Gemini CLI"
   );
   await bar(page).getByRole("button", { name: "Add 2" }).click();
   await add.started;

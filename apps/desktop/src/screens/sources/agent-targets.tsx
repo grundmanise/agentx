@@ -14,6 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { andList } from "#/lib/plural.ts";
 import { AgentPickerDialog } from "#/screens/sources/agent-picker-dialog.tsx";
 import {
   directConfigurations,
@@ -64,7 +65,8 @@ const universalHint = "Skills are always added to universal agents";
 
 /**
  * The Universal stack: the clients that read the library, so every skill reaches them. Always
- * on and never a toggle: the chosen ring and a lock, then a divider before "Add to".
+ * on and never a toggle: the chosen ring and a lock, then a divider before "Add to". A screen
+ * reader hears the tooltip's text and the clients' names.
  */
 const UniversalMark = ({ universal }: { universal: Configuration[] }) => (
   <>
@@ -75,7 +77,9 @@ const UniversalMark = ({ universal }: { universal: Configuration[] }) => (
           <span className="rounded-checkbox ring-overlay-bg absolute -right-1.5 -bottom-1.5 flex ring-2">
             <LockMark />
           </span>
-          <span className="sr-only">{universalHint}</span>
+          <span className="sr-only">{`${universalHint}: ${andList(
+            universal.map((c) => c.name)
+          )}`}</span>
         </span>
       </TooltipTrigger>
       <TooltipContent>{universalHint}</TooltipContent>
@@ -124,7 +128,7 @@ export const AgentTargets = ({
   onClearTargets,
   disabled,
 }: {
-  /** How many skills the install adds, for the agent picker's title. */
+  /** How many skills the install adds, for the agent picker's subtitle. */
   skills: number;
   /** The configurations that take a placement, in inventory order. */
   direct: Configuration[];
