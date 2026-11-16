@@ -1,7 +1,6 @@
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import type { Range } from "@tanstack/react-virtual";
 import {
-  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -32,8 +31,6 @@ import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
 import type { ToolArg } from "#/screens/skills/adopt.ts";
 import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
-import { pinAt } from "#/screens/skills/pinned.ts";
-import type { Pin, PinHeights } from "#/screens/skills/pinned.ts";
 import {
   forksOf,
   GROUP_DISK,
@@ -145,24 +142,16 @@ const GroupHeader = ({
   label,
   source,
   count,
-  first,
   action,
 }: {
   label: string;
   /** The full URL of a source's group, which the tooltip on its label shows. */
   source?: string;
   count: number;
-  first: boolean;
   /** A control at the header's right end, such as the Unmanaged group's Adopt all. */
   action?: ReactNode;
 }) => (
-  <div
-    className={
-      first
-        ? "pt-group-first-top px-group pb-group-bottom gap-group flex items-center"
-        : "pt-group-top px-group pb-group-bottom gap-group flex items-center"
-    }
-  >
+  <div className="pt-group-top px-group pb-group-bottom gap-group min-h-group-header flex items-center">
     <span className="gap-group flex min-w-0 flex-1 items-baseline">
       <GroupLabel label={label} source={source} />
       <span className="type-technical-sm text-group-count">{count}</span>
@@ -175,145 +164,81 @@ const GroupHeader = ({
  * Adopt all, at the right end of the Unmanaged group's header while another tool installed skills
  * agentx can adopt: it opens the adopt dialog for every such tool.
  */
-const AdoptAll = ({
-  onOpen,
-  tabbable = true,
-}: {
-  onOpen: () => void;
-  /** Whether the Tab key reaches it; false in the pinned copy of the header. */
-  tabbable?: boolean;
-}) => {
+const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
   const adoption = useAppStore((s) => s.adoption);
   const busy = useAdoptRun((s) => s.run !== undefined);
   if (toolsToAdopt(adoption).length === 0) {
     return null;
   }
   return (
-    <Button
-      variant="primary"
-      size="sm"
-      disabled={busy}
-      onClick={onOpen}
-      tabIndex={tabbable ? undefined : -1}
-    >
+    <Button variant="primary" size="sm" disabled={busy} onClick={onOpen}>
       Adopt all
     </Button>
   );
 };
 
 /**
- * One thing the list places at its own offset: a group's header, a plugin's header, or a row,
- * with its place among the rows of its group or plugin.
+ * A run of rows the list places as one block: a group's rows, or one open plugin's. Each block
+ * draws only its rows near the part of the list that shows.
  */
-type Item =
-  | { kind: "header"; key: string; group: Group; first: boolean }
-  | {
-      kind: "subheader";
-      key: string;
-      group: Group;
-      subgroup: Subgroup;
-      open: boolean;
-      /** The first subgroup of its group, right under the group's header. */
-      first: boolean;
-    }
-  | {
-      kind: "row";
-      key: string;
-      group: Group;
-      subgroup?: Subgroup;
-      row: SkillRow;
-      at: number;
-      size: number;
-    };
-
-/** The rows of a group, or of one plugin in it, as items. */
-const rowItems = (group: Group, rows: SkillRow[], subgroup?: Subgroup) =>
-  rows.map((row, at): Item => ({
-    at,
-    group,
-    key: `row:${row.key}`,
-    kind: "row",
-    row,
-    size: rows.length,
-    ...(subgroup === undefined ? {} : { subgroup }),
-  }));
-
-/** The headers and rows in the order the list shows them; a collapsed plugin shows its header only. */
-const itemsOf = (groups: Group[], collapsed: ReadonlySet<string>): Item[] =>
-  groups.flatMap((group, i): Item[] => [
-    { first: i === 0, group, key: `group:${group.key}`, kind: "header" },
-    ...(group.subgroups === undefined
-      ? rowItems(group, group.rows)
-      : group.subgroups.flatMap((subgroup, at): Item[] => {
-          const open = !collapsed.has(subgroup.key);
-          return [
-            {
-              first: at === 0,
-              group,
-              key: `subgroup:${subgroup.key}`,
-              kind: "subheader",
-              open,
-              subgroup,
-            },
-            ...(open ? rowItems(group, subgroup.rows, subgroup) : []),
-          ];
-        })),
-  ]);
-
-/**
- * The height the list assumes for an item it has not drawn yet, in px, close to what the tokens
- * give: a group's header, and a row with `row.spacing` above it, with or without its description
- * line. Each item takes its measured height once it is drawn.
- */
-const estimatedHeight = (item: Item | undefined) => {
-  if (item?.kind === "header") {
-    return item.first ? 30 : 46;
-  }
-  if (item?.kind === "subheader") {
-    return item.first ? 28 : 36;
-  }
-  return item?.row.description === "" ? 44 : 66;
-};
-
-/** The heights the pinned headers take before the list measures them: a first header's. */
-const ESTIMATED_PIN: PinHeights = { group: 30, subgroup: 28 };
-
-/**
- * The heights of the pinned headers: the first group header's, and the first plugin header's in
- * its group, as the list measured them. The pinned headers are drawn as those are.
- */
-const pinHeights = (
-  items: Item[],
-  spans: readonly ({ size: number } | undefined)[]
-): PinHeights => {
-  const subheader = items.findIndex(
-    (item) => item.kind === "subheader" && item.first
-  );
-  return {
-    group: spans[0]?.size ?? ESTIMATED_PIN.group,
-    subgroup: spans[subheader]?.size ?? ESTIMATED_PIN.subgroup,
-  };
-};
-
-/** The headers pinned at the top of the list, by their index among the items. */
-interface Pinned {
-  header: number;
-  subheader?: number;
+interface Block {
+  key: string;
+  group: Group;
+  subgroup?: Subgroup;
+  rows: SkillRow[];
 }
 
-/** The headers a pin holds, by their index among the items. */
-const pinnedOf = (pin: Pin | undefined): Pinned | undefined => {
-  if (pin === undefined) {
-    return undefined;
-  }
-  return pin.subheader === undefined
-    ? { header: pin.header }
-    : { header: pin.header, subheader: pin.subheader };
-};
+const groupKey = (group: Group) => `group:${group.key}`;
+const subgroupKey = (subgroup: Subgroup) => `subgroup:${subgroup.key}`;
+
+/** The blocks in the order the list shows them; a collapsed plugin has none. */
+const blocksOf = (groups: Group[], collapsed: ReadonlySet<string>): Block[] =>
+  groups.flatMap((group): Block[] =>
+    group.subgroups === undefined
+      ? [{ group, key: groupKey(group), rows: group.rows }]
+      : group.subgroups
+          .filter((subgroup) => !collapsed.has(subgroup.key))
+          .map((subgroup) => ({
+            group,
+            key: subgroupKey(subgroup),
+            rows: subgroup.rows,
+            subgroup,
+          }))
+  );
 
 /**
- * The height a drawn item takes in the list: the height the browser lays it out at, up to the
- * next whole pixel. Every item then starts on a whole pixel, where the list can scroll to, and
+ * Where a block is: the offset of its rows from the top of the list, and the height of the
+ * headers pinned above them, which a row comes into view below; in px.
+ */
+interface Place {
+  offset: number;
+  pinned: number;
+}
+
+const samePlaces = (
+  a: ReadonlyMap<string, Place>,
+  b: ReadonlyMap<string, Place>
+) =>
+  a.size === b.size &&
+  [...b].every(([key, place]) => {
+    const was = a.get(key);
+    return was?.offset === place.offset && was.pinned === place.pinned;
+  });
+
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) =>
+  a.size === b.size && [...b].every((key) => a.has(key));
+
+/**
+ * The height the list assumes for a row it has not drawn yet, in px, close to what the tokens
+ * give: a row with `row.spacing` above it, with or without its description line. Each row takes
+ * its measured height once it is drawn.
+ */
+const estimatedHeight = (row: SkillRow | undefined) =>
+  row?.description === "" ? 44 : 66;
+
+/**
+ * The height a drawn row takes in the list: the height the browser lays it out at, up to the
+ * next whole pixel. Every row then starts on a whole pixel, where the list can scroll to, and
  * none overlaps the next.
  */
 const measuredHeight = (element: Element, entry?: ResizeObserverEntry) =>
@@ -321,13 +246,15 @@ const measuredHeight = (element: Element, entry?: ResizeObserverEntry) =>
     entry?.borderBoxSize[0]?.blockSize ?? element.getBoundingClientRect().height
   );
 
-/** How many items the list keeps drawn beyond each edge of what shows. */
+/** How many rows a block keeps drawn beyond each edge of what shows. */
 const OVERSCAN = 8;
 
-/** A drawn item: the list sets its offset from the top. */
-const PLACED = "absolute top-0 left-0 w-full";
+/** How far beyond each edge of what shows a block counts as near, and draws its rows, in px. */
+const NEAR_PX = 480;
+
+/** A drawn row: the list sets its offset from the top of its block. */
 const PLACED_ROW = "absolute top-0 left-0 flex w-full";
-/** A row after the first of its group, `row.spacing` below the row before it. */
+/** A row after the first of its block, `row.spacing` below the row before it. */
 const PLACED_ROW_AFTER = "pt-rows absolute top-0 left-0 flex w-full";
 /** A row of a plugin's subgroup, indented so its glyph sits under the plugin's name. */
 const PLACED_SUBROW = "pl-subgroup-indent absolute top-0 left-0 flex w-full";
@@ -335,11 +262,11 @@ const PLACED_SUBROW_AFTER =
   "pt-rows pl-subgroup-indent absolute top-0 left-0 flex w-full";
 
 /** Where a row is placed: after the first of its block, `row.spacing` lower; in a subgroup, indented. */
-const placedRow = (item: { at: number; subgroup?: Subgroup }) => {
-  if (item.subgroup === undefined) {
-    return item.at === 0 ? PLACED_ROW : PLACED_ROW_AFTER;
+const placedRow = (at: number, inSubgroup: boolean) => {
+  if (!inSubgroup) {
+    return at === 0 ? PLACED_ROW : PLACED_ROW_AFTER;
   }
-  return item.at === 0 ? PLACED_SUBROW : PLACED_SUBROW_AFTER;
+  return at === 0 ? PLACED_SUBROW : PLACED_SUBROW_AFTER;
 };
 
 const NO_FORKS: SkillRow[] = [];
@@ -358,114 +285,163 @@ const forksByOriginal = (rows: SkillRow[]) => {
   return forks;
 };
 
-/** The drawn part of a group's rows, or of one plugin's: its header when that is drawn, and its drawn rows. */
-interface DrawnPart {
-  subgroup?: Subgroup;
-  subheader?: { index: number; item: Item & { kind: "subheader" } };
-  rows: { index: number; item: Item & { kind: "row" } }[];
-}
+/**
+ * The rows of one block. Only the rows near the part of the list that shows are in the
+ * document, each at its offset in the block, which the library writes on it; the selected row
+ * stays drawn wherever the list is scrolled to, so it keeps the focus a click gave it.
+ */
+const RowBlock = ({
+  block,
+  place,
+  near,
+  scroller,
+  selectedKey,
+  forks,
+  configurations,
+  facts,
+  onSelect,
+  watcher,
+  onLayout,
+  onList,
+  onScroll,
+}: {
+  block: Block;
+  place: Place;
+  /** Whether the block is near the part of the list that shows. */
+  near: boolean;
+  scroller: RefObject<HTMLElement | null>;
+  selectedKey: string | undefined;
+  forks: Map<string, SkillRow[]>;
+  configurations: Configuration[];
+  facts: Parameters<typeof SkillRowItem>[0]["facts"];
+  onSelect: (row: SkillRow) => void;
+  /** Tells the list when the block comes near the part that shows, or goes far. */
+  watcher: IntersectionObserver | null;
+  /** Tells the list that the block measured its rows, which can move the blocks below it. */
+  onLayout: () => void;
+  /** Keeps the block's list element, which the list measures. */
+  onList: (key: string, element: HTMLUListElement | null) => void;
+  /** Keeps how the block scrolls one of its rows into view, by its place in the block. */
+  onScroll: (key: string, scroll: ((index: number) => void) | null) => void;
+}) => {
+  const { key, rows, subgroup } = block;
+  const selectedIndex = useMemo(
+    () => rows.findIndex((row) => row.key === selectedKey),
+    [rows, selectedKey]
+  );
+  // The virtualizer's functions return new values while they stay the same functions, which
+  // React Compiler cannot memoize. The app is built without it, and this component reads them
+  // on every render and passes none of them to a memoized component.
+  // oxlint-disable-next-line react/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    // The library sets each drawn row's offset and the block's height on the elements itself.
+    directDomUpdates: true,
+    directDomUpdatesMode: "position",
+    estimateSize: useCallback(
+      (index: number) => estimatedHeight(rows[index]),
+      [rows]
+    ),
+    getItemKey: useCallback(
+      (index: number) => rows[index]?.key ?? index,
+      [rows]
+    ),
+    getScrollElement: () => scroller.current,
+    measureElement: measuredHeight,
+    onChange: onLayout,
+    overscan: OVERSCAN,
+    // A block far from what shows draws no rows, but the selected one.
+    rangeExtractor: useCallback(
+      (range: Range) => {
+        const indexes = near ? defaultRangeExtractor(range) : [];
+        if (selectedIndex === -1 || indexes.includes(selectedIndex)) {
+          return indexes;
+        }
+        // The drawn indexes are one run, so the selected row is before or after all of them.
+        return selectedIndex < (indexes[0] ?? 0)
+          ? [selectedIndex, ...indexes]
+          : [...indexes, selectedIndex];
+      },
+      [near, selectedIndex]
+    ),
+    scrollMargin: place.offset,
+    scrollPaddingStart: place.pinned,
+  });
+  const { containerRef } = virtualizer;
+  const listRef = useCallback(
+    (element: HTMLUListElement) => {
+      containerRef(element);
+      onList(key, element);
+      watcher?.observe(element);
+      return () => {
+        watcher?.unobserve(element);
+        onList(key, null);
+        containerRef(null);
+      };
+    },
+    [containerRef, onList, key, watcher]
+  );
+  useEffect(() => {
+    onScroll(key, (index) => {
+      virtualizer.scrollToIndex(index, { align: "auto" });
+    });
+    return () => {
+      onScroll(key, null);
+    };
+  }, [key, onScroll, virtualizer]);
+  return (
+    <ul ref={listRef} data-block={key} className="relative">
+      {virtualizer.getVirtualItems().map(({ index }) => {
+        const row = rows[index];
+        if (row === undefined) {
+          return null;
+        }
+        return (
+          <li
+            key={row.key}
+            ref={virtualizer.measureElement}
+            data-index={index}
+            aria-posinset={index + 1}
+            aria-setsize={rows.length}
+            className={placedRow(index, subgroup !== undefined)}
+          >
+            <SkillRowItem
+              row={row}
+              forks={forks.get(row.name) ?? NO_FORKS}
+              configurations={configurations}
+              facts={facts}
+              selected={row.key === selectedKey}
+              onSelect={onSelect}
+            />
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
 
-/** The drawn part of one group: its header when that is drawn, and its drawn parts. */
-interface DrawnGroup {
-  group: Group;
-  header?: { index: number; item: Item & { kind: "header" } };
-  parts: DrawnPart[];
-}
+const NO_PLACE: Place = { offset: 0, pinned: 0 };
 
-/** The drawn items by group and plugin, in order. */
-const drawnGroups = (items: Item[], indexes: number[]): DrawnGroup[] => {
-  const drawn: DrawnGroup[] = [];
-  for (const index of indexes) {
-    const item = items[index];
-    if (item === undefined) {
-      continue;
-    }
-    let last = drawn.at(-1);
-    if (last?.group !== item.group) {
-      last = { group: item.group, parts: [] };
-      drawn.push(last);
-    }
-    if (item.kind === "header") {
-      last.header = { index, item };
-      continue;
-    }
-    let part = last.parts.at(-1);
-    if (part === undefined || part.subgroup !== item.subgroup) {
-      part =
-        item.subgroup === undefined
-          ? { rows: [] }
-          : { rows: [], subgroup: item.subgroup };
-      last.parts.push(part);
-    }
-    if (item.kind === "subheader") {
-      part.subheader = { index, item };
-    } else {
-      part.rows.push({ index, item });
+/** The block and place of the row `key`, or none when the filters leave it out. */
+const locate = (blocks: Block[], key: string | undefined) => {
+  let found: { block: string; index: number; key: string } | undefined;
+  for (const block of blocks) {
+    const index = block.rows.findIndex((row) => row.key === key);
+    if (key !== undefined && index !== -1) {
+      found = { block: block.key, index, key };
+      break;
     }
   }
-  return drawn;
+  return found;
 };
 
 /**
- * The headers pinned at the top of the list while it scrolls: the group's header of the part
- * that shows at the top, and in PLUGINS its plugin's header. Each is drawn as the first header of
- * its kind, so it covers the header it pins exactly; the next header pushes it up as it comes
- * under it. It is a copy for the eye and the pointer, hidden from assistive technology and out of
- * the tab order: the headers in the list are still there for both.
- */
-const PinnedHeaders = ({
-  group,
-  subgroup,
-  groupLayer,
-  subgroupLayer,
-  onAdoptAll,
-  onToggle,
-}: {
-  group: Group;
-  subgroup?: { subgroup: Subgroup; open: boolean };
-  /** The layer the next group's header pushes up. */
-  groupLayer: RefObject<HTMLDivElement | null>;
-  /** The layer the next plugin's header pushes up, under the group's header. */
-  subgroupLayer: RefObject<HTMLDivElement | null>;
-  onAdoptAll: () => void;
-  onToggle: () => void;
-}) => (
-  <div aria-hidden="true" className="sticky top-0 z-10 h-0">
-    <div ref={groupLayer} className="flex flex-col">
-      <div className="bg-shell-content-bg relative z-10">
-        <GroupHeader
-          label={group.label}
-          source={group.source}
-          count={group.rows.length}
-          first
-          action={
-            group.key === GROUP_DISK ? (
-              <AdoptAll onOpen={onAdoptAll} tabbable={false} />
-            ) : undefined
-          }
-        />
-      </div>
-      {subgroup !== undefined && (
-        <div ref={subgroupLayer} className="bg-shell-content-bg flex">
-          <SectionToggle
-            label={subgroup.subgroup.label}
-            count={subgroup.subgroup.rows.length}
-            open={subgroup.open}
-            tabbable={false}
-            onToggle={onToggle}
-          />
-        </div>
-      )}
-    </div>
-  </div>
-);
-
-/**
- * The rows in their groups, each group under its header. Only the headers and rows near the part
- * of the list that shows are in the document, so the list stays quick with hundreds of skills:
- * each group's label carries its full count, and each row its place in its group. The selected
- * row comes into view when the selection changes, below the pinned headers. While the list
- * scrolls, the header of the group at its top, and in PLUGINS of the plugin, stays pinned there.
+ * The rows in their groups, each group under its header. The headers are in the document and
+ * pin themselves with `position: sticky`: a group's header at the top of the list, a plugin's
+ * under it, each while its section shows, so the next one pushes it out. Only the rows near the
+ * part of the list that shows are in the document, so the list stays quick with hundreds of
+ * skills: each group's label carries its full count, and each row its place in its group. The
+ * selected row comes into view below the pinned headers when the selection changes.
  */
 const SkillGroups = ({
   rows,
@@ -504,269 +480,230 @@ const SkillGroups = ({
   const select = useCallback((row: SkillRow) => {
     latestSelect.current(row);
   }, []);
+  const blocks = useMemo(
+    () => blocksOf(groups, collapsed),
+    [groups, collapsed]
+  );
+
+  // The list's scroll element and content, the blocks' lists, the pinned headers above them,
+  // and how each block scrolls a row into view.
   const scroller = useRef<HTMLElement>(null);
-  const items = useMemo(() => itemsOf(groups, collapsed), [groups, collapsed]);
-  // Where the selected row is among the items, or -1 when the filters leave it out.
-  const selectedIndex = useMemo(
-    () =>
-      items.findIndex(
-        (item) => item.kind === "row" && item.row.key === selectedKey
-      ),
-    [items, selectedKey]
-  );
-  // The headers pinned at the top, and the heights they take, which the selected row comes into
-  // view below.
-  const [pinned, setPinned] = useState<Pinned>();
-  const [heights, setHeights] = useState<PinHeights>(ESTIMATED_PIN);
-  const groupLayer = useRef<HTMLDivElement>(null);
-  const subgroupLayer = useRef<HTMLDivElement>(null);
-  const latestPin = useRef<(() => void) | null>(null);
-  const selectedItem = items[selectedIndex];
-  const pinnedHeight =
-    heights.group +
-    (selectedItem?.kind === "row" && selectedItem.subgroup !== undefined
-      ? heights.subgroup
-      : 0);
-  // The virtualizer's functions return new values while they stay the same functions, which
-  // React Compiler cannot memoize. The app is built without it, and this component reads them
-  // on every render and passes none of them to a memoized component.
-  // oxlint-disable-next-line react/incompatible-library
-  const virtualizer = useVirtualizer({
-    count: items.length,
-    // The library sets each drawn item's offset and the list's height on the elements itself.
-    directDomUpdates: true,
-    directDomUpdatesMode: "position",
-    estimateSize: useCallback(
-      (index: number) => estimatedHeight(items[index]),
-      [items]
-    ),
-    getItemKey: useCallback(
-      (index: number) => items[index]?.key ?? index,
-      [items]
-    ),
-    getScrollElement: () => scroller.current,
-    measureElement: measuredHeight,
-    // The library tells when it measures or redraws, which can move the headers under the pin.
-    onChange: () => {
-      latestPin.current?.();
+  const content = useRef<HTMLDivElement>(null);
+  const lists = useRef(new Map<string, HTMLUListElement>());
+  const headers = useRef(new Map<string, HTMLDivElement>());
+  const scrolls = useRef(new Map<string, (index: number) => void>());
+  const onList = useCallback(
+    (key: string, element: HTMLUListElement | null) => {
+      if (element === null) {
+        lists.current.delete(key);
+      } else {
+        lists.current.set(key, element);
+      }
     },
-    overscan: OVERSCAN,
-    // The selected row stays drawn wherever the list is scrolled to, so it keeps the focus a
-    // click gave it.
-    rangeExtractor: useCallback(
-      (range: Range) => {
-        const indexes = defaultRangeExtractor(range);
-        if (selectedIndex === -1 || indexes.includes(selectedIndex)) {
-          return indexes;
-        }
-        // The drawn indexes are one run, so the selected row is before or after all of them.
-        return selectedIndex < (indexes[0] ?? 0)
-          ? [selectedIndex, ...indexes]
-          : [...indexes, selectedIndex];
-      },
-      [selectedIndex]
-    ),
-    scrollPaddingStart: pinnedHeight,
-  });
-
-  // Pins the headers for the list's scroll offset, and writes how far the next header pushes
-  // them on their layers, as the library writes each item's offset on it.
-  const syncPin = () => {
-    const spans = virtualizer.measurementsCache;
-    const measured = pinHeights(items, spans);
-    setHeights((was) =>
-      was.group === measured.group && was.subgroup === measured.subgroup
-        ? was
-        : measured
-    );
-    const pin = pinAt(items, spans, scroller.current?.scrollTop ?? 0, measured);
-    const next = pinnedOf(pin);
-    setPinned((was) =>
-      was?.header === next?.header && was?.subheader === next?.subheader
-        ? was
-        : next
-    );
-    if (pin !== undefined) {
-      groupLayer.current?.style.setProperty(
-        "translate",
-        `0 ${pin.groupShift}px`
-      );
-      subgroupLayer.current?.style.setProperty(
-        "translate",
-        `0 ${pin.subgroupShift}px`
-      );
-    }
-  };
-  useLayoutEffect(() => {
-    latestPin.current = syncPin;
-    syncPin();
-  });
-
-  // A click on the pinned plugin's header first brings its header in the list to the pinned
-  // place, so the plugin stays at the top once its rows collapse.
-  const togglePinned = (index: number, key: string) => {
-    const span = virtualizer.measurementsCache[index];
-    const place =
-      span === undefined
-        ? undefined
-        : span.start + span.size - heights.group - heights.subgroup;
-    if (place !== undefined && (scroller.current?.scrollTop ?? 0) > place) {
-      virtualizer.scrollToOffset(place);
-    }
-    onToggle(key);
-  };
-  const pinnedHeader = pinned === undefined ? undefined : items[pinned.header];
-  const pinnedSubheader =
-    pinned?.subheader === undefined ? undefined : items[pinned.subheader];
-
-  // The selected row comes into view when the selection changes (a key press, a click, or a route
-  // another screen opened) and when the filters list it again. A list that changes around the
-  // same selected row stays where it is.
-  const latestIndex = useRef(selectedIndex);
-  useEffect(() => {
-    latestIndex.current = selectedIndex;
-  }, [selectedIndex]);
-  const listed = selectedIndex !== -1;
-  useEffect(() => {
-    if (listed) {
-      virtualizer.scrollToIndex(latestIndex.current, { align: "auto" });
-    }
-  }, [selectedKey, listed, virtualizer]);
-
-  const drawn = drawnGroups(
-    items,
-    virtualizer.getVirtualItems().map((v) => v.index)
+    []
   );
+  const onHeader = useCallback(
+    (key: string, element: HTMLDivElement | null) => {
+      if (element === null) {
+        headers.current.delete(key);
+      } else {
+        headers.current.set(key, element);
+      }
+    },
+    []
+  );
+  const onScroll = useCallback(
+    (key: string, scroll: ((index: number) => void) | null) => {
+      if (scroll === null) {
+        scrolls.current.delete(key);
+      } else {
+        scrolls.current.set(key, scroll);
+      }
+    },
+    []
+  );
+
+  // Where each block is, and which blocks are near the part of the list that shows. The library
+  // places each block's rows from its offset in the list, which the headers above it decide.
+  const [places, setPlaces] = useState<ReadonlyMap<string, Place>>(
+    () => new Map()
+  );
+  const [near, setNear] = useState<ReadonlySet<string>>(() => new Set());
+  const measure = () => {
+    const list = scroller.current?.getBoundingClientRect();
+    const top = content.current?.getBoundingClientRect().top;
+    if (list === undefined || top === undefined) {
+      return;
+    }
+    const next = new Map<string, Place>();
+    const shown = new Set<string>();
+    for (const block of blocks) {
+      const element = lists.current.get(block.key);
+      if (element === undefined) {
+        continue;
+      }
+      const box = element.getBoundingClientRect();
+      const pinned =
+        (headers.current.get(groupKey(block.group))?.offsetHeight ?? 0) +
+        (block.subgroup === undefined
+          ? 0
+          : (headers.current.get(subgroupKey(block.subgroup))?.offsetHeight ??
+            0));
+      next.set(block.key, { offset: box.top - top, pinned });
+      if (
+        box.bottom >= list.top - NEAR_PX &&
+        box.top <= list.bottom + NEAR_PX
+      ) {
+        shown.add(block.key);
+      }
+    }
+    setPlaces((was) => (samePlaces(was, next) ? was : next));
+    setNear((was) => (sameSet(was, shown) ? was : shown));
+  };
+  const latestMeasure = useRef(measure);
+  useLayoutEffect(() => {
+    latestMeasure.current = measure;
+    measure();
+  });
+  // A block's offset moves when the rows above it are measured.
+  const onLayout = useCallback(() => {
+    latestMeasure.current();
+  }, []);
+  // A block comes near or goes far as the list scrolls.
+  const [watcher, setWatcher] = useState<IntersectionObserver | null>(null);
+  const scrollerRef = useCallback((element: HTMLElement) => {
+    scroller.current = element;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setNear((was) => {
+          const next = new Set(was);
+          for (const entry of entries) {
+            const key =
+              entry.target instanceof HTMLElement
+                ? entry.target.dataset.block
+                : undefined;
+            if (key !== undefined && entry.isIntersecting) {
+              next.add(key);
+            } else if (key !== undefined) {
+              next.delete(key);
+            }
+          }
+          return sameSet(was, next) ? was : next;
+        });
+      },
+      { root: element, rootMargin: `${NEAR_PX}px 0px` }
+    );
+    setWatcher(observer);
+    return () => {
+      observer.disconnect();
+      setWatcher(null);
+      scroller.current = null;
+    };
+  }, []);
+
+  // The block and place of the selected row, or none when the filters leave it out.
+  const located = useMemo(
+    () => locate(blocks, selectedKey),
+    [blocks, selectedKey]
+  );
+  // The selected row comes into view when the selection changes (a key press, a click, or a route
+  // another screen opened) and when the filters list it again, once its block is placed. A list
+  // that changes around the same selected row stays where it is.
+  const latestLocated = useRef(located);
+  useEffect(() => {
+    latestLocated.current = located;
+  }, [located]);
+  const placed = located !== undefined && places.has(located.block);
+  useEffect(() => {
+    const at = latestLocated.current;
+    if (placed && at !== undefined && at.key === selectedKey) {
+      scrolls.current.get(at.block)?.(at.index);
+    }
+  }, [selectedKey, placed]);
+
+  const blockOf = (key: string) => blocks.find((block) => block.key === key);
+  const rowBlock = (block: Block | undefined) =>
+    block === undefined ? null : (
+      <RowBlock
+        block={block}
+        place={places.get(block.key) ?? NO_PLACE}
+        near={near.has(block.key)}
+        scroller={scroller}
+        selectedKey={selectedKey}
+        forks={forks}
+        configurations={configurations}
+        facts={facts}
+        onSelect={select}
+        watcher={watcher}
+        onLayout={onLayout}
+        onList={onList}
+        onScroll={onScroll}
+      />
+    );
   return (
     <nav
-      ref={scroller}
+      ref={scrollerRef}
       aria-label="Skills"
       className="pr-split-list-right pb-split-list-bottom pl-split-list-left min-h-0 flex-1 overflow-auto pt-0"
-      onScroll={() => {
-        latestPin.current?.();
-      }}
     >
       {groups.length === 0 ? (
         <p className="type-secondary text-text-hint m-0 py-10 text-center">
           No skills match
         </p>
       ) : (
-        <>
-          {pinned !== undefined && pinnedHeader?.kind === "header" && (
-            <PinnedHeaders
-              group={pinnedHeader.group}
-              {...(pinnedSubheader?.kind === "subheader"
-                ? {
-                    subgroup: {
-                      open: pinnedSubheader.open,
-                      subgroup: pinnedSubheader.subgroup,
-                    },
-                  }
-                : {})}
-              groupLayer={groupLayer}
-              subgroupLayer={subgroupLayer}
-              onAdoptAll={onAdoptAll}
-              onToggle={() => {
-                if (
-                  pinned.subheader !== undefined &&
-                  pinnedSubheader?.kind === "subheader"
-                ) {
-                  togglePinned(pinned.subheader, pinnedSubheader.subgroup.key);
-                }
-              }}
-            />
-          )}
-          <div ref={virtualizer.containerRef} className="relative">
-            {drawn.map(({ group, header, parts }) => (
-              <section
-                key={group.key}
-                aria-label={`${group.label} (${group.rows.length})`}
-                className="contents"
+        <div ref={content}>
+          {groups.map((group, at) => (
+            <section
+              key={group.key}
+              aria-label={`${group.label} (${group.rows.length})`}
+              className={at === 0 ? undefined : "pt-group-spacing"}
+            >
+              <div
+                ref={(element) => {
+                  onHeader(groupKey(group), element);
+                }}
+                className="bg-shell-content-bg sticky top-0 z-10"
               >
-                {header !== undefined && (
-                  <div
-                    ref={virtualizer.measureElement}
-                    data-index={header.index}
-                    className={PLACED}
-                  >
-                    <GroupHeader
-                      label={group.label}
-                      source={group.source}
-                      count={group.rows.length}
-                      first={header.item.first}
-                      action={
-                        group.key === GROUP_DISK ? (
-                          <AdoptAll onOpen={onAdoptAll} />
-                        ) : undefined
-                      }
-                    />
-                  </div>
-                )}
-                {parts.map(({ subgroup, subheader, rows: partRows }) => {
-                  const list = (
-                    <ul className="contents">
-                      {partRows.map(({ index, item }) => (
-                        <li
-                          key={item.key}
-                          ref={virtualizer.measureElement}
-                          data-index={index}
-                          aria-posinset={item.at + 1}
-                          aria-setsize={item.size}
-                          className={placedRow(item)}
-                        >
-                          <SkillRowItem
-                            row={item.row}
-                            forks={forks.get(item.row.name) ?? NO_FORKS}
-                            configurations={configurations}
-                            facts={facts}
-                            selected={item.row.key === selectedKey}
-                            onSelect={select}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  );
-                  if (subgroup === undefined) {
-                    return <Fragment key="rows">{list}</Fragment>;
+                <GroupHeader
+                  label={group.label}
+                  source={group.source}
+                  count={group.rows.length}
+                  action={
+                    group.key === GROUP_DISK ? (
+                      <AdoptAll onOpen={onAdoptAll} />
+                    ) : undefined
                   }
-                  return (
+                />
+              </div>
+              {group.subgroups === undefined
+                ? rowBlock(blockOf(groupKey(group)))
+                : group.subgroups.map((subgroup, place) => (
                     <section
                       key={subgroup.key}
                       aria-label={`${subgroup.label} (${subgroup.rows.length})`}
-                      className="contents"
+                      className={place === 0 ? undefined : "pt-subgroup-top"}
                     >
-                      {subheader !== undefined && (
-                        <div
-                          ref={virtualizer.measureElement}
-                          data-index={subheader.index}
-                          className={PLACED}
-                        >
-                          <div
-                            className={
-                              subheader.item.first
-                                ? "flex"
-                                : "pt-subgroup-top flex"
-                            }
-                          >
-                            <SectionToggle
-                              label={subgroup.label}
-                              count={subgroup.rows.length}
-                              open={subheader.item.open}
-                              onToggle={() => {
-                                onToggle(subgroup.key);
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                      {list}
+                      <div
+                        ref={(element) => {
+                          onHeader(subgroupKey(subgroup), element);
+                        }}
+                        className="bg-shell-content-bg top-group-header sticky z-5 flex"
+                      >
+                        <SectionToggle
+                          label={subgroup.label}
+                          count={subgroup.rows.length}
+                          open={!collapsed.has(subgroup.key)}
+                          onToggle={() => {
+                            onToggle(subgroup.key);
+                          }}
+                        />
+                      </div>
+                      {rowBlock(blockOf(subgroupKey(subgroup)))}
                     </section>
-                  );
-                })}
-              </section>
-            ))}
-          </div>
-        </>
+                  ))}
+            </section>
+          ))}
+        </div>
       )}
     </nav>
   );

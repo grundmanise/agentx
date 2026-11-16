@@ -113,29 +113,26 @@ test("while the list scrolls, the header of its group and of its plugin stay pin
 }) => {
   const start = listedPluginSkill(300);
   await openAt(cli, page, start.name);
-  // The pinned copy is for the eye and the pointer; the headers in the list keep their roles.
-  const pinned = list(page).locator(":scope > [aria-hidden=true]");
-  await expect(pinned).toContainText("PLUGINS");
-  await expect(pinned.getByText(start.plugin, { exact: true })).toBeVisible();
-  // The selected row comes into view below the pinned headers.
-  const opened = await row(page, start.name).boundingBox();
-  const header = await pinned.boundingBox();
-  expect(opened?.y).toBeGreaterThanOrEqual(
-    (header?.y ?? 0) + (header?.height ?? 0)
-  );
-
-  // A click on the pinned plugin collapses it and keeps its header at the top.
-  await pinned.getByText(start.plugin, { exact: true }).click();
+  const top = (await list(page).boundingBox())?.y ?? 0;
+  // Far into PLUGINS, its header sits at the top of the list and the plugin's header under it.
+  const group = list(page).getByText("PLUGINS", { exact: true });
   const toggle = list(page).getByRole("button", {
     exact: true,
     name: `${start.plugin} ${SKILLS_PER_PLUGIN}`,
   });
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(group).toBeInViewport();
   await expect(toggle).toBeInViewport();
-
-  // At the top of the list, the first group's header is in its place and nothing is pinned.
-  await list(page).evaluate((nav) => {
-    nav.scrollTo(0, 0);
-  });
-  await expect(pinned).toHaveCount(0);
+  const groupBox = await group.boundingBox();
+  const toggleBox = await toggle.boundingBox();
+  expect(groupBox?.y ?? 0).toBeLessThan(top + 20);
+  expect(toggleBox?.y ?? 0).toBeGreaterThan(groupBox?.y ?? 0);
+  expect(toggleBox?.y ?? 0).toBeLessThan(top + 60);
+  // The selected row comes into view below them.
+  const opened = await row(page, start.name).boundingBox();
+  expect(opened?.y ?? 0).toBeGreaterThanOrEqual(
+    (toggleBox?.y ?? 0) + (toggleBox?.height ?? 0)
+  );
+  // A click on the pinned plugin's header collapses it.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });

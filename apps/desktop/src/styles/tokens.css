@@ -589,9 +589,11 @@
   --padding-rows: 2px;
   --width-row-glyph: 18px;
   --padding-group: 14px;
-  --padding-group-top: 20px;
-  --padding-group-first-top: 4px;
+  --padding-group-top: 4px;
   --padding-group-bottom: 8px;
+  --padding-group-spacing: 16px;
+  --min-height-group-header: 30px;
+  --inset-group-header: var(--min-height-group-header);
   --gap-group: 8px;
   --padding-subgroup-x: 14px;
   --padding-subgroup-y: 6px;
