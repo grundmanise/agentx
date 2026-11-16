@@ -24,6 +24,13 @@ import {
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
+declare global {
+  interface Window {
+    /** The texts the toast showed, in order, with its width, as a test records them. */
+    toastTexts?: { text: string; width: number }[];
+  }
+}
+
 const launchLines = [
   ["version", "--json"],
   ["doctor", "--json"],
@@ -309,8 +316,16 @@ test.describe("banners", () => {
   });
 });
 
+/** The progress of a check of 10 sources, `current` of them fetched. */
+const fetched = (current: number): InlineEvent => ({
+  current,
+  phase: "fetch",
+  total: 10,
+  type: "progress",
+});
+
 test.describe("Check updates", () => {
-  test("records skill check-updates, turns while it fetches, and toasts what it found with Update all", async ({
+  test("records skill check-updates, counts the sources while it fetches, and toasts what it found with Update all", async ({
     cli,
     page,
   }) => {
@@ -341,7 +356,7 @@ test.describe("Check updates", () => {
     await run.started;
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "true");
     await expect(
-      toasts(page).getByText("Checking for updates · 0 of 2 sources")
+      toasts(page).getByText("Checking for updates… 0/2")
     ).toBeVisible();
     run.release();
     // draft's pending merge comes first: four skills are offered an update.
@@ -370,6 +385,51 @@ test.describe("Check updates", () => {
       ["skill", "check-updates", "--json"],
       ["skill", "update", "--all", "--json"],
     ]);
+  });
+
+  test("keeps room for a two-digit count from the start, so the toast keeps its width", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf", []);
+    // Each text the toast shows, with its width, as the page draws them.
+    await page.evaluate(() => {
+      const seen: { text: string; width: number }[] = [];
+      window.toastTexts = seen;
+      new MutationObserver(() => {
+        const toast = document.querySelector("[data-sonner-toast]");
+        const text = toast?.querySelector("[data-title]")?.textContent ?? "";
+        if (toast !== null && text !== "" && seen.at(-1)?.text !== text) {
+          seen.push({ text, width: toast.getBoundingClientRect().width });
+        }
+      }).observe(document.body, {
+        characterData: true,
+        childList: true,
+        subtree: true,
+      });
+    });
+    const run = cli.register(["skill", "check-updates"], {
+      events: [fetched(0), fetched(1), fetched(10)],
+      holdAfter: 0,
+    });
+    await checkButton(page).click();
+    await run.started;
+    await expect(
+      toasts(page).getByText("Checking for updates…", { exact: true })
+    ).toBeVisible();
+    run.release();
+    await expect(
+      toasts(page).getByText("All skills are up to date")
+    ).toBeVisible();
+    const seen = (await page.evaluate(() => window.toastTexts)) ?? [];
+    const checking = seen.filter((s) => s.text.startsWith("Checking"));
+    expect(checking.map((s) => s.text.trim())).toEqual([
+      "Checking for updates…",
+      "Checking for updates… 0/10",
+      "Checking for updates… 1/10",
+      "Checking for updates… 10/10",
+    ]);
+    expect(new Set(checking.map((s) => s.width)).size).toBe(1);
   });
 
   test("is an icon button that shows its name in a tooltip, and is busy while the check runs", async ({

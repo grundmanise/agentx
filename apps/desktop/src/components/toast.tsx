@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { toast, Toaster as Sonner } from "sonner";
 import type { ExternalToast } from "sonner";
 
@@ -74,7 +75,7 @@ export interface ToastAction {
  * instead, as a running command's toast does when its progress moves.
  */
 export const notify = (
-  message: string,
+  message: ReactNode,
   action?: ToastAction,
   {
     lasting = false,
