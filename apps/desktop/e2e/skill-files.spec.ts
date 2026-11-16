@@ -106,7 +106,6 @@ test("an unmodified skill: every file, SKILL.md first and open, the rest by path
     "true"
   );
   expect(later(cli)).toEqual([["skill", "files", "pdf", "--json"]]);
-  await expect(section).toContainText("Read-only");
   // The meta comes with the files: the SKILL.md row is there while they are read.
   await expect(fileRow(section, "SKILL.md")).toContainText("6 lines");
   expect(await rowNames(section)).toEqual([

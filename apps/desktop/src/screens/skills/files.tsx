@@ -478,7 +478,6 @@ export const FilesSection = ({
     <section aria-label="Files" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline gap-3">
         {heading}
-        <span className="type-technical-sm text-text-caption">Read-only</span>
         {compared !== undefined && (
           <span className="type-technical-sm text-text-caption">
             {compared}
