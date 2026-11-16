@@ -560,9 +560,6 @@ test.describe("the detail pane", () => {
           - definition: 3f2a9c1
           - term: State
           - definition: current
-        - region "History":
-          - heading "History" [level=2]
-          - paragraph: History is kept for your own skills
     `);
     // The fork pill opens the fork.
     await article
@@ -655,7 +652,17 @@ test.describe("the detail pane", () => {
       .getByRole("listitem");
     await expect(entries).toHaveCount(5);
     await expect(entries.last()).toContainText("Import pdf from acme/skills");
-    // A long subject wraps inside the sheet; the sheet never scrolls sideways.
+    // Dragged to its narrowest, a long subject wraps inside the sheet; the sheet never scrolls
+    // sideways.
+    const handle = sheet.getByRole("separator", { name: "Resize" });
+    const grip = await handle.boundingBox();
+    const y = (grip?.y ?? 0) + (grip?.height ?? 0) / 2;
+    await page.mouse.move(grip?.x ?? 0, y);
+    await page.mouse.down();
+    await page.mouse.move(page.viewportSize()?.width ?? 0, y, { steps: 5 });
+    await page.mouse.up();
+    const narrowest = await sheet.boundingBox();
+    expect(Math.round(narrowest?.width ?? 0)).toBe(420);
     const long = sheet.getByRole("button", {
       name: "pdf-letters: edit SKILL.md and add examples.md (studio-mac)",
     });
@@ -733,9 +740,6 @@ test.describe("the detail pane", () => {
           - definition: acme-marketplace
           - term: Agent
           - definition: Claude Code
-        - region "History":
-          - heading "History" [level=2]
-          - paragraph: History is kept for your own skills
     `);
 
     await row(page, "scratch").click();
@@ -759,9 +763,6 @@ test.describe("the detail pane", () => {
             - link "/home/me/.agents/skills/scratch"
           - term: Installed by
           - definition: Skills CLI · https://github.com/vercel/skills
-        - region "History":
-          - heading "History" [level=2]
-          - paragraph: History is kept for your own skills
     `);
   });
 

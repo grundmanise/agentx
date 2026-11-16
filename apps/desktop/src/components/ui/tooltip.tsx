@@ -2,6 +2,8 @@
 // "Tooltip". Its parts keep shadcn's names and `data-slot` attributes and take no `className`;
 // its animation classes and its arrow are dropped (DESIGN.md §8), as no overlay of the app
 // points at its anchor. `TooltipProvider` wraps the app once, in `src/main.tsx`.
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 
 import type { OwnProps } from "#/lib/utils.ts";
@@ -28,20 +30,37 @@ const TooltipTrigger = ({
   <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 );
 
+const tooltipContentVariants = cva(
+  "rounded-tooltip border-overlay-border bg-overlay-bg type-secondary text-text-primary z-50 w-fit border px-3 py-1.5 text-balance",
+  {
+    defaultVariants: { size: "line" },
+    variants: {
+      size: {
+        // One line, as wide as its text.
+        line: "",
+        // A sentence that explains a term: it wraps past `tooltip.text-max-width`.
+        text: "max-w-tooltip-text",
+      },
+    },
+  }
+);
+
 /**
  * `tooltip.radius`, `overlay.bg` with `overlay.border`, one `type.secondary` `text.primary` line
- * with shadcn's padding, `tooltip.offset` from its trigger.
+ * with shadcn's padding, `tooltip.offset` from its trigger; `size="text"` wraps a sentence.
  */
 const TooltipContent = ({
   // tooltip.offset
   sideOffset = 6,
+  size,
   ...props
-}: OwnProps<typeof TooltipPrimitive.Content>) => (
+}: OwnProps<typeof TooltipPrimitive.Content> &
+  VariantProps<typeof tooltipContentVariants>) => (
   <TooltipPrimitive.Portal>
     <TooltipPrimitive.Content
       data-slot="tooltip-content"
       sideOffset={sideOffset}
-      className="rounded-tooltip border-overlay-border bg-overlay-bg type-secondary text-text-primary z-50 w-fit border px-3 py-1.5 text-balance"
+      className={tooltipContentVariants({ size })}
       {...props}
     />
   </TooltipPrimitive.Portal>

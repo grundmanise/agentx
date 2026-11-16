@@ -17,9 +17,9 @@ const Divider = () => (
 );
 
 /**
- * The floating action bar (DESIGN.md §2.2 "Overlays", §4 "Overlays", §8): how many cards are
- * selected, the install targets (`AgentTargets`, DESIGN.md §6 "Agent picker"), and Add; while the
- * install runs, its progress and Cancel.
+ * The floating action bar (DESIGN.md §2.2 "Overlays", §4 "Overlays", §8): the install targets
+ * (`AgentTargets`, DESIGN.md §6 "Agent picker") and Add, which counts the selected cards; while
+ * the install runs, its progress first and Cancel.
  */
 export const ActionBar = ({
   count,
@@ -53,13 +53,18 @@ export const ActionBar = ({
   <div
     role="toolbar"
     aria-label="Selected skills"
-    className="bottom-floating-bar animate-floating-bar rounded-floating-bar border-overlay-border bg-overlay-bg shadow-popover h-floating-bar absolute left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 border pr-2 pl-5"
+    className="bottom-floating-bar animate-floating-bar rounded-floating-bar border-overlay-border bg-overlay-bg shadow-popover h-floating-bar absolute left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 border pr-2 pl-4"
   >
-    <output className="type-body text-text-primary font-medium whitespace-nowrap">
-      {adding ? progressText(progress) : `${count} selected`}
-    </output>
-    <Divider />
+    {adding && (
+      <>
+        <output className="type-body text-text-primary font-medium whitespace-nowrap">
+          {progressText(progress)}
+        </output>
+        <Divider />
+      </>
+    )}
     <AgentTargets
+      skills={count}
       direct={direct}
       universal={universal}
       targets={targets}

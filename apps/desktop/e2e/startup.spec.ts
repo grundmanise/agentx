@@ -121,7 +121,7 @@ test("a first launch says at once that it loads, and from 5 seconds how much lon
   await pauseTimers(page);
   await page.goto("/");
   await doctor.started;
-  await expect(progress(page)).toContainText("Loading");
+  await expect(progress(page)).toContainText("Starting the app…");
   await expect(progress(page)).not.toContainText("trying for");
 
   await page.clock.runFor(5000);
@@ -136,22 +136,31 @@ test("a first launch says at once that it loads, and from 5 seconds how much lon
   await expect(progress(page)).toHaveCount(0);
 });
 
-/** The screen in the main panel: washed out and pulsing while it shows the kept inventory. */
-const screen = (page: Page) => page.getByRole("main").locator("> div");
+/** The screen in the main panel: out of reach while it shows the kept inventory. */
+const screen = (page: Page) =>
+  page.getByRole("main").locator("> div:not([data-launch-veil])");
+/** The frosted pane, with the spinner, over the kept inventory while the checks run. */
+const veil = (page: Page) =>
+  page.getByRole("main").locator("> [data-launch-veil]");
 
 /**
  * Launches with one skill of your own, waits until its inventory is kept for the next launch, then
  * restarts the app with `doctor` held. Returns the held doctor and the command lines of the
  * restart, the reads of the skill included.
  */
-const relaunch = async (cli: MockCli, page: Page) => {
+const relaunch = async (cli: MockCli, page: Page, more: string[] = []) => {
   cli.onServeStart({
     events: [
-      { ...firstInventory(), library: [skill("notes", { fork_id: "f1" })] },
+      {
+        ...firstInventory(),
+        library: ["notes", ...more].map((n) => skill(n, { fork_id: n })),
+      },
     ],
   });
-  cli.register(["skill", "files", "notes"], { events: filesOf("notes") });
-  cli.register(["skill", "history", "notes"], { events: [] });
+  for (const n of ["notes", ...more]) {
+    cli.register(["skill", "files", n], { events: filesOf(n) });
+    cli.register(["skill", "history", n], { events: [] });
+  }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
   await launched(cli);
@@ -184,24 +193,27 @@ const start = async (page: Page, args: string[]) => {
 
 const removeNotes = ["skill", "remove", "notes"];
 
-test("a later launch shows the kept inventory at once, washed out and pulsing, and runs commands once the checks pass", async ({
+test("a later launch shows the kept inventory at once under a frosted pane, and runs commands once the checks pass", async ({
   cli,
   page,
 }) => {
   const { commands, doctor } = await relaunch(cli, page);
   // The skill is there while the checks run, and none of its reads ran.
   await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
-  await expect(screen(page)).toHaveCSS("animation-name", "panel-loading");
+  await expect(veil(page)).toBeVisible();
+  await expect(veil(page).getByRole("status")).toContainText(
+    "Starting the app…"
+  );
+  await expect(screen(page)).toHaveAttribute("inert", "");
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
   await expect(progress(page)).toHaveCount(0);
   expect(commands()).toEqual(launchLines);
 
-  // The sidebar goes to another screen, washed out as well.
-  await page.getByRole("link", { name: "Settings" }).click();
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Settings" })
-  ).toBeVisible();
-  await expect(screen(page)).toHaveCSS("animation-name", "panel-loading");
+  // The sidebar, the command field and the sync status are out of reach, and ⌘K opens nothing.
+  await expect(page.locator("[inert] nav[aria-label='Main']")).toBeVisible();
+  await expect(page.locator("header [inert]")).toHaveCount(2);
+  await page.keyboard.press("Control+K");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // A change started now waits too, and Cancel stops one that waits.
   cli.register(["skill", "place", "notes"], {});
@@ -212,8 +224,9 @@ test("a later launch shows the kept inventory at once, washed out and pulsing, a
   }, removeNotes.join(" "));
 
   doctor.release();
-  await expect(screen(page)).toHaveCSS("animation-name", "none");
-  await expect(screen(page)).toHaveCSS("opacity", "1");
+  await expect(veil(page)).toHaveCount(0);
+  await expect(screen(page)).not.toHaveAttribute("inert");
+  await expect(page.locator("[inert]")).toHaveCount(0);
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await expect
     .poll(() => commands())
@@ -226,6 +239,24 @@ test("a later launch shows the kept inventory at once, washed out and pulsing, a
     );
   expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
   expect(cli.serveStarts).toBe(2);
+});
+
+test("the arrows do not move the selection under the launch pane", async ({
+  cli,
+  page,
+}) => {
+  const { doctor } = await relaunch(cli, page, ["todo"]);
+  const detail = (name: string) =>
+    page.getByRole("heading", { exact: true, level: 1, name });
+  await expect(detail("notes")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+
+  // Once the checks pass, notes is still selected, and the arrows work again.
+  doctor.release();
+  await expect(veil(page)).toHaveCount(0);
+  await expect(detail("notes")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await expect(detail("todo")).toBeVisible();
 });
 
 test("a change started on a kept inventory does not run on a machine that is no longer as it showed", async ({

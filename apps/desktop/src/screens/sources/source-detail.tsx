@@ -1,8 +1,9 @@
 // The card of the open source on the Sources screen (DESIGN.md §6 "Source card"): its owner's
-// tile, its name, which opens the repository in the browser, a Read-only tag when access is
-// limited, its full URL with its pin beneath, Refresh and Remove, and a strip of facts from
-// `source list` and its listing.
+// tile, its name, a Read-only tag when access is limited, its full URL with its pin beneath,
+// which opens the repository in the browser, Refresh and Remove, and a strip of facts from
+// `source list` and its listing. The name, the URL and the facts' values are selectable.
 // The card of Personal, the account remote, has no Remove: Settings manages the account remote.
+import { useRef } from "react";
 import type { Ref } from "react";
 
 import type { SourceEvent } from "#/cli/events.gen.ts";
@@ -40,7 +41,7 @@ const Fact = ({
     <dt className="type-secondary text-source-card-fact-label">{label}</dt>
     <dd
       className={cn(
-        "type-technical-sm m-0 truncate",
+        "type-technical-sm m-0 truncate select-text",
         attention ? "text-tone-attention-fg" : "text-source-card-fact-value"
       )}
     >
@@ -49,31 +50,45 @@ const Fact = ({
   </div>
 );
 
-/** The source's name, a link to its repository when its URL names one. */
-const SourceName = ({ url }: { url: string }) => {
-  const name = shortSource(url);
-  const page = webUrl(url);
-  if (page === undefined) {
-    return (
-      <h2 className="type-source-name text-source-card-name m-0 min-w-0 truncate">
-        {name}
-      </h2>
-    );
-  }
+/** How far the pointer may move between press and release for the release to count as a click. */
+const CLICK_SLOP = 4;
+
+/**
+ * The full URL under the name, a link to its repository when its URL names one. It is
+ * selectable: a drag selects its text, and the release that ends the drag opens nothing.
+ */
+const SourceUrl = ({ source }: { source: SourceEvent }) => {
+  const text = fullSource(source);
+  const page = webUrl(source.url);
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
   return (
-    <h2 className="type-source-name m-0 min-w-0 truncate">
-      <a
-        href={page}
-        title={page}
-        className="text-source-card-name hover:underline"
-        onClick={(e) => {
-          e.preventDefault();
-          void openInBrowser(page);
-        }}
-      >
-        {name}
-      </a>
-    </h2>
+    <p className="type-technical-sm text-text-muted m-0 truncate select-text">
+      {page === undefined ? (
+        text
+      ) : (
+        <a
+          href={page}
+          draggable={false}
+          className="text-text-muted hover:underline"
+          onPointerDown={(e) => {
+            pressedAt.current = { x: e.clientX, y: e.clientY };
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            const from = pressedAt.current;
+            pressedAt.current = null;
+            const dragged =
+              from !== null &&
+              Math.hypot(e.clientX - from.x, e.clientY - from.y) > CLICK_SLOP;
+            if (!dragged) {
+              void openInBrowser(page);
+            }
+          }}
+        >
+          {text}
+        </a>
+      )}
+    </p>
   );
 };
 
@@ -115,14 +130,14 @@ export const SourceDetail = ({
       </span>
       <div className="flex min-h-9 min-w-0 flex-1 flex-col justify-center gap-0.5">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <SourceName url={source.url} />
+          <h2 className="type-source-name text-source-card-name m-0 min-w-0 truncate select-text">
+            {shortSource(source.url)}
+          </h2>
           {source.access === "read-only" && (
             <Pill tone="neutral">Read-only</Pill>
           )}
         </div>
-        <p className="type-technical-sm text-text-muted m-0 truncate">
-          {fullSource(source)}
-        </p>
+        <SourceUrl source={source} />
       </div>
       <div className="gap-button flex flex-none items-center">
         <Button
