@@ -690,7 +690,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
 | `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
 | `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
-| `shell.panel-loading-blur` | 24 | `backdrop-blur-panel-loading` | The frosted pane over the kept inventory while the startup checks run (§8) |
+| `shell.panel-loading-blur` | 12 | `backdrop-blur-panel-loading` | The frosted pane over the kept inventory while the startup checks run (§8) |
 | `file-row.height` | 44 | `h-file-row` | File tree row |
 | `file-row.padding-x` | 16 | `px-file-row`, `right-file-row` for the control at the row's end |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |

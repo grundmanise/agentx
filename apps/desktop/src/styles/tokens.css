@@ -422,7 +422,7 @@
   /* Blurs (DESIGN.md §4, code): `blur-code-loading`. */
   --blur-code-loading: 8px;
   /* The frosted pane over the kept inventory while the startup checks run. */
-  --blur-panel-loading: 24px;
+  --blur-panel-loading: 12px;
 
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
