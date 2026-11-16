@@ -323,29 +323,36 @@ const markerVariants = cva("text-center", {
 
 // On a tinted line, front matter takes `code.prose`: `code.frontmatter` on the added tint falls
 // under the 4.5:1 contrast text needs (DESIGN.md §6 "Code pane").
-const textVariants = cva("break-all whitespace-pre-wrap no-underline", {
-  compoundVariants: [
-    { className: "text-code-frontmatter", kind: "plain", tone: "frontmatter" },
-    {
-      className: "text-code-prose",
-      kind: ["added", "removed"],
-      tone: "frontmatter",
+const textVariants = cva(
+  "break-all whitespace-pre-wrap no-underline select-text",
+  {
+    compoundVariants: [
+      {
+        className: "text-code-frontmatter",
+        kind: "plain",
+        tone: "frontmatter",
+      },
+      {
+        className: "text-code-prose",
+        kind: ["added", "removed"],
+        tone: "frontmatter",
+      },
+    ],
+    variants: {
+      kind: {
+        added: "",
+        plain: "",
+        removed: "",
+      },
+      tone: {
+        frontmatter: "",
+        heading: "text-code-heading",
+        list: "text-code-list",
+        prose: "text-code-prose",
+      },
     },
-  ],
-  variants: {
-    kind: {
-      added: "",
-      plain: "",
-      removed: "",
-    },
-    tone: {
-      frontmatter: "",
-      heading: "text-code-heading",
-      list: "text-code-list",
-      prose: "text-code-prose",
-    },
-  },
-});
+  }
+);
 
 const markers: Record<LineKind, string> = {
   added: "+",
