@@ -159,7 +159,7 @@ export const UpdateSheet = ({
   onOpenChange: (open: boolean) => void;
 }) => (
   <Sheet open={open} onOpenChange={onOpenChange}>
-    <SheetContent size="wide">
+    <SheetContent name="whats-new">
       <SheetHeader>
         <SheetTitle>{TITLE}</SheetTitle>
         <SheetDescription>{update.name}</SheetDescription>

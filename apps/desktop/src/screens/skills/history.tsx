@@ -12,6 +12,7 @@ import {
 } from "#/components/ui/sheet.tsx";
 import { formatDate } from "#/lib/dates.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
+import { useKeptRead } from "#/screens/skills/kept-read.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -283,7 +284,7 @@ const HistorySheet = ({
   onOpenChange: (open: boolean) => void;
 }) => (
   <Sheet open={open} onOpenChange={onOpenChange}>
-    <SheetContent>
+    <SheetContent name="history">
       <SheetHeader>
         <SheetTitle>History</SheetTitle>
         <SheetDescription>{name}</SheetDescription>
@@ -316,15 +317,16 @@ const HistorySheet = ({
  */
 export const HistorySection = ({ row }: { row: SkillRow }) => {
   const version = versionOf(row);
-  const read = useAppStore((s) => s.histories[row.name]);
+  const stored = useAppStore((s) => s.histories[row.name]);
+  // A read of another version is not this version's history; the one shown before stays meanwhile.
+  const read = useKeptRead(stored?.version === version ? stored : undefined);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
     void loadHistory(row.name, version);
   }, [row.name, version]);
 
-  // A read of another version is not this version's history.
-  if (read === undefined || read.version !== version) {
+  if (read === undefined) {
     return (
       <p className="type-secondary text-text-hint m-0">Reading the history…</p>
     );

@@ -129,6 +129,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | --- | --- | --- |
 | `shell.bg` | `gray-990` | Window body, sidebar, startup layer |
 | `shell.content-bg` | `gray-970` | Content area, both split columns, command field |
+| `shell.loading-veil` | `gray-970` at 40% | The frosted pane over the kept inventory while the startup checks run (§8) |
 | `shell.divider` | `gray-890` | Split column divider, section dividers, table header rule |
 | `shell.scrim` | `black/50` | Behind the history sheet |
 | `shell.scrim-strong` | `black/55` | Behind dialogs and the palette |
@@ -187,6 +188,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `pill.disabled-text` | `accent.attention` |  |
 | `pill.version-bg` | `gray-880` | Plugin version |
 | `pill.version-text` | `gray-300` |  |
+| `pill.universal-bg` | `gray-850` | Universal pill on a universal agent's row in the agent picker |
+| `pill.universal-text` | `gray-250` | 5.8:1 on `pill.universal-bg` |
 
 #### Inputs, switches, checkboxes
 
@@ -295,7 +298,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `monogram.9-bg` | `pink-900` |  |
 | `monogram.9-text` | `pink-200` |  |
 | `agent-picker.badge-bg` | `accent.primary` | Count of chosen targets the Add skills bar hides, on its "+n" button (digits `on-accent`) |
-| `agent-picker.row-hover` | `gray-880` | Row hover in the Choose agents dialog |
+| `agent-picker.row-hover` | `gray-880` | Row hover in the agent picker |
 
 #### Cards and banners
 
@@ -353,7 +356,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `dialog.subtitle` | `gray-400` |  |
 | `sheet.bg` | `gray-960` | History sheet body |
 | `sheet.border` | `gray-850` |  |
-| `sheet.handle` | `gray-700` | A resizable sheet's handle on hover and while it drags |
+| `sheet.handle` | `gray-700` | A sheet's handle on hover and while it drags |
 | `toast.text` | `gray-50` |  |
 
 #### Code, file tree and diffs
@@ -509,7 +512,6 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `shell.command-height` | 32 | `h-command` |  |
 | `shell.status-height` | 30 | `h-status` | Account remote status pill |
 | `shell.panel-inset` | 10 | `mr-panel mb-panel` | Main panel inset from the right and bottom |
-| `shell.panel-loading` | 50% | `opacity-panel-loading` | Opacity of the screen in the main panel while it shows the kept inventory, before the startup checks pass: where its pulse starts and ends (§8) |
 | `stale-bar.height` | 36 | `h-stale-bar` | Stale bar at the top of the main panel |
 | `stale-bar.padding` | 0 16 | `px-stale-bar` |  |
 | `shell.focus-ring-width` | 2 | none: `index.css` sets it on every element | Keyboard focus outline |
@@ -655,12 +657,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
-| `sheet.width` | 420 | `w-sheet` | History sheet |
-| `sheet.width-wide` | 560 | `w-sheet-wide` | What's new sheet, whose patches need the room |
-| `sheet.log-width` | the width the user dragged it to, else 1120 | `w-sheet-dragged` | Activity log sheet, twice `sheet.width-wide`, for its lines. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet-log` |
-| `sheet.log-min-width` | 420 | `min-w-sheet-log` | The narrowest the Activity log sheet drags to: `sheet.width` |
-| `sheet.log-max-width` | 90% of the window | `max-w-sheet-log` | The widest the Activity log sheet drags to, and opens at in a narrow window |
-| `sheet.handle-width` | 8 | `w-sheet-handle` | The drag handle on a resizable sheet's left edge |
+| `tooltip.text-max-width` | 280 | `max-w-tooltip-text` | A tooltip that explains a term (`size="text"`); past it the sentence wraps |
+| `sheet.width` | the width the user dragged the sheet to, else 1120 | `w-sheet-dragged` | Every sheet: History, What's new and Activity log. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet` |
+| `sheet.min-width` | 420 | `min-w-sheet` | The narrowest a sheet drags to |
+| `sheet.max-width` | 90% of the window | `max-w-sheet` | The widest a sheet drags to, and opens at in a narrow window |
+| `sheet.handle-width` | 8 | `w-sheet-handle` | The drag handle on a sheet's left edge |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
 | `sheet.padding` | 28 32 | `py-sheet-y px-sheet` |  |
 | `palette.width` | 640 | `w-palette` |  |
@@ -668,7 +669,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `palette.top` | 112 | `top-palette` | From the window top |
 | `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
 | `adopt.list-max-height` | 280 | `max-h-adopt-list` | The adopt dialog's list of skills; it scrolls past it |
-| `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The Choose agents dialog's list; it scrolls past it |
+| `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The agent picker's list; it scrolls past it |
 | `add-skill.list-max-height` | 264 | `max-h-add-skill-list` | The Add skill dialog's list of skills found; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
@@ -690,6 +691,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
 | `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
 | `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
+| `shell.panel-loading-blur` | 12 | `backdrop-blur-panel-loading` | The frosted pane over the kept inventory while the startup checks run (§8) |
 | `file-row.height` | 44 | `h-file-row` | File tree row |
 | `file-row.padding-x` | 16 | `px-file-row`, `right-file-row` for the control at the row's end |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
@@ -721,7 +723,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `segmented.radius` | 9999 | Track and segments |
 | `agent-chip.radius` | 9999 | Agent client toggle chip |
 | `logo.radius` | 50% | Agent client logo |
-| `agent-picker.row-radius` | 10 | Row of the Choose agents dialog |
+| `agent-picker.row-radius` | 10 | Row of the agent picker |
 | `add-skill.row-radius` | 10 | Skill row of the Add skill dialog |
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
@@ -795,6 +797,7 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a 
 - Disabled (plugin): `pill.disabled-*`.
 - Version (plugin): `pill.version-*`.
 - Fork: `pill.neutral-*`, hover `pill.neutral-hover`, the 12px fork glyph then the fork's name. In the detail header of the original of a fork made under a new name, one per fork; it opens the fork.
+- Universal: `pill.universal-*`, after the name of a universal agent in the agent picker (§6 "Agent picker"). It does nothing on a click: it is a button only so that its tooltip, which says what universal agents are, opens from the keyboard too.
 
 A skill row whose banner (§6 "Banner (detail pane)") has tone `attention` or `danger` shows an `AlertTriangleIcon` (`xs`) in `tone.attention.fg` after the name and pill, whatever the banner's tone; its accessible name is the banner's title. The banner tile keeps the circled `AlertIcon`. Other banner tones put nothing on the row.
 
@@ -826,13 +829,13 @@ The chip of an agent whose folder another agent reads names both in its title an
 
 ### Agent picker (Add skills bar, Add skill dialog)
 
-The install targets in the floating bar of the Add skills screen, and under the skills found in the Add skill dialog, are "Add to" in `type.secondary` `text.muted`, then round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the Universal stack, then the rest, each group in inventory order. The order is fixed when the bar or the skills found appear and again when the Choose agents dialog closes, so a logo stays in place while it is toggled. The choice starts as the enabled configurations, where `skill add` installs when no agent is named (`src/screens/sources/agent-targets.tsx`). With more than six configurations that take a placement, a small secondary button "+n" comes last, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo, and each member of the Universal stack, shows the client's name in a Tooltip; the Universal toggle keeps its explanation as its accessible description.
+The install targets in the floating bar of the Add skills screen, and under the skills found in the Add skill dialog, start with the Universal stack when any configuration reads the library: its 28px logos in the chosen ring of a logo toggle (2px `accent.primary`, offset 2px), with the lock mark (§6 "Checkbox (popover)") on its bottom-right corner, ringed in `overlay.bg`. It is no control: universal clients read the library, so every skill reaches them. Its Tooltip says so, a screen reader also hears the clients' names, and a divider separates it from the rest. Then "Add to" in `type.secondary` `text.muted`, then round 28px logo toggles (`Toggle` `kind="logo"`), at most five: the chosen ones first, then the rest, each group in inventory order. The order is fixed when the bar or the skills found appear and again when the agent picker closes, so a logo stays in place while it is toggled. The choice starts as the enabled configurations, where `skill add` installs when no agent is named (`src/screens/sources/agent-targets.tsx`). With more than six configurations that take a placement, a small secondary button "+n" comes last, n being how many it hides; with six or fewer, the bar shows them all. When chosen targets are among the hidden ones, the button ends with an `agent-picker.badge` round badge in `agent-picker.badge-bg`, `type.key-hint` `on-accent`, that counts them. Each logo shows the client's name in a Tooltip. The bar does not count the selected skills: its Add button does. While the install runs, its progress comes first, before the targets.
 
-The "+n" button opens Choose agents, a dialog (§6 "Dialog") with a search field (§6 "Inputs") that filters by name, then every configuration that takes a placement, sorted by name, in a list that scrolls past `agent-picker.list-max-height`. A row is the whole hit target, `agent-picker.row-radius`, hover `agent-picker.row-hover`: a 28px logo, the name in `type.body` `text.primary` over the configuration's path in `type.technical-sm` `text.caption`, and the round checkbox (§6 "Checkbox (popover)") at the right. A row toggles the same targets as the bar. The footer counts the chosen targets in `type.secondary` `text.muted`, then a ghost Clear, which unchecks them all, and a primary Done, which closes the dialog.
+The "+n" button opens the agent picker, a dialog (§6 "Dialog") titled by where the skills go, with no count. Its subtitle asks for the agents and words the skills as one or several; when configurations read the library, it adds that universal agents always have them, and that term is a help term (§6 "Tooltip") whose tooltip says they read the library, the path in `type.technical-sm`. Then a search field (§6 "Inputs") that filters by name, then every configuration that takes a placement and every universal one, sorted by name together, in a list that scrolls past `agent-picker.list-max-height`. A row has a 28px logo and the name in `type.body` `text.primary` over the configuration's path in `type.technical-sm` `text.caption`. A row that takes a placement is the whole hit target, `agent-picker.row-radius`, hover `agent-picker.row-hover`, with the round checkbox (§6 "Checkbox (popover)") at the right; it toggles the same targets as the bar. A universal row is no control and has no hover: the Universal pill (§6 "Pills (status)") after the name, with the same tooltip, and the lock mark where a row has its checkbox, which a screen reader hears as always on. The search filters both kinds alike. The footer has a ghost Clear, which unchecks every target that takes a placement, and a primary Done, which closes the dialog. The search field has the focus when the dialog opens.
 
 ### Checkbox (popover)
 
-16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark; mixed, for a box that stands for several of which some are checked: the same fill with a `checkbox.check` dash. In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
+16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` mark; mixed, for a box that stands for several of which some are checked: the same fill with a `checkbox.check` dash; locked, for a target that is always on: the same fill with a `checkbox.check` lock (`LockMark`). In a dialog the same mark sits beside a `type.body` `text.primary` label, with a `type.secondary` `text.muted` line under it when the choice needs explaining.
 
 ### Radio group
 
@@ -846,7 +849,7 @@ On a card the track is `segmented.card-track-bg`. A control whose command runs i
 
 ### Agent client logo chip
 
-Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo names its client on hover: as its `title`, or, in the Add skills bar and the Choose agents dialog, in the Tooltip (§6 "Tooltip"), which opens at once.
+Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo names its client on hover: as its `title`, or, in the Add skills bar and the agent picker, in the Tooltip (§6 "Tooltip"), which opens at once.
 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
@@ -1021,7 +1024,9 @@ The rows of the Skills list column, in their groups (§6 "Group header"). Only t
 
 ### Tooltip
 
-shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, shows the full text of a shortened label, such as a source group's URL, or says why an inert agent chip does nothing: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs, but for an inert agent chip, whose reason it describes.
+shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, shows the full text of a shortened label, such as a source group's URL, or says why an inert agent chip does nothing: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs, but for an inert agent chip, whose reason it describes, and a help term.
+
+A help term (`src/components/help-term.tsx`) is a word in running text that explains itself: it keeps the text's type and colour with a dotted underline and the help cursor, and is a button that does nothing on a click, so its tooltip opens from the keyboard too. The punctuation that follows it sits inside the button, outside the underline, so a screen reader reads no space before it. Its tooltip, and the Universal pill's, take `size="text"`: the sentence wraps past `tooltip.text-max-width`.
 
 ### Popover (Filter)
 
@@ -1030,22 +1035,27 @@ shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for
 - The popover never leaves the window: it is at most `popover.max-height` high and scrolls inside that.
 - AGENTS lists the checked agents first, then the rest by the popularity of the agent client (`src/lib/agent-popularity.ts`), Universal where its most used client would stand; the order is fixed when the popover opens. A machine can have dozens of agent configurations, so the group shows six rows, plus every row that is checked or was since the popover opened, and a small ghost button under them that shows the rest and hides them again. With seven rows or fewer it shows them all and no button.
 
+### Sheet
+
+Every sheet (History, What's new, Activity log) has the same frame and the same default width.
+
+- `sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too.
+- A `sheet.handle-width` handle on its left edge drags its width between `sheet.min-width` and `sheet.max-width`. The handle shows `sheet.handle` on hover and while it drags, and `shell.focus-ring` on focus. A double click or Home brings back the default. Each sheet keeps the width the user left it at in localStorage, so it opens at that width after the app restarts too.
+
 ### Sheet (History)
 
-`sheet.width`, `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost close at the top right; Escape closes it too. Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. The chevron hangs outside the entry: the meta line and the files start under the subject, `timeline.indent` in. A 1px `timeline.connector` runs from under each chevron, 4px below its line, to 4px above the next entry's chevron, so the entries read as one history. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
+The sheet frame (§6 "Sheet"). Content scrolls down only: a long line wraps, never clips or scrolls sideways. Each entry is a plain inline button (no fill, no padding, no radius): a chevron and the subject, which expands it to the files its commit changed, one row each: status and path in `type.technical-sm`, `text.caption` and `text.secondary`. The chevron hangs outside the entry: the meta line and the files start under the subject, `timeline.indent` in. A 1px `timeline.connector` runs from under each chevron, 4px below its line, to 4px above the next entry's chevron, so the entries read as one history. An entry whose subject holds a link (§6 "Timeline (history)") keeps the chevron alone in its button, and the subject follows it.
 
 ### Sheet (What's new)
 
-The History sheet's frame at `sheet.width-wide`, for what an update changes before the user takes it. Under the skill's name, the base and newer version in `type.technical-sm` `text.caption`, each by its date when the CLI dates it, else by its short id. Below, the File list (§6) with every row open: status `type.technical-sm` `text.caption` (`accent.danger` for a deleted file), path `type.technical` `file-row.path`, and the patch in the Code pane with the diff tints, its hunks alone, numbered as in the newer version.
+The sheet frame (§6 "Sheet"), for what an update changes before the user takes it. Under the skill's name, the base and newer version in `type.technical-sm` `text.caption`, each by its date when the CLI dates it, else by its short id. Below, the File list (§6) with every row open: status `type.technical-sm` `text.caption` (`accent.danger` for a deleted file), path `type.technical` `file-row.path`, and the patch in the Code pane with the diff tints, its hunks alone, numbered as in the newer version.
 
 - A patch with no lines to show, a read in progress and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
 - An update from another machine cannot be diffed before it is taken: the sheet lists its files in the same card, status and path, with no chevron.
 
 ### Sheet (Activity log)
 
-The History sheet's frame at `sheet.log-width` (`src/app/activity-log.tsx`): the last lines of what the app ran and what the background scan reported, as a terminal shows them. A sheet, since the log is looked at beside the screen whose action it explains, and from any screen; Settings and the palette open it.
-
-- The sheet is resizable: a `sheet.handle-width` handle on its left edge drags its width between `sheet.log-min-width` and `sheet.log-max-width`. The handle shows `sheet.handle` on hover and while it drags, and `shell.focus-ring` on focus. The arrow keys move it 40 at a time, and a double click or Home brings back the default. The sheet opens at the width the user left it at until the app quits.
+The sheet frame (§6 "Sheet") (`src/app/activity-log.tsx`): the last lines of what the app ran and what the background scan reported, as a terminal shows them. A sheet, since the log is looked at beside the screen whose action it explains, and from any screen; Settings and the palette open it.
 
 - One block of lines, oldest first: `code.bg` with 1px `code.border`, `log.output-radius`, `type.technical-sm`, long lines wrapped. A line is its time in a `log.time-width` column, its text, and a note at the right: how long a command ran, and how it ended when it did not succeed. No rows to open, no dots and no filter: the log is read as a terminal is.
 - Red is the one colour, and it means failed. A command that failed is `tone.danger.fg` with its last 5 lines of output under it, in the same colour and with no time. A command that succeeded keeps its line only, in `text.secondary` with its time and note in `text.caption`. What the background scan reported and a command's debug lines are `text.caption`, so the commands stand out. A scan the app restarts on purpose is no failure.
@@ -1113,11 +1123,11 @@ The nav items in sidebar order, `shell.nav-gap` apart. A screen nested under ano
 The Sources screen (`src/screens/sources`), under Skills: the serif page title with Add source, the search field, the source pills, the card of the open source, then the select-all row and the skill list.
 
 - A source pill (`source-pill.*`, `pill.radius`) holds the attention dot of a stale source, the source's short name, and its skill count in `type.technical-sm` (`source-pill.count`, `source-pill.active-count` on the active pill) once it is known.
-- The card of the open source: `source-card.bg`, a 1px `source-card.border`, `source-card.radius`. Its top row is a 36px owner tile (`source-card.tile-*`, `source-card.tile-radius`, the owner's initial in `type.source-name`), the name in `type.source-name`, which opens the repository in the browser, then a neutral Read-only pill when access is limited, and under them the full URL with its `#pin` in `type.technical-sm` `text.muted`; at its right, Refresh (secondary) and Remove (danger), `button.gap` apart. Under it, after a 1px `source-card.divider` rule, a strip of four facts, each a `type.secondary` `source-card.fact-label` label over a `type.technical-sm` value in `source-card.fact-value`, a never-fetched source's Fetched in `tone.attention.fg`. The card shows tags only for limits: a source you can write to has none. It hides while a search runs, since a search looks across every source; Personal's card has no Remove, since Settings manages the account remote.
+- The card of the open source: `source-card.bg`, a 1px `source-card.border`, `source-card.radius`. Its top row is a 36px owner tile (`source-card.tile-*`, `source-card.tile-radius`, the owner's initial in `type.source-name`), the name in `type.source-name`, then a neutral Read-only pill when access is limited, and under them the full URL with its `#pin` in `type.technical-sm` `text.muted`, a link that opens the repository in the browser, underlined on hover; at its right, Refresh (secondary) and Remove (danger), `button.gap` apart. Under it, after a 1px `source-card.divider` rule, a strip of four facts, each a `type.secondary` `source-card.fact-label` label over a `type.technical-sm` value in `source-card.fact-value`, a never-fetched source's Fetched in `tone.attention.fg`. The name, the URL and the facts' values are selectable, so they can be copied; a drag across the URL selects it and opens nothing. The card shows tags only for limits: a source you can write to has none. It hides while a search runs, since a search looks across every source; Personal's card has no Remove, since Settings manages the account remote.
 - The select-all row: one checkbox (§6 "Checkbox (popover)"), checked, mixed or not as the selection is, its label in `type.secondary` `text.secondary` counting the selection; at the right, how many skills this machine already has in `type.secondary` `text.hint`.
 - The skill list: one column, a card per skill, `add-card.spacing` apart, selectable skills first, then by name. A search answer groups them by source, each group under its source's `type.caption` `group.label` caption. Each card is an accordion item (`src/components/ui/accordion.tsx`, variant `list`): `card.bg`, a 1px `card.border`, `add-card.radius`, `add-card.hover-border` on hover; a selected skill's card `add-card.selected-bg` and `add-card.selected-border`.
 - A closed card is one row of `file-row.height`, `file-row.padding-x`: a chevron in `file-row.meta` (turns 90° when open, as in the File list), the name in `type.row-name` `text.primary`, then one line of the description in `type.row-desc` `text.muted`, both truncated, the description filling the rest of the row. At the end, the round check: a 20px ring in `add-card.check-ring`, filled with `add-card.check-bg` and an `on-accent` check when selected, in a 32px hit area (`add-card.check-radius`). A skill this machine holds already has its status there instead, in `type.secondary` 500: Added (`add-card.status-added`), Forked (`add-card.status-forked`), Already in library (`add-card.status-disk`), Name in use (`add-card.status-in-use`).
-- The row opens and closes on a click anywhere but the check, and several can be open at once; only the check selects. The row and the check each draw the focus outline inside the card. While open, the row's description line hides, since the frontmatter of SKILL.md holds it, and under the row come, for a skill that cannot be selected, why in `type.secondary` `text.hint`, wrapped, and View skill, a link in `type.secondary` `text.primary`, medium, underlined on hover, which opens the skill's directory on its source's web page at the commit the source was fetched at (GitHub's `/tree/` page, GitLab's `/-/tree/`; no link for another host), both `file-row.padding-x` in, then the skill's SKILL.md in the Code pane, edge to edge, read when the row first opens. While it is read, or when it cannot be, one `type.secondary` `text.hint` line on `code.bg` takes its place. Your skills on the account remote have no SKILL.md to read here: they open to their description alone.
+- The row opens and closes on a click anywhere but the check, and several can be open at once; only the check selects. The row and the check each draw the focus outline inside the card. A row whose SKILL.md is not read yet stays closed while it is read: a `sm` `Spinner` in `text.muted` takes the description's place, with no text, as the read is often too quick to read it; its tooltip (§6 "Tooltip") and its status say Loading skill…, and the row is `aria-busy`; it opens when the read ends, so the card grows once, to its full content. A click while it waits cancels the open. While open, the row's description line hides, since the frontmatter of SKILL.md holds it, and View skill sits beside the name in the same row, on the name's baseline, a link in `type.secondary` `text.primary`, medium, underlined, which opens the skill's directory on its source's web page at the commit the source was fetched at (GitHub's `/tree/` page, GitLab's `/-/tree/`; no link for another host). The trigger lies under the whole row, so the link takes its own clicks and every other click opens or closes the row. Under the row come, for a skill that cannot be selected, why in `type.secondary` `text.hint`, wrapped, `file-row.padding-x` in, then the skill's SKILL.md in the Code pane, edge to edge. When it cannot be read, one `type.secondary` `text.hint` line on `code.bg` takes its place. Your skills on the account remote have no SKILL.md to read here: they open at once to their description alone.
 - Only the cards near what shows are in the document, so a source of thousands of skills stays quick; the list scrolls with the screen, and an open card takes its measured height.
 - Remove opens a dialog (§6 "Dialog") with no line under its title. When this machine has skills from the source, a checkbox offers to remove them too, unticked, their names listed under it in `type.technical` `text.muted`; the confirm is a danger button.
 
@@ -1140,7 +1150,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-
 
 ## 8. Motion
 
-Nothing loops forever, and nothing waits on purpose. Two things loop, each only while something runs. The `Spinner` of a pending control (§6), of a running check, or of a read the screen waits on, such as a skill's files, turns only while its command runs and stops when the command ends. The kept inventory pulses only until the startup checks pass.
+Nothing loops forever, and nothing waits on purpose. Two things loop, each only while something runs. The `Spinner` of a pending control (§6), of a running check, or of a read the screen waits on, such as a skill's files, turns only while its command runs and stops when the command ends.
 
 - Hover and background changes: no transition, or at most `.2s`.
 - Switches: the track changes colour in `.2s`; the knob moves with no transition.
@@ -1151,7 +1161,7 @@ Nothing loops forever, and nothing waits on purpose. Two things loop, each only 
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; a control with a leading icon, such as Check updates or Check tools, shows it in the icon's place, so a long check reads as busy past its first second.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass; a passing launch shows no startup layer.
-- A launch with a kept inventory shows its screens with the first frame, with no fade, washed out and pulsing (`animate-panel-loading`): opacity `shell.panel-loading` → 30% → `shell.panel-loading` every `1s`, `ease-in-out`, as often as the `Spinner` turns, so that a launch of a second or two shows a whole pulse. The wash alone could pass for a disabled screen; the pulse says that it loads. Nothing else does: no spinner and no text. The title bar and the sidebar stay at full opacity, and the sidebar navigates. When the checks pass, the pulse stops and the screen goes to full opacity in `.2s`. With reduced motion, the screen is washed out and does not pulse.
+- A launch with a kept inventory shows its screens with the first frame, with no fade, under a frosted pane: `shell.loading-veil` with a `shell.panel-loading-blur` backdrop blur, and on top the launch progress of an empty panel (the `Spinner`, Starting the app…, and from 5 seconds how much longer the check keeps trying). The pane takes every click and key, the screen under it is inert, and a screen's own shortcuts, such as the arrows of the skill list, wait for the checks, so nothing in the main panel starts before they pass. The sidebar, the command field and the sync status look as always but are inert, and ⌘K opens nothing, until the checks pass; the title bar still drags the window. This holds on a launch with no kept inventory too. When the checks pass, the pane fades out in `.3s` (`animate-code-loading-out`).
 - A launch with no kept inventory shows, from its first frame, a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way. The line says only that the app loads, not which check runs. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
 - Button enable and disable, every variant: `opacity .2s`.
