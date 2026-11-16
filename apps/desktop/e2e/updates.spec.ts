@@ -475,10 +475,9 @@ test.describe("the Update skills dialog", () => {
     await expect(page).toHaveURL(/#\/skills\/pdf$/u);
     const dialog = updateDialog(page);
     const skillRow = (name: string) => dialogRow(page, name);
-    // A group per source, A to Z, each skill under the source its update comes from: a fork's
-    // upstream for pdf-letters.
-    await expect(dialog.getByRole("heading")).toHaveText([
-      "Update skills",
+    // A section per source, A to Z, each open, each skill under the source its update comes
+    // from: a fork's upstream for pdf-letters.
+    await expect(dialog.getByRole("button", { expanded: true })).toHaveText([
       "acme/skills",
       "me/account",
     ]);
@@ -521,24 +520,51 @@ test.describe("the Update skills dialog", () => {
     await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
 
     // A group's button reads Select all while some of its skills are left out and selects them
-    // all, then reads Deselect all and clears them all.
+    // all, then reads Deselect all and clears them all, in a group of one skill too.
+    const account = dialog.getByRole("region", { name: "me/account" });
+    await account
+      .getByRole("button", { exact: true, name: "Select all" })
+      .click();
+    await expect(dialog.getByText("All 4 selected")).toBeVisible();
+    await expect(
+      account.getByRole("button", { exact: true, name: "Deselect all" })
+    ).toBeVisible();
+    // The button sits in the header and leaves the section open.
+    await expect(account.getByRole("listitem")).toHaveCount(1);
     const groupButton = (name: string) =>
       acme.getByRole("button", { exact: true, name });
     await expect(groupButton("Deselect all")).toBeVisible();
     await dialog.getByText("pdf-letters", { exact: true }).click();
     await groupButton("Select all").click();
-    await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
+    await expect(dialog.getByText("All 4 selected")).toBeVisible();
     await groupButton("Deselect all").click();
-    await expect(dialog.getByText("Select all 4")).toBeVisible();
+    await expect(dialog.getByText("1 of 4 selected")).toBeVisible();
     await groupButton("Select all").click();
+    await expect(dialog.getByText("All 4 selected")).toBeVisible();
+    // pdf is left out of the run.
+    await dialog.getByText("pdf", { exact: true }).click();
     await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
 
-    cli.register(["skill", "update", "pdf"], {
-      events: [updated("pdf", "current")],
+    // A source's header collapses its skills, and expands them again.
+    const acmeToggle = acme.getByRole("button", {
+      exact: true,
+      name: "acme/skills",
     });
+    await acmeToggle.click();
+    await expect(acmeToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(acme.getByRole("listitem")).toHaveCount(0);
+    await acmeToggle.click();
+    await expect(acme.getByRole("listitem")).toHaveCount(3);
+
+    const warning =
+      "pdf-letters: skipped the copy in codex, which differs from the library";
     const letters = cli.register(["skill", "update", "pdf-letters"], {
       events: [updated("pdf-letters", "modified")],
       holdAfter: 0,
+      logs: [{ level: "warn", message: warning }],
+    });
+    cli.register(["skill", "update", "release-notes"], {
+      events: [updated("release-notes", "current")],
     });
     cli.register(["skill", "update", "review"], {
       events: [
@@ -555,12 +581,26 @@ test.describe("the Update skills dialog", () => {
       .getByRole("button", { exact: true, name: "Update 3 skills" })
       .click();
     await letters.started;
-    await expect(dialog.getByRole("status")).toHaveText("Updating 2 of 3…");
+    await expect(dialog.getByRole("status")).toHaveText("Updating 1 of 3…");
+    // The run lists the selected skills alone: pdf, left out, is gone.
+    await expect(dialog.getByRole("listitem")).toHaveText([
+      /pdf-letters/u,
+      /review/u,
+      /release-notes/u,
+    ]);
     letters.release();
 
     await expect(dialog.getByRole("status")).toHaveText(
       "2 of 3 skills updated"
     );
+    // Once it ended, only the skills with something to say are left, under their source: the
+    // warning on pdf-letters and review's conflict. release-notes updated with no warning, and its
+    // source goes with it.
+    await expect(dialog.getByRole("region")).toHaveCount(1);
+    await expect(acme.getByRole("listitem")).toHaveText([
+      new RegExp(`pdf-letters.*${warning}`, "u"),
+      /review/u,
+    ]);
     // A conflict says where to resolve it, in place of the note on local changes.
     const reviewRow = dialog
       .getByRole("listitem")
@@ -574,14 +614,14 @@ test.describe("the Update skills dialog", () => {
     // The merge waits on its row: the dialog opens no skill.
     await expect(page).toHaveURL(/#\/skills\/pdf$/u);
     expect(later(cli)).toEqual([
-      ["skill", "update", "pdf", "--json"],
       ["skill", "update", "pdf-letters", "--json"],
       ["skill", "update", "review", "--json"],
+      ["skill", "update", "release-notes", "--json"],
     ]);
 
     await dialog.getByRole("button", { exact: true, name: "Done" }).click();
     await expect(dialog).toHaveCount(0);
-    // The inventory that follows has review's merge pending: release-notes is left.
+    // The inventory that follows has review's merge pending: pdf, left out, is left.
     await cli.serveEmit([
       {
         ...updatesInventory,

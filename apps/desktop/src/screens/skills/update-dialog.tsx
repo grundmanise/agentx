@@ -1,11 +1,12 @@
 // The Update skills dialog, which the sidebar's update pill and a check by hand that found an
 // update open: every skill the last update check found an update for, but those with a pending
-// merge, all selected, grouped by source. A row toggles its skill, a group's Select all or Deselect
-// all every skill of its source, and See changes opens the What's new sheet of its update above the
-// dialog. A row is two lines at most: the name, then one note. Update runs in the dialog
-// (`updates.ts`): each selected row shows its state, then its result, and the footer counts the
-// run, then sums it up. The dialog cannot be dismissed while the run
-// goes, and Done closes it.
+// merge, all selected, grouped by source in sections that collapse. A row toggles its skill, a
+// group's Select all or Deselect all every skill of its source, and See changes opens the What's
+// new sheet of its update above the dialog. A row is two lines at most: the name, then one note.
+// Update runs in the dialog (`updates.ts`): the selected rows alone stay, each shows its state,
+// and once the run ended only the rows with something to say are left: a conflict, an error or a
+// warning. The footer counts the run, then sums it up. The dialog cannot be dismissed while the
+// run goes, and Done closes it.
 import { cva } from "class-variance-authority";
 import { useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
@@ -15,6 +16,7 @@ import { AlertIcon } from "#/components/icons/alert.tsx";
 import { CheckIcon } from "#/components/icons/check.tsx";
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
+import { SectionToggle } from "#/components/section-toggle.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
@@ -43,7 +45,11 @@ import {
   useUpdateRun,
   UPDATE_PILL_ID,
 } from "#/screens/skills/updates.ts";
-import type { UpdateRunRow, UpdateStatus } from "#/screens/skills/updates.ts";
+import type {
+  UpdateRun,
+  UpdateRunRow,
+  UpdateStatus,
+} from "#/screens/skills/updates.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { useAppStore } from "#/store/store.ts";
 
@@ -111,6 +117,25 @@ const groupsOf = (rows: readonly UpdateRunRow[]): SourceGroup[] => {
       : Number(a.url === undefined) - Number(b.url === undefined)
   );
   return sorted;
+};
+
+/**
+ * Whether the dialog lists `row`: before the run, every skill; during it, the selected ones; once
+ * it ended, those with something to say, a conflict, an error or a warning.
+ */
+const listed = (row: UpdateRunRow, run: UpdateRun | undefined) => {
+  if (run === undefined) {
+    return true;
+  }
+  if (row.status === "skipped") {
+    return false;
+  }
+  return (
+    run.phase === "running" ||
+    row.status === "conflict" ||
+    row.status === "failed" ||
+    (row.warnings ?? []).length > 0
+  );
 };
 
 /** What a screen reader hears for each state, before the name. */
@@ -220,10 +245,8 @@ const rowVariants = cva("relative flex items-start gap-3 px-3 py-2", {
     state: {
       // Before the run: the whole row toggles its skill.
       idle: "rounded-update-skills-row hover:bg-update-skills-row-hover",
-      // In the run, a skill selected.
+      // In the run and after it.
       run: "",
-      // In the run, a skill left out.
-      skipped: "opacity-update-skills-skipped",
     },
   },
 });
@@ -290,14 +313,8 @@ const Row = ({
   const published = publishedText(update, now);
   const note = noteOf(row, idle);
   const selected = row.status !== "skipped";
-  let state: "idle" | "run" | "skipped" = "run";
-  if (idle) {
-    state = "idle";
-  } else if (!selected) {
-    state = "skipped";
-  }
   return (
-    <li className={rowVariants({ state })}>
+    <li className={rowVariants({ state: idle ? "idle" : "run" })}>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex min-w-0 items-baseline gap-2">
           {idle ? (
@@ -366,45 +383,48 @@ const Row = ({
 };
 
 /**
- * The header of a source's skills: the source's short form as a caption, its full URL as the
- * tooltip. Before the run, a source of two or more skills adds a text button next to it: Select
- * all while any of them is left out, which selects them all, else Deselect all, which clears them.
+ * The header of a source's skills, which collapses or expands them: a chevron and the source's
+ * short form as a caption, its full URL as the tooltip. Before the run, a text button at its
+ * right end: Select all while any of them is left out, which selects them all, else Deselect all,
+ * which clears them.
  */
 const GroupHeader = ({
   group,
   idle,
+  open,
+  onToggle,
   onSelect,
 }: {
   group: SourceGroup;
   idle: boolean;
+  open: boolean;
+  onToggle: () => void;
   /** Selects every skill of the group, or with `false` leaves them all out. */
   onSelect: (selected: boolean) => void;
 }) => {
   const all = group.rows.every((r) => r.status !== "skipped");
   return (
-    <div className="flex h-6 items-center gap-2 px-3">
-      <h3 className="m-0 flex min-w-0">
-        <span
-          title={group.url}
-          className="type-caption text-group-label min-w-0 truncate"
-        >
-          {group.label}
-        </span>
-      </h3>
-      {idle && group.rows.length > 1 && (
-        <Button
-          variant="link"
-          size="inline"
-          onClick={() => {
-            onSelect(!all);
-          }}
-        >
-          <span className="type-secondary whitespace-nowrap">
-            {all ? "Deselect all" : "Select all"}
-          </span>
-        </Button>
-      )}
-    </div>
+    <SectionToggle
+      label={group.label}
+      title={group.url}
+      open={open}
+      onToggle={onToggle}
+      action={
+        idle ? (
+          <Button
+            variant="link"
+            size="inline"
+            onClick={() => {
+              onSelect(!all);
+            }}
+          >
+            <span className="type-secondary whitespace-nowrap">
+              {all ? "Deselect all" : "Select all"}
+            </span>
+          </Button>
+        ) : undefined
+      }
+    />
   );
 };
 
@@ -436,6 +456,8 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
   const confirm = useRef<HTMLButtonElement>(null);
   // The skills the user left out: a skill an update check adds while the dialog is open is selected.
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
+  // The keys of the collapsed sources: every one is open when the dialog opens.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   // The update whose What's new sheet is open, and the See changes that opened it.
   const [seeing, setSeeing] = useState<
     { update: UpdateAvailableEvent; opener: HTMLElement } | undefined
@@ -458,7 +480,25 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
   const running = run?.phase === "running";
   const total = rows.length;
   const selected = rows.filter((r) => r.status !== "skipped").length;
+  // The groups as the dialog lists them: a group with no row left to list goes.
+  const shown = groups
+    .map((group) => ({
+      ...group,
+      rows: group.rows.filter((row) => listed(row, run)),
+    }))
+    .filter((group) => group.rows.length > 0);
 
+  const toggleSection = (key: string) => {
+    setCollapsed((before) => {
+      const next = new Set(before);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
   const toggle = (name: string) => {
     setExcluded((before) => {
       const next = new Set(before);
@@ -486,6 +526,8 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
 
   const start = () => {
     if (idle && selected > 0) {
+      // The run shows every selected row: a section collapsed before it opens again.
+      setCollapsed(new Set());
       void updateSkills(rows);
     }
   };
@@ -563,43 +605,54 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
             }}
           />
         )}
-        {total === 0 ? (
+        {total === 0 && (
           <p className="type-secondary text-text-hint m-0">
             All skills are up to date
           </p>
-        ) : (
+        )}
+        {/* Once the run ended with nothing to say about any skill, the footer says it all. */}
+        {shown.length > 0 && (
           <div className="max-h-update-skills-list -mx-3 flex flex-col gap-3 overflow-auto">
-            {groups.map((group) => (
-              <section
-                key={group.key}
-                aria-label={group.label}
-                className="flex flex-col gap-0.5"
-              >
-                <GroupHeader
-                  group={group}
-                  idle={idle}
-                  onSelect={(select) => {
-                    selectGroup(group, select);
-                  }}
-                />
-                <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
-                  {group.rows.map((row) => (
-                    <Row
-                      key={row.update.name}
-                      row={row}
-                      idle={idle}
-                      now={now}
-                      onToggle={() => {
-                        toggle(row.update.name);
-                      }}
-                      onSeeChanges={(opener) => {
-                        setSeeing({ opener, update: row.update });
-                      }}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ))}
+            {shown.map((group) => {
+              const open = !collapsed.has(group.key);
+              return (
+                <section
+                  key={group.key}
+                  aria-label={group.label}
+                  className="flex flex-col gap-0.5"
+                >
+                  <GroupHeader
+                    group={group}
+                    idle={idle}
+                    open={open}
+                    onToggle={() => {
+                      toggleSection(group.key);
+                    }}
+                    onSelect={(select) => {
+                      selectGroup(group, select);
+                    }}
+                  />
+                  {open && (
+                    <ul className="pl-subgroup-indent m-0 flex list-none flex-col gap-0.5 py-0 pr-0">
+                      {group.rows.map((row) => (
+                        <Row
+                          key={row.update.name}
+                          row={row}
+                          idle={idle}
+                          now={now}
+                          onToggle={() => {
+                            toggle(row.update.name);
+                          }}
+                          onSeeChanges={(opener) => {
+                            setSeeing({ opener, update: row.update });
+                          }}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              );
+            })}
           </div>
         )}
         {run?.failure !== undefined && <ProblemText problem={run.failure} />}

@@ -535,8 +535,6 @@
   /* A skill row in no agent client, washed out. */
   --opacity-row-off: 50%;
   /* The screen in the main panel while it shows the kept inventory, before the startup checks pass. */
-  /* A skill the Update skills run leaves out, washed out while the run goes and after it. */
-  --opacity-update-skills-skipped: 40%;
 
   /* Window and shell */
   --height-titlebar: 50px;
