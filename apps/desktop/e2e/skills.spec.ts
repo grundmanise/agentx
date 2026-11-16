@@ -252,6 +252,9 @@ test.describe("the list", () => {
     const logos = row(page, "scratch").getByRole("img");
     expect(await names(logos)).toEqual(["Zed"]);
     await expect(logos.first()).toHaveAttribute("src", /^data:image\/svg/u);
+    // A logo names its client in the Tooltip, which opens at once.
+    await logos.first().hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Zed", { timeout: 300 });
     expect(
       await names(page.getByRole("region", { name: "Agents" }).getByRole("img"))
     ).toEqual(["Zed", "Claude Code"]);

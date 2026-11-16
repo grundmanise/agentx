@@ -73,7 +73,7 @@ const UniversalMark = ({ universal }: { universal: Configuration[] }) => (
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="rounded-pill ring-accent-primary ring-offset-overlay-bg relative flex flex-none ring-2 ring-offset-2">
-          <LogoStack clients={universal} size={28} hover="none" decorative />
+          <LogoStack clients={universal} size={28} tooltip={false} decorative />
           <span className="rounded-checkbox ring-overlay-bg absolute -right-1.5 -bottom-1.5 flex ring-2">
             <LockMark />
           </span>
@@ -156,7 +156,7 @@ export const AgentTargets = ({
           }}
           aria-label={c.name}
         >
-          <AgentLogo client={c} size={28} hover="none" decorative />
+          <AgentLogo client={c} size={28} tooltip={false} decorative />
         </Toggle>
       </TooltipTrigger>
       <TooltipContent>{c.name}</TooltipContent>
