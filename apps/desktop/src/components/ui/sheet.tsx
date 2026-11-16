@@ -9,7 +9,7 @@ import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import type { OwnProps } from "#/lib/utils.ts";
-import { setSheetWidth, useSheetWidths } from "#/store/sheet.ts";
+import { keepSheetWidth, sheetWidth } from "#/store/sheet.ts";
 import type { SheetName } from "#/store/sheet.ts";
 
 const Sheet = ({ ...props }: OwnProps<typeof SheetPrimitive.Root>) => (
@@ -56,51 +56,44 @@ const DRAGGED_WIDTH = "--sheet-dragged-width";
 const drawnWidth = (sheet: HTMLElement) =>
   Math.round(sheet.getBoundingClientRect().width);
 
-/** The sheet a handle is on. */
-const sheetOf = (handle: HTMLElement | null) =>
-  handle?.parentElement ?? undefined;
-
-/** Sets the width the sheet asks for, or its default when `width` is null. */
+/**
+ * Sets the width the sheet asks for, or its default when `width` is null. A negative width is
+ * invalid CSS, which would drop the minimum width too, so it stops at 0 and the minimum clamps it.
+ */
 const setWidth = (sheet: HTMLElement, width: number | null) => {
   if (width === null) {
     sheet.style.removeProperty(DRAGGED_WIDTH);
   } else {
-    sheet.style.setProperty(DRAGGED_WIDTH, `${width}px`);
+    sheet.style.setProperty(DRAGGED_WIDTH, `${Math.max(0, width)}px`);
   }
 };
 
 /**
- * The handle on a sheet's left edge, `sheet.handle-width` wide: dragging it moves the
- * sheet's left edge, and a double click or Home brings back the default width. It shows `sheet.handle` on hover, and the focus ring colour on focus.
- * The sheet takes the new width at once; `onWidthChange` hears it, clamped, when the drag ends,
- * and null for the default.
+ * The handle on the left edge of the sheet `name`, `sheet.handle-width` wide: dragging it moves
+ * the sheet's left edge, and a double click or Home brings back the default width. It shows
+ * `sheet.handle` on hover, and the focus ring colour on focus. The sheet opens at the width the
+ * user left it at, which the handle keeps, clamped, when a drag ends.
  */
-const ResizeHandle = ({
-  width,
-  onWidthChange,
-}: {
-  width: number | null;
-  onWidthChange: (width: number | null) => void;
-}) => {
+const ResizeHandle = ({ name }: { name: SheetName }) => {
   const handle = useRef<HTMLDivElement>(null);
   // Where the drag started and how wide the sheet was then; null while no drag runs.
   const drag = useRef<{ x: number; width: number } | null>(null);
-  const sheet = () => sheetOf(handle.current);
+  const sheet = () => handle.current?.parentElement ?? undefined;
 
-  // The sheet opens at the width the user left it at.
+  // The sheet opens at the width the user left it at. Only the handle changes it after that.
   useLayoutEffect(() => {
-    const el = sheetOf(handle.current);
-    if (el !== undefined) {
-      setWidth(el, width);
+    const el = handle.current?.parentElement;
+    if (el) {
+      setWidth(el, sheetWidth(name));
     }
-  }, [width]);
+  }, [name]);
 
   const reset = () => {
     const el = sheet();
     if (el !== undefined) {
       setWidth(el, null);
     }
-    onWidthChange(null);
+    keepSheetWidth(name, null);
   };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -118,12 +111,8 @@ const ResizeHandle = ({
     if (el === undefined || drag.current === null) {
       return;
     }
-    // The sheet is at the right edge, so moving the handle left widens it. A negative width is
-    // invalid CSS, which would drop the minimum width, so it stops at 0 and the minimum clamps it.
-    setWidth(
-      el,
-      Math.max(0, drag.current.width + drag.current.x - event.clientX)
-    );
+    // The sheet is at the right edge, so moving the handle left widens it.
+    setWidth(el, drag.current.width + drag.current.x - event.clientX);
   };
 
   const onPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
@@ -137,7 +126,7 @@ const ResizeHandle = ({
     }
     const dragged = drawnWidth(el);
     setWidth(el, dragged);
-    onWidthChange(dragged);
+    keepSheetWidth(name, dragged);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -175,27 +164,19 @@ const SheetContent = ({
   name,
   children,
   ...props
-}: OwnProps<typeof SheetPrimitive.Content> & { name: SheetName }) => {
-  const width = useSheetWidths((s) => s[name] ?? null);
-  return (
-    <SheetPortal>
-      <SheetOverlay />
-      <SheetPrimitive.Content
-        data-slot="sheet-content"
-        className={SHEET_CONTENT}
-        {...props}
-      >
-        {children}
-        <ResizeHandle
-          width={width}
-          onWidthChange={(next) => {
-            setSheetWidth(name, next);
-          }}
-        />
-      </SheetPrimitive.Content>
-    </SheetPortal>
-  );
-};
+}: OwnProps<typeof SheetPrimitive.Content> & { name: SheetName }) => (
+  <SheetPortal>
+    <SheetOverlay />
+    <SheetPrimitive.Content
+      data-slot="sheet-content"
+      className={SHEET_CONTENT}
+      {...props}
+    >
+      {children}
+      <ResizeHandle name={name} />
+    </SheetPrimitive.Content>
+  </SheetPortal>
+);
 
 /** The title and the description, with a ghost Close at the top right. */
 const SheetHeader = ({ children }: { children: ReactNode }) => (
