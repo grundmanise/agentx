@@ -50,8 +50,6 @@ interface ActivityLog {
   debug: boolean;
   /** Whether the log's sheet shows. */
   open: boolean;
-  /** The width the user dragged the sheet to, in pixels, until the app quits; null for its default. */
-  width: number | null;
 }
 
 export const useActivityLog = create<ActivityLog>()(() => ({
@@ -59,17 +57,11 @@ export const useActivityLog = create<ActivityLog>()(() => ({
   dropped: 0,
   lines: [],
   open: false,
-  width: null,
 }));
 
 /** Shows or hides the activity log. */
 export const openActivityLog = (open = true) => {
   useActivityLog.setState({ open });
-};
-
-/** Keeps the width the user dragged the log's sheet to, or its default for null. */
-export const setActivityLogWidth = (width: number | null) => {
-  useActivityLog.setState({ width });
 };
 
 /** Turns debug output on or off for the commands run from now on. */

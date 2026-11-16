@@ -66,6 +66,9 @@ test.describe("the What's new sheet", () => {
     await seeChanges(page, "pdf").click();
     await read.started;
     await expect(sheet(page)).toBeVisible();
+    // It opens as wide as every sheet, the Activity log's 1120.
+    const box = await sheet(page).boundingBox();
+    expect(Math.round(box?.width ?? 0)).toBe(1120);
     await expect(sheet(page)).toContainText("pdf");
     // The two versions, by date where the CLI dates them.
     await expect(sheet(page)).toContainText("Sep 14 → Sep 28");
