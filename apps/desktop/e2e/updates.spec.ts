@@ -173,6 +173,8 @@ test.describe("Update", () => {
       await expect(
         toasts(page).getByText(c.toast, { exact: true })
       ).toBeVisible();
+      // Updated or up to date already, the skill has no update left.
+      await expect(update(page, c.name)).toHaveCount(0);
       expect(later(cli)).toEqual([["skill", "update", c.name, "--json"]]);
     });
   }
@@ -485,27 +487,31 @@ test.describe("the Update skills dialog", () => {
     await expect(
       dialog.getByRole("region", { name: "me/account" }).getByRole("checkbox")
     ).toHaveCount(1);
-    // Every skill, the group of three and the select-all row, all checked.
+    // Every skill and the select-all row, all checked.
     await expect(dialog.getByRole("checkbox", { checked: true })).toHaveCount(
-      6
+      5
     );
     await expect(dialog.getByText("All 4 selected")).toBeVisible();
     await expect(skillRow("review")).toContainText(
       "Skill has local changes; update merges with edits."
     );
 
-    // See changes opens What's new above the dialog; Escape closes the sheet alone.
+    // See changes opens What's new above the dialog; Escape closes the sheet alone and puts the
+    // focus back on See changes.
     cli.register(["skill", "diff", "pdf", "--update"], {
       events: pdfUpdateDiffs,
     });
-    await skillRow("pdf")
-      .getByRole("button", { exact: true, name: "See changes" })
-      .click();
+    const seeChanges = skillRow("pdf").getByRole("button", {
+      exact: true,
+      name: "See changes",
+    });
+    await seeChanges.click();
     const sheet = page.getByRole("dialog", { name: "What's new" });
     await expect(sheet).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(sheet).toHaveCount(0);
     await expect(dialog).toBeVisible();
+    await expect(seeChanges).toBeFocused();
     await expect(
       dialog.getByRole("checkbox", { exact: true, name: "pdf" })
     ).toBeChecked();
@@ -514,19 +520,17 @@ test.describe("the Update skills dialog", () => {
     await dialog.getByText("release-notes", { exact: true }).click();
     await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
 
-    // A group's checkbox is mixed while some of its skills are left out, selects them all, then
-    // clears them all.
-    const group = acme.getByRole("checkbox", {
-      exact: true,
-      name: "acme/skills",
-    });
+    // A group's button reads Select all while some of its skills are left out and selects them
+    // all, then reads Deselect all and clears them all.
+    const groupButton = (name: string) =>
+      acme.getByRole("button", { exact: true, name });
+    await expect(groupButton("Deselect all")).toBeVisible();
     await dialog.getByText("pdf-letters", { exact: true }).click();
-    await expect(group).toHaveAttribute("aria-checked", "mixed");
-    await group.click();
+    await groupButton("Select all").click();
     await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
-    await group.click();
+    await groupButton("Deselect all").click();
     await expect(dialog.getByText("Select all 4")).toBeVisible();
-    await group.click();
+    await groupButton("Select all").click();
     await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
 
     cli.register(["skill", "update", "pdf"], {
@@ -557,15 +561,15 @@ test.describe("the Update skills dialog", () => {
     await expect(dialog.getByRole("status")).toHaveText(
       "2 of 3 skills updated"
     );
-    // The note on local changes stays, and a conflict says where to resolve it.
+    // A conflict says where to resolve it, in place of the note on local changes.
     const reviewRow = dialog
       .getByRole("listitem")
       .filter({ hasText: "review" });
     await expect(reviewRow).toContainText(
-      "Skill has local changes; update merges with edits."
-    );
-    await expect(reviewRow).toContainText(
       "Merge conflict. Open the skill to resolve it."
+    );
+    await expect(reviewRow).not.toContainText(
+      "Skill has local changes; update merges with edits."
     );
     // The merge waits on its row: the dialog opens no skill.
     await expect(page).toHaveURL(/#\/skills\/pdf$/u);

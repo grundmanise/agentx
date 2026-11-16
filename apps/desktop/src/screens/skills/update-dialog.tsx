@@ -1,9 +1,10 @@
 // The Update skills dialog, which the sidebar's update pill and a check by hand that found an
 // update open: every skill the last update check found an update for, but those with a pending
-// merge, all selected, grouped by source. A row toggles its skill, a group's checkbox every skill
-// of its source, and See changes opens the What's new sheet of its update above the dialog.
-// Update runs in the dialog (`updates.ts`): each selected row shows its state, then its result,
-// and the footer counts the run, then sums it up. The dialog cannot be dismissed while the run
+// merge, all selected, grouped by source. A row toggles its skill, a group's Select all or Deselect
+// all every skill of its source, and See changes opens the What's new sheet of its update above the
+// dialog. A row is two lines at most: the name, then one note. Update runs in the dialog
+// (`updates.ts`): each selected row shows its state, then its result, and the footer counts the
+// run, then sums it up. The dialog cannot be dismissed while the run
 // goes, and Done closes it.
 import { cva } from "class-variance-authority";
 import { useId, useRef, useState } from "react";
@@ -75,8 +76,12 @@ const sourceOf = (update: UpdateAvailableEvent) => {
   return url === undefined || url === "" ? undefined : url;
 };
 
-/** The skills of one source, under its short form; `url` is undefined for those the CLI gives none. */
+/**
+ * The skills of one source, under its short form; `url` is undefined for those the CLI gives none.
+ * `key` is the URL, as two hosts can share a short form.
+ */
 interface SourceGroup {
+  key: string;
   label: string;
   url: string | undefined;
   rows: UpdateRunRow[];
@@ -93,15 +98,16 @@ const groupsOf = (rows: readonly UpdateRunRow[]): SourceGroup[] => {
   const groups = new Map<string, SourceGroup>();
   for (const row of rows) {
     const url = sourceOf(row.update);
+    const key = url ?? "";
     const label = url === undefined ? NO_SOURCE : shortSource(url);
-    const group = groups.get(label) ?? { label, rows: [], url };
+    const group = groups.get(key) ?? { key, label, rows: [], url };
     group.rows.push(row);
-    groups.set(label, group);
+    groups.set(key, group);
   }
   const sorted = [...groups.values()];
   sorted.sort((a, b) =>
     (a.url === undefined) === (b.url === undefined)
-      ? a.label.localeCompare(b.label)
+      ? a.label.localeCompare(b.label) || a.key.localeCompare(b.key)
       : Number(a.url === undefined) - Number(b.url === undefined)
   );
   return sorted;
@@ -161,7 +167,7 @@ const StatusMark = ({ status }: { status: UpdateStatus }) => {
   }
 };
 
-const noteVariants = cva("type-notice m-0", {
+const noteVariants = cva("type-notice m-0 truncate", {
   variants: {
     tone: {
       attention: "text-tone-attention-fg",
@@ -170,36 +176,43 @@ const noteVariants = cva("type-notice m-0", {
   },
 });
 
-/** The line under a row of a run, for a skill the user must act on: a conflict, or a failure. */
-const ResultNote = ({ row }: { row: UpdateRunRow }) => {
-  const { name } = row.update;
-  switch (row.status) {
-    case "conflict": {
-      return (
-        <p className={noteVariants({ tone: "attention" })}>
-          Merge conflict. Open the skill to resolve it.
-        </p>
-      );
-    }
-    case "failed": {
-      return row.reason === undefined ? null : (
-        <p className={noteVariants({ tone: "danger" })}>
-          {problemSentence({ message: row.reason }, { keep: [name] })}
-        </p>
-      );
-    }
-    case "waiting":
-    case "skipped":
-    case "running":
-    case "updated":
-    case "merged":
-    case "current": {
-      return null;
-    }
-    default: {
-      return null;
-    }
+/** The one line under a row's name: its text, its full text as the tooltip, and its tone. */
+interface Note {
+  text: string;
+  title: string;
+  tone: "attention" | "danger";
+}
+
+/**
+ * The note under a row, one at most so that a row keeps to two lines: once its run ended, a
+ * conflict or the CLI's reason, then the first warning the CLI logged for it, all of them in the
+ * tooltip; else, before, during and after the run, that a skill with local edits merges with them.
+ */
+const noteOf = (row: UpdateRunRow, idle: boolean): Note | undefined => {
+  if (!idle && row.status === "conflict") {
+    const text = "Merge conflict. Open the skill to resolve it.";
+    return { text, title: text, tone: "attention" };
   }
+  if (!idle && row.status === "failed" && row.reason !== undefined) {
+    const text = problemSentence(
+      { message: row.reason },
+      { keep: [row.update.name] }
+    );
+    return { text, title: text, tone: "danger" };
+  }
+  const [warning] = row.warnings ?? [];
+  if (!idle && warning !== undefined) {
+    return {
+      text: warning,
+      title: (row.warnings ?? []).join("\n"),
+      tone: "attention",
+    };
+  }
+  if (row.edited) {
+    const text = "Skill has local changes; update merges with edits.";
+    return { text, title: text, tone: "attention" };
+  }
+  return undefined;
 };
 
 const rowVariants = cva("relative flex items-start gap-3 px-3 py-2", {
@@ -269,11 +282,13 @@ const Row = ({
   idle: boolean;
   now: number;
   onToggle: () => void;
-  onSeeChanges: () => void;
+  /** Opens the What's new sheet; `opener` is See changes, which gets the focus back. */
+  onSeeChanges: (opener: HTMLElement) => void;
 }) => {
   const id = useId();
   const { update } = row;
   const published = publishedText(update, now);
+  const note = noteOf(row, idle);
   const selected = row.status !== "skipped";
   let state: "idle" | "run" | "skipped" = "run";
   if (idle) {
@@ -313,7 +328,13 @@ const Row = ({
             <>
               <Dot />
               <span className="relative flex">
-                <Button variant="link" size="inline" onClick={onSeeChanges}>
+                <Button
+                  variant="link"
+                  size="inline"
+                  onClick={(e) => {
+                    onSeeChanges(e.currentTarget);
+                  }}
+                >
                   <span className="type-secondary whitespace-nowrap">
                     See changes
                   </span>
@@ -322,18 +343,11 @@ const Row = ({
             </>
           )}
         </div>
-        {row.edited && (
-          <p className={noteVariants({ tone: "attention" })}>
-            Skill has local changes; update merges with edits.
+        {note !== undefined && (
+          <p title={note.title} className={noteVariants({ tone: note.tone })}>
+            {note.text}
           </p>
         )}
-        {!idle && <ResultNote row={row} />}
-        {!idle &&
-          row.warnings?.map((warning) => (
-            <p key={warning} className={noteVariants({ tone: "attention" })}>
-              {warning}
-            </p>
-          ))}
       </div>
       <span className="relative flex h-5 items-center">
         {idle ? (
@@ -353,9 +367,8 @@ const Row = ({
 
 /**
  * The header of a source's skills: the source's short form as a caption, its full URL as the
- * tooltip. Before the run, a source of two or more skills adds a checkbox at the right, under the
- * rows' checkboxes, that selects them all, checked, unchecked or mixed as they are, and clears
- * them once all are selected; the caption is its label.
+ * tooltip. Before the run, a source of two or more skills adds a text button next to it: Select
+ * all while any of them is left out, which selects them all, else Deselect all, which clears them.
  */
 const GroupHeader = ({
   group,
@@ -367,46 +380,29 @@ const GroupHeader = ({
   /** Selects every skill of the group, or with `false` leaves them all out. */
   onSelect: (selected: boolean) => void;
 }) => {
-  const id = useId();
-  const selected = group.rows.filter((r) => r.status !== "skipped").length;
-  const all = selected === group.rows.length;
-  let checked: boolean | "indeterminate" = false;
-  if (all) {
-    checked = true;
-  } else if (selected > 0) {
-    checked = "indeterminate";
-  }
-  const toggles = idle && group.rows.length > 1;
+  const all = group.rows.every((r) => r.status !== "skipped");
   return (
-    <div className="flex h-6 items-center gap-3 px-3">
-      <h3 className="m-0 flex min-w-0 flex-1">
-        {toggles ? (
-          <label
-            htmlFor={id}
-            title={group.url}
-            className="type-caption text-group-label min-w-0 cursor-pointer truncate"
-          >
-            {group.label}
-          </label>
-        ) : (
-          <span
-            title={group.url}
-            className="type-caption text-group-label min-w-0 truncate"
-          >
-            {group.label}
-          </span>
-        )}
-      </h3>
-      {toggles && (
-        <span className="flex">
-          <Checkbox
-            id={id}
-            checked={checked}
-            onCheckedChange={() => {
-              onSelect(!all);
-            }}
-          />
+    <div className="flex h-6 items-center gap-2 px-3">
+      <h3 className="m-0 flex min-w-0">
+        <span
+          title={group.url}
+          className="type-caption text-group-label min-w-0 truncate"
+        >
+          {group.label}
         </span>
+      </h3>
+      {idle && group.rows.length > 1 && (
+        <Button
+          variant="link"
+          size="inline"
+          onClick={() => {
+            onSelect(!all);
+          }}
+        >
+          <span className="type-secondary whitespace-nowrap">
+            {all ? "Deselect all" : "Select all"}
+          </span>
+        </Button>
       )}
     </div>
   );
@@ -440,7 +436,10 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
   const confirm = useRef<HTMLButtonElement>(null);
   // The skills the user left out: a skill an update check adds while the dialog is open is selected.
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
-  const [seeing, setSeeing] = useState<UpdateAvailableEvent | undefined>();
+  // The update whose What's new sheet is open, and the See changes that opened it.
+  const [seeing, setSeeing] = useState<
+    { update: UpdateAvailableEvent; opener: HTMLElement } | undefined
+  >();
 
   // Once Update is pressed, the dialog shows the run: its rows as they were then. The run goes
   // in the dialog's order, group by group.
@@ -572,7 +571,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
           <div className="max-h-update-skills-list -mx-3 flex flex-col gap-3 overflow-auto">
             {groups.map((group) => (
               <section
-                key={group.label}
+                key={group.key}
                 aria-label={group.label}
                 className="flex flex-col gap-0.5"
               >
@@ -593,8 +592,8 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
                       onToggle={() => {
                         toggle(row.update.name);
                       }}
-                      onSeeChanges={() => {
-                        setSeeing(row.update);
+                      onSeeChanges={(opener) => {
+                        setSeeing({ opener, update: row.update });
                       }}
                     />
                   ))}
@@ -636,14 +635,22 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
       {/* Outside the dialog's content, so that no key or click in the sheet reaches the dialog. */}
       {seeing !== undefined && (
         <UpdateSheet
-          update={seeing}
-          versions={updateVersions(seeing)}
+          update={seeing.update}
+          versions={updateVersions(seeing.update)}
           open
           over="dialog"
           onOpenChange={(open) => {
             if (!open) {
               setSeeing(undefined);
             }
+          }}
+          onCloseAutoFocus={(e) => {
+            // The sheet has no trigger: the focus goes back to See changes, or to the confirm.
+            e.preventDefault();
+            (seeing.opener.isConnected
+              ? seeing.opener
+              : confirm.current
+            )?.focus();
           }}
         />
       )}
