@@ -140,15 +140,15 @@ test("the sources row: one pill per shared source, Personal, the counts and the 
   expect(commandLines(cli)).toEqual([`source skills ${ACME_ID}`]);
 });
 
-test("the open source's card: its name links to the repository, its full URL, a Read-only tag, and its facts", async ({
+test("the open source's card: its name, its full URL linking to the repository, a Read-only tag, and its facts", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
-  const name = details(page).getByRole("link", { name: "acme/skills" });
   await expect(
-    details(page).getByText(`${ACME}#v2`, { exact: true })
+    details(page).getByRole("heading", { name: "acme/skills" })
   ).toBeVisible();
+  const url = details(page).getByRole("link", { name: `${ACME}#v2` });
   await expect(
     details(page).getByText("Read-only", { exact: true })
   ).toBeVisible();
@@ -156,7 +156,21 @@ test("the open source's card: its name links to the repository, its full URL, a 
   await expect(fact(page, "Branch")).toHaveText("main");
   await expect(fact(page, "Commit")).toHaveText("3f2a9c1");
   await expect(fact(page, "Fetched")).toHaveText("3 days ago");
-  await name.click();
+  // A drag selects the URL's text and opens nothing; a click opens the repository.
+  const box = await url.boundingBox();
+  if (box === null) {
+    throw new Error("the URL has no box");
+  }
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + 1, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 1, y, { steps: 5 });
+  await page.mouse.up();
+  expect(
+    await page.evaluate(() => window.getSelection()?.toString() ?? "")
+  ).toContain("acme/skills");
+  expect(cli.openedUrls).toEqual([]);
+  await url.click();
   expect(cli.openedUrls).toEqual([ACME]);
 
   await pill(page, "zeta/tools").click();
@@ -165,7 +179,7 @@ test("the open source's card: its name links to the repository, its full URL, a 
   // The account remote is managed in Settings: its card has no Remove.
   await pill(page, "Personal").click();
   await expect(
-    details(page).getByRole("link", { name: "me/account" })
+    details(page).getByRole("heading", { name: "me/account" })
   ).toBeVisible();
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
