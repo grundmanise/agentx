@@ -159,6 +159,27 @@ test("an unmodified skill: every file, SKILL.md first and open, the rest by path
   ]);
 });
 
+test("the name, the description and a file's text can be selected and copied", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page, "/#/skills/pdf");
+  const article = pane(page, "pdf");
+  const selected = async (target: Locator) => {
+    await target.click({ clickCount: 3 });
+    return await page.evaluate(() => window.getSelection()?.toString().trim());
+  };
+  expect(await selected(article.getByRole("heading", { name: "pdf" }))).toBe(
+    "pdf"
+  );
+  expect(await selected(article.getByText("Read and convert PDF files"))).toBe(
+    "Read and convert PDF files"
+  );
+  // A line of the file: its text, without its line number.
+  const skillMd = content(files(page, "pdf"), "SKILL.md");
+  expect(await selected(skillMd.getByText("name: pdf"))).toBe("name: pdf");
+});
+
 test("a modified skill of a source: its edits labelled and tinted, against the version installed", async ({
   cli,
   page,

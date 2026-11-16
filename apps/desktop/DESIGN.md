@@ -445,7 +445,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.startup-title` | serif | 48 | 400 | 1 | -0.02em |  | Startup title |
 | `type.check-detail` | mono | 12.5 | 400 | 1.5 |  |  | Startup check detail (`check.detail`) |
 | `type.check-hint` | sans | 13 | 400 | 1.5 |  |  | Startup check hint callout (`text.secondary`) |
-| `type.skill-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane skill name |
+| `type.skill-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane skill name, selectable |
 | `type.body` | sans | 14 | 400 |  |  |  | Body, palette rows |
 | `type.input` | sans | 14 | 400 |  |  |  | Text inputs and search fields |
 | `type.input-mono` | mono | 14 | 400 |  |  |  | Inputs that take a URL or a command |
@@ -471,7 +471,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.palette-footer` | sans | 12 | 400 |  |  |  | Palette footer (`text.hint`) |
 | `type.toast` | sans | 13.5 | 400 |  |  |  | Toast message |
 | `type.toast-action` | sans | 13 | 600 |  |  |  | Action inside a toast |
-| `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
+| `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`), selectable |
 | `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
 | `type.source-name` | sans | 16 | 500 |  |  |  | Source name on the card of the open source (`source-card.name`) |
@@ -1057,7 +1057,7 @@ The History sheet's frame at `sheet.log-width` (`src/app/activity-log.tsx`): the
 
 ### Code pane
 
-`code.bg`, `type.code`, grid `code.gutter 1fr`: line number in `code.line-number`, right-aligned · marker · text. Front matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: an added line on `diff.added-bg`, a removed line on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
+`code.bg`, `type.code`, grid `code.gutter 1fr`: line number in `code.line-number`, right-aligned · marker · text. Front matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: an added line on `diff.added-bg`, a removed line on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1. The text is selectable, so it can be copied; the line numbers and markers are not, so a copy holds only the file's text.
 
 ### File list (detail pane FILES)
 

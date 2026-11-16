@@ -158,7 +158,7 @@ export const SkillDetail = ({
             title={glyphTitle(row)}
             size={18}
           />
-          <h1 className="type-skill-name text-text-primary m-0 break-all">
+          <h1 className="type-skill-name text-text-primary m-0 break-all select-text">
             {row.name}
           </h1>
           {/* Left out when the banner says where the skill came from. */}
@@ -209,7 +209,7 @@ export const SkillDetail = ({
           </div>
         </div>
         {row.description !== "" && (
-          <p className="type-detail-desc text-text-muted m-0 text-pretty">
+          <p className="type-detail-desc text-text-muted m-0 text-pretty select-text">
             {row.description}
           </p>
         )}
