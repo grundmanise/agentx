@@ -41,6 +41,9 @@ const grid = (page: Page, name: string) =>
 /** The row of a skill, which opens and closes it. */
 const row = (page: Page, name: string) =>
   page.getByRole("heading").getByRole("button", { exact: true, name });
+/** What the row of a skill shows: its name, description or status, over the button. */
+const rowLine = (page: Page, name: string) =>
+  page.locator("[data-slot=accordion-row]").filter({ has: row(page, name) });
 /** The round check that selects a skill. */
 const check = (page: Page, name: string) =>
   page.getByRole("button", { exact: true, name: `Select ${name}` });
@@ -209,7 +212,9 @@ test("a source listing: selectable skills first, then each state with its label 
       expect(row(page, name)).toHaveAccessibleDescription(
         new RegExp(`^${label}\\.`, "u")
       ),
-      expect(row(page, name).getByText(label, { exact: true })).toBeVisible(),
+      expect(
+        rowLine(page, name).getByText(label, { exact: true })
+      ).toBeVisible(),
     ])
   );
   // An open row says why its skill cannot be selected.
@@ -238,21 +243,29 @@ test("a source listing: selectable skills first, then each state with its label 
   ]);
 });
 
-test("opening a row reads its SKILL.md once and links to the skill", async ({
+test("opening a row reads its SKILL.md once, then opens, and links to the skill", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
   const read = cli.register(["source", "read", ACME_ID, "skills/docx"], {
     events: [skillMd("docx", "---\nname: docx\n---\n# Word documents\n")],
+    holdAfter: 0,
   });
   await row(page, "docx").click();
   await read.started;
+  // The row waits closed, with a spinner, until SKILL.md is read.
+  await expect(row(page, "docx")).toHaveAttribute("aria-busy", "true");
+  await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Loading skill…" })
+  ).toBeVisible();
+  read.release();
   await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
   await expect(
     opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
   ).toContainText("# Word documents");
-  await opened(page, "docx").getByRole("link", { name: "View skill" }).click();
+  await page.getByRole("link", { name: "View skill" }).click();
   expect(cli.openedUrls).toEqual([`${ACME}/tree/3f2a9c1e8d7b6a/skills/docx`]);
   // The row opens and closes on a click; the check alone selects.
   await expect(bar(page)).toHaveCount(0);
@@ -334,7 +347,7 @@ test("names and targets: two cards and one enabled agent turned off", async ({
     },
   ]);
   await expect(
-    row(page, "docx").getByText("Added", { exact: true })
+    rowLine(page, "docx").getByText("Added", { exact: true })
   ).toBeVisible();
   expect(commandLines(cli)).toContain(
     `skill add ${ACME} --name artifacts --name docx --to claude-code`
@@ -740,7 +753,7 @@ test("Personal lists the account remote's installable skills and adds by name", 
     "my-pdf",
     "release-notes",
   ]);
-  await expect(row(page, "my-pdf")).toContainText("from acme/skills");
+  await expect(rowLine(page, "my-pdf")).toContainText("from acme/skills");
   // Your skills on the account remote open to their description alone.
   await row(page, "release-notes").click();
   await expect(opened(page, "release-notes")).toHaveText("personal skill");
