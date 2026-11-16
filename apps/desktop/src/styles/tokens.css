@@ -138,6 +138,8 @@
   /* Window and shell */
   --color-shell-bg: var(--gray-990);
   --color-shell-content-bg: var(--gray-970);
+  /* `shell.content-bg` at 40%: the frosted pane over the kept inventory at launch. */
+  --color-shell-loading-veil: rgb(18 18 20 / 0.4);
   --color-shell-divider: var(--gray-890);
   --color-shell-scrim: rgb(0 0 0 / 0.5);
   --color-shell-scrim-strong: rgb(0 0 0 / 0.55);
@@ -188,6 +190,8 @@
   --color-pill-disabled-text: var(--color-accent-attention);
   --color-pill-version-bg: var(--gray-880);
   --color-pill-version-text: var(--gray-300);
+  --color-pill-universal-bg: var(--gray-850);
+  --color-pill-universal-text: var(--gray-250);
 
   /* Inputs, switches, checkboxes */
   --color-input-bg: var(--gray-980);
@@ -398,13 +402,6 @@
       opacity: 0;
     }
   }
-  /* The kept inventory before the startup checks pass: from `opacity-panel-loading` down and back. */
-  --animate-panel-loading: panel-loading 1s ease-in-out infinite;
-  @keyframes panel-loading {
-    50% {
-      opacity: 30%;
-    }
-  }
   --animate-code-reveal: code-reveal 0.3s ease-out;
   @keyframes code-reveal {
     from {
@@ -428,6 +425,8 @@
 
   /* Blurs (DESIGN.md §4, code): `blur-code-loading`. */
   --blur-code-loading: 8px;
+  /* The frosted pane over the kept inventory while the startup checks run. */
+  --blur-panel-loading: 12px;
 
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
@@ -535,7 +534,6 @@
   /* A skill row in no agent client, washed out. */
   --opacity-row-off: 50%;
   /* The screen in the main panel while it shows the kept inventory, before the startup checks pass. */
-  --opacity-panel-loading: 50%;
 
   /* Window and shell */
   --height-titlebar: 50px;
@@ -666,11 +664,9 @@
   --width-popover: 360px;
   --min-width-menu: 240px;
   --padding-menu: 6px;
-  --width-sheet: 420px;
-  --width-sheet-wide: 560px;
-  --width-sheet-log: 1120px;
-  --min-width-sheet-log: 420px;
-  --max-width-sheet-log: 90vw;
+  --width-sheet: 1120px;
+  --min-width-sheet: 420px;
+  --max-width-sheet: 90vw;
   --width-sheet-handle: 8px;
   --width-log-time: 8ch;
   --inset-sheet: 10px;
@@ -687,6 +683,7 @@
   --padding-key-hint-y: 3px;
   --min-height-toast: 44px;
   --max-width-toast: 640px;
+  --max-width-tooltip-text: 280px;
   --padding-toast: 18px;
   --padding-toast-y: 10px;
   --width-toast-detail: 440px;
@@ -978,7 +975,7 @@
 @utility max-h-popover {
   max-height: var(--radix-popover-content-available-height);
 }
-/* sheet.log-width: the width the user dragged the Activity log sheet to, else its default. */
+/* sheet.width: the width the user dragged a sheet to, else its default. */
 @utility w-sheet-dragged {
-  width: var(--sheet-dragged-width, var(--width-sheet-log));
+  width: var(--sheet-dragged-width, var(--width-sheet));
 }
