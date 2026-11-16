@@ -84,9 +84,17 @@ export const PillButton = ({
   label,
   title,
   onClick,
+  id,
   children,
-}: PillProps & { label: string; title: string; onClick: () => void }) => (
+}: PillProps & {
+  label: string;
+  title: string;
+  onClick: () => void;
+  /** For a control that moves the focus to the pill. */
+  id?: string;
+}) => (
   <button
+    id={id}
     type="button"
     aria-label={label}
     title={title}

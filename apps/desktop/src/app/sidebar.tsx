@@ -9,6 +9,7 @@ import { plural } from "#/lib/plural.ts";
 import { cn } from "#/lib/utils.ts";
 import { UpdateSkillsDialog } from "#/screens/skills/update-dialog.tsx";
 import {
+  UPDATE_PILL_ID,
   openUpdateDialog,
   useOfferedUpdates,
 } from "#/screens/skills/updates.ts";
@@ -61,6 +62,7 @@ const UpdatePill = () => {
   return n === 0 ? null : (
     <span className="absolute top-1/2 right-2 flex -translate-y-1/2">
       <PillButton
+        id={UPDATE_PILL_ID}
         tone="update"
         icon={<ArrowUpIcon size="2xs" />}
         label={plural(n, "update")}

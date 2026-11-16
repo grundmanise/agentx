@@ -249,6 +249,9 @@ export const useUpdateDialog = create<{ open: boolean }>()(() => ({
   open: false,
 }));
 
+/** The id of the sidebar's update pill, which takes the focus back when the dialog closes. */
+export const UPDATE_PILL_ID = "update-pill";
+
 /** Opens the Update skills dialog. */
 export const openUpdateDialog = () => {
   useUpdateDialog.setState({ open: true });
@@ -278,6 +281,8 @@ export interface UpdateRunRow {
   status: UpdateStatus;
   /** Why the CLI did not update it, in its words. */
   reason?: string;
+  /** What the CLI warned about while it updated it, such as a placement it skipped. */
+  warnings?: string[];
 }
 
 /** The run of the dialog: its rows and how far it is. */
@@ -376,8 +381,10 @@ const stoppedProblem = (outcome: Outcome): Problem => ({
 /** The activity entry the run adds once it ended: what it did, in the words of its summary. */
 const logRun = (run: UpdateRun) => {
   const rows = selectedRows(run);
-  const clean = rows.every((r) =>
-    ["updated", "merged", "current"].includes(r.status)
+  const clean = rows.every(
+    (r) =>
+      ["updated", "merged", "current"].includes(r.status) &&
+      (r.warnings ?? []).length === 0
   );
   addActivity(clean ? "success" : "attention", runSummaryText(run));
 };
@@ -441,8 +448,12 @@ export const updateSkills = async (rows: UpdateRunRow[]) => {
       );
       break;
     }
+    const warnings = outcome.logs
+      .filter((l) => l.level === "warn")
+      .map((l) => l.message);
     setRow(name, {
       status,
+      ...(warnings.length > 0 ? { warnings } : {}),
       ...(status === "failed" && error !== undefined
         ? { reason: error.message }
         : {}),

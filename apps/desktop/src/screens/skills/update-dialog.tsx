@@ -39,6 +39,7 @@ import {
   useOfferedUpdates,
   useUpdateDialog,
   useUpdateRun,
+  UPDATE_PILL_ID,
 } from "#/screens/skills/updates.ts";
 import type { UpdateRunRow, UpdateStatus } from "#/screens/skills/updates.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
@@ -320,6 +321,12 @@ const Row = ({
           </span>
         )}
         <Note row={row} idle={idle} />
+        {!idle &&
+          row.warnings?.map((warning) => (
+            <p key={warning} className={noteVariants({ tone: "attention" })}>
+              {warning}
+            </p>
+          ))}
       </div>
       <span className="relative flex h-5 items-center">
         {idle ? (
@@ -421,6 +428,16 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           confirm.current?.focus();
+        }}
+        onCloseAutoFocus={(e) => {
+          // The pill that opened the dialog is gone once no update is left: focus Skills then.
+          e.preventDefault();
+          (
+            document.querySelector<HTMLElement>(`#${UPDATE_PILL_ID}`) ??
+            document.querySelector<HTMLElement>(
+              'nav[aria-label="Main"] a[href="/skills"]'
+            )
+          )?.focus();
         }}
         onEscapeKeyDown={(e) => {
           if (running) {
