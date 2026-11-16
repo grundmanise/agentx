@@ -1,9 +1,10 @@
-// The Update skills dialog, which the sidebar's update pill opens: every skill the last update
-// check found an update for, but those with a pending merge, all selected. A row toggles its
-// skill, and See changes opens the What's new sheet of its update above the dialog. Update runs in
-// the dialog (`updates.ts`): each selected row shows its state, then its result, and the footer
-// counts the run, then sums it up. The dialog cannot be dismissed while the run goes, and Done
-// closes it.
+// The Update skills dialog, which the sidebar's update pill and a check by hand that found an
+// update open: every skill the last update check found an update for, but those with a pending
+// merge, all selected, grouped by source. A row toggles its skill, a group's checkbox every skill
+// of its source, and See changes opens the What's new sheet of its update above the dialog.
+// Update runs in the dialog (`updates.ts`): each selected row shows its state, then its result,
+// and the footer counts the run, then sums it up. The dialog cannot be dismissed while the run
+// goes, and Done closes it.
 import { cva } from "class-variance-authority";
 import { useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
@@ -54,24 +55,56 @@ const DAY = 24 * 60 * 60 * 1000;
 const publishedText = (update: UpdateAvailableEvent, now: number) => {
   const time = update.candidate_upstream_time;
   const at = time === undefined ? Number.NaN : Date.parse(time);
-  let when;
+  let when: string | undefined;
   if (time !== undefined && !Number.isNaN(at)) {
     when = now - at < 30 * DAY ? formatAgo(time, now) : formatDate(time);
   }
-  return when === undefined ? undefined : `Published ${when}`;
+  return when;
 };
 
-/** The newer version's date and time in full, for the tooltip of "Published …". */
+/** The newer version's date and time in full, for the tooltip of its date. */
 const publishedTitle = (time: string) =>
   new Date(time).toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   });
 
-/** Where the update comes from: the upstream of a fork, else the skill's source, short. */
+/** Where the update comes from: the upstream of a fork, else the skill's source. */
 const sourceOf = (update: UpdateAvailableEvent) => {
   const url = update.upstream ?? update.source;
-  return url === undefined || url === "" ? undefined : shortSource(url);
+  return url === undefined || url === "" ? undefined : url;
+};
+
+/** The skills of one source, under its short form; `url` is undefined for those the CLI gives none. */
+interface SourceGroup {
+  label: string;
+  url: string | undefined;
+  rows: UpdateRunRow[];
+}
+
+/** The label of the group of updates the CLI gives no source for. */
+const NO_SOURCE = "No source";
+
+/**
+ * The rows by source, A to Z by the source's short form, the updates with no source last. Each
+ * group keeps the rows' order: A to Z by name, as the app offers the updates.
+ */
+const groupsOf = (rows: readonly UpdateRunRow[]): SourceGroup[] => {
+  const groups = new Map<string, SourceGroup>();
+  for (const row of rows) {
+    const url = sourceOf(row.update);
+    const label = url === undefined ? NO_SOURCE : shortSource(url);
+    const group = groups.get(label) ?? { label, rows: [], url };
+    group.rows.push(row);
+    groups.set(label, group);
+  }
+  const sorted = [...groups.values()];
+  sorted.sort((a, b) =>
+    (a.url === undefined) === (b.url === undefined)
+      ? a.label.localeCompare(b.label)
+      : Number(a.url === undefined) - Number(b.url === undefined)
+  );
+  return sorted;
 };
 
 /** What a screen reader hears for each state, before the name. */
@@ -96,16 +129,10 @@ const StatusMark = ({ status }: { status: UpdateStatus }) => {
       );
     }
     case "updated":
-    case "merged": {
-      return (
-        <span className="text-tone-primary-fg flex">
-          <CheckIcon />
-        </span>
-      );
-    }
+    case "merged":
     case "current": {
       return (
-        <span className="text-text-hint flex">
+        <span className="text-tone-primary-fg flex">
           <CheckIcon />
         </span>
       );
@@ -139,40 +166,19 @@ const noteVariants = cva("type-notice m-0", {
     tone: {
       attention: "text-tone-attention-fg",
       danger: "text-tone-danger-fg",
-      hint: "text-text-hint",
-      primary: "text-tone-primary-fg",
     },
   },
 });
 
-/** The line under a row: what the update does to edits, or what the run did. */
-const Note = ({ row, idle }: { row: UpdateRunRow; idle: boolean }) => {
+/** The line under a row of a run, for a skill the user must act on: a conflict, or a failure. */
+const ResultNote = ({ row }: { row: UpdateRunRow }) => {
   const { name } = row.update;
-  if (idle) {
-    return row.edited ? (
-      <p className={noteVariants({ tone: "attention" })}>
-        You edited this skill. The update merges with your edits.
-      </p>
-    ) : null;
-  }
   switch (row.status) {
     case "conflict": {
       return (
         <p className={noteVariants({ tone: "attention" })}>
-          Merge conflict with your edits. Open the skill to resolve it.
+          Merge conflict. Open the skill to resolve it.
         </p>
-      );
-    }
-    case "merged": {
-      return (
-        <p className={noteVariants({ tone: "primary" })}>
-          Merged with your edits.
-        </p>
-      );
-    }
-    case "current": {
-      return (
-        <p className={noteVariants({ tone: "hint" })}>Already up to date.</p>
       );
     }
     case "failed": {
@@ -185,7 +191,9 @@ const Note = ({ row, idle }: { row: UpdateRunRow; idle: boolean }) => {
     case "waiting":
     case "skipped":
     case "running":
-    case "updated": {
+    case "updated":
+    case "merged":
+    case "current": {
       return null;
     }
     default: {
@@ -208,7 +216,7 @@ const rowVariants = cva("relative flex items-start gap-3 px-3 py-2", {
 });
 
 /**
- * "Published 2 days ago", with the date in full as its tooltip. Before the run it is a second
+ * "2 days ago", with the date in full as its tooltip. Before the run it is a second
  * label of the row's checkbox, above the row's hit area so that its tooltip shows, and a click on
  * it still toggles the skill.
  */
@@ -266,7 +274,6 @@ const Row = ({
   const id = useId();
   const { update } = row;
   const published = publishedText(update, now);
-  const source = sourceOf(update);
   const selected = row.status !== "skipped";
   let state: "idle" | "run" | "skipped" = "run";
   if (idle) {
@@ -315,12 +322,12 @@ const Row = ({
             </>
           )}
         </div>
-        {source !== undefined && (
-          <span className="type-technical-sm text-text-hint truncate">
-            {source}
-          </span>
+        {row.edited && (
+          <p className={noteVariants({ tone: "attention" })}>
+            Skill has local changes; update merges with edits.
+          </p>
         )}
-        <Note row={row} idle={idle} />
+        {!idle && <ResultNote row={row} />}
         {!idle &&
           row.warnings?.map((warning) => (
             <p key={warning} className={noteVariants({ tone: "attention" })}>
@@ -341,6 +348,67 @@ const Row = ({
         )}
       </span>
     </li>
+  );
+};
+
+/**
+ * The header of a source's skills: the source's short form as a caption, its full URL as the
+ * tooltip. Before the run, a source of two or more skills adds a checkbox at the right, under the
+ * rows' checkboxes, that selects them all, checked, unchecked or mixed as they are, and clears
+ * them once all are selected; the caption is its label.
+ */
+const GroupHeader = ({
+  group,
+  idle,
+  onSelect,
+}: {
+  group: SourceGroup;
+  idle: boolean;
+  /** Selects every skill of the group, or with `false` leaves them all out. */
+  onSelect: (selected: boolean) => void;
+}) => {
+  const id = useId();
+  const selected = group.rows.filter((r) => r.status !== "skipped").length;
+  const all = selected === group.rows.length;
+  let checked: boolean | "indeterminate" = false;
+  if (all) {
+    checked = true;
+  } else if (selected > 0) {
+    checked = "indeterminate";
+  }
+  const toggles = idle && group.rows.length > 1;
+  return (
+    <div className="flex h-6 items-center gap-3 px-3">
+      <h3 className="m-0 flex min-w-0 flex-1">
+        {toggles ? (
+          <label
+            htmlFor={id}
+            title={group.url}
+            className="type-caption text-group-label min-w-0 cursor-pointer truncate"
+          >
+            {group.label}
+          </label>
+        ) : (
+          <span
+            title={group.url}
+            className="type-caption text-group-label min-w-0 truncate"
+          >
+            {group.label}
+          </span>
+        )}
+      </h3>
+      {toggles && (
+        <span className="flex">
+          <Checkbox
+            id={id}
+            checked={checked}
+            onCheckedChange={() => {
+              onSelect(!all);
+            }}
+          />
+        </span>
+      )}
+    </div>
   );
 };
 
@@ -374,16 +442,19 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
   const [seeing, setSeeing] = useState<UpdateAvailableEvent | undefined>();
 
-  // Once Update is pressed, the dialog shows the run: its rows as they were then.
-  const rows: UpdateRunRow[] =
+  // Once Update is pressed, the dialog shows the run: its rows as they were then. The run goes
+  // in the dialog's order, group by group.
+  const groups = groupsOf(
     run?.rows ??
-    offers.map((update) => ({
-      edited:
-        library?.find((entry) => entry.name === update.name)?.state ===
-        "modified",
-      status: excluded.has(update.name) ? "skipped" : "waiting",
-      update,
-    }));
+      offers.map((update) => ({
+        edited:
+          library?.find((entry) => entry.name === update.name)?.state ===
+          "modified",
+        status: excluded.has(update.name) ? "skipped" : "waiting",
+        update,
+      }))
+  );
+  const rows = groups.flatMap((g) => g.rows);
   const idle = run === undefined;
   const running = run?.phase === "running";
   const total = rows.length;
@@ -396,6 +467,19 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
         next.delete(name);
       } else {
         next.add(name);
+      }
+      return next;
+    });
+  };
+  const selectGroup = (group: SourceGroup, select: boolean) => {
+    setExcluded((before) => {
+      const next = new Set(before);
+      for (const row of group.rows) {
+        if (select) {
+          next.delete(row.update.name);
+        } else {
+          next.add(row.update.name);
+        }
       }
       return next;
     });
@@ -467,7 +551,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
             Update the selected skills to their latest version.
           </DialogDescription>
         </DialogHeader>
-        {idle && total > 1 && (
+        {idle && groups.length > 1 && (
           <SelectAllRow
             selected={selected}
             total={total}
@@ -485,25 +569,39 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
             All skills are up to date
           </p>
         ) : (
-          <ul
-            aria-label="Skills"
-            className="max-h-update-skills-list -mx-3 my-0 flex list-none flex-col gap-0.5 overflow-auto p-0"
-          >
-            {rows.map((row) => (
-              <Row
-                key={row.update.name}
-                row={row}
-                idle={idle}
-                now={now}
-                onToggle={() => {
-                  toggle(row.update.name);
-                }}
-                onSeeChanges={() => {
-                  setSeeing(row.update);
-                }}
-              />
+          <div className="max-h-update-skills-list -mx-3 flex flex-col gap-3 overflow-auto">
+            {groups.map((group) => (
+              <section
+                key={group.label}
+                aria-label={group.label}
+                className="flex flex-col gap-0.5"
+              >
+                <GroupHeader
+                  group={group}
+                  idle={idle}
+                  onSelect={(select) => {
+                    selectGroup(group, select);
+                  }}
+                />
+                <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+                  {group.rows.map((row) => (
+                    <Row
+                      key={row.update.name}
+                      row={row}
+                      idle={idle}
+                      now={now}
+                      onToggle={() => {
+                        toggle(row.update.name);
+                      }}
+                      onSeeChanges={() => {
+                        setSeeing(row.update);
+                      }}
+                    />
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
         {run?.failure !== undefined && <ProblemText problem={run.failure} />}
         <DialogFooter>
@@ -554,8 +652,8 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
 };
 
 /**
- * The Update skills dialog. The sidebar's update pill opens it; while its run goes it cannot be
- * dismissed, and Done closes it.
+ * The Update skills dialog. The sidebar's update pill opens it, and so does a check by hand that
+ * found an update; while its run goes it cannot be dismissed, and Done closes it.
  */
 const closeDialog = () => {
   dismissUpdateRun();

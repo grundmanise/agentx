@@ -574,12 +574,14 @@ If no check has found an update for the skill, the command says it is up to date
 
 When the last update check found updates, a pill next to **Skills** in the sidebar says how many, such as **3 updates**. It leaves out a skill whose update waits for you to resolve a merge: finish that one on the skill's page.
 
-1. Select the pill. The **Update skills** dialog lists every skill with an update, all selected, with when its newer version was published and where it comes from.
+To check now, select **Check updates** above the **Skills** list, or press `⌘K` (`Ctrl+K` on Linux) and run **Check skills for updates**. A notification shows the progress; select **Cancel** to stop the check. When the check finds updates, the **Update skills** dialog opens. Otherwise, the app says that all skills are up to date. If a source can't be reached, a notification names it, and the dialog still lists the updates found in the other sources.
+
+1. Select the pill, or check for updates. The **Update skills** dialog lists every skill with an update, all selected, grouped by the source the update comes from, with when its newer version was published.
 2. To read an update first, select **See changes** on its row. Press Escape to go back to the list.
-3. Select a skill's row to leave it out. Use the checkbox above the list to select all of them or none.
+3. Select a skill's row to leave it out. To select or clear every skill of a source, use the checkbox next to the source's name. To select all of them or none, use the checkbox above the list.
 4. Select **Update all**, or **Update** with the number of skills selected, or press Enter.
 
-The dialog updates the skills one after another and shows each result on its row. A skill you edited is merged with your edits. When they conflict, its row says so: open the skill to resolve the merge, see [When your edits conflict](#when-your-edits-conflict). Select **Done** to close the dialog. The pill then counts only the updates that are left.
+The dialog updates the skills one after another and marks each row updated with a check. A skill with local changes is merged with your edits. When they conflict, its row says so: open the skill to resolve the merge, see [When your edits conflict](#when-your-edits-conflict). The dialog then says how many of the selected skills it updated. Select **Done** to close it. The pill then counts only the updates that are left.
 
 A copy placement is handled on its own:
 

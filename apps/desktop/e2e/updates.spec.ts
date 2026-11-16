@@ -1,8 +1,8 @@
-// Updates on the Skills screen: Check updates, the banners of an update and their Update button,
-// the banner of a pending merge with Show folder, Abort and Update, Update all on the toast of
-// a check, and the Update skills dialog the sidebar's update pill opens. Each button runs exactly
-// one command line, which the mocked CLI records, and its outcome is the toast of the results
-// table; the dialog runs one per skill selected and shows the outcome itself.
+// Updates on the Skills screen: Check updates, which opens the Update skills dialog when it finds
+// an update, the banners of an update and their Update button, the banner of a pending merge with
+// Show folder, Abort and Update, and the Update skills dialog the sidebar's update pill opens.
+// Each button runs exactly one command line, which the mocked CLI records, and its outcome is the
+// toast of the results table; the dialog runs one per skill selected and shows the outcome itself.
 import type { Page } from "@playwright/test";
 
 import {
@@ -15,9 +15,7 @@ import { pdfUpdateDiffs } from "./fixtures/update-diffs.ts";
 import {
   ACME,
   allUpdates,
-  lettersUpdate,
   pdfUpdate,
-  releaseNotesUpdate,
   reviewUpdate,
   updatesInventory,
   updatesLibrary,
@@ -74,6 +72,13 @@ const expectOffered = async (page: Page, name: string) => {
 };
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
+const updateDialog = (page: Page) =>
+  page.getByRole("dialog", { name: "Update skills" });
+/** The row of `name` in the Update skills dialog, before its run. */
+const dialogRow = (page: Page, name: string) =>
+  updateDialog(page)
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("checkbox", { exact: true, name }) });
 
 /** The library entry of `name` as `skill update` emits it once it updated the skill. */
 const updated = (name: string, state: "current" | "modified"): InlineEvent => {
@@ -312,7 +317,7 @@ test.describe("banners", () => {
 });
 
 test.describe("Check updates", () => {
-  test("records skill check-updates, turns while it fetches, and toasts what it found with Update all", async ({
+  test("records skill check-updates, turns while it fetches, and opens the Update skills dialog with what it found", async ({
     cli,
     page,
   }) => {
@@ -346,32 +351,16 @@ test.describe("Check updates", () => {
       toasts(page).getByText("Checking for updates · 0 of 2 sources")
     ).toBeVisible();
     run.release();
-    // draft's pending merge comes first: four skills are offered an update.
-    await expect(toasts(page).getByText("4 skills have updates")).toBeVisible();
-    await expect(checkButton(page)).toHaveAttribute("aria-busy", "false");
-    // One after the other: each selects its row.
-    await expectOffered(page, "pdf");
-    await expectOffered(page, "pdf-letters");
-    await expectOffered(page, "release-notes");
-    await expectOffered(page, "review");
+    // draft's pending merge comes first: four skills are offered an update, in the dialog.
+    await expect(updateDialog(page)).toBeVisible();
+    await expect(updateDialog(page).getByRole("listitem")).toHaveCount(4);
+    await expect(dialogRow(page, "pdf-letters")).toBeVisible();
+    await expect(dialogRow(page, "release-notes")).toBeVisible();
+    // The dialog says what the check found: its progress toast is gone.
+    await expect(toasts(page).getByText(/^Checking for updates/u)).toHaveCount(
+      0
+    );
     expect(later(cli)).toEqual([["skill", "check-updates", "--json"]]);
-
-    cli.register(["skill", "update", "--all"], {
-      events: [
-        updated("pdf", "current"),
-        updated("pdf-letters", "modified"),
-        updated("release-notes", "current"),
-        updated("review", "modified"),
-      ],
-    });
-    await toasts(page)
-      .getByRole("button", { exact: true, name: "Update all" })
-      .click();
-    await expect(toasts(page).getByText("Updated 4 skills")).toBeVisible();
-    expect(later(cli)).toEqual([
-      ["skill", "check-updates", "--json"],
-      ["skill", "update", "--all", "--json"],
-    ]);
   });
 
   test("is an icon button that shows its name in a tooltip, and is busy while the check runs", async ({
@@ -405,13 +394,6 @@ test.describe("Check updates", () => {
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "false");
   });
 
-  test("one update: 1 skill has an update", async ({ cli, page }) => {
-    await open(cli, page, "pdf", []);
-    cli.register(["skill", "check-updates"], { events: [pdfUpdate] });
-    await checkButton(page).click();
-    await expect(toasts(page).getByText("1 skill has an update")).toBeVisible();
-  });
-
   test("nothing new: All skills are up to date, and the updates serve found are gone", async ({
     cli,
     page,
@@ -426,7 +408,7 @@ test.describe("Check updates", () => {
     await expect(update(page, "pdf")).toHaveCount(0);
   });
 
-  test("exit 3: names the source it could not reach, with a line of the app's own, and lists the updates found", async ({
+  test("exit 3: names the source it could not reach, with a line of the app's own, and opens the dialog with the updates found", async ({
     cli,
     page,
   }) => {
@@ -474,62 +456,13 @@ test.describe("Check updates", () => {
         { exact: true }
       )
     ).toBeVisible();
-    await expectOffered(page, "pdf");
-    await expectOffered(page, "review");
+    await expect(dialogRow(page, "pdf")).toBeVisible();
+    await expect(dialogRow(page, "review")).toBeVisible();
   });
 });
 
-test.describe("Update all", () => {
-  const cases = [
-    { conflicted: ["review"], toast: "Updated 3 skills. 1 has conflicts" },
-    {
-      conflicted: ["review", "pdf-letters"],
-      toast: "Updated 2 skills. 2 have conflicts",
-    },
-  ];
-  for (const c of cases) {
-    test(`exit 4: "${c.toast}"`, async ({ cli, page }) => {
-      await open(cli, page, "pdf", []);
-      cli.register(["skill", "check-updates"], {
-        events: [pdfUpdate, lettersUpdate, releaseNotesUpdate, reviewUpdate],
-      });
-      await checkButton(page).click();
-      const names = ["pdf", "pdf-letters", "release-notes", "review"];
-      cli.register(["skill", "update", "--all"], {
-        events: [
-          ...names
-            .filter((name) => !c.conflicted.includes(name))
-            .map((name) => updated(name, "current")),
-          ...c.conflicted.map((name): InlineEvent => ({
-            files: [],
-            kind: "managed",
-            name,
-            type: "conflict",
-          })),
-          {
-            code: "pending_merge",
-            message: `${c.conflicted.length} of 4 skills could not be updated: the update conflicts with their edits`,
-            type: "error",
-          },
-        ],
-        exitCode: 4,
-      });
-      await toasts(page)
-        .getByRole("button", { exact: true, name: "Update all" })
-        .click();
-      await expect(
-        toasts(page).getByText(c.toast, { exact: true })
-      ).toBeVisible();
-      expect(later(cli)).toEqual([
-        ["skill", "check-updates", "--json"],
-        ["skill", "update", "--all", "--json"],
-      ]);
-    });
-  }
-});
-
 test.describe("the Update skills dialog", () => {
-  test("the sidebar's pill opens it with every update offered selected, and it updates the selection one skill at a time", async ({
+  test("the sidebar's pill opens it with every update offered selected, by source, and it updates the selection one skill at a time", async ({
     cli,
     page,
   }) => {
@@ -538,19 +471,28 @@ test.describe("the Update skills dialog", () => {
     // draft's pending merge comes first: its update is not counted.
     await nav.getByRole("button", { exact: true, name: "4 updates" }).click();
     await expect(page).toHaveURL(/#\/skills\/pdf$/u);
-    const dialog = page.getByRole("dialog", { name: "Update skills" });
-    const skillRow = (name: string) =>
-      dialog.getByRole("listitem").filter({
-        has: page.getByRole("checkbox", { exact: true, name }),
-      });
+    const dialog = updateDialog(page);
+    const skillRow = (name: string) => dialogRow(page, name);
+    // A group per source, A to Z, each skill under the source its update comes from: a fork's
+    // upstream for pdf-letters.
+    await expect(dialog.getByRole("heading")).toHaveText([
+      "Update skills",
+      "acme/skills",
+      "me/account",
+    ]);
+    const acme = dialog.getByRole("region", { name: "acme/skills" });
+    await expect(acme.getByRole("listitem")).toHaveCount(3);
+    await expect(
+      dialog.getByRole("region", { name: "me/account" }).getByRole("checkbox")
+    ).toHaveCount(1);
+    // Every skill, the group of three and the select-all row, all checked.
     await expect(dialog.getByRole("checkbox", { checked: true })).toHaveCount(
-      5
+      6
     );
     await expect(dialog.getByText("All 4 selected")).toBeVisible();
     await expect(skillRow("review")).toContainText(
-      "You edited this skill. The update merges with your edits."
+      "Skill has local changes; update merges with edits."
     );
-    await expect(skillRow("pdf")).toContainText("acme/skills");
 
     // See changes opens What's new above the dialog; Escape closes the sheet alone.
     cli.register(["skill", "diff", "pdf", "--update"], {
@@ -570,6 +512,21 @@ test.describe("the Update skills dialog", () => {
 
     // A click on the row's name leaves the skill out.
     await dialog.getByText("release-notes", { exact: true }).click();
+    await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
+
+    // A group's checkbox is mixed while some of its skills are left out, selects them all, then
+    // clears them all.
+    const group = acme.getByRole("checkbox", {
+      exact: true,
+      name: "acme/skills",
+    });
+    await dialog.getByText("pdf-letters", { exact: true }).click();
+    await expect(group).toHaveAttribute("aria-checked", "mixed");
+    await group.click();
+    await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
+    await group.click();
+    await expect(dialog.getByText("Select all 4")).toBeVisible();
+    await group.click();
     await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
 
     cli.register(["skill", "update", "pdf"], {
@@ -598,11 +555,17 @@ test.describe("the Update skills dialog", () => {
     letters.release();
 
     await expect(dialog.getByRole("status")).toHaveText(
-      "2 skills updated · 1 needs a merge"
+      "2 of 3 skills updated"
     );
-    await expect(dialog).toContainText("Merged with your edits.");
-    await expect(dialog).toContainText(
-      "Merge conflict with your edits. Open the skill to resolve it."
+    // The note on local changes stays, and a conflict says where to resolve it.
+    const reviewRow = dialog
+      .getByRole("listitem")
+      .filter({ hasText: "review" });
+    await expect(reviewRow).toContainText(
+      "Skill has local changes; update merges with edits."
+    );
+    await expect(reviewRow).toContainText(
+      "Merge conflict. Open the skill to resolve it."
     );
     // The merge waits on its row: the dialog opens no skill.
     await expect(page).toHaveURL(/#\/skills\/pdf$/u);

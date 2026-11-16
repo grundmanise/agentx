@@ -1,8 +1,8 @@
-// Updates on the Skills screen: Check updates (`skill check-updates`), the Update of one skill
-// (`skill update <name>`, from its banner), Update all (`skill update --all`, from the toast of
-// a check that found more than one) and the run of the Update skills dialog (`update-dialog.tsx`),
-// which the sidebar's update pill opens: `skill update <name>` for each skill selected, one after
-// another, each row following its own command. Each runs through the runner and says what
+// Updates on the Skills screen: Check updates (`skill check-updates`), which opens the Update
+// skills dialog (`update-dialog.tsx`) when it found an update, the Update of one skill
+// (`skill update <name>`, from its banner) and the run of that dialog, which the sidebar's update
+// pill opens too: `skill update <name>` for each skill selected, one after another, each row
+// following its own command. Each runs through the runner and says what
 // happened by what the CLI emitted; the list redraws from the inventory and the update check
 // that follow, never from a result predicted here.
 import { useMemo } from "react";
@@ -15,7 +15,7 @@ import type {
   LibraryEntry,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
-import { notify } from "#/components/toast.tsx";
+import { dismissToast, notify } from "#/components/toast.tsx";
 import type { ToastAction } from "#/components/toast.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
@@ -30,8 +30,6 @@ export const CHECK_UPDATES = "Check updates";
 
 /** The label of the Update of `name`, which its banner's Update shows as pending. */
 export const updateLabel = (name: string) => `update ${name}`;
-
-const UPDATE_ALL = "update all";
 
 const plural = (n: number, one: string, many: string) =>
   n === 1 ? `${n} ${one}` : `${n} ${many}`;
@@ -103,23 +101,6 @@ export const updateSkill = async (row: SkillRow) => {
   }
 };
 
-/** Update all: `skill update --all`, every update the last check found. */
-export const updateAll = async () => {
-  const outcome = await runCommand(["skill", "update", "--all"], {
-    label: UPDATE_ALL,
-    success: (events) =>
-      `Updated ${plural(updatedIn(events).length, "skill", "skills")}`,
-  });
-  const { exitCode, events } = outcome;
-  const waiting = conflictsIn(events);
-  if (exitCode === EXIT_CODES.pending_merge && waiting > 0) {
-    const updated = plural(updatedIn(events).length, "skill", "skills");
-    notify(
-      `Updated ${updated}. ${waiting === 1 ? "1 has" : `${waiting} have`} conflicts`
-    );
-  }
-};
-
 /**
  * The updates the app offers, by name: every update candidate of the last check but those of a
  * skill with a pending merge, which the skill's banner finishes first.
@@ -152,6 +133,14 @@ const offered = (events: CliEvent[]) =>
     events.flatMap((e) => (e.type === "update_available" ? [e] : [])),
     useAppStore.getState().inventory?.library ?? []
   ).length;
+
+/** Whether the app offers an update now, as the sidebar's update pill counts them. */
+const offersUpdates = () => {
+  const { inventory, updates } = useAppStore.getState();
+  return (
+    offeredUpdates(Object.values(updates), inventory?.library ?? []).length > 0
+  );
+};
 
 /** The sources a check could not reach: those of its fetches that its error names. */
 const unreachable = (events: CliEvent[], message: string) => {
@@ -195,13 +184,26 @@ const checking = (current?: number, total?: number) =>
     ? "Checking for updates"
     : `Checking for updates · ${current} of ${plural(total, "source", "sources")}`;
 
+/** Whether the Update skills dialog is open: the sidebar's update pill and Check updates open it. */
+export const useUpdateDialog = create<{ open: boolean }>()(() => ({
+  open: false,
+}));
+
+/** The id of the sidebar's update pill, which takes the focus back when the dialog closes. */
+export const UPDATE_PILL_ID = "update-pill";
+
+/** Opens the Update skills dialog. */
+export const openUpdateDialog = () => {
+  useUpdateDialog.setState({ open: true });
+};
+
 /**
  * Check updates: `skill check-updates`, which fetches each source and lists every update it finds.
  * Its toast says how far it got, from 0 of the total before the first fetch and then one source
- * fetched at a time, then what it found: how many skills
- * have an update, with Update all when there is more than one. A source it could not reach
- * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere are
- * listed all the same (src/store/loaders.ts).
+ * fetched at a time. When the app then offers an update, the toast goes and the Update skills
+ * dialog opens; else the toast says that all skills are up to date. A source it could not reach
+ * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere
+ * are listed all the same (src/store/loaders.ts), in the dialog.
  */
 export const checkUpdates = async () => {
   if (checkRunning()) {
@@ -214,16 +216,7 @@ export const checkUpdates = async () => {
     },
   };
   notify(checking(), cancel, { lasting: true });
-  await runCommand(["skill", "check-updates"], {
-    action: (events) =>
-      offered(events) > 1
-        ? {
-            label: "Update all",
-            onClick: () => {
-              void updateAll();
-            },
-          }
-        : undefined,
+  const { exitCode } = await runCommand(["skill", "check-updates"], {
     failure: unreachableFailure,
     label: CHECK_UPDATES,
     onProgress: (event) => {
@@ -234,27 +227,20 @@ export const checkUpdates = async () => {
         });
       }
     },
-    success: (events) => {
-      const n = offered(events);
-      if (n === 0) {
-        return "All skills are up to date";
-      }
-      return n === 1 ? "1 skill has an update" : `${n} skills have updates`;
-    },
+    // An update found: the dialog says so, in place of a toast.
+    success: (events) =>
+      offered(events) === 0 ? "All skills are up to date" : undefined,
   });
-};
-
-/** Whether the Update skills dialog is open: the sidebar's update pill opens it. */
-export const useUpdateDialog = create<{ open: boolean }>()(() => ({
-  open: false,
-}));
-
-/** The id of the sidebar's update pill, which takes the focus back when the dialog closes. */
-export const UPDATE_PILL_ID = "update-pill";
-
-/** Opens the Update skills dialog. */
-export const openUpdateDialog = () => {
-  useUpdateDialog.setState({ open: true });
+  if (
+    (exitCode === EXIT_CODES.ok || exitCode === EXIT_CODES.source) &&
+    offersUpdates()
+  ) {
+    // Exit 3 keeps its toast, which names the source the check could not reach.
+    if (exitCode === EXIT_CODES.ok) {
+      dismissToast();
+    }
+    openUpdateDialog();
+  }
 };
 
 /**
@@ -330,23 +316,18 @@ export const runProgressText = (run: UpdateRun) => {
   return `Updating ${Math.max(1, started)} of ${selected.length}…`;
 };
 
-/** "3 skills updated · 1 needs a merge": what the run did, once it ended. */
+/** The statuses of a skill the run updated, or found up to date already. */
+const UPDATED: ReadonlySet<UpdateStatus> = new Set<UpdateStatus>([
+  "updated",
+  "merged",
+  "current",
+]);
+
+/** "2 of 4 skills updated": what the run did of the skills selected, once it ended. */
 export const runSummaryText = (run: UpdateRun) => {
   const rows = selectedRows(run);
-  const count = (...statuses: UpdateStatus[]) =>
-    rows.filter((r) => statuses.includes(r.status)).length;
-  const updated = count("updated", "merged", "current");
-  const conflicts = count("conflict");
-  const failed = count("failed");
-  return [
-    updated === 0
-      ? "No skills updated"
-      : `${plural(updated, "skill", "skills")} updated`,
-    ...(conflicts > 0
-      ? [`${conflicts} ${conflicts === 1 ? "needs" : "need"} a merge`]
-      : []),
-    ...(failed > 0 ? [`${failed} not updated`] : []),
-  ].join(" · ");
+  const updated = rows.filter((r) => UPDATED.has(r.status)).length;
+  return `${updated} of ${plural(rows.length, "skill", "skills")} updated`;
 };
 
 /** Where one skill's `skill update <name>` left it. */
@@ -382,9 +363,7 @@ const stoppedProblem = (outcome: Outcome): Problem => ({
 const logRun = (run: UpdateRun) => {
   const rows = selectedRows(run);
   const clean = rows.every(
-    (r) =>
-      ["updated", "merged", "current"].includes(r.status) &&
-      (r.warnings ?? []).length === 0
+    (r) => UPDATED.has(r.status) && (r.warnings ?? []).length === 0
   );
   addActivity(clean ? "success" : "attention", runSummaryText(run));
 };
