@@ -125,8 +125,12 @@ const ResizeHandle = ({
     if (el === undefined || drag.current === null) {
       return;
     }
-    // The sheet is at the right edge, so moving the handle left widens it.
-    setWidth(el, drag.current.width + drag.current.x - event.clientX);
+    // The sheet is at the right edge, so moving the handle left widens it. A negative width is
+    // invalid CSS, which would drop the minimum width, so it stops at 0 and the minimum clamps it.
+    setWidth(
+      el,
+      Math.max(0, drag.current.width + drag.current.x - event.clientX)
+    );
   };
 
   const onPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
