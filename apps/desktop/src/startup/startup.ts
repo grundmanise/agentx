@@ -1,8 +1,8 @@
 // The launch sequence and the state of the startup layer. On launch the app resolves the CLI, runs
 // `version` and `doctor` at the same time, then starts the serve child and waits for its first
 // inventory. The layer shows only when a check fails, when a command exits with code 8, and in
-// manual mode. Until the checks pass, the panel shows the kept inventory, washed out
-// (src/store/launch-cache.ts), or, on a launch with none, that it loads. The
+// manual mode. Until the checks pass, the panel shows the kept inventory under a frosted
+// pane (src/store/launch-cache.ts), or, on a launch with none, that it loads. The
 // only commands it runs are `version`, `doctor` and `serve`: it changes nothing on disk.
 import { create } from "zustand";
 
