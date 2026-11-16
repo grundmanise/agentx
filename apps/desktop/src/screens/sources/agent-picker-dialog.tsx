@@ -1,23 +1,61 @@
-// The Choose agents dialog of the Add skills bar (DESIGN.md §6 "Agent picker"): every
-// configuration that takes a placement, by name, with its path and a checkbox, a search over the
-// names, and Clear · Done. A row toggles the same targets as the bar's logos.
-import { useId, useState } from "react";
+// The agent picker of the Add skills bar (DESIGN.md §6 "Agent picker"), "Where to install": a
+// search over the names, then every configuration that takes a placement and every universal one,
+// by name. A row has its logo, name and path; a direct one has a checkbox that toggles the same
+// targets as the bar's logos, a universal one the Universal pill and the lock. Then Clear · Done.
+import { useId, useRef, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
+import { LockMark } from "#/components/check-mark.tsx";
+import { HelpTerm } from "#/components/help-term.tsx";
+import { PillTip } from "#/components/pill.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
-import { plural } from "#/lib/plural.ts";
 
-/** One configuration: its logo, name and path, and the checkbox; the whole row toggles it. */
+/** What universal agents are, in the tooltip of the subtitle's term and of the Universal pill. */
+const universalTip = (
+  <>
+    Universal agents read your skills library,{" "}
+    <span className="type-technical-sm">~/.agents/skills</span>, so every skill
+    you add reaches them.
+  </>
+);
+
+/** The name over the path, beside the logo. */
+const Name = ({
+  configuration,
+  universal,
+}: {
+  configuration: Configuration;
+  universal: boolean;
+}) => (
+  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="type-body text-text-primary truncate">
+        {configuration.name}
+      </span>
+      {universal && (
+        <PillTip tone="universal" tip={universalTip}>
+          Universal
+        </PillTip>
+      )}
+    </span>
+    <span className="type-technical-sm text-text-caption truncate">
+      {configuration.path}
+    </span>
+  </span>
+);
+
+/** A configuration that takes a placement, with the checkbox; the whole row toggles it. */
 const Row = ({
   configuration,
   checked,
@@ -34,20 +72,8 @@ const Row = ({
         htmlFor={id}
         className="rounded-agent-picker-row hover:bg-agent-picker-row-hover has-focus-visible:outline-shell-focus-ring flex cursor-pointer items-center gap-3 px-3 py-2 has-focus-visible:outline-2 has-focus-visible:-outline-offset-2"
       >
-        <AgentLogo
-          client={configuration}
-          size={28}
-          hover="tooltip"
-          decorative
-        />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="type-body text-text-primary truncate">
-            {configuration.name}
-          </span>
-          <span className="type-technical-sm text-text-caption truncate">
-            {configuration.path}
-          </span>
-        </span>
+        <AgentLogo client={configuration} size={28} decorative />
+        <Name configuration={configuration} universal={false} />
         <Checkbox
           id={id}
           aria-label={configuration.name}
@@ -59,27 +85,49 @@ const Row = ({
   );
 };
 
-/** Choose agents: the full list of install targets, searchable by name. */
+/**
+ * A universal configuration: its client reads the library, so every skill reaches it. The lock
+ * stands where a row has its checkbox, and the row is no control.
+ */
+const UniversalRow = ({ configuration }: { configuration: Configuration }) => (
+  <li className="flex items-center gap-3 px-3 py-2">
+    <AgentLogo client={configuration} size={28} decorative />
+    <Name configuration={configuration} universal />
+    <LockMark />
+    <span className="sr-only">Always on</span>
+  </li>
+);
+
+/** The agent picker: every install target and every universal agent, searchable by name. */
 export const AgentPickerDialog = ({
   open,
   onOpenChange,
+  skills,
   configurations,
+  universal,
   targets,
   onToggleTarget,
   onClearTargets,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** How many skills the install adds, for the subtitle's wording. */
+  skills: number;
   /** The configurations that take a placement. */
   configurations: Configuration[];
+  /** The configurations whose client reads the library. */
+  universal: Configuration[];
   /** The ids of the chosen targets. */
   targets: string[];
   onToggleTarget: (id: string) => void;
   onClearTargets: () => void;
 }) => {
   const [query, setQuery] = useState("");
+  const search = useRef<HTMLInputElement>(null);
+  const one = skills === 1;
   const text = query.trim().toLowerCase();
-  const rows = configurations.filter((c) =>
+  const universalIds = new Set(universal.map((c) => c.id));
+  const rows = [...configurations, ...universal].filter((c) =>
     c.name.toLowerCase().includes(text)
   );
   rows.sort((a, b) => a.name.localeCompare(b.name));
@@ -93,11 +141,28 @@ export const AgentPickerDialog = ({
         onOpenChange(next);
       }}
     >
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          search.current?.focus();
+        }}
+      >
         <DialogHeader>
-          <DialogTitle>Choose agents</DialogTitle>
+          <DialogTitle>Where to install</DialogTitle>
+          <DialogDescription>
+            {`Choose agents to add the ${one ? "skill" : "skills"} to.`}
+            {universal.length > 0 && (
+              <>
+                {` ${one ? "It is" : "They are"} always available to `}
+                <HelpTerm tip={universalTip} trailing=".">
+                  universal agents
+                </HelpTerm>
+              </>
+            )}
+          </DialogDescription>
         </DialogHeader>
         <SearchField
+          ref={search}
           label="Search agents"
           placeholder="Search agents"
           value={query}
@@ -112,22 +177,23 @@ export const AgentPickerDialog = ({
             aria-label="Agents"
             className="max-h-agent-picker-list m-0 flex list-none flex-col overflow-auto p-0"
           >
-            {rows.map((c) => (
-              <Row
-                key={c.id}
-                configuration={c}
-                checked={targets.includes(c.id)}
-                onToggle={() => {
-                  onToggleTarget(c.id);
-                }}
-              />
-            ))}
+            {rows.map((c) =>
+              universalIds.has(c.id) ? (
+                <UniversalRow key={c.id} configuration={c} />
+              ) : (
+                <Row
+                  key={c.id}
+                  configuration={c}
+                  checked={targets.includes(c.id)}
+                  onToggle={() => {
+                    onToggleTarget(c.id);
+                  }}
+                />
+              )
+            )}
           </ul>
         )}
         <DialogFooter>
-          <output className="type-secondary text-text-muted flex min-w-0 flex-1 items-center">
-            {plural(targets.length, "agent")}
-          </output>
           <Button
             variant="ghost"
             disabled={targets.length === 0}

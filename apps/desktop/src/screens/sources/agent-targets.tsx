@@ -1,12 +1,12 @@
-// The install targets of a `skill add` (DESIGN.md §6 "Agent picker"): "Add to", then round logo
-// toggles, at most five, the rest behind a "+n" button that opens Choose agents, with the
-// Universal stack, always on, between the chosen ones and the rest. The Add skills bar of Sources
-// and the Add skill dialog show it; `useAgentTargets` holds the choice, which starts as the
+// The install targets of a `skill add` (DESIGN.md §6 "Agent picker"): the Universal stack, locked
+// on, then "Add to" and round logo toggles, at most five, the rest behind a "+n" button that opens
+// the agent picker. The Add skills bar of Sources and the Add skill dialog show it; `useAgentTargets` holds the choice, which starts as the
 // enabled configurations, where `skill add` installs when no agent is named.
 import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
+import { LockMark } from "#/components/check-mark.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import {
@@ -14,11 +14,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { andList } from "#/lib/plural.ts";
 import { AgentPickerDialog } from "#/screens/sources/agent-picker-dialog.tsx";
 import {
   directConfigurations,
   universalConfigurations,
-  universalTitle,
 } from "#/screens/sources/projection.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -54,15 +54,39 @@ export const useAgentTargets = () => {
   return { chosen, clear, direct, enabled, toggle, universal };
 };
 
+/** The ids of `direct`, the chosen ones first, each group in inventory order. */
+const targetOrder = (direct: Configuration[], targets: string[]) => [
+  ...direct.filter((c) => targets.includes(c.id)).map((c) => c.id),
+  ...direct.filter((c) => !targets.includes(c.id)).map((c) => c.id),
+];
+
+/** What the Universal stack means, in its tooltip. */
+const universalHint = "Skills are always added to universal agents";
+
 /**
- * The ids of `direct`, the chosen ones first, each group in inventory order, and how many were
- * chosen: the Universal stack goes between the two groups.
+ * The Universal stack: the clients that read the library, so every skill reaches them. Always
+ * on and never a toggle: the chosen ring and a lock, then a divider before "Add to". A screen
+ * reader hears the tooltip's text and the clients' names.
  */
-const targetOrder = (direct: Configuration[], targets: string[]) => {
-  const chosen = direct.filter((c) => targets.includes(c.id)).map((c) => c.id);
-  const rest = direct.filter((c) => !targets.includes(c.id)).map((c) => c.id);
-  return { chosen: chosen.length, ids: [...chosen, ...rest] };
-};
+const UniversalMark = ({ universal }: { universal: Configuration[] }) => (
+  <>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="rounded-pill ring-accent-primary ring-offset-overlay-bg relative flex flex-none ring-2 ring-offset-2">
+          <LogoStack clients={universal} size={28} tooltip={false} decorative />
+          <span className="rounded-checkbox ring-overlay-bg absolute -right-1.5 -bottom-1.5 flex ring-2">
+            <LockMark />
+          </span>
+          <span className="sr-only">{`${universalHint}: ${andList(
+            universal.map((c) => c.name)
+          )}`}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{universalHint}</TooltipContent>
+    </Tooltip>
+    <span aria-hidden className="bg-shell-divider h-6 w-px flex-none" />
+  </>
+);
 
 /**
  * The configurations shown as logos, and the rest, in `order`. A configuration the order does not
@@ -91,10 +115,12 @@ const moreLabel = (hidden: number, chosen: number) =>
     : `${hidden} more agents, ${chosen} chosen`;
 
 /**
- * "Add to" and the targets as logo toggles, laid out by the parent's flex row. The order is fixed
- * when it mounts and when Choose agents closes, so a logo stays in place while it is toggled.
+ * The Universal stack, then "Add to" and the targets as logo toggles, laid out by the parent's
+ * flex row. The order is fixed when it mounts and when the agent picker closes, so a logo stays in
+ * place while it is toggled.
  */
 export const AgentTargets = ({
+  skills,
   direct,
   universal,
   targets,
@@ -102,6 +128,8 @@ export const AgentTargets = ({
   onClearTargets,
   disabled,
 }: {
+  /** How many skills the install adds, for the agent picker's subtitle. */
+  skills: number;
   /** The configurations that take a placement, in inventory order. */
   direct: Configuration[];
   /** The configurations whose client reads the library. */
@@ -115,10 +143,7 @@ export const AgentTargets = ({
 }) => {
   const [order, setOrder] = useState(() => targetOrder(direct, targets));
   const [picking, setPicking] = useState(false);
-  const { shown, hidden } = splitTargets(direct, order.ids);
-  // The logos chosen when the order was fixed, then Universal, then the rest.
-  const lead = shown.slice(0, order.chosen);
-  const trail = shown.slice(order.chosen);
+  const { shown, hidden } = splitTargets(direct, order);
   const logoToggle = (c: Configuration) => (
     <Tooltip key={c.id}>
       <TooltipTrigger asChild>
@@ -131,7 +156,7 @@ export const AgentTargets = ({
           }}
           aria-label={c.name}
         >
-          <AgentLogo client={c} size={28} hover="none" decorative />
+          <AgentLogo client={c} size={28} tooltip={false} decorative />
         </Toggle>
       </TooltipTrigger>
       <TooltipContent>{c.name}</TooltipContent>
@@ -140,31 +165,13 @@ export const AgentTargets = ({
   const hiddenChosen = hidden.filter((c) => targets.includes(c.id)).length;
   return (
     <>
+      {universal.length > 0 && <UniversalMark universal={universal} />}
       <span className="type-secondary text-text-muted whitespace-nowrap">
         Add to
       </span>
       <fieldset className="m-0 flex items-center gap-2 border-0 p-0">
         <legend className="sr-only">Add to</legend>
-        {lead.map(logoToggle)}
-        {universal.length > 0 && (
-          <Toggle
-            kind="logo"
-            pressed
-            onPressedChange={() => {
-              // Universal clients read the library: every skill reaches them, whatever is chosen.
-            }}
-            aria-label="Universal"
-            aria-description={universalTitle(universal.map((c) => c.name))}
-          >
-            <LogoStack
-              clients={universal}
-              size={28}
-              hover="tooltip"
-              decorative
-            />
-          </Toggle>
-        )}
-        {trail.map(logoToggle)}
+        {shown.map(logoToggle)}
         {hidden.length > 0 && (
           <Button
             variant="secondary"
@@ -193,7 +200,9 @@ export const AgentTargets = ({
             setOrder(targetOrder(direct, targets));
           }
         }}
+        skills={skills}
         configurations={direct}
+        universal={universal}
         targets={targets}
         onToggleTarget={onToggleTarget}
         onClearTargets={onClearTargets}

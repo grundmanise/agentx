@@ -190,6 +190,8 @@
   --color-pill-disabled-text: var(--color-accent-attention);
   --color-pill-version-bg: var(--gray-880);
   --color-pill-version-text: var(--gray-300);
+  --color-pill-universal-bg: var(--gray-850);
+  --color-pill-universal-text: var(--gray-250);
 
   /* Inputs, switches, checkboxes */
   --color-input-bg: var(--gray-980);
@@ -351,6 +353,8 @@
   --color-file-row-edited-label: var(--color-accent-attention);
   --color-diff-added-bg: rgb(212 255 79 / 0.12);
   --color-diff-removed-bg: rgb(255 123 114 / 0.08);
+  --color-diff-added-word: rgb(212 255 79 / 0.24);
+  --color-diff-removed-word: rgb(255 123 114 / 0.24);
   --color-diff-yours-label: var(--color-accent-yours);
   --color-diff-yours-bg: rgb(182 156 255 / 0.06);
   --color-diff-theirs-label: var(--color-accent-theirs);
@@ -660,11 +664,9 @@
   --width-popover: 360px;
   --min-width-menu: 240px;
   --padding-menu: 6px;
-  --width-sheet: 420px;
-  --width-sheet-wide: 560px;
-  --width-sheet-log: 1120px;
-  --min-width-sheet-log: 420px;
-  --max-width-sheet-log: 90vw;
+  --width-sheet: 1120px;
+  --min-width-sheet: 420px;
+  --max-width-sheet: 90vw;
   --width-sheet-handle: 8px;
   --width-log-time: 8ch;
   --inset-sheet: 10px;
@@ -681,6 +683,7 @@
   --padding-key-hint-y: 3px;
   --min-height-toast: 44px;
   --max-width-toast: 640px;
+  --max-width-tooltip-text: 280px;
   --padding-toast: 18px;
   --padding-toast-y: 10px;
   --width-toast-detail: 440px;
@@ -972,7 +975,7 @@
 @utility max-h-popover {
   max-height: var(--radix-popover-content-available-height);
 }
-/* sheet.log-width: the width the user dragged the Activity log sheet to, else its default. */
+/* sheet.width: the width the user dragged a sheet to, else its default. */
 @utility w-sheet-dragged {
-  width: var(--sheet-dragged-width, var(--width-sheet-log));
+  width: var(--sheet-dragged-width, var(--width-sheet));
 }

@@ -11,6 +11,7 @@ import {
 import type { ReactNode, RefObject } from "react";
 
 import { CodePane } from "#/components/code-pane.tsx";
+import { Spinner } from "#/components/spinner.tsx";
 import {
   Accordion,
   AccordionContent,
@@ -18,6 +19,11 @@ import {
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
 import { statusLabels } from "#/screens/sources/projection.ts";
@@ -28,8 +34,20 @@ import type {
 } from "#/screens/sources/projection.ts";
 import { loadSkillMd } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
+import type { SkillMdRead } from "#/store/store.ts";
 
 const SKILL_MD = "SKILL.md";
+
+/** Which read of a skill's SKILL.md a read in the store is: its subpath at its tree. */
+const versionOf = ({ subpath, tree }: SkillMdRef) => `${subpath}\u0000${tree}`;
+
+/**
+ * Whether a card has what it shows when open: no SKILL.md to read, or the read of its current
+ * version ended, read or not.
+ */
+const isReady = (card: SkillCard, read: SkillMdRead | undefined) =>
+  card.skillMd === undefined ||
+  (read !== undefined && read.version === versionOf(card.skillMd));
 
 /** The round check at the end of a selectable skill's row: a ring, filled with the check when selected. */
 const CheckMark = ({ checked }: { checked: boolean }) => (
@@ -82,7 +100,10 @@ const PaneHint = ({ children }: { children: string }) => (
   </p>
 );
 
-/** The skill's SKILL.md from `source read`, read when its row opens, in the Code pane. */
+/**
+ * The skill's SKILL.md from `source read`, in the Code pane. The row opens once the read ends, so
+ * this shows the file or why it is not shown.
+ */
 const SkillMd = ({
   cardKey,
   name,
@@ -92,17 +113,13 @@ const SkillMd = ({
   name: string;
   skillMd: SkillMdRef;
 }) => {
-  const { source, subpath, tree } = skillMd;
-  const version = `${subpath}\u0000${tree}`;
   const read = useAppStore((s) => s.skillMds[cardKey]);
-  useEffect(() => {
-    void loadSkillMd(cardKey, { source, subpath, tree });
-  }, [cardKey, source, subpath, tree]);
-
   const current =
-    read !== undefined && read.version === version ? read : undefined;
+    read !== undefined && read.version === versionOf(skillMd)
+      ? read
+      : undefined;
   if (current === undefined) {
-    return <PaneHint>{`Reading ${SKILL_MD}…`}</PaneHint>;
+    return null;
   }
   if (current.failed === true) {
     return <PaneHint>{`${SKILL_MD} could not be read`}</PaneHint>;
@@ -125,12 +142,15 @@ const SkillMd = ({
   );
 };
 
-/** "View skill": the skill's directory on its source's web page, opened in the browser. */
+/**
+ * "View skill": the skill's directory on its source's web page, opened in the browser. It sits
+ * beside the name in the open row, over the row's trigger, and takes its own clicks.
+ */
 const ViewSkill = ({ page }: { page: string }) => (
   <a
     href={page}
     title={page}
-    className="type-secondary text-text-primary self-start font-medium hover:underline"
+    className="type-secondary text-text-primary pointer-events-auto flex-none font-medium underline underline-offset-2"
     onClick={(e) => {
       e.preventDefault();
       void openInBrowser(page);
@@ -141,19 +161,16 @@ const ViewSkill = ({ page }: { page: string }) => (
 );
 
 /**
- * What an open row shows: why a skill that cannot be selected cannot be, a link to the skill on
- * its source's web page, and its SKILL.md, whose frontmatter holds the description. One of your
- * skills on the account remote has no SKILL.md to read here, so its row shows its description.
+ * What an open row shows: why a skill that cannot be selected cannot be, and its SKILL.md, whose
+ * frontmatter holds the description. One of your skills on the account remote has no SKILL.md to
+ * read here, so its row shows its description.
  */
 const Details = ({ card }: { card: SkillCard }) => {
   const description =
     card.skillMd === undefined && card.description !== ""
       ? card.description
       : undefined;
-  const header =
-    description !== undefined ||
-    card.title !== undefined ||
-    card.page !== undefined;
+  const header = description !== undefined || card.title !== undefined;
   return (
     <>
       {header && (
@@ -168,7 +185,6 @@ const Details = ({ card }: { card: SkillCard }) => {
               {card.title}
             </p>
           )}
-          {card.page !== undefined && <ViewSkill page={card.page} />}
         </div>
       )}
       {card.skillMd !== undefined && (
@@ -178,24 +194,63 @@ const Details = ({ card }: { card: SkillCard }) => {
   );
 };
 
+const LOADING = "Loading skill…";
+
+/**
+ * A spinner in the description's place while the row's SKILL.md is read, before the row opens.
+ * The read is often quick, so it has no text; its tooltip says what it waits for.
+ */
+const Loading = () => (
+  <output className="text-text-muted flex min-w-0 flex-1 items-center">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="pointer-events-auto flex flex-none">
+          <Spinner size="sm" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{LOADING}</TooltipContent>
+    </Tooltip>
+    <span className="sr-only">{LOADING}</span>
+  </output>
+);
+
 /**
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its
- * description while closed) and, at its end, the round check that selects it, or for a skill this
- * machine holds already its status. The row is named by the skill alone; its status and
- * description are read as its description.
+ * description while closed, View skill beside the name while open) and, at its end, the round
+ * check that selects it, or for a skill this machine holds already its status. The row is named
+ * by the skill alone; its status and description are read as its description. A row asked to
+ * open reads its SKILL.md first, with a spinner in the description's place, and opens once the
+ * read ends.
  */
 const SkillItem = ({
   card,
   open,
+  loading,
   selected,
   onToggle,
 }: {
   card: SkillCard;
   open: boolean;
+  /** Whether the row was asked to open and its SKILL.md is being read. */
+  loading: boolean;
   selected: boolean;
   onToggle: (card: SkillCard) => void;
 }) => {
   const descriptionId = useId();
+  const wanted = open || loading;
+  const source = card.skillMd?.source;
+  const subpath = card.skillMd?.subpath;
+  const tree = card.skillMd?.tree;
+  useEffect(() => {
+    if (
+      wanted &&
+      source !== undefined &&
+      subpath !== undefined &&
+      tree !== undefined
+    ) {
+      void loadSkillMd(card.key, { source, subpath, tree });
+    }
+  }, [wanted, card.key, source, subpath, tree]);
   const status =
     card.status === undefined ? undefined : statusLabels[card.status];
   const description = [status, card.description]
@@ -208,6 +263,7 @@ const SkillItem = ({
         label={card.name}
         description={description === "" ? undefined : descriptionId}
         open={open}
+        busy={loading}
         meta={
           status === undefined ? undefined : (
             <span className={statusVariants({ status: card.status })}>
@@ -230,13 +286,27 @@ const SkillItem = ({
           ) : undefined
         }
       >
-        <span className="type-row-name text-text-primary min-w-0 flex-initial truncate">
-          {card.name}
+        {/* The name and View skill share a baseline, as their sizes differ. */}
+        <span className="flex min-w-0 flex-initial items-baseline gap-3">
+          <span
+            aria-hidden
+            className="type-row-name text-text-primary min-w-0 flex-initial truncate"
+          >
+            {card.name}
+          </span>
+          {open && card.page !== undefined && <ViewSkill page={card.page} />}
         </span>
-        {/* The details show the description in full while the row is open. */}
-        <span className="type-row-desc text-text-muted min-w-0 flex-1 truncate">
-          {open ? "" : card.description}
-        </span>
+        {loading ? (
+          <Loading />
+        ) : (
+          // The details show the description in full while the row is open.
+          <span
+            aria-hidden
+            className="type-row-desc text-text-muted min-w-0 flex-1 truncate"
+          >
+            {open ? "" : card.description}
+          </span>
+        )}
         {description !== "" && (
           <span id={descriptionId} className="sr-only">
             {description}
@@ -383,10 +453,34 @@ export const SkillList = ({
   /** The element the list scrolls in. */
   scroller: RefObject<HTMLElement | null>;
 }) => {
-  const [open, setOpen] = useState<string[]>([]);
+  // The rows asked to open. A row whose SKILL.md is still read waits closed, then opens.
+  const [wanted, setWanted] = useState<string[]>([]);
+  const skillMds = useAppStore((s) => s.skillMds);
   const list = useRef<HTMLDivElement>(null);
   const offset = useOffsetIn(list, scroller);
   const items = itemsOf(groups, captions);
+  const cards = new Map(
+    items.flatMap((item) =>
+      item.kind === "card" ? [[item.key, item.card] as const] : []
+    )
+  );
+  const ready = (key: string) => {
+    const card = cards.get(key);
+    return card === undefined || isReady(card, skillMds[key]);
+  };
+  const open = wanted.filter(ready);
+  // A click on a row that opens, or one that waits for its read, asks again: it no longer
+  // waits. A click on an open row closes it.
+  const onOpenChange = (next: string[]) => {
+    const clicked = new Set([
+      ...next.filter((key) => !open.includes(key)),
+      ...open.filter((key) => !next.includes(key)),
+    ]);
+    setWanted((previous) => [
+      ...previous.filter((key) => !clicked.has(key)),
+      ...[...clicked].filter((key) => !previous.includes(key)),
+    ]);
+  };
   // The same function on every render, which calls the latest `onToggle`.
   const latestToggle = useRef(onToggle);
   useEffect(() => {
@@ -445,6 +539,9 @@ export const SkillList = ({
           <SkillItem
             card={item.card}
             open={open.includes(item.card.key)}
+            loading={
+              wanted.includes(item.card.key) && !open.includes(item.card.key)
+            }
             selected={selected.has(item.card.key)}
             onToggle={toggle}
           />
@@ -459,7 +556,7 @@ export const SkillList = ({
         variant="list"
         label="Skills"
         value={open}
-        onValueChange={setOpen}
+        onValueChange={onOpenChange}
       >
         <div ref={virtualizer.containerRef} className="relative">
           {sections.map(({ group, nodes }) => (
