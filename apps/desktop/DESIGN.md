@@ -684,6 +684,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` | From the bottom edge |
 | `toast.detail-width` | 440 | `w-toast-detail` | Error toast |
 | `toast.detail-padding` | 12 6 12 18 | `py-toast-detail pr-1.5 pl-toast` |  |
+| `toast.count-min-width` | 5ch | `min-w-toast-count` | The count of a progress toast, such as Check updates' "1/10", in `tabular-nums`: room for "99/99" from the start, so the toast keeps its width as the count comes |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
 
@@ -1003,6 +1004,7 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 - As wide as its text, up to `toast.max-width`; past it the text wraps and the toast grows taller. A one-line toast keeps `toast.min-height`, so it looks as it did before toasts wrapped.
 - The action keeps its width on the right of the text and is centred on the toast's height, wrapped or not: the toast is a pill, so its middle is the line the eye follows, and a short action lined up with one line of two would look misplaced on the rounded end.
+- A toast whose command counts its progress keeps room for the count after its text from the start, `toast.count-min-width`, empty until the count comes, so the toast keeps its width: Check updates says "Checking for updates…", then "Checking for updates… 1/10".
 
 - One toast at a time: a new one replaces the one showing.
 - It goes after 2.6s, or 5s with an action.

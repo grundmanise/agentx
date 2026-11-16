@@ -17,6 +17,7 @@ import type {
 } from "#/cli/events.gen.ts";
 import { dismissToast, notify } from "#/components/toast.tsx";
 import type { ToastAction } from "#/components/toast.tsx";
+import { checkingText } from "#/screens/skills/checking-text.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { cancelCommand, runCommand, usePending } from "#/store/runner.ts";
@@ -179,11 +180,6 @@ const unreachableFailure = ({ exitCode, events }: Outcome) => {
 const checkRunning = () =>
   Object.hasOwn(useAppStore.getState().pending, CHECK_UPDATES);
 
-const checking = (current?: number, total?: number) =>
-  current === undefined || total === undefined
-    ? "Checking for updates"
-    : `Checking for updates · ${current} of ${plural(total, "source", "sources")}`;
-
 /** Whether the Update skills dialog is open: the sidebar's update pill and Check updates open it. */
 export const useUpdateDialog = create<{ open: boolean }>()(() => ({
   open: false,
@@ -199,8 +195,8 @@ export const openUpdateDialog = () => {
 
 /**
  * Check updates: `skill check-updates`, which fetches each source and lists every update it finds.
- * Its toast says how far it got, from 0 of the total before the first fetch and then one source
- * fetched at a time. When the app then offers an update, the toast goes and the Update skills
+ * Its toast says "Checking for updates…", then how far it got, "0/10" before the first fetch and
+ * then one source fetched at a time, in room it keeps from the start. When the app then offers an update, the toast goes and the Update skills
  * dialog opens; else the toast says that all skills are up to date. A source it could not reach
  * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere
  * are listed all the same (src/store/loaders.ts), in the dialog.
@@ -215,13 +211,13 @@ export const checkUpdates = async () => {
       void cancelCommand(CHECK_UPDATES);
     },
   };
-  notify(checking(), cancel, { lasting: true });
+  notify(checkingText(), cancel, { lasting: true });
   const { exitCode } = await runCommand(["skill", "check-updates"], {
     failure: unreachableFailure,
     label: CHECK_UPDATES,
     onProgress: (event) => {
       if (event.phase === "fetch") {
-        notify(checking(event.current, event.total), cancel, {
+        notify(checkingText(event.current, event.total), cancel, {
           inPlace: true,
           lasting: true,
         });
