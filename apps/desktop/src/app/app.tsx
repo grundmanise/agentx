@@ -125,11 +125,11 @@ export const App = () => {
     setNavigate(navigate);
   }, [navigate]);
 
-  // ⌘K / Ctrl+K toggles the palette from anywhere but the startup layer.
+  // ⌘K / Ctrl+K toggles the palette from anywhere but the startup layer, once the checks pass.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const shortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
-      if (shortcut && !startup.open) {
+      if (shortcut && startup.ready && !startup.open) {
         e.preventDefault();
         setPaletteOpen((open) => !open);
       }
@@ -138,12 +138,13 @@ export const App = () => {
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [startup.open]);
+  }, [startup.open, startup.ready]);
 
   return (
     <div className="bg-shell-bg text-text-primary flex h-full flex-col">
       <TopBar
         commandField={!startup.open}
+        locked={!startup.ready}
         onOpenPalette={() => {
           setPaletteOpen(true);
         }}
@@ -152,7 +153,10 @@ export const App = () => {
         <StartupLayer />
       ) : (
         <div className="flex min-h-0 flex-1">
-          <Sidebar />
+          {/* Until the checks pass, nothing in the window but the frosted pane can be reached. */}
+          <div inert={!startup.ready} className="contents">
+            <Sidebar />
+          </div>
           <main
             aria-busy={!startup.ready}
             className="rounded-shell-panel border-shell-divider bg-shell-content-bg mr-panel mb-panel relative flex min-w-0 flex-1 flex-col overflow-hidden border"

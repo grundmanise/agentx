@@ -121,7 +121,7 @@ test("a first launch says at once that it loads, and from 5 seconds how much lon
   await pauseTimers(page);
   await page.goto("/");
   await doctor.started;
-  await expect(progress(page)).toContainText("Loading");
+  await expect(progress(page)).toContainText("Starting the app…");
   await expect(progress(page)).not.toContainText("trying for");
 
   await page.clock.runFor(5000);
@@ -201,18 +201,19 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
   // The skill is there while the checks run, and none of its reads ran.
   await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
   await expect(veil(page)).toBeVisible();
-  await expect(veil(page).getByRole("status")).toContainText("Loading");
+  await expect(veil(page).getByRole("status")).toContainText(
+    "Starting the app…"
+  );
   await expect(screen(page)).toHaveAttribute("inert", "");
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
   await expect(progress(page)).toHaveCount(0);
   expect(commands()).toEqual(launchLines);
 
-  // The sidebar goes to another screen, under the pane as well.
-  await page.getByRole("link", { name: "Settings" }).click();
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Settings" })
-  ).toBeVisible();
-  await expect(screen(page)).toHaveAttribute("inert", "");
+  // The sidebar, the command field and the sync status are out of reach, and ⌘K opens nothing.
+  await expect(page.locator("[inert] nav[aria-label='Main']")).toBeVisible();
+  await expect(page.locator("header [inert]")).toHaveCount(2);
+  await page.keyboard.press("Control+K");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // A change started now waits too, and Cancel stops one that waits.
   cli.register(["skill", "place", "notes"], {});
@@ -225,6 +226,7 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
   doctor.release();
   await expect(veil(page)).toHaveCount(0);
   await expect(screen(page)).not.toHaveAttribute("inert");
+  await expect(page.locator("[inert]")).toHaveCount(0);
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await expect
     .poll(() => commands())

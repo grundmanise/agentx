@@ -7,7 +7,7 @@ date: 2026-11-14
 
 A launch runs four steps before the app knows the machine: it reads the login shell's environment, runs `agentx version` and `agentx doctor`, then starts `agentx serve` and waits for its first inventory. Each step starts processes, and on macOS that takes long enough to see. Until now the main panel stayed empty for all of it.
 
-The app now keeps the last inventory it applied, with the slices it loads once the checks pass (the machine settings, the machine, the sources and the adoption preview), as the **kept inventory**. A launch that finds one fills its store from it before the first frame, so the screens show at once. The checks run as before, at the same time as the user reads. Until they pass, the screen in the main panel is under a frosted pane with the launch spinner on top. The pane takes every click and key, so no control in the main panel starts a command before the checks pass. The title bar and the sidebar are as always, and the user can go to any screen.
+The app now keeps the last inventory it applied, with the slices it loads once the checks pass (the machine settings, the machine, the sources and the adoption preview), as the **kept inventory**. A launch that finds one fills its store from it before the first frame, so the screens show at once. The checks run as before, at the same time as the user reads. Until they pass, the screen in the main panel is under a frosted pane with the launch spinner on top. The pane takes every click and key, so no control in the main panel starts a command before the checks pass. The sidebar, the command field, the sync status and ⌘K are out of reach until then too: with nothing to act on, no command waits for the checks.
 
 The kept inventory is shown, never trusted:
 
@@ -18,7 +18,7 @@ The kept inventory is shown, never trusted:
 
 The browser's `localStorage` holds it, as one item. The read is synchronous, so the kept inventory is in the first frame; a file in the app's config directory, read through the Rust side, would arrive after it. The item names the build that wrote it, and a launch drops what another build kept, since its events may have another shape. It is written only after the checks pass, from what the app read from the CLI in that run.
 
-`version` and `doctor` now run at the same time: both only read the machine, and neither needs the other's result. Doctor still gates serve, since serve's first scan creates agentx home. A launch with no kept inventory, such as the first one, shows a spinner and "Loading" from its first frame; before, a spinner and the name of the running check showed only after 2 seconds.
+`version` and `doctor` now run at the same time: both only read the machine, and neither needs the other's result. Doctor still gates serve, since serve's first scan creates agentx home. A launch with no kept inventory, such as the first one, shows a spinner and "Starting the app…" from its first frame; before, a spinner and the name of the running check showed only after 2 seconds.
 
 This amends [ADR 0001](0001-go-cli-owns-machine-and-account-tauri-renders.md): the app keeps a copy of what the CLI last told it. It still reads nothing of the machine itself. It leaves [ADR 0004](0004-no-local-database-git-holds-lineage-files-hold-machine-state.md) as it is: the kept inventory holds no state. Deleting it changes one thing, what the next launch shows before its checks pass.
 
