@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 
 import { useRouteKey } from "#/lib/route-key.ts";
@@ -9,16 +9,18 @@ import {
   forksOf,
   groupRows,
   inCollapsed,
-  noFilters,
   projectRows,
 } from "#/screens/skills/projection.ts";
-import type {
-  Filters,
-  SkillRow,
-  SortOrder,
-} from "#/screens/skills/projection.ts";
+import type { SkillRow } from "#/screens/skills/projection.ts";
 import { SkillDetail } from "#/screens/skills/skill-detail.tsx";
 import { SkillList } from "#/screens/skills/skill-list.tsx";
+import {
+  setFilters,
+  setOrder,
+  toggleCollapsed,
+  useSkillsView,
+} from "#/screens/skills/view.ts";
+import { useStartup } from "#/startup/startup.ts";
 import { useAppStore } from "#/store/store.ts";
 
 const none: SkillRow[] = [];
@@ -70,21 +72,10 @@ export const SkillsScreen = () => {
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
-  const [filters, setFilters] = useState<Filters>(noFilters);
-  const [order, setOrder] = useState<SortOrder>("default");
-  // The keys of the plugin subgroups the user collapsed.
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
-    () => new Set()
-  );
-  const toggle = (key: string) => {
-    setCollapsed((keys) => {
-      const next = new Set(keys);
-      if (!next.delete(key)) {
-        next.add(key);
-      }
-      return next;
-    });
-  };
+  // The search, filters, sort order and collapsed subgroups stay while another screen shows.
+  const filters = useSkillsView((s) => s.filters);
+  const order = useSkillsView((s) => s.order);
+  const collapsed = useSkillsView((s) => s.collapsed);
 
   const rows = useMemo(
     () =>
@@ -120,10 +111,16 @@ export const SkillsScreen = () => {
   };
 
   // j/k and the arrows move the selection through the visible rows, in group order, past the
-  // rows of a collapsed subgroup.
+  // rows of a collapsed subgroup. Not under the launch pane: the list waits for the startup checks.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || inField(e.target)) {
+      if (
+        !useStartup.getState().ready ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        inField(e.target)
+      ) {
         return;
       }
       const step = steps[e.key] ?? 0;
@@ -156,7 +153,7 @@ export const SkillsScreen = () => {
         selectedKey={selected?.key}
         onSelect={select}
         collapsed={collapsed}
-        onToggle={toggle}
+        onToggle={toggleCollapsed}
       />
       <section
         aria-label="Skill details"

@@ -53,7 +53,7 @@ The complete result of one scan of one machine: its agent configurations with th
 _Avoid_: scan result, state
 
 **Kept inventory**:
-The last inventory the desktop app applied, kept in the app's own storage with the settings, machine, sources and adoption preview it loaded. A launch shows it, washed out and pulsing, until the startup checks pass; no command runs against it, and the serve child's first inventory replaces it.
+The last inventory the desktop app applied, kept in the app's own storage with the settings, machine, sources and adoption preview it loaded. A launch shows it under a frosted pane with a spinner until the startup checks pass; no command runs against it, and the serve child's first inventory replaces it.
 _Avoid_: cached snapshot, last session, offline inventory
 
 **Snapshot**:
