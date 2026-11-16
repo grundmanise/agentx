@@ -12,7 +12,6 @@ import {
   inCollapsed,
   noFilters,
   projectRows,
-  subgroupKey,
 } from "#/screens/skills/projection.ts";
 import type {
   Filters,
@@ -115,15 +114,6 @@ export const SkillsScreen = () => {
         rows.find((r) => r.name === routeKey))) ??
     flat.find((r) => !inCollapsed(r, expanded)) ??
     flat[0];
-  // A newly selected row in a collapsed subgroup, such as a plugin's skill another screen opens,
-  // opens its subgroup so the list shows it. Collapsing that subgroup later keeps it collapsed.
-  const [shownKey, setShownKey] = useState<string>();
-  if (selected !== undefined && selected.key !== shownKey) {
-    setShownKey(selected.key);
-    if (inCollapsed(selected, expanded)) {
-      setExpanded(new Set(expanded).add(subgroupKey(selected)));
-    }
-  }
   const configurations = inventory?.configurations ?? [];
 
   // The key the next key press moves from: the last selection made, which the route may not show

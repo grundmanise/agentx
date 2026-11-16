@@ -66,7 +66,6 @@ test("a list of hundreds of skills holds only the rows near what shows, and brin
   await list(page).evaluate((nav) => {
     nav.scrollTop = 0;
   });
-  await list(page).getByRole("button", { name: "Collapse all" }).click();
   await list(page).getByRole("button", { name: "Expand all" }).click();
 
   // The keys move the selection past the rows that were drawn and from one plugin to the next,
@@ -86,7 +85,7 @@ test("a list of hundreds of skills holds only the rows near what shows, and brin
   expect(await list(page).getByRole("listitem").count()).toBeLessThan(50);
 });
 
-test("plugins' subgroups start collapsed, but the opened skill's; Collapse all and Expand all", async ({
+test("plugins' subgroups start collapsed and show only the selected skill; Collapse all and Expand all", async ({
   cli,
   page,
 }) => {
@@ -98,17 +97,14 @@ test("plugins' subgroups start collapsed, but the opened skill's; Collapse all a
   });
   const toggle = (name: string, count = SKILLS_PER_PLUGIN) =>
     list(page).getByRole("button", { exact: true, name: `${name} ${count}` });
-  await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "true");
+  // A collapsed subgroup shows its selected skill, and no other.
+  await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "false");
   await expect(toggle("ACME-TOOLS", 1)).toHaveAttribute(
     "aria-expanded",
     "false"
   );
-
-  // Collapse all collapses every subgroup to its header; the detail pane keeps the selected skill.
-  await list(page).getByRole("button", { name: "Collapse all" }).click();
-  await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "false");
-  await expect(plugin.getByRole("listitem")).toHaveCount(0);
-  await expect(pane(page, first.name)).toBeVisible();
+  await expect(plugin.getByRole("listitem")).toHaveCount(1);
+  await expect(row(page, first.name)).toHaveAttribute("aria-current", "true");
 
   // Expand all opens every one.
   await list(page).getByRole("button", { name: "Expand all" }).click();
@@ -118,12 +114,20 @@ test("plugins' subgroups start collapsed, but the opened skill's; Collapse all a
   );
   await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "true");
 
-  // A collapsed subgroup's rows are skipped by the keys.
+  // Collapse all collapses every one to its header and the selected skill.
+  await list(page).getByRole("button", { name: "Collapse all" }).click();
+  await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "false");
+  await expect(plugin.getByRole("listitem")).toHaveCount(1);
+  await expect(pane(page, first.name)).toBeVisible();
+
+  // The keys skip a collapsed subgroup's rows; once the selection leaves it, it shows none.
+  await list(page).getByRole("button", { name: "Expand all" }).click();
   await toggle(first.plugin).click();
   await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "false");
   const next = listedPluginSkill(SKILLS_PER_PLUGIN).name;
   await page.keyboard.press("j");
   await expect(row(page, next)).toHaveAttribute("aria-current", "true");
+  await expect(plugin.getByRole("listitem")).toHaveCount(0);
   await toggle(first.plugin).click();
   await expect(row(page, first.name)).toBeVisible();
 });
