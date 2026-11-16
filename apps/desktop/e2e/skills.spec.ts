@@ -259,15 +259,31 @@ test.describe("the list", () => {
 });
 
 test.describe("filters", () => {
-  test("the name filter matches a substring, whatever the case", async ({
+  test("the name filter matches a substring, whatever the case, and stays while another screen shows", async ({
     cli,
     page,
   }) => {
     await openSkills(cli, page);
-    await page
-      .getByRole("searchbox", { name: "Filter skills by name" })
-      .fill("PDF");
+    const search = page.getByRole("searchbox", {
+      name: "Filter skills by name",
+    });
+    await search.fill("PDF");
     expect(await rowNames(list(page))).toEqual(["pdf-letters", "pdf"]);
+    await page.getByRole("button", { name: "Filter" }).click();
+    await filters(page)
+      .getByRole("group", { name: "Show" })
+      .getByRole("radio", { name: "Personal 1" })
+      .check();
+    await page.keyboard.press("Escape");
+    expect(await rowNames(list(page))).toEqual(["pdf-letters"]);
+
+    await page.getByRole("link", { name: "Settings" }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Settings" })
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Skills" }).click();
+    await expect(search).toHaveValue("PDF");
+    expect(await rowNames(list(page))).toEqual(["pdf-letters"]);
     await page.getByRole("searchbox").fill("zzz");
     await expect(list(page).getByText("No skills match")).toBeVisible();
   });
