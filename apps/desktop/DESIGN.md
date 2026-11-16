@@ -380,6 +380,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `file-row.edited-label` | `accent.attention` | Status of a file the user changed |
 | `diff.added-bg` | `lime-400/12` | Added line tint (marker `accent.primary`) |
 | `diff.removed-bg` | `red-400/8` | Removed line tint (marker `accent.danger`) |
+| `diff.added-word` | `lime-400/24` | Changed text of an added line, over its tint (text `code.strong`: 5.2:1) |
+| `diff.removed-word` | `red-400/24` | Changed text of a removed line, over its tint (text `code.strong`: 8.3:1) |
 | `diff.yours-label` | `accent.yours` | Your side's label, dot and chosen-pane ring |
 | `diff.yours-bg` | `violet-400/6` | Your side's pane ground |
 | `diff.theirs-label` | `accent.theirs` | Base version or update side's label, dot and chosen-pane ring |
@@ -1068,6 +1070,9 @@ The sheet frame (§6 "Sheet") (`src/app/activity-log.tsx`): the last lines of wh
 ### Code pane
 
 `code.bg`, `type.code`, grid `code.gutter 1fr`: line number in `code.line-number`, right-aligned · marker · text. Front matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: an added line on `diff.added-bg`, a removed line on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
+
+- Changed text: within a change, the text that differs between its removed lines and its added lines is marked as VS Code's diff editor marks it, with VS Code's own diff (copied into `src/vendor/vscode-diff`): a character diff of the whole change, extended to whole words where most of a word changed, with short kept runs between two changes joined into them. The changed text sits on `diff.removed-word` and `diff.added-word` in `code.strong`, since a line's own tone falls under 4.5:1 on those tints. White space counts, so a change of indentation is marked.
+- A change with one side, only removed or only added lines, has its line tint alone. So does a change that takes longer than 100 ms to compare.
 
 ### File list (detail pane FILES)
 
