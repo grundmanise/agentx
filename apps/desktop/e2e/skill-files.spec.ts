@@ -317,6 +317,7 @@ test("each file on disk can be shown in the file manager from its row", async ({
   );
 
   // A plugin's skill is shown where its occurrence resolves.
+  await list(page).getByRole("button", { name: "Expand all" }).click();
   await row(page, "commit-helper").click();
   await reveal(files(page, "commit-helper"), "reference/forms.md").click();
   expect(cli.reveals.at(-1)).toEqual([

@@ -97,6 +97,11 @@ const openSkills = async (
   await expect(row(page, "pdf")).toBeVisible();
 };
 
+/** Opens every plugin's subgroup, which start collapsed. */
+const expandPlugins = async (page: Page) => {
+  await list(page).getByRole("button", { name: "Expand all" }).click();
+};
+
 /** The command lines the screen itself ran, but the reads of a skill's files and edits. */
 const notFiles = (cli: MockCli) =>
   later(cli).filter((l) => !["files", "diff"].includes(l[1] ?? ""));
@@ -156,6 +161,7 @@ test.describe("the list", () => {
     page,
   }) => {
     await openSkills(cli, page);
+    await expandPlugins(page);
     const pdf = row(page, "pdf");
     await expect(pdf).toContainText("Read and convert PDF files");
     await expect(pdf).toHaveAccessibleDescription(/^Skill · Enabled\./u);
@@ -318,6 +324,7 @@ test.describe("filters", () => {
     page,
   }) => {
     await openSkills(cli, page);
+    await expandPlugins(page);
     await page.getByRole("button", { name: "Filter" }).click();
     const state = filters(page).getByRole("group", { name: "State" });
     await state.getByRole("radio", { name: "Enabled" }).check();
@@ -347,6 +354,7 @@ test.describe("filters", () => {
     page,
   }) => {
     await openSkills(cli, page);
+    await expandPlugins(page);
     await page.getByRole("button", { name: "Filter" }).click();
     const agents = filters(page).getByRole("group", { name: "Agents" });
     await expect(agents).toMatchAriaSnapshot(`

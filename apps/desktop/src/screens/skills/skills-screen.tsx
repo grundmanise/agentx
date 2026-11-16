@@ -8,9 +8,11 @@ import {
   filterRows,
   forksOf,
   groupRows,
+  GROUP_PLUGINS,
   inCollapsed,
   noFilters,
   projectRows,
+  subgroupKey,
 } from "#/screens/skills/projection.ts";
 import type {
   Filters,
@@ -40,7 +42,7 @@ const nextShown = (
   flat: SkillRow[],
   at: number,
   step: number,
-  collapsed: ReadonlySet<string>
+  expanded: ReadonlySet<string>
 ) => {
   const by = at === -1 ? 1 : step;
   const from = at === -1 ? 0 : at + step;
@@ -48,7 +50,7 @@ const nextShown = (
   return Array.from(
     { length: Math.max(0, count) },
     (_, n) => flat[from + n * by]
-  ).find((row) => row !== undefined && !inCollapsed(row, collapsed));
+  ).find((row) => row !== undefined && !inCollapsed(row, expanded));
 };
 
 /** Whether a key press belongs to a field or an overlay, which the list then leaves alone. */
@@ -72,12 +74,12 @@ export const SkillsScreen = () => {
   const adoption = useAppStore((s) => s.adoption);
   const [filters, setFilters] = useState<Filters>(noFilters);
   const [order, setOrder] = useState<SortOrder>("default");
-  // The keys of the plugin subgroups the user collapsed.
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
+  // The keys of the plugin subgroups that are open; every other one is collapsed.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set()
   );
   const toggle = (key: string) => {
-    setCollapsed((keys) => {
+    setExpanded((keys) => {
       const next = new Set(keys);
       if (!next.delete(key)) {
         next.add(key);
@@ -98,13 +100,30 @@ export const SkillsScreen = () => {
     [rows, filters, order]
   );
   const flat = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
+  // Collapse all closes every plugin's subgroup; Expand all opens each one the filters list.
+  const toggleAll = (open: boolean) => {
+    const keys =
+      groups
+        .find((g) => g.key === GROUP_PLUGINS)
+        ?.subgroups?.map((s) => s.key) ?? [];
+    setExpanded(open ? new Set(keys) : new Set());
+  };
   const selected =
     (routeKey === undefined
       ? undefined
       : (rows.find((r) => r.key === routeKey) ??
         rows.find((r) => r.name === routeKey))) ??
-    flat.find((r) => !inCollapsed(r, collapsed)) ??
+    flat.find((r) => !inCollapsed(r, expanded)) ??
     flat[0];
+  // A newly selected row in a collapsed subgroup, such as a plugin's skill another screen opens,
+  // opens its subgroup so the list shows it. Collapsing that subgroup later keeps it collapsed.
+  const [shownKey, setShownKey] = useState<string>();
+  if (selected !== undefined && selected.key !== shownKey) {
+    setShownKey(selected.key);
+    if (inCollapsed(selected, expanded)) {
+      setExpanded(new Set(expanded).add(subgroupKey(selected)));
+    }
+  }
   const configurations = inventory?.configurations ?? [];
 
   // The key the next key press moves from: the last selection made, which the route may not show
@@ -132,7 +151,7 @@ export const SkillsScreen = () => {
       }
       e.preventDefault();
       const at = flat.findIndex((r) => r.key === current.current);
-      const next = nextShown(flat, at, step, collapsed);
+      const next = nextShown(flat, at, step, expanded);
       if (next !== undefined && next.key !== current.current) {
         select(next);
       }
@@ -155,8 +174,9 @@ export const SkillsScreen = () => {
         onOrder={setOrder}
         selectedKey={selected?.key}
         onSelect={select}
-        collapsed={collapsed}
+        expanded={expanded}
         onToggle={toggle}
+        onToggleAll={toggleAll}
       />
       <section
         aria-label="Skill details"

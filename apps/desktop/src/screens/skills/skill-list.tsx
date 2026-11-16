@@ -34,6 +34,7 @@ import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
 import {
   forksOf,
   GROUP_DISK,
+  GROUP_PLUGINS,
   nextOrder,
   UNIVERSAL,
 } from "#/screens/skills/projection.ts";
@@ -186,6 +187,46 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
 };
 
 /**
+ * Collapse all, at the right end of the PLUGINS group's header while a plugin's subgroup is open:
+ * it collapses every one. While all are collapsed it reads Expand all and opens every one.
+ */
+const ToggleAll = ({
+  open,
+  onToggleAll,
+}: {
+  /** Whether a plugin's subgroup is open. */
+  open: boolean;
+  onToggleAll: (open: boolean) => void;
+}) => (
+  <Button
+    variant="ghost"
+    size="sm"
+    onClick={() => {
+      onToggleAll(!open);
+    }}
+  >
+    {open ? "Collapse all" : "Expand all"}
+  </Button>
+);
+
+/** The control at the right end of a group's header, if the group has one. */
+const groupAction = (
+  group: Group,
+  expanded: ReadonlySet<string>,
+  onAdoptAll: () => void,
+  onToggleAll: (open: boolean) => void
+) => {
+  if (group.key === GROUP_DISK) {
+    return <AdoptAll onOpen={onAdoptAll} />;
+  }
+  if (group.key === GROUP_PLUGINS) {
+    const open = (group.subgroups ?? []).some((s) => expanded.has(s.key));
+    return <ToggleAll open={open} onToggleAll={onToggleAll} />;
+  }
+  return null;
+};
+
+/**
  * One thing the list places at its own offset: a group's header, a plugin's header, or a row,
  * with its place among the rows of its group or plugin.
  */
@@ -223,13 +264,13 @@ const rowItems = (group: Group, rows: SkillRow[], subgroup?: Subgroup) =>
   }));
 
 /** The headers and rows in the order the list shows them; a collapsed plugin shows its header only. */
-const itemsOf = (groups: Group[], collapsed: ReadonlySet<string>): Item[] =>
+const itemsOf = (groups: Group[], expanded: ReadonlySet<string>): Item[] =>
   groups.flatMap((group, i): Item[] => [
     { first: i === 0, group, key: `group:${group.key}`, kind: "header" },
     ...(group.subgroups === undefined
       ? rowItems(group, group.rows)
       : group.subgroups.flatMap((subgroup, at): Item[] => {
-          const open = !collapsed.has(subgroup.key);
+          const open = expanded.has(subgroup.key);
           return [
             {
               first: at === 0,
@@ -367,8 +408,9 @@ const SkillGroups = ({
   selectedKey,
   onSelect,
   onAdoptAll,
-  collapsed,
+  expanded,
   onToggle,
+  onToggleAll,
 }: {
   /** Every row, before the filters. */
   rows: SkillRow[];
@@ -379,10 +421,12 @@ const SkillGroups = ({
   onSelect: (row: SkillRow) => void;
   /** Opens the adopt dialog for every tool with skills to adopt. */
   onAdoptAll: () => void;
-  /** The keys of the collapsed plugin subgroups. */
-  collapsed: ReadonlySet<string>;
+  /** The keys of the open plugin subgroups; every other one is collapsed. */
+  expanded: ReadonlySet<string>;
   /** Collapses or expands a plugin's subgroup, by its key. */
   onToggle: (key: string) => void;
+  /** Expands every plugin's subgroup, or collapses every one. */
+  onToggleAll: (open: boolean) => void;
 }) => {
   // What the rows' banners read besides the row, for their alert triangles.
   const sources = useAppStore((s) => s.sources);
@@ -398,7 +442,7 @@ const SkillGroups = ({
     latestSelect.current(row);
   }, []);
   const scroller = useRef<HTMLElement>(null);
-  const items = useMemo(() => itemsOf(groups, collapsed), [groups, collapsed]);
+  const items = useMemo(() => itemsOf(groups, expanded), [groups, expanded]);
   // Where the selected row is among the items, or -1 when the filters leave it out.
   const selectedIndex = useMemo(
     () =>
@@ -491,11 +535,12 @@ const SkillGroups = ({
                     source={group.source}
                     count={group.rows.length}
                     first={header.item.first}
-                    action={
-                      group.key === GROUP_DISK ? (
-                        <AdoptAll onOpen={onAdoptAll} />
-                      ) : undefined
-                    }
+                    action={groupAction(
+                      group,
+                      expanded,
+                      onAdoptAll,
+                      onToggleAll
+                    )}
                   />
                 </div>
               )}
@@ -617,8 +662,9 @@ export const SkillList = ({
   onOrder,
   selectedKey,
   onSelect,
-  collapsed,
+  expanded,
   onToggle,
+  onToggleAll,
 }: {
   /** Every row, before the filters. */
   rows: SkillRow[];
@@ -631,10 +677,12 @@ export const SkillList = ({
   onOrder: (order: SortOrder) => void;
   selectedKey: string | undefined;
   onSelect: (row: SkillRow) => void;
-  /** The keys of the collapsed plugin subgroups. */
-  collapsed: ReadonlySet<string>;
+  /** The keys of the open plugin subgroups; every other one is collapsed. */
+  expanded: ReadonlySet<string>;
   /** Collapses or expands a plugin's subgroup, by its key. */
   onToggle: (key: string) => void;
+  /** Expands every plugin's subgroup, or collapses every one. */
+  onToggleAll: (open: boolean) => void;
 }) => {
   const [adopting, setAdopting] = useState(false);
   // The tools the open adopt dialog covers: every tool with skills to adopt when it opened.
@@ -700,8 +748,9 @@ export const SkillList = ({
         configurations={configurations}
         selectedKey={selectedKey}
         onSelect={onSelect}
-        collapsed={collapsed}
+        expanded={expanded}
         onToggle={onToggle}
+        onToggleAll={onToggleAll}
         onAdoptAll={() => {
           setAdoptTools(toolsToAdopt(adoption).map((t) => t.arg));
           setAdopting(true);
