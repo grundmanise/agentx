@@ -249,15 +249,12 @@ type Item =
       row: SkillRow;
       at: number;
       size: number;
-      /** Right under its header: the first row shown in its group or plugin. */
-      first: boolean;
     };
 
 /** The rows of a group, or of one plugin in it, as items. */
 const rowItems = (group: Group, rows: SkillRow[], subgroup?: Subgroup) =>
   rows.map((row, at): Item => ({
     at,
-    first: at === 0,
     group,
     key: `row:${row.key}`,
     kind: "row",
@@ -266,25 +263,8 @@ const rowItems = (group: Group, rows: SkillRow[], subgroup?: Subgroup) =>
     ...(subgroup === undefined ? {} : { subgroup }),
   }));
 
-/** The selected row of a collapsed plugin, the one row it still shows, at its place among its plugin's. */
-const pinnedItems = (
-  group: Group,
-  subgroup: Subgroup,
-  selectedKey: string | undefined
-) =>
-  rowItems(group, subgroup.rows, subgroup)
-    .filter((item) => item.kind === "row" && item.row.key === selectedKey)
-    .map((item): Item => ({ ...item, first: true }));
-
-/**
- * The headers and rows in the order the list shows them. A collapsed plugin shows its header,
- * and its selected row when it holds the selection.
- */
-const itemsOf = (
-  groups: Group[],
-  expanded: ReadonlySet<string>,
-  selectedKey: string | undefined
-): Item[] =>
+/** The headers and rows in the order the list shows them; a collapsed plugin shows its header only. */
+const itemsOf = (groups: Group[], expanded: ReadonlySet<string>): Item[] =>
   groups.flatMap((group, i): Item[] => [
     { first: i === 0, group, key: `group:${group.key}`, kind: "header" },
     ...(group.subgroups === undefined
@@ -300,9 +280,7 @@ const itemsOf = (
               open,
               subgroup,
             },
-            ...(open
-              ? rowItems(group, subgroup.rows, subgroup)
-              : pinnedItems(group, subgroup, selectedKey)),
+            ...(open ? rowItems(group, subgroup.rows, subgroup) : []),
           ];
         })),
   ]);
@@ -346,11 +324,11 @@ const PLACED_SUBROW_AFTER =
   "pt-rows pl-subgroup-indent absolute top-0 left-0 flex w-full";
 
 /** Where a row is placed: after the first of its block, `row.spacing` lower; in a subgroup, indented. */
-const placedRow = (item: { first: boolean; subgroup?: Subgroup }) => {
+const placedRow = (item: { at: number; subgroup?: Subgroup }) => {
   if (item.subgroup === undefined) {
-    return item.first ? PLACED_ROW : PLACED_ROW_AFTER;
+    return item.at === 0 ? PLACED_ROW : PLACED_ROW_AFTER;
   }
-  return item.first ? PLACED_SUBROW : PLACED_SUBROW_AFTER;
+  return item.at === 0 ? PLACED_SUBROW : PLACED_SUBROW_AFTER;
 };
 
 const NO_FORKS: SkillRow[] = [];
@@ -464,10 +442,7 @@ const SkillGroups = ({
     latestSelect.current(row);
   }, []);
   const scroller = useRef<HTMLElement>(null);
-  const items = useMemo(
-    () => itemsOf(groups, expanded, selectedKey),
-    [groups, expanded, selectedKey]
-  );
+  const items = useMemo(() => itemsOf(groups, expanded), [groups, expanded]);
   // Where the selected row is among the items, or -1 when the filters leave it out.
   const selectedIndex = useMemo(
     () =>

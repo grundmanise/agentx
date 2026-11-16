@@ -283,7 +283,6 @@ test.describe("filters", () => {
     page,
   }) => {
     await openSkills(cli, page);
-    await expandPlugins(page);
     await page.getByRole("button", { name: "Filter" }).click();
     const show = filters(page).getByRole("group", { name: "Show" });
     await expect(show).toMatchAriaSnapshot(`
