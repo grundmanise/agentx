@@ -216,9 +216,6 @@ importers:
       tailwind-merge:
         specifier: 3.7.0
         version: 3.7.0
-      vscode-diff:
-        specifier: 3.0.1
-        version: 3.0.1
       zustand:
         specifier: 5.0.15
         version: 5.0.15(@types/react@19.3.0)(react@19.3.0)
@@ -2842,9 +2839,6 @@ packages:
       yaml:
         optional: true
 
-  vscode-diff@3.0.1:
-    resolution: {integrity: sha512-0rRDmIuGsuQMIIhbWsILSMxG4k5x8unNvkD7P+yn5cA7O6bKg28P/dhvgABRvP5ksYmGE9UKHonk/Z4PBMdojA==}
-
   which-command@0.1.0:
     resolution: {integrity: sha512-XZyoF5/5hZtXitIwzrU4NKK+Wtbb9aB9CezUEw2Q0wlYK8NUYQxC1rRXgNueYLtBAJwXIb+/tFVk4dozciNJMA==}
     engines: {node: '>=22'}
@@ -5086,8 +5080,6 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
       yaml: 2.9.1
-
-  vscode-diff@3.0.1: {}
 
   which-command@0.1.0: {}
 

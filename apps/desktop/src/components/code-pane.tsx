@@ -1,5 +1,6 @@
 import { cva } from "class-variance-authority";
-import { DefaultLinesDiffComputer } from "vscode-diff";
+
+import { DefaultLinesDiffComputer } from "#/vendor/vscode-diff/index.ts";
 
 // The Code pane (DESIGN.md §6 "Code pane"): a file's lines in a grid of line number, marker and
 // text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it. The tints

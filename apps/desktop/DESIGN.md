@@ -1061,7 +1061,7 @@ The History sheet's frame at `sheet.log-width` (`src/app/activity-log.tsx`): the
 
 `code.bg`, `type.code`, grid `code.gutter 1fr`: line number in `code.line-number`, right-aligned · marker · text. Front matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: an added line on `diff.added-bg`, a removed line on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
 
-- Changed text: within a change, the text that differs between its removed lines and its added lines is marked as VS Code's diff editor marks it, with VS Code's own diff (`vscode-diff`): a character diff of the whole change, extended to whole words where most of a word changed, with short kept runs between two changes joined into them. The changed text sits on `diff.removed-word` and `diff.added-word` in `code.strong`, since a line's own tone falls under 4.5:1 on those tints. White space counts, so a change of indentation is marked.
+- Changed text: within a change, the text that differs between its removed lines and its added lines is marked as VS Code's diff editor marks it, with VS Code's own diff (copied into `src/vendor/vscode-diff`): a character diff of the whole change, extended to whole words where most of a word changed, with short kept runs between two changes joined into them. The changed text sits on `diff.removed-word` and `diff.added-word` in `code.strong`, since a line's own tone falls under 4.5:1 on those tints. White space counts, so a change of indentation is marked.
 - A change with one side, only removed or only added lines, has its line tint alone. So does a change that takes longer than 100 ms to compare.
 
 ### File list (detail pane FILES)
