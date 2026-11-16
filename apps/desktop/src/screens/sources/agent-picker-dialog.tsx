@@ -1,16 +1,19 @@
-// The Choose agents dialog of the Add skills bar (DESIGN.md §6 "Agent picker"): every
-// configuration that takes a placement, by name, with its path and a checkbox, a search over the
-// names, and Clear · Done. A row toggles the same targets as the bar's logos.
+// The agent picker of the Add skills bar (DESIGN.md §6 "Agent picker"), titled by the skills it
+// adds: the Universal agents, locked on, then a search over the names and every other
+// configuration that takes a placement, by name, with its path and a checkbox, and Clear · Done.
+// A row toggles the same targets as the bar's logos.
 import { useId, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
-import { AgentLogo } from "#/components/agent-logo.tsx";
+import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
+import { LockMark } from "#/components/check-mark.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -59,25 +62,53 @@ const Row = ({
   );
 };
 
-/** Choose agents: the full list of install targets, searchable by name. */
+/**
+ * The Universal agents, above the search: their stack, their names, and the lock where a row has
+ * its checkbox. They read the library, so every skill reaches them and the row is no control.
+ */
+const UniversalRow = ({ universal }: { universal: Configuration[] }) => (
+  <div className="flex items-center gap-3 px-3 py-2">
+    <LogoStack clients={universal} size={28} hover="tooltip" decorative />
+    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="type-body text-text-primary truncate">
+        Universal agents
+      </span>
+      <span className="type-secondary text-text-caption truncate">
+        {universal.map((c) => c.name).join(", ")}
+      </span>
+    </span>
+    <LockMark />
+    <span className="sr-only">Always on</span>
+  </div>
+);
+
+/** The agent picker: the Universal agents, then every other install target, searchable by name. */
 export const AgentPickerDialog = ({
   open,
   onOpenChange,
+  skills,
   configurations,
+  universal,
   targets,
   onToggleTarget,
   onClearTargets,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** How many skills the install adds. */
+  skills: number;
   /** The configurations that take a placement. */
   configurations: Configuration[];
+  /** The configurations whose client reads the library. */
+  universal: Configuration[];
   /** The ids of the chosen targets. */
   targets: string[];
   onToggleTarget: (id: string) => void;
   onClearTargets: () => void;
 }) => {
   const [query, setQuery] = useState("");
+  const descriptionId = useId();
+  const hasUniversal = universal.length > 0;
   const text = query.trim().toLowerCase();
   const rows = configurations.filter((c) =>
     c.name.toLowerCase().includes(text)
@@ -93,13 +124,22 @@ export const AgentPickerDialog = ({
         onOpenChange(next);
       }}
     >
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent
+        aria-describedby={hasUniversal ? descriptionId : undefined}
+      >
         <DialogHeader>
-          <DialogTitle>Choose agents</DialogTitle>
+          <DialogTitle>{`Add ${plural(skills, "skill")} to`}</DialogTitle>
+          {hasUniversal && (
+            <DialogDescription id={descriptionId}>
+              Skills are always available to universal agents. Choose other
+              agents to install them to.
+            </DialogDescription>
+          )}
         </DialogHeader>
+        {hasUniversal && <UniversalRow universal={universal} />}
         <SearchField
-          label="Search agents"
-          placeholder="Search agents"
+          label={hasUniversal ? "Search other agents" : "Search agents"}
+          placeholder={hasUniversal ? "Search other agents" : "Search agents"}
           value={query}
           onChange={setQuery}
         />
