@@ -138,6 +138,8 @@
   /* Window and shell */
   --color-shell-bg: var(--gray-990);
   --color-shell-content-bg: var(--gray-970);
+  /* `shell.content-bg` at 40%: the frosted pane over the kept inventory at launch. */
+  --color-shell-loading-veil: rgb(18 18 20 / 0.4);
   --color-shell-divider: var(--gray-890);
   --color-shell-scrim: rgb(0 0 0 / 0.5);
   --color-shell-scrim-strong: rgb(0 0 0 / 0.55);
@@ -396,13 +398,6 @@
       opacity: 0;
     }
   }
-  /* The kept inventory before the startup checks pass: from `opacity-panel-loading` down and back. */
-  --animate-panel-loading: panel-loading 1s ease-in-out infinite;
-  @keyframes panel-loading {
-    50% {
-      opacity: 30%;
-    }
-  }
   --animate-code-reveal: code-reveal 0.3s ease-out;
   @keyframes code-reveal {
     from {
@@ -426,6 +421,8 @@
 
   /* Blurs (DESIGN.md §4, code): `blur-code-loading`. */
   --blur-code-loading: 8px;
+  /* The frosted pane over the kept inventory while the startup checks run. */
+  --blur-panel-loading: 12px;
 
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
@@ -533,7 +530,6 @@
   /* A skill row in no agent client, washed out. */
   --opacity-row-off: 50%;
   /* The screen in the main panel while it shows the kept inventory, before the startup checks pass. */
-  --opacity-panel-loading: 50%;
 
   /* Window and shell */
   --height-titlebar: 50px;
