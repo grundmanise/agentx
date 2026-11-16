@@ -18,6 +18,8 @@ const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 
 const openFromPalette = async (page: Page) => {
+  // ⌘K opens nothing until the startup checks pass.
+  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await page.keyboard.press("Control+K");
   await page
     .getByRole("dialog")
@@ -181,8 +183,6 @@ test("the log opens 1120 wide, its left edge drags its width up to 90% of the wi
   expect(await width()).toBe(1152);
   cli.restart();
   await page.reload();
-  // The kept inventory shows at once, and ⌘K opens nothing until the startup checks pass.
-  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await openFromPalette(page);
   expect(await width()).toBe(1152);
 });
