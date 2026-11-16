@@ -57,7 +57,7 @@ const itemVariants = cva("", {
 // A `card` row turns `file-row.hover` while hovered or focused; the trigger draws no outline. A
 // `list` card shows hover on its border, and the trigger and the action draw the focus outline
 // inside the card, which clips anything outside it.
-const headerVariants = cva("group relative m-0 flex items-center", {
+const rowVariants = cva("group relative m-0 flex items-center", {
   defaultVariants: { variant: "card" },
   variants: {
     variant: {
@@ -67,18 +67,32 @@ const headerVariants = cva("group relative m-0 flex items-center", {
   },
 });
 
-const triggerVariants = cva(
-  "h-file-row px-file-row flex min-w-0 flex-1 items-center gap-3 text-left",
-  {
-    defaultVariants: { variant: "card" },
-    variants: {
-      variant: {
-        card: "outline-none",
-        list: "rounded-add-card focus-visible:-outline-offset-2",
-      },
+// A `card` heading holds the trigger and its content. A `list` heading lies under the whole row
+// and its trigger fills it, so that a link in the row's content can take its own clicks.
+const headingVariants = cva("m-0 flex", {
+  defaultVariants: { variant: "card" },
+  variants: {
+    variant: {
+      card: "min-w-0 flex-1",
+      list: "absolute inset-0",
     },
-  }
-);
+  },
+});
+
+const triggerVariants = cva("", {
+  defaultVariants: { variant: "card" },
+  variants: {
+    variant: {
+      card: "h-file-row px-file-row flex min-w-0 flex-1 items-center gap-3 text-left outline-none",
+      list: "rounded-add-card flex-1 focus-visible:-outline-offset-2",
+    },
+  },
+});
+
+// What a `list` row shows, over its trigger: clicks pass through to the trigger, except on a
+// control that takes them with `pointer-events-auto`.
+const LIST_CONTENT =
+  "h-file-row px-file-row pointer-events-none relative flex min-w-0 flex-1 items-center gap-3";
 
 // The row's own control. On a `card` row it sits over the meta text at the row's end and fades in
 // while the row is hovered or holds the focus, or while its menu is open, as the meta text fades
@@ -96,7 +110,7 @@ const actionVariants = cva("flex items-center", {
     },
     variant: {
       card: "right-file-row h-file-row absolute top-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100",
-      list: "flex-none pr-2.5",
+      list: "relative flex-none pr-2.5",
     },
   },
 });
@@ -180,13 +194,17 @@ const AccordionItem = ({
  * `label` alone. `action` is a control of the row's own, beside the trigger rather than inside
  * it: it sits over the meta text at the row's end and fades in while the row is hovered or holds
  * the focus, or while its menu is open, as the meta fades out, so the row's layout never changes;
- * it is in the tab order throughout. In a `list`, the action follows the trigger and always shows.
+ * it is in the tab order throughout. In a `list`, the action follows the trigger and always shows,
+ * and the trigger lies under the whole row with `children` over it: a link among them, such as one
+ * that shows only while the item is open, takes its own clicks with `pointer-events-auto`. Hide
+ * the text of `children` that repeats `label` from assistive technology.
  */
 const AccordionTrigger = ({
   variant,
   label,
   description,
   open,
+  busy = false,
   meta,
   action,
   actionShown = false,
@@ -198,6 +216,8 @@ const AccordionTrigger = ({
   description?: string;
   /** Whether the item is open, which turns the chevron down. */
   open: boolean;
+  /** Whether what the item shows is being read, before it opens. */
+  busy?: boolean;
   /** The text at the row's end, such as "6 lines". */
   meta?: ReactNode;
   /** A button over the meta text, such as an icon button. */
@@ -205,41 +225,62 @@ const AccordionTrigger = ({
   /** Keeps the action shown, and the meta hidden, while something of its own is open, such as its menu. */
   actionShown?: boolean;
   children: ReactNode;
-}) => (
-  <div data-slot="accordion-row" className={headerVariants({ variant })}>
-    <AccordionPrimitive.Header
-      data-slot="accordion-header"
-      className="m-0 flex min-w-0 flex-1"
+}) => {
+  const list = variant === "list";
+  // In a `list`, the row's description holds the meta text.
+  const metaText = meta !== undefined && (
+    <span
+      aria-hidden={list || undefined}
+      className={metaVariants({
+        gives: action !== undefined && variant !== "list",
+        hidden: action !== undefined && variant !== "list" && actionShown,
+      })}
     >
-      <AccordionPrimitive.Trigger
-        aria-label={label}
-        aria-describedby={description}
-        data-slot="accordion-trigger"
-        className={triggerVariants({ variant })}
+      {meta}
+    </span>
+  );
+  const chevron = (
+    <span className={chevronVariants({ open })}>
+      <ChevronIcon size="xs" />
+    </span>
+  );
+  return (
+    <div data-slot="accordion-row" className={rowVariants({ variant })}>
+      <AccordionPrimitive.Header
+        data-slot="accordion-header"
+        className={headingVariants({ variant })}
       >
-        <span className={chevronVariants({ open })}>
-          <ChevronIcon size="xs" />
+        <AccordionPrimitive.Trigger
+          aria-label={label}
+          aria-describedby={description}
+          aria-busy={busy}
+          data-slot="accordion-trigger"
+          className={triggerVariants({ variant })}
+        >
+          {!list && (
+            <>
+              {chevron}
+              {children}
+              {metaText}
+            </>
+          )}
+        </AccordionPrimitive.Trigger>
+      </AccordionPrimitive.Header>
+      {list && (
+        <div data-slot="accordion-content-row" className={LIST_CONTENT}>
+          {chevron}
+          {children}
+          {metaText}
+        </div>
+      )}
+      {action !== undefined && (
+        <span className={actionVariants({ shown: actionShown, variant })}>
+          {action}
         </span>
-        {children}
-        {meta !== undefined && (
-          <span
-            className={metaVariants({
-              gives: action !== undefined && variant !== "list",
-              hidden: action !== undefined && variant !== "list" && actionShown,
-            })}
-          >
-            {meta}
-          </span>
-        )}
-      </AccordionPrimitive.Trigger>
-    </AccordionPrimitive.Header>
-    {action !== undefined && (
-      <span className={actionVariants({ shown: actionShown, variant })}>
-        {action}
-      </span>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
+};
 
 const AccordionContent = ({
   ...props

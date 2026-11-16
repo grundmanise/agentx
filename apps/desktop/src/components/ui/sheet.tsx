@@ -1,8 +1,7 @@
 // shadcn/ui Sheet (`pnpm dlx shadcn@latest add sheet`), on our tokens: DESIGN.md §6 "Sheet".
 // The design has one sheet, at the right edge, so there is no `side`. Its parts keep shadcn's
 // names and `data-slot` attributes and take no `className`; the close is our ghost Button, in the
-// header. A resizable sheet has a handle on its left edge that drags its width.
-import { cva } from "class-variance-authority";
+// header. Every sheet has a handle on its left edge that drags its width, which each sheet keeps.
 import { Dialog as SheetPrimitive } from "radix-ui";
 import { useLayoutEffect, useRef } from "react";
 import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
@@ -10,6 +9,8 @@ import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import type { OwnProps } from "#/lib/utils.ts";
+import { keepSheetWidth, sheetWidth } from "#/store/sheet.ts";
+import type { SheetName } from "#/store/sheet.ts";
 
 const Sheet = ({ ...props }: OwnProps<typeof SheetPrimitive.Root>) => (
   <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -40,86 +41,59 @@ const SheetOverlay = ({
   />
 );
 
-const sheetContentVariants = cva(
-  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet fixed z-40 flex flex-col gap-6 overflow-hidden border outline-none",
-  {
-    defaultVariants: { size: "default" },
-    variants: {
-      size: {
-        /** `sheet.width`: the History sheet. */
-        default: "w-sheet",
-        /**
-         * `sheet.log-width`, which the user drags between `sheet.log-min-width` and
-         * `sheet.log-max-width`: the Activity log sheet.
-         */
-        resizable: "w-sheet-dragged min-w-sheet-log max-w-sheet-log",
-        /** `sheet.width-wide`: a sheet of diffs, such as What's new. */
-        wide: "w-sheet-wide",
-      },
-    },
-  }
-);
+/**
+ * `sheet.width`, which the user drags between `sheet.min-width` and `sheet.max-width`, inset
+ * `sheet.inset` from the top, right and bottom, `sheet.bg` with `sheet.border`, `sheet.radius`,
+ * `overlay.shadow` and `sheet.padding`.
+ */
+const SHEET_CONTENT =
+  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet w-sheet-dragged min-w-sheet max-w-sheet fixed z-40 flex flex-col gap-6 overflow-hidden border outline-none";
 
 /** The CSS variable that `w-sheet-dragged` reads, set on the sheet. */
 const DRAGGED_WIDTH = "--sheet-dragged-width";
-/** How far an arrow key moves the handle, in pixels. */
-const KEY_STEP = 40;
 
 /** The width a sheet takes as drawn, which its minimum and maximum width have clamped. */
 const drawnWidth = (sheet: HTMLElement) =>
   Math.round(sheet.getBoundingClientRect().width);
 
-/** The sheet a handle is on. */
-const sheetOf = (handle: HTMLElement | null) =>
-  handle?.parentElement ?? undefined;
-
-/** Sets the width the sheet asks for, or its default when `width` is null. */
+/**
+ * Sets the width the sheet asks for, or its default when `width` is null. A negative width is
+ * invalid CSS, which would drop the minimum width too, so it stops at 0 and the minimum clamps it.
+ */
 const setWidth = (sheet: HTMLElement, width: number | null) => {
   if (width === null) {
     sheet.style.removeProperty(DRAGGED_WIDTH);
   } else {
-    sheet.style.setProperty(DRAGGED_WIDTH, `${width}px`);
+    sheet.style.setProperty(DRAGGED_WIDTH, `${Math.max(0, width)}px`);
   }
 };
 
 /**
- * The handle on a resizable sheet's left edge, `sheet.handle-width` wide: dragging it moves the
- * sheet's left edge, an arrow key moves it `KEY_STEP` pixels, and a double click or Home brings
- * back the default width. It shows `sheet.handle` on hover, and the focus ring colour on focus.
- * The sheet takes the new width at once; `onWidthChange` hears it, clamped, when the drag ends,
- * and null for the default.
+ * The handle on the left edge of the sheet `name`, `sheet.handle-width` wide: dragging it moves
+ * the sheet's left edge, and a double click or Home brings back the default width. It shows
+ * `sheet.handle` on hover, and the focus ring colour on focus. The sheet opens at the width the
+ * user left it at, which the handle keeps, clamped, when a drag ends.
  */
-const ResizeHandle = ({
-  width,
-  onWidthChange,
-}: {
-  width: number | null;
-  onWidthChange: (width: number | null) => void;
-}) => {
+const ResizeHandle = ({ name }: { name: SheetName }) => {
   const handle = useRef<HTMLDivElement>(null);
   // Where the drag started and how wide the sheet was then; null while no drag runs.
   const drag = useRef<{ x: number; width: number } | null>(null);
-  const sheet = () => sheetOf(handle.current);
+  const sheet = () => handle.current?.parentElement ?? undefined;
 
-  // The sheet opens at the width the user left it at.
+  // The sheet opens at the width the user left it at. Only the handle changes it after that.
   useLayoutEffect(() => {
-    const el = sheetOf(handle.current);
-    if (el !== undefined) {
-      setWidth(el, width);
+    const el = handle.current?.parentElement;
+    if (el) {
+      setWidth(el, sheetWidth(name));
     }
-  }, [width]);
-
-  const resize = (el: HTMLElement, next: number) => {
-    setWidth(el, next);
-    onWidthChange(drawnWidth(el));
-  };
+  }, [name]);
 
   const reset = () => {
     const el = sheet();
     if (el !== undefined) {
       setWidth(el, null);
     }
-    onWidthChange(null);
+    keepSheetWidth(name, null);
   };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -150,19 +124,13 @@ const ResizeHandle = ({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    resize(el, drawnWidth(el));
+    const dragged = drawnWidth(el);
+    setWidth(el, dragged);
+    keepSheetWidth(name, dragged);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const el = sheet();
-    if (el === undefined) {
-      return;
-    }
-    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      event.preventDefault();
-      const step = event.key === "ArrowLeft" ? KEY_STEP : -KEY_STEP;
-      resize(el, drawnWidth(el) + step);
-    } else if (event.key === "Home") {
+    if (event.key === "Home") {
       event.preventDefault();
       reset();
     }
@@ -188,57 +156,27 @@ const ResizeHandle = ({
   );
 };
 
-/** A sheet of a fixed width, or one the user resizes, whose width the caller keeps. */
-type SheetSize =
-  | { size?: "default" | "wide" }
-  | {
-      size: "resizable";
-      /** The width the user dragged the sheet to, or null for `sheet.log-width`. */
-      width: number | null;
-      onWidthChange: (width: number | null) => void;
-    };
-
 /**
- * `sheet.width` (`sheet.width-wide` for `size="wide"`, the dragged width for
- * `size="resizable"`), inset `sheet.inset` from the top, right and bottom, `sheet.bg` with
- * `sheet.border`, `sheet.radius`, `overlay.shadow` and `sheet.padding`. A column: the header, then
- * the content, which scrolls down only.
+ * A column: the header, then the content, which scrolls down only; the handle on its left edge.
+ * `name` is the sheet whose width the drag keeps.
  */
 const SheetContent = ({
+  name,
   children,
   ...props
-}: Omit<OwnProps<typeof SheetPrimitive.Content>, keyof SheetSize> &
-  SheetSize) => {
-  if (props.size === "resizable") {
-    const { size, width, onWidthChange, ...rest } = props;
-    return (
-      <SheetPortal>
-        <SheetOverlay />
-        <SheetPrimitive.Content
-          data-slot="sheet-content"
-          className={sheetContentVariants({ size })}
-          {...rest}
-        >
-          {children}
-          <ResizeHandle width={width} onWidthChange={onWidthChange} />
-        </SheetPrimitive.Content>
-      </SheetPortal>
-    );
-  }
-  const { size, ...rest } = props;
-  return (
-    <SheetPortal>
-      <SheetOverlay />
-      <SheetPrimitive.Content
-        data-slot="sheet-content"
-        className={sheetContentVariants({ size })}
-        {...rest}
-      >
-        {children}
-      </SheetPrimitive.Content>
-    </SheetPortal>
-  );
-};
+}: OwnProps<typeof SheetPrimitive.Content> & { name: SheetName }) => (
+  <SheetPortal>
+    <SheetOverlay />
+    <SheetPrimitive.Content
+      data-slot="sheet-content"
+      className={SHEET_CONTENT}
+      {...props}
+    >
+      {children}
+      <ResizeHandle name={name} />
+    </SheetPrimitive.Content>
+  </SheetPortal>
+);
 
 /** The title and the description, with a ghost Close at the top right. */
 const SheetHeader = ({ children }: { children: ReactNode }) => (

@@ -337,6 +337,7 @@ const AddSkillForm = ({
           {nothing === undefined && (
             <div className="flex items-center gap-3">
               <AgentTargets
+                skills={selected.length}
                 direct={direct}
                 universal={universal}
                 targets={chosen}

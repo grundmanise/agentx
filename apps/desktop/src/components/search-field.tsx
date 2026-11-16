@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 import { SearchIcon } from "#/components/icons/search.tsx";
 
 /**
@@ -5,6 +7,7 @@ import { SearchIcon } from "#/components/icons/search.tsx";
  * the left. It filters as the user types.
  */
 export const SearchField = ({
+  ref,
   label,
   placeholder,
   value,
@@ -15,12 +18,15 @@ export const SearchField = ({
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
+  /** For a dialog that puts the focus in the field when it opens. */
+  ref?: Ref<HTMLInputElement>;
 }) => (
   <div className="text-input-placeholder relative flex items-center">
     <span className="pointer-events-none absolute left-3 flex">
       <SearchIcon size="xs" />
     </span>
     <input
+      ref={ref}
       type="search"
       aria-label={label}
       placeholder={placeholder}

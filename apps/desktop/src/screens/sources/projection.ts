@@ -434,15 +434,6 @@ export const directConfigurations = (configurations: Configuration[]) =>
 export const universalConfigurations = (configurations: Configuration[]) =>
   configurations.filter((c) => c.reads_library);
 
-/** "Codex and Gemini CLI always get skills from your library". */
-export const universalTitle = (names: string[]) => {
-  const list =
-    names.length <= 1
-      ? names.join("")
-      : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
-  return `${list} always get skills from your library`;
-};
-
 const sameSet = (a: string[], b: string[]) =>
   a.length === b.length && a.every((id) => b.includes(id));
 

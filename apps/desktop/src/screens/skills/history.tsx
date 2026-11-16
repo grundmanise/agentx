@@ -12,6 +12,7 @@ import {
 } from "#/components/ui/sheet.tsx";
 import { formatDate } from "#/lib/dates.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
+import { useKeptRead } from "#/screens/skills/kept-read.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -283,7 +284,7 @@ const HistorySheet = ({
   onOpenChange: (open: boolean) => void;
 }) => (
   <Sheet open={open} onOpenChange={onOpenChange}>
-    <SheetContent>
+    <SheetContent name="history">
       <SheetHeader>
         <SheetTitle>History</SheetTitle>
         <SheetDescription>{name}</SheetDescription>
@@ -309,33 +310,23 @@ const HistorySheet = ({
 );
 
 /**
- * HISTORY in the detail pane. For one of your own skills, the latest commits of its branch from
+ * HISTORY in the detail pane, for one of your own skills: the latest commits of its branch from
  * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. In the
  * subject of the commit that created a fork, the origin's name links to its page, when the CLI
- * knows one. Other
- * skills have no history of their own.
+ * knows one. Other skills have no history of their own, and the pane shows no section for them.
  */
 export const HistorySection = ({ row }: { row: SkillRow }) => {
-  const yours = row.kind === "yours";
   const version = versionOf(row);
-  const read = useAppStore((s) => s.histories[row.name]);
+  const stored = useAppStore((s) => s.histories[row.name]);
+  // A read of another version is not this version's history; the one shown before stays meanwhile.
+  const read = useKeptRead(stored?.version === version ? stored : undefined);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
-    if (yours) {
-      void loadHistory(row.name, version);
-    }
-  }, [yours, row.name, version]);
+    void loadHistory(row.name, version);
+  }, [row.name, version]);
 
-  if (!yours) {
-    return (
-      <p className="type-secondary text-text-hint m-0">
-        History is kept for your own skills
-      </p>
-    );
-  }
-  // A read of another version is not this version's history.
-  if (read === undefined || read.version !== version) {
+  if (read === undefined) {
     return (
       <p className="type-secondary text-text-hint m-0">Reading the history…</p>
     );

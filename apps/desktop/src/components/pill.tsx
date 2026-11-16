@@ -1,6 +1,13 @@
 import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
+import { cn } from "#/lib/utils.ts";
+
 // DESIGN.md §6 "Pills (status)": 20px high in list rows, 22 in the detail header. A plugin's
 // version pill is in mono (`type.version-pill`); every other pill is `type.pill`.
 const pillVariants = cva(
@@ -31,6 +38,7 @@ const pillVariants = cva(
         disabled: "bg-pill-disabled-bg text-pill-disabled-text",
         neutral: "bg-pill-neutral-bg text-pill-neutral-text",
         removed: "bg-pill-removed-bg text-pill-removed-text",
+        universal: "bg-pill-universal-bg text-pill-universal-text",
         update: "bg-pill-update-bg text-pill-update-text",
         version: "bg-pill-version-bg text-pill-version-text",
       },
@@ -42,6 +50,7 @@ export type PillTone =
   | "disabled"
   | "neutral"
   | "removed"
+  | "universal"
   | "update"
   | "version";
 
@@ -90,4 +99,33 @@ export const PillButton = ({
     {icon}
     {children}
   </button>
+);
+
+/**
+ * A pill that explains itself: the Universal pill of the agent picker. It does nothing on a
+ * click; its `tip` opens on hover and on focus, so it is a button the keyboard reaches.
+ */
+export const PillTip = ({
+  tone,
+  size,
+  face,
+  icon,
+  tip,
+  children,
+}: PillProps & { tip: ReactNode }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button
+        type="button"
+        className={cn(
+          pillVariants({ clickable: false, face, size, tone }),
+          "cursor-help"
+        )}
+      >
+        {icon}
+        {children}
+      </button>
+    </TooltipTrigger>
+    <TooltipContent size="text">{tip}</TooltipContent>
+  </Tooltip>
 );
