@@ -317,7 +317,7 @@ export const runProgressText = (run: UpdateRun) => {
 };
 
 /** The statuses of a skill the run updated, or found up to date already. */
-const UPDATED: ReadonlySet<UpdateStatus> = new Set<UpdateStatus>([
+export const UPDATED: ReadonlySet<UpdateStatus> = new Set<UpdateStatus>([
   "updated",
   "merged",
   "current",

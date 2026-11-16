@@ -3,7 +3,7 @@
 // merge, all selected, grouped by source in sections that collapse. A row toggles its skill, a
 // group's Select all or Deselect all every skill of its source, and See changes opens the What's
 // new sheet of its update above the dialog. A row is two lines at most: the name, then one note.
-// Update runs in the dialog (`updates.ts`): the selected rows alone stay, each shows its state,
+// Update runs in the dialog (`updates.ts`): the selected rows alone stay, each led by its state,
 // and once the run ended only the rows with something to say are left: a conflict, an error or a
 // warning. The footer counts the run, then sums it up. The dialog cannot be dismissed while the
 // run goes, and Done closes it.
@@ -40,6 +40,7 @@ import {
   runProgressText,
   runSummaryText,
   updateSkills,
+  UPDATED,
   useOfferedUpdates,
   useUpdateDialog,
   useUpdateRun,
@@ -150,8 +151,30 @@ const statusNames: Record<UpdateStatus, string> = {
   waiting: "Waiting",
 };
 
-const StatusMark = ({ status }: { status: UpdateStatus }) => {
-  switch (status) {
+/** Whether `row` updated, or was up to date, with a warning from the CLI: it asks for attention. */
+const warned = (row: UpdateRunRow) =>
+  UPDATED.has(row.status) && (row.warnings ?? []).length > 0;
+
+/** What a screen reader hears for the row's state, before the name. */
+const statusName = (row: UpdateRunRow) =>
+  warned(row)
+    ? `${statusNames[row.status]} with a warning`
+    : statusNames[row.status];
+
+/**
+ * The row's state, in a slot as wide as its icon, so that the names line up whether it shows or
+ * not: nothing while it waits, a spinner while it runs, a check once it updated cleanly, the alert
+ * for a conflict or a warning, a cross when it did not update.
+ */
+const StatusMark = ({ row }: { row: UpdateRunRow }) => {
+  if (warned(row)) {
+    return (
+      <span className="text-tone-attention-fg flex">
+        <AlertIcon />
+      </span>
+    );
+  }
+  switch (row.status) {
     case "running": {
       return (
         <span className="text-text-muted flex">
@@ -194,6 +217,11 @@ const StatusMark = ({ status }: { status: UpdateStatus }) => {
 
 const noteVariants = cva("type-notice m-0 truncate", {
   variants: {
+    // In the run and after it the note starts under the name, past the state mark and its gap.
+    inset: {
+      mark: "pl-6",
+      none: "",
+    },
     tone: {
       attention: "text-tone-attention-fg",
       danger: "text-tone-danger-fg",
@@ -291,8 +319,8 @@ const Dot = () => (
 /**
  * One skill. Before the run, its name is a label of the round checkbox at the right whose hit
  * area covers the row, so a click anywhere on it toggles the skill, but on See changes, which
- * sits above it and opens the What's new sheet. In the run, the state mark takes the checkbox's
- * place.
+ * sits above it and opens the What's new sheet. In the run, the checkbox goes and the state mark
+ * leads the name, on its line.
  */
 const Row = ({
   row,
@@ -326,10 +354,15 @@ const Row = ({
               {update.name}
             </label>
           ) : (
-            <span className="type-body text-text-primary min-w-0 truncate">
-              <span className="sr-only">{`${statusNames[row.status]}: `}</span>
-              {update.name}
-            </span>
+            <>
+              <span className="flex flex-none self-center">
+                <StatusMark row={row} />
+              </span>
+              <span className="type-body text-text-primary min-w-0 truncate">
+                <span className="sr-only">{`${statusName(row)}: `}</span>
+                {update.name}
+              </span>
+            </>
           )}
           {published !== undefined && (
             <>
@@ -361,23 +394,27 @@ const Row = ({
           )}
         </div>
         {note !== undefined && (
-          <p title={note.title} className={noteVariants({ tone: note.tone })}>
+          <p
+            title={note.title}
+            className={noteVariants({
+              inset: idle ? "none" : "mark",
+              tone: note.tone,
+            })}
+          >
             {note.text}
           </p>
         )}
       </div>
-      <span className="relative flex h-5 items-center">
-        {idle ? (
+      {idle && (
+        <span className="relative flex h-5 items-center">
           <Checkbox
             id={id}
             aria-label={update.name}
             checked={selected}
             onCheckedChange={onToggle}
           />
-        ) : (
-          <StatusMark status={row.status} />
-        )}
-      </span>
+        </span>
+      )}
     </li>
   );
 };

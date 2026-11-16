@@ -601,6 +601,10 @@ test.describe("the Update skills dialog", () => {
       new RegExp(`pdf-letters.*${warning}`, "u"),
       /review/u,
     ]);
+    // pdf-letters updated with a warning: it takes the attention mark, not the updated one.
+    await expect(
+      dialog.getByRole("listitem").filter({ hasText: "pdf-letters" })
+    ).toContainText("Updated with a warning: pdf-letters");
     // A conflict says where to resolve it, in place of the note on local changes.
     const reviewRow = dialog
       .getByRole("listitem")
