@@ -105,7 +105,7 @@ export const SkillsScreen = () => {
       ? undefined
       : (rows.find((r) => r.key === routeKey) ??
         rows.find((r) => r.name === routeKey))) ??
-    flat.find((r) => !inCollapsed(r, expanded)) ??
+    // The first row whatever is collapsed, so collapsing a subgroup never changes the selection.
     flat[0];
   // A newly selected row in a collapsed subgroup, such as a plugin's skill another screen opens,
   // opens its subgroup so the list shows it. Collapsing that subgroup later keeps it collapsed.
@@ -125,21 +125,25 @@ export const SkillsScreen = () => {
   const configurations = inventory?.configurations ?? [];
 
   // The key the next key press moves from: the last selection made, which the route may not show
-  // yet when keys come fast. While a selection made here is on its way, a route that shows an
-  // earlier one is stale and leaves it alone; a route another screen opens takes over.
+  // yet when keys come fast. `requested` holds the selections made here since the route last
+  // showed the latest one. A route that shows the latest settles them; a route that shows an
+  // earlier one is stale and leaves `current` alone; any other route, such as a skill another
+  // screen opens, takes over.
   const current = useRef(selected?.key);
-  const pending = useRef<string | null>(null);
+  const requested = useRef<string[]>([]);
   const selectedKey = selected?.key;
   useEffect(() => {
-    if (pending.current === null) {
+    const keys = requested.current;
+    if (keys.at(-1) === selectedKey) {
+      requested.current = [];
+    } else if (selectedKey === undefined || !keys.includes(selectedKey)) {
+      requested.current = [];
       current.current = selectedKey;
-    } else if (pending.current === selectedKey) {
-      pending.current = null;
     }
   }, [selectedKey]);
   const select = (row: SkillRow) => {
     current.current = row.key;
-    pending.current = row.key === selectedKey ? null : row.key;
+    requested.current = [...requested.current, row.key];
     void navigate(skillPath(row.key));
   };
 
