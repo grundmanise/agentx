@@ -20,7 +20,6 @@ import {
   LINE_LIMIT,
   logText,
   openActivityLog,
-  setActivityLogWidth,
   setDebugOutput,
   useActivityLog,
 } from "#/store/activity-log.ts";
@@ -182,14 +181,9 @@ export const ActivityLogSheet = () => {
   const open = useActivityLog((s) => s.open);
   const lines = useActivityLog((s) => s.lines);
   const dropped = useActivityLog((s) => s.dropped);
-  const width = useActivityLog((s) => s.width);
   return (
     <Sheet open={open} onOpenChange={openActivityLog}>
-      <SheetContent
-        size="resizable"
-        width={width}
-        onWidthChange={setActivityLogWidth}
-      >
+      <SheetContent name="activity-log">
         <SheetHeader>
           <SheetTitle>Activity log</SheetTitle>
           <SheetDescription>
