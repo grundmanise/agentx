@@ -162,7 +162,7 @@ export const UpdateSheet = ({
   over?: "page" | "dialog";
 }) => (
   <Sheet open={open} onOpenChange={onOpenChange}>
-    <SheetContent size="wide" over={over}>
+    <SheetContent name="whats-new" over={over}>
       <SheetHeader>
         <SheetTitle>{TITLE}</SheetTitle>
         <SheetDescription>{update.name}</SheetDescription>
