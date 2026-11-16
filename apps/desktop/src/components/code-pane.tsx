@@ -1,22 +1,156 @@
 import { cva } from "class-variance-authority";
 
+import { DefaultLinesDiffComputer } from "#/vendor/vscode-diff/index.ts";
+
 // The Code pane (DESIGN.md §6 "Code pane"): a file's lines in a grid of line number, marker and
 // text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it. The tints
 // of a change: an added line with "+" in `accent.primary` on `diff.added-bg`, the palette's green,
 // a removed line with "−" in `accent.danger` on
-// `diff.removed-bg` and no number. A patch with no file content shows its hunks alone. The whole rendering of a file and of a diff is here, from the
-// file's content and the unified diff git wrote, so that another renderer could take its place
-// without touching a screen.
+// `diff.removed-bg` and no number. Within a change, the characters that differ between its removed
+// and added lines are marked as VS Code's diff editor marks them, with its own diff, on
+// `diff.removed-word` and `diff.added-word`. A patch with
+// no file content shows its hunks alone. The whole rendering of a file and of a diff is here, from
+// the file's content and the unified diff git wrote, so that another renderer could take its
+// place without touching a screen.
 
 /** How a line is shown: as it is, added, or removed. */
 export type LineKind = "plain" | "added" | "removed";
+
+/** A run of a changed line's text: kept from the other side of its change, or changed. */
+export interface Segment {
+  changed: boolean;
+  text: string;
+}
 
 export interface CodeLine {
   kind: LineKind;
   /** The line's number in the file shown; a removed line has none. */
   number?: number;
   text: string;
+  /**
+   * The line's text cut where it differs from the other side of its change, as VS Code's diff
+   * editor marks it. Absent for a line of a change with one side, or one too long to compare.
+   */
+  segments?: Segment[];
 }
+
+/** VS Code's own diff, as its diff editor runs it. */
+const differ = new DefaultLinesDiffComputer();
+/** How long one change may take to compare before it keeps its line tints alone. */
+const MAX_COMPUTATION_MS = 100;
+
+/** A range of text in 1-based lines and columns, its end column exclusive. */
+interface TextRange {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+}
+
+/** Which characters of each line `ranges` cover. */
+const changedChars = (
+  lines: readonly string[],
+  ranges: readonly TextRange[]
+): boolean[][] => {
+  const marks = lines.map((text) =>
+    Array.from({ length: text.length }, () => false)
+  );
+  for (const range of ranges) {
+    for (let n = range.startLineNumber; n <= range.endLineNumber; n += 1) {
+      const row = marks[n - 1] ?? [];
+      const from = n === range.startLineNumber ? range.startColumn - 1 : 0;
+      const to = n === range.endLineNumber ? range.endColumn - 1 : row.length;
+      row.fill(true, from, Math.min(to, row.length));
+    }
+  }
+  return marks;
+};
+
+/** A line's text cut into runs of changed and kept characters. */
+const segmentsOf = (text: string, marks: readonly boolean[]): Segment[] => {
+  const out: Segment[] = [];
+  let from = 0;
+  for (let i = 1; i <= text.length; i += 1) {
+    if (i === text.length || marks[i] !== marks[from]) {
+      out.push({ changed: marks[from] ?? false, text: text.slice(from, i) });
+      from = i;
+    }
+  }
+  return out;
+};
+
+/**
+ * The segments of a change's removed and added lines: VS Code's diff of the two sides, a
+ * character diff of the whole change extended to whole words, with short kept runs between
+ * changes joined into them. Undefined when the comparison takes too long.
+ */
+export const changeSegments = (
+  removed: readonly string[],
+  added: readonly string[]
+): [Segment[][], Segment[][]] | undefined => {
+  const diff = differ.computeDiff([...removed], [...added], {
+    computeMoves: false,
+    ignoreTrimWhitespace: false,
+    maxComputationTimeMs: MAX_COMPUTATION_MS,
+  });
+  if (diff.hitTimeout) {
+    return undefined;
+  }
+  const inner = diff.changes.flatMap((change) => change.innerChanges ?? []);
+  const before = changedChars(
+    removed,
+    inner.map((c) => c.originalRange)
+  );
+  const after = changedChars(
+    added,
+    inner.map((c) => c.modifiedRange)
+  );
+  return [
+    removed.map((text, i) => segmentsOf(text, before[i] ?? [])),
+    added.map((text, i) => segmentsOf(text, after[i] ?? [])),
+  ];
+};
+
+/**
+ * The lines with the changed characters of each change marked. A change is a run of removed lines
+ * followed by a run of added lines, as git lays one out; one with a single side has no marks.
+ */
+const withInlineChanges = (lines: readonly CodeLine[]): CodeLine[] => {
+  const out = [...lines];
+  let i = 0;
+  while (i < out.length) {
+    if (out[i]?.kind !== "removed") {
+      i += 1;
+      continue;
+    }
+    let added = i;
+    while (out[added]?.kind === "removed") {
+      added += 1;
+    }
+    let end = added;
+    while (out[end]?.kind === "added") {
+      end += 1;
+    }
+    const segments =
+      end > added
+        ? changeSegments(
+            out.slice(i, added).map((line) => line.text),
+            out.slice(added, end).map((line) => line.text)
+          )
+        : undefined;
+    for (const [k, lineSegments] of [
+      ...(segments?.[0] ?? []),
+      ...(segments?.[1] ?? []),
+    ].entries()) {
+      const line = out[i + k];
+      if (line !== undefined) {
+        out[i + k] = { ...line, segments: lineSegments };
+      }
+    }
+    i = end;
+  }
+  return out;
+};
 
 /** One line of a unified diff's hunk. */
 interface PatchLine {
@@ -189,34 +323,69 @@ const markerVariants = cva("text-center", {
 
 // On a tinted line, front matter takes `code.prose`: `code.frontmatter` on the added tint falls
 // under the 4.5:1 contrast text needs (DESIGN.md §6 "Code pane").
-const textVariants = cva("break-all whitespace-pre-wrap no-underline", {
-  compoundVariants: [
-    { className: "text-code-frontmatter", kind: "plain", tone: "frontmatter" },
-    {
-      className: "text-code-prose",
-      kind: ["added", "removed"],
-      tone: "frontmatter",
+const textVariants = cva(
+  "break-all whitespace-pre-wrap no-underline select-text",
+  {
+    compoundVariants: [
+      {
+        className: "text-code-frontmatter",
+        kind: "plain",
+        tone: "frontmatter",
+      },
+      {
+        className: "text-code-prose",
+        kind: ["added", "removed"],
+        tone: "frontmatter",
+      },
+    ],
+    variants: {
+      kind: {
+        added: "",
+        plain: "",
+        removed: "",
+      },
+      tone: {
+        frontmatter: "",
+        heading: "text-code-heading",
+        list: "text-code-list",
+        prose: "text-code-prose",
+      },
     },
-  ],
-  variants: {
-    kind: {
-      added: "",
-      plain: "",
-      removed: "",
-    },
-    tone: {
-      frontmatter: "",
-      heading: "text-code-heading",
-      list: "text-code-list",
-      prose: "text-code-prose",
-    },
-  },
-});
+  }
+);
 
 const markers: Record<LineKind, string> = {
   added: "+",
   plain: "",
   removed: "−",
+};
+
+// A changed word's text is `code.strong`: the line's own tone falls under 4.5:1 on the word tints
+// (DESIGN.md §6 "Code pane").
+const wordVariants = cva("text-code-strong", {
+  variants: {
+    kind: {
+      added: "bg-diff-added-word",
+      plain: "",
+      removed: "bg-diff-removed-word",
+    },
+  },
+});
+
+/** A changed line's text, with the characters that differ from the other side marked. */
+const LineText = ({ line, text }: { line: CodeLine; text: string }) => {
+  if (line.segments === undefined) {
+    return text;
+  }
+  return line.segments.map((segment, i) =>
+    segment.changed ? (
+      <mark key={i} className={wordVariants({ kind: line.kind })}>
+        {segment.text}
+      </mark>
+    ) : (
+      segment.text
+    )
+  );
 };
 
 const Line = ({ line, tone }: { line: CodeLine; tone: Tone }) => {
@@ -230,10 +399,14 @@ const Line = ({ line, tone }: { line: CodeLine; tone: Tone }) => {
         {markers[line.kind]}
       </span>
       {line.kind === "added" && (
-        <ins className={textVariants({ kind: "added", tone })}>{text}</ins>
+        <ins className={textVariants({ kind: "added", tone })}>
+          <LineText line={line} text={text} />
+        </ins>
       )}
       {line.kind === "removed" && (
-        <del className={textVariants({ kind: "removed", tone })}>{text}</del>
+        <del className={textVariants({ kind: "removed", tone })}>
+          <LineText line={line} text={text} />
+        </del>
       )}
       {line.kind === "plain" && (
         <span className={textVariants({ kind: "plain", tone })}>{text}</span>
@@ -271,14 +444,16 @@ export const codeLines = ({
     return patch === undefined ? [] : removedLines(patch);
   }
   if (content === undefined) {
-    return patch === undefined || tint !== undefined ? [] : hunkLines(patch);
+    return patch === undefined || tint !== undefined
+      ? []
+      : withInlineChanges(hunkLines(patch));
   }
   if (tint === "added") {
     return numbered(content, "added");
   }
   return patch === undefined
     ? numbered(content, "plain")
-    : editedLines(content, patch);
+    : withInlineChanges(editedLines(content, patch));
 };
 
 export const CodePane = (props: CodePaneProps) => {

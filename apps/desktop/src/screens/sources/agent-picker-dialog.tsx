@@ -72,12 +72,7 @@ const Row = ({
         htmlFor={id}
         className="rounded-agent-picker-row hover:bg-agent-picker-row-hover has-focus-visible:outline-shell-focus-ring flex cursor-pointer items-center gap-3 px-3 py-2 has-focus-visible:outline-2 has-focus-visible:-outline-offset-2"
       >
-        <AgentLogo
-          client={configuration}
-          size={28}
-          hover="tooltip"
-          decorative
-        />
+        <AgentLogo client={configuration} size={28} decorative />
         <Name configuration={configuration} universal={false} />
         <Checkbox
           id={id}
@@ -96,7 +91,7 @@ const Row = ({
  */
 const UniversalRow = ({ configuration }: { configuration: Configuration }) => (
   <li className="flex items-center gap-3 px-3 py-2">
-    <AgentLogo client={configuration} size={28} hover="tooltip" decorative />
+    <AgentLogo client={configuration} size={28} decorative />
     <Name configuration={configuration} universal />
     <LockMark />
     <span className="sr-only">Always on</span>

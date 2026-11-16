@@ -158,7 +158,7 @@ export const SkillDetail = ({
             title={glyphTitle(row)}
             size={18}
           />
-          <h1 className="type-skill-name text-text-primary m-0 break-all">
+          <h1 className="type-skill-name text-text-primary m-0 break-all select-text">
             {row.name}
           </h1>
           {/* Left out when the banner says where the skill came from. */}
@@ -209,7 +209,7 @@ export const SkillDetail = ({
           </div>
         </div>
         {row.description !== "" && (
-          <p className="type-detail-desc text-text-muted m-0 text-pretty">
+          <p className="type-detail-desc text-text-muted m-0 text-pretty select-text">
             {row.description}
           </p>
         )}
@@ -257,10 +257,13 @@ export const SkillDetail = ({
             ))}
           </dl>
         </section>
-        <section aria-label="History" className="flex flex-col gap-3">
-          <Caption>History</Caption>
-          <HistorySection row={row} />
-        </section>
+        {/* Only your own skills keep a history; other skills show no section. */}
+        {row.kind === "yours" && (
+          <section aria-label="History" className="flex flex-col gap-3">
+            <Caption>History</Caption>
+            <HistorySection row={row} />
+          </section>
+        )}
       </div>
     </article>
   );

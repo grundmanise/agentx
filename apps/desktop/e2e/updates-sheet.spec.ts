@@ -104,6 +104,14 @@ test.describe("the What's new sheet", () => {
         hasText: "import sys",
       })
     ).toBeVisible();
+    // A change marks the text that differs, in its removed line and in its added one.
+    await expect(patch(page, "SKILL.md").locator("del mark")).toHaveText([
+      "and",
+    ]);
+    await expect(patch(page, "SKILL.md").locator("ins mark")).toHaveText([
+      ",",
+      "and convert",
+    ]);
 
     // A block closes and opens again.
     await block(page, "SKILL.md").click();

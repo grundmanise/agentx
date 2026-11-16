@@ -382,6 +382,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `file-row.edited-label` | `accent.attention` | Status of a file the user changed |
 | `diff.added-bg` | `lime-400/12` | Added line tint (marker `accent.primary`) |
 | `diff.removed-bg` | `red-400/8` | Removed line tint (marker `accent.danger`) |
+| `diff.added-word` | `lime-400/24` | Changed text of an added line, over its tint (text `code.strong`: 5.2:1) |
+| `diff.removed-word` | `red-400/24` | Changed text of a removed line, over its tint (text `code.strong`: 8.3:1) |
 | `diff.yours-label` | `accent.yours` | Your side's label, dot and chosen-pane ring |
 | `diff.yours-bg` | `violet-400/6` | Your side's pane ground |
 | `diff.theirs-label` | `accent.theirs` | Base version or update side's label, dot and chosen-pane ring |
@@ -450,7 +452,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.startup-title` | serif | 48 | 400 | 1 | -0.02em |  | Startup title |
 | `type.check-detail` | mono | 12.5 | 400 | 1.5 |  |  | Startup check detail (`check.detail`) |
 | `type.check-hint` | sans | 13 | 400 | 1.5 |  |  | Startup check hint callout (`text.secondary`) |
-| `type.skill-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane skill name |
+| `type.skill-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane skill name, selectable |
 | `type.body` | sans | 14 | 400 |  |  |  | Body, palette rows |
 | `type.input` | sans | 14 | 400 |  |  |  | Text inputs and search fields |
 | `type.input-mono` | mono | 14 | 400 |  |  |  | Inputs that take a URL or a command |
@@ -476,7 +478,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.palette-footer` | sans | 12 | 400 |  |  |  | Palette footer (`text.hint`) |
 | `type.toast` | sans | 13.5 | 400 |  |  |  | Toast message |
 | `type.toast-action` | sans | 13 | 600 |  |  |  | Action inside a toast |
-| `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
+| `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`), selectable |
 | `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
 | `type.source-name` | sans | 16 | 500 |  |  |  | Source name on the card of the open source (`source-card.name`) |
@@ -556,8 +558,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `row.spacing` | 2 | `gap-rows`, `pt-rows` | Between rows; `pt-rows` on a row of the Skills list, which places each row itself |
 | `row.glyph-col` | 18 | `w-row-glyph` | Glyph column |
 | `row.off` | 50% | `opacity-row-off` | Opacity of a row in no agent client: washed out |
-| `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
-| `group.padding` | 20 14 8 | `pt-group-top px-group pb-group-bottom` | Later group headers |
+| `group.padding` | 4 14 8 | `pt-group-top px-group pb-group-bottom` | Group header |
+| `group.spacing` | 16 | `pt-group-spacing` | Above each group but the first, outside its pinned header |
+| `group.header-height` | 30 | `min-h-group-header`, `top-group-header` | Least height of a group header; a plugin's header pins this far down, under its group's |
 | `group.gap` | 8 | `gap-group` | Label → count |
 | `subgroup.padding` | 6 14 | `py-subgroup-y px-subgroup-x` | A section toggle: a plugin's header under PLUGINS, a source's header in the Update skills dialog |
 | `subgroup.spacing` | 8 | `pt-subgroup-top` | Above a plugin's header, but the first in its group |
@@ -855,7 +858,7 @@ On a card the track is `segmented.card-track-bg`. A control whose command runs i
 
 ### Agent client logo chip
 
-Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo names its client on hover: as its `title`, or, in the Add skills bar and the agent picker, in the Tooltip (§6 "Tooltip"), which opens at once.
+Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (toggle chips), 44 (agent client cards). Stacked logos overlap by `logo.overlap` with a `logo.ring` ring in the parent's background. Every logo names its client on hover in the Tooltip (§6 "Tooltip"), which opens at once. A logo whose control already shows the name or carries its own Tooltip (a toggle chip, a logo toggle, the Universal mark) shows none.
 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
@@ -880,9 +883,9 @@ Sort toggle, at the right end of the filter row, always reads as a sort by name:
 
 ### Group header (lists)
 
-`type.caption` in `group.label`, then the count in `group.count`. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding-first` for the first group, `group.padding` for the rest. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
+`type.caption` in `group.label`, then the count in `group.count`. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding`, with `group.spacing` above each group but the first, and at least `group.header-height` tall. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool.
 
-The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a plugin installed in several agent clients is one subgroup. Its header (`src/components/section-toggle.tsx`) is a flat, full-width row, not a button with a fill: `subgroup.padding`, `row.radius`, no fill at rest and `subgroup.hover` under the pointer; a `xs` chevron in `text.caption`, the plugin's name in `type.caption` `subgroup.label`, then the count in `type.technical-sm` `subgroup.count`, `group.gap` apart. Its chevron lines up with the group's caption above it. `subgroup.spacing` above each header but the first in its group. The plugin's rows are inset by `subgroup.indent`, so each row's glyph sits under the plugin's name and the rows read as inside its section; their hover and selected fill start at the inset. A click collapses or expands the plugin's rows (`aria-expanded`); the chevron turns 90° while they show, with no transition. A collapsed subgroup keeps its header and count, and j/k skip its rows. Every subgroup is open when the screen opens. Each row's place (`aria-posinset`, `aria-setsize`) is among its plugin's rows.
+The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a plugin installed in several agent clients is one subgroup. Its header (`src/components/section-toggle.tsx`) is a flat, full-width row, not a button with a fill: `subgroup.padding`, `row.radius`, no fill at rest and `subgroup.hover` under the pointer; a `xs` chevron in `text.caption`, the plugin's name in `type.caption` `subgroup.label`, then the count in `type.technical-sm` `subgroup.count`, `group.gap` apart. Its chevron lines up with the group's caption above it. `subgroup.spacing` above each header but the first in its group, outside its pinned header. The plugin's rows are inset by `subgroup.indent`, so each row's glyph sits under the plugin's name and the rows read as inside its section; their hover and selected fill start at the inset. A click collapses or expands the plugin's rows (`aria-expanded`); the chevron turns 90° while they show, with no transition. A collapsed subgroup keeps its header and count, and j/k skip its rows. Every subgroup is open when the screen opens. Each row's place (`aria-posinset`, `aria-setsize`) is among its plugin's rows.
 
 The section toggle also heads a source in the Update skills dialog (§6 "Update skills dialog"), with no count. There it can end with one control at its right end, `subgroup.padding` from the edge, beside the toggle and outside it, so a click on the control toggles nothing; the whole row then takes `subgroup.hover`.
 
@@ -1039,7 +1042,9 @@ The Skills list column's header: the page title and the skill count on the left;
 
 ### Skills list
 
-The rows of the Skills list column, in their groups (§6 "Group header"). Only the headers and rows near the part of the list that shows are in the document, so a machine with hundreds of skills scrolls as one with a dozen. The list places each drawn header and row at its own offset, with the heights and `row.spacing` the tokens give; the library that does this (`@tanstack/react-virtual`) writes the offsets and the list's height on the elements itself, and no component sets a style. A group's label carries its full count, and each row its place in its group (`aria-posinset`, `aria-setsize`). The selected row comes into view when the selection changes: by a key, a click, or a route another screen opened.
+The rows of the Skills list column, in their groups (§6 "Group header"). Only the headers and rows near the part of the list that shows are in the document, so a machine with hundreds of skills scrolls as one with a dozen. The list places each drawn header and row at its own offset, with the heights and `row.spacing` the tokens give; the library that does this (`@tanstack/react-virtual`) writes the offsets and the list's height on the elements itself. A group's label carries its full count, and each row its place in its group (`aria-posinset`, `aria-setsize`). The selected row comes into view below the pinned headers when the selection changes: by a key, a click, or a route another screen opened.
+
+While the list scrolls, the header of the group that shows at the top stays pinned there with `position: sticky`, on `shell.content-bg`, and in PLUGINS the header of the plugin pins `group.header-height` under it. Each stays pinned while its group or plugin shows; the next header pushes it out, and a plugin's header slides under its group's. A click on a pinned plugin's header collapses or expands it and keeps it at the top.
 
 ### Tooltip
 
@@ -1086,7 +1091,10 @@ The sheet frame (§6 "Sheet") (`src/app/activity-log.tsx`): the last lines of wh
 
 ### Code pane
 
-`code.bg`, `type.code`, grid `code.gutter 1fr`: line number in `code.line-number`, right-aligned · marker · text. Front matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: an added line on `diff.added-bg`, a removed line on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
+`code.bg`, `type.code`, grid `code.gutter 1fr`: line number in `code.line-number`, right-aligned · marker · text. Front matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: an added line on `diff.added-bg`, a removed line on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1. The text is selectable, so it can be copied; the line numbers and markers are not, so a copy holds only the file's text.
+
+- Changed text: within a change, the text that differs between its removed lines and its added lines is marked as VS Code's diff editor marks it, with VS Code's own diff (copied into `src/vendor/vscode-diff`): a character diff of the whole change, extended to whole words where most of a word changed, with short kept runs between two changes joined into them. The changed text sits on `diff.removed-word` and `diff.added-word` in `code.strong`, since a line's own tone falls under 4.5:1 on those tints. White space counts, so a change of indentation is marked.
+- A change with one side, only removed or only added lines, has its line tint alone. So does a change that takes longer than 100 ms to compare.
 
 ### File list (detail pane FILES)
 

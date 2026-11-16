@@ -9,8 +9,12 @@ import shadcn from "ultracite/oxlint/shadcn";
 export default defineConfig({
   extends: [core, react, shadcn],
   // Lint the generated files in src/cli too, which Ultracite skips by default, so that the
-  // type check covers them.
-  ignorePatterns: (core.ignorePatterns ?? []).filter((p) => p !== "**/*.gen.*"),
+  // type check covers them. Code copied from another project, in src/vendor, keeps that project's
+  // style so that it can be compared with its source: tsc still checks its types.
+  ignorePatterns: [
+    ...(core.ignorePatterns ?? []).filter((p) => p !== "**/*.gen.*"),
+    "src/vendor/**",
+  ],
   jsPlugins: [...shadcn.jsPlugins, "eslint-plugin-better-tailwindcss"],
   options: {
     denyWarnings: true,

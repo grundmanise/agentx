@@ -283,6 +283,16 @@ const loadingVariants = cva("bg-code-bg overflow-hidden", {
   },
 });
 
+/** The pane of a row, faded in while the loading pane over it fades out. */
+const revealVariants = cva("", {
+  variants: {
+    revealing: {
+      false: "",
+      true: "animate-code-reveal",
+    },
+  },
+});
+
 /**
  * The SKILL.md pane while the files are read: a stand-in file blurred like frosted glass with a
  * spinner on top, at the Code pane's full height. `leaving`, it lies over the real SKILL.md as
@@ -449,21 +459,25 @@ export const FilesSection = ({
                   )}
                 </AccordionTrigger>
                 <AccordionContent>
-                  {revealing && file.path === SKILL_MD ? (
-                    <div className="relative">
-                      <div className="animate-code-reveal">
-                        <Pane row={file} />
-                      </div>
+                  {/* One tree, faded in or not, so that the pane is not remounted when the
+                      fade ends and a selection made during it stays. */}
+                  <div className="relative">
+                    <div
+                      className={revealVariants({
+                        revealing: revealing && file.path === SKILL_MD,
+                      })}
+                    >
+                      <Pane row={file} />
+                    </div>
+                    {revealing && file.path === SKILL_MD && (
                       <LoadingPane
                         leaving
                         onLeft={() => {
                           setRevealing(false);
                         }}
                       />
-                    </div>
-                  ) : (
-                    <Pane row={file} />
-                  )}
+                    )}
+                  </div>
                 </AccordionContent>
               </AccordionItem>
             );

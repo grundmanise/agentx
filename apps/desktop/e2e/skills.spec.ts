@@ -252,6 +252,9 @@ test.describe("the list", () => {
     const logos = row(page, "scratch").getByRole("img");
     expect(await names(logos)).toEqual(["Zed"]);
     await expect(logos.first()).toHaveAttribute("src", /^data:image\/svg/u);
+    // A logo names its client in the Tooltip, which opens at once.
+    await logos.first().hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Zed", { timeout: 300 });
     expect(
       await names(page.getByRole("region", { name: "Agents" }).getByRole("img"))
     ).toEqual(["Zed", "Claude Code"]);
@@ -259,15 +262,31 @@ test.describe("the list", () => {
 });
 
 test.describe("filters", () => {
-  test("the name filter matches a substring, whatever the case", async ({
+  test("the name filter matches a substring, whatever the case, and stays while another screen shows", async ({
     cli,
     page,
   }) => {
     await openSkills(cli, page);
-    await page
-      .getByRole("searchbox", { name: "Filter skills by name" })
-      .fill("PDF");
+    const search = page.getByRole("searchbox", {
+      name: "Filter skills by name",
+    });
+    await search.fill("PDF");
     expect(await rowNames(list(page))).toEqual(["pdf-letters", "pdf"]);
+    await page.getByRole("button", { name: "Filter" }).click();
+    await filters(page)
+      .getByRole("group", { name: "Show" })
+      .getByRole("radio", { name: "Personal 1" })
+      .check();
+    await page.keyboard.press("Escape");
+    expect(await rowNames(list(page))).toEqual(["pdf-letters"]);
+
+    await page.getByRole("link", { name: "Settings" }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Settings" })
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Skills" }).click();
+    await expect(search).toHaveValue("PDF");
+    expect(await rowNames(list(page))).toEqual(["pdf-letters"]);
     await page.getByRole("searchbox").fill("zzz");
     await expect(list(page).getByText("No skills match")).toBeVisible();
   });
@@ -560,9 +579,6 @@ test.describe("the detail pane", () => {
           - definition: 3f2a9c1
           - term: State
           - definition: current
-        - region "History":
-          - heading "History" [level=2]
-          - paragraph: History is kept for your own skills
     `);
     // The fork pill opens the fork.
     await article
@@ -743,9 +759,6 @@ test.describe("the detail pane", () => {
           - definition: acme-marketplace
           - term: Agent
           - definition: Claude Code
-        - region "History":
-          - heading "History" [level=2]
-          - paragraph: History is kept for your own skills
     `);
 
     await row(page, "scratch").click();
@@ -769,9 +782,6 @@ test.describe("the detail pane", () => {
             - link "/home/me/.agents/skills/scratch"
           - term: Installed by
           - definition: Skills CLI · https://github.com/vercel/skills
-        - region "History":
-          - heading "History" [level=2]
-          - paragraph: History is kept for your own skills
     `);
   });
 

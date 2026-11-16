@@ -128,12 +128,6 @@ const tileVariants = cva("rounded-logo block flex-none", {
   },
 });
 
-/**
- * How a logo names its client to the pointer: a native `title`, the app's Tooltip, or nothing,
- * for a logo inside a control that shows the name itself or carries the tooltip.
- */
-export type LogoHover = "title" | "tooltip" | "none";
-
 export interface AgentLogoProps {
   /** The configuration's `client` slug, which picks the logo, and its `name`, for the title. */
   client: Pick<Configuration, "client" | "name">;
@@ -144,8 +138,11 @@ export interface AgentLogoProps {
   surface?: LogoSurface;
   /** Inside a control that names the client itself: the image then adds nothing to its name. */
   decorative?: boolean;
-  /** How the logo names its client on hover; a `title` unless the caller says otherwise. */
-  hover?: LogoHover;
+  /**
+   * Names the client in a Tooltip on hover, which opens at once. False inside a control that shows
+   * the name itself or carries its own Tooltip.
+   */
+  tooltip?: boolean;
 }
 
 /**
@@ -166,9 +163,8 @@ const LogoImage = ({
   ring = false,
   surface,
   decorative = false,
-  hover = "title",
   ...trigger
-}: AgentLogoProps & TriggerProps) => {
+}: Omit<AgentLogoProps, "tooltip"> & TriggerProps) => {
   const bundled = logos[client.client];
   return (
     <img
@@ -176,7 +172,6 @@ const LogoImage = ({
       src={bundled ?? monogram(client.name)}
       alt={decorative ? "" : client.name}
       aria-hidden={decorative ? true : undefined}
-      title={hover === "title" ? client.name : undefined}
       width={size}
       height={size}
       draggable={false}
@@ -193,18 +188,18 @@ const LogoImage = ({
 /**
  * A round agent client logo (DESIGN.md §6 "Agent client logo chip"): the bundled image, or a
  * monogram of the client's name when none is bundled. Every logo is an image named after the
- * client, with the name on hover: as its title, or in a Tooltip with `hover="tooltip"`.
+ * client, with the name in a Tooltip on hover, unless `tooltip={false}`.
  */
-export const AgentLogo = ({ hover = "title", ...props }: AgentLogoProps) =>
-  hover === "tooltip" ? (
+export const AgentLogo = ({ tooltip = true, ...props }: AgentLogoProps) =>
+  tooltip ? (
     <Tooltip>
       <TooltipTrigger asChild>
-        <LogoImage hover="none" {...props} />
+        <LogoImage {...props} />
       </TooltipTrigger>
       <TooltipContent>{props.client.name}</TooltipContent>
     </Tooltip>
   ) : (
-    <LogoImage hover={hover} {...props} />
+    <LogoImage {...props} />
   );
 
 const stackVariants = cva("flex items-center", {
@@ -229,14 +224,14 @@ export const LogoStack = ({
   extra = 0,
   surface,
   decorative = false,
-  hover,
+  tooltip,
 }: {
   clients: Pick<Configuration, "client" | "name">[];
   size: LogoSize;
   extra?: number;
   surface?: LogoSurface;
   decorative?: boolean;
-  hover?: LogoHover;
+  tooltip?: boolean;
 }) => (
   <span className={stackVariants({ size })}>
     {clients.map((c) => (
@@ -247,7 +242,7 @@ export const LogoStack = ({
         ring
         surface={surface}
         decorative={decorative}
-        hover={hover}
+        tooltip={tooltip}
       />
     ))}
     {extra > 0 && (
