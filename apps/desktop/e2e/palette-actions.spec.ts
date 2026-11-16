@@ -51,35 +51,30 @@ test("the groups read ACTIONS, GO TO, SKILLS", async ({ cli, page }) => {
 });
 
 test.describe("ACTIONS", () => {
-  test("with an update and skills to publish: Update all and Publish all, with their counts", async ({
+  test("with skills to publish: Publish all, with its count", async ({
     cli,
     page,
   }) => {
     launch(cli);
     await openPalette(page);
     await expect(group(page, "ACTIONS").getByRole("option")).toHaveText([
-      /^Update all/u,
       /^Publish all/u,
       "Add skill",
       "Create skill",
-      "Check updates",
+      "Check skills for updates",
       "Rescan this machine",
       "Show activity log",
     ]);
-    await expect(option(page, "Update all")).toContainText("1 skill");
     await expect(option(page, "Publish all")).toContainText("3 skills");
   });
 
-  test("with no update and nothing to publish: neither Update all nor Publish all", async ({
-    cli,
-    page,
-  }) => {
+  test("with nothing to publish: no Publish all", async ({ cli, page }) => {
     launch(cli, "synced", { update: false });
     await openPalette(page);
     await expect(group(page, "ACTIONS").getByRole("option")).toHaveText([
       "Add skill",
       "Create skill",
-      "Check updates",
+      "Check skills for updates",
       "Rescan this machine",
       "Show activity log",
     ]);
@@ -88,20 +83,11 @@ test.describe("ACTIONS", () => {
   test("with no account remote: no Publish all", async ({ cli, page }) => {
     launch(cli, "no-account-remote");
     await openPalette(page);
-    await expect(option(page, "Update all")).toHaveCount(1);
+    // Once the skills show, the inventory is in.
+    await expect(
+      group(page, "SKILLS").getByRole("option").first()
+    ).toBeVisible();
     await expect(option(page, "Publish all")).toHaveCount(0);
-  });
-
-  test("Update all runs skill update --all", async ({ cli, page }) => {
-    launch(cli);
-    cli.register(["skill", "update", "--all"], {
-      events: [{ name: "pdf", state: "current", type: "library_skill" }],
-    });
-    await openPalette(page);
-    await option(page, "Update all").click();
-    await expect(palette(page)).toBeHidden();
-    await expect(toasts(page)).toContainText("Updated 1 skill");
-    expect(ran(cli, ["skill", "update", "--all"])).toBe(true);
   });
 
   test("Publish all runs skill publish with every skill the title bar counts", async ({
@@ -124,11 +110,14 @@ test.describe("ACTIONS", () => {
     expect(ran(cli, ["skill", "publish", ...names])).toBe(true);
   });
 
-  test("Check updates runs skill check-updates", async ({ cli, page }) => {
+  test("Check skills for updates runs skill check-updates", async ({
+    cli,
+    page,
+  }) => {
     launch(cli);
     cli.register(["skill", "check-updates"], { events: [] });
     await openPalette(page);
-    await option(page, "Check updates").click();
+    await option(page, "Check skills for updates").click();
     await expect(toasts(page)).toContainText("All skills are up to date");
     expect(ran(cli, ["skill", "check-updates"])).toBe(true);
   });

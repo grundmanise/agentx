@@ -1,11 +1,21 @@
-// Updates on the Skills screen: Check updates (`skill check-updates`), the Update of one skill
-// (`skill update <name>`, from its banner) and Update all (`skill update --all`,
-// from the toast of a check that found more than one). Each runs one command through the runner
-// and says what happened by what the CLI emitted; the list redraws from the inventory and the
-// update check that follow, never from a result predicted here.
+// Updates on the Skills screen: Check updates (`skill check-updates`), which opens the Update
+// skills dialog (`update-dialog.tsx`) when it found an update, the Update of one skill
+// (`skill update <name>`, from its banner) and the run of that dialog, which the sidebar's update
+// pill opens too: `skill update <name>` for each skill selected, one after another, each row
+// following its own command. Each runs through the runner and says what
+// happened by what the CLI emitted; the list redraws from the inventory and the update check
+// that follow, never from a result predicted here.
+import { useMemo } from "react";
+import { create } from "zustand";
+
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { CliEvent, ErrorEvent } from "#/cli/events.gen.ts";
-import { notify } from "#/components/toast.tsx";
+import type {
+  CliEvent,
+  ErrorEvent,
+  LibraryEntry,
+  UpdateAvailableEvent,
+} from "#/cli/events.gen.ts";
+import { dismissToast, notify } from "#/components/toast.tsx";
 import type { ToastAction } from "#/components/toast.tsx";
 import { checkingText } from "#/screens/skills/checking-text.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
@@ -13,15 +23,14 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { cancelCommand, runCommand, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
-import { useAppStore } from "#/store/store.ts";
+import { addActivity, useAppStore } from "#/store/store.ts";
+import type { Problem } from "#/store/store.ts";
 
 /** The label of Check updates, which the runner shows as pending while the check runs. */
 export const CHECK_UPDATES = "Check updates";
 
 /** The label of the Update of `name`, which its banner's Update shows as pending. */
 export const updateLabel = (name: string) => `update ${name}`;
-
-const UPDATE_ALL = "update all";
 
 const plural = (n: number, one: string, many: string) =>
   n === 1 ? `${n} ${one}` : `${n} ${many}`;
@@ -93,31 +102,45 @@ export const updateSkill = async (row: SkillRow) => {
   }
 };
 
-/** Update all: `skill update --all`, every update the last check found. */
-export const updateAll = async () => {
-  const outcome = await runCommand(["skill", "update", "--all"], {
-    label: UPDATE_ALL,
-    success: (events) =>
-      `Updated ${plural(updatedIn(events).length, "skill", "skills")}`,
-  });
-  const { exitCode, events } = outcome;
-  const waiting = conflictsIn(events);
-  if (exitCode === EXIT_CODES.pending_merge && waiting > 0) {
-    const updated = plural(updatedIn(events).length, "skill", "skills");
-    notify(
-      `Updated ${updated}. ${waiting === 1 ? "1 has" : `${waiting} have`} conflicts`
-    );
-  }
+/**
+ * The updates the app offers, by name: every update candidate of the last check but those of a
+ * skill with a pending merge, which the skill's banner finishes first.
+ */
+export const offeredUpdates = (
+  updates: Iterable<UpdateAvailableEvent>,
+  library: readonly LibraryEntry[]
+) => {
+  const offers = [...updates].filter(
+    (u) =>
+      library.find((entry) => entry.name === u.name)?.pending_merge !== true
+  );
+  offers.sort((a, b) => a.name.localeCompare(b.name));
+  return offers;
+};
+
+/** The updates the app offers, from the store as it is now; a new list only when one changes. */
+export const useOfferedUpdates = () => {
+  const updates = useAppStore((s) => s.updates);
+  const library = useAppStore((s) => s.inventory?.library);
+  return useMemo(
+    () => offeredUpdates(Object.values(updates), library ?? []),
+    [updates, library]
+  );
 };
 
 /** How many skills the check offers an update for: a skill with a pending merge is not offered one. */
-const offered = (events: CliEvent[]) => {
-  const library = useAppStore.getState().inventory?.library ?? [];
-  return events.filter(
-    (e) =>
-      e.type === "update_available" &&
-      library.find((entry) => entry.name === e.name)?.pending_merge !== true
+const offered = (events: CliEvent[]) =>
+  offeredUpdates(
+    events.flatMap((e) => (e.type === "update_available" ? [e] : [])),
+    useAppStore.getState().inventory?.library ?? []
   ).length;
+
+/** Whether the app offers an update now, as the sidebar's update pill counts them. */
+const offersUpdates = () => {
+  const { inventory, updates } = useAppStore.getState();
+  return (
+    offeredUpdates(Object.values(updates), inventory?.library ?? []).length > 0
+  );
 };
 
 /** The sources a check could not reach: those of its fetches that its error names. */
@@ -157,13 +180,26 @@ const unreachableFailure = ({ exitCode, events }: Outcome) => {
 const checkRunning = () =>
   Object.hasOwn(useAppStore.getState().pending, CHECK_UPDATES);
 
+/** Whether the Update skills dialog is open: the sidebar's update pill and Check updates open it. */
+export const useUpdateDialog = create<{ open: boolean }>()(() => ({
+  open: false,
+}));
+
+/** The id of the sidebar's update pill, which takes the focus back when the dialog closes. */
+export const UPDATE_PILL_ID = "update-pill";
+
+/** Opens the Update skills dialog. */
+export const openUpdateDialog = () => {
+  useUpdateDialog.setState({ open: true });
+};
+
 /**
  * Check updates: `skill check-updates`, which fetches each source and lists every update it finds.
  * Its toast says "Checking for updates…", then how far it got, "0/10" before the first fetch and
- * then one source fetched at a time, in room it keeps from the start; then what it found: how many skills
- * have an update, with Update all when there is more than one. A source it could not reach
- * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere are
- * listed all the same (src/store/loaders.ts).
+ * then one source fetched at a time, in room it keeps from the start. When the app then offers an update, the toast goes and the Update skills
+ * dialog opens; else the toast says that all skills are up to date. A source it could not reach
+ * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere
+ * are listed all the same (src/store/loaders.ts), in the dialog.
  */
 export const checkUpdates = async () => {
   if (checkRunning()) {
@@ -176,16 +212,7 @@ export const checkUpdates = async () => {
     },
   };
   notify(checkingText(), cancel, { lasting: true });
-  await runCommand(["skill", "check-updates"], {
-    action: (events) =>
-      offered(events) > 1
-        ? {
-            label: "Update all",
-            onClick: () => {
-              void updateAll();
-            },
-          }
-        : undefined,
+  const { exitCode } = await runCommand(["skill", "check-updates"], {
     failure: unreachableFailure,
     label: CHECK_UPDATES,
     onProgress: (event) => {
@@ -196,12 +223,221 @@ export const checkUpdates = async () => {
         });
       }
     },
-    success: (events) => {
-      const n = offered(events);
-      if (n === 0) {
-        return "All skills are up to date";
-      }
-      return n === 1 ? "1 skill has an update" : `${n} skills have updates`;
-    },
+    // An update found: the dialog says so, in place of a toast.
+    success: (events) =>
+      offered(events) === 0 ? "All skills are up to date" : undefined,
   });
+  if (
+    (exitCode === EXIT_CODES.ok || exitCode === EXIT_CODES.source) &&
+    offersUpdates()
+  ) {
+    // Exit 3 keeps its toast, which names the source the check could not reach.
+    if (exitCode === EXIT_CODES.ok) {
+      dismissToast();
+    }
+    openUpdateDialog();
+  }
+};
+
+/**
+ * Where a skill of the Update skills dialog is in its run. Before the run every selected skill is
+ * `waiting` and every other one `skipped`; its command makes it `running`, then it ends `updated`
+ * (`merged` when its edits were merged in), `current` when there was nothing to update after all,
+ * `conflict` when the merge waits for the user, or `failed` with the CLI's reason.
+ */
+export type UpdateStatus =
+  | "waiting"
+  | "skipped"
+  | "running"
+  | "updated"
+  | "merged"
+  | "current"
+  | "conflict"
+  | "failed";
+
+/** One skill of the run, as the dialog listed it when Update was pressed. */
+export interface UpdateRunRow {
+  update: UpdateAvailableEvent;
+  /** The library holds edits the update merges with. */
+  edited: boolean;
+  status: UpdateStatus;
+  /** Why the CLI did not update it, in its words. */
+  reason?: string;
+  /** What the CLI warned about while it updated it, such as a placement it skipped. */
+  warnings?: string[];
+}
+
+/** The run of the dialog: its rows and how far it is. */
+export interface UpdateRun {
+  /** `running` until the last command ends; `failed` when one ended in a way that stops the run. */
+  phase: "running" | "ended" | "failed";
+  rows: UpdateRunRow[];
+  /** Why the run stopped, as the CLI or the app says it. */
+  failure?: Problem;
+}
+
+/** The one run of the dialog, from Update until the dialog is closed after it. */
+export const useUpdateRun = create<{ run: UpdateRun | undefined }>()(() => ({
+  run: undefined,
+}));
+
+const setRow = (name: string, change: Partial<UpdateRunRow>) => {
+  useUpdateRun.setState(({ run }) => ({
+    run:
+      run === undefined
+        ? run
+        : {
+            ...run,
+            rows: run.rows.map((row) =>
+              row.update.name === name ? { ...row, ...change } : row
+            ),
+          },
+  }));
+};
+
+/** Forgets the run once its dialog closes. A run still going is never forgotten. */
+export const dismissUpdateRun = () => {
+  if (useUpdateRun.getState().run?.phase !== "running") {
+    useUpdateRun.setState({ run: undefined });
+  }
+};
+
+const selectedRows = (run: UpdateRun) =>
+  run.rows.filter((r) => r.status !== "skipped");
+
+/** "Updating 2 of 4…": the skill whose command runs, of those selected. */
+export const runProgressText = (run: UpdateRun) => {
+  const selected = selectedRows(run);
+  const started = selected.filter((r) => r.status !== "waiting").length;
+  return `Updating ${Math.max(1, started)} of ${selected.length}…`;
+};
+
+/** The statuses of a skill the run updated, or found up to date already. */
+export const UPDATED: ReadonlySet<UpdateStatus> = new Set<UpdateStatus>([
+  "updated",
+  "merged",
+  "current",
+]);
+
+/** "2 of 4 skills updated": what the run did of the skills selected, once it ended. */
+export const runSummaryText = (run: UpdateRun) => {
+  const rows = selectedRows(run);
+  const updated = rows.filter((r) => UPDATED.has(r.status)).length;
+  return `${updated} of ${plural(rows.length, "skill", "skills")} updated`;
+};
+
+/** Where one skill's `skill update <name>` left it. */
+const statusOf = (name: string, outcome: Outcome): UpdateStatus => {
+  if (outcome.exitCode === EXIT_CODES.ok) {
+    const updated = updatedIn(outcome.events).find((e) => e.name === name);
+    if (updated === undefined) {
+      return "current";
+    }
+    return updated.state === "modified" ? "merged" : "updated";
+  }
+  return outcome.exitCode === EXIT_CODES.pending_merge &&
+    outcome.events.some((e) => e.type === "conflict" && e.name === name)
+    ? "conflict"
+    : "failed";
+};
+
+/** Whether a command ended in a way the runner answers itself: the lock, the account repo, a cancel. */
+const answeredByRunner = (outcome: Outcome) =>
+  outcome.exitCode === EXIT_CODES.locked ||
+  outcome.exitCode === EXIT_CODES.account_repo ||
+  outcome.cancelled;
+
+/** A command that failed with no word from the CLI: it could not start, or was stopped. */
+const stoppedProblem = (outcome: Outcome): Problem => ({
+  message:
+    outcome.startError === undefined
+      ? "agentx skill update did not finish"
+      : `agentx could not start: ${outcome.startError}`,
+});
+
+/** The activity entry the run adds once it ended: what it did, in the words of its summary. */
+const logRun = (run: UpdateRun) => {
+  const rows = selectedRows(run);
+  const clean = rows.every(
+    (r) => UPDATED.has(r.status) && (r.warnings ?? []).length === 0
+  );
+  addActivity(clean ? "success" : "attention", runSummaryText(run));
+};
+
+/**
+ * Updates the skills of `rows` that are selected, one `skill update <name>` after another, in
+ * the dialog's order: the CLI takes one name, or every update at once. Each row follows its own
+ * command. A merge that conflicts stays on its row and opens no skill; the dialog shows the
+ * result, so no toast does. A command that ends in a way the runner answers (the lock, the
+ * account repo, a cancel) puts the dialog back as it was before the run, with the skills already
+ * updated gone from it; one that ends with no word from the CLI stops the run with its problem.
+ */
+export const updateSkills = async (rows: UpdateRunRow[]) => {
+  if (useUpdateRun.getState().run !== undefined) {
+    return;
+  }
+  useUpdateRun.setState({ run: { phase: "running", rows } });
+  for (const row of rows.filter((r) => r.status === "waiting")) {
+    const { name } = row.update;
+    // A run that stopped starts nothing more.
+    if (useUpdateRun.getState().run?.phase !== "running") {
+      break;
+    }
+    setRow(name, { status: "running" });
+    // One skill after another: the CLI's lock admits one run at a time.
+    // oxlint-disable-next-line no-await-in-loop
+    const outcome = await runUntilSettled(["skill", "update", name], {
+      keep: [name],
+      label: updateLabel(name),
+      ownActivity: (ended) =>
+        statusOf(name, ended) === "conflict"
+          ? {
+              message: `${name} skill has conflicts. Resolve them to finish the update`,
+              tone: "attention",
+            }
+          : undefined,
+      ownFailure: true,
+      retry: () => {
+        openUpdateDialog();
+      },
+      stayOnConflict: true,
+    });
+    if (answeredByRunner(outcome)) {
+      useUpdateRun.setState({ run: undefined });
+      return;
+    }
+    const error = outcome.events.find((e) => e.type === "error");
+    const status = statusOf(name, outcome);
+    if (status === "failed" && error === undefined) {
+      setRow(name, { status: "waiting" });
+      useUpdateRun.setState(({ run }) =>
+        run === undefined
+          ? { run }
+          : {
+              run: {
+                ...run,
+                failure: stoppedProblem(outcome),
+                phase: "failed",
+              },
+            }
+      );
+      break;
+    }
+    const warnings = outcome.logs
+      .filter((l) => l.level === "warn")
+      .map((l) => l.message);
+    setRow(name, {
+      status,
+      ...(warnings.length > 0 ? { warnings } : {}),
+      ...(status === "failed" && error !== undefined
+        ? { reason: error.message }
+        : {}),
+    });
+  }
+  const { run } = useUpdateRun.getState();
+  if (run?.phase === "running") {
+    const ended: UpdateRun = { ...run, phase: "ended" };
+    useUpdateRun.setState({ run: ended });
+    logRun(ended);
+  }
 };
