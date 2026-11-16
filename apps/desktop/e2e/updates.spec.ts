@@ -24,6 +24,13 @@ import {
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
+declare global {
+  interface Window {
+    /** The texts the toasts showed, in order, as a test records them. */
+    toastTexts?: string[];
+  }
+}
+
 const launchLines = [
   ["version", "--json"],
   ["doctor", "--json"],
@@ -370,6 +377,84 @@ test.describe("Check updates", () => {
       ["skill", "check-updates", "--json"],
       ["skill", "update", "--all", "--json"],
     ]);
+  });
+
+  test("opens its toast with the source count, not without it first", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf", []);
+    // Every text the toasts show, as the page draws them.
+    await page.evaluate(() => {
+      const seen: string[] = [];
+      window.toastTexts = seen;
+      new MutationObserver(() => {
+        for (const toast of document.querySelectorAll("[data-sonner-toast]")) {
+          const text = toast.querySelector("[data-title]")?.textContent;
+          if (text !== null && text !== undefined && seen.at(-1) !== text) {
+            seen.push(text);
+          }
+        }
+      }).observe(document.body, {
+        characterData: true,
+        childList: true,
+        subtree: true,
+      });
+    });
+    const run = cli.register(["skill", "check-updates"], {
+      events: [{ current: 0, phase: "fetch", total: 2, type: "progress" }],
+      holdAfter: 1,
+    });
+    await checkButton(page).click();
+    await run.started;
+    await expect(
+      toasts(page).getByText("Checking for updates · 0 of 2 sources")
+    ).toBeVisible();
+    run.release();
+    await expect(
+      toasts(page).getByText("All skills are up to date")
+    ).toBeVisible();
+    const seen = await page.evaluate(() => window.toastTexts);
+    expect(seen).not.toContain("Checking for updates");
+  });
+
+  test("opens without a count when the CLI is slow to emit one, then with the last count", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf", []);
+    const slow = cli.register(["skill", "check-updates"], {
+      events: [{ current: 0, phase: "fetch", total: 2, type: "progress" }],
+      holdAfter: 0,
+    });
+    await checkButton(page).click();
+    await slow.started;
+    await expect(
+      toasts(page).getByText("Checking for updates", { exact: true })
+    ).toBeVisible();
+    slow.release();
+    await expect(
+      toasts(page).getByText("All skills are up to date")
+    ).toBeVisible();
+    // The toast of the first check has left.
+    await expect(toasts(page).getByText(/^Checking for updates/u)).toHaveCount(
+      0
+    );
+
+    // The next check knows how many sources there are before the CLI says so.
+    const next = cli.register(["skill", "check-updates"], {
+      events: [{ current: 0, phase: "fetch", total: 2, type: "progress" }],
+      holdAfter: 0,
+    });
+    await checkButton(page).click();
+    await next.started;
+    await expect(
+      toasts(page).getByText("Checking for updates · 0 of 2 sources")
+    ).toBeVisible();
+    next.release();
+    await expect(
+      toasts(page).getByText("All skills are up to date")
+    ).toBeVisible();
   });
 
   test("is an icon button that shows its name in a tooltip, and is busy while the check runs", async ({

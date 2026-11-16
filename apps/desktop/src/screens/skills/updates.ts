@@ -161,6 +161,15 @@ const checking = (current?: number, total?: number) =>
     ? "Checking for updates"
     : `Checking for updates · ${current} of ${plural(total, "source", "sources")}`;
 
+/** The sources the last check fetched, so that the next one opens with its count. */
+let lastTotal: number | undefined;
+
+/**
+ * How long Check updates waits for the CLI's count before it opens its toast without one, in ms.
+ * The CLI emits the count before its first fetch, so this passes only when it is slow to start.
+ */
+const COUNT_WAIT_MS = 400;
+
 /**
  * Check updates: `skill check-updates`, which fetches each source and lists every update it finds.
  * Its toast says how far it got, from 0 of the total before the first fetch and then one source
@@ -168,6 +177,10 @@ const checking = (current?: number, total?: number) =>
  * have an update, with Update all when there is more than one. A source it could not reach
  * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere are
  * listed all the same (src/store/loaders.ts).
+ *
+ * The toast opens with the count, so that its text and width do not change as the count comes:
+ * with the total of the last check, or else when the CLI emits its own, or, if the CLI is slow to,
+ * without a count after COUNT_WAIT_MS.
  */
 export const checkUpdates = async () => {
   if (checkRunning()) {
@@ -179,33 +192,51 @@ export const checkUpdates = async () => {
       void cancelCommand(CHECK_UPDATES);
     },
   };
-  notify(checking(), cancel, { lasting: true });
-  await runCommand(["skill", "check-updates"], {
-    action: (events) =>
-      offered(events) > 1
-        ? {
-            label: "Update all",
-            onClick: () => {
-              void updateAll();
-            },
-          }
-        : undefined,
-    failure: unreachableFailure,
-    label: CHECK_UPDATES,
-    onProgress: (event) => {
-      if (event.phase === "fetch") {
-        notify(checking(event.current, event.total), cancel, {
-          inPlace: true,
-          lasting: true,
-        });
-      }
-    },
-    success: (events) => {
-      const n = offered(events);
-      if (n === 0) {
-        return "All skills are up to date";
-      }
-      return n === 1 ? "1 skill has an update" : `${n} skills have updates`;
-    },
-  });
+  let opened = false;
+  const show = (current?: number, total?: number) => {
+    notify(checking(current, total), cancel, {
+      inPlace: opened,
+      lasting: true,
+    });
+    opened = true;
+  };
+  let wait: ReturnType<typeof setTimeout> | undefined;
+  if (lastTotal === undefined) {
+    wait = setTimeout(() => {
+      show();
+    }, COUNT_WAIT_MS);
+  } else {
+    show(0, lastTotal);
+  }
+  try {
+    await runCommand(["skill", "check-updates"], {
+      action: (events) =>
+        offered(events) > 1
+          ? {
+              label: "Update all",
+              onClick: () => {
+                void updateAll();
+              },
+            }
+          : undefined,
+      failure: unreachableFailure,
+      label: CHECK_UPDATES,
+      onProgress: (event) => {
+        if (event.phase === "fetch") {
+          clearTimeout(wait);
+          lastTotal = event.total;
+          show(event.current, event.total);
+        }
+      },
+      success: (events) => {
+        const n = offered(events);
+        if (n === 0) {
+          return "All skills are up to date";
+        }
+        return n === 1 ? "1 skill has an update" : `${n} skills have updates`;
+      },
+    });
+  } finally {
+    clearTimeout(wait);
+  }
 };
