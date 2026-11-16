@@ -156,12 +156,7 @@ export const AgentTargets = ({
             aria-label="Universal"
             aria-description={universalTitle(universal.map((c) => c.name))}
           >
-            <LogoStack
-              clients={universal}
-              size={28}
-              hover="tooltip"
-              decorative
-            />
+            <LogoStack clients={universal} size={28} decorative />
           </Toggle>
         )}
         {trail.map(logoToggle)}

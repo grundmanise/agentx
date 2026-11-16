@@ -34,12 +34,7 @@ const Row = ({
         htmlFor={id}
         className="rounded-agent-picker-row hover:bg-agent-picker-row-hover has-focus-visible:outline-shell-focus-ring flex cursor-pointer items-center gap-3 px-3 py-2 has-focus-visible:outline-2 has-focus-visible:-outline-offset-2"
       >
-        <AgentLogo
-          client={configuration}
-          size={28}
-          hover="tooltip"
-          decorative
-        />
+        <AgentLogo client={configuration} size={28} decorative />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="type-body text-text-primary truncate">
             {configuration.name}

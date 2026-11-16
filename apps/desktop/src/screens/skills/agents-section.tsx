@@ -93,7 +93,7 @@ const DirectChip = ({
   const pending = useSettling(chipLabel(row, c));
   return (
     <AgentChip
-      logo={<AgentLogo client={c} size={28} />}
+      logo={<AgentLogo client={c} size={28} hover="none" />}
       name={c.name}
       state={state}
       title={chipTitle(row, c, state, configurations)}
