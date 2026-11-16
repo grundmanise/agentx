@@ -677,7 +677,6 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` | From the bottom edge |
 | `toast.detail-width` | 440 | `w-toast-detail` | Error toast |
 | `toast.detail-padding` | 12 6 12 18 | `py-toast-detail pr-1.5 pl-toast` |  |
-| `toast.count-min-width` | 1ch | `min-w-toast-count` | A number of a progress toast, in `tabular-nums`: the dash that stands in for it until the count comes takes the room of the digit that replaces it |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
 
@@ -980,6 +979,7 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 - As wide as its text, up to `toast.max-width`; past it the text wraps and the toast grows taller. A one-line toast keeps `toast.min-height`, so it looks as it did before toasts wrapped.
 - The action keeps its width on the right of the text and is centred on the toast's height, wrapped or not: the toast is a pill, so its middle is the line the eye follows, and a short action lined up with one line of two would look misplaced on the rounded end.
+- A toast whose command counts its progress keeps one text while it runs, so it keeps its width and place, and puts the count in the Tooltip (§6 "Tooltip") of an info icon after the text: the `InfoIcon` (`xs`) in a plain inline Button: `button.ghost-text`, `text.primary` on hover. Check updates says "Checking for updates", and its tooltip "Determining the number of sources" until the CLI sends the count, then "Checked 1 of 2 sources".
 
 - One toast at a time: a new one replaces the one showing.
 - It goes after 2.6s, or 5s with an action.
@@ -1023,7 +1023,7 @@ The rows of the Skills list column, in their groups (§6 "Group header"). Only t
 
 ### Tooltip
 
-shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, shows the full text of a shortened label, such as a source group's URL, or says why an inert agent chip does nothing: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs, but for an inert agent chip, whose reason it describes.
+shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, shows the full text of a shortened label, such as a source group's URL, says why an inert agent chip does nothing, or counts a running command's progress behind a toast's info icon (§6 "Toast"): `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs, but for an inert agent chip, whose reason it describes.
 
 ### Popover (Filter)
 

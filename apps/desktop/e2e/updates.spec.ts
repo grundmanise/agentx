@@ -24,13 +24,6 @@ import {
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
-declare global {
-  interface Window {
-    /** The texts the toast showed, in order, with its width, as a test records them. */
-    toastTexts?: { text: string; width: number }[];
-  }
-}
-
 const launchLines = [
   ["version", "--json"],
   ["doctor", "--json"],
@@ -77,6 +70,12 @@ const expectOffered = async (page: Page, name: string) => {
     })
   ).toBeVisible();
 };
+/** The toast of a running check: its text alone, which the count does not change. */
+const checkingToast = (page: Page) =>
+  toasts(page).getByText("Checking for updates", { exact: true });
+/** The info icon of a running check's toast, whose tooltip counts the sources. */
+const sourcesInfo = (page: Page) =>
+  toasts(page).getByRole("button", { exact: true, name: "Sources" });
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
 
@@ -347,9 +346,11 @@ test.describe("Check updates", () => {
     await checkButton(page).click();
     await run.started;
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "true");
-    await expect(
-      toasts(page).getByText("Checking for updates · 0 of 2 sources")
-    ).toBeVisible();
+    await expect(checkingToast(page)).toBeVisible();
+    await sourcesInfo(page).hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "Checked 0 of 2 sources"
+    );
     run.release();
     // draft's pending merge comes first: four skills are offered an update.
     await expect(toasts(page).getByText("4 skills have updates")).toBeVisible();
@@ -379,71 +380,48 @@ test.describe("Check updates", () => {
     ]);
   });
 
-  for (const { total, count } of [
-    { count: "0 of 2 sources", total: 2 },
-    { count: "0 of 1 source", total: 1 },
-  ]) {
-    test(`opens with a dash for each number, and keeps its width as "${count}" comes`, async ({
-      cli,
-      page,
-    }) => {
-      await open(cli, page, "pdf", []);
-      // Each text the toast shows, with its width, as the page draws them.
-      await page.evaluate(() => {
-        const seen: { text: string; width: number }[] = [];
-        window.toastTexts = seen;
-        new MutationObserver(() => {
-          const toast = document.querySelector("[data-sonner-toast]");
-          const title = toast?.querySelector("[data-title]");
-          // The text that is read: without what is hidden from it.
-          const read = title?.cloneNode(true);
-          if (read instanceof Element) {
-            for (const hidden of read.querySelectorAll("[aria-hidden]")) {
-              hidden.remove();
-            }
-          }
-          const text = read?.textContent ?? "";
-          if (toast !== null && text !== "" && seen.at(-1)?.text !== text) {
-            seen.push({ text, width: toast.getBoundingClientRect().width });
-          }
-        }).observe(document.body, {
-          characterData: true,
-          childList: true,
-          subtree: true,
-        });
-      });
-      const run = cli.register(["skill", "check-updates"], {
-        events: [
-          { current: 0, phase: "fetch", total, type: "progress" },
-          {
-            current: 1,
-            phase: "fetch",
-            subject: ACME,
-            total,
-            type: "progress",
-          },
-        ],
-        holdAfter: 1,
-      });
-      await checkButton(page).click();
-      await run.started;
-      await expect(
-        toasts(page).getByText(`Checking for updates · ${count}`)
-      ).toBeVisible();
-      run.release();
-      await expect(
-        toasts(page).getByText("All skills are up to date")
-      ).toBeVisible();
-      const seen = (await page.evaluate(() => window.toastTexts)) ?? [];
-      const checking = seen.filter((s) => s.text.startsWith("Checking"));
-      expect(checking.map((s) => s.text)).toEqual([
-        "Checking for updates · – of – sources",
-        `Checking for updates · ${count}`,
-        `Checking for updates · ${count.replace("0", "1")}`,
-      ]);
-      expect(new Set(checking.map((s) => s.width)).size).toBe(1);
+  test("says in its info icon's tooltip that it determines the number of sources until the CLI sends it", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf", []);
+    const run = cli.register(["skill", "check-updates"], {
+      events: [{ current: 0, phase: "fetch", total: 2, type: "progress" }],
+      holdAfter: 0,
     });
-  }
+    await checkButton(page).click();
+    await run.started;
+    await expect(checkingToast(page)).toBeVisible();
+    await sourcesInfo(page).hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "Determining the number of sources"
+    );
+    run.release();
+    await expect(
+      toasts(page).getByText("All skills are up to date")
+    ).toBeVisible();
+  });
+
+  test("keeps its text as the count comes, and counts one source in the singular", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf", []);
+    const run = cli.register(["skill", "check-updates"], {
+      events: [{ current: 0, phase: "fetch", total: 1, type: "progress" }],
+      holdAfter: 1,
+    });
+    await checkButton(page).click();
+    await run.started;
+    await sourcesInfo(page).hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Checked 0 of 1 source");
+    // The same text as before the count came, so the toast keeps its width and place.
+    await expect(checkingToast(page)).toBeVisible();
+    run.release();
+    await expect(
+      toasts(page).getByText("All skills are up to date")
+    ).toBeVisible();
+  });
 
   test("is an icon button that shows its name in a tooltip, and is busy while the check runs", async ({
     cli,
