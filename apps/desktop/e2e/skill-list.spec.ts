@@ -106,3 +106,36 @@ test("a plugin's subgroup collapses to its header, and the keys skip its rows", 
   await toggle.click();
   await expect(row(page, first.name)).toBeVisible();
 });
+
+test("while the list scrolls, the header of its group and of its plugin stay pinned at the top", async ({
+  cli,
+  page,
+}) => {
+  const start = listedPluginSkill(300);
+  await openAt(cli, page, start.name);
+  // The pinned copy is for the eye and the pointer; the headers in the list keep their roles.
+  const pinned = list(page).locator(":scope > [aria-hidden=true]");
+  await expect(pinned).toContainText("PLUGINS");
+  await expect(pinned.getByText(start.plugin, { exact: true })).toBeVisible();
+  // The selected row comes into view below the pinned headers.
+  const opened = await row(page, start.name).boundingBox();
+  const header = await pinned.boundingBox();
+  expect(opened?.y).toBeGreaterThanOrEqual(
+    (header?.y ?? 0) + (header?.height ?? 0)
+  );
+
+  // A click on the pinned plugin collapses it and keeps its header at the top.
+  await pinned.getByText(start.plugin, { exact: true }).click();
+  const toggle = list(page).getByRole("button", {
+    exact: true,
+    name: `${start.plugin} ${SKILLS_PER_PLUGIN}`,
+  });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(toggle).toBeInViewport();
+
+  // At the top of the list, the first group's header is in its place and nothing is pinned.
+  await list(page).evaluate((nav) => {
+    nav.scrollTo(0, 0);
+  });
+  await expect(pinned).toHaveCount(0);
+});

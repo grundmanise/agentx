@@ -4,11 +4,12 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
@@ -31,6 +32,8 @@ import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
 import type { ToolArg } from "#/screens/skills/adopt.ts";
 import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
+import { pinAt } from "#/screens/skills/pinned.ts";
+import type { Pin, PinHeights } from "#/screens/skills/pinned.ts";
 import {
   forksOf,
   GROUP_DISK,
@@ -172,14 +175,27 @@ const GroupHeader = ({
  * Adopt all, at the right end of the Unmanaged group's header while another tool installed skills
  * agentx can adopt: it opens the adopt dialog for every such tool.
  */
-const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
+const AdoptAll = ({
+  onOpen,
+  tabbable = true,
+}: {
+  onOpen: () => void;
+  /** Whether the Tab key reaches it; false in the pinned copy of the header. */
+  tabbable?: boolean;
+}) => {
   const adoption = useAppStore((s) => s.adoption);
   const busy = useAdoptRun((s) => s.run !== undefined);
   if (toolsToAdopt(adoption).length === 0) {
     return null;
   }
   return (
-    <Button variant="primary" size="sm" disabled={busy} onClick={onOpen}>
+    <Button
+      variant="primary"
+      size="sm"
+      disabled={busy}
+      onClick={onOpen}
+      tabIndex={tabbable ? undefined : -1}
+    >
       Adopt all
     </Button>
   );
@@ -257,6 +273,42 @@ const estimatedHeight = (item: Item | undefined) => {
     return item.first ? 28 : 36;
   }
   return item?.row.description === "" ? 44 : 66;
+};
+
+/** The heights the pinned headers take before the list measures them: a first header's. */
+const ESTIMATED_PIN: PinHeights = { group: 30, subgroup: 28 };
+
+/**
+ * The heights of the pinned headers: the first group header's, and the first plugin header's in
+ * its group, as the list measured them. The pinned headers are drawn as those are.
+ */
+const pinHeights = (
+  items: Item[],
+  spans: readonly ({ size: number } | undefined)[]
+): PinHeights => {
+  const subheader = items.findIndex(
+    (item) => item.kind === "subheader" && item.first
+  );
+  return {
+    group: spans[0]?.size ?? ESTIMATED_PIN.group,
+    subgroup: spans[subheader]?.size ?? ESTIMATED_PIN.subgroup,
+  };
+};
+
+/** The headers pinned at the top of the list, by their index among the items. */
+interface Pinned {
+  header: number;
+  subheader?: number;
+}
+
+/** The headers a pin holds, by their index among the items. */
+const pinnedOf = (pin: Pin | undefined): Pinned | undefined => {
+  if (pin === undefined) {
+    return undefined;
+  }
+  return pin.subheader === undefined
+    ? { header: pin.header }
+    : { header: pin.header, subheader: pin.subheader };
 };
 
 /**
@@ -355,10 +407,65 @@ const drawnGroups = (items: Item[], indexes: number[]): DrawnGroup[] => {
 };
 
 /**
+ * The headers pinned at the top of the list while it scrolls: the group's header of the part
+ * that shows at the top, and in PLUGINS its plugin's header. Each is drawn as the first header of
+ * its kind, so it covers the header it pins exactly; the next header pushes it up as it comes
+ * under it. It is a copy for the eye and the pointer, hidden from assistive technology and out of
+ * the tab order: the headers in the list are still there for both.
+ */
+const PinnedHeaders = ({
+  group,
+  subgroup,
+  groupLayer,
+  subgroupLayer,
+  onAdoptAll,
+  onToggle,
+}: {
+  group: Group;
+  subgroup?: { subgroup: Subgroup; open: boolean };
+  /** The layer the next group's header pushes up. */
+  groupLayer: RefObject<HTMLDivElement | null>;
+  /** The layer the next plugin's header pushes up, under the group's header. */
+  subgroupLayer: RefObject<HTMLDivElement | null>;
+  onAdoptAll: () => void;
+  onToggle: () => void;
+}) => (
+  <div aria-hidden="true" className="sticky top-0 z-10 h-0">
+    <div ref={groupLayer} className="flex flex-col">
+      <div className="bg-shell-content-bg relative z-10">
+        <GroupHeader
+          label={group.label}
+          source={group.source}
+          count={group.rows.length}
+          first
+          action={
+            group.key === GROUP_DISK ? (
+              <AdoptAll onOpen={onAdoptAll} tabbable={false} />
+            ) : undefined
+          }
+        />
+      </div>
+      {subgroup !== undefined && (
+        <div ref={subgroupLayer} className="bg-shell-content-bg flex">
+          <SectionToggle
+            label={subgroup.subgroup.label}
+            count={subgroup.subgroup.rows.length}
+            open={subgroup.open}
+            tabbable={false}
+            onToggle={onToggle}
+          />
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+/**
  * The rows in their groups, each group under its header. Only the headers and rows near the part
  * of the list that shows are in the document, so the list stays quick with hundreds of skills:
  * each group's label carries its full count, and each row its place in its group. The selected
- * row comes into view when the selection changes.
+ * row comes into view when the selection changes, below the pinned headers. While the list
+ * scrolls, the header of the group at its top, and in PLUGINS of the plugin, stays pinned there.
  */
 const SkillGroups = ({
   rows,
@@ -407,6 +514,19 @@ const SkillGroups = ({
       ),
     [items, selectedKey]
   );
+  // The headers pinned at the top, and the heights they take, which the selected row comes into
+  // view below.
+  const [pinned, setPinned] = useState<Pinned>();
+  const [heights, setHeights] = useState<PinHeights>(ESTIMATED_PIN);
+  const groupLayer = useRef<HTMLDivElement>(null);
+  const subgroupLayer = useRef<HTMLDivElement>(null);
+  const latestPin = useRef<(() => void) | null>(null);
+  const selectedItem = items[selectedIndex];
+  const pinnedHeight =
+    heights.group +
+    (selectedItem?.kind === "row" && selectedItem.subgroup !== undefined
+      ? heights.subgroup
+      : 0);
   // The virtualizer's functions return new values while they stay the same functions, which
   // React Compiler cannot memoize. The app is built without it, and this component reads them
   // on every render and passes none of them to a memoized component.
@@ -426,6 +546,10 @@ const SkillGroups = ({
     ),
     getScrollElement: () => scroller.current,
     measureElement: measuredHeight,
+    // The library tells when it measures or redraws, which can move the headers under the pin.
+    onChange: () => {
+      latestPin.current?.();
+    },
     overscan: OVERSCAN,
     // The selected row stays drawn wherever the list is scrolled to, so it keeps the focus a
     // click gave it.
@@ -442,7 +566,58 @@ const SkillGroups = ({
       },
       [selectedIndex]
     ),
+    scrollPaddingStart: pinnedHeight,
   });
+
+  // Pins the headers for the list's scroll offset, and writes how far the next header pushes
+  // them on their layers, as the library writes each item's offset on it.
+  const syncPin = () => {
+    const spans = virtualizer.measurementsCache;
+    const measured = pinHeights(items, spans);
+    setHeights((was) =>
+      was.group === measured.group && was.subgroup === measured.subgroup
+        ? was
+        : measured
+    );
+    const pin = pinAt(items, spans, scroller.current?.scrollTop ?? 0, measured);
+    const next = pinnedOf(pin);
+    setPinned((was) =>
+      was?.header === next?.header && was?.subheader === next?.subheader
+        ? was
+        : next
+    );
+    if (pin !== undefined) {
+      groupLayer.current?.style.setProperty(
+        "translate",
+        `0 ${pin.groupShift}px`
+      );
+      subgroupLayer.current?.style.setProperty(
+        "translate",
+        `0 ${pin.subgroupShift}px`
+      );
+    }
+  };
+  useLayoutEffect(() => {
+    latestPin.current = syncPin;
+    syncPin();
+  });
+
+  // A click on the pinned plugin's header first brings its header in the list to the pinned
+  // place, so the plugin stays at the top once its rows collapse.
+  const togglePinned = (index: number, key: string) => {
+    const span = virtualizer.measurementsCache[index];
+    const place =
+      span === undefined
+        ? undefined
+        : span.start + span.size - heights.group - heights.subgroup;
+    if (place !== undefined && (scroller.current?.scrollTop ?? 0) > place) {
+      virtualizer.scrollToOffset(place);
+    }
+    onToggle(key);
+  };
+  const pinnedHeader = pinned === undefined ? undefined : items[pinned.header];
+  const pinnedSubheader =
+    pinned?.subheader === undefined ? undefined : items[pinned.subheader];
 
   // The selected row comes into view when the selection changes (a key press, a click, or a route
   // another screen opened) and when the filters list it again. A list that changes around the
@@ -467,102 +642,131 @@ const SkillGroups = ({
       ref={scroller}
       aria-label="Skills"
       className="pr-split-list-right pb-split-list-bottom pl-split-list-left min-h-0 flex-1 overflow-auto pt-0"
+      onScroll={() => {
+        latestPin.current?.();
+      }}
     >
       {groups.length === 0 ? (
         <p className="type-secondary text-text-hint m-0 py-10 text-center">
           No skills match
         </p>
       ) : (
-        <div ref={virtualizer.containerRef} className="relative">
-          {drawn.map(({ group, header, parts }) => (
-            <section
-              key={group.key}
-              aria-label={`${group.label} (${group.rows.length})`}
-              className="contents"
-            >
-              {header !== undefined && (
-                <div
-                  ref={virtualizer.measureElement}
-                  data-index={header.index}
-                  className={PLACED}
-                >
-                  <GroupHeader
-                    label={group.label}
-                    source={group.source}
-                    count={group.rows.length}
-                    first={header.item.first}
-                    action={
-                      group.key === GROUP_DISK ? (
-                        <AdoptAll onOpen={onAdoptAll} />
-                      ) : undefined
-                    }
-                  />
-                </div>
-              )}
-              {parts.map(({ subgroup, subheader, rows: partRows }) => {
-                const list = (
-                  <ul className="contents">
-                    {partRows.map(({ index, item }) => (
-                      <li
-                        key={item.key}
-                        ref={virtualizer.measureElement}
-                        data-index={index}
-                        aria-posinset={item.at + 1}
-                        aria-setsize={item.size}
-                        className={placedRow(item)}
-                      >
-                        <SkillRowItem
-                          row={item.row}
-                          forks={forks.get(item.row.name) ?? NO_FORKS}
-                          configurations={configurations}
-                          facts={facts}
-                          selected={item.row.key === selectedKey}
-                          onSelect={select}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                );
-                if (subgroup === undefined) {
-                  return <Fragment key="rows">{list}</Fragment>;
+        <>
+          {pinned !== undefined && pinnedHeader?.kind === "header" && (
+            <PinnedHeaders
+              group={pinnedHeader.group}
+              {...(pinnedSubheader?.kind === "subheader"
+                ? {
+                    subgroup: {
+                      open: pinnedSubheader.open,
+                      subgroup: pinnedSubheader.subgroup,
+                    },
+                  }
+                : {})}
+              groupLayer={groupLayer}
+              subgroupLayer={subgroupLayer}
+              onAdoptAll={onAdoptAll}
+              onToggle={() => {
+                if (
+                  pinned.subheader !== undefined &&
+                  pinnedSubheader?.kind === "subheader"
+                ) {
+                  togglePinned(pinned.subheader, pinnedSubheader.subgroup.key);
                 }
-                return (
-                  <section
-                    key={subgroup.key}
-                    aria-label={`${subgroup.label} (${subgroup.rows.length})`}
-                    className="contents"
+              }}
+            />
+          )}
+          <div ref={virtualizer.containerRef} className="relative">
+            {drawn.map(({ group, header, parts }) => (
+              <section
+                key={group.key}
+                aria-label={`${group.label} (${group.rows.length})`}
+                className="contents"
+              >
+                {header !== undefined && (
+                  <div
+                    ref={virtualizer.measureElement}
+                    data-index={header.index}
+                    className={PLACED}
                   >
-                    {subheader !== undefined && (
-                      <div
-                        ref={virtualizer.measureElement}
-                        data-index={subheader.index}
-                        className={PLACED}
-                      >
-                        <div
-                          className={
-                            subheader.item.first
-                              ? "flex"
-                              : "pt-subgroup-top flex"
-                          }
+                    <GroupHeader
+                      label={group.label}
+                      source={group.source}
+                      count={group.rows.length}
+                      first={header.item.first}
+                      action={
+                        group.key === GROUP_DISK ? (
+                          <AdoptAll onOpen={onAdoptAll} />
+                        ) : undefined
+                      }
+                    />
+                  </div>
+                )}
+                {parts.map(({ subgroup, subheader, rows: partRows }) => {
+                  const list = (
+                    <ul className="contents">
+                      {partRows.map(({ index, item }) => (
+                        <li
+                          key={item.key}
+                          ref={virtualizer.measureElement}
+                          data-index={index}
+                          aria-posinset={item.at + 1}
+                          aria-setsize={item.size}
+                          className={placedRow(item)}
                         >
-                          <SectionToggle
-                            label={subgroup.label}
-                            count={subgroup.rows.length}
-                            open={subheader.item.open}
-                            onToggle={() => {
-                              onToggle(subgroup.key);
-                            }}
+                          <SkillRowItem
+                            row={item.row}
+                            forks={forks.get(item.row.name) ?? NO_FORKS}
+                            configurations={configurations}
+                            facts={facts}
+                            selected={item.row.key === selectedKey}
+                            onSelect={select}
                           />
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                  if (subgroup === undefined) {
+                    return <Fragment key="rows">{list}</Fragment>;
+                  }
+                  return (
+                    <section
+                      key={subgroup.key}
+                      aria-label={`${subgroup.label} (${subgroup.rows.length})`}
+                      className="contents"
+                    >
+                      {subheader !== undefined && (
+                        <div
+                          ref={virtualizer.measureElement}
+                          data-index={subheader.index}
+                          className={PLACED}
+                        >
+                          <div
+                            className={
+                              subheader.item.first
+                                ? "flex"
+                                : "pt-subgroup-top flex"
+                            }
+                          >
+                            <SectionToggle
+                              label={subgroup.label}
+                              count={subgroup.rows.length}
+                              open={subheader.item.open}
+                              onToggle={() => {
+                                onToggle(subgroup.key);
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {list}
-                  </section>
-                );
-              })}
-            </section>
-          ))}
-        </div>
+                      )}
+                      {list}
+                    </section>
+                  );
+                })}
+              </section>
+            ))}
+          </div>
+        </>
       )}
     </nav>
   );
