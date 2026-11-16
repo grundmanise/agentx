@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 
 /** The icon size scale (DESIGN.md §7), in pixels. */
 export const iconSizes = {
+  "2xs": 12,
   lg: 18,
   md: 16,
   sm: 15,

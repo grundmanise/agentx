@@ -570,6 +570,17 @@ agentx skill update --all
 
 If no check has found an update for the skill, the command says it is up to date as of the last check and changes nothing. Run `agentx skill check-updates` to look again.
 
+### Update skills in the desktop app
+
+When the last update check found updates, a pill next to **Skills** in the sidebar says how many, such as **3 updates**. It leaves out a skill whose update waits for you to resolve a merge: finish that one on the skill's page.
+
+1. Select the pill. The **Update skills** dialog lists every skill with an update, all selected, with when its newer version was published and where it comes from.
+2. To read an update first, select **See changes** on its row. Press Escape to go back to the list.
+3. Select a skill's row to leave it out. Use the checkbox above the list to select all of them or none.
+4. Select **Update all**, or **Update** with the number of skills selected, or press Enter.
+
+The dialog updates the skills one after another and shows each result on its row. A skill you edited is merged with your edits. When they conflict, its row says so: open the skill to resolve the merge, see [When your edits conflict](#when-your-edits-conflict). Select **Done** to close the dialog. The pill then counts only the updates that are left.
+
 A copy placement is handled on its own:
 
 - A copy that holds the version you are replacing gets the new version, and keeps the files your ignore rules name in it.

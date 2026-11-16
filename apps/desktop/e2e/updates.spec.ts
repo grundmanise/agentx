@@ -1,7 +1,8 @@
 // Updates on the Skills screen: Check updates, the banners of an update and their Update button,
-// the banner of a pending merge with Show folder, Abort and Update, and Update all on the toast of
-// a check. Each button runs exactly one
-// command line, which the mocked CLI records, and its outcome is the toast of the results table.
+// the banner of a pending merge with Show folder, Abort and Update, Update all on the toast of
+// a check, and the Update skills dialog the sidebar's update pill opens. Each button runs exactly
+// one command line, which the mocked CLI records, and its outcome is the toast of the results
+// table; the dialog runs one per skill selected and shows the outcome itself.
 import type { Page } from "@playwright/test";
 
 import {
@@ -10,6 +11,7 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
+import { pdfUpdateDiffs } from "./fixtures/update-diffs.ts";
 import {
   ACME,
   allUpdates,
@@ -524,6 +526,108 @@ test.describe("Update all", () => {
       ]);
     });
   }
+});
+
+test.describe("the Update skills dialog", () => {
+  test("the sidebar's pill opens it with every update offered selected, and it updates the selection one skill at a time", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf");
+    const nav = page.getByRole("navigation", { name: "Main" });
+    // draft's pending merge comes first: its update is not counted.
+    await nav.getByRole("button", { exact: true, name: "4 updates" }).click();
+    await expect(page).toHaveURL(/#\/skills\/pdf$/u);
+    const dialog = page.getByRole("dialog", { name: "Update skills" });
+    const skillRow = (name: string) =>
+      dialog.getByRole("listitem").filter({
+        has: page.getByRole("checkbox", { exact: true, name }),
+      });
+    await expect(dialog.getByRole("checkbox", { checked: true })).toHaveCount(
+      5
+    );
+    await expect(dialog.getByText("All 4 selected")).toBeVisible();
+    await expect(skillRow("review")).toContainText(
+      "You edited this skill. The update merges with your edits."
+    );
+    await expect(skillRow("pdf")).toContainText("acme/skills");
+
+    // See changes opens What's new above the dialog; Escape closes the sheet alone.
+    cli.register(["skill", "diff", "pdf", "--update"], {
+      events: pdfUpdateDiffs,
+    });
+    await skillRow("pdf")
+      .getByRole("button", { exact: true, name: "See changes" })
+      .click();
+    const sheet = page.getByRole("dialog", { name: "What's new" });
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("checkbox", { exact: true, name: "pdf" })
+    ).toBeChecked();
+
+    // A click on the row's name leaves the skill out.
+    await dialog.getByText("release-notes", { exact: true }).click();
+    await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
+
+    cli.register(["skill", "update", "pdf"], {
+      events: [updated("pdf", "current")],
+    });
+    const letters = cli.register(["skill", "update", "pdf-letters"], {
+      events: [updated("pdf-letters", "modified")],
+      holdAfter: 0,
+    });
+    cli.register(["skill", "update", "review"], {
+      events: [
+        { files: [], kind: "managed", name: "review", type: "conflict" },
+        {
+          code: "pending_merge",
+          message: "the update of review conflicts with its edits",
+          type: "error",
+        },
+      ],
+      exitCode: 4,
+    });
+    await dialog
+      .getByRole("button", { exact: true, name: "Update 3 skills" })
+      .click();
+    await letters.started;
+    await expect(dialog.getByRole("status")).toHaveText("Updating 2 of 3…");
+    letters.release();
+
+    await expect(dialog.getByRole("status")).toHaveText(
+      "2 skills updated · 1 needs a merge"
+    );
+    await expect(dialog).toContainText("Merged with your edits.");
+    await expect(dialog).toContainText(
+      "Merge conflict with your edits. Open the skill to resolve it."
+    );
+    // The merge waits on its row: the dialog opens no skill.
+    await expect(page).toHaveURL(/#\/skills\/pdf$/u);
+    expect(later(cli)).toEqual([
+      ["skill", "update", "pdf", "--json"],
+      ["skill", "update", "pdf-letters", "--json"],
+      ["skill", "update", "review", "--json"],
+    ]);
+
+    await dialog.getByRole("button", { exact: true, name: "Done" }).click();
+    await expect(dialog).toHaveCount(0);
+    // The inventory that follows has review's merge pending: release-notes is left.
+    await cli.serveEmit([
+      {
+        ...updatesInventory,
+        library: updatesLibrary.map((entry) =>
+          entry.name === "review" ? { ...entry, pending_merge: true } : entry
+        ),
+        scan_counter: 2,
+      } satisfies InlineEvent,
+    ]);
+    await expect(
+      nav.getByRole("button", { exact: true, name: "1 update" })
+    ).toBeVisible();
+  });
 });
 
 /** The banner of draft's pending merge. */

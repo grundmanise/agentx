@@ -1,0 +1,563 @@
+// The Update skills dialog, which the sidebar's update pill opens: every skill the last update
+// check found an update for, but those with a pending merge, all selected. A row toggles its
+// skill, and See changes opens the What's new sheet of its update above the dialog. Update runs in
+// the dialog (`updates.ts`): each selected row shows its state, then its result, and the footer
+// counts the run, then sums it up. The dialog cannot be dismissed while the run goes, and Done
+// closes it.
+import { cva } from "class-variance-authority";
+import { useId, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
+
+import type { UpdateAvailableEvent } from "#/cli/events.gen.ts";
+import { AlertIcon } from "#/components/icons/alert.tsx";
+import { CheckIcon } from "#/components/icons/check.tsx";
+import { CloseIcon } from "#/components/icons/close.tsx";
+import { ProblemText } from "#/components/problem-text.tsx";
+import { Spinner } from "#/components/spinner.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import { Checkbox } from "#/components/ui/checkbox.tsx";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "#/components/ui/dialog.tsx";
+import { formatAgo, formatDate } from "#/lib/dates.ts";
+import { plural } from "#/lib/plural.ts";
+import { problemSentence } from "#/lib/problem-text.ts";
+import { useNow } from "#/screens/settings/clock.ts";
+import { shortSource, updateVersions } from "#/screens/skills/projection.ts";
+import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
+import {
+  dismissUpdateRun,
+  runProgressText,
+  runSummaryText,
+  updateSkills,
+  useOfferedUpdates,
+  useUpdateDialog,
+  useUpdateRun,
+} from "#/screens/skills/updates.ts";
+import type { UpdateRunRow, UpdateStatus } from "#/screens/skills/updates.ts";
+import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
+import { useAppStore } from "#/store/store.ts";
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * When the newer version was published, as the update check dates it: how long ago within a
+ * month, else its date. Undefined when the CLI dates it not.
+ */
+const publishedText = (update: UpdateAvailableEvent, now: number) => {
+  const time = update.candidate_upstream_time;
+  const at = time === undefined ? Number.NaN : Date.parse(time);
+  let when;
+  if (time !== undefined && !Number.isNaN(at)) {
+    when = now - at < 30 * DAY ? formatAgo(time, now) : formatDate(time);
+  }
+  return when === undefined ? undefined : `Published ${when}`;
+};
+
+/** The newer version's date and time in full, for the tooltip of "Published …". */
+const publishedTitle = (time: string) =>
+  new Date(time).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+/** Where the update comes from: the upstream of a fork, else the skill's source, short. */
+const sourceOf = (update: UpdateAvailableEvent) => {
+  const url = update.upstream ?? update.source;
+  return url === undefined || url === "" ? undefined : shortSource(url);
+};
+
+/** What a screen reader hears for each state, before the name. */
+const statusNames: Record<UpdateStatus, string> = {
+  conflict: "Needs a merge",
+  current: "Up to date",
+  failed: "Not updated",
+  merged: "Updated",
+  running: "Updating",
+  skipped: "Not selected",
+  updated: "Updated",
+  waiting: "Waiting",
+};
+
+const StatusMark = ({ status }: { status: UpdateStatus }) => {
+  switch (status) {
+    case "running": {
+      return (
+        <span className="text-text-muted flex">
+          <Spinner />
+        </span>
+      );
+    }
+    case "updated":
+    case "merged": {
+      return (
+        <span className="text-tone-primary-fg flex">
+          <CheckIcon />
+        </span>
+      );
+    }
+    case "current": {
+      return (
+        <span className="text-text-hint flex">
+          <CheckIcon />
+        </span>
+      );
+    }
+    case "conflict": {
+      return (
+        <span className="text-tone-attention-fg flex">
+          <AlertIcon />
+        </span>
+      );
+    }
+    case "failed": {
+      return (
+        <span className="text-tone-danger-fg flex">
+          <CloseIcon />
+        </span>
+      );
+    }
+    case "waiting":
+    case "skipped": {
+      return <span className="size-4 flex-none" />;
+    }
+    default: {
+      return null;
+    }
+  }
+};
+
+const noteVariants = cva("type-notice m-0", {
+  variants: {
+    tone: {
+      attention: "text-tone-attention-fg",
+      danger: "text-tone-danger-fg",
+      hint: "text-text-hint",
+      primary: "text-tone-primary-fg",
+    },
+  },
+});
+
+/** The line under a row: what the update does to edits, or what the run did. */
+const Note = ({ row, idle }: { row: UpdateRunRow; idle: boolean }) => {
+  const { name } = row.update;
+  if (idle) {
+    return row.edited ? (
+      <p className={noteVariants({ tone: "attention" })}>
+        You edited this skill. The update merges with your edits.
+      </p>
+    ) : null;
+  }
+  switch (row.status) {
+    case "conflict": {
+      return (
+        <p className={noteVariants({ tone: "attention" })}>
+          Merge conflict with your edits. Open the skill to resolve it.
+        </p>
+      );
+    }
+    case "merged": {
+      return (
+        <p className={noteVariants({ tone: "primary" })}>
+          Merged with your edits.
+        </p>
+      );
+    }
+    case "current": {
+      return (
+        <p className={noteVariants({ tone: "hint" })}>Already up to date.</p>
+      );
+    }
+    case "failed": {
+      return row.reason === undefined ? null : (
+        <p className={noteVariants({ tone: "danger" })}>
+          {problemSentence({ message: row.reason }, { keep: [name] })}
+        </p>
+      );
+    }
+    case "waiting":
+    case "skipped":
+    case "running":
+    case "updated": {
+      return null;
+    }
+    default: {
+      return null;
+    }
+  }
+};
+
+const rowVariants = cva("relative flex items-start gap-3 px-3 py-2", {
+  variants: {
+    state: {
+      // Before the run: the whole row toggles its skill.
+      idle: "rounded-update-skills-row hover:bg-update-skills-row-hover",
+      // In the run, a skill selected.
+      run: "",
+      // In the run, a skill left out.
+      skipped: "opacity-update-skills-skipped",
+    },
+  },
+});
+
+/**
+ * "Published 2 days ago", with the date in full as its tooltip. Before the run it is a second
+ * label of the row's checkbox, above the row's hit area so that its tooltip shows, and a click on
+ * it still toggles the skill.
+ */
+const Published = ({
+  text,
+  title,
+  checkbox,
+}: {
+  text: string;
+  title: string;
+  checkbox: string | undefined;
+}) =>
+  checkbox === undefined ? (
+    <span
+      title={title}
+      className="type-secondary text-text-hint whitespace-nowrap"
+    >
+      {text}
+    </span>
+  ) : (
+    <label
+      htmlFor={checkbox}
+      title={title}
+      className="type-secondary text-text-hint relative cursor-pointer whitespace-nowrap"
+    >
+      {text}
+    </label>
+  );
+
+const Dot = () => (
+  <span aria-hidden className="type-secondary text-text-caption">
+    ·
+  </span>
+);
+
+/**
+ * One skill. Before the run, its name is a label of the round checkbox at the right whose hit
+ * area covers the row, so a click anywhere on it toggles the skill, but on See changes, which
+ * sits above it and opens the What's new sheet. In the run, the state mark takes the checkbox's
+ * place.
+ */
+const Row = ({
+  row,
+  idle,
+  now,
+  onToggle,
+  onSeeChanges,
+}: {
+  row: UpdateRunRow;
+  idle: boolean;
+  now: number;
+  onToggle: () => void;
+  onSeeChanges: () => void;
+}) => {
+  const id = useId();
+  const { update } = row;
+  const published = publishedText(update, now);
+  const source = sourceOf(update);
+  const selected = row.status !== "skipped";
+  let state: "idle" | "run" | "skipped" = "run";
+  if (idle) {
+    state = "idle";
+  } else if (!selected) {
+    state = "skipped";
+  }
+  return (
+    <li className={rowVariants({ state })}>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 items-baseline gap-2">
+          {idle ? (
+            // The label's hit area covers the row; the controls above it are positioned.
+            <label
+              htmlFor={id}
+              className="type-body text-text-primary min-w-0 cursor-pointer truncate after:absolute after:inset-0"
+            >
+              {update.name}
+            </label>
+          ) : (
+            <span className="type-body text-text-primary min-w-0 truncate">
+              <span className="sr-only">{`${statusNames[row.status]}: `}</span>
+              {update.name}
+            </span>
+          )}
+          {published !== undefined && (
+            <>
+              <Dot />
+              <Published
+                text={published}
+                title={publishedTitle(update.candidate_upstream_time ?? "")}
+                checkbox={idle ? id : undefined}
+              />
+            </>
+          )}
+          {idle && (
+            <>
+              <Dot />
+              <span className="relative flex">
+                <Button variant="link" size="inline" onClick={onSeeChanges}>
+                  <span className="type-secondary whitespace-nowrap">
+                    See changes
+                  </span>
+                </Button>
+              </span>
+            </>
+          )}
+        </div>
+        {source !== undefined && (
+          <span className="type-technical-sm text-text-hint truncate">
+            {source}
+          </span>
+        )}
+        <Note row={row} idle={idle} />
+      </div>
+      <span className="relative flex h-5 items-center">
+        {idle ? (
+          <Checkbox
+            id={id}
+            aria-label={update.name}
+            checked={selected}
+            onCheckedChange={onToggle}
+          />
+        ) : (
+          <StatusMark status={row.status} />
+        )}
+      </span>
+    </li>
+  );
+};
+
+/** The confirm's label for `selected` of `total` skills. */
+const confirmLabel = (selected: number, total: number) => {
+  if (selected === 0) {
+    return "Update";
+  }
+  return selected === total && total > 1
+    ? `Update all ${total}`
+    : `Update ${plural(selected, "skill")}`;
+};
+
+/** Whether Enter in the dialog confirms: anywhere but on a button, which Enter presses itself. */
+const enterConfirms = (event: KeyboardEvent) =>
+  event.key === "Enter" &&
+  !(
+    event.target instanceof HTMLButtonElement &&
+    event.target.getAttribute("role") !== "checkbox"
+  );
+
+/** The dialog's body, mounted while it is open, so that the selection starts whole each time. */
+const UpdateForm = ({ onClose }: { onClose: () => void }) => {
+  const offers = useOfferedUpdates();
+  const library = useAppStore((s) => s.inventory?.library);
+  const lastChecked = useAppStore((s) => s.lastChecked);
+  const run = useUpdateRun((s) => s.run);
+  const now = useNow();
+  const confirm = useRef<HTMLButtonElement>(null);
+  // The skills the user left out: a skill an update check adds while the dialog is open is selected.
+  const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
+  const [seeing, setSeeing] = useState<UpdateAvailableEvent | undefined>();
+
+  // Once Update is pressed, the dialog shows the run: its rows as they were then.
+  const rows: UpdateRunRow[] =
+    run?.rows ??
+    offers.map((update) => ({
+      edited:
+        library?.find((entry) => entry.name === update.name)?.state ===
+        "modified",
+      status: excluded.has(update.name) ? "skipped" : "waiting",
+      update,
+    }));
+  const idle = run === undefined;
+  const running = run?.phase === "running";
+  const total = rows.length;
+  const selected = rows.filter((r) => r.status !== "skipped").length;
+
+  const toggle = (name: string) => {
+    setExcluded((before) => {
+      const next = new Set(before);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+
+  const start = () => {
+    if (idle && selected > 0) {
+      void updateSkills(rows);
+    }
+  };
+  const close = () => {
+    if (running) {
+      return;
+    }
+    dismissUpdateRun();
+    onClose();
+  };
+
+  let status = "";
+  if (run !== undefined) {
+    status = running ? runProgressText(run) : runSummaryText(run);
+  } else if (lastChecked !== undefined) {
+    const ago = formatAgo(lastChecked, now);
+    status = ago === undefined ? "" : `Checked ${ago}`;
+  }
+
+  return (
+    <>
+      <DialogContent
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          confirm.current?.focus();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (running) {
+            e.preventDefault();
+          }
+        }}
+        onInteractOutside={(e) => {
+          if (running) {
+            e.preventDefault();
+          }
+        }}
+        onKeyDown={(e) => {
+          if (!enterConfirms(e)) {
+            return;
+          }
+          e.preventDefault();
+          if (idle) {
+            start();
+          } else {
+            close();
+          }
+        }}
+      >
+        <DialogHeader showCloseButton={false}>
+          <DialogTitle>Update skills</DialogTitle>
+          <DialogDescription>
+            Update the selected skills to their latest version.
+          </DialogDescription>
+        </DialogHeader>
+        {idle && total > 1 && (
+          <SelectAllRow
+            selected={selected}
+            total={total}
+            added={0}
+            onSelectAll={() => {
+              setExcluded(new Set());
+            }}
+            onClear={() => {
+              setExcluded(new Set(rows.map((r) => r.update.name)));
+            }}
+          />
+        )}
+        {total === 0 ? (
+          <p className="type-secondary text-text-hint m-0">
+            All skills are up to date
+          </p>
+        ) : (
+          <ul
+            aria-label="Skills"
+            className="max-h-update-skills-list -mx-3 my-0 flex list-none flex-col gap-0.5 overflow-auto p-0"
+          >
+            {rows.map((row) => (
+              <Row
+                key={row.update.name}
+                row={row}
+                idle={idle}
+                now={now}
+                onToggle={() => {
+                  toggle(row.update.name);
+                }}
+                onSeeChanges={() => {
+                  setSeeing(row.update);
+                }}
+              />
+            ))}
+          </ul>
+        )}
+        {run?.failure !== undefined && <ProblemText problem={run.failure} />}
+        <DialogFooter>
+          <output className="type-secondary text-text-hint flex min-w-0 flex-1 items-center">
+            {status}
+          </output>
+          {run === undefined || running ? (
+            <>
+              <DialogClose asChild>
+                <Button variant="ghost" disabled={running}>
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button
+                ref={confirm}
+                variant="primary"
+                disabled={running || selected === 0}
+                aria-busy={running ? true : undefined}
+                onClick={start}
+              >
+                {running && <Spinner />}
+                {confirmLabel(selected, total)}
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" onClick={close}>
+              Done
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+      {/* Outside the dialog's content, so that no key or click in the sheet reaches the dialog. */}
+      {seeing !== undefined && (
+        <UpdateSheet
+          update={seeing}
+          versions={updateVersions(seeing)}
+          open
+          over="dialog"
+          onOpenChange={(open) => {
+            if (!open) {
+              setSeeing(undefined);
+            }
+          }}
+        />
+      )}
+    </>
+  );
+};
+
+/**
+ * The Update skills dialog. The sidebar's update pill opens it; while its run goes it cannot be
+ * dismissed, and Done closes it.
+ */
+const closeDialog = () => {
+  dismissUpdateRun();
+  useUpdateDialog.setState({ open: false });
+};
+
+export const UpdateSkillsDialog = () => {
+  const open = useUpdateDialog((s) => s.open);
+  const running = useUpdateRun((s) => s.run?.phase === "running");
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !running) {
+          closeDialog();
+        }
+      }}
+    >
+      {open && <UpdateForm onClose={closeDialog} />}
+    </Dialog>
+  );
+};

@@ -3,7 +3,15 @@ import { NavLink } from "react-router";
 import { screens } from "#/app/screens.ts";
 import type { Screen } from "#/app/screens.ts";
 import { AgentxMark } from "#/components/agentx-mark.tsx";
+import { ArrowUpIcon } from "#/components/icons/arrow-up.tsx";
+import { PillButton } from "#/components/pill.tsx";
+import { plural } from "#/lib/plural.ts";
 import { cn } from "#/lib/utils.ts";
+import { UpdateSkillsDialog } from "#/screens/skills/update-dialog.tsx";
+import {
+  openUpdateDialog,
+  useOfferedUpdates,
+} from "#/screens/skills/updates.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /** This machine's label, from the inventory, under the product name. */
@@ -43,6 +51,28 @@ const NavItem = ({
   </NavLink>
 );
 
+/**
+ * The update pill at the right of the Skills nav item, while the last update check found an
+ * update the app offers: "1 update", "4 updates". It sits beside the link, not in it, so a click
+ * opens the Update skills dialog and goes nowhere.
+ */
+const UpdatePill = () => {
+  const n = useOfferedUpdates().length;
+  return n === 0 ? null : (
+    <span className="absolute top-1/2 right-2 flex -translate-y-1/2">
+      <PillButton
+        tone="update"
+        icon={<ArrowUpIcon size="2xs" />}
+        label={plural(n, "update")}
+        title="Update skills"
+        onClick={openUpdateDialog}
+      >
+        {plural(n, "update")}
+      </PillButton>
+    </span>
+  );
+};
+
 export const Sidebar = () => (
   <aside className="bg-shell-bg w-sidebar gap-nav pt-sidebar-top pr-sidebar-right pb-sidebar pl-sidebar flex flex-none flex-col">
     <div className="flex items-center gap-2.5 px-2.5 pt-1 pb-5.5">
@@ -55,7 +85,14 @@ export const Sidebar = () => (
     <nav aria-label="Main" className="gap-nav flex flex-col">
       {screens.map((s) => (
         <div key={s.path} className="gap-nav flex flex-col">
-          <NavItem screen={s} />
+          {s.path === "/skills" ? (
+            <div className="relative flex flex-col">
+              <NavItem screen={s} />
+              <UpdatePill />
+            </div>
+          ) : (
+            <NavItem screen={s} />
+          )}
           {s.children !== undefined && (
             // Nested screens hang off a `shell.nav-tree` rule under their parent's icon.
             <div className="gap-nav border-shell-nav-tree ml-4.5 flex flex-col border-l pl-2">
@@ -67,5 +104,6 @@ export const Sidebar = () => (
         </div>
       ))}
     </nav>
+    <UpdateSkillsDialog />
   </aside>
 );

@@ -179,6 +179,7 @@
   /* Status pills */
   --color-pill-update-bg: var(--color-accent-primary);
   --color-pill-update-text: var(--color-on-accent);
+  --color-pill-update-hover: var(--color-accent-primary-hover);
   --color-pill-neutral-bg: var(--gray-860);
   --color-pill-neutral-hover: var(--gray-800);
   --color-pill-neutral-text: var(--gray-200);
@@ -242,6 +243,7 @@
   --color-table-row-hover: var(--gray-930);
   --color-table-header-text: var(--gray-500);
   --color-add-skill-row-hover: var(--gray-880);
+  --color-update-skills-row-hover: var(--gray-880);
 
   /* Skill glyph */
   --color-glyph-idle: var(--gray-400);
@@ -444,6 +446,7 @@
   --radius-logo: 50%;
   --radius-agent-picker-row: 10px;
   --radius-add-skill-row: 10px;
+  --radius-update-skills-row: 10px;
   --radius-shell-nav: 10px;
   --radius-shell-logo: 8px;
   --radius-shell-status: 9999px;
@@ -534,6 +537,8 @@
   --opacity-row-off: 50%;
   /* The screen in the main panel while it shows the kept inventory, before the startup checks pass. */
   --opacity-panel-loading: 50%;
+  /* A skill the Update skills run leaves out, washed out while the run goes and after it. */
+  --opacity-update-skills-skipped: 40%;
 
   /* Window and shell */
   --height-titlebar: 50px;
@@ -681,6 +686,7 @@
   --max-height-adopt-list: 280px;
   --max-height-agent-picker-list: 320px;
   --max-height-add-skill-list: 264px;
+  --max-height-update-skills-list: 280px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
   --min-height-toast: 44px;

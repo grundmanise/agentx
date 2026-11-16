@@ -146,20 +146,23 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
 /**
  * The What's new sheet of `update`: its skill's name, `versions` (the base and the newer version,
  * as the update's banner and pill name them), then what it changes. Escape or Close closes it.
+ * `over` is `dialog` when it opens from the Update skills dialog, above it.
  */
 export const UpdateSheet = ({
   update,
   versions,
   open,
   onOpenChange,
+  over,
 }: {
   update: UpdateAvailableEvent;
   versions: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  over?: "page" | "dialog";
 }) => (
   <Sheet open={open} onOpenChange={onOpenChange}>
-    <SheetContent size="wide">
+    <SheetContent size="wide" over={over}>
       <SheetHeader>
         <SheetTitle>{TITLE}</SheetTitle>
         <SheetDescription>{update.name}</SheetDescription>

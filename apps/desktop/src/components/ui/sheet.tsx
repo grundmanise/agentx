@@ -29,22 +29,44 @@ const SheetPortal = ({ ...props }: OwnProps<typeof SheetPrimitive.Portal>) => (
   <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
 );
 
+/**
+ * What a sheet opens over: the page, under any dialog, or a dialog, such as the What's new sheet
+ * that See changes opens from the Update skills dialog.
+ */
+type SheetLayer = "page" | "dialog";
+
+const overlayVariants = cva("bg-shell-scrim fixed inset-0", {
+  defaultVariants: { over: "page" },
+  variants: {
+    over: {
+      dialog: "z-50",
+      page: "z-40",
+    },
+  },
+});
+
 /** `shell.scrim` behind the sheet. */
 const SheetOverlay = ({
+  over,
   ...props
-}: OwnProps<typeof SheetPrimitive.Overlay>) => (
+}: OwnProps<typeof SheetPrimitive.Overlay> & { over?: SheetLayer }) => (
   <SheetPrimitive.Overlay
     data-slot="sheet-overlay"
-    className="bg-shell-scrim fixed inset-0 z-40"
+    className={overlayVariants({ over })}
     {...props}
   />
 );
 
 const sheetContentVariants = cva(
-  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet fixed z-40 flex flex-col gap-6 overflow-hidden border outline-none",
+  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet fixed flex flex-col gap-6 overflow-hidden border outline-none",
   {
-    defaultVariants: { size: "default" },
+    defaultVariants: { over: "page", size: "default" },
     variants: {
+      // Over a dialog, the sheet and its scrim sit on the dialog's layer, later in the document.
+      over: {
+        dialog: "z-50",
+        page: "z-40",
+      },
       size: {
         /** `sheet.width`: the History sheet. */
         default: "w-sheet",
@@ -206,17 +228,18 @@ type SheetSize =
  */
 const SheetContent = ({
   children,
+  over,
   ...props
 }: Omit<OwnProps<typeof SheetPrimitive.Content>, keyof SheetSize> &
-  SheetSize) => {
+  SheetSize & { over?: SheetLayer }) => {
   if (props.size === "resizable") {
     const { size, width, onWidthChange, ...rest } = props;
     return (
       <SheetPortal>
-        <SheetOverlay />
+        <SheetOverlay over={over} />
         <SheetPrimitive.Content
           data-slot="sheet-content"
-          className={sheetContentVariants({ size })}
+          className={sheetContentVariants({ over, size })}
           {...rest}
         >
           {children}
@@ -228,10 +251,10 @@ const SheetContent = ({
   const { size, ...rest } = props;
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay over={over} />
       <SheetPrimitive.Content
         data-slot="sheet-content"
-        className={sheetContentVariants({ size })}
+        className={sheetContentVariants({ over, size })}
         {...rest}
       >
         {children}
