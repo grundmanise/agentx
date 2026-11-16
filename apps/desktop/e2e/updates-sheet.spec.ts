@@ -101,13 +101,13 @@ test.describe("the What's new sheet", () => {
         hasText: "import sys",
       })
     ).toBeVisible();
-    // A replaced line marks the words that changed, in the removed line and in the added one.
+    // A change marks the text that differs, in its removed line and in its added one.
     await expect(patch(page, "SKILL.md").locator("del mark")).toHaveText([
-      "merge",
+      "and",
     ]);
     await expect(patch(page, "SKILL.md").locator("ins mark")).toHaveText([
-      ", merge",
-      "convert",
+      ",",
+      "and convert",
     ]);
 
     // A block closes and opens again.

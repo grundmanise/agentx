@@ -1,11 +1,13 @@
 import { cva } from "class-variance-authority";
+import { DefaultLinesDiffComputer } from "vscode-diff";
 
 // The Code pane (DESIGN.md §6 "Code pane"): a file's lines in a grid of line number, marker and
 // text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it. The tints
 // of a change: an added line with "+" in `accent.primary` on `diff.added-bg`, the palette's green,
 // a removed line with "−" in `accent.danger` on
-// `diff.removed-bg` and no number. A removed line and the added line that replaced it also mark
-// the words that changed between them, on `diff.removed-word` and `diff.added-word`. A patch with
+// `diff.removed-bg` and no number. Within a change, the characters that differ between its removed
+// and added lines are marked as VS Code's diff editor marks them, with its own diff, on
+// `diff.removed-word` and `diff.added-word`. A patch with
 // no file content shows its hunks alone. The whole rendering of a file and of a diff is here, from
 // the file's content and the unified diff git wrote, so that another renderer could take its
 // place without touching a screen.
@@ -13,7 +15,7 @@ import { cva } from "class-variance-authority";
 /** How a line is shown: as it is, added, or removed. */
 export type LineKind = "plain" | "added" | "removed";
 
-/** A run of a changed line's text: kept from the other line of its pair, or changed. */
+/** A run of a changed line's text: kept from the other side of its change, or changed. */
 export interface Segment {
   changed: boolean;
   text: string;
@@ -25,170 +27,94 @@ export interface CodeLine {
   number?: number;
   text: string;
   /**
-   * The line's text cut where it differs from the line it pairs with: a removed line and the
-   * added line that replaced it. Absent for a line with no pair, or one too unlike its pair.
+   * The line's text cut where it differs from the other side of its change, as VS Code's diff
+   * editor marks it. Absent for a line of a change with one side, or one too long to compare.
    */
   segments?: Segment[];
 }
 
-/** A word, a run of white space, or one other character: what the word diff compares. */
-const TOKEN = /[\p{L}\p{N}_]+|\s+|[^\p{L}\p{N}_\s]/gu;
-const SPACE = /^\s+$/u;
-/** The token pairs above which a line pair is too long to compare and keeps its line tint. */
-const MAX_CELLS = 250_000;
-/**
- * The share of the shorter line, in characters other than white space, a pair must keep for its
- * changed words to be marked: under it, the lines are unlike, and the whole line is the change.
- */
-const MIN_KEPT = 0.5;
+/** VS Code's own diff, as its diff editor runs it. */
+const differ = new DefaultLinesDiffComputer();
+/** How long one change may take to compare before it keeps its line tints alone. */
+const MAX_COMPUTATION_MS = 100;
 
-/** The characters of `tokens` other than white space, counting only those `keep` marks. */
-const nonSpaceLength = (
-  tokens: readonly string[],
-  keep: (i: number) => boolean
-) => {
-  let sum = 0;
-  for (const [i, token] of tokens.entries()) {
-    if (keep(i) && !SPACE.test(token)) {
-      sum += token.length;
+/** A range of text in 1-based lines and columns, its end column exclusive. */
+interface TextRange {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+}
+
+/** Which characters of each line `ranges` cover. */
+const changedChars = (
+  lines: readonly string[],
+  ranges: readonly TextRange[]
+): boolean[][] => {
+  const marks = lines.map((text) =>
+    Array.from({ length: text.length }, () => false)
+  );
+  for (const range of ranges) {
+    for (let n = range.startLineNumber; n <= range.endLineNumber; n += 1) {
+      const row = marks[n - 1] ?? [];
+      const from = n === range.startLineNumber ? range.startColumn - 1 : 0;
+      const to = n === range.endLineNumber ? range.endColumn - 1 : row.length;
+      row.fill(true, from, Math.min(to, row.length));
     }
   }
-  return sum;
+  return marks;
 };
 
-/** Joins runs of tokens with the same flag into segments. */
-const segmentsOf = (
-  tokens: readonly string[],
-  changed: readonly boolean[]
-): Segment[] => {
+/** A line's text cut into runs of changed and kept characters. */
+const segmentsOf = (text: string, marks: readonly boolean[]): Segment[] => {
   const out: Segment[] = [];
-  for (const [i, token] of tokens.entries()) {
-    const flag = changed[i] ?? false;
-    const last = out.at(-1);
-    if (last?.changed === flag) {
-      last.text += token;
-    } else {
-      out.push({ changed: flag, text: token });
+  let from = 0;
+  for (let i = 1; i <= text.length; i += 1) {
+    if (i === text.length || marks[i] !== marks[from]) {
+      out.push({ changed: marks[from] ?? false, text: text.slice(from, i) });
+      from = i;
     }
   }
   return out;
 };
 
-/** Marks white space kept between two changed tokens as changed, so a change reads as one run. */
-const joinGaps = (tokens: readonly string[], changed: boolean[]) => {
-  for (let i = 1; i < tokens.length - 1; i += 1) {
-    if (
-      !changed[i] &&
-      changed[i - 1] &&
-      changed[i + 1] &&
-      SPACE.test(tokens[i] ?? "")
-    ) {
-      changed[i] = true;
-    }
-  }
-};
-
-/** How many tokens `a` and `b` share at their start, and then at their end. */
-const commonEnds = (a: readonly string[], b: readonly string[]) => {
-  let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) {
-    start += 1;
-  }
-  let end = 0;
-  while (
-    end < a.length - start &&
-    end < b.length - start &&
-    a[a.length - 1 - end] === b[b.length - 1 - end]
-  ) {
-    end += 1;
-  }
-  return { end, start };
-};
-
 /**
- * Which tokens of `a` and of `b` are not in their longest common subsequence: the changed ones.
- * Undefined when the two are too long to compare.
+ * The segments of a change's removed and added lines: VS Code's diff of the two sides, a
+ * character diff of the whole change extended to whole words, with short kept runs between
+ * changes joined into them. Undefined when the comparison takes too long.
  */
-const changedTokens = (
-  a: readonly string[],
-  b: readonly string[]
-): [boolean[], boolean[]] | undefined => {
-  const n = a.length;
-  const m = b.length;
-  if (n * m > MAX_CELLS) {
+export const changeSegments = (
+  removed: readonly string[],
+  added: readonly string[]
+): [Segment[][], Segment[][]] | undefined => {
+  const diff = differ.computeDiff([...removed], [...added], {
+    computeMoves: false,
+    ignoreTrimWhitespace: false,
+    maxComputationTimeMs: MAX_COMPUTATION_MS,
+  });
+  if (diff.hitTimeout) {
     return undefined;
   }
-  // lcs[i * w + j]: the length of the longest common subsequence of a[i..] and b[j..].
-  const w = m + 1;
-  const lcs = new Uint32Array((n + 1) * w);
-  const at = (i: number, j: number) => lcs[i * w + j] ?? 0;
-  for (let i = n - 1; i >= 0; i -= 1) {
-    for (let j = m - 1; j >= 0; j -= 1) {
-      lcs[i * w + j] =
-        a[i] === b[j]
-          ? at(i + 1, j + 1) + 1
-          : Math.max(at(i + 1, j), at(i, j + 1));
-    }
-  }
-  const changedA = a.map(() => true);
-  const changedB = b.map(() => true);
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) {
-      changedA[i] = false;
-      changedB[j] = false;
-      i += 1;
-      j += 1;
-    } else if (at(i + 1, j) >= at(i, j + 1)) {
-      i += 1;
-    } else {
-      j += 1;
-    }
-  }
-  return [changedA, changedB];
-};
-
-/**
- * The words that differ between a removed line and the added line that replaced it: the longest
- * common run of tokens is kept, the rest changed. Undefined when the lines are too long to compare
- * or too unlike to mark.
- */
-export const wordDiff = (
-  before: string,
-  after: string
-): [Segment[], Segment[]] | undefined => {
-  const a = before.match(TOKEN) ?? [];
-  const b = after.match(TOKEN) ?? [];
-  const { start, end } = commonEnds(a, b);
-  const middle = changedTokens(
-    a.slice(start, a.length - end),
-    b.slice(start, b.length - end)
+  const inner = diff.changes.flatMap((change) => change.innerChanges ?? []);
+  const before = changedChars(
+    removed,
+    inner.map((c) => c.originalRange)
   );
-  if (middle === undefined) {
-    return undefined;
-  }
-  const changedA = a.map((_, i) => middle[0][i - start] ?? false);
-  const changedB = b.map((_, j) => middle[1][j - start] ?? false);
-  const kept = nonSpaceLength(a, (i) => !changedA[i]);
-  const shorter = Math.min(
-    nonSpaceLength(a, () => true),
-    nonSpaceLength(b, () => true)
+  const after = changedChars(
+    added,
+    inner.map((c) => c.modifiedRange)
   );
-  if (kept === 0 || kept < shorter * MIN_KEPT) {
-    return undefined;
-  }
-  joinGaps(a, changedA);
-  joinGaps(b, changedB);
-  return [segmentsOf(a, changedA), segmentsOf(b, changedB)];
+  return [
+    removed.map((text, i) => segmentsOf(text, before[i] ?? [])),
+    added.map((text, i) => segmentsOf(text, after[i] ?? [])),
+  ];
 };
 
 /**
- * The lines with the changed words of each pair marked. A run of removed lines followed by a run
- * of added lines is one change: its first removed line pairs with its first added line, and so
- * on, as git lays a replaced line out.
+ * The lines with the changed characters of each change marked. A change is a run of removed lines
+ * followed by a run of added lines, as git lays one out; one with a single side has no marks.
  */
-const withWordDiffs = (lines: readonly CodeLine[]): CodeLine[] => {
+const withInlineChanges = (lines: readonly CodeLine[]): CodeLine[] => {
   const out = [...lines];
   let i = 0;
   while (i < out.length) {
@@ -204,20 +130,23 @@ const withWordDiffs = (lines: readonly CodeLine[]): CodeLine[] => {
     while (out[end]?.kind === "added") {
       end += 1;
     }
-    const pairs = Math.min(added - i, end - added);
-    for (let k = 0; k < pairs; k += 1) {
-      const removed = out[i + k];
-      const replacement = out[added + k];
-      if (removed === undefined || replacement === undefined) {
-        continue;
-      }
-      const diff = wordDiff(removed.text, replacement.text);
-      if (diff !== undefined) {
-        out[i + k] = { ...removed, segments: diff[0] };
-        out[added + k] = { ...replacement, segments: diff[1] };
+    const segments =
+      end > added
+        ? changeSegments(
+            out.slice(i, added).map((line) => line.text),
+            out.slice(added, end).map((line) => line.text)
+          )
+        : undefined;
+    for (const [k, lineSegments] of [
+      ...(segments?.[0] ?? []),
+      ...(segments?.[1] ?? []),
+    ].entries()) {
+      const line = out[i + k];
+      if (line !== undefined) {
+        out[i + k] = { ...line, segments: lineSegments };
       }
     }
-    i = Math.max(end, i + 1);
+    i = end;
   }
   return out;
 };
@@ -435,7 +364,7 @@ const wordVariants = cva("text-code-strong", {
   },
 });
 
-/** A changed line's text, its changed words marked when it pairs with the line it replaced. */
+/** A changed line's text, with the characters that differ from the other side marked. */
 const LineText = ({ line, text }: { line: CodeLine; text: string }) => {
   if (line.segments === undefined) {
     return text;
@@ -509,14 +438,14 @@ export const codeLines = ({
   if (content === undefined) {
     return patch === undefined || tint !== undefined
       ? []
-      : withWordDiffs(hunkLines(patch));
+      : withInlineChanges(hunkLines(patch));
   }
   if (tint === "added") {
     return numbered(content, "added");
   }
   return patch === undefined
     ? numbered(content, "plain")
-    : withWordDiffs(editedLines(content, patch));
+    : withInlineChanges(editedLines(content, patch));
 };
 
 export const CodePane = (props: CodePaneProps) => {
