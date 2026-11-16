@@ -136,8 +136,12 @@ test("a first launch says at once that it loads, and from 5 seconds how much lon
   await expect(progress(page)).toHaveCount(0);
 });
 
-/** The screen in the main panel: washed out and pulsing while it shows the kept inventory. */
-const screen = (page: Page) => page.getByRole("main").locator("> div");
+/** The screen in the main panel: out of reach while it shows the kept inventory. */
+const screen = (page: Page) =>
+  page.getByRole("main").locator("> div:not([data-launch-veil])");
+/** The frosted pane, with the spinner, over the kept inventory while the checks run. */
+const veil = (page: Page) =>
+  page.getByRole("main").locator("> [data-launch-veil]");
 
 /**
  * Launches with one skill of your own, waits until its inventory is kept for the next launch, then
@@ -184,24 +188,26 @@ const start = async (page: Page, args: string[]) => {
 
 const removeNotes = ["skill", "remove", "notes"];
 
-test("a later launch shows the kept inventory at once, washed out and pulsing, and runs commands once the checks pass", async ({
+test("a later launch shows the kept inventory at once under a frosted pane, and runs commands once the checks pass", async ({
   cli,
   page,
 }) => {
   const { commands, doctor } = await relaunch(cli, page);
   // The skill is there while the checks run, and none of its reads ran.
   await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
-  await expect(screen(page)).toHaveCSS("animation-name", "panel-loading");
+  await expect(veil(page)).toBeVisible();
+  await expect(veil(page).getByRole("status")).toContainText("Loading");
+  await expect(screen(page)).toHaveAttribute("inert", "");
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
   await expect(progress(page)).toHaveCount(0);
   expect(commands()).toEqual(launchLines);
 
-  // The sidebar goes to another screen, washed out as well.
+  // The sidebar goes to another screen, under the pane as well.
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })
   ).toBeVisible();
-  await expect(screen(page)).toHaveCSS("animation-name", "panel-loading");
+  await expect(screen(page)).toHaveAttribute("inert", "");
 
   // A change started now waits too, and Cancel stops one that waits.
   cli.register(["skill", "place", "notes"], {});
@@ -212,8 +218,8 @@ test("a later launch shows the kept inventory at once, washed out and pulsing, a
   }, removeNotes.join(" "));
 
   doctor.release();
-  await expect(screen(page)).toHaveCSS("animation-name", "none");
-  await expect(screen(page)).toHaveCSS("opacity", "1");
+  await expect(veil(page)).toHaveCount(0);
+  await expect(screen(page)).not.toHaveAttribute("inert");
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await expect
     .poll(() => commands())
