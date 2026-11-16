@@ -125,20 +125,21 @@ export const SkillsScreen = () => {
   const configurations = inventory?.configurations ?? [];
 
   // The key the next key press moves from: the last selection made, which the route may not show
-  // yet when keys come fast. `requested` holds the selections made here since the route last
-  // showed the latest one. A route that shows the latest settles them; a route that shows an
-  // earlier one is stale and leaves `current` alone; any other route, such as a skill another
-  // screen opens, takes over.
+  // yet when keys come fast. `requested` queues the selections made here whose routes have not
+  // shown yet; the routes show them in order. A route in the queue drops it up to that entry, and
+  // `current` stays: a newer selection may still be on its way. Any other route, such as a skill
+  // another screen opens, takes over.
   const current = useRef(selected?.key);
   const requested = useRef<string[]>([]);
   const selectedKey = selected?.key;
   useEffect(() => {
-    const keys = requested.current;
-    if (keys.at(-1) === selectedKey) {
-      requested.current = [];
-    } else if (selectedKey === undefined || !keys.includes(selectedKey)) {
+    const at =
+      selectedKey === undefined ? -1 : requested.current.indexOf(selectedKey);
+    if (at === -1) {
       requested.current = [];
       current.current = selectedKey;
+    } else {
+      requested.current = requested.current.slice(at + 1);
     }
   }, [selectedKey]);
   const select = (row: SkillRow) => {
