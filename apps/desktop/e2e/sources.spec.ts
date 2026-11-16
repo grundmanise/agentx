@@ -324,7 +324,9 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   );
   await check(page, "docx").click();
   await check(page, "artifacts").click();
-  await expect(bar(page)).toContainText("2 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 2" })
+  ).toBeVisible();
   // The enabled agents are preselected; the disabled one is off.
   await expect(target(page, "Claude Code")).toHaveAttribute(
     "aria-pressed",
@@ -371,7 +373,7 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   );
 });
 
-test("many agents: five logos and +n, Choose agents toggles a target, two-letter monograms", async ({
+test("many agents: five logos and +n, the agent picker toggles a target, two-letter monograms", async ({
   cli,
   page,
 }) => {
@@ -404,17 +406,9 @@ test("many agents: five logos and +n, Choose agents toggles a target, two-letter
     { events: [{ name: "docx", type: "library_skill" }] }
   );
   await check(page, "docx").click();
-  // The chosen agents first, then the rest, five in all, with Universal after the chosen ones; the other three behind +3, last.
+  // The chosen agents first, then the rest, five in all; the other three behind +3, last.
   expect(await names(bar(page).getByRole("group", { name: "Add to" }))).toEqual(
-    [
-      "Claude Code",
-      "Cursor",
-      "Universal",
-      "Windsurf",
-      "Kilo Code",
-      "Aider",
-      "3 more agents",
-    ]
+    ["Claude Code", "Cursor", "Windsurf", "Kilo Code", "Aider", "3 more agents"]
   );
   // A client with no bundled logo draws two letters: its initials, or a one-word name's first two.
   await expect(target(page, "Kilo Code").locator("img")).toHaveAttribute(
@@ -429,8 +423,35 @@ test("many agents: five logos and +n, Choose agents toggles a target, two-letter
   await expect(page.getByRole("tooltip")).toHaveText("Kilo Code");
 
   await target(page, "3 more agents").click();
-  const picker = page.getByRole("dialog", { name: "Choose agents" });
+  const picker = page.getByRole("dialog", { name: "Where to install" });
+  await expect(picker).toHaveAccessibleDescription(
+    "Choose agents to add the skill to. It is always available to universal agents."
+  );
+  // The term explains itself on hover.
+  await picker.getByRole("button", { name: "universal agents" }).hover();
+  await expect(page.getByRole("tooltip")).toHaveText(
+    "Universal agents read your skills library, ~/.agents/skills, so every skill you add reaches them."
+  );
+  // Every agent by name, the universal ones among them, locked on with the Universal pill.
   const agents = picker.getByRole("list", { name: "Agents" });
+  await expect(agents.getByRole("listitem")).toHaveText([
+    /^Aider/u,
+    /^Amp/u,
+    /^Claude Code/u,
+    /^Cline/u,
+    "CodexUniversal/home/me/.codexAlways on",
+    /^Cursor/u,
+    "Gemini CLIUniversal/home/me/.gemini-cliAlways on",
+    /^Kilo Code/u,
+    /^Windsurf/u,
+    /^Zed/u,
+  ]);
+  // The Universal pill says the same, from the keyboard too.
+  await page.mouse.move(0, 0);
+  await agents.getByRole("button", { name: "Universal" }).first().focus();
+  await expect(page.getByRole("tooltip")).toContainText(
+    "Universal agents read your skills library"
+  );
   expect(
     await agents
       .getByRole("checkbox")
@@ -445,11 +466,14 @@ test("many agents: five logos and +n, Choose agents toggles a target, two-letter
     "Windsurf",
     "Zed",
   ]);
-  await expect(picker).toContainText("2 agents");
-  await picker.getByRole("searchbox", { name: "Search agents" }).fill("ze");
+  const search = picker.getByRole("searchbox", { name: "Search agents" });
+  await search.fill("gem");
+  await expect(agents.getByRole("listitem")).toHaveText([
+    "Gemini CLIUniversal/home/me/.gemini-cliAlways on",
+  ]);
+  await search.fill("ze");
   await agents.getByText("Zed", { exact: true }).click();
   await expect(agents.getByRole("checkbox", { name: "Zed" })).toBeChecked();
-  await expect(picker).toContainText("3 agents");
   await picker.getByRole("button", { name: "Done" }).click();
   await expect(picker).toHaveCount(0);
 
@@ -494,21 +518,19 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
   await selectAll(page).click();
   await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
   await expect(selectAll(page)).toHaveAttribute("aria-checked", "true");
-  await expect(bar(page)).toContainText("4 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 4" })
+  ).toBeVisible();
   await check(page, "docx").click();
   await check(page, "forms").click();
-  await expect(bar(page)).toContainText("2 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 2" })
+  ).toBeVisible();
   await expect(selectAll(page)).toHaveAccessibleName("2 of 4 selected");
   await expect(selectAll(page)).toHaveAttribute("aria-checked", "mixed");
-  // The Universal stack is on and stays on.
-  await expect(target(page, "Universal")).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
-  await target(page, "Universal").click();
-  await expect(target(page, "Universal")).toHaveAttribute(
-    "aria-pressed",
-    "true"
+  // The Universal stack is always on: a locked mark, not a toggle.
+  await expect(bar(page)).toContainText(
+    "Skills are always added to universal agents: Codex and Gemini CLI"
   );
   await bar(page).getByRole("button", { name: "Add 2" }).click();
   await add.started;
@@ -545,7 +567,9 @@ test("progress shows from the progress events, and Cancel stops the run", async 
   ).toBeVisible();
   expect(cli.cancels).toHaveLength(1);
   // The selection stays, for another try.
-  await expect(bar(page)).toContainText("2 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 2" })
+  ).toBeVisible();
 });
 
 test("a partial failure lists what was added, the error, its hint and each skipped skill", async ({
@@ -582,7 +606,9 @@ test("a partial failure lists what was added, the error, its hint and each skipp
   await expect(toast).toContainText(error.hint);
   await expect(toast).toContainText(warning);
   // The skill that landed leaves the selection; the skipped one stays.
-  await expect(bar(page)).toContainText("1 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 1" })
+  ).toBeVisible();
   await expect(check(page, "docx")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "artifacts")).toHaveAttribute(
     "aria-pressed",
@@ -689,7 +715,9 @@ test("Add source runs source add, then opens the new source fully preselected", 
   await expect(pill(page, "acme/more")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "review")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "triage")).toHaveAttribute("aria-pressed", "true");
-  await expect(bar(page)).toContainText("2 selected");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 2" })
+  ).toBeVisible();
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
     "source add acme/more",

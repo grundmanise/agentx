@@ -190,6 +190,8 @@
   --color-pill-disabled-text: var(--color-accent-attention);
   --color-pill-version-bg: var(--gray-880);
   --color-pill-version-text: var(--gray-300);
+  --color-pill-universal-bg: var(--gray-850);
+  --color-pill-universal-text: var(--gray-250);
 
   /* Inputs, switches, checkboxes */
   --color-input-bg: var(--gray-980);
@@ -681,6 +683,7 @@
   --padding-key-hint-y: 3px;
   --min-height-toast: 44px;
   --max-width-toast: 640px;
+  --max-width-tooltip-text: 280px;
   --padding-toast: 18px;
   --padding-toast-y: 10px;
   --width-toast-detail: 440px;
