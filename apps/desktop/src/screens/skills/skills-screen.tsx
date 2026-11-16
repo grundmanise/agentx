@@ -20,6 +20,7 @@ import {
   toggleCollapsed,
   useSkillsView,
 } from "#/screens/skills/view.ts";
+import { useStartup } from "#/startup/startup.ts";
 import { useAppStore } from "#/store/store.ts";
 
 const none: SkillRow[] = [];
@@ -110,10 +111,16 @@ export const SkillsScreen = () => {
   };
 
   // j/k and the arrows move the selection through the visible rows, in group order, past the
-  // rows of a collapsed subgroup.
+  // rows of a collapsed subgroup. Not under the launch pane: the list waits for the startup checks.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || inField(e.target)) {
+      if (
+        !useStartup.getState().ready ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        inField(e.target)
+      ) {
         return;
       }
       const step = steps[e.key] ?? 0;
