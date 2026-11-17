@@ -442,13 +442,11 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 	if err != nil {
 		return forkSource{}, err
 	}
-	switch o, err := pluginOccurrence(inventory, name); {
-	case err == nil:
-		return forkSource{}, refuse(exitRefused, shown+" comes with the plugin "+sanitised(o.Plugin)+", whose folder agentx never changes",
-			"make a copy of your own with '"+skillCommand("fork", name)+"'").
-			listed("comes with the plugin " + sanitised(o.Plugin) + ", whose folder agentx never changes. To make a copy of your own, run '" + skillCommand("fork", name) + "'")
-	case failureOf(err).status != exitNotFound:
-		return forkSource{}, err // several plugins provide it, and the refusal names them
+	if plugins := pluginsProviding(inventory, name); len(plugins) > 0 {
+		fork := skillCommand("fork", plugins[0]+":"+name)
+		return forkSource{}, refuse(exitRefused, shown+" comes with the plugin "+sanitised(plugins[0])+", whose folder agentx never changes",
+			"make a copy of your own with '"+fork+"'").
+			listed("comes with the plugin " + sanitised(plugins[0]) + ", whose folder agentx never changes. To make a copy of your own, run '" + fork + "'")
 	}
 	return forkSource{}, missing
 }

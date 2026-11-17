@@ -422,6 +422,9 @@ func TestAdoptRefusesAName(t *testing.T) {
 		equal(t, c.name+": exit", out.exit, c.exit.exit)
 		e := lastError(t, h.events(out.stdout))
 		contains(t, c.name+": the error", e["message"].(string), c.want)
+		if c.name == "tidy" {
+			equal(t, "tidy: the hint", e["hint"], "make a copy of your own with 'agentx skill fork formatter:tidy'")
+		}
 		if c.name == "dup" {
 			equal(t, "dup: the hint", e["hint"], "rename the folder and adopt it under the new name, or replace it with 'agentx skill place dup --to claude-code --force', which discards what it holds")
 		}
