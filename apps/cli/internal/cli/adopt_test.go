@@ -388,7 +388,8 @@ func TestAdoptRefusesAName(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(gemini, 0o755) }) // so the temporary home can be removed
-	// A plugin's skill, which only Claude Code's plugin provides.
+	// A plugin's skill, which only Claude Code's plugin provides: adopt, like
+	// every command, reads a bare name as no plugin's.
 	plugin := pluginHome(t, h)[0]
 	writeFile(t, mkdirs(t, filepath.Join(plugin, "skills", "tidy"), "SKILL.md"), skill("tidy", "Tidy up"))
 	refs, worktrees := h.accountGit("for-each-ref"), names(t, filepath.Join(h.agentx, "worktrees"))
@@ -413,7 +414,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 		{"occupied", exitRefused, filepath.Join(h.library, "occupied") + " is in the way: adopting occupied puts the skill there"},
 		{"locked", exitRefused, "locked cannot be adopted: agentx cannot write to " + gemini + " (permission denied)"},
 		{"My_Skill", exitRefused, "My_Skill is not a valid skill name"},
-		{"tidy", exitRefused, "tidy comes with the plugin formatter, whose folder agentx never changes"},
+		{"tidy", exitNotFound, `no skill called "tidy" can be adopted: no record names it`},
 	} {
 		if c.name == "locked" && os.Geteuid() == 0 {
 			continue
@@ -422,9 +423,6 @@ func TestAdoptRefusesAName(t *testing.T) {
 		equal(t, c.name+": exit", out.exit, c.exit.exit)
 		e := lastError(t, h.events(out.stdout))
 		contains(t, c.name+": the error", e["message"].(string), c.want)
-		if c.name == "tidy" {
-			equal(t, "tidy: the hint", e["hint"], "make a copy of your own with 'agentx skill fork formatter:tidy'")
-		}
 		if c.name == "dup" {
 			equal(t, "dup: the hint", e["hint"], "rename the folder and adopt it under the new name, or replace it with 'agentx skill place dup --to claude-code --force', which discards what it holds")
 		}
