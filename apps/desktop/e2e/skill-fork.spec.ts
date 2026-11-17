@@ -299,21 +299,31 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   // Claude Code has the plugin's skill and a link to the fork; the agents that read the library
   // see the fork alone.
   const agents = fork.getByRole("region", { name: "Agents" });
-  await expect(agents).toContainText(
-    "Claude Code sees two skills named commit-helper. Details"
+  const notice = agents.getByRole("note", { name: "Skills of the same name" });
+  await expect(notice).toContainText(
+    "Claude Code also sees the acme-tools plugin's commit-helper. It picks one of the two."
   );
-  await agents.getByRole("button", { name: "Details" }).click();
-  const sights = page.getByRole("dialog", { name: "What each agent sees" });
+  await notice.getByRole("button", { name: "Details" }).click();
+  const sights = page.getByRole("dialog", {
+    name: "Skills named commit-helper",
+  });
+  const table = sights.getByRole("table", {
+    name: "Skills named commit-helper",
+  });
+  await expect(table.getByRole("columnheader")).toHaveText([
+    "Agent",
+    "Yours",
+    "acme-tools",
+  ]);
+  await expect(table.getByRole("rowheader")).toHaveText([
+    "Claude Code",
+    "Codex, Gemini CLI",
+  ]);
   await expect(
-    sights.getByRole("region", { name: "Your library" }).getByRole("listitem")
-  ).toHaveText(["Codex", "Gemini CLI", "Claude Code(through a link)"]);
-  await expect(
-    sights
-      .getByRole("region", { name: "acme-tools plugin" })
-      .getByRole("listitem")
-  ).toHaveText(["Claude Code"]);
+    table.getByRole("row", { name: /^Claude Code/u }).getByRole("cell")
+  ).toHaveText(["Sees it", "Sees it"]);
   await expect(sights).toContainText(
-    "An agent that finds two skills with the same name decides which one it uses."
+    "The highlighted agent sees both. agentx can't tell which one it uses. To keep them apart, rename yours."
   );
 });
 
@@ -350,18 +360,18 @@ test("a plugin's skill several plugins provide is named <plugin>:<skill>", async
   ]);
 });
 
-test("What each agent sees: the button beside AGENTS lists the places that hold the skill and the agents that see each", async ({
+test("What each agent sees: with no agent seeing two, the button beside AGENTS shows who sees the skill, with no notice", async ({
   cli,
   page,
 }) => {
   await openSkill(cli, page, "pdf");
   const agents = pane(page, "pdf").getByRole("region", { name: "Agents" });
   await agents.getByRole("button", { name: "What each agent sees" }).click();
-  const sights = page.getByRole("dialog", { name: "What each agent sees" });
-  await expect(sights.getByRole("heading", { level: 3 })).toHaveText([
-    "Your library",
+  const sights = page.getByRole("dialog", { name: "Skills named pdf" });
+  const table = sights.getByRole("table", { name: "Skills named pdf" });
+  await expect(table.getByRole("columnheader")).toHaveText(["Agent", "Yours"]);
+  await expect(table.getByRole("rowheader")).toHaveText([
+    "Claude Code, Codex, Gemini CLI",
   ]);
-  await expect(
-    sights.getByRole("region", { name: "Your library" }).getByRole("listitem")
-  ).toHaveText(["Codex", "Gemini CLI", "Claude Code(through a link)"]);
+  await expect(agents.getByRole("note")).toHaveCount(0);
 });

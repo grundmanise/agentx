@@ -771,6 +771,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `floating-bar.radius` | 9999 |  |
 | `check.mark-radius` | 50% | Startup status circle |
 | `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
+| `sights-notice.radius` | 12 | The notice under AGENTS when an agent sees two skills of one name |
 | `startup.logo-radius` | 12 | Product mark on the startup layer |
 | `tooltip.radius` | 8 | Tooltip |
 
@@ -932,8 +933,8 @@ Fork is a secondary small button in the action row, before Remove, for a skill o
 Where the agents find a skill of the selected skill's name, from the inventory alone: which places hold one, and which agents see each. It never says which of two skills an agent uses, since that is the agent's own rule.
 
 - A quiet `icon-xs` button with the info icon beside the AGENTS caption, its name in a Tooltip, opens a popover (§6 "Popover (Filter)" for its frame) below it.
-- When some agent sees more than one skill of the name, one `type.secondary` `text.muted` line under the chips names those agents, at most four and then a count, and ends with Details, a link inline button that opens the same popover below the line.
-- The popover: its title, then a group for each place, the library first, then each plugin, then each agent's own folder: a heading in `type.secondary` `text.muted`, then the agents in one wrapped row, each a 16px logo and the name in `type.secondary` `text.secondary`, the most used first. In the library's group the agents that read the library come first, then those with a link or a copy, with that said after the name in `text.hint`. A last `text.muted` line says that the agent decides, while some agent sees more than one; for a plugin's skill it adds that a different name avoids it.
+- When some agent sees more than one skill of the name, a notice under the chips: `tone.attention` bg and 1px border, `sights-notice.radius`, an `AlertTriangleIcon` (`xs`) in `tone.attention.fg`, then a `type.secondary` `text.secondary` paragraph that names those agents and the other skill by where it is, and under it a small secondary Details that opens the same popover below it. Rename yours, a small primary button before Details, is ready for when the app can rename a skill; until then it does not show.
+- The popover: its title, then a table (`src/components/ui/table.tsx`). A column for each place, the library first, then each plugin, then each agent's own folder, its caption in `table.header-text`; a check in `tone.primary.fg` where the row's agents see the skill, an en dash in `text.hint` where they do not. The agents that see more than one skill come first, a row each on `tone.attention.bg`; then the agents that see one, a row for those that see the same one, their names joined. Rows are `type.secondary` `text.secondary`, a 1px `shell.divider` rule above each. While some row is highlighted, a `text.muted` line under the table says what the highlight means.
 
 ### Edit (detail pane)
 

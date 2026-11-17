@@ -226,7 +226,7 @@ export const SkillDetail = ({
       <section aria-label="Agents" className="flex flex-col gap-3">
         <div className="flex items-center gap-1.5">
           <Caption>Agents</Caption>
-          <SightsButton sights={sights} row={row} />
+          <SightsButton sights={sights} />
         </div>
         <AgentsSection
           row={row}
@@ -235,7 +235,7 @@ export const SkillDetail = ({
             setRemoving("universal");
           }}
         />
-        <SightsNotice sights={sights} row={row} />
+        <SightsNotice sights={sights} />
       </section>
       {row.entry !== undefined && (
         <RemoveDialog
