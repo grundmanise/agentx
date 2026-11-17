@@ -637,11 +637,20 @@ test.describe("the Update skills dialog", () => {
       ],
       exitCode: 4,
     });
+    // The run's state takes the checkbox's place before the name: the name stays where it was.
+    const releaseNotesName = dialog
+      .getByRole("listitem")
+      .filter({ hasText: "release-notes" })
+      .getByText("release-notes");
+    const nameBefore = await releaseNotesName.boundingBox();
+    expect(nameBefore).not.toBeNull();
     await dialog
       .getByRole("button", { exact: true, name: "Update 3 skills" })
       .click();
     await letters.started;
     await expect(dialog.getByRole("status")).toHaveText("Updating 1 of 3…");
+    const nameRunning = await releaseNotesName.boundingBox();
+    expect(nameRunning?.x).toBe(nameBefore?.x);
     // The run lists the selected skills alone: pdf, left out, is gone.
     await expect(dialog.getByRole("listitem")).toHaveText([
       /pdf-letters/u,
