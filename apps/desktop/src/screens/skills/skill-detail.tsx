@@ -27,8 +27,8 @@ import {
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
-import { openRename, RenameButton } from "#/screens/skills/rename-dialog.tsx";
-import { canRename, ownOfName } from "#/screens/skills/rename.ts";
+import { RenameButton } from "#/screens/skills/rename-dialog.tsx";
+import { canRename } from "#/screens/skills/rename.ts";
 import { SightsNotice } from "#/screens/skills/sights-view.tsx";
 import { sightsOf } from "#/screens/skills/sights.ts";
 import { useSettling } from "#/store/settle.ts";
@@ -121,8 +121,7 @@ const EditButton = ({ row }: { row: SkillRow }) => {
  * library skill; the other actions come with the changes that add them); then the description. No
  * status pill: the banner is the status. One banner, with its button; AGENTS, whose chips add and
  * remove placements, and, when some agent sees more than one skill of this name, a notice under the
- * chips whose Details shows what each agent sees, with Rename while your own skill of
- * the name is one of them; FILES; then DETAILS and HISTORY side by side. Every control runs one
+ * chips whose Details shows what each agent sees; FILES; then DETAILS and HISTORY side by side. Every control runs one
  * command and redraws from the inventory that follows.
  */
 export const SkillDetail = ({
@@ -156,14 +155,6 @@ export const SkillDetail = ({
   });
   const details = detailsOf(row, configurations);
   const sights = sightsOf(row, sameName, configurations);
-  // The notice's Rename renames your own skill of the name, this one or the one beside a plugin's.
-  const yours = ownOfName(row, sameName);
-  const onRename =
-    yours === undefined
-      ? undefined
-      : () => {
-          openRename(yours);
-        };
   return (
     <article
       aria-label={row.name}
@@ -244,7 +235,7 @@ export const SkillDetail = ({
             setRemoving("universal");
           }}
         />
-        <SightsNotice sights={sights} onRename={onRename} />
+        <SightsNotice sights={sights} />
       </section>
       {row.entry !== undefined && (
         <RemoveDialog

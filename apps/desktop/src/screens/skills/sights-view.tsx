@@ -2,15 +2,12 @@
 // the name, a notice under the chips that ends with Details, a word with a dashed underline. Hover
 // on it opens a hover card: a table with a column for each place that holds a skill of the name
 // and a row for each agent that sees more than one, highlighted, then a row for the agents that
-// see the same one (`sightsTable`). `onRename`, given while you have a skill of the name, adds
-// Rename to the notice's buttons on the right, which opens the Rename dialog for it.
-// The notice is a Callout, as the detail pane's banner is; the hover card only explains and holds
-// no button.
+// see the same one (`sightsTable`). The notice is a Callout, as the detail pane's banner is, with
+// no button; the hover card only explains.
 import { useId } from "react";
 
 import { Callout } from "#/components/callout.tsx";
 import { CheckIcon } from "#/components/icons/check.tsx";
-import { Button } from "#/components/ui/button.tsx";
 import {
   HoverCard,
   HoverCardContent,
@@ -26,22 +23,6 @@ import {
 } from "#/components/ui/table.tsx";
 import { clashText, sightsTable } from "#/screens/skills/sights.ts";
 import type { NameSights, SightsTable } from "#/screens/skills/sights.ts";
-
-/** Renames your library's skill of the name; Rename shows only with it. */
-type OnRename = (() => void) | undefined;
-
-const RenameYours = ({
-  table,
-  onRename,
-}: {
-  table: SightsTable;
-  onRename: OnRename;
-}) =>
-  onRename !== undefined && table.renamable ? (
-    <Button variant="ghost" size="sm" onClick={onRename}>
-      Rename
-    </Button>
-  ) : null;
 
 /** ✓ or –, with the words a screen reader says for each. */
 const Sees = ({ sees }: { sees: boolean }) =>
@@ -103,16 +84,9 @@ const SightsBody = ({ table }: { table: SightsTable }) => {
 
 /**
  * The notice under the chips while some agent sees more than one skill of the name, a callout: how
- * many skills of the name there are, then Details, which opens the table on hover, and Rename your
- * skill on the right.
+ * many skills of the name there are, then Details, which opens the table on hover.
  */
-export const SightsNotice = ({
-  sights,
-  onRename,
-}: {
-  sights: NameSights;
-  onRename?: () => void;
-}) => {
+export const SightsNotice = ({ sights }: { sights: NameSights }) => {
   const clash = clashText(sights);
   if (clash === undefined) {
     return null;
@@ -138,7 +112,6 @@ export const SightsNotice = ({
           </HoverCard>
         </>
       }
-      actions={<RenameYours table={table} onRename={onRename} />}
     />
   );
 };

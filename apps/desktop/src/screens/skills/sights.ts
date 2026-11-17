@@ -278,8 +278,6 @@ export interface SightsTable {
   rows: SightsRow[];
   /** What the highlighted rows mean, while there are some. */
   footer?: string;
-  /** Some agent sees your library's skill and another one, which renaming yours keeps apart. */
-  renamable: boolean;
 }
 
 const headingOf = (place: Place) => {
@@ -329,12 +327,8 @@ export const sightsTable = (sights: NameSights): SightsTable => {
       sees: seesOf(group),
     });
   }
-  const renamable = clashing.some((a) =>
-    placesOf(a).some((p) => p.kind === "library")
-  );
   const table: SightsTable = {
     columns: sights.places.map((p) => ({ heading: headingOf(p), key: p.key })),
-    renamable,
     rows,
     title: `Multiple skills named ${sights.name}`,
   };

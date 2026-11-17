@@ -1,6 +1,5 @@
-// Rename, for one of your own skills: Rename in the notice under AGENTS, on a plugin's skill your fork
-// of the same name sits beside, renames the fork and selects it under its new name; Rename in the
-// action row with a name another skill has keeps the dialog open with the CLI's words.
+// Rename, for one of your own skills, in the action row: renames the skill and selects it under its
+// new name; with a name another skill has, it keeps the dialog open with the CLI's words.
 import type { Page } from "@playwright/test";
 
 import { sources } from "./fixtures/agents.ts";
@@ -42,15 +41,15 @@ const openSkill = async (
   await expect(pane(page, name)).toBeVisible();
 };
 
-test("The notice's Rename on a plugin's skill renames your skill of that name and selects it", async ({
+test("Rename renames your skill and selects it under its new name", async ({
   cli,
   page,
 }) => {
-  await openSkill(cli, page, "commit-helper", "skill:h-commit");
-  const notice = pane(page, "commit-helper")
-    .getByRole("region", { name: "Agents" })
-    .getByRole("note", { name: "Skills of the same name" });
-  await notice.getByRole("button", { exact: true, name: "Rename" }).click();
+  await openSkill(cli, page, "commit-helper");
+  await pane(page, "commit-helper")
+    .getByLabel("Actions", { exact: true })
+    .getByRole("button", { name: "Rename" })
+    .click();
   const dialog = renameDialog(page, "commit-helper");
   const field = dialog.getByRole("textbox", { name: "Name" });
   await expect(field).toHaveValue("commit-helper");
