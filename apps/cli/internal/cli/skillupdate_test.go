@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -382,7 +383,64 @@ func TestSkillUpdateAllReportsConflictsInNameOrder(t *testing.T) {
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "alpha"+refusal+"\nbeta"+refusal)
 }
 
-// otherSourceHarness is updateHarness with a second source holding gamma,
+// TestSkillUpdateOfSeveralNamesReportsEachSkill updates three named skills
+// in one run, given out of order and one of them twice: alpha, which has an
+// update, is updated; beta, whose edit conflicts with its update, is left
+// with a merge pending; delta has no update. Each skill ends with one
+// progress event, after what the run says of it: alpha's library_skill,
+// beta's conflict and an error naming beta, nothing for delta. The run
+// then answers as --all does, exit code 4 and an error naming beta, with
+// one journal for the whole run.
+func TestSkillUpdateOfSeveralNamesReportsEachSkill(t *testing.T) {
+	t.Parallel()
+	h, _, _, second := mixedHarness(t)
+	version := mutationVersion(t, h)
+	out := h.run("--json", "skill", "update", "delta", "beta", "alpha", "delta")
+	equal(t, "exit", out.exit, 4)
+	equal(t, "updated", updatedNames(h, out.stdout), "alpha")
+	refusal := "beta conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is"
+	var ended []string
+	seen := map[string]string{} // what the run said of each skill before it ended it
+	var runError jsonEvent
+	for _, e := range h.events(out.stdout) {
+		switch e["type"] {
+		case "library_skill":
+			seen[e["name"].(string)] += "updated "
+			equal(t, "alpha's upstream_commit", e["upstream_commit"], second)
+		case "conflict":
+			seen[e["name"].(string)] += "conflict "
+		case "error":
+			if e["skill"] == nil {
+				runError = e
+				continue
+			}
+			seen[e["skill"].(string)] += "error "
+			equal(t, "the skill's error", e["message"], refusal)
+			equal(t, "the skill's code", e["code"], "pending_merge")
+		case "progress":
+			name := e["subject"].(string)
+			equal(t, name+"'s phase", e["phase"], "update")
+			equal(t, name+"'s total", e["total"], float64(3))
+			equal(t, name+"'s current", e["current"], float64(len(ended)+1))
+			said := strings.TrimSpace(seen[name])
+			if said == "" {
+				said = "nothing"
+			}
+			ended = append(ended, name+": "+said)
+		}
+	}
+	slices.Sort(ended)
+	equal(t, "what the run said of each skill as it ended it", strings.Join(ended, "; "), "alpha: updated; beta: conflict error; delta: nothing")
+	if runError == nil {
+		t.Fatal("no error of the run")
+	}
+	equal(t, "the run's message", runError["message"], "1 of 3 skills could not be updated: "+refusal)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
+	equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised\n")
+	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, edited here\n")
+	equal(t, "mutations", mutationVersion(t, h), version+1)
+}
+
 // installed too, and a check that found an update for all three skills:
 // alpha's second version, beta revised and gamma revised.
 func otherSourceHarness(t *testing.T) (h *harness, s, other *sourceRepo) {
@@ -686,27 +744,64 @@ func TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce(t *testing.T) {
 	}
 }
 
-// TestSkillUpdateUsage: a name and --all are the two forms, and one of them
-// is needed.
+// TestSkillUpdateUsage: names and --all are the two forms, and one of
+// them is needed; the forms themselves are TestUpdateNames'.
 func TestSkillUpdateUsage(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	for _, c := range []struct {
-		args    []string
-		message string
-	}{
-		{[]string{"skill", "update"}, "no skill to update"},
-		{[]string{"skill", "update", "alpha", "--all"}, "skill update takes a skill name or --all, not both"},
-	} {
-		out := h.run(append([]string{"--json"}, c.args...)...)
-		equal(t, strings.Join(c.args, " ")+": exit", out.exit, 1)
-		e := h.one(out.stdout, "error")
-		equal(t, "message", e["message"], c.message)
-		equal(t, "hint", e["hint"], "name the skill to update, or run 'agentx skill update --all' to update every skill the last check found an update for")
-	}
-	out := h.run("skill", "update", "--all")
+	out := h.run("--json", "skill", "update", "alpha", "--all")
+	equal(t, "exit", out.exit, 1)
+	e := h.one(out.stdout, "error")
+	equal(t, "message", e["message"], "skill update takes skill names or --all, not both")
+	equal(t, "hint", e["hint"], "name the skills to update, or run 'agentx skill update --all' to update every skill the last check found an update for")
+	out = h.run("skill", "update", "--all")
 	equal(t, "exit of --all on an empty machine", out.exit, 0)
 	contains(t, "stdout", out.stdout, "Nothing to update")
+}
+
+// TestUpdateNames: the names a run of skill update takes, in name order and
+// each once, and the forms it refuses, in the order it refuses them.
+func TestUpdateNames(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name    string
+		args    []string
+		all     bool
+		abort   bool
+		want    []string
+		refusal string
+	}{
+		{name: "one name", args: []string{"pdf"}, want: []string{"pdf"}},
+		{name: "names in name order", args: []string{"pdf", "docx", "alpha"}, want: []string{"alpha", "docx", "pdf"}},
+		{name: "a name given twice counts once", args: []string{"pdf", "docx", "pdf"}, want: []string{"docx", "pdf"}},
+		{name: "--all", all: true},
+		{name: "one name to abort", args: []string{"pdf"}, abort: true, want: []string{"pdf"}},
+		{name: "the same name twice to abort", args: []string{"pdf", "pdf"}, abort: true, want: []string{"pdf"}},
+		{name: "neither", refusal: "no skill to update"},
+		{name: "--abort alone", abort: true, refusal: "no skill to update"},
+		{name: "names and --all", args: []string{"pdf"}, all: true, refusal: "skill update takes skill names or --all, not both"},
+		{name: "names, --all and --abort", args: []string{"pdf"}, all: true, abort: true, refusal: "skill update takes skill names or --all, not both"},
+		{name: "--all and --abort", all: true, abort: true, refusal: "--abort gives up the merge of one skill, not of --all"},
+		{name: "several names to abort", args: []string{"pdf", "docx"}, abort: true, refusal: "--abort gives up the merge of one skill, not of several"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			got, f := updateNames(c.args, c.all, c.abort)
+			if c.refusal != "" {
+				if f == nil {
+					t.Fatalf("updateNames(%q, %v, %v) = %q, want the refusal %q", c.args, c.all, c.abort, got, c.refusal)
+				}
+				equal(t, "exit", f.status, exitUsage)
+				equal(t, "refusal", f.message, c.refusal)
+				return
+			}
+			if f != nil {
+				t.Fatalf("updateNames(%q, %v, %v) refused: %s", c.args, c.all, c.abort, f.message)
+			}
+			equal(t, "names", strings.Join(got, " "), strings.Join(c.want, " "))
+			equal(t, "--all", got == nil, c.all)
+		})
+	}
 }
 
 // checked commits alpha's second version and runs a check, which pins it

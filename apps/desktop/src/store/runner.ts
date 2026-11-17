@@ -60,6 +60,13 @@ export interface CommandOptions {
   /** An action on the success toast, such as Undo, or what the events say it is, if any. */
   action?: ToastAction | ((events: CliEvent[]) => ToastAction | undefined);
   onProgress?: (event: ProgressEvent) => void;
+  /** Called with each event on stdout as it arrives, before the command ends. */
+  onEvent?: (event: CliEvent) => void;
+  /**
+   * Called with each log event on stderr as it arrives. stdout and stderr are separate streams,
+   * so a log may arrive after an event the CLI wrote later.
+   */
+  onLog?: (log: LogEvent) => void;
   /** Stops the command when it passes. */
   deadlineMs?: number;
   /**
@@ -159,18 +166,26 @@ export const cancelCommand = async (label: string) => {
   await cancel(runId);
 };
 
-const followProgress = async (
+/** The handlers a control follows a command's lines with as they arrive. */
+type Followers = Pick<CommandOptions, "onEvent" | "onLog" | "onProgress">;
+
+const follow = async (
   reader: ReadableStreamDefaultReader<RunLine>,
-  onProgress: (event: ProgressEvent) => void
+  followers: Followers
 ): Promise<void> => {
   const { done, value } = await reader.read();
   if (done) {
     return;
   }
-  if (value.kind === "event" && value.event.type === "progress") {
-    onProgress(value.event);
+  if (value.kind === "event") {
+    followers.onEvent?.(value.event);
+    if (value.event.type === "progress") {
+      followers.onProgress?.(value.event);
+    }
+  } else if (value.kind === "log") {
+    followers.onLog?.(value.event);
   }
-  await followProgress(reader, onProgress);
+  await follow(reader, followers);
 };
 
 const problemOf = (args: readonly string[], outcome: Outcome): Problem => {
@@ -389,13 +404,15 @@ export const runCommand = async (
   }
   const started = run(args, { deadlineMs: options.deadlineMs });
   setPending(options.label, started.runId);
-  const progress =
-    options.onProgress === undefined
+  const following =
+    options.onProgress === undefined &&
+    options.onEvent === undefined &&
+    options.onLog === undefined
       ? undefined
-      : followProgress(started.lines.getReader(), options.onProgress);
+      : follow(started.lines.getReader(), options);
   let outcome: Outcome;
   try {
-    const [result] = await Promise.all([started.result, progress]);
+    const [result] = await Promise.all([started.result, following]);
     outcome = {
       cancelled: result.cancelled,
       events: result.events,
