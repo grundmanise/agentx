@@ -307,7 +307,7 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   await page.mouse.move(0, 0);
   await notice.getByText("Details", { exact: true }).hover();
   const table = page.getByRole("table", {
-    name: "Skills named commit-helper",
+    name: "Multiple skills named commit-helper",
   });
   await expect(table.getByRole("columnheader")).toHaveText([
     "Agent",

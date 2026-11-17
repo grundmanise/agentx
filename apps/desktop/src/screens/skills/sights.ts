@@ -366,7 +366,7 @@ export const sightsTable = (sights: NameSights): SightsTable => {
     columns: sights.places.map((p) => ({ heading: headingOf(p), key: p.key })),
     renamable,
     rows,
-    title: `Skills named ${sights.name}`,
+    title: `Multiple skills named ${sights.name}`,
   };
   if (clashing.length > 0) {
     const lines = [
