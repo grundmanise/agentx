@@ -144,21 +144,6 @@ export const sightsOf = (
   return { name: row.name, own: [...own], places: kept };
 };
 
-/** `a`, `a and b`, `a, b and c`. */
-const listOf = (items: string[]) =>
-  items.length < 2
-    ? items.join("")
-    : `${items.slice(0, -1).join(", ")} and ${items.at(-1) ?? ""}`;
-
-/** `a`, `a and b`, `a, b and c`, `a, b, c and d`, and past four `a, b, c and 2 more`. */
-export const namesOf = (agents: Pick<Configuration, "name">[]): string => {
-  const names = agents.map((a) => a.name);
-  if (names.length > 4) {
-    return `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
-  }
-  return listOf(names);
-};
-
 /** The places each agent sees, by the agent's id. */
 const placesByAgent = (sights: NameSights) => {
   const by = new Map<string, Place[]>();
@@ -189,27 +174,6 @@ export const clashingOf = (sights: NameSights): Configuration[] => {
   return agentsOf(sights).filter((a) => (by.get(a.id)?.length ?? 0) > 1);
 };
 
-/** A skill of the name by where it is: "your pdf", "the acme plugin's pdf", "the copy in Codex's folder". */
-const skillIn = (place: Place, name: string) => {
-  switch (place.kind) {
-    case "library": {
-      return `your ${name}`;
-    }
-    case "plugin": {
-      return `the ${place.label} plugin's ${name}`;
-    }
-    case "folder": {
-      return `the copy in ${place.label}'s folder`;
-    }
-    case "project": {
-      return "the copy in a project's folder";
-    }
-    default: {
-      return name;
-    }
-  }
-};
-
 /** Agents in runs that share a key, in the order of their first agent. */
 const groupBy = (
   agents: Configuration[],
@@ -225,45 +189,54 @@ const groupBy = (
 
 const keyOfPlaces = (places: Place[]) => places.map((p) => p.key).join("|");
 
+/** The places of the skills that some agent sees more than one of, in the table's order. */
+const clashingPlaces = (sights: NameSights): Place[] => {
+  const by = placesByAgent(sights);
+  const seen = new Set(
+    clashingOf(sights).flatMap((a) => (by.get(a.id) ?? []).map((p) => p.key))
+  );
+  return sights.places.filter((p) => seen.has(p.key));
+};
+
 /**
- * The notice under AGENTS while some agent sees more than one skill of the name: who also sees
- * which other skill, then that each of them picks one. Undefined when no agent sees two.
+ * The notice under AGENTS while some agent sees more than one skill of the name: how many skills
+ * of the name such agents see, and that they may use the wrong one. Undefined when no agent sees
+ * two.
  */
 export const clashText = (sights: NameSights): string | undefined => {
-  const clashing = clashingOf(sights);
-  if (clashing.length === 0) {
+  const places = clashingPlaces(sights);
+  if (places.length === 0) {
     return undefined;
   }
-  const by = placesByAgent(sights);
-  const placesOf = (a: Configuration) => by.get(a.id) ?? [];
-  const sees = (a: Configuration) =>
-    placesOf(a).some((p) => sights.own.includes(p.key));
-  const othersOf = (a: Configuration) =>
-    placesOf(a).filter((p) => !sights.own.includes(p.key));
-  const sentences: string[] = [];
-  const also = clashing.filter(sees);
-  for (const group of groupBy(also, (a) => keyOfPlaces(othersOf(a)))) {
-    const [first] = group;
-    if (first !== undefined) {
-      const skills = othersOf(first).map((p) => skillIn(p, sights.name));
-      const verb = group.length === 1 ? "sees" : "see";
-      sentences.push(`${namesOf(group)} also ${verb} ${listOf(skills)}.`);
-    }
-  }
-  const rest = clashing.filter((a) => !sees(a));
-  for (const group of groupBy(rest, (a) => keyOfPlaces(placesOf(a)))) {
-    const [first] = group;
-    if (first !== undefined) {
-      const skills = placesOf(first).map((p) => skillIn(p, sights.name));
-      const verb = group.length === 1 ? "sees" : "see";
-      sentences.push(`${namesOf(group)} ${verb} ${listOf(skills)}.`);
-    }
-  }
-  const two = clashing.every((a) => placesOf(a).length === 2);
-  const who = clashing.length === 1 ? "It picks" : "Each picks";
-  sentences.push(`${who} one of ${two ? "the two" : "them"}.`);
-  return sentences.join(" ");
+  return `Found ${places.length} skills named ${sights.name}. Agents that see more than one may use the wrong one.`;
 };
+
+/** What keeps a place's skill from clashing: rename it, uninstall its plugin or remove the copy. */
+const fixOf = (place: Place) => {
+  switch (place.kind) {
+    case "library": {
+      return "rename your skill";
+    }
+    case "plugin": {
+      return `uninstall the ${place.label} plugin`;
+    }
+    case "folder": {
+      return `remove the copy in ${place.label}'s folder`;
+    }
+    case "project": {
+      return "remove the copy in the project's folder";
+    }
+    default: {
+      return place.label;
+    }
+  }
+};
+
+/** `a`, `a or b`, `a, b or c`. */
+const choiceOf = (items: string[]) =>
+  items.length < 2
+    ? items.join("")
+    : `${items.slice(0, -1).join(", ")} or ${items.at(-1) ?? ""}`;
 
 /** A column of the table: a place, under a short heading. */
 export interface SightsColumn {
@@ -295,7 +268,7 @@ export interface SightsTable {
 const headingOf = (place: Place) => {
   switch (place.kind) {
     case "library": {
-      return "Yours";
+      return "Your skill";
     }
     case "plugin": {
       return place.label;
@@ -349,18 +322,12 @@ export const sightsTable = (sights: NameSights): SightsTable => {
     title: `Skills named ${sights.name}`,
   };
   if (clashing.length > 0) {
-    const two = clashing.every((a) => placesOf(a).length === 2);
-    const one = clashing.length === 1;
-    const sees = one
-      ? "The highlighted agent sees"
-      : "The highlighted agents see";
     const lines = [
-      `${sees} ${two ? "both skills" : "all of them"}.`,
-      `It's up to ${one ? "the agent" : "each agent"} to decide which one to use.`,
+      clashing.length === 1
+        ? "The highlighted agent sees more than one of these skills and decides which one to use."
+        : "The highlighted agents see more than one of these skills, and each decides which one to use.",
+      `To avoid clashes, ${choiceOf(clashingPlaces(sights).map(fixOf))}.`,
     ];
-    if (renamable) {
-      lines.push("To prevent possible clashes, rename your skill.");
-    }
     table.footer = lines.join(" ");
   }
   return table;

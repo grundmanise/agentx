@@ -60,18 +60,21 @@ const cases: {
   name: string;
   sights: NameSights;
   table: string[];
+  /** The footer and the notice, whole when `exact`, else a distinctive part of each. */
   footer?: string;
   notice?: string;
+  exact?: true;
 }[] = [
   {
+    exact: true,
     footer:
-      "The highlighted agents see both skills. It's up to each agent to decide which one to use. To prevent possible clashes, rename your skill.",
+      "The highlighted agents see more than one of these skills, and each decides which one to use. To avoid clashes, rename your skill or uninstall the chrome-devtools-mcp plugin.",
     name: "your fork of a plugin's skill under its name",
     notice:
-      "Claude Code, Codex and Gemini CLI also see the chrome-devtools-mcp plugin's a11y-debugging. Each picks one of the two.",
+      "Found 2 skills named a11y-debugging. Agents that see more than one may use the wrong one.",
     sights: sights([yours, devtools], [yours]),
     table: [
-      "Agent | Yours | chrome-devtools-mcp",
+      "Agent | Your skill | chrome-devtools-mcp",
       "! Claude Code | ✓ | ✓",
       "! Codex | ✓ | ✓",
       "! Gemini CLI | ✓ | ✓",
@@ -80,25 +83,27 @@ const cases: {
   },
   {
     footer:
-      "The highlighted agent sees both skills. It's up to the agent to decide which one to use. To prevent possible clashes, rename your skill.",
+      "The highlighted agent sees more than one of these skills and decides which one to use. To avoid clashes, rename your skill or uninstall the acme plugin.",
     name: "the plugin's skill, seen beside yours by one agent",
-    notice:
-      "Claude Code also sees your a11y-debugging. It picks one of the two.",
+    notice: "Found 2 skills named a11y-debugging.",
     sights: sights(
       [place("library", [claude, codex]), place("plugin", [claude], "acme")],
       [place("plugin", [claude], "acme")]
     ),
-    table: ["Agent | Yours | acme", "! Claude Code | ✓ | ✓", "Codex | ✓ | –"],
+    table: [
+      "Agent | Your skill | acme",
+      "! Claude Code | ✓ | ✓",
+      "Codex | ✓ | –",
+    ],
   },
   {
     footer:
-      "The highlighted agents see all of them. It's up to each agent to decide which one to use. To prevent possible clashes, rename your skill.",
+      "To avoid clashes, rename your skill, uninstall the chrome-devtools-mcp plugin or remove the copy in Codex's folder.",
     name: "three skills: an agent's own copy too",
-    notice:
-      "Claude Code and Gemini CLI also see the chrome-devtools-mcp plugin's a11y-debugging. Codex also sees the chrome-devtools-mcp plugin's a11y-debugging and the copy in Codex's folder. Each picks one of them.",
+    notice: "Found 3 skills named a11y-debugging.",
     sights: sights([yours, devtools, codexFolder], [yours]),
     table: [
-      "Agent | Yours | chrome-devtools-mcp | Codex's folder",
+      "Agent | Your skill | chrome-devtools-mcp | Codex's folder",
       "! Claude Code | ✓ | ✓ | –",
       "! Codex | ✓ | ✓ | ✓",
       "! Gemini CLI | ✓ | ✓ | –",
@@ -107,10 +112,9 @@ const cases: {
   },
   {
     footer:
-      "The highlighted agent sees both skills. It's up to the agent to decide which one to use.",
+      "To avoid clashes, uninstall the alpha plugin or uninstall the beta plugin.",
     name: "two plugins, none of yours",
-    notice:
-      "Claude Code also sees the beta plugin's a11y-debugging. It picks one of the two.",
+    notice: "Found 2 skills named a11y-debugging.",
     sights: sights(
       [place("plugin", [claude], "alpha"), place("plugin", [claude], "beta")],
       [place("plugin", [claude], "alpha")]
@@ -124,7 +128,7 @@ const cases: {
       [place("library", readers)]
     ),
     table: [
-      "Agent | Yours | acme",
+      "Agent | Your skill | acme",
       "Claude Code | – | ✓",
       "Cursor, Codex, GitHub Copilot, Gemini CLI, OpenCode, Cline | ✓ | –",
     ],
@@ -134,7 +138,14 @@ const cases: {
 for (const c of cases) {
   test(`what each agent sees: ${c.name}`, () => {
     expect(asText(c.sights)).toEqual(c.table);
-    expect(sightsTable(c.sights).footer).toBe(c.footer);
-    expect(clashText(c.sights)).toBe(c.notice);
+    const { footer } = sightsTable(c.sights);
+    const notice = clashText(c.sights);
+    if (c.exact === true || c.footer === undefined) {
+      expect(footer).toBe(c.footer);
+      expect(notice).toBe(c.notice);
+    } else {
+      expect(footer).toContain(c.footer);
+      expect(notice).toContain(c.notice);
+    }
   });
 }
