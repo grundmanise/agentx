@@ -2,7 +2,8 @@
 // an update, the banners of an update and their Update button, the banner of a pending merge with
 // Show folder, Abort and Update, and the Update skills dialog the sidebar's update pill opens.
 // Each button runs exactly one command line, which the mocked CLI records, and its outcome is the
-// toast of the results table; the dialog runs one per skill selected and shows the outcome itself.
+// toast of the results table; the dialog runs one for every skill selected and shows the outcome
+// itself.
 import type { Page } from "@playwright/test";
 
 import {
@@ -92,6 +93,19 @@ const updated = (name: string, state: "current" | "modified"): InlineEvent => {
   const entry = updatesLibrary.find((e) => e.name === name);
   return { ...entry, state, type: "library_skill" };
 };
+
+/** The `progress` event of a `skill update` of several names once it is done with `subject`. */
+const updateDone = (
+  subject: string,
+  current: number,
+  total: number
+): InlineEvent => ({
+  current,
+  phase: "update",
+  subject,
+  total,
+  type: "progress",
+});
 
 /**
  * Opens the Skills screen on the fixture machine, on `name`, with serve's start check having
@@ -524,7 +538,7 @@ test.describe("Check updates", () => {
 });
 
 test.describe("the Update skills dialog", () => {
-  test("the sidebar's pill opens it with every update offered selected, by source, and it updates the selection one skill at a time", async ({
+  test("the sidebar's pill opens it with every update offered selected, by source, and it updates the selection in one command", async ({
     cli,
     page,
   }) => {
@@ -618,25 +632,34 @@ test.describe("the Update skills dialog", () => {
 
     const warning =
       "pdf-letters: skipped the copy in codex, which differs from the library";
-    const letters = cli.register(["skill", "update", "pdf-letters"], {
-      events: [updated("pdf-letters", "modified")],
-      holdAfter: 0,
-      logs: [{ level: "warn", message: warning }],
-    });
-    cli.register(["skill", "update", "release-notes"], {
-      events: [updated("release-notes", "current")],
-    });
-    cli.register(["skill", "update", "review"], {
-      events: [
-        { files: [], kind: "managed", name: "review", type: "conflict" },
-        {
-          code: "pending_merge",
-          message: "the update of review conflicts with its edits",
-          type: "error",
-        },
-      ],
-      exitCode: 4,
-    });
+    // One command for the selection, in the dialog's order: each skill's outcome, then its progress.
+    const run = cli.register(
+      ["skill", "update", "pdf-letters", "review", "release-notes"],
+      {
+        events: [
+          updated("pdf-letters", "modified"),
+          updateDone("pdf-letters", 1, 3),
+          { files: [], kind: "managed", name: "review", type: "conflict" },
+          {
+            code: "pending_merge",
+            message: "the update of review conflicts with its edits",
+            skill: "review",
+            type: "error",
+          },
+          updateDone("review", 2, 3),
+          updated("release-notes", "current"),
+          updateDone("release-notes", 3, 3),
+          {
+            code: "pending_merge",
+            message: "1 of 3 skills could not be updated: review",
+            type: "error",
+          },
+        ],
+        exitCode: 4,
+        holdAfter: 0,
+        logs: [{ level: "warn", message: warning, skill: "pdf-letters" }],
+      }
+    );
     // The run's state takes the checkbox's place before the name: the name stays where it was.
     const releaseNotesName = dialog
       .getByRole("listitem")
@@ -647,17 +670,17 @@ test.describe("the Update skills dialog", () => {
     await dialog
       .getByRole("button", { exact: true, name: "Update 3 skills" })
       .click();
-    await letters.started;
+    await run.started;
     await expect(dialog.getByRole("status")).toHaveText("Updating 1 of 3…");
     const nameRunning = await releaseNotesName.boundingBox();
     expect(nameRunning?.x).toBe(nameBefore?.x);
-    // The run lists the selected skills alone: pdf, left out, is gone.
+    // The run lists the selected skills alone, all updating at once: pdf, left out, is gone.
     await expect(dialog.getByRole("listitem")).toHaveText([
-      /pdf-letters/u,
-      /review/u,
-      /release-notes/u,
+      /Updating: pdf-letters/u,
+      /Updating: review/u,
+      /Updating: release-notes/u,
     ]);
-    letters.release();
+    run.release();
 
     await expect(dialog.getByRole("status")).toHaveText(
       "2 of 3 skills updated"
@@ -687,9 +710,7 @@ test.describe("the Update skills dialog", () => {
     // The merge waits on its row: the dialog opens no skill.
     await expect(page).toHaveURL(/#\/skills\/pdf$/u);
     expect(later(cli)).toEqual([
-      ["skill", "update", "pdf-letters", "--json"],
-      ["skill", "update", "review", "--json"],
-      ["skill", "update", "release-notes", "--json"],
+      ["skill", "update", "pdf-letters", "review", "release-notes", "--json"],
     ]);
 
     await dialog.getByRole("button", { exact: true, name: "Done" }).click();

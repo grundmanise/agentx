@@ -25,7 +25,7 @@ SKILLS
 
 UPDATES AND PUBLISHING
   skill check-updates             Look for upstream updates and other machines' edits
-  skill update <name>             Apply the update the last check found
+  skill update <name>...          Apply the update the last check found
   skill publish [<name>...]       Publish edits to the source or the account remote
 
 SOURCES

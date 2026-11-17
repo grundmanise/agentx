@@ -520,7 +520,7 @@ func (r *applyRun) ownSkill(ctx context.Context, e snapshotSkill) (string, error
 	if f := r.movable(e.Name, rec); f != nil {
 		return "", f
 	}
-	if err := r.inv.quietly(func() error { return r.inv.skillUpdate(ctx, e.Name) }); err != nil {
+	if err := r.inv.quietly(func() error { return r.inv.skillUpdate(ctx, []string{e.Name}) }); err != nil {
 		return "", err
 	}
 	if now, err := r.branchAt(ctx, lineage.ForkRef(e.Name)); err != nil || now != tip {
@@ -597,7 +597,7 @@ func (r *applyRun) sharedSkill(ctx context.Context, e snapshotSkill) (string, er
 	if err != nil {
 		return "", err
 	}
-	if err := inv.quietly(func() error { return inv.skillUpdate(ctx, e.Name) }); err != nil {
+	if err := inv.quietly(func() error { return inv.skillUpdate(ctx, []string{e.Name}) }); err != nil {
 		return "", err
 	}
 	if now, err := r.branchAt(ctx, lineage.ManagedRef(e.Name)); err != nil || now != commit {
