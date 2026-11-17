@@ -2,8 +2,9 @@
 // the notice under AGENTS (`clashText`), for the places that hold a skill of one name.
 import { expect, test } from "@playwright/test";
 
-import type { Configuration } from "#/cli/events.gen.ts";
-import { clashText, sightsTable } from "#/screens/skills/sights.ts";
+import type { Configuration, Occurrence } from "#/cli/events.gen.ts";
+import type { SkillRow } from "#/screens/skills/projection.ts";
+import { clashText, sightsOf, sightsTable } from "#/screens/skills/sights.ts";
 import type { NameSights, Place, PlaceKind } from "#/screens/skills/sights.ts";
 
 import { configuration } from "./harness/cli.ts";
@@ -149,3 +150,74 @@ for (const c of cases) {
     }
   });
 }
+
+/** An occurrence of a skill at `path`, seen by `id`. */
+const at = (id: string, path: string, plugin?: string): Occurrence => ({
+  configuration: id,
+  id: `${id}:${path}`,
+  kind: "directory",
+  path,
+  resolved_path: path,
+  scope: "user",
+  ...(plugin === undefined ? {} : { plugin }),
+});
+
+/** A row of the Skills list named review, as far as `sightsOf` reads it. */
+const row = (
+  occurrences: Occurrence[],
+  extra: Partial<SkillRow> = {}
+): SkillRow => ({
+  agents: [],
+  description: "",
+  enabled: true,
+  group: "",
+  hasUpdate: false,
+  key: occurrences[0]?.path ?? "review",
+  kind: "disk",
+  modified: false,
+  name: "review",
+  occurrences,
+  pills: [],
+  published: false,
+  universal: false,
+  ...extra,
+});
+
+const claudeAt = configuration("claude-code", {
+  name: "Claude Code",
+  path: "/home/me/.claude/skills",
+});
+
+test("sightsOf: a fork with the plugin's content still shows the plugin's copy", () => {
+  const plugin = "/home/me/.claude/plugins/cache/m/acme/1/skills/review";
+  const fork = row(
+    [
+      at("claude-code", "/home/me/.claude/skills/review"),
+      at("claude-code", plugin, "acme"),
+    ],
+    {
+      agents: ["claude-code"],
+      entry: {
+        content_hash: "",
+        kind: "managed",
+        name: "review",
+        placements: [],
+        universal: [],
+      },
+      kind: "yours",
+    }
+  );
+  const s = sightsOf(fork, [], [claudeAt]);
+  expect(s.places.map((p) => p.key)).toEqual(["library", "plugin:acme"]);
+  expect(clashText(s)).toBe(
+    "Found 2 skills named review. Agents that see more than one may use the wrong one."
+  );
+});
+
+test("sightsOf: two directories in one agent's folder are two skills", () => {
+  const a = row([at("claude-code", "/home/me/.claude/skills/a")]);
+  const b = row([at("claude-code", "/home/me/.claude/skills/b")]);
+  const s = sightsOf(a, [b], [claudeAt]);
+  expect(s.places).toHaveLength(2);
+  expect(clashText(s)).toContain("Found 2 skills named review.");
+});

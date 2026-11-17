@@ -35,7 +35,11 @@ const ownerOf = (o: Occurrence, configurations: Configuration[]) =>
     (c) => c.path !== "" && o.path.startsWith(`${c.path}/`)
   ) ?? configurations.find((c) => c.id === o.configuration);
 
-/** The place an occurrence of a skill outside the library is in. */
+/**
+ * The place an occurrence of a skill outside the library is in. An agent's folder is keyed by the
+ * skill's own directory too: two directories there whose skills share a name are two skills,
+ * while one directory seen by several agents stays one place.
+ */
 const placeOf = (
   o: Occurrence,
   configurations: Configuration[]
@@ -48,7 +52,7 @@ const placeOf = (
   }
   const owner = ownerOf(o, configurations);
   return {
-    key: `folder:${owner?.id ?? o.configuration}`,
+    key: `folder:${owner?.id ?? o.configuration}:${o.path}`,
     kind: "folder",
     label: owner?.name ?? o.configuration,
   };
@@ -124,6 +128,15 @@ export const sightsOf = (
     if (r.entry !== undefined) {
       for (const agent of libraryAgents(r, configurations)) {
         add({ key: LIBRARY, kind: "library", label: "" }, agent, mine);
+      }
+      // A fork of a plugin's skill under its own name has the plugin's content until it is edited,
+      // so the inventory holds the two as one skill, under the library's row: the plugin's copy
+      // is still a place of its own.
+      for (const o of r.occurrences) {
+        const c = byId.get(o.configuration);
+        if (o.plugin !== undefined && c !== undefined) {
+          add(placeOf(o, configurations), c, false);
+        }
       }
       continue;
     }
