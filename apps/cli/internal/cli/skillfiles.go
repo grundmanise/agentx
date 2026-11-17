@@ -171,7 +171,7 @@ func (inv *invocation) skillFiles(ctx context.Context, arg, configuration string
 	if err != nil {
 		return err
 	}
-	o, err := pluginOccurrence(inventory, arg, "files")
+	o, err := pluginOccurrence(inventory, arg)
 	if err != nil {
 		return err
 	}

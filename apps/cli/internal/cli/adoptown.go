@@ -438,16 +438,6 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 			"replace the link with the folder it points to, then run '"+adoptCommand(name)+"' again").
 			listed("a symlink to " + quotedPath(target) + ". To adopt it, replace " + quotedPath(links[0]) + " with the folder it points to")
 	}
-	inventory, err := fk.scanned()
-	if err != nil {
-		return forkSource{}, err
-	}
-	if plugins := pluginsProviding(inventory, name); len(plugins) > 0 {
-		fork := skillCommand("fork", plugins[0]+":"+name)
-		return forkSource{}, refuse(exitRefused, shown+" comes with the plugin "+sanitised(plugins[0])+", whose folder agentx never changes",
-			"make a copy of your own with '"+fork+"'").
-			listed("comes with the plugin " + sanitised(plugins[0]) + ", whose folder agentx never changes. To make a copy of your own, run '" + fork + "'")
-	}
 	return forkSource{}, missing
 }
 
