@@ -205,8 +205,7 @@ const RenameDialog = ({ row }: { row: SkillRow }) => {
         <DialogHeader showCloseButton={false}>
           <DialogTitle>{`Rename ${row.name}?`}</DialogTitle>
           <DialogDescription>
-            Your agents see it under the new name. Publish it to rename it on
-            your account remote too.
+            Your agents will see it under the new name.
           </DialogDescription>
         </DialogHeader>
         <RenameForm row={row} />
