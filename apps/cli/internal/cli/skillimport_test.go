@@ -241,10 +241,10 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 	equal(t, "exit of source fetch", h.run("source", "fetch", s.url).exit, 0)
 	equal(t, "the fetched tip", h.accountGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), tip)
 
-	out := h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor")
+	out := h.run("skill", "add", s.url, "--name", "alpha", "--to", "cortex")
 	equal(t, "exit of the second placement", out.exit, 0)
 	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
-	if _, err := os.Lstat(filepath.Join(h.home, ".cursor", "skills", "alpha")); err != nil {
+	if _, err := os.Lstat(filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")); err != nil {
 		t.Errorf("the second configuration has no placement: %v", err)
 	}
 

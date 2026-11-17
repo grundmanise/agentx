@@ -61,7 +61,7 @@ func TestSkillForkConvertsManagedSkills(t *testing.T) {
 		if link, _ := os.Readlink(filepath.Join(h.library, name)); link != "../../../agentx/worktrees/"+name+"/"+name {
 			t.Errorf("%s: the library symlink is %q", name, link)
 		}
-		for _, client := range []string{".claude", ".cursor"} {
+		for _, client := range []string{".claude", ".snowflake/cortex"} {
 			equal(t, name+": "+client+"'s placement", placed(client, name), filepath.Join(h.library, name))
 		}
 	}
@@ -97,7 +97,7 @@ func TestForksOfOneVersionShareTheImport(t *testing.T) {
 	for _, h := range []*harness{a, b} {
 		h.mustRun("skill", "add", s.url, "--name", "alpha")
 	}
-	b.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+	b.mustRun("skill", "place", "alpha", "--to", "cortex", "--copy")
 	a.mustRun("skill", "fork", "alpha")
 	out := b.mustRun("skill", "fork", "alpha", "--name", "my-alpha")
 	contains(t, "the text output", out.stdout, "✓ forked alpha as my-alpha: 4 placements; alpha stays as it was\n")
@@ -123,8 +123,8 @@ func TestForksOfOneVersionShareTheImport(t *testing.T) {
 		place := p.(map[string]any)
 		modes[place["configuration"].(string)] = place["mode"].(string)
 	}
-	equal(t, "the renamed fork's placements", fmt.Sprint(modes), fmt.Sprint(map[string]string{"claude-code": modeSymlink, "cursor": modeCopy, "codex": modeLibrary, "gemini-cli": modeLibrary}))
-	if info, err := os.Lstat(filepath.Join(b.home, ".cursor", "skills", "alpha")); err != nil || !info.IsDir() {
+	equal(t, "the renamed fork's placements", fmt.Sprint(modes), fmt.Sprint(map[string]string{"claude-code": modeSymlink, "cortex": modeCopy, "codex": modeLibrary, "gemini-cli": modeLibrary}))
+	if info, err := os.Lstat(filepath.Join(b.home, ".snowflake/cortex", "skills", "alpha")); err != nil || !info.IsDir() {
 		t.Errorf("the original's copy is not as it was: %v", err)
 	}
 	if info, err := os.Lstat(filepath.Join(b.library, "alpha")); err != nil || !info.IsDir() {
@@ -277,7 +277,7 @@ func TestSkillForkOfAFork(t *testing.T) {
 	equal(t, "what the creation commit changes", h.accountGit("diff-tree", "-r", "--name-status", source, tip), "D\tREADME.md\nM\talpha/SKILL.md")
 	contains(t, "SKILL.md", h.accountGit("cat-file", "blob", tip+":alpha/SKILL.md"), "name: alpha-two\n")
 	equal(t, "the upstream", h.listed("alpha-two")["upstream_commit"], h.listed("alpha")["upstream_commit"])
-	for _, client := range []string{".claude", ".cursor"} {
+	for _, client := range []string{".claude", ".snowflake/cortex"} {
 		if target, _ := os.Readlink(filepath.Join(h.home, client, "skills", "alpha-two")); target != filepath.Join(h.library, "alpha-two") {
 			t.Errorf("%s's placement points at %q", client, target)
 		}
@@ -536,7 +536,7 @@ exec %GIT% "$@"
 func TestAdoptRecoversWhereItWasKilled(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
-	for _, client := range []string{".claude", ".cursor"} {
+	for _, client := range []string{".claude", ".snowflake/cortex"} {
 		writeFile(t, mkdirs(t, filepath.Join(h.home, client, "skills", "jot"), "SKILL.md"), skill("jot", "Jot things down"))
 	}
 	out := killedChild(t, h, "TestForkChildProcess", forkChildEnv, "adopt --skill jot", `
@@ -557,7 +557,7 @@ exec %GIT% "$@"
 	if !home.WorktreeAt(filepath.Join(h.agentx, "worktrees", "jot"), "skills/jot") {
 		t.Error("the worktree is not on the branch after recovery")
 	}
-	for _, client := range []string{".claude", ".cursor"} {
+	for _, client := range []string{".claude", ".snowflake/cortex"} {
 		if target, _ := os.Readlink(filepath.Join(h.home, client, "skills", "jot")); target != filepath.Join(h.library, "jot") {
 			t.Errorf("%s's placement points at %q", client, target)
 		}

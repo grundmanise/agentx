@@ -767,8 +767,7 @@ func (r *applyRun) place(ctx context.Context, e snapshotSkill, did string) (stri
 // placeInto is the configurations a skill is placed in for want, the ones a
 // snapshot records: each detected one want names, but a client that reads
 // the library, which sees every library skill, and a client that reads the
-// skills directory of another one want names, as Cursor reads Claude
-// Code's, which sees the skill there.
+// skills directory of another one want names, which sees the skill there.
 func (r *applyRun) placeInto(want []string) []placeTarget {
 	var into []placeTarget
 	for _, t := range r.targets {

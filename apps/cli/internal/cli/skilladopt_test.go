@@ -25,12 +25,12 @@ func TestPlaceAdoptsADirectoryOfThisVersionAndSaysSo(t *testing.T) {
 		copyMode string
 	}{
 		{"a symlink placement, in text", nil, ""},
-		{"a copy placement, in JSON", []string{"--json", "--copy"}, "cursor"},
+		{"a copy placement, in JSON", []string{"--json", "--copy"}, "cortex"},
 	} {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
 			h, place := adoptable(t)
-			out := h.run(append([]string{"skill", "place", "alpha", "--to", "cursor"}, c.args...)...)
+			out := h.run(append([]string{"skill", "place", "alpha", "--to", "cortex"}, c.args...)...)
 			equal(t, "exit", out.exit, 0)
 			if c.copyMode == "" {
 				contains(t, "the output", out.stdout, "adopted "+place)
@@ -42,7 +42,7 @@ func TestPlaceAdoptsADirectoryOfThisVersionAndSaysSo(t *testing.T) {
 	}
 }
 
-// adoptable is a machine whose Cursor placement path already holds a
+// adoptable is a machine whose Cortex Code placement path already holds a
 // directory of the user's that is byte for byte the library's version of
 // alpha, as a cp -a of the library directory leaves it. It returns the
 // harness and that path.
@@ -50,7 +50,7 @@ func adoptable(t *testing.T) (*harness, string) {
 	t.Helper()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "codex").exit, 0)
-	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	place := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	copyTree(t, filepath.Join(h.library, "alpha"), place)
 	return h, place
 }

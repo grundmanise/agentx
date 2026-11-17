@@ -127,8 +127,8 @@ func (inv *invocation) reportPlacedAll(ctx context.Context, id string, targets [
 		inv.out.emit(ev)
 		if len(ev.Placements) > 0 {
 			// One skill the configuration now sees, however many ways it sees
-			// it: a client that reads another client's skills directory, as
-			// Cursor reads Claude Code's, has more paths than placements made.
+			// it: a client that reads another client's skills directory has
+			// more paths than placements made.
 			placed++
 		}
 		// One row per skill, its placement at this configuration's own

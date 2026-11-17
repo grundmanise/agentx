@@ -79,12 +79,12 @@ $ agentx skill add anthropics/skills --name pdf
 ✓ installed pdf from https://github.com/anthropics/skills under skills/pdf: 4 placements
   claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
   codex        library  /home/me/.agents/skills/pdf
-  cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
+  cursor       library  /home/me/.agents/skills/pdf
   gemini-cli   library  /home/me/.agents/skills/pdf
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 ```
 
-agentx adds the source, installs the skill into the library and links it into each client. Codex and Gemini CLI read the library directly, so they need no link (see [Clients that see every skill](/cli/skill#clients-that-see-every-skill)). See [`agentx skill`](/cli/skill) to place, update and remove skills.
+agentx adds the source, installs the skill into the library and links it into each client. Codex, Cursor and Gemini CLI read the library directly, so they need no link (see [Clients that see every skill](/cli/skill#clients-that-see-every-skill)). See [`agentx skill`](/cli/skill) to place, update and remove skills.
 
 ## Get help
 

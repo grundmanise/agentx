@@ -13,13 +13,13 @@ import (
 func placeHome(t *testing.T) *harness {
 	t.Helper()
 	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codeium/windsurf", ".copilot", ".codex", ".gemini"}})
+	h.build(t, fixture{dirs: []string{".claude", ".snowflake/cortex", ".codeium/windsurf", ".copilot", ".codex", ".gemini"}})
 	return h
 }
 
 // TestSkillPlaceAddsAPlacementLater puts a library skill into
 // configurations the install left out, each a mutation of its own that
-// changes nothing else: a symlink into Cursor, and into GitHub Copilot a
+// changes nothing else: a symlink into Cortex Code, and into GitHub Copilot a
 // copy of the library directory, its executable bit included, which
 // copy_mode records as an install with --copy records it. Codex reads the
 // library, so for a skill placed there the library entry is the placement.
@@ -30,9 +30,9 @@ func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	before := mutationVersion(t, h)
 
-	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
+	out := h.run("--json", "skill", "place", "alpha", "--to", "cortex")
 	equal(t, "exit", out.exit, 0)
-	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	place := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	target, ok := isSymlink(t, place)
 	if !ok || target != filepath.Join(h.library, "alpha") {
 		t.Errorf("the placement is %q (symlink %v), want a link to the library", target, ok)
@@ -43,7 +43,7 @@ func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
 	ev := h.one(out.stdout, "library_skill")
 	equal(t, "kind", ev["kind"], "managed")
-	equal(t, "placements", strings.Join(placementsOf(t, ev), ";"), "cursor symlink symlink")
+	equal(t, "placements", strings.Join(placementsOf(t, ev), ";"), "cortex symlink symlink")
 	contains(t, "the result", out.stdout, "placed alpha in 1 configuration")
 
 	out = h.run("--json", "skill", "place", "alpha", "--to", "github-copilot", "--copy")
@@ -78,17 +78,17 @@ func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 func TestPlacingAgainKeepsARecordedCopy(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "cortex", "--copy").exit, 0)
 
-	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
+	out := h.run("--json", "skill", "place", "alpha", "--to", "cortex")
 	equal(t, "exit", out.exit, 0)
-	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	place := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	info, err := os.Lstat(place)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		t.Fatalf("the placement is no longer a copy: %v", err)
 	}
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
-	equal(t, "placements", strings.Join(placementsOf(t, h.one(out.stdout, "library_skill")), ";"), "cursor copy copy")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cortex")
+	equal(t, "placements", strings.Join(placementsOf(t, h.one(out.stdout, "library_skill")), ";"), "cortex copy copy")
 }
 
 // TestPlacingAgainKeepsAnEditedCopy: a copy copy_mode records for the
@@ -105,35 +105,35 @@ func TestPlacingAgainKeepsAnEditedCopy(t *testing.T) {
 		again func(t *testing.T, h *harness, s *sourceRepo, flags ...string) outcome
 	}{
 		{"skill place", func(_ *testing.T, h *harness, _ *sourceRepo, flags ...string) outcome {
-			return h.run(append(flags, "skill", "place", "alpha", "--to", "cursor")...)
+			return h.run(append(flags, "skill", "place", "alpha", "--to", "cortex")...)
 		}},
 		{"skill add", func(_ *testing.T, h *harness, s *sourceRepo, flags ...string) outcome {
-			return h.run(append(flags, "skill", "add", s.url, "--name", "alpha", "--to", "cursor")...)
+			return h.run(append(flags, "skill", "add", s.url, "--name", "alpha", "--to", "cortex")...)
 		}},
 		{"config enable --place-all", func(t *testing.T, h *harness, _ *sourceRepo, flags ...string) outcome {
-			equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
-			return h.run(append(flags, "config", "enable", "cursor", "--place-all")...)
+			equal(t, "disable", h.run("config", "disable", "cortex").exit, 0)
+			return h.run(append(flags, "config", "enable", "cortex", "--place-all")...)
 		}},
 	} {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
-			h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy")
-			place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+			h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cortex", "--copy")
+			place := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 			editCopy(t, place)
 			edited := libraryTree(t, place)
 
 			out := c.again(t, h, s, "--json")
 			equal(t, "exit", out.exit, 0)
 			sameTree(t, "the copy", libraryTree(t, place), edited)
-			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
+			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cortex")
 			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(place))
 			contains(t, "the result", h.one(out.stdout, "result")["summary"].(string), ", 1 placement skipped")
 
 			text := c.again(t, h, s)
 			equal(t, "exit", text.exit, 0)
 			sameTree(t, "the copy", libraryTree(t, place), edited)
-			warning, wayOn := keptCopyLines(place, "alpha", "agentx skill remove alpha --from cursor", "agentx skill place alpha --to cursor --copy")
+			warning, wayOn := keptCopyLines(place, "alpha", "agentx skill remove alpha --from cortex", "agentx skill place alpha --to cortex --copy")
 			equal(t, "stderr", text.stderr, "warning: "+warning+"\n  "+wayOn+"\n")
 			contains(t, "stdout", text.stdout, ", 1 placement skipped")
 		})
@@ -150,17 +150,17 @@ func TestPlacingAgainKeepsAnEditedCopy(t *testing.T) {
 func TestPlacingAgainLeavesAnEditedCopyOfAnotherConfiguration(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy")
-	recorded := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cortex", "--copy")
+	recorded := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	editCopy(t, recorded)
 	other := filepath.Join(h.home, ".copilot", "skills", "alpha")
 	copyTree(t, recorded, other)
 	edited := libraryTree(t, other)
 
-	out := h.run("--json", "skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--to", "github-copilot")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha", "--to", "cortex", "--to", "github-copilot")
 	equal(t, "exit", out.exit, 0)
 	sameTree(t, "the other copy", libraryTree(t, other), edited)
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cortex")
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
 		editedCopyWarning(recorded)+"\n"+other+" is not this skill and was left as it is; no placement was made for github-copilot")
 	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string), ", 2 placements skipped")
@@ -175,8 +175,8 @@ func TestPlacingAgainLeavesAnEditedCopyOfAnotherConfiguration(t *testing.T) {
 func TestPlacingAgainLeavesWhatReplacedARecordedCopy(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy")
-	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cortex", "--copy")
+	place := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	mine := filepath.Join(h.home, "my-skills", "alpha")
 	copyTree(t, place, mine)
 	for _, c := range []struct {
@@ -184,8 +184,8 @@ func TestPlacingAgainLeavesWhatReplacedARecordedCopy(t *testing.T) {
 		replace func()
 		warning string
 	}{
-		{"a link", func() { swapForLink(t, place, mine) }, " is a link of your own and was left as it is; no placement was made for cursor"},
-		{"a file", func() { restore(t, place, "mine\n") }, " is not this skill and was left as it is; no placement was made for cursor"},
+		{"a link", func() { swapForLink(t, place, mine) }, " is a link of your own and was left as it is; no placement was made for cortex"},
+		{"a file", func() { restore(t, place, "mine\n") }, " is not this skill and was left as it is; no placement was made for cortex"},
 	} {
 		c.replace()
 		before, err := os.Lstat(place)
@@ -193,13 +193,13 @@ func TestPlacingAgainLeavesWhatReplacedARecordedCopy(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
+		out := h.run("--json", "skill", "place", "alpha", "--to", "cortex")
 		equal(t, c.what+": exit", out.exit, 0)
 		after, err := os.Lstat(place)
 		if err != nil || after.Mode() != before.Mode() || after.Size() != before.Size() {
 			t.Errorf("%s: what the user put at the placement path changed: %v", c.what, err)
 		}
-		equal(t, c.what+": copy_mode", copyModeOf(t, h, "alpha"), "cursor")
+		equal(t, c.what+": copy_mode", copyModeOf(t, h, "alpha"), "cortex")
 		equal(t, c.what+": warnings", strings.Join(warnings(h, out.stderr), "\n"), place+c.warning)
 		contains(t, c.what+": the result", h.one(out.stdout, "result")["summary"].(string), ", 1 placement skipped")
 	}
@@ -218,13 +218,13 @@ func TestTheHintForAnEditedCopyTakesTheLibraryVersion(t *testing.T) {
 	t.Parallel()
 	addAlpha := func(t *testing.T) *harness {
 		h, s := placementHarness(t)
-		h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy")
+		h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cortex", "--copy")
 		return h
 	}
 	for _, c := range []struct {
 		what    string
 		name    string
-		install func(t *testing.T) *harness // a machine with a copy of the skill placed in Cursor
+		install func(t *testing.T) *harness // a machine with a copy of the skill placed in Cortex Code
 		edit    func(t *testing.T, h *harness, place string)
 		remove  string
 		again   string
@@ -232,33 +232,33 @@ func TestTheHintForAnEditedCopyTakesTheLibraryVersion(t *testing.T) {
 		{
 			what: "the copy edited", name: "alpha", install: addAlpha,
 			edit:   func(t *testing.T, _ *harness, place string) { editCopy(t, place) },
-			remove: "agentx skill remove alpha --from cursor", again: "agentx skill place alpha --to cursor --copy",
+			remove: "agentx skill remove alpha --from cortex", again: "agentx skill place alpha --to cortex --copy",
 		},
 		{
 			what: "the library edited", name: "alpha", install: addAlpha,
 			edit: func(t *testing.T, h *harness, _ string) {
 				editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited in the library\n")
 			},
-			remove: "agentx skill remove alpha --from cursor", again: "agentx skill place alpha --to cursor --copy",
+			remove: "agentx skill remove alpha --from cortex", again: "agentx skill place alpha --to cortex --copy",
 		},
 		{
 			what: "a name that starts with a dash", name: "-mine", install: placeOwnCopy("-mine"),
 			edit:   func(t *testing.T, _ *harness, place string) { editCopy(t, place) },
-			remove: "agentx skill remove --from cursor -- -mine", again: "agentx skill place --to cursor --copy -- -mine",
+			remove: "agentx skill remove --from cortex -- -mine", again: "agentx skill place --to cortex --copy -- -mine",
 		},
 		{
 			what: "a name a shell has to quote", name: "it's mine", install: placeOwnCopy("it's mine"),
 			edit:   func(t *testing.T, _ *harness, place string) { editCopy(t, place) },
-			remove: `agentx skill remove 'it'\''s mine' --from cursor`, again: `agentx skill place 'it'\''s mine' --to cursor --copy`,
+			remove: `agentx skill remove 'it'\''s mine' --from cortex`, again: `agentx skill place 'it'\''s mine' --to cortex --copy`,
 		},
 	} {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
 			h := c.install(t)
-			place := filepath.Join(h.home, ".cursor", "skills", c.name)
+			place := filepath.Join(h.home, ".snowflake/cortex", "skills", c.name)
 			c.edit(t, h, place)
 
-			warned := warnings(h, h.mustRun("--json", "skill", "place", "--to", "cursor", "--", c.name).stderr)
+			warned := warnings(h, h.mustRun("--json", "skill", "place", "--to", "cortex", "--", c.name).stderr)
 			if len(warned) != 1 {
 				t.Fatalf("warnings = %q, want the one for the copy", warned)
 			}
@@ -276,9 +276,9 @@ func TestTheHintForAnEditedCopyTakesTheLibraryVersion(t *testing.T) {
 				t.Fatalf("the placement is not a copy: %v", err)
 			}
 			sameTree(t, "the copy", libraryTree(t, place), libraryTree(t, filepath.Join(h.library, c.name)))
-			equal(t, "copy_mode", copyModeOf(t, h, c.name), "cursor")
-			again := h.mustRun("--json", "skill", "place", "--to", "cursor", "--", c.name)
-			equal(t, "placements", strings.Join(placementsOf(t, h.one(again.stdout, "library_skill")), ";"), "cursor copy copy")
+			equal(t, "copy_mode", copyModeOf(t, h, c.name), "cortex")
+			again := h.mustRun("--json", "skill", "place", "--to", "cortex", "--", c.name)
+			equal(t, "placements", strings.Join(placementsOf(t, h.one(again.stdout, "library_skill")), ";"), "cortex copy copy")
 		})
 	}
 }
@@ -292,7 +292,7 @@ func editCopy(t *testing.T, place string) {
 }
 
 // placeOwnCopy is a machine with no source whose library holds a skill of
-// the user's own called name, a copy of it placed in Cursor.
+// the user's own called name, a copy of it placed in Cortex Code.
 func placeOwnCopy(name string) func(t *testing.T) *harness {
 	return func(t *testing.T) *harness {
 		h := placeHome(t)
@@ -300,20 +300,20 @@ func placeOwnCopy(name string) func(t *testing.T) *harness {
 			t.Fatal(err)
 		}
 		writeFile(t, filepath.Join(h.library, name, "SKILL.md"), skill("mine", "A skill of my own"))
-		h.mustRun("skill", "place", "--to", "cursor", "--copy", "--", name)
+		h.mustRun("skill", "place", "--to", "cortex", "--copy", "--", name)
 		return h
 	}
 }
 
 // editedCopyWarning is the message of the log event a copy of alpha that
-// copy_mode records for Cursor, and that does not hold the library's
+// copy_mode records for Cortex Code, and that does not hold the library's
 // version, is kept with.
 func editedCopyWarning(place string) string {
-	return keptCopyWarning(place, "alpha", "agentx skill remove alpha --from cursor", "agentx skill place alpha --to cursor --copy")
+	return keptCopyWarning(place, "alpha", "agentx skill remove alpha --from cortex", "agentx skill place alpha --to cortex --copy")
 }
 
 // keptCopyWarning is the message of the log event a copy of name that
-// copy_mode records for Cursor, and that does not hold the library's
+// copy_mode records for Cortex Code, and that does not hold the library's
 // version, is kept with, remove and again being the two commands it names:
 // the two lines of the text warning joined by "; ".
 func keptCopyWarning(place, name, remove, again string) string {
@@ -324,7 +324,7 @@ func keptCopyWarning(place, name, remove, again string) string {
 // keptCopyLines are the two lines of that warning in text: the warning, and
 // the line under it that names the two commands joined by &&.
 func keptCopyLines(place, name, remove, again string) (warning, wayOn string) {
-	return "cursor's copy of " + name + " is different from the library, so it was left unchanged (" + place + ")",
+	return "cortex's copy of " + name + " is different from the library, so it was left unchanged (" + place + ")",
 		wayOnPrefix + remove + " && " + again
 }
 
@@ -452,7 +452,7 @@ func TestSkillPlaceRefusesWhatItCannotFind(t *testing.T) {
 	h := placeHome(t)
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "alpha"), "SKILL.md"), skill("alpha", "A skill of my own"))
 
-	for _, args := range [][]string{{"gamma", "--to", "cursor"}, {"gamma", "--force"}} {
+	for _, args := range [][]string{{"gamma", "--to", "cortex"}, {"gamma", "--force"}} {
 		none := h.run(append([]string{"skill", "place"}, args...)...)
 		equal(t, strings.Join(args, " ")+": exit", none.exit, 5)
 		contains(t, strings.Join(args, " ")+": stderr", none.stderr, "the library holds no skill called \"gamma\"")
@@ -467,7 +467,7 @@ func TestSkillPlaceRefusesWhatItCannotFind(t *testing.T) {
 
 // TestSkillPlaceQuotesThePathsOfItsRows places a library directory whoever
 // made it named across two lines and with an escape sequence in it, where
-// Cursor already holds a copy of it, so the placement adopts that copy.
+// Cortex Code already holds a copy of it, so the placement adopts that copy.
 // The name on the line that confirms the placement is sanitised, and the
 // paths of its row and of the line naming what it adopted carry the name,
 // so they are quoted: every line stays one line, and each path still names
@@ -481,15 +481,15 @@ func TestSkillPlaceQuotesThePathsOfItsRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
-	copyTree(t, dir, filepath.Join(h.home, ".cursor", "skills", raw))
+	copyTree(t, dir, filepath.Join(h.home, ".snowflake/cortex", "skills", raw))
 
-	out := h.run("skill", "place", raw, "--to", "cursor")
+	out := h.run("skill", "place", raw, "--to", "cortex")
 	equal(t, "exit", out.exit, 0)
 	const quoted = `two\nrows \033[31mRED\033[0m"`
-	placement := `"` + filepath.Join(h.home, ".cursor", "skills") + string(filepath.Separator) + quoted
+	placement := `"` + filepath.Join(h.home, ".snowflake/cortex", "skills") + string(filepath.Separator) + quoted
 	library := `"` + h.library + string(filepath.Separator) + quoted
 	equal(t, "stdout", out.stdout, "✓ placed two rows [31mRED [0m in 1 configuration\n"+
-		"  cursor  symlink  "+placement+" -> "+library+"\n"+
+		"  cortex  symlink  "+placement+" -> "+library+"\n"+
 		"  adopted "+placement+"\n"+
 		"  always available to universal clients: codex, gemini-cli\n")
 }
@@ -506,7 +506,7 @@ func TestConfigPlacementPlacesCopies(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	isCopy := func(path string) bool {
 		info, err := os.Lstat(path)
 		return err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0
@@ -517,21 +517,21 @@ func TestConfigPlacementPlacesCopies(t *testing.T) {
 	settings := h.one(out.stdout, "settings")["settings"].(map[string]any)
 	deep(t, "copy_configurations", settings["copy_configurations"], any([]any{"github-copilot"}))
 
-	h.mustRun("skill", "add", s.url, "--all", "--to", "cursor", "--to", "github-copilot")
+	h.mustRun("skill", "add", s.url, "--all", "--to", "cortex", "--to", "github-copilot")
 	if !isCopy(copilot) {
 		t.Errorf("the install placed no copy in github-copilot")
 	}
-	if _, ok := isSymlink(t, cursor); !ok {
-		t.Errorf("the install placed no symlink in cursor")
+	if _, ok := isSymlink(t, cortex); !ok {
+		t.Errorf("the install placed no symlink in cortex")
 	}
 	equal(t, "copy_mode after the install", copyModeOf(t, h, "alpha"), "github-copilot")
 
-	out = h.run("config", "placement", "cursor", "copy")
+	out = h.run("config", "placement", "cortex", "copy")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "✓ cursor now places copies\n")
-	deep(t, "copy_configurations", readSettingsFile(t, h)["copy_configurations"], any([]any{"cursor", "github-copilot"}))
-	if _, ok := isSymlink(t, cursor); !ok {
-		t.Errorf("config placement changed the placement in cursor")
+	equal(t, "stdout", out.stdout, "✓ cortex now places copies\n")
+	deep(t, "copy_configurations", readSettingsFile(t, h)["copy_configurations"], any([]any{"cortex", "github-copilot"}))
+	if _, ok := isSymlink(t, cortex); !ok {
+		t.Errorf("config placement changed the placement in cortex")
 	}
 	inventory := h.inventory(t)
 	modes := map[string]string{}
@@ -539,7 +539,7 @@ func TestConfigPlacementPlacesCopies(t *testing.T) {
 		conf := c.(map[string]any)
 		modes[conf["id"].(string)] = conf["placement"].(string)
 	}
-	equal(t, "placements", modes["cursor"]+" "+modes["claude-code"]+" "+modes["codex"], "copy symlink library")
+	equal(t, "placements", modes["cortex"]+" "+modes["claude-code"]+" "+modes["codex"], "copy symlink library")
 	for _, e := range inventory["library"].([]any) {
 		if entry := e.(map[string]any); entry["name"] == "alpha" {
 			if strings.Contains(drift(entry), driftDisplaced) {
@@ -548,57 +548,57 @@ func TestConfigPlacementPlacesCopies(t *testing.T) {
 		}
 	}
 
-	out = h.run("--json", "skill", "place", "alpha", "--to", "cursor")
+	out = h.run("--json", "skill", "place", "alpha", "--to", "cortex")
 	equal(t, "exit of skill place", out.exit, 0)
-	if !isCopy(cursor) {
-		t.Errorf("skill place did not turn the symlink in cursor into a copy")
+	if !isCopy(cortex) {
+		t.Errorf("skill place did not turn the symlink in cortex into a copy")
 	}
-	equal(t, "copy_mode after skill place", copyModeOf(t, h, "alpha"), "cursor,github-copilot")
+	equal(t, "copy_mode after skill place", copyModeOf(t, h, "alpha"), "cortex,github-copilot")
 
-	out = h.run("config", "placement", "cursor", "symlink")
+	out = h.run("config", "placement", "cortex", "symlink")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "✓ cursor now places symlinks\n")
+	equal(t, "stdout", out.stdout, "✓ cortex now places symlinks\n")
 	deep(t, "copy_configurations", readSettingsFile(t, h)["copy_configurations"], any([]any{"github-copilot"}))
-	if !isCopy(cursor) {
-		t.Errorf("config placement changed the copy in cursor")
+	if !isCopy(cortex) {
+		t.Errorf("config placement changed the copy in cortex")
 	}
 
 	// --convert turns what is already there into the mode in the same
 	// mutation: beta's symlink becomes a recorded copy, and alpha, already a
 	// copy, is no symlink to convert.
-	beta := filepath.Join(h.home, ".cursor", "skills", "beta")
+	beta := filepath.Join(h.home, ".snowflake/cortex", "skills", "beta")
 	before := mutationVersion(t, h)
-	out = h.run("--json", "config", "placement", "cursor", "copy", "--convert")
+	out = h.run("--json", "config", "placement", "cortex", "copy", "--convert")
 	equal(t, "exit of --convert to copies", out.exit, 0)
 	equal(t, "mutations", mutationVersion(t, h)-before, 1)
 	equal(t, "events", strings.Join(h.types(h.events(out.stdout)), ","), "settings,library_skill,result")
-	equal(t, "the result", h.one(out.stdout, "result")["summary"], "cursor now places copies, 1 skill converted")
+	equal(t, "the result", h.one(out.stdout, "result")["summary"], "cortex now places copies, 1 skill converted")
 	if !isCopy(beta) {
-		t.Errorf("--convert did not turn the symlink of beta in cursor into a copy")
+		t.Errorf("--convert did not turn the symlink of beta in cortex into a copy")
 	}
-	equal(t, "copy_mode of beta", copyModeOf(t, h, "beta"), "cursor,github-copilot")
+	equal(t, "copy_mode of beta", copyModeOf(t, h, "beta"), "cortex,github-copilot")
 
 	// Back to symlinks: the copy that holds the library's version becomes a
 	// symlink, and the one edited in place is kept, still recorded.
 	writeFile(t, filepath.Join(beta, "SKILL.md"), "---\nname: beta\ndescription: edited\n---\n\nedited\n")
-	out = h.run("config", "placement", "cursor", "symlink", "--convert")
+	out = h.run("config", "placement", "cortex", "symlink", "--convert")
 	equal(t, "exit of --convert to symlinks", out.exit, 0)
-	equal(t, "the first line", strings.SplitN(out.stdout, "\n", 2)[0], "✓ cursor now places symlinks, 1 skill converted, 1 skipped")
-	contains(t, "stderr", out.stderr, "cursor's copy of beta is different from the library, so it was kept as a copy")
-	contains(t, "the way to discard it", out.stderr, "agentx skill remove beta --from cursor && agentx skill place beta --to cursor")
-	if _, ok := isSymlink(t, cursor); !ok {
-		t.Errorf("--convert did not turn the copy of alpha in cursor into a symlink")
+	equal(t, "the first line", strings.SplitN(out.stdout, "\n", 2)[0], "✓ cortex now places symlinks, 1 skill converted, 1 skipped")
+	contains(t, "stderr", out.stderr, "cortex's copy of beta is different from the library, so it was kept as a copy")
+	contains(t, "the way to discard it", out.stderr, "agentx skill remove beta --from cortex && agentx skill place beta --to cortex")
+	if _, ok := isSymlink(t, cortex); !ok {
+		t.Errorf("--convert did not turn the copy of alpha in cortex into a symlink")
 	}
 	equal(t, "copy_mode of alpha", copyModeOf(t, h, "alpha"), "github-copilot")
 	contains(t, "the edited copy", fileBody(t, filepath.Join(beta, "SKILL.md")), "description: edited")
-	equal(t, "copy_mode of beta", copyModeOf(t, h, "beta"), "cursor,github-copilot")
+	equal(t, "copy_mode of beta", copyModeOf(t, h, "beta"), "cortex,github-copilot")
 
 	for _, c := range []struct {
 		args []string
 		says string
 	}{
 		{[]string{"codex", "copy"}, "codex reads the library, so its placement is the library entry"},
-		{[]string{"cursor", "hardlink"}, `unknown placement "hardlink"`},
+		{[]string{"cortex", "hardlink"}, `unknown placement "hardlink"`},
 	} {
 		out = h.run(append([]string{"config", "placement"}, c.args...)...)
 		equal(t, "exit of "+c.args[0]+" "+c.args[1], out.exit, 1)

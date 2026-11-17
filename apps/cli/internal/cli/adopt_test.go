@@ -356,7 +356,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 	} {
 		h.accountGit("update-ref", ref, tip)
 	}
-	claude, cursor := filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".cursor", "skills")
+	claude, cortex := filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".snowflake/cortex", "skills")
 	for _, dir := range []string{
 		filepath.Join(h.library, "shared"), filepath.Join(h.library, "dup"), filepath.Join(claude, "dup"),
 		filepath.Join(claude, "lost"), filepath.Join(claude, "published"), filepath.Join(claude, "differs"),
@@ -365,7 +365,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 	} {
 		writeFile(t, mkdirs(t, dir, "SKILL.md"), skill(filepath.Base(dir), "A skill"))
 	}
-	writeFile(t, mkdirs(t, filepath.Join(cursor, "differs"), "SKILL.md"), skill("differs", "Another skill"))
+	writeFile(t, mkdirs(t, filepath.Join(cortex, "differs"), "SKILL.md"), skill("differs", "Another skill"))
 	for link, target := range map[string]string{
 		filepath.Join(claude, "linked"):     filepath.Join(h.home, "elsewhere"),
 		filepath.Join(h.library, "liblink"): filepath.Join(h.home, "elsewhere"),
@@ -405,7 +405,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 		{"dup", exitRefused, "the library already holds a skill called dup, a skill of a shared source, so " + filepath.Join(claude, "dup") + " cannot be adopted under that name"},
 		{"lost", exitRefused, "agentx already manages a skill called lost, so " + filepath.Join(claude, "lost") + " cannot be adopted under that name"},
 		{"published", exitRefused, "you already published a skill called published, so " + filepath.Join(claude, "published") + " cannot be adopted under that name"},
-		{"differs", exitRefused, "differs is in several agents' skills folders, with different files: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cursor, "differs") + " (cursor)"},
+		{"differs", exitRefused, "differs is in several agents' skills folders, with different files: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cortex, "differs") + " (cortex)"},
 		{"linked", exitRefused, "so there is no folder of linked to adopt"},
 		{"liblink", exitRefused, "liblink is a symlink to " + filepath.Join(h.home, "elsewhere") + ", and agentx adopts folders only"},
 		{"cloned", exitRefused, "cloned is a Git repository of its own, which agentx cannot adopt"},
@@ -435,7 +435,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 	equal(t, "every skill: exit", all.exit, 0)
 	for _, row := range []string{
 		"published could not be adopted: " + filepath.Join(claude, "published") + " has the name of a skill you already published. To adopt it, rename that folder",
-		"differs could not be adopted: in several agents' skills folders, with different files: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cursor, "differs") + " (cursor). To adopt it, keep one and remove or rename the others",
+		"differs could not be adopted: in several agents' skills folders, with different files: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cortex, "differs") + " (cortex). To adopt it, keep one and remove or rename the others",
 		"held could not be adopted: " + filepath.Join(h.agentx, "worktrees", "held") + " is in the way: agentx keeps the skill there. To adopt it, move " + filepath.Join(h.agentx, "worktrees", "held") + " somewhere else",
 	} {
 		contains(t, "every skill: stderr", all.stderr, row)
@@ -477,7 +477,7 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	equal(t, "the fork id", ev["fork_id"], h.trailer(tip, lineage.TrailerForkID))
 
 	clients := map[string]string{}
-	for _, client := range []string{".claude", ".codex", ".cursor"} {
+	for _, client := range []string{".claude", ".codex", ".snowflake/cortex"} {
 		clients[client] = filepath.Join(h.home, client, "skills", "jot")
 		writeFile(t, mkdirs(t, clients[client], "SKILL.md"), skill("jot", "Jot things down"))
 		writeFile(t, filepath.Join(clients[client], "pad.md"), "a pad\n")
@@ -493,7 +493,7 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	if link, _ := os.Readlink(filepath.Join(h.library, "jot")); link != "../../../agentx/worktrees/jot/jot" {
 		t.Errorf("from the clients: the library symlink is %q", link)
 	}
-	for _, client := range []string{".claude", ".cursor"} {
+	for _, client := range []string{".claude", ".snowflake/cortex"} {
 		if target, _ := os.Readlink(clients[client]); target != filepath.Join(h.library, "jot") {
 			t.Errorf("from the clients: %s's placement points at %q", client, target)
 		}

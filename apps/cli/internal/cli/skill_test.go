@@ -10,7 +10,7 @@ import (
 
 // installHarness is a machine with four configurations, one source added
 // and nothing installed yet: the starting point of every install test.
-// Claude Code and Cursor keep their own skills directories; Codex and
+// Claude Code and Cortex Code keep their own skills directories; Codex and
 // Gemini CLI read the library itself.
 func installHarness(t *testing.T) (*harness, *sourceRepo) {
 	t.Helper()
@@ -21,7 +21,7 @@ func installHarness(t *testing.T) (*harness, *sourceRepo) {
 // installHome is the home installHarness hands out.
 var installHome = &fixtureHome{
 	source: "skills",
-	dirs:   []string{".claude", ".cursor", ".codex", ".gemini"},
+	dirs:   []string{".claude", ".snowflake/cortex", ".codex", ".gemini"},
 	build: func(h *harness, s *sourceRepo) []string {
 		buildExecutable(s)
 		h.mustRun("source", "add", s.url)
@@ -74,9 +74,9 @@ func TestSkillAddPlacesTheSkillEverywhere(t *testing.T) {
 		t.Errorf("scripts/run.sh is not executable: %v", err)
 	}
 
-	// Claude Code and Cursor get a symlink; Codex and Gemini CLI, which read
+	// Claude Code and Cortex Code get a symlink; Codex and Gemini CLI, which read
 	// the library, get none and are placed at the library itself.
-	for _, rel := range []string{".claude/skills/alpha", ".cursor/skills/alpha"} {
+	for _, rel := range []string{".claude/skills/alpha", ".snowflake/cortex/skills/alpha"} {
 		link := filepath.Join(h.home, rel)
 		target, err := os.Readlink(link)
 		if err != nil {
@@ -117,14 +117,10 @@ func TestSkillAddPlacesTheSkillEverywhere(t *testing.T) {
 		p := p.(map[string]any)
 		got = append(got, p["configuration"].(string)+" "+p["mode"].(string)+" "+p["kind"].(string))
 	}
-	// Cursor reads the Claude Code directory as well as its own, so it sees
-	// the skill through both placements; the inventory reports what is
-	// there rather than what the install meant.
 	want = []string{
 		"claude-code symlink symlink",
 		"codex library library",
-		"cursor symlink symlink",
-		"cursor symlink symlink",
+		"cortex symlink symlink",
 		"gemini-cli library library",
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {

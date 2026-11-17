@@ -102,11 +102,15 @@ func newHarness(t *testing.T) *harness {
 	// PATH is the one value taken from the test process: commands under test
 	// still read it from the map, and tests that need another git replace it.
 	h.env = map[string]string{
-		"PATH":               os.Getenv("PATH"),
-		"HOME":               h.home,
-		"AGENTX_HOME":        h.agentx,
-		"AGENTX_LIBRARY":     h.library,
-		"XDG_CONFIG_HOME":    h.config,
+		"PATH":            os.Getenv("PATH"),
+		"HOME":            h.home,
+		"AGENTX_HOME":     h.agentx,
+		"AGENTX_LIBRARY":  h.library,
+		"XDG_CONFIG_HOME": h.config,
+		// Copilot reads the library unless COPILOT_HOME is set: set to the
+		// directory it uses by default, Copilot keeps a placement of its own,
+		// a client beside Claude Code that agentx places into.
+		"COPILOT_HOME":       filepath.Join(h.home, ".copilot"),
 		"AGENTX_HOSTNAME":    "test-host",
 		"AGENTX_PLATFORM_ID": "platform-test",
 	}

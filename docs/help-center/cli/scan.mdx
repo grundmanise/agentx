@@ -63,7 +63,7 @@ agentx cleans text from files it did not write before it prints it. See [Text ou
 
 ## See who reads what
 
-A client can read other clients' directories. Cursor reads `~/.claude/skills` and `~/.codex/skills` next to its own `~/.cursor/skills`, so a skill you put in the Claude Code directory appears under Cursor too. Some clients, such as Codex and Gemini CLI, read the library at `~/.agents/skills` directly, so every library skill appears under them without any link in their own directories.
+A client can read other clients' directories. Cursor reads `~/.claude/skills` and `~/.codex/skills` next to its own `~/.cursor/skills`, and OpenCode reads `~/.claude/skills`, so a skill you put in the Claude Code directory appears under them too. Some clients, such as Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode and Cline, read the library at `~/.agents/skills` directly, so every library skill appears under them without any link in their own directories. GitHub Copilot stops reading the library when `COPILOT_HOME` is set, and then keeps its skills in `$COPILOT_HOME/skills`. Cline also reads its own `~/.cline/skills`.
 
 ## Read the servers
 

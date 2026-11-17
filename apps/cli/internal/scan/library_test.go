@@ -3,6 +3,7 @@ package scan
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -171,5 +172,47 @@ func TestReadsLibraryFollowsLinksEitherWay(t *testing.T) {
 				t.Errorf("readsLibrary(%v, %s) = %t, want %t", dirs, library, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestSkillsDirsOfTheClientsThatReadTheLibrary pins which user skills
+// directories the clients read, as their docs and sources say, and so
+// whether agentx places a skill for them or counts the library entry as
+// their placement.
+func TestSkillsDirsOfTheClientsThatReadTheLibrary(t *testing.T) {
+	t.Parallel()
+	d := home.Dirs{User: "/u", Home: "/u/.agentx", Library: "/u/.agents/skills", Config: "/u/.config"}
+	withCopilotHome := d
+	withCopilotHome.CopilotHome = "/elsewhere/copilot"
+	tests := []struct {
+		slug  string
+		dirs  home.Dirs
+		want  []string
+		reads bool
+	}{
+		{"claude-code", d, []string{"/u/.claude/skills"}, false},
+		{"codex", d, []string{"/u/.codex/skills", "/u/.agents/skills"}, true},
+		{"gemini-cli", d, []string{"/u/.gemini/skills", "/u/.agents/skills"}, true},
+		{"cursor", d, []string{"/u/.cursor/skills", "/u/.claude/skills", "/u/.codex/skills", "/u/.agents/skills"}, true},
+		{"github-copilot", d, []string{"/u/.copilot/skills", "/u/.agents/skills"}, true},
+		{"github-copilot", withCopilotHome, []string{"/elsewhere/copilot/skills"}, false},
+		{"opencode", d, []string{"/u/.config/opencode/skills", "/u/.claude/skills", "/u/.agents/skills"}, true},
+		{"cline", d, []string{"/u/.cline/skills", "/u/.agents/skills"}, true},
+	}
+	for _, tt := range tests {
+		c, ok := Lookup(tt.slug)
+		if !ok {
+			t.Fatalf("no client %s", tt.slug)
+		}
+		if got := c.SkillsDirs(tt.dirs); !slices.Equal(got, tt.want) {
+			t.Errorf("%s with COPILOT_HOME %q: skills dirs = %v, want %v", tt.slug, tt.dirs.CopilotHome, got, tt.want)
+		}
+		if got := ReadsLibrary(c, tt.dirs); got != tt.reads {
+			t.Errorf("%s with COPILOT_HOME %q: reads the library = %v, want %v", tt.slug, tt.dirs.CopilotHome, got, tt.reads)
+		}
+	}
+	c, _ := Lookup("github-copilot")
+	if got := c.ConfigDir(withCopilotHome); got != "/elsewhere/copilot" {
+		t.Errorf("Copilot's configuration directory with COPILOT_HOME = %s, want /elsewhere/copilot", got)
 	}
 }

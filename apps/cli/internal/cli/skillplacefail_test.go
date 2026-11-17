@@ -48,14 +48,14 @@ func TestSkillAddSkipsAPlacementItCannotMake(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			h, s := installHarness(t)
-			c.build(t, h, filepath.Join(h.home, ".cursor", "skills"))
+			c.build(t, h, filepath.Join(h.home, ".snowflake/cortex", "skills"))
 
 			out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 			if out.exit != 0 {
 				t.Fatalf("skill add: exit %d, want the placement skipped and the install done\n%s", out.exit, out.stderr)
 			}
-			contains(t, "stderr", out.stderr, filepath.Join(h.home, ".cursor", "skills", "alpha"))
-			contains(t, "stderr", out.stderr, "no placement was made for cursor")
+			contains(t, "stderr", out.stderr, filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha"))
+			contains(t, "stderr", out.stderr, "no placement was made for cortex")
 			result := h.one(out.stdout, "result")
 			contains(t, "the result", result["summary"].(string), "1 placement skipped")
 
@@ -89,7 +89,7 @@ func TestRecoveryRefusesAStepItCannotApplyCleanly(t *testing.T) {
 
 	// A journal left by an interrupted install whose placement lands under
 	// a path that is a regular file: the step can never be applied.
-	blocked := filepath.Join(h.home, ".cursor", "blocked")
+	blocked := filepath.Join(h.home, ".snowflake/cortex", "blocked")
 	writeFile(t, blocked, "not a directory\n")
 	writeJournalFile(t, h, `{"progress":"staged","replace":[],"steps":[`+
 		`{"kind":"link","path":`+quote(filepath.Join(blocked, "alpha"))+`,"old":"absent","new":"link:`+filepath.Join(h.library, "alpha")+`"}]}`)

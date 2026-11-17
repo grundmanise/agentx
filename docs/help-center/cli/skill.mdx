@@ -16,9 +16,9 @@ agentx skill add anthropics/skills --name pdf
 ✓ installed pdf from https://github.com/anthropics/skills under skills/pdf: 4 placements
   claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
   codex        library  /home/me/.agents/skills/pdf
-  cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
+  cursor       library  /home/me/.agents/skills/pdf
   gemini-cli   library  /home/me/.agents/skills/pdf
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 ```
 
 Each row is one client's placement. For a universal client, the placement is the library entry itself. See [Clients that see every skill](#clients-that-see-every-skill).
@@ -98,14 +98,14 @@ warning: pdf under skills/pdf-v2 was skipped: the source has another skill named
 
 ### Clients that see every skill
 
-Some clients, such as Codex and Gemini CLI, read the library directly. These are universal clients. They see every skill in the library, so they get no link of their own. A client also becomes universal when its skills directory and the library are one directory through a symlink. For example, if `~/.claude/skills` is a symlink to the library, Claude Code reads the library, and so does Cursor, which also reads `~/.claude/skills`.
+Some clients read the library directly: Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode and Cline, among others. These are universal clients. They see every skill in the library, so they get no link of their own. GitHub Copilot reads the library only while `COPILOT_HOME` is not set; with `COPILOT_HOME` set, it gets a link in `$COPILOT_HOME/skills`. A client also becomes universal when its skills directory and the library are one directory through a symlink. For example, if `~/.claude/skills` is a symlink to the library, Claude Code reads the library.
 
 Every other client gets a symlink in its own skills directory, pointing at the library.
 
 A universal client sees every skill in your library, even if you disabled that client with `agentx config disable` or left it out of `--to`. The install output ends with a line that names them:
 
 ```text
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 ```
 
 The line is left out when no universal client is installed. To take a skill away from the universal clients, remove it from the library. See [Clients that read the library](#clients-that-read-the-library).
@@ -115,7 +115,7 @@ The line is left out when no universal client is installed. To take a skill away
 By default a skill is placed in every enabled configuration. To choose, name the configurations with `--to`:
 
 ```sh
-agentx skill add anthropics/skills --name pdf --to claude-code --to cursor
+agentx skill add anthropics/skills --name pdf --to claude-code --to windsurf
 ```
 
 `--to` names the configurations for this install, in place of every enabled one. You can name a configuration you disabled. Universal clients see the skill whatever `--to` names.
@@ -149,8 +149,8 @@ agentx installs only regular files and directories. It leaves out a symlink or a
 A copy agentx placed stops matching the library when you edit the copy or when the skill in the library changes. `agentx skill place` and `agentx config enable --place-all` keep that copy exactly as it is and skip it, with a warning:
 
 ```text
-warning: cursor's copy of pdf is different from the library, so it was left unchanged (/home/me/.cursor/skills/pdf)
-  to replace it with the library version: agentx skill remove pdf --from cursor && agentx skill place pdf --to cursor --copy
+warning: windsurf's copy of pdf is different from the library, so it was left unchanged (/home/me/.codeium/windsurf/skills/pdf)
+  to replace it with the library version: agentx skill remove pdf --from windsurf && agentx skill place pdf --to windsurf --copy
 ```
 
 To replace the copy with the library version, run the command on the second line of the warning. This deletes what the copy holds, so save what you want to keep first.
@@ -213,18 +213,18 @@ agentx skill add --all --except standup
 Put a skill the library already holds into another client:
 
 ```sh
-agentx skill place pdf --to cursor
+agentx skill place pdf --to windsurf
 ```
 
 ```text
 ✓ placed pdf in 1 configuration
-  cursor  symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
-  always available to universal clients: codex, gemini-cli
+  windsurf  symlink  /home/me/.codeium/windsurf/skills/pdf -> /home/me/.agents/skills/pdf
+  always available to universal clients: codex, cursor, gemini-cli
 ```
 
-The first line counts the configurations you placed the skill in, and any placements agentx skipped. Each client you named gets one row. A client whose placement was skipped gets a row only if it sees the skill through another client's skills directory, as Cursor reads Claude Code's.
+The first line counts the configurations you placed the skill in, and any placements agentx skipped. Each client you named gets one row. A client whose placement was skipped gets a row only if it sees the skill through another client's skills directory.
 
-Name each client with `--to`, once for each. Without `--to`, agentx places the skill into every enabled client and puts back what `agentx skill list` flags there; see [Put back placements](#put-back-placements). Add `--copy` for a client that cannot follow a symlink; agentx remembers the choice, as it does for `agentx skill add --copy`. To turn a recorded copy back into a symlink, take it away with `agentx skill remove pdf --from cursor`, then place the skill again with `agentx skill place pdf --to cursor`.
+Name each client with `--to`, once for each. Without `--to`, agentx places the skill into every enabled client and puts back what `agentx skill list` flags there; see [Put back placements](#put-back-placements). Add `--copy` for a client that cannot follow a symlink; agentx remembers the choice, as it does for `agentx skill add --copy`. To turn a recorded copy back into a symlink, take it away with `agentx skill remove pdf --from windsurf`, then place the skill again with `agentx skill place pdf --to windsurf`.
 
 What is already at the path decides what happens, as for an install (see [If something is already there](#if-something-is-already-there)), with one difference: a directory that holds other content stops the command, unless you add `--force`. See [When the directory differs from the library](#when-the-directory-differs-from-the-library).
 
@@ -251,10 +251,10 @@ agentx skill place pdf
 ✓ placed pdf in 4 configurations
   claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
   codex        library  /home/me/.agents/skills/pdf
-  cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
+  cursor       library  /home/me/.agents/skills/pdf
   gemini-cli   library  /home/me/.agents/skills/pdf
   adopted /home/me/.claude/skills/pdf
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 ```
 
 - A missing placement is made again: a copy if you placed a copy there before, a link otherwise.
@@ -282,10 +282,10 @@ agentx skill place pdf --force
 ✓ placed pdf in 4 configurations
   claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
   codex        library  /home/me/.agents/skills/pdf
-  cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
+  cursor       library  /home/me/.agents/skills/pdf
   gemini-cli   library  /home/me/.agents/skills/pdf
   discarded what /home/me/.claude/skills/pdf held
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 ```
 
 To keep that content, move the directory out of the client's skills directory, for example to use it as a skill of your own. Then run `skill place` again to put the link back. `--force` never changes the library.
@@ -301,7 +301,7 @@ One of your own skills is placed as `skill add` places it. `skill place` also pu
 `skill place` stops with exit code 6 and changes nothing when symlinks join the paths it would change, for example a client's skills directory that links into the library or into another client's directory. The error names the paths. Remove the symlink that joins them, then run the command again.
 
 ```text
-error: /home/me/.cursor/skills/pdf lies inside /home/me/.claude/skills/pdf, and placing one would change the other, so nothing was placed
+error: /home/me/.codeium/windsurf/skills/pdf lies inside /home/me/.claude/skills/pdf, and placing one would change the other, so nothing was placed
 hint: replace the symlink that joins them with the files it leads to, or move one of them elsewhere, then run 'agentx skill place pdf' again
 ```
 
@@ -821,12 +821,12 @@ hint: rename yours with 'agentx skill rename release-notes <new>', then publish 
 From one client:
 
 ```sh
-agentx skill remove pdf --from cursor
+agentx skill remove pdf --from windsurf
 ```
 
 ```text
-✓ removed pdf from cursor: 1 placement
-  cursor  symlink  /home/me/.cursor/skills/pdf
+✓ removed pdf from windsurf: 1 placement
+  windsurf  symlink  /home/me/.codeium/windsurf/skills/pdf
 ```
 
 From the machine altogether:
@@ -838,8 +838,8 @@ agentx skill remove pdf
 ```text
 ✓ removed pdf from the library: 4 placements
   claude-code  symlink  /home/me/.claude/skills/pdf
-  cursor       copy     /home/me/.cursor/skills/pdf
   codex        library  /home/me/.agents/skills/pdf
+  cursor       library  /home/me/.agents/skills/pdf
   gemini-cli   library  /home/me/.agents/skills/pdf
   deleted /home/me/.agents/skills/pdf and refs/heads/managed/pdf
 ```
@@ -876,7 +876,7 @@ agentx deletes only a link that points straight at the library entry. A link of 
 
 ```text
 warning: /home/me/.claude/skills/pdf points at /home/me/mylinks/pdf, not at /home/me/.agents/skills/pdf and was left as it is; it no longer leads to pdf
-warning: /home/me/.cursor/skills/pdf is a directory agentx did not place there and was left as it is; cursor still sees it
+warning: /home/me/.codeium/windsurf/skills/pdf is a directory agentx did not place there and was left as it is; windsurf still sees it
 ✓ removed pdf from the library: 2 placements, 2 placements left in place
   ...
 ```
@@ -886,7 +886,7 @@ Here `~/mylinks/pdf` points at the library entry. The removal deletes that entry
 agentx removes a copy it placed even if you changed it, and warns you:
 
 ```text
-warning: cursor's copy of pdf was different from the library; removing it deleted those changes (/home/me/.cursor/skills/pdf)
+warning: windsurf's copy of pdf was different from the library; removing it deleted those changes (/home/me/.codeium/windsurf/skills/pdf)
 ```
 
 Take a copy of anything you want to keep before removing it.
@@ -913,16 +913,6 @@ After a removal, agentx checks each client again. If a client still sees the ski
 ```text
 warning: codex still sees pdf at /home/me/.codex/skills/pdf, which agentx did not place there
 ```
-
-A client that reads another client's skills directory, as Cursor reads Claude Code's, keeps seeing the skill through that client's placement after `--from` removes its own. agentx warns and names the client to remove it from:
-
-```text
-warning: cursor still sees pdf through claude-code's placement at /home/me/.claude/skills/pdf; remove it from claude-code to take it from both
-✓ removed pdf from cursor: 1 placement
-  cursor  symlink  /home/me/.cursor/skills/pdf
-```
-
-To take the skill from both, name both clients: `agentx skill remove pdf --from cursor --from claude-code`.
 
 Two clients that share one skills directory, as Zencoder and Zenflow share `~/.zencoder/skills`, share each placement in it. Removing the skill from one takes it from both, and agentx warns:
 
@@ -961,7 +951,7 @@ agentx skill place pdf --machine cloud --to claude-code
 Add `--copy` to give those configurations a copy instead of a symlink, as on this machine. The snapshot's settings remember the choice. When you remove the skill from a configuration with `--from`, that configuration no longer gets a copy:
 
 ```sh
-agentx skill place pdf --machine cloud --to cursor --copy
+agentx skill place pdf --machine cloud --to windsurf --copy
 ```
 
 The cloud machine always takes the latest version of the skill: the account remote's for one of your own skills, and the source's for a skill of a source. Publish your own skills first. If the account remote does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine. [Adopt it](/cli/adopt#skills-adopted-as-they-are) and publish it first.

@@ -34,7 +34,7 @@ func TestSkillAddPointsAtSkillPlaceForALibrarySkill(t *testing.T) {
 		args []string // after skill add
 		hint string
 	}{
-		{name: "alpha", args: []string{"alpha", "--to", "cursor"}, hint: "agentx skill place alpha --to cursor"},
+		{name: "alpha", args: []string{"alpha", "--to", "cortex"}, hint: "agentx skill place alpha --to cortex"},
 		{name: "-mine", args: []string{"--copy", "--", "-mine"}, hint: "agentx skill place --copy -- -mine"},
 	} {
 		message := c.name + " is already in the library; skill add installs a skill from a source"
@@ -60,8 +60,8 @@ func TestSkillAddPointsAtSkillPlaceForALibrarySkill(t *testing.T) {
 			t.Errorf("%s: the refusal changed what is on disk:\nbefore %v\nafter  %v", c.name, before, after)
 		}
 		h.mustRun(shellCommands(c.hint)[0][1:]...)
-		if _, err := os.Lstat(filepath.Join(h.home, ".cursor", "skills", c.name)); err != nil {
-			t.Errorf("%s: the command the hint names placed nothing in cursor: %v", c.name, err)
+		if _, err := os.Lstat(filepath.Join(h.home, ".snowflake/cortex", "skills", c.name)); err != nil {
+			t.Errorf("%s: the command the hint names placed nothing in cortex: %v", c.name, err)
 		}
 	}
 
@@ -70,7 +70,7 @@ func TestSkillAddPointsAtSkillPlaceForALibrarySkill(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(h.library, "notes", "README.md"), "no SKILL.md here\n")
 	for _, name := range []string{"gamma", "notes"} {
-		text := h.run("skill", "add", name, "--to", "cursor")
+		text := h.run("skill", "add", name, "--to", "cortex")
 		equal(t, name+": exit", text.exit, 1)
 		equal(t, name+": stderr", text.stderr, "error: not a source URL: "+name+"\nhint: accepted forms: "+source.Forms+"\n")
 	}
@@ -86,11 +86,11 @@ func TestSkillAddReadsASourceFormAsASource(t *testing.T) {
 	id := source.ID(s.url)
 	ownLibrarySkill(t, h, id)
 
-	out := h.run("--json", "skill", "add", id, "--name", "alpha", "--to", "cursor")
+	out := h.run("--json", "skill", "add", id, "--name", "alpha", "--to", "cortex")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "installed", h.one(out.stdout, "library_skill")["name"], "alpha")
-	if _, ok := isSymlink(t, filepath.Join(h.home, ".cursor", "skills", "alpha")); !ok {
-		t.Error("the skill of the source was not placed in cursor")
+	if _, ok := isSymlink(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")); !ok {
+		t.Error("the skill of the source was not placed in cortex")
 	}
 }
 

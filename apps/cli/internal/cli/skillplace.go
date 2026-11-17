@@ -817,8 +817,7 @@ func (inv *invocation) printPlaced(lib scan.LibrarySkill, targets []placeTarget,
 	out := inv.out
 	// The configurations placed into, not the rows: a configuration whose
 	// placement was skipped is not counted, yet still has a row when it sees
-	// the skill through another client's skills directory, as Cursor reads
-	// Claude Code's.
+	// the skill through another client's skills directory.
 	line := "placed " + out.paint(heading, sanitised(lib.Name)) + " in " + out.paint(noteStyle, plural(len(done.placed), "configuration"))
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
@@ -879,9 +878,9 @@ func (inv *invocation) printAdoptions(adoptions []string) {
 // ownPlacements are the placements the text of a command that placed a
 // skill shows: one per configuration it covered, the one at that
 // configuration's own place. The rescan finds more than that. A client that
-// reads another client's skills directory, as Cursor reads Claude Code's,
-// sees the skill through that client's placement as well as its own, and
-// printing both under it would give one client two rows for one placement.
+// reads another client's skills directory sees the skill through that
+// client's placement as well as its own, and printing both under it would
+// give one client two rows for one placement.
 // That path is the other client's placement and is shown as that client's
 // row. The library_skill event is left as the rescan found it, every path
 // included, for whoever wants each way a client sees the skill.

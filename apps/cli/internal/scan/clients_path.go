@@ -37,6 +37,21 @@ func (pathClient) at(d home.Dirs, spec string) string {
 	return filepath.Join(d.User, spec)
 }
 
+// readsMore is a path client that reads more user skills directories after
+// its own, each named as a pathClient's skills are.
+type readsMore struct {
+	pathClient
+	more []string
+}
+
+func (r readsMore) SkillsDirs(d home.Dirs) []string {
+	dirs := r.pathClient.SkillsDirs(d)
+	for _, spec := range r.more {
+		dirs = append(dirs, r.at(d, spec))
+	}
+	return dirs
+}
+
 // pathClients is the agent list of the skills CLI (npm package skills 1.7.0)
 // minus the six clients with their own file and minus the agents that are
 // only detected from a project directory, which have no user-scope
@@ -51,7 +66,7 @@ var pathClients = []Client{
 	pathClient{"augment", "Augment", ".augment", ".augment/skills", ".augment/skills"},
 	pathClient{"autohand-code", "Autohand Code CLI", ".autohand", ".autohand/skills", ".autohand/skills"},
 	pathClient{"bob", "IBM Bob", ".bob", ".bob/skills", ".bob/skills"},
-	pathClient{"cline", "Cline", ".cline", "library", ".agents/skills"},
+	readsMore{pathClient{"cline", "Cline", ".cline", ".cline/skills", ".agents/skills"}, []string{"library"}},
 	pathClient{"codearts-agent", "CodeArts Agent", ".codeartsdoer", ".codeartsdoer/skills", ".codeartsdoer/skills"},
 	pathClient{"codebuddy", "CodeBuddy", ".codebuddy", ".codebuddy/skills", ".codebuddy/skills"},
 	pathClient{"codemaker", "Codemaker", ".codemaker", ".codemaker/skills", ".codemaker/skills"},
@@ -89,7 +104,7 @@ var pathClients = []Client{
 	pathClient{"neovate", "Neovate", ".neovate", ".neovate/skills", ".neovate/skills"},
 	pathClient{"ona", "Ona", ".ona", ".ona/skills", ".ona/skills"},
 	pathClient{"openclaw", "OpenClaw", ".openclaw", ".openclaw/skills", "skills"},
-	pathClient{"opencode", "OpenCode", "xdg/opencode", "xdg/opencode/skills", ".agents/skills"},
+	readsMore{pathClient{"opencode", "OpenCode", "xdg/opencode", "xdg/opencode/skills", ".agents/skills"}, []string{".claude/skills", "library"}},
 	pathClient{"openhands", "OpenHands", ".openhands", ".openhands/skills", ".openhands/skills"},
 	pathClient{"pi", "Pi", ".pi/agent", ".pi/agent/skills", ".pi/skills"},
 	pathClient{"pochi", "Pochi", ".pochi", ".pochi/skills", ".pochi/skills"},

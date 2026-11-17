@@ -82,14 +82,14 @@ func TestSkillRemoveLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 
 // TestSkillRemoveSaysALinkThroughARemovedPlacementLeadsNowhere: a link of
 // the user's is left however it resolves, but what the removal says of it
-// follows where it leads. Here it leads through Cursor's placement, which
+// follows where it leads. Here it leads through Cortex Code's placement, which
 // the same removal deletes, so the link stays and no longer leads to the
 // skill, and the warning says that.
 func TestSkillRemoveSaysALinkThroughARemovedPlacementLeadsNowhere(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor").exit, 0)
-	through := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "cortex").exit, 0)
+	through := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	place := filepath.Join(h.home, ".claude", "skills", "alpha")
 	if err := os.MkdirAll(filepath.Dir(place), 0o755); err != nil {
 		t.Fatal(err)
@@ -98,9 +98,9 @@ func TestSkillRemoveSaysALinkThroughARemovedPlacementLeadsNowhere(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	out := h.run("skill", "remove", "alpha", "--from", "claude-code", "--from", "cursor")
+	out := h.run("skill", "remove", "alpha", "--from", "claude-code", "--from", "cortex")
 	equal(t, "exit", out.exit, 0)
-	nothingAt(t, "the cursor placement", through)
+	nothingAt(t, "the cortex placement", through)
 	stillTheirs(t, "after a removal", place, through)
 	contains(t, "the warning", out.stderr, place+" points at "+through+", not at ")
 	contains(t, "the warning", out.stderr, "and was left as it is; it no longer leads to alpha\n")
@@ -123,9 +123,9 @@ func TestSkillPlaceLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
 			equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "codex").exit, 0)
-			place, target := userLink(t, h, ".cursor", "alpha")
+			place, target := userLink(t, h, ".snowflake/cortex", "alpha")
 
-			out := h.run(append([]string{"skill", "place", "alpha", "--to", "cursor"}, c.args...)...)
+			out := h.run(append([]string{"skill", "place", "alpha", "--to", "cortex"}, c.args...)...)
 			equal(t, "exit", out.exit, 0)
 			stillTheirs(t, "after a placement", place, target)
 			contains(t, "the warning", out.stderr, place)
@@ -143,9 +143,9 @@ func TestSkillAddLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "codex").exit, 0)
-	place, target := userLink(t, h, ".cursor", "alpha")
+	place, target := userLink(t, h, ".snowflake/cortex", "alpha")
 
-	out := h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor")
+	out := h.run("skill", "add", s.url, "--name", "alpha", "--to", "cortex")
 	equal(t, "exit", out.exit, 0)
 	stillTheirs(t, "after an install", place, target)
 	contains(t, "the warning", out.stderr, "is a link of your own")

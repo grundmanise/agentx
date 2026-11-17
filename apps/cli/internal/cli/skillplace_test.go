@@ -20,18 +20,18 @@ func TestSkillAddToOverridesTheTargets(t *testing.T) {
 	unknown := h.run("skill", "add", s.url, "--name", "alpha", "--to", "nowhere")
 	equal(t, "exit of an unknown configuration", unknown.exit, 5)
 	contains(t, "stderr of an unknown configuration", unknown.stderr, "detected configurations:")
-	equal(t, "exit", h.run("config", "disable", "cursor").exit, 0)
+	equal(t, "exit", h.run("config", "disable", "cortex").exit, 0)
 
-	out := h.run("--json", "skill", "add", s.url, "--name", "alpha", "--to", "cursor")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha", "--to", "cortex")
 	equal(t, "exit", out.exit, 0)
-	if _, err := os.Lstat(filepath.Join(h.home, ".cursor", "skills", "alpha")); err != nil {
+	if _, err := os.Lstat(filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")); err != nil {
 		t.Errorf("the configuration --to named has no placement: %v", err)
 	}
 	if _, err := os.Lstat(filepath.Join(h.home, ".claude", "skills", "alpha")); err == nil {
 		t.Error("a configuration --to did not name was placed into")
 	}
 	for _, p := range placementsOf(t, h.one(out.stdout, "library_skill")) {
-		if !strings.Contains(p, "cursor") {
+		if !strings.Contains(p, "cortex") {
 			t.Errorf("placement %q, want the --to configuration alone", p)
 		}
 	}
@@ -47,7 +47,7 @@ func TestSkillAddSkipsDisabledConfigurations(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(h.home, ".claude", "skills", "alpha")); err == nil {
 		t.Error("a disabled configuration was placed into")
 	}
-	if _, err := os.Lstat(filepath.Join(h.home, ".cursor", "skills", "alpha")); err != nil {
+	if _, err := os.Lstat(filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")); err != nil {
 		t.Errorf("an enabled configuration has no placement: %v", err)
 	}
 }
@@ -82,7 +82,7 @@ func TestSkillAddCopyPlacesCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Join(settings.CopyMode["alpha"], ",")
-	equal(t, "copy_mode", got, "claude-code,cursor")
+	equal(t, "copy_mode", got, "claude-code,cortex")
 	equal(t, "journals left behind", journalCount(t, h), before)
 	for _, p := range placementsOf(t, h.one(out.stdout, "library_skill")) {
 		if strings.HasPrefix(p, "claude-code") && !strings.Contains(p, "copy copy") {
@@ -104,7 +104,7 @@ func TestSkillAddAdoptsAPlacementOfTheSameVersion(t *testing.T) {
 	same := filepath.Join(h.home, ".claude", "skills", "alpha")
 	copyTree(t, filepath.Join(s.work, "skills", "alpha"), same)
 	// And a directory holding something else.
-	other2 := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	other2 := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	if err := os.MkdirAll(other2, 0o755); err != nil {
 		t.Fatal(err)
 	}
