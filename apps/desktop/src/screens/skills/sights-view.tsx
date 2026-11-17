@@ -109,8 +109,8 @@ const SightsBody = ({
 };
 
 /**
- * The notice under the chips while some agent sees more than one skill of the name: who also sees
- * which other one, then Details, which opens the table on hover.
+ * The notice under the chips while some agent sees more than one skill of the name: how many skills
+ * of the name there are, then Details, which opens the table on hover.
  */
 export const SightsNotice = ({
   sights,

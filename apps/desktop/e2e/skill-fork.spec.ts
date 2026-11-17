@@ -300,16 +300,14 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   // see the fork alone.
   const agents = fork.getByRole("region", { name: "Agents" });
   const notice = agents.getByRole("note", { name: "Skills of the same name" });
-  await expect(notice).toContainText(
-    "Claude Code also sees the acme-tools plugin's commit-helper. It picks one of the two."
-  );
+  await expect(notice).toContainText("Found 2 skills named commit-helper.");
   await notice.getByText("Details", { exact: true }).hover();
   const table = page.getByRole("table", {
     name: "Skills named commit-helper",
   });
   await expect(table.getByRole("columnheader")).toHaveText([
     "Agent",
-    "Yours",
+    "Your skill",
     "acme-tools",
   ]);
   await expect(table.getByRole("rowheader")).toHaveText([
@@ -321,7 +319,7 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   ).toHaveText(["Sees it", "Sees it"]);
   await expect(
     page.getByText(
-      "The highlighted agent sees both skills. It's up to the agent to decide which one to use. To prevent possible clashes, rename your skill."
+      "To avoid clashes, rename your skill or uninstall the acme-tools plugin."
     )
   ).toBeVisible();
 });
