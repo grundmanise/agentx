@@ -123,7 +123,10 @@ export const commitHelperRenamed = {
   ...inventory,
   library: [
     ...inventory.library,
-    ownEntry("my-commit-helper", "h-commit-renamed"),
+    // A rename keeps the skill's fork id.
+    ownEntry("my-commit-helper", "h-commit-renamed", {
+      fork_id: "f-commit-helper",
+    }),
   ],
   scan_counter: 3,
   skills: [

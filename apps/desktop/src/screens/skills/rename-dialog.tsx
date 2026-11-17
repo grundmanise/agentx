@@ -6,7 +6,7 @@
 // that follows holds it. A refusal, such as a name another skill has (exit 6), keeps the dialog
 // open with the CLI's message and its hint in the dialog's own words (`renameHint`); a change to
 // the name clears it.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -91,6 +91,7 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
   const [refusal, setRefusal] = useState<Problem | undefined>();
   const pending = usePending(renameLabel(row));
   const nameRef = useRef<HTMLInputElement>(null);
+  const ruleId = useId();
   const ready = isSkillName(name) && name !== row.name;
 
   // The name is selected as the dialog opens, so typing replaces it.
@@ -98,20 +99,21 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
     nameRef.current?.select();
   }, []);
 
-  const submit = async () => {
-    if (pending || !ready) {
-      return;
-    }
-    setRefusal(undefined);
-    const outcome = await runUntilSettled(renameArgs(row.name, name), {
-      keep: [row.name, name],
+  // Renames to `to`. Retry, after another command held the lock, runs this again, so a rename that
+  // then succeeds closes the dialog and selects the skill as the first try would.
+  const rename = async (to: string) => {
+    const outcome = await runUntilSettled(renameArgs(row.name, to), {
+      keep: [row.name, to],
       label: renameLabel(row),
       ownFailure: true,
-      success: `Renamed ${row.name} skill to ${name}`,
+      retry: () => {
+        void rename(to);
+      },
+      success: `Renamed ${row.name} skill to ${to}`,
     });
     if (outcome.exitCode === EXIT_CODES.ok) {
       closeRename();
-      openSkill(name);
+      openSkill(to);
       return;
     }
     // Exit 4 opens the skill whose merge is pending (src/store/runner.ts).
@@ -127,12 +129,20 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
     nameRef.current?.select();
   };
 
+  const submit = () => {
+    if (pending || !ready) {
+      return;
+    }
+    setRefusal(undefined);
+    void rename(name);
+  };
+
   return (
     <form
       className="gap-dialog flex flex-col"
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        submit();
       }}
     >
       <div className="gap-input-label flex flex-col">
@@ -141,6 +151,7 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
           kind="mono"
           aria-label="Name"
           aria-invalid={breaksSkillNameRule(name) ? true : undefined}
+          aria-describedby={breaksSkillNameRule(name) ? ruleId : undefined}
           value={name}
           disabled={pending}
           onChange={(e) => {
@@ -149,7 +160,7 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
           }}
         />
         {breaksSkillNameRule(name) && (
-          <p className="type-secondary text-text-hint m-0">
+          <p id={ruleId} className="type-secondary text-text-hint m-0">
             {`Use ${SKILL_NAME_RULE}`}
           </p>
         )}
