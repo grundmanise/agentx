@@ -3,7 +3,8 @@
 // on it opens a hover card: a table with a column for each place that holds a skill of the name
 // and a row for each agent that sees more than one, highlighted, then a row for the agents that
 // see the same one (`sightsTable`). `onRename`, given while you have a skill of the name, adds
-// Rename your skill to the notice and the hover card, which opens the Rename dialog for it.
+// Rename your skill to the notice, right-aligned on the text's line, which opens the Rename dialog
+// for it. The hover card only explains: it holds no button.
 import { useId } from "react";
 
 import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
@@ -56,13 +57,7 @@ const Sees = ({ sees }: { sees: boolean }) =>
   );
 
 /** The hover card's body: its title, the table, then what the highlighted rows mean. */
-const SightsBody = ({
-  table,
-  onRename,
-}: {
-  table: SightsTable;
-  onRename: OnRename;
-}) => {
+const SightsBody = ({ table }: { table: SightsTable }) => {
   const titleId = useId();
   return (
     <>
@@ -99,10 +94,7 @@ const SightsBody = ({
         </TableBody>
       </Table>
       {table.footer !== undefined && (
-        <div className="flex flex-col items-start gap-2.5">
-          <p className="type-secondary text-text-muted m-0">{table.footer}</p>
-          <RenameYours table={table} onRename={onRename} />
-        </div>
+        <p className="type-secondary text-text-muted m-0">{table.footer}</p>
       )}
     </>
   );
@@ -128,27 +120,27 @@ export const SightsNotice = ({
     <div
       role="note"
       aria-label="Skills of the same name"
-      className="rounded-sights-notice border-tone-attention-border bg-tone-attention-bg flex items-start gap-2.5 border px-3 py-2.5"
+      className="rounded-sights-notice border-tone-attention-border bg-tone-attention-bg flex items-center gap-2.5 border px-3 py-2.5"
     >
-      <span className="text-tone-attention-fg flex h-5 flex-none items-center">
+      <span className="text-tone-attention-fg flex h-5 flex-none items-center self-start">
         <AlertTriangleIcon size="xs" />
       </span>
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-2.5">
-        <p className="type-secondary text-text-secondary m-0 text-pretty">
-          {text}{" "}
-          <HoverCard>
-            <HoverCardTrigger asChild>
-              <span className="underline decoration-dashed underline-offset-2">
-                Details
-              </span>
-            </HoverCardTrigger>
-            <HoverCardContent>
-              <SightsBody table={table} onRename={onRename} />
-            </HoverCardContent>
-          </HoverCard>
-        </p>
+      <p className="type-secondary text-text-secondary m-0 min-w-0 flex-1 text-pretty">
+        {text}{" "}
+        <HoverCard>
+          <HoverCardTrigger asChild>
+            <span className="underline decoration-dashed underline-offset-2">
+              Details
+            </span>
+          </HoverCardTrigger>
+          <HoverCardContent>
+            <SightsBody table={table} />
+          </HoverCardContent>
+        </HoverCard>
+      </p>
+      <span className="flex flex-none items-center">
         <RenameYours table={table} onRename={onRename} />
-      </div>
+      </span>
     </div>
   );
 };
