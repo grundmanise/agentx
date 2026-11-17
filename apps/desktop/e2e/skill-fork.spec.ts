@@ -260,7 +260,7 @@ test("refused in place with Use a different name on: the hint leaves the switch 
   ]);
 });
 
-test("a plugin's skill: Use a different name starts on; turned off, Fork runs skill fork <skill> and AGENTS says who sees more than one skill", async ({
+test("a plugin's skill: Use a different name starts on; turned off, Fork runs skill fork <plugin>:<skill> and AGENTS says who sees more than one skill", async ({
   cli,
   page,
 }) => {
@@ -281,7 +281,7 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   await expect(dialog).toContainText(
     "Agents with the plugin will see more than one skill named commit-helper."
   );
-  cli.register(["skill", "fork", "commit-helper"], {
+  cli.register(["skill", "fork", "acme-tools:commit-helper"], {
     events: [forked("commit-helper")],
   });
 
@@ -294,7 +294,9 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   const fork = pane(page, "commit-helper");
   await expect(fork).toContainText("personal skill");
   await expect(page).toHaveURL(/#\/skills\/commit-helper$/u);
-  expect(forks(cli)).toEqual([["skill", "fork", "commit-helper", "--json"]]);
+  expect(forks(cli)).toEqual([
+    ["skill", "fork", "acme-tools:commit-helper", "--json"],
+  ]);
 
   // Claude Code has the plugin's skill and a link to the fork; the agents that read the library
   // see the fork alone.

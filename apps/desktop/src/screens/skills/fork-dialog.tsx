@@ -48,7 +48,6 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
-import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** What the CLI said when it refused a fork, and the names its words may start with. */
@@ -123,8 +122,6 @@ export const ForkButton = ({ row }: { row: SkillRow }) => {
 
 /** The Fork dialog's form, mounted while it is open for `row`, so it opens clean each time. */
 const ForkForm = ({ row }: { row: SkillRow }) => {
-  const skills = useAppStore((s) => s.inventory?.skills);
-  const library = useAppStore((s) => s.inventory?.library);
   const [renaming, setRenaming] = useState(() => renamesAtFirst(row));
   const [name, setName] = useState(() => firstName(row));
   const [refusal, setRefusal] = useState<Refusal | undefined>();
@@ -146,7 +143,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       return;
     }
     setRefusal(undefined);
-    const target = forkTarget(row, skills ?? [], library ?? []);
+    const target = forkTarget(row);
     const outcome = await runUntilSettled(
       forkArgs(target, renaming ? name : undefined),
       {
