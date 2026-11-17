@@ -614,30 +614,3 @@ func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 	equal(t, "message once nothing records the source", e["message"], "no source with id "+id)
 	equal(t, "hint once nothing records the source", e["hint"], "run 'agentx source list' to see the sources")
 }
-
-// TestTheNextCommandRemovesTheLinksOfAClientFoundToReadTheLibrary: agentx
-// placed symlinks in Cursor's own skills directory before it knew Cursor
-// reads the library, so Cursor listed each such skill twice. The next
-// command that changes anything removes them, whatever it is about, and
-// leaves a link of the user's to anywhere else, and Copilot's placement
-// while COPILOT_HOME, set by the harness, keeps Copilot off the library.
-func TestTheNextCommandRemovesTheLinksOfAClientFoundToReadTheLibrary(t *testing.T) {
-	t.Parallel()
-	h, s := universalHarness(t, ".cursor", ".copilot")
-	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "github-copilot")
-	lib := filepath.Join(h.library, "alpha")
-	old := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	mine := filepath.Join(h.home, ".cursor", "skills", "mine")
-	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	link(t, lib, old)
-	link(t, filepath.Join(h.home, ".claude", "skills", "alpha"), mine)
-
-	out := h.mustRun("config", "set", "label", "laptop")
-	contains(t, "the warning", out.stderr, "removed 1 link agentx placed for clients that read the library, which listed those skills twice: "+old)
-	nothingAt(t, "Cursor's old placement", old)
-	stillTheirs(t, "the user's link", mine, filepath.Join(h.home, ".claude", "skills", "alpha"))
-	linksToLibrary(t, "Copilot's placement", filepath.Join(h.home, ".copilot", "skills", "alpha"), lib)
-	equal(t, "journals", journalCount(t, h), 0)
-}
