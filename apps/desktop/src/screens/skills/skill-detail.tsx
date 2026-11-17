@@ -29,7 +29,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
 import { openRename, RenameButton } from "#/screens/skills/rename-dialog.tsx";
 import { canRename, ownOfName } from "#/screens/skills/rename.ts";
-import { SightsButton, SightsNotice } from "#/screens/skills/sights-view.tsx";
+import { SightsNotice } from "#/screens/skills/sights-view.tsx";
 import { sightsOf } from "#/screens/skills/sights.ts";
 import { useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -120,11 +120,10 @@ const EditButton = ({ row }: { row: SkillRow }) => {
  * write to, Fork for a skill of a source or a plugin's, Rename for one of your own, Remove for a
  * library skill; the other actions come with the changes that add them); then the description. No
  * status pill: the banner is the status. One banner, with its button; AGENTS, whose chips add and
- * remove placements, with an info button beside its caption and, when some agent sees more than one
- * skill of this name, a notice under the chips, which both open what each agent sees, with Rename
- * yours while your own skill of the name is one an agent sees beside another; FILES; then DETAILS
- * and HISTORY side by side. Every control runs one command and redraws from the inventory that
- * follows.
+ * remove placements, and, when some agent sees more than one skill of this name, a notice under the
+ * chips whose Details shows what each agent sees, with Rename your skill while your own skill of
+ * the name is one of them; FILES; then DETAILS and HISTORY side by side. Every control runs one
+ * command and redraws from the inventory that follows.
  */
 export const SkillDetail = ({
   row,
@@ -237,10 +236,7 @@ export const SkillDetail = ({
       </header>
       {banner !== undefined && <BannerView row={row} banner={banner} />}
       <section aria-label="Agents" className="flex flex-col gap-3">
-        <div className="flex items-center gap-1.5">
-          <Caption>Agents</Caption>
-          <SightsButton sights={sights} onRename={onRename} />
-        </div>
+        <Caption>Agents</Caption>
         <AgentsSection
           row={row}
           configurations={configurations}

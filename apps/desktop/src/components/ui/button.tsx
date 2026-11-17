@@ -22,9 +22,6 @@ const buttonVariants = cva(
         // A square as tall as a small button, as shadcn pairs `icon-sm` with `sm`.
         "icon-sm":
           "type-button-sm size-8.5 items-center justify-center p-0 whitespace-nowrap",
-        // The smallest square, beside a caption such as AGENTS: its negative margin keeps the
-        // caption's row as tall as the caption.
-        "icon-xs": "-my-1.5 size-6 items-center justify-center p-0",
         // As tall as its text, with no padding: a plain button inside a line of text, such as an
         // entry of the History sheet, whose children set its type.
         inline: "items-start justify-start p-0 text-left whitespace-normal",
@@ -44,10 +41,6 @@ const buttonVariants = cva(
         plain: "text-button-ghost-text hover:text-text-primary",
         primary:
           "bg-button-primary-bg text-button-primary-text hover:bg-button-primary-hover font-semibold",
-        // The ghost with a muted label: a quiet control beside a caption, such as the info button
-        // by AGENTS.
-        quiet:
-          "bg-button-ghost-bg text-text-muted hover:bg-button-ghost-hover hover:text-text-primary",
         secondary:
           "bg-button-secondary-bg text-button-secondary-text hover:bg-button-secondary-hover font-medium",
       },

@@ -303,11 +303,8 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   await expect(notice).toContainText(
     "Claude Code also sees the acme-tools plugin's commit-helper. It picks one of the two."
   );
-  await notice.getByRole("button", { name: "Details" }).click();
-  const sights = page.getByRole("dialog", {
-    name: "Skills named commit-helper",
-  });
-  const table = sights.getByRole("table", {
+  await notice.getByText("Details", { exact: true }).hover();
+  const table = page.getByRole("table", {
     name: "Skills named commit-helper",
   });
   await expect(table.getByRole("columnheader")).toHaveText([
@@ -322,9 +319,11 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   await expect(
     table.getByRole("row", { name: /^Claude Code/u }).getByRole("cell")
   ).toHaveText(["Sees it", "Sees it"]);
-  await expect(sights).toContainText(
-    "The highlighted agent sees both. agentx can't tell which one it uses. To keep them apart, rename yours."
-  );
+  await expect(
+    page.getByText(
+      "The highlighted agent sees both skills. It's up to the agent to decide which one to use. To prevent possible clashes, rename your skill."
+    )
+  ).toBeVisible();
 });
 
 test("a plugin's skill several plugins provide is named <plugin>:<skill>", async ({
@@ -358,20 +357,4 @@ test("a plugin's skill several plugins provide is named <plugin>:<skill>", async
       "--json",
     ],
   ]);
-});
-
-test("What each agent sees: with no agent seeing two, the button beside AGENTS shows who sees the skill, with no notice", async ({
-  cli,
-  page,
-}) => {
-  await openSkill(cli, page, "pdf");
-  const agents = pane(page, "pdf").getByRole("region", { name: "Agents" });
-  await agents.getByRole("button", { name: "What each agent sees" }).click();
-  const sights = page.getByRole("dialog", { name: "Skills named pdf" });
-  const table = sights.getByRole("table", { name: "Skills named pdf" });
-  await expect(table.getByRole("columnheader")).toHaveText(["Agent", "Yours"]);
-  await expect(table.getByRole("rowheader")).toHaveText([
-    "Claude Code, Codex, Gemini CLI",
-  ]);
-  await expect(agents.getByRole("note")).toHaveCount(0);
 });
