@@ -253,7 +253,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "publish" },
-      text: "Only on this machine. Publish it to your account remote.",
+      text: "The skill is only available on this machine. Publish it to distribute it to other machines or clients.",
       title: "Not published",
       tone: "yours",
     }),
