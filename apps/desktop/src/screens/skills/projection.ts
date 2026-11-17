@@ -73,6 +73,8 @@ export interface SkillRow {
 export interface Subgroup {
   key: string;
   label: string;
+  /** The marketplace the plugin comes from, which its header shows; none for a local plugin. */
+  marketplace?: string;
   rows: SkillRow[];
 }
 
@@ -456,7 +458,15 @@ const pluginSubgroups = (rows: SkillRow[]): Subgroup[] => {
     const key = subgroupKey(row);
     let subgroup = byKey.get(key);
     if (subgroup === undefined) {
-      subgroup = { key, label: pluginNameOf(row).toUpperCase(), rows: [] };
+      const marketplace = row.plugin?.marketplace;
+      subgroup = {
+        key,
+        label: pluginNameOf(row).toUpperCase(),
+        rows: [],
+        ...(marketplace === undefined || marketplace === ""
+          ? {}
+          : { marketplace }),
+      };
       byKey.set(key, subgroup);
     }
     subgroup.rows.push(row);
