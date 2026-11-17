@@ -792,6 +792,7 @@ Finder in this file means the platform's file manager. `src/lib/reveal.ts` names
 - **Link, inline** – the plain inline shape in `text.secondary`, 500, hover `text.primary` and underlined. Only for a link-like action inside a line of text that opens something, such as See changes on a row of the Update skills dialog.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
+- **Quiet icon** – the icon button at its smallest, 24px, with a `text.muted` icon; hover `button.ghost-hover`, `text.primary`. Beside a caption, such as the info button by AGENTS, a negative margin keeps the caption's row as tall as the caption.
 - **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
 
 Every button but the plain inline one has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
@@ -924,7 +925,15 @@ The section toggle also heads a source in the Update skills dialog (§6 "Update 
 
 ### Fork dialog (detail pane)
 
-Fork is a secondary small button in the action row, before Remove, for a skill of a source and a plugin's skill. No banner carries it. An unmanaged skill is adopted from its banner. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
+Fork is a secondary small button in the action row, before Remove, for a skill of a source and a plugin's skill. No banner carries it. An unmanaged skill is adopted from its banner. The title is a question. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled while the field holds no valid name. For a plugin's skill the switch starts on, with `my-<name>` in the field, selected, so Fork works at once: a fork under the plugin's own name leaves two skills of that name for the agents with the plugin. Turned off, one `type.secondary` `text.muted` line under the switch says so. A fork that succeeds closes the dialog and selects the fork; no dialog follows it.
+
+### What each agent sees (detail pane AGENTS)
+
+Where the agents find a skill of the selected skill's name, from the inventory alone: which places hold one, and which agents see each. It never says which of two skills an agent uses, since that is the agent's own rule.
+
+- A quiet `icon-xs` button with the info icon beside the AGENTS caption, its name in a Tooltip, opens a popover (§6 "Popover (Filter)" for its frame) below it.
+- When some agent sees more than one skill of the name, one `type.secondary` `text.muted` line under the chips names those agents, at most four and then a count, and ends with Details, a link inline button that opens the same popover below the line.
+- The popover: its title, then a group for each place, the library first, then each plugin, then each agent's own folder: a heading in `type.secondary` `text.muted`, then the agents in one wrapped row, each a 16px logo and the name in `type.secondary` `text.secondary`, the most used first. In the library's group the agents that read the library come first, then those with a link or a copy, with that said after the name in `text.hint`. A last `text.muted` line says that the agent decides, while some agent sees more than one; for a plugin's skill it adds that a different name avoids it.
 
 ### Edit (detail pane)
 

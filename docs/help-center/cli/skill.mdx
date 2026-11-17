@@ -5,6 +5,31 @@ description: "Install, place, update, publish and remove skills, and see what is
 
 Your library is one directory, `~/.agents/skills`, that holds every skill agentx manages. agentx installs a skill there once and links it into each agent client. Every client sees the same files, and one update reaches all of them. This page uses the terms placement, universal client, configuration, managed skill and base version; see the [glossary](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md).
 
+## Where skills live
+
+A skill is a folder with a `SKILL.md`. It lives in one of three places:
+
+- **Your library**, `~/.agents/skills`. agentx installs, creates, forks and adopts skills here.
+- **A plugin's own folder**, such as `~/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format`. The plugin owns it. agentx cannot change or remove a plugin's skill.
+- **A client's own skills folder**, such as `~/.claude/skills`. It holds the links and copies agentx puts there, and any folder you or another tool put there.
+
+A client sees every skill in every folder it reads. Clients reach your library skills in one of two ways:
+
+- A client that reads the library sees every library skill. Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode and Cline read the library. GitHub Copilot does not when `COPILOT_HOME` is set.
+- For every other client, agentx puts a link to the library skill in the client's own skills folder, or a copy if you chose copy for that client.
+
+See [Clients that see every skill](#clients-that-see-every-skill) and [Copy instead of link](#copy-instead-of-link).
+
+In the desktop app, open a skill and select the info button beside **Agents** to see each place that holds a skill of that name and the agents that see it there.
+
+### Skills with the same name
+
+When two folders a client reads hold skills with the same name, the client decides which one it uses, or it shows both. agentx does not control this. For a client's rules, see its own documentation, such as [Claude Code's skills documentation](https://code.claude.com/docs/en/skills).
+
+To keep two skills apart, give one of them another name: [fork it under a new name](/cli/fork#fork-under-a-new-name), or [rename it](/cli/fork#rename-a-skill-of-your-own) if it is one of your own skills. For what a fork changes, see [What each client sees after a fork](/cli/fork#what-each-client-sees-after-a-fork).
+
+In the desktop app, a line under **Agents** names the agents that see more than one skill of that name. Select **Details** to see where each one is.
+
 ## Install a skill
 
 ```sh

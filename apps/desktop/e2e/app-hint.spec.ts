@@ -29,7 +29,11 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   [gitRepo, "on", "move its .git out of the skill, or type a new name"],
   // Fork ran with the switch on and the skill's own name typed.
   [gitRepo, "named", "move its .git out of the skill"],
-  [gitRepo, "off", "move its .git out of the skill, or turn on Use a new name"],
+  [
+    gitRepo,
+    "off",
+    "move its .git out of the skill, or turn on Use a different name",
+  ],
   [
     refused(
       "/home/me/.agents/skills/pdf is a symlink to /home/me/work/pdf; forking pdf in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to",

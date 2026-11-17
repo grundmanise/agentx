@@ -48,11 +48,21 @@ export const forkArgs = (target: string, newName?: string): string[] =>
 /** What the Fork dialog says forking `row` does: a plugin's skill is forked beside the plugin's. */
 export const forkText = (row: SkillRow): string =>
   row.kind === "plugin"
-    ? `It becomes one of your skills, in your library. The plugin's ${row.name} stays as it is; agentx tells you after forking what each agent sees.`
-    : `It becomes one of your skills and replaces ${row.name} in every agent that has it. You can still take new versions of the original.`;
+    ? "A copy will be created in your skill library. The plugin keeps its own skill."
+    : "A copy will be created in your skill library. Keep the same name to use it in place of this skill, or choose a new name to use both. You can still get updates from the original.";
 
 /**
- * The Use a new name switch and the name field as they stand once a refusal shows: off; on with
+ * Whether Use a different name starts on: for a plugin's skill, whose fork under its own name
+ * leaves two skills of that name for the agents with the plugin.
+ */
+export const renamesAtFirst = (row: SkillRow) => row.kind === "plugin";
+
+/** The name the Name field starts with: `my-<name>` for a plugin's skill, so Fork works at once. */
+export const firstName = (row: SkillRow) =>
+  renamesAtFirst(row) ? `my-${row.name}` : "";
+
+/**
+ * The Use a different name switch and the name field as they stand once a refusal shows: off; on with
  * no name typed, as exit 6 leaves them when Fork ran with the switch off, since the dialog then
  * turns it on; or on with a name typed.
  */
@@ -76,7 +86,7 @@ export const formAfter = (
 /** What is left to do to fork beside the skill, as the form stands, or nothing once a name is typed. */
 const besideWays: Record<ForkFields, string | undefined> = {
   named: undefined,
-  off: "turn on Use a new name",
+  off: "turn on Use a different name",
   on: "type a new name",
 };
 
@@ -127,14 +137,14 @@ const forkHintRules = (form: ForkFields): HintRule[] => [
   {
     app: () =>
       form === "off"
-        ? "turn on Use a new name and give it a valid name"
+        ? "turn on Use a different name and give it a valid name"
         : "type a valid new name",
     cli: /^fork it under a valid name with '.+'$/u,
   },
   {
     app: () => {
       if (form === "off") {
-        return "turn on Use a new name and choose another name";
+        return "turn on Use a different name and choose another name";
       }
       return form === "on" ? "type a new name" : "choose another name";
     },

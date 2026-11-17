@@ -58,17 +58,6 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 	return cmd
 }
 
-// forkNoteEvent is what one client is known to do with a fork of a
-// plugin's skill beside the plugin's own copy, which agentx leaves as it
-// is.
-type forkNoteEvent struct {
-	event
-	Name          string `json:"name"`
-	Plugin        string `json:"plugin"`
-	Configuration string `json:"configuration"`
-	Note          string `json:"note"`
-}
-
 // forking is one run of skill fork, as it is planned before the lock.
 type forking struct {
 	src     forkSource
@@ -101,7 +90,6 @@ type forking struct {
 	writer  *forkWriter // the fork commit writer, read by checkForking for a fork's fork
 	commit  string      // the creation commit
 	targets []placeTarget
-	notes   []forkNoteEvent
 	// scanned scans the machine once, the first time it is asked, and
 	// inventory keeps what it found.
 	scanned   func() (scan.Inventory, error)
@@ -656,14 +644,10 @@ func forkSubject(src forkSource, target string, mode forkMode) string {
 }
 
 // planBeside picks the configurations a fork made beside its source is
-// placed into, and, for a plugin's skill, the note of every client that
-// sees both copies. The fork goes where the source is: into every
-// configuration that has a placement of the source at its own place,
-// copies where copy_mode records them, and for a plugin's skill into every
-// enabled configuration that has the plugin. A client that reads the
-// library sees the fork whatever it is placed in, and is said to; a
-// disabled configuration that has the plugin and does not read the library
-// sees no fork, and gets no note.
+// placed into. The fork goes where the source is: into every configuration
+// that has a placement of the source at its own place, copies where
+// copy_mode records them, and for a plugin's skill into every enabled
+// configuration that has the plugin.
 func (inv *invocation) planBeside(fk *forking, inventory scan.Inventory) error {
 	ids := map[string]bool{}
 	src := fk.src
@@ -676,23 +660,11 @@ func (inv *invocation) planBeside(fk *forking, inventory scan.Inventory) error {
 		if err != nil {
 			return err
 		}
-		// A configuration has the fork beside the plugin's copy when the fork
-		// is placed into it or its client reads the library; one agentx
-		// leaves alone, which has the plugin all the same, gets no note.
-		universal := universalClients(inventory)
-		var sees []string
 		for _, t := range enabled {
 			if ids[t.id] {
 				fk.targets = append(fk.targets, t)
-				sees = append(sees, t.id)
 			}
 		}
-		for _, id := range universal {
-			if ids[id] && !containsString(sees, id) {
-				sees = append(sees, id)
-			}
-		}
-		fk.notes = pluginForkNotes(fk.target, src.plugin, sees, universal)
 		return nil
 	case src.held:
 		s, err := inv.loadSettings()
@@ -718,34 +690,6 @@ func (inv *invocation) planBeside(fk *forking, inventory scan.Inventory) error {
 		}
 	}
 	return nil
-}
-
-// pluginForkNotes are the notes a fork called name of a skill of plugin
-// carries: one for each configuration that has the plugin, what its client
-// does with the two copies, and one for each client that reads the
-// library and does not have the plugin, which sees the fork all the same.
-// Sorted by configuration. Pure.
-func pluginForkNotes(name, plugin string, withPlugin, universal []string) []forkNoteEvent {
-	has := map[string]bool{}
-	var notes []forkNoteEvent
-	for _, id := range withPlugin {
-		has[id] = true
-		note := scan.PluginForkNote(id)
-		if note == "" {
-			note = "which of the two copies wins is not documented"
-		}
-		notes = append(notes, forkNoteEvent{Configuration: id, Note: note})
-	}
-	for _, id := range universal {
-		if !has[id] {
-			notes = append(notes, forkNoteEvent{Configuration: id, Note: "it reads the library, so it sees " + name + " whether or not it has " + plugin})
-		}
-	}
-	for i := range notes {
-		notes[i].event, notes[i].Name, notes[i].Plugin = newEvent("fork_note"), name, plugin
-	}
-	sort.Slice(notes, func(i, j int) bool { return notes[i].Configuration < notes[j].Configuration })
-	return notes
 }
 
 // applyFork records and applies the fork under the lock, once everything
@@ -876,10 +820,6 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 	if from, ok := libs[src.name]; ok && src.held {
 		out.emit(sc.librarySkillEventFor(ctx, inv, inventory, from, nil))
 	}
-	for _, n := range fk.notes {
-		out.emit(n)
-		out.print(out.paint(infoStyle, glyphInfo), " ", n.Configuration, ": ", sanitised(n.Note))
-	}
 	what, stays := name, name+" stays as it was"
 	if src.kind == kindPlugin {
 		what, stays = name+" from plugin "+sanitised(src.plugin), "the plugin's copy stays as it was"
@@ -912,7 +852,27 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 	inv.summary += "; " + stays
 	inv.printPlacementRows(fk.target, rows)
 	inv.printUniversal(ev.Universal)
+	if src.kind == kindPlugin && fk.target == src.name {
+		if both := seeBoth(pluginConfigurations(inventory, src.plugin), targetIDs(done.placed), ev.Universal); len(both) > 0 {
+			out.print(out.paint(infoStyle, glyphInfo), " ", strings.Join(both, ", "), " now see two skills named ", name, "; rename the fork with 'agentx skill rename ", name, " <new>' to keep them apart")
+		}
+	}
 	inv.noAccountRemoteHint(ev)
 	inv.summary += universalClause(ev.Universal)
 	return nil
+}
+
+// seeBoth are the configurations that see two skills of one name after a
+// plugin's skill is forked under its own name: those that have the plugin
+// and have the fork too, placed into them or read through the library.
+// Sorted. Pure.
+func seeBoth(withPlugin, placed, universal []string) []string {
+	var ids []string
+	for _, id := range withPlugin {
+		if containsString(placed, id) || containsString(universal, id) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }

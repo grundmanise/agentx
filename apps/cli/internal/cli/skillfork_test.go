@@ -170,9 +170,9 @@ func pluginHome(t *testing.T, h *harness) []string {
 // TestSkillForkOfAPluginSkill forks a skill two plugins provide under one
 // name: the bare name is refused, naming both, and the plugin is named.
 // The fork is a branch of its own, placed into the configuration that
-// has the plugin, and the result notes, client by client, how each
-// treats the fork beside the plugin's copy, the client that reads the
-// library without the plugin included. With the one configuration that
+// has the plugin, and the text output names the configurations that now
+// see two skills of the name: those with the plugin that have the fork,
+// placed or read through the library. With the one configuration that
 // has the plugin disabled, the fork has no placement. Every plugin
 // directory is left byte for byte as it was. The history of each fork
 // says where it came from: the plugin, its marketplace, the original
@@ -190,18 +190,9 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 	equal(t, "an ambiguous name: exit", out.exit, exitRefused.exit)
 	contains(t, "an ambiguous name", h.one(out.stdout, "error")["message"].(string), "format is provided by several plugins: formatter, linter")
 
-	out = h.run("--json", "skill", "fork", "formatter:format")
+	out = h.run("skill", "fork", "formatter:format")
 	equal(t, "exit", out.exit, 0)
-	var notes []string
-	for _, n := range h.eventsOfType(out.stdout, "fork_note") {
-		equal(t, "the note's plugin", n["plugin"], "formatter")
-		notes = append(notes, n["configuration"].(string)+": "+n["note"].(string))
-	}
-	equal(t, "the notes", strings.Join(notes, "\n"), strings.Join([]string{
-		"claude-code: " + scan.PluginForkNote("claude-code"),
-		"codex: " + scan.PluginForkNote("codex"),
-		"gemini-cli: it reads the library, so it sees format whether or not it has formatter",
-	}, "\n"))
+	contains(t, "the text output", out.stdout, "• claude-code, codex now see two skills named format; rename the fork with 'agentx skill rename format <new>' to keep them apart\n")
 	tip := h.ref(lineage.ForkRef("format"))
 	equal(t, "the history", h.accountGit("rev-list", lineage.ForkRef("format")), tip)
 	equal(t, "the subject", h.accountGit("log", "-1", "--format=%s", tip), "Fork format from plugin formatter")
@@ -215,7 +206,6 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 	}
 	h.mustRun("config", "disable", "claude-code")
 	text := h.mustRun("skill", "fork", "linter:format", "--name", "lint-format")
-	contains(t, "the text output", text.stdout, "• codex: it reads the library, so it sees lint-format whether or not it has linter\n")
 	contains(t, "the text output", text.stdout, "✓ forked format from plugin linter as lint-format: 0 placements; the plugin's copy stays as it was\n")
 	for name, want := range map[string]map[string]any{
 		"format":      {"kind": "plugin", "skill": "format", "plugin": "formatter", "marketplace": "acme", "url": "https://github.com/acme/formatter"},
@@ -420,27 +410,6 @@ func TestPluginOccurrence(t *testing.T) {
 			t.Errorf("%s: pluginOccurrence = %q, exit %d, want %q, exit %d", tc.arg, o.Path, code, tc.path, tc.exit)
 		}
 	}
-}
-
-// TestPluginForkNotes notes every configuration with the plugin by what
-// its client does, one nothing is known of included, and every client that
-// reads the library without the plugin, sorted by configuration.
-func TestPluginForkNotes(t *testing.T) {
-	t.Parallel()
-	notes := pluginForkNotes("format", "fmt", []string{"windsurf", "claude-code", "codex"}, []string{"codex", "gemini-cli"})
-	var got []string
-	for _, n := range notes {
-		got = append(got, n.Configuration+": "+n.Note)
-		if n.Name != "format" || n.Plugin != "fmt" || n.Type != "fork_note" {
-			t.Errorf("a note is %+v", n)
-		}
-	}
-	equal(t, "the notes", strings.Join(got, "\n"), strings.Join([]string{
-		"claude-code: " + scan.PluginForkNote("claude-code"),
-		"codex: " + scan.PluginForkNote("codex"),
-		"gemini-cli: it reads the library, so it sees format whether or not it has fmt",
-		"windsurf: which of the two copies wins is not documented",
-	}, "\n"))
 }
 
 // forkChildEnv marks the process TestSkillForkRecoversWhereItWasKilled and

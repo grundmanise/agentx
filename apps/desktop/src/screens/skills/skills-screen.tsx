@@ -207,6 +207,9 @@ export const SkillsScreen = () => {
             key={selected.key}
             row={selected}
             forks={forksOf(selected, rows)}
+            sameName={rows.filter(
+              (r) => r.name === selected.name && r.key !== selected.key
+            )}
             configurations={configurations}
           />
         )}

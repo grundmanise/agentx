@@ -344,9 +344,10 @@ const chipsInView = async (article: Locator) => {
   const agents = article.getByRole("region", { name: "Agents" });
   const chips = await agents.getByRole("switch").all();
   const boxes = await Promise.all(
-    [...chips, agents.getByRole("button")].map(
-      async (el) => await el.boundingBox()
-    )
+    [
+      ...chips,
+      agents.getByRole("button", { name: /^Show (?:\d+ more|fewer)$/u }),
+    ].map(async (el) => await el.boundingBox())
   );
   const names = await Promise.all(
     chips.map(async (el) => await el.getAttribute("aria-label"))

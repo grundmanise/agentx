@@ -105,7 +105,7 @@ const record = (
 ): AdoptionEvent => ({
   file: tool === "vercel" ? LOCK : STORE,
   name,
-  schema_version: 3,
+  schema_version: 4,
   source: tool === "vercel" ? VERCEL : TEAM,
   state,
   subpath: name,
@@ -125,7 +125,7 @@ const legacyRecord: AdoptionEvent = {
   file: LOCK,
   name: "legacy",
   reason: legacyReason,
-  schema_version: 3,
+  schema_version: 4,
   state: "refused",
   tool: "vercel",
   type: "adoption",
