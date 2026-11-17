@@ -68,7 +68,7 @@ const cases: {
   {
     exact: true,
     footer:
-      "The highlighted agents see more than one of these skills, and each decides which one to use. To avoid clashes, rename your skill or uninstall the chrome-devtools-mcp plugin.",
+      "The highlighted agents see more than one skill, and each decides which one to use. To avoid clashes, rename your skill or uninstall the chrome-devtools-mcp plugin.",
     name: "your fork of a plugin's skill under its name",
     notice:
       "Found 2 skills named a11y-debugging. Agents that see more than one may use the wrong one.",
@@ -83,7 +83,7 @@ const cases: {
   },
   {
     footer:
-      "The highlighted agent sees more than one of these skills and decides which one to use. To avoid clashes, rename your skill or uninstall the acme plugin.",
+      "The highlighted agent sees more than one skill and decides which one to use. To avoid clashes, rename your skill or uninstall the acme plugin.",
     name: "the plugin's skill, seen beside yours by one agent",
     notice: "Found 2 skills named a11y-debugging.",
     sights: sights(
