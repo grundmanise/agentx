@@ -99,7 +99,7 @@ const cases: {
   },
   {
     footer:
-      "To avoid clashes, rename your skill, uninstall the chrome-devtools-mcp plugin or remove the copy in Codex's folder.",
+      "To avoid clashes, make sure each agent sees only one. You can rename your skill, uninstall the chrome-devtools-mcp plugin or remove the copy in Codex's folder.",
     name: "three skills: an agent's own copy too",
     notice: "Found 3 skills named a11y-debugging.",
     sights: sights([yours, devtools, codexFolder], [yours]),

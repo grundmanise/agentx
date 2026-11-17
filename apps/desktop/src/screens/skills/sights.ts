@@ -251,6 +251,17 @@ const choiceOf = (items: string[]) =>
     ? items.join("")
     : `${items.slice(0, -1).join(", ")} or ${items.at(-1) ?? ""}`;
 
+/**
+ * How to end the clash. With two skills, any one fix ends it. With more, one fix is not enough,
+ * so the fixes are offered as ways to bring each agent down to one skill.
+ */
+const fixesOf = (places: Place[]) => {
+  const fixes = choiceOf(places.map(fixOf));
+  return places.length > 2
+    ? `To avoid clashes, make sure each agent sees only one. You can ${fixes}.`
+    : `To avoid clashes, ${fixes}.`;
+};
+
 /** A column of the table: a place, under a short heading. */
 export interface SightsColumn {
   key: string;
@@ -339,7 +350,7 @@ export const sightsTable = (sights: NameSights): SightsTable => {
       clashing.length === 1
         ? "The highlighted agent sees more than one skill and decides which one to use."
         : "The highlighted agents see more than one skill, and each decides which one to use.",
-      `To avoid clashes, ${choiceOf(clashingPlaces(sights).map(fixOf))}.`,
+      fixesOf(clashingPlaces(sights)),
     ];
     table.footer = lines.join(" ");
   }
