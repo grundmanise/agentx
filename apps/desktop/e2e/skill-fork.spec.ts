@@ -323,7 +323,7 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   ).toHaveText(["Sees it", "Sees it"]);
   await expect(
     page.getByText(
-      "To avoid clashes, rename your skill or uninstall the acme-tools plugin."
+      "To avoid clashes, make sure each agent sees only one, for example by renaming your skill."
     )
   ).toBeVisible();
 });

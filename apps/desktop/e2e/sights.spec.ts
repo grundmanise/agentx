@@ -69,7 +69,7 @@ const cases: {
   {
     exact: true,
     footer:
-      "The highlighted agents see more than one skill, and each decides which one to use. To avoid clashes, rename your skill or uninstall the chrome-devtools-mcp plugin.",
+      "The highlighted agents see more than one skill, and each decides which one to use. To avoid clashes, make sure each agent sees only one, for example by renaming your skill.",
     name: "your fork of a plugin's skill under its name",
     notice:
       "Found 2 skills named a11y-debugging. Agents that see more than one may pick the wrong skill.",
@@ -84,7 +84,7 @@ const cases: {
   },
   {
     footer:
-      "The highlighted agent sees more than one skill and decides which one to use. To avoid clashes, rename your skill or uninstall the acme plugin.",
+      "The highlighted agent sees more than one skill and decides which one to use. To avoid clashes, make sure each agent sees only one, for example by renaming your skill.",
     name: "the plugin's skill, seen beside yours by one agent",
     notice: "Found 2 skills named a11y-debugging.",
     sights: sights(
@@ -99,7 +99,7 @@ const cases: {
   },
   {
     footer:
-      "To avoid clashes, make sure each agent sees only one. You can rename your skill, uninstall the plugin or remove the copy from the agent's folder.",
+      "To avoid clashes, make sure each agent sees only one, for example by renaming your skill.",
     name: "three skills: an agent's own copy too",
     notice: "Found 3 skills named a11y-debugging.",
     sights: sights([yours, devtools, codexFolder], [yours]),
@@ -113,7 +113,7 @@ const cases: {
   },
   {
     footer:
-      "To avoid clashes, uninstall the alpha plugin or uninstall the beta plugin.",
+      "To avoid clashes, make sure each agent sees only one, for example by uninstalling one of the plugins.",
     name: "two plugins, none of yours",
     notice: "Found 2 skills named a11y-debugging.",
     sights: sights(
@@ -124,7 +124,7 @@ const cases: {
   },
   {
     footer:
-      "To avoid clashes, make sure each agent sees only one. You can rename your skill or uninstall one of the plugins.",
+      "To avoid clashes, make sure each agent sees only one, for example by renaming your skill.",
     name: "three skills: yours and two plugins",
     notice: "Found 3 skills named a11y-debugging.",
     sights: sights(

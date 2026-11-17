@@ -235,54 +235,24 @@ export const clashText = (sights: NameSights): ClashText | undefined => {
   };
 };
 
-/** What keeps a place's skill from clashing: rename it, uninstall its plugin or remove the copy. */
-const fixOf = (place: Place) => {
-  switch (place.kind) {
-    case "library": {
-      return "rename your skill";
-    }
-    case "plugin": {
-      return `uninstall the ${place.label} plugin`;
-    }
-    case "folder": {
-      return `remove the copy in ${place.label}'s folder`;
-    }
-    case "project": {
-      return "remove the copy in the project's folder";
-    }
-    default: {
-      return place.label;
-    }
-  }
-};
-
-/** `a`, `a or b`, `a, b or c`. */
-const choiceOf = (items: string[]) =>
-  items.length < 2
-    ? items.join("")
-    : `${items.slice(0, -1).join(", ")} or ${items.at(-1) ?? ""}`;
-
 /**
- * How to end the clash. With two skills, any one fix ends it, so each is named. With more, one fix
- * is not enough, so the kinds of fix are offered as ways to bring each agent down to one skill.
+ * How to end the clash: the goal, with one fix as its example, the first place's, the places
+ * being in the order of `rank`. Turning a skill off for an agent, uninstalling and removing a copy also reach the
+ * goal, so they are not listed.
  */
 const fixesOf = (places: Place[]) => {
-  if (places.length <= 2) {
-    return `To avoid clashes, ${choiceOf(places.map(fixOf))}.`;
-  }
-  const count = (kind: PlaceKind) =>
-    places.filter((p) => p.kind === kind).length;
-  const plugins = count("plugin");
-  const folders = count("folder");
-  const fixes = [
-    count("library") > 0 ? "rename your skill" : "",
-    plugins > 1 ? "uninstall one of the plugins" : "",
-    plugins === 1 ? "uninstall the plugin" : "",
-    folders > 1 ? "remove a copy from an agent's folder" : "",
-    folders === 1 ? "remove the copy from the agent's folder" : "",
-    count("project") > 0 ? "remove the copy from the project's folder" : "",
-  ].filter((f) => f !== "");
-  return `To avoid clashes, make sure each agent sees only one. You can ${choiceOf(fixes)}.`;
+  const [first] = places;
+  const plugins = places.filter((p) => p.kind === "plugin").length;
+  const examples: Record<PlaceKind, string> = {
+    folder: `removing the copy in ${first?.label}'s folder`,
+    library: "renaming your skill",
+    plugin:
+      plugins > 1
+        ? "uninstalling one of the plugins"
+        : `uninstalling the ${first?.label} plugin`,
+    project: "removing the copy in the project's folder",
+  };
+  return `To avoid clashes, make sure each agent sees only one, for example by ${examples[first?.kind ?? "library"]}.`;
 };
 
 /** A column of the table: a place, under a short heading. */
