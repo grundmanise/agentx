@@ -168,7 +168,8 @@ func pluginHome(t *testing.T, h *harness) []string {
 }
 
 // TestSkillForkOfAPluginSkill forks a skill two plugins provide under one
-// name: the bare name is refused, naming both, and the plugin is named.
+// name: the bare name is refused, naming both and the qualified name to use,
+// since a plugin's skill is named <plugin>:<skill> alone.
 // The fork is a branch of its own, placed into the configuration that
 // has the plugin, and the text output names the configurations that now
 // see more than one skill of the name: those with the plugin that have the fork,
@@ -189,6 +190,7 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 	out := h.run("--json", "skill", "fork", "format")
 	equal(t, "an ambiguous name: exit", out.exit, exitRefused.exit)
 	contains(t, "an ambiguous name", h.one(out.stdout, "error")["message"].(string), "format is provided by several plugins: formatter, linter")
+	contains(t, "an ambiguous name: hint", h.one(out.stdout, "error")["hint"].(string), "name it as <plugin>:format, such as 'agentx skill fork formatter:format'")
 
 	out = h.run("skill", "fork", "formatter:format")
 	equal(t, "exit", out.exit, 0)
@@ -378,8 +380,9 @@ func TestRenameFrontmatter(t *testing.T) {
 	}
 }
 
-// TestPluginOccurrence picks the plugin's skill a name means among what a
-// scan found, refusing a name nothing or several plugins provide.
+// TestPluginOccurrence picks the plugin's skill <plugin>:<skill> names among
+// what a scan found, refusing a bare name a plugin provides and finding no
+// name no plugin provides.
 func TestPluginOccurrence(t *testing.T) {
 	t.Parallel()
 	occ := func(plugin, config, path, scope string) scan.Occurrence {
@@ -394,14 +397,15 @@ func TestPluginOccurrence(t *testing.T) {
 		arg, path string
 		exit      int
 	}{
-		{"format", "/a/fmt/skills/format", 0},
+		{"format", "", exitRefused.exit},
 		{"fmt:format", "/a/fmt/skills/format", 0},
 		{"check", "", exitRefused.exit},
 		{"lint:check", "/a/lint/skills/check", 0},
 		{"lint:format", "", exitNotFound.exit},
 		{"only", "", exitNotFound.exit},
+		{"proj:only", "", exitNotFound.exit},
 	} {
-		o, err := pluginOccurrence(inventory, tc.arg)
+		o, err := pluginOccurrence(inventory, tc.arg, "fork")
 		code := 0
 		if f := (*failure)(nil); errors.As(err, &f) {
 			code = f.status.exit
