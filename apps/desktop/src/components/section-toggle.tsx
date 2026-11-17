@@ -19,15 +19,17 @@ const toggleVariants = cva(
 /**
  * The header of a section that collapses, within a list (DESIGN.md §6 "Group header (lists)"):
  * a flat, full-width row with no fill at rest, a chevron that turns down while the section is
- * open, the section's caption and its count. It tints on hover. A click collapses or expands
- * the section, which `aria-expanded` reports. It is named by its caption and count. An action,
- * such as a text button, sits at the row's right end, beside the toggle, so that a click on it
- * toggles nothing.
+ * open, the section's caption, its count and, at the right end, a dim detail such as a plugin's
+ * marketplace. It tints on hover. A click collapses or expands the section, which
+ * `aria-expanded` reports. It is named by its caption, count and detail. An action, such as a
+ * text button, sits at the row's right end, beside the toggle, so that a click on it toggles
+ * nothing.
  */
 export const SectionToggle = ({
   label,
   title,
   count,
+  detail,
   open,
   onToggle,
   action,
@@ -38,6 +40,8 @@ export const SectionToggle = ({
   title?: string;
   /** How many rows the section holds; left out, the header shows no count. */
   count?: number;
+  /** A dim note at the row's right end, such as a plugin's marketplace; it truncates first. */
+  detail?: string;
   open: boolean;
   onToggle: () => void;
   /** A control at the row's right end, outside the toggle. */
@@ -65,6 +69,11 @@ export const SectionToggle = ({
       </span>
       {count !== undefined && (
         <span className="type-technical-sm text-subgroup-count">{count}</span>
+      )}
+      {detail !== undefined && (
+        <span className="type-technical-sm text-subgroup-source ml-auto min-w-0 truncate">
+          {detail}
+        </span>
       )}
     </button>
   );

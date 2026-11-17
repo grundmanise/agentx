@@ -96,8 +96,12 @@ test("plugins' subgroups start collapsed, but the opened skill's; Collapse all a
   const plugin = list(page).getByRole("region", {
     name: `${first.plugin} (${SKILLS_PER_PLUGIN})`,
   });
+  // Each plugin's header names its marketplace at its right end.
   const toggle = (name: string, count = SKILLS_PER_PLUGIN) =>
-    list(page).getByRole("button", { exact: true, name: `${name} ${count}` });
+    list(page).getByRole("button", {
+      exact: true,
+      name: `${name} ${count} acme-marketplace`,
+    });
   await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "true");
   await expect(toggle("ACME-TOOLS", 1)).toHaveAttribute(
     "aria-expanded",
@@ -140,7 +144,7 @@ test("while the list scrolls, the header of its group and of its plugin stay pin
   const header = (plugin: string) =>
     list(page).getByRole("button", {
       exact: true,
-      name: `${plugin} ${SKILLS_PER_PLUGIN}`,
+      name: `${plugin} ${SKILLS_PER_PLUGIN} acme-marketplace`,
     });
   /** How far below the top of the list an element is, in px. */
   const below = async (element: ReturnType<typeof header>) => {

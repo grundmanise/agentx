@@ -743,6 +743,7 @@ const SkillGroups = ({
                             <SectionToggle
                               label={subgroup.label}
                               count={subgroup.rows.length}
+                              detail={subgroup.marketplace}
                               open={subheader.item.open}
                               onToggle={() => {
                                 toggle(subheader.index, subgroup.key);
