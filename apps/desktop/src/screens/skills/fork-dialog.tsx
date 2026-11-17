@@ -1,20 +1,19 @@
-// The Fork dialog and the dialog of what each agent sees after a plugin's skill is forked. The
-// `ForkButton` of the detail pane's action row opens the Fork dialog; `ForkDialogs`, which
-// the Skills screen mounts once, shows them, so they outlive the detail pane of the skill forked,
+// The Fork dialog. The `ForkButton` of the detail pane's action row opens it; `ForkDialogs`, which
+// the Skills screen mounts once, shows it, so it outlives the detail pane of the skill forked,
 // which the fork replaces in the selection. Fork runs `skill fork <name>`, or `--name <new>` with
-// Use a new name on, and the screen redraws from the inventory that follows: the fork is selected
-// by the name the CLI reports, and shows once that inventory holds it. A refusal (exit 6), such as
-// a library entry that is a symlink, keeps the dialog open with the CLI's message and a hint in
-// the dialog's own words (`forkHint`), as one sentence-cased paragraph (`ProblemText`), the
-// skill's name and the new one keeping their case, and turns Use a new name on, since forking
-// beside the skill is the way out the CLI names; the hint names what the form then leaves to do.
-// A change to the switch or the name clears the refusal, which was about the form as it was.
+// Use a different name on, and the screen redraws from the inventory that follows: the fork is
+// selected by the name the CLI reports, and shows once that inventory holds it. For a plugin's
+// skill the switch starts on, with `my-<name>` in the Name field; turned off, a line says that the
+// agents with the plugin will see more than one skill of the name. A refusal (exit 6), such as a library
+// entry that is a symlink, keeps the dialog open with the CLI's message and a hint in the dialog's
+// own words (`forkHint`), as one sentence-cased paragraph (`ProblemText`), the skill's name and
+// the new one keeping their case, and turns Use a different name on, since forking beside the
+// skill is the way out the CLI names; the hint names what the form then leaves to do. A change to
+// the switch or the name clears the refusal, which was about the form as it was.
 import { useEffect, useId, useRef, useState } from "react";
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { ForkNoteEvent } from "#/cli/events.gen.ts";
-import { AgentLogo } from "#/components/agent-logo.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -35,11 +34,13 @@ import {
   SKILL_NAME_RULE,
 } from "#/lib/skill-name.ts";
 import {
+  firstName,
   forkArgs,
   forkHint,
   forkTarget,
   forkText,
   formAfter,
+  renamesAtFirst,
 } from "#/screens/skills/fork.ts";
 import type { ForkFields } from "#/screens/skills/fork.ts";
 import { openSkill } from "#/screens/skills/open.ts";
@@ -47,7 +48,6 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
-import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** What the CLI said when it refused a fork, and the names its words may start with. */
@@ -88,8 +88,6 @@ export const forkLabel = (row: SkillRow) => `fork ${row.key}`;
 interface ForkState {
   /** The skill the Fork dialog is open for. */
   forking?: SkillRow;
-  /** The notes of the plugin's skill last forked, until Done. */
-  notes?: ForkNoteEvent[];
 }
 
 const useForkStore = create<ForkState>()(() => ({}));
@@ -101,10 +99,6 @@ const openFork = (row: SkillRow) => {
 
 const closeFork = () => {
   useForkStore.setState({ forking: undefined });
-};
-
-const closeNotes = () => {
-  useForkStore.setState({ notes: undefined });
 };
 
 /** Fork, a secondary button in the detail pane's action row: opens the dialog. */
@@ -128,19 +122,19 @@ export const ForkButton = ({ row }: { row: SkillRow }) => {
 
 /** The Fork dialog's form, mounted while it is open for `row`, so it opens clean each time. */
 const ForkForm = ({ row }: { row: SkillRow }) => {
-  const skills = useAppStore((s) => s.inventory?.skills);
-  const [renaming, setRenaming] = useState(false);
-  const [name, setName] = useState("");
+  const [renaming, setRenaming] = useState(() => renamesAtFirst(row));
+  const [name, setName] = useState(() => firstName(row));
   const [refusal, setRefusal] = useState<Refusal | undefined>();
   const pending = usePending(forkLabel(row));
   const nameRef = useRef<HTMLInputElement>(null);
   const switchId = useId();
   const nameValid = isSkillName(name);
 
-  // The field takes the focus when it shows: on the switch, or when a refusal turns it on.
+  // The field takes the focus when it shows: as the dialog opens for a plugin's skill, on the
+  // switch, or when a refusal turns it on. Its name is selected, so typing replaces it.
   useEffect(() => {
     if (renaming) {
-      nameRef.current?.focus();
+      nameRef.current?.select();
     }
   }, [renaming]);
 
@@ -149,7 +143,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       return;
     }
     setRefusal(undefined);
-    const target = forkTarget(row, skills ?? []);
+    const target = forkTarget(row);
     const outcome = await runUntilSettled(
       forkArgs(target, renaming ? name : undefined),
       {
@@ -162,10 +156,6 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       closeFork();
       const fork = outcome.events.find((e) => e.type === "library_skill");
       openSkill(fork?.name ?? (renaming ? name : row.name));
-      const notes = outcome.events.filter((e) => e.type === "fork_note");
-      if (notes.length > 0) {
-        useForkStore.setState({ notes });
-      }
       return;
     }
     // Exit 4 opens the skill whose merge is pending (src/store/runner.ts).
@@ -200,17 +190,12 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
     >
       <div className="gap-input-label flex flex-col">
         <label htmlFor={switchId} className="flex items-center gap-3">
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="type-body text-text-primary">Use a new name</span>
-            {row.kind !== "plugin" && (
-              <span className="type-secondary text-text-muted">
-                {`The fork then sits beside ${row.name} instead of replacing it.`}
-              </span>
-            )}
+          <span className="type-body text-text-primary min-w-0 flex-1">
+            Use a different name
           </span>
           <Switch
             id={switchId}
-            aria-label="Use a new name"
+            aria-label="Use a different name"
             checked={renaming}
             disabled={pending}
             onCheckedChange={(on) => {
@@ -219,6 +204,11 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
             }}
           />
         </label>
+        {!renaming && row.kind === "plugin" && (
+          <p className="type-secondary text-text-muted m-0">
+            {`Agents with the plugin will see more than one skill named ${row.name}.`}
+          </p>
+        )}
         {renaming && (
           <>
             <Input
@@ -265,7 +255,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
   );
 };
 
-/** "Fork {skill}": what the fork does for this kind of skill, Use a new name, Cancel · Fork. */
+/** "Fork {skill}?": what the fork does for this kind of skill, Use a different name, Cancel · Fork. */
 const ForkDialog = ({ row }: { row: SkillRow }) => {
   const pending = usePending(forkLabel(row));
   return (
@@ -280,7 +270,7 @@ const ForkDialog = ({ row }: { row: SkillRow }) => {
     >
       <DialogContent>
         <DialogHeader showCloseButton={false}>
-          <DialogTitle>{`Fork ${row.name}`}</DialogTitle>
+          <DialogTitle>{`Fork ${row.name}?`}</DialogTitle>
           <DialogDescription>{forkText(row)}</DialogDescription>
         </DialogHeader>
         <ForkForm row={row} />
@@ -289,63 +279,10 @@ const ForkDialog = ({ row }: { row: SkillRow }) => {
   );
 };
 
-/** "What each agent sees": one row per `fork_note`, its agent's logo and name and the note. */
-const NotesDialog = ({ notes }: { notes: ForkNoteEvent[] }) => {
-  const configurations = useAppStore((s) => s.inventory?.configurations);
-  return (
-    <Dialog
-      open
-      onOpenChange={(next) => {
-        if (!next) {
-          closeNotes();
-        }
-      }}
-    >
-      <DialogContent aria-describedby={undefined}>
-        <DialogHeader showCloseButton={false}>
-          <DialogTitle>What each agent sees</DialogTitle>
-        </DialogHeader>
-        <ul
-          aria-label="What each agent sees"
-          className="m-0 flex list-none flex-col gap-4 p-0"
-        >
-          {notes.map((note) => {
-            const client = configurations?.find(
-              (c) => c.id === note.configuration
-            ) ?? { client: note.configuration, name: note.configuration };
-            return (
-              <li key={note.configuration} className="flex items-start gap-3">
-                <AgentLogo client={client} size={20} decorative />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="type-body text-text-primary">
-                    {client.name}
-                  </span>
-                  <span className="type-secondary text-text-muted">
-                    {note.note}
-                  </span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-        <DialogFooter>
-          <Button variant="primary" onClick={closeNotes}>
-            Done
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
-/** The Fork dialog while one is open, and the notes of a plugin's skill just forked. */
+/** The Fork dialog while one is open. */
 export const ForkDialogs = () => {
   const forking = useForkStore((s) => s.forking);
-  const notes = useForkStore((s) => s.notes);
-  return (
-    <>
-      {forking !== undefined && <ForkDialog key={forking.key} row={forking} />}
-      {notes !== undefined && <NotesDialog notes={notes} />}
-    </>
+  return forking === undefined ? null : (
+    <ForkDialog key={forking.key} row={forking} />
   );
 };

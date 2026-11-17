@@ -388,7 +388,8 @@ func TestAdoptRefusesAName(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(gemini, 0o755) }) // so the temporary home can be removed
-	// A plugin's skill, which only Claude Code's plugin provides.
+	// A plugin's skill, which only Claude Code's plugin provides: adopt, like
+	// every command, reads a bare name as no plugin's.
 	plugin := pluginHome(t, h)[0]
 	writeFile(t, mkdirs(t, filepath.Join(plugin, "skills", "tidy"), "SKILL.md"), skill("tidy", "Tidy up"))
 	refs, worktrees := h.accountGit("for-each-ref"), names(t, filepath.Join(h.agentx, "worktrees"))
@@ -413,7 +414,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 		{"occupied", exitRefused, filepath.Join(h.library, "occupied") + " is in the way: adopting occupied puts the skill there"},
 		{"locked", exitRefused, "locked cannot be adopted: agentx cannot write to " + gemini + " (permission denied)"},
 		{"My_Skill", exitRefused, "My_Skill is not a valid skill name"},
-		{"tidy", exitRefused, "tidy comes with the plugin formatter, whose folder agentx never changes"},
+		{"tidy", exitNotFound, `no skill called "tidy" can be adopted: no record names it`},
 	} {
 		if c.name == "locked" && os.Geteuid() == 0 {
 			continue

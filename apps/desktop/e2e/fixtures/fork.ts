@@ -157,31 +157,6 @@ export const twoPluginsInventory = {
   ],
 } satisfies InlineEvent;
 
-/** What `skill fork commit-helper` says each agent sees, sorted by configuration. */
-export const forkNotes: InlineEvent[] = [
-  {
-    configuration: "claude-code",
-    name: "commit-helper",
-    note: "the fork owns the bare name and the plugin's copy stays reachable under the plugin's prefix, so the model sees both",
-    plugin: "acme-tools",
-    type: "fork_note",
-  },
-  {
-    configuration: "codex",
-    name: "commit-helper",
-    note: "it reads the library, so it sees commit-helper whether or not it has acme-tools",
-    plugin: "acme-tools",
-    type: "fork_note",
-  },
-  {
-    configuration: "gemini-cli",
-    name: "commit-helper",
-    note: "it reads the library, so it sees commit-helper whether or not it has acme-tools",
-    plugin: "acme-tools",
-    type: "fork_note",
-  },
-];
-
 /** The library_skill event `skill fork` writes for the fork it made. */
 export const forked = (name: string): InlineEvent => ({
   name,

@@ -663,6 +663,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
+| `hover-card.max-height` | the room from its trigger to the window's edge, less `popover.window-inset` | `max-h-hover-card` | Radix measures it, so it is a utility in `tokens.css` with no theme value; the hover card scrolls past it |
 | `tooltip.text-max-width` | 280 | `max-w-tooltip-text` | A tooltip that explains a term (`size="text"`); past it the sentence wraps |
 | `sheet.width` | the width the user dragged the sheet to, else 1120 | `w-sheet-dragged` | Every sheet: History, What's new and Activity log. The drag sets the variable on the sheet, so it is a utility in `tokens.css` that falls back to the theme value `--width-sheet` |
 | `sheet.min-width` | 420 | `min-w-sheet` | The narrowest a sheet drags to |
@@ -772,6 +773,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `floating-bar.radius` | 9999 |  |
 | `check.mark-radius` | 50% | Startup status circle |
 | `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
+| `sights-notice.radius` | 12 | The notice under AGENTS when an agent sees more than one skill of one name |
 | `startup.logo-radius` | 12 | Product mark on the startup layer |
 | `tooltip.radius` | 8 | Tooltip |
 
@@ -925,7 +927,14 @@ The section toggle also heads a source in the Update skills dialog (§6 "Update 
 
 ### Fork dialog (detail pane)
 
-Fork is a secondary small button in the action row, before Remove, for a skill of a source and a plugin's skill. No banner carries it. An unmanaged skill is adopted from its banner. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled. A fork that succeeds closes the dialog and selects the fork. After a plugin's skill is forked, a second dialog lists each agent the CLI wrote a note for: a 20px logo, the name in `type.body` `text.primary`, the note in `type.secondary` `text.muted`, and one primary button.
+Fork is a secondary small button in the action row, before Remove, for a skill of a source and a plugin's skill. No banner carries it. An unmanaged skill is adopted from its banner. The title is a question. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled while the field holds no valid name. For a plugin's skill the switch starts on, with `my-<name>` in the field, selected, so Fork works at once: a fork under the plugin's own name leaves two skills of that name for the agents with the plugin. Turned off, one `type.secondary` `text.muted` line under the switch says so. A fork that succeeds closes the dialog and selects the fork; no dialog follows it.
+
+### What each agent sees (detail pane AGENTS)
+
+Where the agents find a skill of the selected skill's name, from the inventory alone: which places hold one, and which agents see each. It never says which of two skills an agent uses, since that is the agent's own rule.
+
+- When some agent sees more than one skill of the name, a notice under the chips: `tone.attention` bg and 1px border, `sights-notice.radius`, an `AlertTriangleIcon` (`xs`) in `tone.attention.fg`, then a `type.secondary` `text.secondary` paragraph that names those agents and the other skill by where it is, and ends with Details: the paragraph's type and colour with a dashed underline, plain text that opens a hover card (§6 "Hover card") on hover. Rename yours, a small primary button under the paragraph, is ready for when the app can rename a skill; until then it does not show. With no agent seeing more than one, AGENTS shows nothing of this.
+- The hover card: its title in `type.secondary` `text.primary` 500, then a table (`src/components/ui/table.tsx`). A column for each place, the library first, then each plugin, then each agent's own folder, its caption in `table.header-text`; a check in `tone.primary.fg` where the row's agents see the skill, an en dash in `text.hint` where they do not. The agents that see more than one skill come first, a row each on `tone.attention.bg`; then the agents that see one, a row for those that see the same one, their names joined. Rows are `type.secondary` `text.secondary`, a 1px `shell.divider` rule above each. While some row is highlighted, a `text.muted` line under the table says what the highlight means.
 
 ### Edit (detail pane)
 
@@ -1054,6 +1063,10 @@ While the list scrolls, the header of the group that shows at the top stays pinn
 shadcn's Tooltip (`src/components/ui/tooltip.tsx`) names an icon-only button for the pointer, shows the full text of a shortened label, such as a source group's URL, or says why an inert agent chip does nothing: `tooltip.radius`, `overlay.bg` with 1px `overlay.border`, one `type.secondary` `text.primary` line with shadcn's padding, `tooltip.offset` from its trigger, on the side with room. It opens at once on hover or focus, as shadcn's provider sets, and closes on leave, Escape or a click. No arrow and no animation, like the app's other overlays. The button keeps its own accessible name; the tooltip adds no text a screen reader needs, but for an inert agent chip, whose reason it describes, and a help term.
 
 A help term (`src/components/help-term.tsx`) is a word in running text that explains itself: it keeps the text's type and colour with a dotted underline and the help cursor, and is a button that does nothing on a click, so its tooltip opens from the keyboard too. The punctuation that follows it sits inside the button, outside the underline, so a screen reader reads no space before it. Its tooltip, and the Universal pill's, take `size="text"`: the sentence wraps past `tooltip.text-max-width`.
+
+### Hover card
+
+shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
 
 ### Popover (Filter)
 
@@ -1196,4 +1209,5 @@ Nothing loops forever, and nothing waits on purpose. Two things loop, each only 
 - A launch with a kept inventory shows its screens with the first frame, with no fade, under a frosted pane: `shell.loading-veil` with a `shell.panel-loading-blur` backdrop blur, and on top the launch progress of an empty panel (the `Spinner`, Starting the app…, and from 5 seconds how much longer the check keeps trying). The pane takes every click and key, the screen under it is inert, and a screen's own shortcuts, such as the arrows of the skill list, wait for the checks, so nothing in the main panel starts before they pass. The sidebar, the command field and the sync status look as always but are inert, and ⌘K opens nothing, until the checks pass; the title bar still drags the window. This holds on a launch with no kept inventory too. When the checks pass, the pane fades out in `.3s` (`animate-code-loading-out`).
 - A launch with no kept inventory shows, from its first frame, a `Spinner` and a status line (`type.secondary`, `text.muted`) in the empty panel, faded in the same way. The line says only that the app loads, not which check runs. From 5s into a check, a countdown line under it (`type.row-desc`, `text.hint`).
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
+- Hover card: `hover-card.open-delay` .2s after the pointer reaches its trigger, so a pointer passing over the text opens nothing; `hover-card.close-delay` .3s after it leaves, so it can cross into the card. Each is a number passed to the hover card (`openDelay`, `closeDelay`). It appears and goes with no transition.
 - Button enable and disable, every variant: `opacity .2s`.

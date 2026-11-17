@@ -1,14 +1,13 @@
 // Fork in the Skills detail pane: which skills offer it, the command line each choice in the Fork
-// dialog produces, the dialog of what each agent sees after a plugin's skill is forked, and the
-// refusal that keeps the dialog open. The screen redraws from the inventory that follows: the fork
-// is selected once serve reports it.
+// dialog produces, and the refusal that keeps the dialog open; then what each agent sees of the
+// skills of one name, which AGENTS offers. The screen redraws from the inventory that follows: the
+// fork is selected once serve reports it.
 import type { Page } from "@playwright/test";
 
 import { sources } from "./fixtures/agents.ts";
 import {
   commitHelperForked,
   forked,
-  forkNotes,
   inventory,
   pdfForkedBeside,
   pdfForkedInPlace,
@@ -45,7 +44,7 @@ const pane = (page: Page, name: string) =>
 const actions = (page: Page, name: string) =>
   pane(page, name).getByLabel("Actions", { exact: true });
 const forkDialog = (page: Page, name: string) =>
-  page.getByRole("dialog", { name: `Fork ${name}` });
+  page.getByRole("dialog", { name: `Fork ${name}?` });
 
 /** Every skill a test opens, the forks included, reads its files and history. */
 const libraryNames = [
@@ -89,10 +88,10 @@ test("a skill of a source: Fork runs skill fork <name> and the pane redraws from
   await actions(page, "pdf").getByRole("button", { name: "Fork" }).click();
   const dialog = forkDialog(page, "pdf");
   await expect(dialog).toContainText(
-    "It becomes one of your skills and replaces pdf in every agent that has it. You can still take new versions of the original."
+    "A copy will be created in your skill library. Keep the same name to use it in place of this skill, or choose a new name to use both. You can still get updates from the original."
   );
   await expect(
-    dialog.getByRole("switch", { name: "Use a new name" })
+    dialog.getByRole("switch", { name: "Use a different name" })
   ).not.toBeChecked();
   const fork = cli.register(["skill", "fork", "pdf"], {
     events: [forked("pdf")],
@@ -117,16 +116,16 @@ test("a skill of a source: Fork runs skill fork <name> and the pane redraws from
   expect(forks(cli)).toEqual([["skill", "fork", "pdf", "--json"]]);
 });
 
-test("Use a new name: Fork runs skill fork <name> --name <new> and selects the fork", async ({
+test("Use a different name: Fork runs skill fork <name> --name <new> and selects the fork", async ({
   cli,
   page,
 }) => {
   await openSkill(cli, page, "pdf");
   await actions(page, "pdf").getByRole("button", { name: "Fork" }).click();
   const dialog = forkDialog(page, "pdf");
-  await dialog.getByText("Use a new name", { exact: true }).click();
+  await dialog.getByText("Use a different name", { exact: true }).click();
   await expect(
-    dialog.getByRole("switch", { name: "Use a new name" })
+    dialog.getByRole("switch", { name: "Use a different name" })
   ).toBeChecked();
   const field = dialog.getByRole("textbox", { name: "Name" });
   await expect(field).toBeFocused();
@@ -164,7 +163,7 @@ test("Use a new name: Fork runs skill fork <name> --name <new> and selects the f
   ]);
 });
 
-test("refused in place: exit 6 keeps the dialog open with the CLI's words and turns Use a new name on", async ({
+test("refused in place: exit 6 keeps the dialog open with the CLI's words and turns Use a different name on", async ({
   cli,
   page,
 }) => {
@@ -185,7 +184,7 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
     "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git. Move its .git out of the skill, or type a new name."
   );
   await expect(
-    dialog.getByRole("switch", { name: "Use a new name" })
+    dialog.getByRole("switch", { name: "Use a different name" })
   ).toBeChecked();
   const field = dialog.getByRole("textbox", { name: "Name" });
   await expect(field).toBeFocused();
@@ -213,7 +212,7 @@ test("a refusal clears when the switch or the name changes", async ({
   await openSkill(cli, page, "pdf");
   await actions(page, "pdf").getByRole("button", { name: "Fork" }).click();
   const dialog = forkDialog(page, "pdf");
-  const toggle = dialog.getByRole("switch", { name: "Use a new name" });
+  const toggle = dialog.getByRole("switch", { name: "Use a different name" });
   const alert = dialog.getByRole("alert");
   cli.register(["skill", "fork", "pdf"], {
     events: [refusedInPlace],
@@ -238,14 +237,14 @@ test("a refusal clears when the switch or the name changes", async ({
   await expect(alert).toHaveCount(0);
 });
 
-test("refused in place with Use a new name on: the hint leaves the switch out", async ({
+test("refused in place with Use a different name on: the hint leaves the switch out", async ({
   cli,
   page,
 }) => {
   await openSkill(cli, page, "pdf");
   await actions(page, "pdf").getByRole("button", { name: "Fork" }).click();
   const dialog = forkDialog(page, "pdf");
-  await dialog.getByRole("switch", { name: "Use a new name" }).click();
+  await dialog.getByRole("switch", { name: "Use a different name" }).click();
   // The skill's own name forks it in its place, which the CLI refuses as without the switch.
   await dialog.getByRole("textbox", { name: "Name" }).fill("pdf");
   cli.register(["skill", "fork", "pdf", "--name", "pdf"], {
@@ -261,7 +260,7 @@ test("refused in place with Use a new name on: the hint leaves the switch out", 
   ]);
 });
 
-test("a plugin's skill: Fork runs skill fork <skill> and shows what each agent sees", async ({
+test("a plugin's skill: Use a different name starts on; turned off, Fork runs skill fork <plugin>:<skill> and AGENTS says who sees more than one skill", async ({
   cli,
   page,
 }) => {
@@ -271,10 +270,19 @@ test("a plugin's skill: Fork runs skill fork <skill> and shows what each agent s
     .click();
   const dialog = forkDialog(page, "commit-helper");
   await expect(dialog).toContainText(
-    "It becomes one of your skills, in your library. The plugin's commit-helper stays as it is; agentx tells you after forking what each agent sees."
+    "A copy will be created in your skill library. The plugin keeps its own skill."
   );
-  cli.register(["skill", "fork", "commit-helper"], {
-    events: [forked("commit-helper"), ...forkNotes],
+  const toggle = dialog.getByRole("switch", { name: "Use a different name" });
+  await expect(toggle).toBeChecked();
+  const field = dialog.getByRole("textbox", { name: "Name" });
+  await expect(field).toHaveValue("my-commit-helper");
+  await expect(field).toBeFocused();
+  await toggle.click();
+  await expect(dialog).toContainText(
+    "Agents with the plugin will see more than one skill named commit-helper."
+  );
+  cli.register(["skill", "fork", "acme-tools:commit-helper"], {
+    events: [forked("commit-helper")],
   });
 
   await dialog.getByRole("button", { name: "Fork" }).click();
@@ -282,24 +290,42 @@ test("a plugin's skill: Fork runs skill fork <skill> and shows what each agent s
   await expect(
     toasts(page).getByText("Forked commit-helper skill", { exact: true })
   ).toBeVisible();
-  const notes = page.getByRole("dialog", { name: "What each agent sees" });
-  const rows = notes.getByRole("listitem");
-  await expect(rows).toHaveCount(3);
-  await expect(rows.nth(0)).toContainText("Claude Code");
-  await expect(rows.nth(0)).toContainText(
-    "the fork owns the bare name and the plugin's copy stays reachable under the plugin's prefix, so the model sees both"
-  );
-  await expect(rows.nth(1)).toContainText("Codex");
-  await expect(rows.nth(1)).toContainText(
-    "it reads the library, so it sees commit-helper whether or not it has acme-tools"
-  );
-  await expect(rows.nth(2)).toContainText("Gemini CLI");
   await cli.serveEmit([commitHelperForked]);
-  await notes.getByRole("button", { name: "Done" }).click();
-  await expect(notes).toHaveCount(0);
-  await expect(pane(page, "commit-helper")).toContainText("personal skill");
+  const fork = pane(page, "commit-helper");
+  await expect(fork).toContainText("personal skill");
   await expect(page).toHaveURL(/#\/skills\/commit-helper$/u);
-  expect(forks(cli)).toEqual([["skill", "fork", "commit-helper", "--json"]]);
+  expect(forks(cli)).toEqual([
+    ["skill", "fork", "acme-tools:commit-helper", "--json"],
+  ]);
+
+  // Claude Code has the plugin's skill and a link to the fork; the agents that read the library
+  // see the fork alone.
+  const agents = fork.getByRole("region", { name: "Agents" });
+  const notice = agents.getByRole("note", { name: "Skills of the same name" });
+  await expect(notice).toContainText("Found 2 skills named commit-helper.");
+  // The pointer may already rest where Details shows up, which opens nothing: move it off first.
+  await page.mouse.move(0, 0);
+  await notice.getByText("Details", { exact: true }).hover();
+  const table = page.getByRole("table", {
+    name: "Skills named commit-helper",
+  });
+  await expect(table.getByRole("columnheader")).toHaveText([
+    "Agent",
+    "Your skill",
+    "acme-tools",
+  ]);
+  await expect(table.getByRole("rowheader")).toHaveText([
+    "Claude Code",
+    "Codex, Gemini CLI",
+  ]);
+  await expect(
+    table.getByRole("row", { name: /^Claude Code/u }).getByRole("cell")
+  ).toHaveText(["Sees it", "Sees it"]);
+  await expect(
+    page.getByText(
+      "To avoid clashes, rename your skill or uninstall the acme-tools plugin."
+    )
+  ).toBeVisible();
 });
 
 test("a plugin's skill several plugins provide is named <plugin>:<skill>", async ({
@@ -316,16 +342,21 @@ test("a plugin's skill several plugins provide is named <plugin>:<skill>", async
   await actions(page, "commit-helper")
     .getByRole("button", { name: "Fork" })
     .click();
-  cli.register(["skill", "fork", "acme-tools:commit-helper"], {
-    events: [forked("commit-helper"), ...forkNotes],
-  });
-  await forkDialog(page, "commit-helper")
-    .getByRole("button", { name: "Fork" })
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: "What each agent sees" })
-  ).toBeVisible();
+  const dialog = forkDialog(page, "commit-helper");
+  cli.register(
+    ["skill", "fork", "acme-tools:commit-helper", "--name", "my-commit-helper"],
+    { events: [forked("my-commit-helper")] }
+  );
+  await dialog.getByRole("button", { name: "Fork" }).click();
+  await expect(dialog).toHaveCount(0);
   expect(forks(cli)).toEqual([
-    ["skill", "fork", "acme-tools:commit-helper", "--json"],
+    [
+      "skill",
+      "fork",
+      "acme-tools:commit-helper",
+      "--name",
+      "my-commit-helper",
+      "--json",
+    ],
   ]);
 });

@@ -27,6 +27,8 @@ import {
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
+import { SightsNotice } from "#/screens/skills/sights-view.tsx";
+import { sightsOf } from "#/screens/skills/sights.ts";
 import { useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -114,18 +116,23 @@ const EditButton = ({ row }: { row: SkillRow }) => {
  * origin (unless the banner says where the skill came from), a pill per fork made from it under a
  * new name, which opens that fork, and at its right end the action row (Edit for a skill the user
  * may write to, Fork for a skill of a source or a plugin's, Remove for a library skill; the other
- * actions come with the changes that add them); then the description. No status pill: the banner is the status. One banner, with its
- * button; AGENTS, whose chips add and remove placements; FILES; then DETAILS and HISTORY side by
- * side. Every control runs one command and redraws from the inventory that follows.
+ * actions come with the changes that add them); then the description. No status pill: the banner
+ * is the status. One banner, with its button; AGENTS, whose chips add and remove placements, and,
+ * when some agent sees more than one skill of this name, a notice under the chips whose Details
+ * shows what each agent sees; FILES; then DETAILS and HISTORY side by side. Every control runs
+ * one command and redraws from the inventory that follows.
  */
 export const SkillDetail = ({
   row,
   forks,
+  sameName,
   configurations,
 }: {
   row: SkillRow;
   /** The forks made from this skill under a new name. */
   forks: SkillRow[];
+  /** The other skills on the machine with this skill's name. */
+  sameName: SkillRow[];
   configurations: Configuration[];
 }) => {
   // Which control opened the Remove dialog: the Universal chip says why the skill leaves every agent.
@@ -145,6 +152,7 @@ export const SkillDetail = ({
     sources,
   });
   const details = detailsOf(row, configurations);
+  const sights = sightsOf(row, sameName, configurations);
   return (
     <article
       aria-label={row.name}
@@ -224,6 +232,7 @@ export const SkillDetail = ({
             setRemoving("universal");
           }}
         />
+        <SightsNotice sights={sights} />
       </section>
       {row.entry !== undefined && (
         <RemoveDialog

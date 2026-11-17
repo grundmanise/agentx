@@ -3,9 +3,10 @@
 // what the dialog says the fork does for each kind of skill, and a refusal's hint in the dialog's
 // own words (docs/spec/cli-contract.md, "Forking a skill").
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { ErrorEvent, SkillNode } from "#/cli/events.gen.ts";
+import type { ErrorEvent } from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
+import { SKILL_NAME_LIMIT } from "#/lib/skill-name.ts";
 import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
@@ -18,25 +19,14 @@ export const canFork = (row: SkillRow) =>
   row.kind === "source" || row.kind === "plugin";
 
 /**
- * How `skill fork` names `row`: a library skill by its name; a plugin's skill by its directory,
- * as `<plugin>:<directory>` when the plugins of the machine provide more than one skill of that
- * directory's name, which the CLI otherwise refuses.
+ * How `skill fork` names `row`: a library skill by its name, and a plugin's skill always as
+ * `<plugin>:<directory>`, which names that plugin's copy and nothing else.
  */
-export const forkTarget = (row: SkillRow, skills: SkillNode[]): string => {
+export const forkTarget = (row: SkillRow): string => {
   const occurrence = row.kind === "plugin" ? occurrenceOf(row) : undefined;
-  if (occurrence?.plugin === undefined) {
-    return row.name;
-  }
-  const directory = directoryName(occurrence.path);
-  const plugins = new Set(
-    skills
-      .flatMap((node) => node.occurrences)
-      .filter(
-        (o) => o.plugin !== undefined && directoryName(o.path) === directory
-      )
-      .map((o) => o.plugin)
-  );
-  return plugins.size > 1 ? `${occurrence.plugin}:${directory}` : directory;
+  return occurrence?.plugin === undefined
+    ? row.name
+    : `${occurrence.plugin}:${directoryName(occurrence.path)}`;
 };
 
 /** `skill fork <target>`, with `--name <new>` for a fork under a new name. */
@@ -48,11 +38,28 @@ export const forkArgs = (target: string, newName?: string): string[] =>
 /** What the Fork dialog says forking `row` does: a plugin's skill is forked beside the plugin's. */
 export const forkText = (row: SkillRow): string =>
   row.kind === "plugin"
-    ? `It becomes one of your skills, in your library. The plugin's ${row.name} stays as it is; agentx tells you after forking what each agent sees.`
-    : `It becomes one of your skills and replaces ${row.name} in every agent that has it. You can still take new versions of the original.`;
+    ? "A copy will be created in your skill library. The plugin keeps its own skill."
+    : "A copy will be created in your skill library. Keep the same name to use it in place of this skill, or choose a new name to use both. You can still get updates from the original.";
 
 /**
- * The Use a new name switch and the name field as they stand once a refusal shows: off; on with
+ * Whether Use a different name starts on: for a plugin's skill, whose fork under its own name
+ * leaves more than one skill of that name for the agents with the plugin.
+ */
+export const renamesAtFirst = (row: SkillRow) => row.kind === "plugin";
+
+const PREFIX = "my-";
+
+/**
+ * The name the Name field starts with: `my-<name>` for a plugin's skill, so Fork works at once; a
+ * name too long to take the prefix is cut to the limit, without a hyphen at its end.
+ */
+export const firstName = (row: SkillRow) =>
+  renamesAtFirst(row)
+    ? `${PREFIX}${row.name}`.slice(0, SKILL_NAME_LIMIT).replace(/-+$/u, "")
+    : "";
+
+/**
+ * The Use a different name switch and the name field as they stand once a refusal shows: off; on with
  * no name typed, as exit 6 leaves them when Fork ran with the switch off, since the dialog then
  * turns it on; or on with a name typed.
  */
@@ -76,7 +83,7 @@ export const formAfter = (
 /** What is left to do to fork beside the skill, as the form stands, or nothing once a name is typed. */
 const besideWays: Record<ForkFields, string | undefined> = {
   named: undefined,
-  off: "turn on Use a new name",
+  off: "turn on Use a different name",
   on: "type a new name",
 };
 
@@ -127,14 +134,14 @@ const forkHintRules = (form: ForkFields): HintRule[] => [
   {
     app: () =>
       form === "off"
-        ? "turn on Use a new name and give it a valid name"
+        ? "turn on Use a different name and give it a valid name"
         : "type a valid new name",
     cli: /^fork it under a valid name with '.+'$/u,
   },
   {
     app: () => {
       if (form === "off") {
-        return "turn on Use a new name and choose another name";
+        return "turn on Use a different name and choose another name";
       }
       return form === "on" ? "type a new name" : "choose another name";
     },

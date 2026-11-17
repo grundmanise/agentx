@@ -75,9 +75,8 @@ func unmanagedRefusal(name string, mode forkMode) error {
 // forkSourceOf finds the skill arg names. The library comes first, its
 // entry's branch saying what it is; then the account repo, for a fork
 // whose library entry is gone, which is forked from its branch all the
-// same; then the plugins the scan found. A plugin's skill is named by its
-// directory, or, where several plugins provide one of that name, as
-// <plugin>:<skill>. scanned is the scan the plugins are read from, run
+// same; then the plugins the scan found. A plugin's skill is named as
+// <plugin>:<skill>, its plugin and its directory. scanned is the scan the plugins are read from, run
 // only when the name is none of the library's or the account repo's. A
 // library entry no branch records is unmanaged, and refused unless mode
 // takes one, see forkMode.takesUnmanaged.
@@ -138,40 +137,23 @@ func (src forkSource) origin() lineage.Origin {
 }
 
 // pluginOccurrence is the plugin's skill arg names among what the scan
-// found: a skill directory called arg inside one plugin, or, for
-// <plugin>:<skill>, the directory called skill inside that plugin. A name
-// several plugins provide is refused with the plugins named, and the
-// plugin's own copies in several configurations are one skill, read from
-// the first by configuration. Pure.
+// found: for <plugin>:<skill>, the directory called skill inside that
+// plugin. A plugin's skill is named that way alone, so a bare name is no
+// plugin's, and a name no plugin provides is not found. The plugin's own
+// copies in several configurations are one skill, read from the first by
+// configuration. Pure.
 func pluginOccurrence(inventory scan.Inventory, arg string) (scan.Occurrence, error) {
 	plugin, skill, qualified := strings.Cut(arg, ":")
-	if !qualified {
-		plugin, skill = "", arg
-	}
 	var found []scan.Occurrence
-	plugins := map[string]bool{}
 	for _, node := range inventory.Skills {
 		for _, o := range node.Occurrences {
-			if o.Plugin == "" || o.Scope != "user" || filepath.Base(o.Path) != skill || (qualified && o.Plugin != plugin) {
-				continue
+			if qualified && o.Plugin == plugin && o.Scope == "user" && filepath.Base(o.Path) == skill {
+				found = append(found, o)
 			}
-			found = append(found, o)
-			plugins[o.Plugin] = true
 		}
 	}
-	switch len(plugins) {
-	case 0:
-		return scan.Occurrence{}, fail(exitNotFound, fmt.Sprintf("neither the library nor any plugin holds a skill called %q", sanitised(arg)),
-			"run 'agentx skill list' to see what the library holds, or 'agentx scan' to see the plugins' skills")
-	case 1:
-	default:
-		names := make([]string, 0, len(plugins))
-		for p := range plugins {
-			names = append(names, p)
-		}
-		sort.Strings(names)
-		return scan.Occurrence{}, fail(exitRefused, sanitised(skill)+" is provided by several plugins: "+sanitised(strings.Join(names, ", ")),
-			"name one as <plugin>:"+sanitised(skill)+", such as '"+skillCommand("fork", names[0]+":"+skill)+"'")
+	if len(found) == 0 {
+		return scan.Occurrence{}, notHeld(arg)
 	}
 	sort.Slice(found, func(i, j int) bool {
 		if found[i].Configuration != found[j].Configuration {
@@ -180,6 +162,12 @@ func pluginOccurrence(inventory scan.Inventory, arg string) (scan.Occurrence, er
 		return found[i].Path < found[j].Path
 	})
 	return found[0], nil
+}
+
+// notHeld is the failure for a name neither the library nor any plugin holds.
+func notHeld(arg string) error {
+	return fail(exitNotFound, fmt.Sprintf("neither the library nor any plugin holds a skill called %q", sanitised(arg)),
+		"run 'agentx skill list' to see what the library holds; name a plugin's skill as <plugin>:<skill>, which 'agentx scan' lists")
 }
 
 // pluginConfigurations are the configurations of the scan that have the

@@ -105,7 +105,7 @@ const diff = (
   name,
   patch: `diff --git a/${path} b/${path}\n`,
   path,
-  schema_version: 3,
+  schema_version: 4,
   status,
   type: "diff",
 });

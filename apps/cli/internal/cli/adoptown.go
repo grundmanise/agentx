@@ -438,18 +438,6 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 			"replace the link with the folder it points to, then run '"+adoptCommand(name)+"' again").
 			listed("a symlink to " + quotedPath(target) + ". To adopt it, replace " + quotedPath(links[0]) + " with the folder it points to")
 	}
-	inventory, err := fk.scanned()
-	if err != nil {
-		return forkSource{}, err
-	}
-	switch o, err := pluginOccurrence(inventory, name); {
-	case err == nil:
-		return forkSource{}, refuse(exitRefused, shown+" comes with the plugin "+sanitised(o.Plugin)+", whose folder agentx never changes",
-			"make a copy of your own with '"+skillCommand("fork", name)+"'").
-			listed("comes with the plugin " + sanitised(o.Plugin) + ", whose folder agentx never changes. To make a copy of your own, run '" + skillCommand("fork", name) + "'")
-	case failureOf(err).status != exitNotFound:
-		return forkSource{}, err // several plugins provide it, and the refusal names them
-	}
 	return forkSource{}, missing
 }
 

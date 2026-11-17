@@ -5,7 +5,7 @@
 
 // The output schema version this app reads. An event of another version is
 // refused.
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // What every event starts with.
 export interface Envelope {
@@ -446,15 +446,6 @@ export interface HistoryEvent {
   origin?: ForkOrigin;
 }
 
-export interface ForkNoteEvent {
-  type: "fork_note";
-  schema_version: number;
-  name: string;
-  plugin: string;
-  configuration: string;
-  note: string;
-}
-
 export interface UpdateAvailableEvent {
   type: "update_available";
   schema_version: number;
@@ -672,7 +663,6 @@ export type CliEvent =
   | DiffEvent
   | SkillFileEvent
   | HistoryEvent
-  | ForkNoteEvent
   | UpdateAvailableEvent
   | ConflictEvent
   | ExportEvent
