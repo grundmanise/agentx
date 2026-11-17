@@ -71,7 +71,7 @@ func exportedFrom(t *testing.T) (*harness, string) {
 	h, s := installHarness(t)
 	equal(t, "label", h.run("config", "set", "label", "first-laptop").exit, 0)
 	equal(t, "disable", h.run("config", "disable", "gemini-cli").exit, 0)
-	equal(t, "add", h.run("skill", "add", s.url, "--all", "--to", "cursor", "--copy").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--all", "--to", "cortex", "--copy").exit, 0)
 	other := h.newSourceRepo("other", true)
 	other.skill("tools/gamma", "gamma", "The third skill", nil)
 	other.commit("one skill")
@@ -171,7 +171,7 @@ func TestImportRestoresAMachine(t *testing.T) {
 	equal(t, "alpha", actions["alpha"]["action"], importInstalled)
 	equal(t, "alpha's state before", actions["alpha"]["state"], restoreMissing)
 	equal(t, "beta", actions["beta"]["action"], importInstalled)
-	equal(t, "beta's placements", fmt.Sprint(actions["beta"]["placements"]), "[codex cursor gemini-cli]")
+	equal(t, "beta's placements", fmt.Sprint(actions["beta"]["placements"]), "[codex cortex gemini-cli]")
 	equal(t, "mine", actions["mine"]["action"], importSkipped)
 	contains(t, "mine's reason", actions["mine"]["reason"].(string), "mine is unmanaged, so there is no source to install it from")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "imported the settings from "+first+": 2 installed, 1 skipped")
@@ -189,19 +189,19 @@ func TestImportRestoresAMachine(t *testing.T) {
 	contains(t, "stdout", text.stdout, "  alpha  managed    kept     "+fixtureURL("skills")+"/skills/alpha")
 	contains(t, "stdout", text.stdout, "  skipped mine: mine is unmanaged, so there is no source to install it from")
 
-	// Placements moved between configurations: alpha from Claude Code to
-	// Cursor, and beta out of every configuration but the clients that read
-	// the library, which see it there whatever the snapshot says.
+	// Placements changed: alpha out of Claude Code and kept in Cortex Code,
+	// and beta out of every configuration but the clients that read the
+	// library, which see it there whatever the snapshot says.
 	moved := editedExport(t, h, first, "moved.json", func(doc map[string]any) {
 		skills := doc["skills"].([]any)
-		skills[0].(map[string]any)["placements"] = []any{"cursor"}
+		skills[0].(map[string]any)["placements"] = []any{"cortex"}
 		skills[1].(map[string]any)["placements"] = []any{}
 	})
 	out = h.mustRun("--json", "import", moved, "--yes")
 	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
 		actions[e["name"].(string)] = e
 	}
-	equal(t, "alpha moved", fmt.Sprint(actions["alpha"]["action"], " ", actions["alpha"]["placements"]), "placed [codex cursor gemini-cli]")
+	equal(t, "alpha moved", fmt.Sprint(actions["alpha"]["action"], " ", actions["alpha"]["placements"]), "unplaced [codex cortex gemini-cli]")
 	equal(t, "beta taken out", fmt.Sprint(actions["beta"]["action"], " ", actions["beta"]["placements"]), "unplaced [codex gemini-cli]")
 
 	// A skill whose library directory was deleted by hand is not kept as
@@ -264,8 +264,8 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 	writeFile(t, filepath.Join(h.library, "beta", "draft.md"), "an edit\n")
 	follow := h.exportPath("follow.json")
 	writeFile(t, follow, `{"schema_version": 2, "settings": {"schema_version": 1}, "skills": [
-		{"name": "alpha", "source": "`+s.url+`", "subpath": "skills/alpha", "placements": ["claude-code", "cursor"]},
-		{"name": "beta", "source": "`+s.url+`", "subpath": "skills/beta", "placements": ["claude-code", "cursor"]}]}`)
+		{"name": "alpha", "source": "`+s.url+`", "subpath": "skills/alpha", "placements": ["claude-code", "cortex"]},
+		{"name": "beta", "source": "`+s.url+`", "subpath": "skills/beta", "placements": ["claude-code", "cortex"]}]}`)
 
 	out := h.mustRun("--json", "import", follow, "--yes")
 	did := map[string]jsonEvent{}
@@ -343,7 +343,7 @@ exec %GIT% "$@"
 		t.Fatalf("the killed import got as far as the library of alpha:\n%s", out)
 	}
 	_, kinds := journalKinds(t, h)
-	equal(t, "the journal of alpha's install", kinds, "ref, publish, link")
+	equal(t, "the journal of alpha's install", kinds, "ref, publish, link, link")
 
 	h.mustRun("config", "set", "label", "recovered")
 	equal(t, "journals after recovery", journalCount(t, h), 0)
@@ -357,7 +357,7 @@ exec %GIT% "$@"
 // TestPlaceInto: an import places a skill in each detected configuration
 // the snapshot names, but in none whose client sees it already: one that
 // reads the library, and one that reads the skills directory of another
-// configuration it is placed in, as Cursor reads Claude Code's.
+// configuration it is placed in, as a client may read Claude Code's.
 func TestPlaceInto(t *testing.T) {
 	t.Parallel()
 	claude, cursor := placeTarget{id: "claude-code", dir: "/h/.claude/skills"}, placeTarget{id: "cursor", dir: "/h/.cursor/skills"}

@@ -427,8 +427,8 @@ func TestPlacementEventsCarryTheDrift(t *testing.T) {
 			args  []string
 			drift []string
 		}{
-			{[]string{"skill", "remove", "alpha", "--from", "cursor"}, []string{"missing", want}},
-			{[]string{"skill", "place", "alpha", "--to", "cursor"}, []string{want}},
+			{[]string{"skill", "remove", "alpha", "--from", "cortex"}, []string{"missing", want}},
+			{[]string{"skill", "place", "alpha", "--to", "cortex"}, []string{want}},
 		} {
 			what := strings.Join(c.args, " ")
 			ev := h.librarySkill(h.mustRun(append([]string{"--json"}, c.args...)...).stdout, "alpha")
@@ -440,8 +440,8 @@ func TestPlacementEventsCarryTheDrift(t *testing.T) {
 		// Enabling a configuration with --place-all reports every library
 		// skill, alpha among them, which is already placed there and so is
 		// left as it is and reported all the same.
-		h.mustRun("config", "disable", "cursor")
-		ev := h.librarySkill(h.mustRun("--json", "config", "enable", "cursor", "--place-all").stdout, "alpha")
+		h.mustRun("config", "disable", "cortex")
+		ev := h.librarySkill(h.mustRun("--json", "config", "enable", "cortex", "--place-all").stdout, "alpha")
 		equal(t, "config enable --place-all drift", drift(ev), want)
 		for _, field := range coordinates {
 			equal(t, "config enable --place-all "+field, ev[field], before[field])

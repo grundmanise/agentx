@@ -96,7 +96,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	equal(t, "the branch's snapshot is the file's", raw, readText(t, file))
 	equal(t, "the commit's subject", remoteGit(t, a, remote, "log", "-1", "--format=%s", tip), "Export first-laptop")
 	equal(t, "the commit's trailers", fmt.Sprintf("%+v", machineOperation(t, a, remote, tip)), fmt.Sprintf("%+v", lineage.OperationTrailers{Operation: "export"}))
-	equal(t, "alpha's placements", fmt.Sprint(doc["skills"].([]any)[0].(map[string]any)["placements"]), "[claude-code codex cursor gemini-cli]")
+	equal(t, "alpha's placements", fmt.Sprint(doc["skills"].([]any)[0].(map[string]any)["placements"]), "[claude-code codex gemini-cli]")
 
 	again := a.run("export", "--machine", "cloud")
 	equal(t, "export --machine again: exit", again.exit, 0)
@@ -188,7 +188,7 @@ func TestABranchWithNoSettingsIsRefused(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"import", "--machine", "cloud", "--yes"},
-		{"skill", "place", "alpha", "--machine", "cloud", "--to", "cursor"},
+		{"skill", "place", "alpha", "--machine", "cloud", "--to", "cortex"},
 	} {
 		out := h.run(args...)
 		equal(t, strings.Join(args, " ")+": exit", out.exit, 6)
@@ -226,15 +226,15 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	ev := h.one(out.stdout, "machine_skill")
 	tip, doc, _ := machineSnapshot(t, h, remote, "cloud")
 	equal(t, "machine_skill.commit", ev["commit"], tip)
-	equal(t, "machine_skill.placements", fmt.Sprint(ev["placements"]), "[claude-code codex cursor gemini-cli]")
+	equal(t, "machine_skill.placements", fmt.Sprint(ev["placements"]), "[claude-code codex cortex gemini-cli]")
 	skills := doc["skills"].([]any)
 	equal(t, "the snapshot's skills", len(skills), 1)
 	entry := skills[0].(map[string]any)
 	equal(t, "the entry's fields", keysOf(entry), "kind,name,placements,source,subpath")
 	equal(t, "the entry's source", entry["source"], s.url)
-	equal(t, "the commit's subject", remoteGit(t, h, remote, "log", "-1", "--format=%s", tip), "Place alpha in claude-code, codex, cursor, gemini-cli")
+	equal(t, "the commit's subject", remoteGit(t, h, remote, "log", "-1", "--format=%s", tip), "Place alpha in claude-code, codex, cortex, gemini-cli")
 	equal(t, "the commit's trailers", fmt.Sprintf("%+v", machineOperation(t, h, remote, tip)),
-		fmt.Sprintf("%+v", lineage.OperationTrailers{Operation: "place", Skill: "alpha", Configurations: []string{"claude-code", "codex", "cursor", "gemini-cli"}}))
+		fmt.Sprintf("%+v", lineage.OperationTrailers{Operation: "place", Skill: "alpha", Configurations: []string{"claude-code", "codex", "cortex", "gemini-cli"}}))
 	here, err := home.LoadSettings(h.agentx)
 	if err != nil {
 		t.Fatal(err)
@@ -247,13 +247,13 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	equal(t, "the account entry's fields, without the access", keysOf(sources[0].(map[string]any)), "account,last_fetched,url")
 	equal(t, "the account entry's URL", sources[0].(map[string]any)["url"], account.URL)
 
-	text := h.run("skill", "remove", "alpha", "--machine", "cloud", "--from", "cursor")
+	text := h.run("skill", "remove", "alpha", "--machine", "cloud", "--from", "cortex")
 	equal(t, "remove --from: exit", text.exit, 0)
 	tip, doc, _ = machineSnapshot(t, h, remote, "cloud")
-	contains(t, "remove --from", text.stdout, "removed alpha from cursor on the cloud machine: pushed "+short(tip)+" to machines/cloud")
+	contains(t, "remove --from", text.stdout, "removed alpha from cortex on the cloud machine: pushed "+short(tip)+" to machines/cloud")
 	equal(t, "the placements left", fmt.Sprint(doc["skills"].([]any)[0].(map[string]any)["placements"]), "[claude-code codex gemini-cli]")
 	equal(t, "the remove's trailers", fmt.Sprintf("%+v", machineOperation(t, h, remote, tip)),
-		fmt.Sprintf("%+v", lineage.OperationTrailers{Operation: "remove", Skill: "alpha", Configurations: []string{"cursor"}}))
+		fmt.Sprintf("%+v", lineage.OperationTrailers{Operation: "remove", Skill: "alpha", Configurations: []string{"cortex"}}))
 
 	refused := h.run("skill", "remove", "alpha", "--machine", "cloud", "--from", "codex")
 	equal(t, "remove --from a universal client: exit", refused.exit, 6)
@@ -306,7 +306,7 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 // and skill remove --from takes them out again. A second home whose account
 // remote is the same repository by another URL imports the branch: it
 // keeps its own URL of the account remote, and the skill is placed in
-// cursor as a copy, a real directory.
+// cortex as a copy, a real directory.
 func TestPlaceACopyOnTheCloudMachineAndImportIt(t *testing.T) {
 	t.Parallel()
 	const overSSH, overHTTPS = "git@example.com:me/agentx-account.git", "https://example.com/me/agentx-account"
@@ -315,12 +315,12 @@ func TestPlaceACopyOnTheCloudMachineAndImportIt(t *testing.T) {
 	remote := newAccountRemote(t, a)
 	a.reachAs(remote, "ssh://git@example.com/me/agentx-account")
 	a.setAccount(overSSH)
-	a.mustRun("skill", "place", "alpha", "--machine", "cloud", "--to", "cursor", "--copy")
+	a.mustRun("skill", "place", "alpha", "--machine", "cloud", "--to", "cortex", "--copy")
 	_, doc, _ := machineSnapshot(t, a, remote, "cloud")
-	equal(t, "copy_mode after place --copy", fmt.Sprint(doc["settings"].(map[string]any)["copy_mode"]), "map[alpha:[cursor]]")
+	equal(t, "copy_mode after place --copy", fmt.Sprint(doc["settings"].(map[string]any)["copy_mode"]), "map[alpha:[cortex]]")
 
 	b := newHarness(t)
-	b.build(t, fixture{dirs: []string{".cursor"}})
+	b.build(t, fixture{dirs: []string{".snowflake/cortex"}})
 	b.rewrite(s)
 	b.reachAs(remote, overHTTPS)
 	b.setAccount(overHTTPS)
@@ -332,12 +332,12 @@ func TestPlaceACopyOnTheCloudMachineAndImportIt(t *testing.T) {
 	}
 	account, _ := accountEntry(settings)
 	equal(t, "the second home's account remote", account.URL, overHTTPS)
-	info, err := os.Lstat(filepath.Join(b.home, ".cursor", "skills", "alpha"))
+	info, err := os.Lstat(filepath.Join(b.home, ".snowflake/cortex", "skills", "alpha"))
 	if err != nil || !info.IsDir() {
-		t.Errorf("alpha is not placed in cursor as a copy: %v %v", info, err)
+		t.Errorf("alpha is not placed in cortex as a copy: %v %v", info, err)
 	}
 
-	a.mustRun("skill", "remove", "alpha", "--machine", "cloud", "--from", "cursor")
+	a.mustRun("skill", "remove", "alpha", "--machine", "cloud", "--from", "cortex")
 	_, doc, _ = machineSnapshot(t, a, remote, "cloud")
 	equal(t, "copy_mode after remove --from", fmt.Sprint(doc["settings"].(map[string]any)["copy_mode"]), "map[]")
 }

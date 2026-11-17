@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -17,7 +18,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
-// updateHarness is a machine with Claude Code and Cursor and a source of
+// updateHarness is a machine with Claude Code and Cortex Code and a source of
 // two skills, both installed from its first commit with a copy in each
 // client. alpha lives at skills/alpha-dir, so its upstream directory is not
 // its library name. The source has not moved on yet; newVersion commits the
@@ -31,7 +32,7 @@ func updateHarness(t *testing.T) (h *harness, s *sourceRepo, first string) {
 // updateHome is the home updateHarness hands out; its id is the first commit.
 var updateHome = &fixtureHome{
 	source: "skills",
-	dirs:   []string{".claude", ".cursor"},
+	dirs:   []string{".claude", ".snowflake/cortex"},
 	build: func(h *harness, s *sourceRepo) []string {
 		s.skill("skills/alpha-dir", "alpha", "The first skill", map[string]string{
 			"notes.md": "alpha notes\n", "old.md": "a file the update deletes\n", "scripts/run.sh": "#!/bin/sh\necho run\n",
@@ -114,9 +115,9 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	h, s, first := updateHarness(t)
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	editCopy(t, cursor)
-	edited := libraryTree(t, cursor)
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
+	editCopy(t, cortex)
+	edited := libraryTree(t, cortex)
 	// The two hold the same bytes, since a copy whose files differ from
 	// the library's, ignored or not, is listed as no placement of it.
 	writeFile(t, filepath.Join(lib, ".DS_Store"), "finder data\n")
@@ -143,8 +144,8 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	}
 	nothingAt(t, "old.md", filepath.Join(lib, "old.md"))
 	sameTree(t, "claude's copy", libraryTree(t, claude), withFile(want, ".DS_Store", "finder data\n"))
-	sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(cursor))
+	sameTree(t, "cortex's copy", libraryTree(t, cortex), edited)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(cortex))
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
 		"updated alpha from "+first[:7]+" to "+second[:7]+", 1 copy placement refreshed, 1 placement skipped")
 	ev := h.one(out.stdout, "library_skill")
@@ -154,13 +155,11 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	if _, ok := ev["candidate"]; ok {
 		t.Errorf("the updated skill still carries a candidate: %v", ev["candidate"])
 	}
-	// The event is the rescan after the update: the refreshed copy, which
-	// Cursor sees through Claude Code's directory too, and not Cursor's own
-	// edited copy, which no longer holds what the library does.
-	equal(t, "placements", strings.Join(placementsOf(t, ev), "|"), "claude-code copy copy|cursor copy copy")
-	equal(t, "placement paths", strings.Join(pathsOf(t, ev), "|"), "claude-code "+claude+"|cursor "+claude)
+	// The event is the rescan after the update: the refreshed copy, and not
+	// Cortex Code's edited copy, which no longer holds what the library does.
+	equal(t, "placements", strings.Join(placementsOf(t, ev), "|"), "claude-code copy copy")
 	equal(t, "drift", drift(ev), "")
-	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
+	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cortex)} {
 		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
 	equal(t, "journals", journalCount(t, h), 0)
@@ -382,7 +381,64 @@ func TestSkillUpdateAllReportsConflictsInNameOrder(t *testing.T) {
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "alpha"+refusal+"\nbeta"+refusal)
 }
 
-// otherSourceHarness is updateHarness with a second source holding gamma,
+// TestSkillUpdateOfSeveralNamesReportsEachSkill updates three named skills
+// in one run, given out of order and one of them twice: alpha, which has an
+// update, is updated; beta, whose edit conflicts with its update, is left
+// with a merge pending; delta has no update. Each skill ends with one
+// progress event, after what the run says of it: alpha's library_skill,
+// beta's conflict and an error naming beta, nothing for delta. The run
+// then answers as --all does, exit code 4 and an error naming beta, with
+// one journal for the whole run.
+func TestSkillUpdateOfSeveralNamesReportsEachSkill(t *testing.T) {
+	t.Parallel()
+	h, _, _, second := mixedHarness(t)
+	version := mutationVersion(t, h)
+	out := h.run("--json", "skill", "update", "delta", "beta", "alpha", "delta")
+	equal(t, "exit", out.exit, 4)
+	equal(t, "updated", updatedNames(h, out.stdout), "alpha")
+	refusal := "beta conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is"
+	var ended []string
+	seen := map[string]string{} // what the run said of each skill before it ended it
+	var runError jsonEvent
+	for _, e := range h.events(out.stdout) {
+		switch e["type"] {
+		case "library_skill":
+			seen[e["name"].(string)] += "updated "
+			equal(t, "alpha's upstream_commit", e["upstream_commit"], second)
+		case "conflict":
+			seen[e["name"].(string)] += "conflict "
+		case "error":
+			if e["skill"] == nil {
+				runError = e
+				continue
+			}
+			seen[e["skill"].(string)] += "error "
+			equal(t, "the skill's error", e["message"], refusal)
+			equal(t, "the skill's code", e["code"], "pending_merge")
+		case "progress":
+			name := e["subject"].(string)
+			equal(t, name+"'s phase", e["phase"], "update")
+			equal(t, name+"'s total", e["total"], float64(3))
+			equal(t, name+"'s current", e["current"], float64(len(ended)+1))
+			said := strings.TrimSpace(seen[name])
+			if said == "" {
+				said = "nothing"
+			}
+			ended = append(ended, name+": "+said)
+		}
+	}
+	slices.Sort(ended)
+	equal(t, "what the run said of each skill as it ended it", strings.Join(ended, "; "), "alpha: updated; beta: conflict error; delta: nothing")
+	if runError == nil {
+		t.Fatal("no error of the run")
+	}
+	equal(t, "the run's message", runError["message"], "1 of 3 skills could not be updated: "+refusal)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
+	equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised\n")
+	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, edited here\n")
+	equal(t, "mutations", mutationVersion(t, h), version+1)
+}
+
 // installed too, and a check that found an update for all three skills:
 // alpha's second version, beta revised and gamma revised.
 func otherSourceHarness(t *testing.T) (h *harness, s, other *sourceRepo) {
@@ -533,8 +589,8 @@ func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
 }
 
 // TestSkillUpdateAllRefreshesEachSkillsCopies runs update --all over two
-// skills with an update, each with a copy in Claude Code and in Cursor, and
-// beta's Cursor copy edited in place. Every copy that held the version
+// skills with an update, each with a copy in Claude Code and in Cortex Code, and
+// beta's Cortex Code copy edited in place. Every copy that held the version
 // replaced is refreshed, beta's own as much as alpha's, and the edited one
 // is kept byte for byte with the warning for a kept copy. The first line
 // adds up what the run did to copies over every skill, as the result
@@ -543,8 +599,8 @@ func TestSkillUpdateAllRefreshesEachSkillsCopies(t *testing.T) {
 	t.Parallel()
 	h, s, first := updateHarness(t)
 	claude := filepath.Join(h.home, ".claude", "skills")
-	cursor := filepath.Join(h.home, ".cursor", "skills")
-	betaCursor := filepath.Join(cursor, "beta")
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills")
+	betaCursor := filepath.Join(cortex, "beta")
 	editCopy(t, betaCursor)
 	edited := libraryTree(t, betaCursor)
 	s.write("skills/beta/notes.md", "beta notes, revised\n")
@@ -567,16 +623,16 @@ func TestSkillUpdateAllRefreshesEachSkillsCopies(t *testing.T) {
 	}
 	sameTree(t, "alpha's library directory", libraryTree(t, filepath.Join(h.library, "alpha")), alphaWant)
 	sameTree(t, "alpha's claude copy", libraryTree(t, filepath.Join(claude, "alpha")), alphaWant)
-	sameTree(t, "alpha's cursor copy", libraryTree(t, filepath.Join(cursor, "alpha")), alphaWant)
+	sameTree(t, "alpha's cortex copy", libraryTree(t, filepath.Join(cortex, "alpha")), alphaWant)
 	sameTree(t, "beta's library directory", libraryTree(t, filepath.Join(h.library, "beta")), betaWant)
 	sameTree(t, "beta's claude copy", libraryTree(t, filepath.Join(claude, "beta")), betaWant)
-	sameTree(t, "beta's cursor copy", libraryTree(t, betaCursor), edited)
-	for _, dir := range []string{h.library, claude, cursor} {
+	sameTree(t, "beta's cortex copy", libraryTree(t, betaCursor), edited)
+	for _, dir := range []string{h.library, claude, cortex} {
 		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
 	equal(t, "journals", journalCount(t, h), 0)
 
-	warning, wayOn := keptCopyLines(betaCursor, "beta", "agentx skill remove beta --from cursor", "agentx skill place beta --to cursor --copy")
+	warning, wayOn := keptCopyLines(betaCursor, "beta", "agentx skill remove beta --from cortex", "agentx skill place beta --to cortex --copy")
 	equal(t, "stderr", out.stderr, "warning: "+warning+"\n  "+wayOn+"\n")
 	moved := first[:7] + " -> " + second[:7]
 	equal(t, "the text", out.stdout, "✓ updated 2 skills, 3 copy placements refreshed, 1 placement skipped\n"+
@@ -594,11 +650,11 @@ func TestSkillUpdateSkipsACopyItCannotRead(t *testing.T) {
 		t.Skip("root reads a directory whatever its mode")
 	}
 	h, s, _ := updateHarness(t)
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	newVersion(t, s)
 	want := secondTree(t, s)
 	h.mustRun("skill", "check-updates")
-	scripts := filepath.Join(cursor, "scripts")
+	scripts := filepath.Join(cortex, "scripts")
 	chmod(t, scripts, 0)
 	t.Cleanup(func() { _ = os.Chmod(scripts, 0o755) }) // so the temporary home can be removed
 
@@ -609,17 +665,17 @@ func TestSkillUpdateSkipsACopyItCannotRead(t *testing.T) {
 	}
 	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
 	warned := warnings(h, out.stderr)
-	if len(warned) != 1 || !strings.HasPrefix(warned[0], "cannot refresh "+cursor+": ") || !strings.HasSuffix(warned[0], "; the copy was left as it is") {
-		t.Errorf("the warnings = %q, want one that cannot refresh %s", warned, cursor)
+	if len(warned) != 1 || !strings.HasPrefix(warned[0], "cannot refresh "+cortex+": ") || !strings.HasSuffix(warned[0], "; the copy was left as it is") {
+		t.Errorf("the warnings = %q, want one that cannot refresh %s", warned, cortex)
 	}
 	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string), ", 1 copy placement refreshed, 1 placement skipped")
 	equal(t, "journals", journalCount(t, h), 0)
-	equal(t, "what is left beside the copy", strings.Join(hiddenEntries(t, filepath.Dir(cursor)), " "), "")
+	equal(t, "what is left beside the copy", strings.Join(hiddenEntries(t, filepath.Dir(cortex)), " "), "")
 }
 
 // TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce updates a skill
 // one of whose copies two configurations reach. Zencoder and Zenflow both
-// read ~/.zencoder/skills, and copy_mode records a copy for each; Cursor's
+// read ~/.zencoder/skills, and copy_mode records a copy for each; Cortex Code's
 // skills directory made a symlink to Claude Code's makes their two copies
 // one directory spelled two ways. The one copy is judged and planned once:
 // planned twice, the second removal would find the first one's copy there
@@ -643,9 +699,9 @@ func TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce(t *testing.T) {
 			shared := filepath.Join(h.home, ".zencoder", "skills")
 			if c.linked {
 				shared = claude
-				cursor := filepath.Join(h.home, ".cursor", "skills")
-				remove(t, cursor)
-				link(t, claude, cursor)
+				cortex := filepath.Join(h.home, ".snowflake/cortex", "skills")
+				remove(t, cortex)
+				link(t, claude, cortex)
 			} else {
 				if err := os.MkdirAll(filepath.Join(h.home, ".zencoder"), 0o755); err != nil {
 					t.Fatal(err)
@@ -686,27 +742,64 @@ func TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce(t *testing.T) {
 	}
 }
 
-// TestSkillUpdateUsage: a name and --all are the two forms, and one of them
-// is needed.
+// TestSkillUpdateUsage: names and --all are the two forms, and one of
+// them is needed; the forms themselves are TestUpdateNames'.
 func TestSkillUpdateUsage(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	for _, c := range []struct {
-		args    []string
-		message string
-	}{
-		{[]string{"skill", "update"}, "no skill to update"},
-		{[]string{"skill", "update", "alpha", "--all"}, "skill update takes a skill name or --all, not both"},
-	} {
-		out := h.run(append([]string{"--json"}, c.args...)...)
-		equal(t, strings.Join(c.args, " ")+": exit", out.exit, 1)
-		e := h.one(out.stdout, "error")
-		equal(t, "message", e["message"], c.message)
-		equal(t, "hint", e["hint"], "name the skill to update, or run 'agentx skill update --all' to update every skill the last check found an update for")
-	}
-	out := h.run("skill", "update", "--all")
+	out := h.run("--json", "skill", "update", "alpha", "--all")
+	equal(t, "exit", out.exit, 1)
+	e := h.one(out.stdout, "error")
+	equal(t, "message", e["message"], "skill update takes skill names or --all, not both")
+	equal(t, "hint", e["hint"], "name the skills to update, or run 'agentx skill update --all' to update every skill the last check found an update for")
+	out = h.run("skill", "update", "--all")
 	equal(t, "exit of --all on an empty machine", out.exit, 0)
 	contains(t, "stdout", out.stdout, "Nothing to update")
+}
+
+// TestUpdateNames: the names a run of skill update takes, in name order and
+// each once, and the forms it refuses, in the order it refuses them.
+func TestUpdateNames(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name    string
+		args    []string
+		all     bool
+		abort   bool
+		want    []string
+		refusal string
+	}{
+		{name: "one name", args: []string{"pdf"}, want: []string{"pdf"}},
+		{name: "names in name order", args: []string{"pdf", "docx", "alpha"}, want: []string{"alpha", "docx", "pdf"}},
+		{name: "a name given twice counts once", args: []string{"pdf", "docx", "pdf"}, want: []string{"docx", "pdf"}},
+		{name: "--all", all: true},
+		{name: "one name to abort", args: []string{"pdf"}, abort: true, want: []string{"pdf"}},
+		{name: "the same name twice to abort", args: []string{"pdf", "pdf"}, abort: true, want: []string{"pdf"}},
+		{name: "neither", refusal: "no skill to update"},
+		{name: "--abort alone", abort: true, refusal: "no skill to update"},
+		{name: "names and --all", args: []string{"pdf"}, all: true, refusal: "skill update takes skill names or --all, not both"},
+		{name: "names, --all and --abort", args: []string{"pdf"}, all: true, abort: true, refusal: "skill update takes skill names or --all, not both"},
+		{name: "--all and --abort", all: true, abort: true, refusal: "--abort gives up the merge of one skill, not of --all"},
+		{name: "several names to abort", args: []string{"pdf", "docx"}, abort: true, refusal: "--abort gives up the merge of one skill, not of several"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			got, f := updateNames(c.args, c.all, c.abort)
+			if c.refusal != "" {
+				if f == nil {
+					t.Fatalf("updateNames(%q, %v, %v) = %q, want the refusal %q", c.args, c.all, c.abort, got, c.refusal)
+				}
+				equal(t, "exit", f.status, exitUsage)
+				equal(t, "refusal", f.message, c.refusal)
+				return
+			}
+			if f != nil {
+				t.Fatalf("updateNames(%q, %v, %v) refused: %s", c.args, c.all, c.abort, f.message)
+			}
+			equal(t, "names", strings.Join(got, " "), strings.Join(c.want, " "))
+			equal(t, "--all", got == nil, c.all)
+		})
+	}
 }
 
 // checked commits alpha's second version and runs a check, which pins it
@@ -1089,7 +1182,7 @@ exec `+real+` "$@"
 		equal(t, c.name+": claude's notes", fileBody(t, filepath.Join(h.home, ".claude", "skills", "alpha", "notes.md")), "alpha notes\n")
 		equal(t, c.name+": journals", journalCount(t, h), 0)
 		equal(t, c.name+": mutations", mutationVersion(t, h), before)
-		for _, dir := range []string{h.library, filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".cursor", "skills")} {
+		for _, dir := range []string{h.library, filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".snowflake/cortex", "skills")} {
 			equal(t, c.name+": what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 		}
 		if c.restore != nil {
@@ -1195,23 +1288,23 @@ exec `+realGit(t)+` "$@"
 	equal(t, "updated", updatedNames(h, out.stdout), "beta")
 
 	claude := filepath.Join(h.home, ".claude", "skills")
-	cursor := filepath.Join(h.home, ".cursor", "skills")
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills")
 	refs = h.refMap()
 	equal(t, "beta's import branch", refs[lineage.ManagedRef("beta")], betaCandidate)
 	equal(t, "beta's candidate", refs[lineage.CandidateRef("beta")], "")
-	for _, dir := range []string{h.library, claude, cursor} {
+	for _, dir := range []string{h.library, claude, cortex} {
 		equal(t, "beta's notes in "+dir, fileBody(t, filepath.Join(dir, "beta", "notes.md")), "beta notes, revised\n")
 	}
 	equal(t, "alpha's import branch", refs[lineage.ManagedRef("alpha")], alphaTip)
 	equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], alphaCandidate)
 	equal(t, "alpha's notes", fileBody(t, notes), "an edit made meanwhile\n")
 	nothingAt(t, "alpha's new.md", filepath.Join(h.library, "alpha", "new.md"))
-	for _, dir := range []string{claude, cursor} {
+	for _, dir := range []string{claude, cortex} {
 		equal(t, "alpha's notes in "+dir, fileBody(t, filepath.Join(dir, "alpha", "notes.md")), "alpha notes\n")
 	}
 	equal(t, "journals", journalCount(t, h), 0)
 	equal(t, "mutations", mutationVersion(t, h), before+1)
-	for _, dir := range []string{h.library, claude, cursor} {
+	for _, dir := range []string{h.library, claude, cortex} {
 		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
 }
@@ -1407,9 +1500,9 @@ func TestSkillUpdateRecoversAtEveryBoundary(t *testing.T) {
 			t.Parallel()
 			h, s, _ := updateHarness(t)
 			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-			editCopy(t, cursor)
-			edited := libraryTree(t, cursor)
+			cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
+			editCopy(t, cortex)
+			edited := libraryTree(t, cortex)
 			writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder data\n")
 			checked(t, h, s)
 			want := secondTree(t, s)
@@ -1442,8 +1535,8 @@ func TestSkillUpdateRecoversAtEveryBoundary(t *testing.T) {
 				t.Error("scripts/run.sh is not executable after recovery")
 			}
 			sameTree(t, "claude's copy", libraryTree(t, claude), want)
-			sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
-			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
+			sameTree(t, "cortex's copy", libraryTree(t, cortex), edited)
+			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cortex)} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}
 			equal(t, "state", h.listed("alpha")["state"], stateCurrent)
@@ -1487,7 +1580,7 @@ func TestSkillUpdateRunAgainFinishesTheUpdateThatStopped(t *testing.T) {
 			equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], "")
 			sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
 			sameTree(t, "claude's copy", libraryTree(t, filepath.Join(h.home, ".claude", "skills", "alpha")), want)
-			sameTree(t, "cursor's copy", libraryTree(t, filepath.Join(h.home, ".cursor", "skills", "alpha")), want)
+			sameTree(t, "cortex's copy", libraryTree(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")), want)
 			equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
 			equal(t, "summary", h.one(out.stdout, "result")["summary"], c.summary)
 			equal(t, "state", h.listed("alpha")["state"], stateCurrent)
@@ -1542,20 +1635,20 @@ func TestSkillUpdateSweepsStagingAKilledUpdateLeft(t *testing.T) {
 	checked(t, h, s)
 	candidate := h.ref(lineage.CandidateRef("alpha"))
 	claude := filepath.Join(h.home, ".claude", "skills")
-	cursor := filepath.Join(h.home, ".cursor", "skills")
-	for i, dir := range []string{h.library, claude, cursor} {
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills")
+	for i, dir := range []string{h.library, claude, cortex} {
 		staged := filepath.Join(dir, fmt.Sprintf(".agentx-staged-deadbeef-%d", i+1))
 		writeFile(t, mkdirs(t, staged, "SKILL.md"), skill("alpha", "a version nothing names"))
 	}
 
 	h.mustRun("skill", "update", "--all")
-	for _, dir := range []string{h.library, claude, cursor} {
+	for _, dir := range []string{h.library, claude, cortex} {
 		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
 	equal(t, "journals", journalCount(t, h), 0)
 	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
 	want := secondTree(t, s)
-	for _, dir := range []string{h.library, claude, cursor} {
+	for _, dir := range []string{h.library, claude, cortex} {
 		sameTree(t, "alpha in "+dir, libraryTree(t, filepath.Join(dir, "alpha")), want)
 		equal(t, "beta's notes in "+dir, fileBody(t, filepath.Join(dir, "beta", "notes.md")), "beta notes, revised\n")
 	}

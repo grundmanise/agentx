@@ -15,14 +15,14 @@ import (
 func TestConfigEnablePlaceAllPlacesEveryLibrarySkill(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
+	equal(t, "disable", h.run("config", "disable", "cortex").exit, 0)
 	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
 	before := mutationVersion(t, h)
 
-	out := h.run("--json", "config", "enable", "cursor", "--place-all")
+	out := h.run("--json", "config", "enable", "cortex", "--place-all")
 	equal(t, "exit", out.exit, 0)
 	for _, name := range []string{"alpha", "beta"} {
-		target, ok := isSymlink(t, filepath.Join(h.home, ".cursor", "skills", name))
+		target, ok := isSymlink(t, filepath.Join(h.home, ".snowflake/cortex", "skills", name))
 		if !ok || target != filepath.Join(h.library, name) {
 			t.Errorf("%s is %q (symlink %v), want a link to the library", name, target, ok)
 		}
@@ -36,7 +36,7 @@ func TestConfigEnablePlaceAllPlacesEveryLibrarySkill(t *testing.T) {
 	if strings.Join(types, ",") != strings.Join(want, ",") {
 		t.Errorf("events = %v, want %v\n%s", types, want, out.stdout)
 	}
-	contains(t, "the result", out.stdout, "cursor is now enabled, 2 skills placed")
+	contains(t, "the result", out.stdout, "cortex is now enabled, 2 skills placed")
 }
 
 // TestConfigEnablePlaceAllPlacesCopiesWhereTheConfigurationDoes: in a
@@ -47,19 +47,19 @@ func TestConfigEnablePlaceAllPlacesEveryLibrarySkill(t *testing.T) {
 func TestConfigEnablePlaceAllPlacesCopiesWhereTheConfigurationDoes(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--all", "--to", "cursor")
-	h.mustRun("config", "placement", "cursor", "copy")
+	h.mustRun("skill", "add", s.url, "--all", "--to", "cortex")
+	h.mustRun("config", "placement", "cortex", "copy")
 
-	out := h.run("--json", "config", "enable", "cursor", "--place-all")
+	out := h.run("--json", "config", "enable", "cortex", "--place-all")
 	equal(t, "exit", out.exit, 0)
 	for _, name := range []string{"alpha", "beta"} {
-		info, err := os.Lstat(filepath.Join(h.home, ".cursor", "skills", name))
+		info, err := os.Lstat(filepath.Join(h.home, ".snowflake/cortex", "skills", name))
 		if err != nil || !info.IsDir() {
-			t.Errorf("%s in cursor is not a copy: %v", name, err)
+			t.Errorf("%s in cortex is not a copy: %v", name, err)
 		}
-		equal(t, "copy_mode of "+name, copyModeOf(t, h, name), "cursor")
+		equal(t, "copy_mode of "+name, copyModeOf(t, h, name), "cortex")
 	}
-	contains(t, "the result", out.stdout, "cursor is now enabled, 2 skills placed")
+	contains(t, "the result", out.stdout, "cortex is now enabled, 2 skills placed")
 }
 
 // TestConfigEnableWithoutPlaceAllChangesOnlyTheDefault: enabling on its own
@@ -68,16 +68,16 @@ func TestConfigEnablePlaceAllPlacesCopiesWhereTheConfigurationDoes(t *testing.T)
 func TestConfigEnableWithoutPlaceAllChangesOnlyTheDefault(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
+	equal(t, "disable", h.run("config", "disable", "cortex").exit, 0)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
-	out := h.run("--json", "config", "enable", "cursor")
+	out := h.run("--json", "config", "enable", "cortex")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "events", strings.Join(h.types(h.events(out.stdout)), ","), "settings,result")
 
 	// A skill installed after it, though, goes there like anywhere else.
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "beta").exit, 0)
-	if _, ok := isSymlink(t, filepath.Join(h.home, ".cursor", "skills", "beta")); !ok {
+	if _, ok := isSymlink(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "beta")); !ok {
 		t.Error("an install after the configuration was enabled did not place into it")
 	}
 }
@@ -88,18 +88,18 @@ func TestConfigEnableWithoutPlaceAllChangesOnlyTheDefault(t *testing.T) {
 func TestConfigEnablePlaceAllSkipsWhatIsInTheWay(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
+	equal(t, "disable", h.run("config", "disable", "cortex").exit, 0)
 	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
-	handMade := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	handMade := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	if err := os.MkdirAll(handMade, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(handMade, "SKILL.md"), "---\nname: alpha\ndescription: mine\n---\n\nmine\n")
 
-	out := h.run("--json", "config", "enable", "cursor", "--place-all")
+	out := h.run("--json", "config", "enable", "cortex", "--place-all")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "the hand-made directory", fileBody(t, filepath.Join(handMade, "SKILL.md")), "description: mine")
-	if _, ok := isSymlink(t, filepath.Join(h.home, ".cursor", "skills", "beta")); !ok {
+	if _, ok := isSymlink(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "beta")); !ok {
 		t.Error("a skill that had nothing in its way was not placed")
 	}
 	contains(t, "stderr", out.stderr, handMade)
@@ -137,7 +137,7 @@ func TestConfigEnablePlaceAllIntoAClientThatReadsTheLibrary(t *testing.T) {
 func TestConfigEnablePlaceAllSanitisesTheNameAndQuotesThePaths(t *testing.T) {
 	t.Parallel()
 	h := placeHome(t)
-	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
+	equal(t, "disable", h.run("config", "disable", "cortex").exit, 0)
 	const raw = "two\nrows \x1b[31mRED\x1b[0m"
 	dir := filepath.Join(h.library, raw)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -145,10 +145,10 @@ func TestConfigEnablePlaceAllSanitisesTheNameAndQuotesThePaths(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
 
-	out := h.run("config", "enable", "cursor", "--place-all")
+	out := h.run("config", "enable", "cortex", "--place-all")
 	equal(t, "exit", out.exit, 0)
 	const quoted = `two\nrows \033[31mRED\033[0m"`
-	placement := `"` + filepath.Join(h.home, ".cursor", "skills") + string(filepath.Separator) + quoted
+	placement := `"` + filepath.Join(h.home, ".snowflake/cortex", "skills") + string(filepath.Separator) + quoted
 	library := `"` + h.library + string(filepath.Separator) + quoted
 	contains(t, "stdout", out.stdout, "\n  two rows [31mRED [0m  symlink  "+placement+" -> "+library+"\n")
 	if lines := strings.Count(out.stdout, "\n"); lines != 3 {
@@ -166,10 +166,10 @@ func TestConfigEnablePlaceAllSanitisesTheNameAndQuotesThePaths(t *testing.T) {
 func TestConfigEnablePlaceAllOnAnEmptyLibrary(t *testing.T) {
 	t.Parallel()
 	h := placeHome(t)
-	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
+	equal(t, "disable", h.run("config", "disable", "cortex").exit, 0)
 
-	out := h.run("--json", "config", "enable", "cursor", "--place-all")
+	out := h.run("--json", "config", "enable", "cortex", "--place-all")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "disabled_configurations", len(readSettingsFile(t, h)["disabled_configurations"].([]any)), 0)
-	contains(t, "the result", out.stdout, "cursor is now enabled, 0 skills placed")
+	contains(t, "the result", out.stdout, "cortex is now enabled, 0 skills placed")
 }

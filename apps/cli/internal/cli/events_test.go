@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
@@ -51,4 +52,29 @@ func TestSkillOrigin(t *testing.T) {
 			equal(t, "origin", got, c.want)
 		})
 	}
+}
+
+// TestWriterAbout: with --json a warning written while the writer is about
+// a skill names it, and one written after names none; a skill a run over
+// several gives up on is an error event naming it, and a warning naming it
+// in the text.
+func TestWriterAbout(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	w := &writer{stdout: &stdout, stderr: &stderr, env: map[string]string{}, json: true}
+	restore := w.about("pdf")
+	w.warn("kept the copy")
+	restore()
+	w.warnWith("could not fetch", "try again")
+	w.skillFailed("docx", refuse(exitRefused, "docx changed", "run it again"))
+	equal(t, "stderr", stderr.String(),
+		`{"type":"log","schema_version":3,"level":"warn","message":"kept the copy","skill":"pdf"}`+"\n"+
+			`{"type":"log","schema_version":3,"level":"warn","message":"could not fetch; try again"}`+"\n")
+	equal(t, "stdout", stdout.String(),
+		`{"type":"error","schema_version":3,"code":"refused","message":"docx changed","hint":"run it again","skill":"docx"}`+"\n")
+
+	var text bytes.Buffer
+	w = &writer{stdout: &text, stderr: &text, env: map[string]string{}, color: "off"}
+	w.skillFailed("docx", refuse(exitRefused, "docx changed", "run it again"))
+	equal(t, "text", text.String(), "warning: docx changed\n")
 }

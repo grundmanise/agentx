@@ -26,7 +26,7 @@ func driftHarness(t *testing.T) (*harness, *sourceRepo) {
 // driftHome is the home driftHarness hands out.
 var driftHome = &fixtureHome{
 	source: "tools",
-	dirs:   []string{".claude", ".cursor", ".codex", ".gemini"},
+	dirs:   []string{".claude", ".snowflake/cortex", ".codex", ".gemini"},
 	build: func(h *harness, s *sourceRepo) []string {
 		s.skill("tools/pdf-tools", "pdf", "Named by its frontmatter", map[string]string{
 			"a.md": "the same bytes\n", "b.md": "the same bytes\n", "c.md": "a third file\n", "bin/run.sh": "#!/bin/sh\necho run\n",
@@ -138,7 +138,7 @@ func TestPlacementDriftIsReadAtEachConfigurationsOwnPlace(t *testing.T) {
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	expect := func(what, want string) {
 		t.Helper()
 		equal(t, what, drift(h.listed("alpha")), want)
@@ -159,15 +159,15 @@ func TestPlacementDriftIsReadAtEachConfigurationsOwnPlace(t *testing.T) {
 
 	// Nothing at the place is missing, but only for an enabled
 	// configuration, and a link of the user's there takes the place.
-	remove(t, cursor)
+	remove(t, cortex)
 	expect("the placement gone", "missing")
-	h.mustRun("config", "disable", "cursor")
+	h.mustRun("config", "disable", "cortex")
 	expect("the configuration disabled", "")
-	h.mustRun("config", "enable", "cursor")
+	h.mustRun("config", "enable", "cortex")
 	expect("the configuration enabled again", "missing")
-	link(t, filepath.Join(h.home, "mine"), cursor)
+	link(t, filepath.Join(h.home, "mine"), cortex)
 	expect("a link of the user's", "")
-	remove(t, cursor)
+	remove(t, cortex)
 
 	// Every word at once, sorted, and in the text listing after the state,
 	// beside an edit: source removed stands in for no edit, and an edit
@@ -191,21 +191,21 @@ func TestACopyIsDisplacedByALinkAndNeverMissing(t *testing.T) {
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--copy")
 	lib := filepath.Join(h.library, "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	equal(t, "after a copy install", drift(h.listed("alpha")), "")
 
-	editCopy(t, cursor)
+	editCopy(t, cortex)
 	equal(t, "an edited copy", drift(h.listed("alpha")), "")
 	editLibrary(t, h, "alpha", "notes.md", "edited in the library\n")
 	ev := h.listed("alpha")
 	equal(t, "an edited library", drift(ev), "")
 	equal(t, "an edited library's state", ev["state"], stateModified)
 	// Placing again keeps the edited copy, and it still takes the place.
-	h.mustRun("skill", "place", "alpha", "--to", "cursor")
+	h.mustRun("skill", "place", "alpha", "--to", "cortex")
 	equal(t, "a kept copy", drift(h.listed("alpha")), "")
 
-	remove(t, cursor)
-	link(t, lib, cursor)
+	remove(t, cortex)
+	link(t, lib, cortex)
 	equal(t, "the library's link where a copy is recorded", drift(h.listed("alpha")), "displaced")
 }
 
@@ -434,7 +434,7 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	expect(edited, "managed", stateModified, "", stateCurrent, "")
 
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	expect(change("unplaced", func() { remove(t, filepath.Join(h.home, ".cursor", "skills", "alpha")) }),
+	expect(change("unplaced", func() { remove(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")) }),
 		"managed", stateModified, "missing", stateModified, "")
 	expect(change("displaced", func() { remove(t, claude); copyTree(t, lib, claude) }),
 		"managed", stateModified, "displaced,missing", stateModified, "missing")

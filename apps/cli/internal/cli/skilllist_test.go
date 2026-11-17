@@ -169,7 +169,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	claude := filepath.Join(h.home, ".claude", "skills", "beta")
 	remove(t, claude)
 	copyTree(t, filepath.Join(h.library, "beta"), claude)
-	remove(t, filepath.Join(h.home, ".cursor", "skills", "beta"))
+	remove(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "beta"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
 	writeFile(t, filepath.Join(h.library, "beta", ".DS_Store"), "finder\n")
 	h.accountGit("update-ref", "refs/heads/managed/ghost", h.accountGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))

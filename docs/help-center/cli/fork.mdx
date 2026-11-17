@@ -17,15 +17,15 @@ agentx skill new release-notes --description "Write release notes from the merge
 ✓ created release-notes in /home/me/.agents/skills/release-notes: 4 placements
   claude-code  symlink  /home/me/.claude/skills/release-notes -> /home/me/.agents/skills/release-notes
   codex        library  /home/me/.agents/skills/release-notes
-  cursor       symlink  /home/me/.cursor/skills/release-notes -> /home/me/.agents/skills/release-notes
+  cursor       library  /home/me/.agents/skills/release-notes
   gemini-cli   library  /home/me/.agents/skills/release-notes
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish release-notes' to publish it.
 ```
 
 The skill starts from a template: a `SKILL.md` with the name and the description in its frontmatter and a line that asks for the instructions. Open `~/.agents/skills/release-notes/SKILL.md` in your library and write the instructions. Leave out `--description` to fill it in later.
 
-agentx links the skill into every enabled client, as [`agentx skill add`](/cli/skill#install-a-skill) does. Each link is a placement. Clients that read the library directly, such as Codex and Gemini CLI, need no link. See [Clients that see every skill](/cli/skill#clients-that-see-every-skill).
+agentx links the skill into every enabled client, as [`agentx skill add`](/cli/skill#install-a-skill) does. Each link is a placement. Clients that read the library directly, such as Codex, Cursor and Gemini CLI, need no link. See [Clients that see every skill](/cli/skill#clients-that-see-every-skill).
 
 To publish the skill:
 
@@ -91,9 +91,9 @@ agentx skill fork pdf --name my-pdf
 ✓ forked pdf as my-pdf: 4 placements; pdf stays as it was
   claude-code  symlink  /home/me/.claude/skills/my-pdf -> /home/me/.agents/skills/my-pdf
   codex        library  /home/me/.agents/skills/my-pdf
-  cursor       copy     /home/me/.cursor/skills/my-pdf
+  cursor       library  /home/me/.agents/skills/my-pdf
   gemini-cli   library  /home/me/.agents/skills/my-pdf
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 ```
 
 - The fork sits beside the skill, which stays exactly as it was.
@@ -120,7 +120,7 @@ agentx skill fork format
 ✓ forked format from plugin formatter as format: 2 placements; the plugin's copy stays as it was
   claude-code  symlink  /home/me/.claude/skills/format -> /home/me/.agents/skills/format
   codex        library  /home/me/.agents/skills/format
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 ```
 
 - agentx leaves the plugin as it is. The fork goes into your library and into the enabled clients that have the plugin. Clients that read the library also see it.
@@ -261,7 +261,7 @@ agentx skill place release-notes
 ```text
 ✓ placed release-notes in 2 configurations
   claude-code  symlink  /home/me/.claude/skills/release-notes -> /home/me/.agents/skills/release-notes
-  cursor       symlink  /home/me/.cursor/skills/release-notes -> /home/me/.agents/skills/release-notes
+  cursor       library  /home/me/.agents/skills/release-notes
 ✓ checked release-notes's worktree out again from its branch
 ```
 

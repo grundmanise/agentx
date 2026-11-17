@@ -43,3 +43,5 @@ Antigravity
 Zencoder
 Zenflow
 symlinks?
+OpenCode
+Cline

@@ -520,7 +520,7 @@ func (r *applyRun) ownSkill(ctx context.Context, e snapshotSkill) (string, error
 	if f := r.movable(e.Name, rec); f != nil {
 		return "", f
 	}
-	if err := r.inv.quietly(func() error { return r.inv.skillUpdate(ctx, e.Name) }); err != nil {
+	if err := r.inv.quietly(func() error { return r.inv.skillUpdate(ctx, []string{e.Name}) }); err != nil {
 		return "", err
 	}
 	if now, err := r.branchAt(ctx, lineage.ForkRef(e.Name)); err != nil || now != tip {
@@ -597,7 +597,7 @@ func (r *applyRun) sharedSkill(ctx context.Context, e snapshotSkill) (string, er
 	if err != nil {
 		return "", err
 	}
-	if err := inv.quietly(func() error { return inv.skillUpdate(ctx, e.Name) }); err != nil {
+	if err := inv.quietly(func() error { return inv.skillUpdate(ctx, []string{e.Name}) }); err != nil {
 		return "", err
 	}
 	if now, err := r.branchAt(ctx, lineage.ManagedRef(e.Name)); err != nil || now != commit {
@@ -767,8 +767,7 @@ func (r *applyRun) place(ctx context.Context, e snapshotSkill, did string) (stri
 // placeInto is the configurations a skill is placed in for want, the ones a
 // snapshot records: each detected one want names, but a client that reads
 // the library, which sees every library skill, and a client that reads the
-// skills directory of another one want names, as Cursor reads Claude
-// Code's, which sees the skill there.
+// skills directory of another one want names, which sees the skill there.
 func (r *applyRun) placeInto(want []string) []placeTarget {
 	var into []placeTarget
 	for _, t := range r.targets {

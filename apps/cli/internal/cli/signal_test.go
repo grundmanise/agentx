@@ -332,7 +332,7 @@ exec `+real+` "$@"
 	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
 		t.Errorf("the library directory was not published: %v", err)
 	}
-	for _, rel := range []string{".claude/skills/alpha", ".cursor/skills/alpha"} {
+	for _, rel := range []string{".claude/skills/alpha", ".snowflake/cortex/skills/alpha"} {
 		if _, err := os.Readlink(filepath.Join(h.home, rel)); err != nil {
 			t.Errorf("the placement %s was not made: %v", rel, err)
 		}

@@ -28,19 +28,19 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 		Long: "Remove a skill from the configurations --from names, or, with --from universal or\n" +
 			"without --from, take it off the machine: every placement, the library directory,\n" +
 			"the import branch and what the settings recorded about it.\n\n" +
-			"A universal client, such as Codex or Gemini CLI, reads the library directly and\n" +
-			"sees the skill through the library entry, so it cannot lose the skill on its own:\n" +
-			"--from naming one is refused, and --from universal removes the skill from every\n" +
-			"client.\n\n" +
+			"A universal client, such as Codex, Cursor or Gemini CLI, reads the library\n" +
+			"directly and sees the skill through the library entry, so it cannot lose the\n" +
+			"skill on its own: --from naming one is refused, and --from universal removes the\n" +
+			"skill from every client.\n\n" +
 			"A placement is deleted only when it is a symlink into the library or a copy this\n" +
 			"machine recorded. Anything else at a placement path is left where it is and\n" +
 			"named in the output: agentx never removes what it did not create.\n\n" +
-			"A client that reads another client's skills directory, as Cursor reads Claude\n" +
-			"Code's, keeps seeing the skill through that client's placement after --from\n" +
-			"removes its own, and the removal warns: remove the skill from that client too to\n" +
-			"take it from both. Two clients that share one skills directory, as Zencoder and\n" +
-			"Zenflow do, share each placement in it: --from naming one takes the skill from\n" +
-			"both, and the removal warns.\n\n" +
+			"A client that reads another client's skills directory keeps seeing the skill\n" +
+			"through that client's placement after --from removes its own, and the removal\n" +
+			"warns: remove the skill from that client too to take it from both. Two clients\n" +
+			"that share one skills directory, as Zencoder and Zenflow do, share each\n" +
+			"placement in it: --from naming one takes the skill from both, and the removal\n" +
+			"warns.\n\n" +
 			"A managed skill whose library directory was deleted outside agentx can still be\n" +
 			"removed without --from: its import branch and the placements agentx made go.\n\n" +
 			"Removing one of your own skills also deletes its worktree, with any unpublished\n" +
@@ -54,7 +54,7 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"machine's disk changes.",
 		Example: examples(
 			"agentx skill remove pdf", "take the skill off this machine",
-			"agentx skill remove pdf --from cursor", "remove only its placement in one client",
+			"agentx skill remove pdf --from windsurf", "remove only its placement in one client",
 			"agentx skill remove release-notes --remote", "also delete its branch on the account remote",
 			"agentx skill remove pdf --machine cloud", "remove it from the cloud machine",
 		),
@@ -792,8 +792,8 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 // else would ever correct the claim.
 //
 // A removal with --from takes only the covered configurations' own
-// placements, and a client that reads another client's skills directory,
-// as Cursor reads Claude Code's, keeps seeing the skill through that
+// placements, and a client that reads another client's skills directory
+// keeps seeing the skill through that
 // client's placement. The run reports the covered configuration as done,
 // so the warning names whose placement it still sees the skill through and
 // which removal takes it from both.

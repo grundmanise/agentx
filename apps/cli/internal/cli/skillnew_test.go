@@ -81,7 +81,7 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 			t.Fatal(err)
 		}
 		equal(t, "the library symlink", link, "../../../agentx/worktrees/notes/notes")
-		for _, client := range []string{".claude", ".cursor"} {
+		for _, client := range []string{".claude", ".snowflake/cortex"} {
 			if target, _ := os.Readlink(filepath.Join(h.home, client, "skills", "notes")); target != filepath.Join(h.library, "notes") {
 				t.Errorf("%s's placement points at %q", client, target)
 			}

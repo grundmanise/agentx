@@ -91,7 +91,7 @@ exec %GIT% "$@"
 		if _, err := os.Stat(filepath.Join(h.library, name, "SKILL.md")); err != nil {
 			t.Errorf("the library directory of %s was not recovered: %v", name, err)
 		}
-		for _, rel := range []string{".claude/skills/", ".cursor/skills/"} {
+		for _, rel := range []string{".claude/skills/", ".snowflake/cortex/skills/"} {
 			if _, err := os.Readlink(filepath.Join(h.home, rel+name)); err != nil {
 				t.Errorf("the placement %s%s was not recovered: %v", rel, name, err)
 			}

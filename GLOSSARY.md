@@ -208,7 +208,7 @@ A fork placed on this machine whose worktree, the skill directory in it or its l
 _Avoid_: missing fork, broken fork
 
 **Universal client**:
-An agent client that reads the library as one of its own skills directories, such as Codex and Gemini CLI, or one of whose skills directories is the library through a symlink: Cursor, which reads Claude Code's skills directory, is one once that directory is linked to the library. It sees every library skill whether or not its agent configuration is enabled and whatever the placements, since the library entry is its placement. A skill leaves it only by leaving the library, which takes the skill from every agent client.
+An agent client that reads the library as one of its own skills directories, such as Codex, Cursor, Gemini CLI, GitHub Copilot (while `COPILOT_HOME` is not set), OpenCode and Cline, or one of whose skills directories is the library through a symlink: Claude Code is one once its skills directory is linked to the library. It sees every library skill whether or not its agent configuration is enabled and whatever the placements, since the library entry is its placement. A skill leaves it only by leaving the library, which takes the skill from every agent client.
 _Avoid_: library client, library reader
 
 **Base version**:

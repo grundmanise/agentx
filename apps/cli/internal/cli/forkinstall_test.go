@@ -168,22 +168,22 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 
 // TestFromAccountSupersedesAnUnmodifiedCopy installs alpha from the
 // account remote on machine b, which installed the same upstream version
-// of alpha from the source first, removed it from Cursor, left a .DS_Store
+// of alpha from the source first, removed it from Cortex Code, left a .DS_Store
 // in it, and had a check pin the source's next version for it. The copy
 // holds its base version, so the fork takes its place: the import branch,
 // its update candidate and the library directory go, the library entry is
 // the symlink into the fork's worktree, which holds the .DS_Store, and the
 // placements are as they were, Claude Code's leading to the fork and
-// Cursor still without one, though the install was given --to cursor,
+// Cortex Code still without one, though the install was given --to cortex,
 // which a warning says places nothing.
 func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	t.Parallel()
 	_, b, s, _ := accountHomes(t)
-	if err := os.MkdirAll(filepath.Join(b.home, ".cursor"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(b.home, ".snowflake/cortex"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	b.mustRun("skill", "add", s.url, "--name", "alpha")
-	b.mustRun("skill", "remove", "alpha", "--from", "cursor")
+	b.mustRun("skill", "remove", "alpha", "--from", "cortex")
 	writeFile(t, filepath.Join(b.library, "alpha", ".DS_Store"), "finder data\n")
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")
@@ -193,7 +193,7 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	}
 	claude := filepath.Join(b.home, ".claude", "skills", "alpha")
 	before, _ := os.Readlink(claude)
-	out := b.mustRun("--json", "skill", "add", "--name", "alpha", "--to", "cursor")
+	out := b.mustRun("--json", "skill", "add", "--name", "alpha", "--to", "cortex")
 	contains(t, "the warning", out.stderr, "so --to and --copy place nothing")
 	equal(t, "the import branch", b.ref(lineage.ManagedRef("alpha")), "")
 	equal(t, "the candidate", b.ref(lineage.CandidateRef("alpha")), "")
@@ -205,8 +205,8 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	equal(t, "git status in the worktree", gitIn(t, b, filepath.Dir(skillDir), "status", "--porcelain"), "")
 	after, _ := os.Readlink(claude)
 	equal(t, "claude-code's placement", after, before)
-	if lexists(filepath.Join(b.home, ".cursor", "skills", "alpha")) {
-		t.Error("the install placed alpha into cursor, which it had been removed from")
+	if lexists(filepath.Join(b.home, ".snowflake/cortex", "skills", "alpha")) {
+		t.Error("the install placed alpha into cortex, which it had been removed from")
 	}
 	ev := b.librarySkill(out.stdout, "alpha")
 	equal(t, "kind", ev["kind"], lineage.KindManaged)

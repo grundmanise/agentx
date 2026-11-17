@@ -149,9 +149,9 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	t.Parallel()
 	h, s, first := updateHarness(t)
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	editCopy(t, cursor)
-	edited := libraryTree(t, cursor)
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
+	editCopy(t, cortex)
+	edited := libraryTree(t, cortex)
 	lib := filepath.Join(h.library, "alpha")
 	skillMD := fileBody(t, filepath.Join(lib, "SKILL.md")) + "\nA line of my own.\n"
 	editLibrary(t, h, "alpha", "SKILL.md", skillMD)
@@ -172,7 +172,7 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	out := h.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
 		"updated alpha from "+first[:7]+" to "+second[:7]+" and merged its edits cleanly, 1 copy placement refreshed, 1 placement skipped")
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(cursor))
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(cortex))
 	refs = h.refMap()
 	equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], candidate)
 	equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], "")
@@ -184,7 +184,7 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	}
 	nothingAt(t, "old.md", filepath.Join(lib, "old.md"))
 	sameTree(t, "claude's copy", libraryTree(t, claude), merged)
-	sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
+	sameTree(t, "cortex's copy", libraryTree(t, cortex), edited)
 	ev := h.one(out.stdout, "library_skill")
 	equal(t, "state", ev["state"], stateModified)
 	equal(t, "upstream_commit", ev["upstream_commit"], second)
@@ -193,7 +193,7 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 			t.Errorf("the merged skill carries %s: %v", field, ev[field])
 		}
 	}
-	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
+	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cortex)} {
 		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
 	equal(t, "journals", journalCount(t, h), 0)
@@ -317,9 +317,9 @@ func TestSkillUpdateAppliesAMergeResolvedWithGit(t *testing.T) {
 			t.Parallel()
 			h, s, first := updateHarness(t)
 			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-			editCopy(t, cursor)
-			edited := libraryTree(t, cursor)
+			cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
+			editCopy(t, cortex)
+			edited := libraryTree(t, cortex)
 			editLibrary(t, h, "alpha", ".DS_Store", "finder data\n")
 			pendingMerge(t, h, s)
 			candidate := h.ref(lineage.CandidateRef("alpha"))
@@ -333,7 +333,7 @@ func TestSkillUpdateAppliesAMergeResolvedWithGit(t *testing.T) {
 			out := h.mustRun("--json", "skill", "update", "alpha")
 			equal(t, "summary", h.one(out.stdout, "result")["summary"],
 				"updated alpha from "+first[:7]+" to "+short(s.run("rev-parse", "HEAD"))+" with the merge you resolved, 1 copy placement refreshed, 1 placement skipped")
-			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(cursor))
+			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(cortex))
 			refs := h.refMap()
 			equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], candidate)
 			equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], "")
@@ -342,8 +342,8 @@ func TestSkillUpdateAppliesAMergeResolvedWithGit(t *testing.T) {
 			want["notes.md"] = "alpha notes, merged by hand\n"
 			sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), withFile(want, ".DS_Store", "finder data\n"))
 			sameTree(t, "claude's copy", libraryTree(t, claude), want)
-			sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
-			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Join(h.agentx, "merges")} {
+			sameTree(t, "cortex's copy", libraryTree(t, cortex), edited)
+			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cortex), filepath.Join(h.agentx, "merges")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}
 			equal(t, "journals", journalCount(t, h), 0)
@@ -626,7 +626,7 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 		was.check(t, h, what, 0)
 	}
 
-	h.mustRun("skill", "remove", "alpha", "--from", "cursor")
+	h.mustRun("skill", "remove", "alpha", "--from", "cortex")
 	h.mustRun("skill", "place", "alpha")
 	h.mustRun("skill", "place", "alpha", "--force")
 	gotHead, gotMergeHead, _ := mergeState(t, h, "alpha")
@@ -712,9 +712,9 @@ func TestSkillUpdateMergeRecoversAtEveryBoundary(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	editCopy(t, cursor)
-	edited := libraryTree(t, cursor)
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
+	editCopy(t, cortex)
+	edited := libraryTree(t, cortex)
 	editLibrary(t, h, "alpha", "mine.md", "a file of my own\n")
 	editLibrary(t, h, "alpha", ".DS_Store", "finder data\n")
 	checked(t, h, s)
@@ -739,8 +739,8 @@ func TestSkillUpdateMergeRecoversAtEveryBoundary(t *testing.T) {
 	noCheckout(t, h, "alpha")
 	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), withFile(want, ".DS_Store", "finder data\n"))
 	sameTree(t, "claude's copy", libraryTree(t, claude), want)
-	sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
-	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
+	sameTree(t, "cortex's copy", libraryTree(t, cortex), edited)
+	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cortex)} {
 		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
 	equal(t, "state", h.listed("alpha")["state"], stateModified)
@@ -768,9 +768,9 @@ func TestSkillUpdateAppliesAResolvedMergeRecoversAtEveryBoundary(t *testing.T) {
 			t.Parallel()
 			h, s, _ := updateHarness(t)
 			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-			editCopy(t, cursor)
-			edited := libraryTree(t, cursor)
+			cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
+			editCopy(t, cortex)
+			edited := libraryTree(t, cortex)
 			pendingMerge(t, h, s)
 			resolvedWithGit(t, h, false)
 			candidate := h.ref(lineage.CandidateRef("alpha"))
@@ -798,8 +798,8 @@ func TestSkillUpdateAppliesAResolvedMergeRecoversAtEveryBoundary(t *testing.T) {
 			noCheckout(t, h, "alpha")
 			sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
 			sameTree(t, "claude's copy", libraryTree(t, claude), want)
-			sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
-			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Join(h.agentx, "merges")} {
+			sameTree(t, "cortex's copy", libraryTree(t, cortex), edited)
+			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cortex), filepath.Join(h.agentx, "merges")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}
 			equal(t, "state", h.listed("alpha")["state"], stateCurrent)
@@ -1089,12 +1089,12 @@ func TestSkillUpdateMergeRefreshesACopyThatHoldsTheEditedLibrary(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	lib := filepath.Join(h.library, "alpha")
 	editLibrary(t, h, "alpha", "mine.md", "a file of my own\n")
-	remove(t, cursor)
-	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
-	sameTree(t, "cursor's copy before the update", libraryTree(t, cursor), libraryTree(t, lib))
+	remove(t, cortex)
+	h.mustRun("skill", "place", "alpha", "--to", "cortex", "--copy")
+	sameTree(t, "cortex's copy before the update", libraryTree(t, cortex), libraryTree(t, lib))
 	checked(t, h, s)
 	want := secondTree(t, s)
 	want["mine.md"] = "a file of my own\n"
@@ -1107,7 +1107,7 @@ func TestSkillUpdateMergeRefreshesACopyThatHoldsTheEditedLibrary(t *testing.T) {
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
 	sameTree(t, "the library directory", libraryTree(t, lib), want)
 	sameTree(t, "claude's copy", libraryTree(t, claude), want)
-	sameTree(t, "cursor's copy", libraryTree(t, cursor), want)
+	sameTree(t, "cortex's copy", libraryTree(t, cortex), want)
 }
 
 // TestAnIgnoredFileIsNotMineAndSurvivesTheMerge: a file git ignores in the

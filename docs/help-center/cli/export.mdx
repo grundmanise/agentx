@@ -107,7 +107,7 @@ Import only moves a skill forward:
 - A skill you edited and did not publish stays as it is. Import skips it and tells you to run [`agentx skill update <name>`](/cli/skill#a-skill-you-edited), which merges your edits with the newer version.
 - A skill whose history went another way on this machine is skipped too. Run `agentx skill update <name>` to merge it.
 
-Codex and Gemini CLI read your library, so they see every skill in it, whatever the snapshot says.
+Clients that read your library, such as Codex, Cursor and Gemini CLI, see every skill in it, whatever the snapshot says.
 
 To install your own skills, import needs your account remote. The snapshot's settings bring it along.
 
