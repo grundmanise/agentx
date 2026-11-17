@@ -252,14 +252,26 @@ const choiceOf = (items: string[]) =>
     : `${items.slice(0, -1).join(", ")} or ${items.at(-1) ?? ""}`;
 
 /**
- * How to end the clash. With two skills, any one fix ends it. With more, one fix is not enough,
- * so the fixes are offered as ways to bring each agent down to one skill.
+ * How to end the clash. With two skills, any one fix ends it, so each is named. With more, one fix
+ * is not enough, so the kinds of fix are offered as ways to bring each agent down to one skill.
  */
 const fixesOf = (places: Place[]) => {
-  const fixes = choiceOf(places.map(fixOf));
-  return places.length > 2
-    ? `To avoid clashes, make sure each agent sees only one. You can ${fixes}.`
-    : `To avoid clashes, ${fixes}.`;
+  if (places.length <= 2) {
+    return `To avoid clashes, ${choiceOf(places.map(fixOf))}.`;
+  }
+  const count = (kind: PlaceKind) =>
+    places.filter((p) => p.kind === kind).length;
+  const plugins = count("plugin");
+  const folders = count("folder");
+  const fixes = [
+    count("library") > 0 ? "rename your skill" : "",
+    plugins > 1 ? "uninstall one of the plugins" : "",
+    plugins === 1 ? "uninstall the plugin" : "",
+    folders > 1 ? "remove a copy from an agent's folder" : "",
+    folders === 1 ? "remove the copy from the agent's folder" : "",
+    count("project") > 0 ? "remove the copy from the project's folder" : "",
+  ].filter((f) => f !== "");
+  return `To avoid clashes, make sure each agent sees only one. You can ${choiceOf(fixes)}.`;
 };
 
 /** A column of the table: a place, under a short heading. */
