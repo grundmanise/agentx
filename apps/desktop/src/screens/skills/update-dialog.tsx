@@ -3,8 +3,8 @@
 // merge, all selected, grouped by source in sections that collapse. A row toggles its skill, a
 // group's Select all or Deselect all every skill of its source, and See changes opens the What's
 // new sheet of its update above the dialog. A row is two lines at most: the name, then one note.
-// Update runs in the dialog (`updates.ts`): the selected rows alone stay, each led by its state,
-// and once the run ended only the rows with something to say are left: a conflict, an error or a
+// Update runs in the dialog (`updates.ts`): the selected rows alone stay, the state of each in
+// place of its checkbox before its name, and once the run ended only the rows with something to say are left: a conflict, an error or a
 // warning. The footer counts the run, then sums it up. The dialog cannot be dismissed while the
 // run goes, and Done closes it.
 import { cva } from "class-variance-authority";
@@ -162,8 +162,8 @@ const statusName = (row: UpdateRunRow) =>
     : statusNames[row.status];
 
 /**
- * The row's state, in a slot as wide as its icon, so that the names line up whether it shows or
- * not: nothing while it waits, a spinner while it runs, a check once it updated cleanly, the alert
+ * The row's state, in the slot its checkbox held before the run, so that the names keep their
+ * place whether it shows or not: nothing while it waits, a spinner while it runs, a check once it updated cleanly, the alert
  * for a conflict or a warning, a cross when it did not update.
  */
 const StatusMark = ({ row }: { row: UpdateRunRow }) => {
@@ -215,13 +215,9 @@ const StatusMark = ({ row }: { row: UpdateRunRow }) => {
   }
 };
 
-const noteVariants = cva("type-notice m-0 truncate", {
+// The note starts under the name, past the checkbox or the state mark and its gap.
+const noteVariants = cva("type-notice m-0 truncate pl-6", {
   variants: {
-    // In the run and after it the note starts under the name, past the state mark and its gap.
-    inset: {
-      mark: "pl-6",
-      none: "",
-    },
     tone: {
       attention: "text-tone-attention-fg",
       danger: "text-tone-danger-fg",
@@ -317,10 +313,10 @@ const Dot = () => (
 );
 
 /**
- * One skill. Before the run, its name is a label of the round checkbox at the right whose hit
- * area covers the row, so a click anywhere on it toggles the skill, but on See changes, which
- * sits above it and opens the What's new sheet. In the run, the checkbox goes and the state mark
- * leads the name, on its line.
+ * One skill, led by a slot before its name, on its line. Before the run the slot holds the round
+ * checkbox, and the name is a label of it whose hit area covers the row, so a click anywhere on it
+ * toggles the skill, but on See changes, which sits above it and opens the What's new sheet. In
+ * the run the state mark takes the checkbox's place, so the name and the note stay where they are.
  */
 const Row = ({
   row,
@@ -345,6 +341,19 @@ const Row = ({
     <li className={rowVariants({ state: idle ? "idle" : "run" })}>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex min-w-0 items-baseline gap-2">
+          {/* Above the name's hit area, which comes after it. */}
+          <span className="relative z-10 flex flex-none self-center">
+            {idle ? (
+              <Checkbox
+                id={id}
+                aria-label={update.name}
+                checked={selected}
+                onCheckedChange={onToggle}
+              />
+            ) : (
+              <StatusMark row={row} />
+            )}
+          </span>
           {idle ? (
             // The label's hit area covers the row; the controls above it are positioned.
             <label
@@ -354,15 +363,10 @@ const Row = ({
               {update.name}
             </label>
           ) : (
-            <>
-              <span className="flex flex-none self-center">
-                <StatusMark row={row} />
-              </span>
-              <span className="type-body text-text-primary min-w-0 truncate">
-                <span className="sr-only">{`${statusName(row)}: `}</span>
-                {update.name}
-              </span>
-            </>
+            <span className="type-body text-text-primary min-w-0 truncate">
+              <span className="sr-only">{`${statusName(row)}: `}</span>
+              {update.name}
+            </span>
           )}
           {published !== undefined && (
             <>
@@ -394,27 +398,11 @@ const Row = ({
           )}
         </div>
         {note !== undefined && (
-          <p
-            title={note.title}
-            className={noteVariants({
-              inset: idle ? "none" : "mark",
-              tone: note.tone,
-            })}
-          >
+          <p title={note.title} className={noteVariants({ tone: note.tone })}>
             {note.text}
           </p>
         )}
       </div>
-      {idle && (
-        <span className="relative flex h-5 items-center">
-          <Checkbox
-            id={id}
-            aria-label={update.name}
-            checked={selected}
-            onCheckedChange={onToggle}
-          />
-        </span>
-      )}
     </li>
   );
 };

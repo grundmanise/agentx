@@ -27,6 +27,7 @@ const (
 	phaseImport   = "import"  // the import commit is written
 	phaseInstall  = "install" // the library, the branch and the placements are in place
 	phaseRescan   = "rescan"  // the affected configurations were read again
+	phaseUpdate   = "update"  // one skill of a run of skill update over several names is done with
 	stepsPerSkill = 3
 )
 

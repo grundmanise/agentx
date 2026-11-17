@@ -90,7 +90,8 @@ export type ProgressPhase =
   | "import"
   | "install"
   | "place"
-  | "rescan";
+  | "rescan"
+  | "update";
 
 // The exit code of each error code, the ok of success included.
 export const EXIT_CODES = {
@@ -543,6 +544,7 @@ export interface ErrorEvent {
   code: ErrorCode;
   message: string;
   hint?: string;
+  skill?: string;
 }
 
 export interface ResultEvent {
@@ -557,6 +559,7 @@ export interface LogEvent {
   schema_version: number;
   level: LogLevel;
   message: string;
+  skill?: string;
 }
 
 export interface InventoryEvent extends Inventory {
