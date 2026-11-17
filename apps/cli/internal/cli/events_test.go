@@ -68,10 +68,10 @@ func TestWriterAbout(t *testing.T) {
 	w.warnWith("could not fetch", "try again")
 	w.skillFailed("docx", refuse(exitRefused, "docx changed", "run it again"))
 	equal(t, "stderr", stderr.String(),
-		`{"type":"log","schema_version":3,"level":"warn","message":"kept the copy","skill":"pdf"}`+"\n"+
-			`{"type":"log","schema_version":3,"level":"warn","message":"could not fetch; try again"}`+"\n")
+		`{"type":"log","schema_version":4,"level":"warn","message":"kept the copy","skill":"pdf"}`+"\n"+
+			`{"type":"log","schema_version":4,"level":"warn","message":"could not fetch; try again"}`+"\n")
 	equal(t, "stdout", stdout.String(),
-		`{"type":"error","schema_version":3,"code":"refused","message":"docx changed","hint":"run it again","skill":"docx"}`+"\n")
+		`{"type":"error","schema_version":4,"code":"refused","message":"docx changed","hint":"run it again","skill":"docx"}`+"\n")
 
 	var text bytes.Buffer
 	w = &writer{stdout: &text, stderr: &text, env: map[string]string{}, color: "off"}
