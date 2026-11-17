@@ -387,49 +387,12 @@ func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 	}
 }
 
-// TestSkillRemoveRefusalNamesAClientReadingAnotherClientsDirectory: the
-// hint of a refused --from names every client the removal it offers takes
-// the skill from, and that includes a client that sees the skill through
-// another client's skills directory. Cursor reads Claude Code's, so the link
-// or the recorded copy agentx made there is how Cursor sees the skill, --to
-// having left Cursor out, and the removal takes the skill from Cursor too.
-func TestSkillRemoveRefusalNamesAClientReadingAnotherClientsDirectory(t *testing.T) {
-	t.Parallel()
-	for _, mode := range []string{modeSymlink, modeCopy} {
-		t.Run(mode, func(t *testing.T) {
-			t.Parallel()
-			h, s := universalHarness(t, ".cursor")
-			add := []string{"skill", "add", s.url, "--name", "alpha", "--to", "claude-code"}
-			if mode == modeCopy {
-				add = append(add, "--copy")
-			}
-			equal(t, "add", h.run(add...).exit, 0)
-			before := mutationVersion(t, h)
-
-			out := h.run("skill", "remove", "alpha", "--from", "codex")
-			equal(t, "exit", out.exit, 6)
-			contains(t, "stderr", out.stderr, "hint: take alpha off the machine with 'agentx skill remove alpha --from universal', "+
-				"which removes it from claude-code, codex, cursor, gemini-cli\n")
-			contains(t, "the library directory", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), "name: alpha")
-			equal(t, "mutations", mutationVersion(t, h), before)
-
-			// The hint's removal does what it says: nothing Cursor reads
-			// holds the skill any more.
-			equal(t, "exit of --from universal", h.run("skill", "remove", "alpha", "--from", "universal").exit, 0)
-			nothingAt(t, "the claude-code placement Cursor read", filepath.Join(h.home, ".claude", "skills", "alpha"))
-			nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
-		})
-	}
-}
-
 // TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary: a link of the
 // user's that leads into the library entry, straight or by way of another
 // link, stays when the skill is taken off the machine, since agentx did not
 // make it, but it no longer leads anywhere, so its client loses the skill
 // and the hint of a refused --from names it. Claude Code sees alpha here
-// only through a chain of the user's links, and Cursor, which reads Claude
-// Code's and Codex's directories, through that chain or through a link in
-// Codex's own directory.
+// only through a chain of the user's links.
 //
 // A link that reaches the skill's files without going through the library
 // entry is not counted: when the entry is itself a link to a directory of
@@ -447,14 +410,14 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 
 	t.Run("a chain of links in a client's own directory", func(t *testing.T) {
 		t.Parallel()
-		h, s := universalHarness(t, ".cursor")
+		h, s := universalHarness(t)
 		equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "gemini-cli").exit, 0)
 		place, target := userLink(t, h, ".claude", "alpha")
 		before := mutationVersion(t, h)
 
 		out := h.run("skill", "remove", "alpha", "--from", "codex")
 		equal(t, "exit", out.exit, 6)
-		contains(t, "stderr", out.stderr, hint+"claude-code, codex, cursor, gemini-cli\n")
+		contains(t, "stderr", out.stderr, hint+"claude-code, codex, gemini-cli\n")
 		contains(t, "the library directory", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), "name: alpha")
 		equal(t, "mutations", mutationVersion(t, h), before)
 
@@ -472,7 +435,7 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 
 	t.Run("a link in a universal client's own directory", func(t *testing.T) {
 		t.Parallel()
-		h, s := universalHarness(t, ".cursor")
+		h, s := universalHarness(t)
 		equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "gemini-cli").exit, 0)
 		mine := filepath.Join(h.home, ".codex", "skills", "alpha")
 		if err := os.MkdirAll(filepath.Dir(mine), 0o755); err != nil {
@@ -484,12 +447,12 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 
 		out := h.run("skill", "remove", "alpha", "--from", "codex")
 		equal(t, "exit", out.exit, 6)
-		contains(t, "stderr", out.stderr, hint+"codex, cursor, gemini-cli\n")
+		contains(t, "stderr", out.stderr, hint+"codex, gemini-cli\n")
 	})
 
 	t.Run("a link beside a library entry that is a link", func(t *testing.T) {
 		t.Parallel()
-		h := universalHome(t, ".cursor")
+		h := universalHome(t)
 		dev := filepath.Join(h.home, "dev", "alpha")
 		if err := os.MkdirAll(dev, 0o755); err != nil {
 			t.Fatal(err)
@@ -508,8 +471,8 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 		equal(t, "exit", out.exit, 6)
 		contains(t, "stderr", out.stderr, hint+"codex, gemini-cli\n")
 
-		// And the removal indeed leaves Claude Code, and Cursor through it,
-		// seeing the user's directory, and says so.
+		// And the removal indeed leaves Claude Code seeing the user's
+		// directory, and says so.
 		removed := h.run("skill", "remove", "alpha", "--from", "universal")
 		equal(t, "exit of --from universal", removed.exit, 0)
 		contains(t, "the user's directory through their link",
@@ -519,7 +482,7 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 
 	t.Run("a chain of links through a library entry that is a link", func(t *testing.T) {
 		t.Parallel()
-		h := universalHome(t, ".cursor")
+		h := universalHome(t)
 		dev := filepath.Join(h.home, "dev", "alpha")
 		if err := os.MkdirAll(dev, 0o755); err != nil {
 			t.Fatal(err)
@@ -535,7 +498,7 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 
 		out := h.run("skill", "remove", "alpha", "--from", "codex")
 		equal(t, "exit", out.exit, 6)
-		contains(t, "stderr", out.stderr, hint+"claude-code, codex, cursor, gemini-cli\n")
+		contains(t, "stderr", out.stderr, hint+"claude-code, codex, gemini-cli\n")
 
 		// The chain went through the library entry, so it breaks there,
 		// although the directory the entry named is still the user's.
@@ -605,11 +568,11 @@ func TestEveryClientReadingTheLibraryIsUniversal(t *testing.T) {
 // the source again.
 func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 	t.Parallel()
-	h, s := universalHarness(t, ".cursor")
+	h, s := universalHarness(t, ".snowflake/cortex")
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
 	h.mustRun("source", "remove", s.url)
 
-	placed := h.mustRun("--json", "skill", "place", "alpha", "--to", "cursor")
+	placed := h.mustRun("--json", "skill", "place", "alpha", "--to", "cortex")
 	ev := h.one(placed.stdout, "library_skill")
 	equal(t, "drift of skill place", drift(ev), "source removed")
 	equal(t, "universal of skill place", universalOf(t, ev), "codex,gemini-cli")
@@ -625,7 +588,7 @@ func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 	refused := h.run("skill", "remove", "alpha", "--from", "codex")
 	equal(t, "exit of --from codex", refused.exit, 6)
 	contains(t, "stderr", refused.stderr, "hint: take alpha off the machine with 'agentx skill remove alpha --from universal', "+
-		"which removes it from claude-code, codex, cursor, gemini-cli\n")
+		"which removes it from claude-code, codex, cortex, gemini-cli\n")
 	contains(t, "the library directory", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), "name: alpha")
 	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
 
@@ -650,4 +613,31 @@ func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 	e := h.one(gone.stdout, "error")
 	equal(t, "message once nothing records the source", e["message"], "no source with id "+id)
 	equal(t, "hint once nothing records the source", e["hint"], "run 'agentx source list' to see the sources")
+}
+
+// TestTheNextCommandRemovesTheLinksOfAClientFoundToReadTheLibrary: agentx
+// placed symlinks in Cursor's own skills directory before it knew Cursor
+// reads the library, so Cursor listed each such skill twice. The next
+// command that changes anything removes them, whatever it is about, and
+// leaves a link of the user's to anywhere else, and Copilot's placement
+// while COPILOT_HOME, set by the harness, keeps Copilot off the library.
+func TestTheNextCommandRemovesTheLinksOfAClientFoundToReadTheLibrary(t *testing.T) {
+	t.Parallel()
+	h, s := universalHarness(t, ".cursor", ".copilot")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "github-copilot")
+	lib := filepath.Join(h.library, "alpha")
+	old := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	mine := filepath.Join(h.home, ".cursor", "skills", "mine")
+	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link(t, lib, old)
+	link(t, filepath.Join(h.home, ".claude", "skills", "alpha"), mine)
+
+	out := h.mustRun("config", "set", "label", "laptop")
+	contains(t, "the warning", out.stderr, "removed 1 link agentx placed for clients that read the library, which listed those skills twice: "+old)
+	nothingAt(t, "Cursor's old placement", old)
+	stillTheirs(t, "the user's link", mine, filepath.Join(h.home, ".claude", "skills", "alpha"))
+	linksToLibrary(t, "Copilot's placement", filepath.Join(h.home, ".copilot", "skills", "alpha"), lib)
+	equal(t, "journals", journalCount(t, h), 0)
 }

@@ -72,15 +72,15 @@ agentx adopt --all
 ```text
 ✓ adopted jot from /home/me/.claude/skills/jot: 1 placement
   claude-code  symlink  /home/me/.claude/skills/jot -> /home/me/.agents/skills/jot
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 ✓ adopted notes
 ✓ adopted scraper
 ✓ adopted pdf from https://github.com/anthropics/skills under skills/pdf: 4 placements
   claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
   codex        library  /home/me/.agents/skills/pdf
-  cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
+  cursor       library  /home/me/.agents/skills/pdf
   gemini-cli   library  /home/me/.agents/skills/pdf
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 Adopted skills stay on this machine until you publish them: run 'agentx source add <url> --account', then 'agentx skill publish <name>'.
 
 Could not adopt (2)
@@ -203,12 +203,12 @@ agentx adopt --skill jot
 ```text
 ✓ adopted jot from /home/me/.claude/skills/jot: 1 placement
   claude-code  symlink  /home/me/.claude/skills/jot -> /home/me/.agents/skills/jot
-  always available to universal clients: codex, gemini-cli
+  always available to universal clients: codex, cursor, gemini-cli
 No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish jot' to publish it.
 ```
 
 - The folder moves into your library, and a symlink to the library takes its place. The client sees the skill as before.
-- Clients that read the library directly, such as Codex and Gemini CLI, now see the skill too. See [Clients that see every skill](/cli/skill#clients-that-see-every-skill).
+- Clients that read the library directly, such as Codex, Cursor and Gemini CLI, now see the skill too. See [Clients that see every skill](/cli/skill#clients-that-see-every-skill).
 - If several clients hold a folder of that name with the same files, agentx moves the first one and replaces each of the others with a symlink. A client that reads the library directly gets no symlink: it sees the skill in the library.
 - A client that held no folder of that name gets no placement. Run [`agentx skill place <name>`](/cli/skill#place-a-skill-you-already-have) to place the skill there.
 - agentx reads each client's own skills folder for your user, enabled or not. The folder must hold a `SKILL.md`. A skill inside a project is left alone, and so is a plugin's skill: [fork a plugin's skill](/cli/fork#fork-a-plugins-skill) instead.

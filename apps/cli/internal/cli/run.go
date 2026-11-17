@@ -56,11 +56,19 @@ type invocation struct {
 // call of the command keeps the cancellation, so a stop before the journal
 // exists still gives up at once and leaves nothing behind. What an
 // interrupted command left of a pending merge is pruned once the journals
-// are finished, see pruneMerges.
+// are finished, see pruneMerges, and the links agentx placed for clients it
+// since found to read the library are removed, see sweepLibraryLinks.
 func (inv *invocation) refs(ctx context.Context) home.RefUpdater {
 	ctx = interrupt.Uninterruptible(ctx)
-	return journalRefs{RefUpdater: inv.git.Refs(ctx), out: inv.out,
-		prune: func() error { return inv.pruneMerges(gitx.AccountRepoPath(inv.dirs.Home)) }}
+	refs := inv.git.Refs(ctx)
+	return journalRefs{RefUpdater: refs, out: inv.out,
+		prune: func() error {
+			if err := inv.pruneMerges(gitx.AccountRepoPath(inv.dirs.Home)); err != nil {
+				return err
+			}
+			inv.sweepLibraryLinks(journalRefs{RefUpdater: refs, out: inv.out})
+			return nil
+		}}
 }
 
 // journalRefs is the ref updater plus the command's stderr, the journal

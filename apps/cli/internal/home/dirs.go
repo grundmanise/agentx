@@ -12,10 +12,13 @@ type Dirs struct {
 	Home    string
 	Library string
 	Config  string // the XDG config home, where agent clients keep user-scope configuration
+	// CopilotHome is COPILOT_HOME, "" when it is not set: GitHub Copilot
+	// keeps its configuration there instead of ~/.copilot.
+	CopilotHome string
 }
 
-// Resolve reads AGENTX_HOME, AGENTX_LIBRARY, HOME and XDG_CONFIG_HOME from env.
-// The process environment is never consulted.
+// Resolve reads AGENTX_HOME, AGENTX_LIBRARY, HOME, XDG_CONFIG_HOME and
+// COPILOT_HOME from env. The process environment is never consulted.
 func Resolve(env map[string]string) (Dirs, error) {
 	user := env["HOME"]
 	if user == "" {
@@ -27,6 +30,7 @@ func Resolve(env map[string]string) (Dirs, error) {
 		Library: env["AGENTX_LIBRARY"],
 		Config:  env["XDG_CONFIG_HOME"],
 	}
+	d.CopilotHome = env["COPILOT_HOME"]
 	if d.Home == "" {
 		d.Home = filepath.Join(user, ".agentx")
 	}

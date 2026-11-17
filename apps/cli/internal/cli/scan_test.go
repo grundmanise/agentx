@@ -504,6 +504,7 @@ func TestScanSymlinkChainAndLibrary(t *testing.T) {
 		"claude-code symlink user ~/.claude/skills/commit",
 		"codex directory user ~/.agents/skills/commit",
 		"codex symlink user ~/.codex/skills/commit",
+		"cursor directory user ~/.agents/skills/commit",
 		"cursor symlink user ~/.claude/skills/commit",
 		"cursor symlink user ~/.codex/skills/commit",
 		"cursor symlink user ~/.cursor/skills/commit",
@@ -516,7 +517,7 @@ func TestScanSymlinkChainAndLibrary(t *testing.T) {
 	}
 
 	out := h.run("scan")
-	contains(t, "stdout", out.stdout, "commit  symlink  user  "+filepath.Join(h.home, ".cursor/skills/commit")+" -> "+filepath.Join(h.home, ".agents/skills/commit"))
+	contains(t, "stdout", out.stdout, "commit  symlink    user  "+filepath.Join(h.home, ".cursor/skills/commit")+" -> "+filepath.Join(h.home, ".agents/skills/commit"))
 }
 
 // TestScanSanitisesUntrustedNames covers a skill whose frontmatter names it
@@ -709,7 +710,7 @@ func TestScanSpawnBudget(t *testing.T) {
 	}
 	equal(t, "skills", len(inventory["skills"].([]any)), 100)
 	for _, s := range inventory["skills"].([]any) {
-		equal(t, "occurrences per skill", len(s.(map[string]any)["occurrences"].([]any)), 4) // claude-code, codex, cursor, gemini-cli
+		equal(t, "occurrences per skill", len(s.(map[string]any)["occurrences"].([]any)), 5) // codex, gemini-cli, and cursor through the library and through Claude Code's directory
 	}
 	// The startup gate runs `git --version` once; the scan itself spawns
 	// nothing, this machine having no account repo to read lineage from.

@@ -12,13 +12,13 @@ import (
 )
 
 // absentHarness installs alpha with a link in Claude Code and a copy in
-// Cursor, which copy_mode records, then deletes its library directory the
+// Cortex Code, which copy_mode records, then deletes its library directory the
 // way something outside agentx would: the import branch and the two
 // placements are what is left of the skill.
-func absentHarness(t *testing.T) (h *harness, claude, cursor string) {
+func absentHarness(t *testing.T) (h *harness, claude, cortex string) {
 	t.Helper()
 	h, _, _ = absentHome.copy(t)
-	return h, filepath.Join(h.home, ".claude", "skills", "alpha"), filepath.Join(h.home, ".cursor", "skills", "alpha")
+	return h, filepath.Join(h.home, ".claude", "skills", "alpha"), filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 }
 
 // absentHome is the home absentHarness hands out.
@@ -28,8 +28,8 @@ var absentHome = &fixtureHome{
 	build: func(h *harness, s *sourceRepo) []string {
 		installHome.build(h, s)
 		h.mustRun("skill", "add", s.url, "--name", "alpha")
-		h.mustRun("skill", "remove", "alpha", "--from", "cursor")
-		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+		h.mustRun("skill", "remove", "alpha", "--from", "cortex")
+		h.mustRun("skill", "place", "alpha", "--to", "cortex", "--copy")
 		remove(h.t, filepath.Join(h.library, "alpha"))
 		return nil
 	},
@@ -56,30 +56,30 @@ func refValue(t *testing.T, h *harness, ref string) string {
 // configuration to keep while another loses it.
 func TestSkillRemoveTakesAwayWhatIsLeftOfASkillTheLibraryNoLongerHolds(t *testing.T) {
 	t.Parallel()
-	h, claude, cursor := absentHarness(t)
+	h, claude, cortex := absentHarness(t)
 
-	one := h.run("--json", "skill", "remove", "alpha", "--from", "cursor")
+	one := h.run("--json", "skill", "remove", "alpha", "--from", "cortex")
 	equal(t, "exit of --from", one.exit, 6)
 	e := h.one(one.stdout, "error")
-	equal(t, "message", e["message"], "the library holds no skill directory for alpha, so it cannot be removed from cursor alone")
+	equal(t, "message", e["message"], "the library holds no skill directory for alpha, so it cannot be removed from cortex alone")
 	equal(t, "hint", e["hint"], "take what is left of it off the machine with 'agentx skill remove alpha'")
-	if _, err := os.Lstat(cursor); err != nil {
-		t.Errorf("the refused removal took cursor's copy: %v", err)
+	if _, err := os.Lstat(cortex); err != nil {
+		t.Errorf("the refused removal took cortex's copy: %v", err)
 	}
-	equal(t, "copy_mode after the refusal", copyModeOf(t, h, "alpha"), "cursor")
+	equal(t, "copy_mode after the refusal", copyModeOf(t, h, "alpha"), "cortex")
 
 	out := h.run("--json", "skill", "remove", "alpha", "--from", "universal")
 	if out.exit != 0 {
 		t.Fatalf("remove: exit %d\n%s", out.exit, out.stderr)
 	}
 	nothingAt(t, "claude-code's link", claude)
-	nothingAt(t, "cursor's copy", cursor)
+	nothingAt(t, "cortex's copy", cortex)
 	equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), "")
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "removed alpha, which the library no longer held: its import branch and 2 placements")
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
 	equal(t, "journals", journalCount(t, h), 0)
-	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
+	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cortex)} {
 		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
 	equal(t, "the listing's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"), "")
@@ -97,17 +97,17 @@ func TestSkillRemoveTakesAwayWhatIsLeftOfASkillTheLibraryNoLongerHolds(t *testin
 // version, since there is no library to differ from.
 func TestSkillRemoveOfAnAbsentSkillSaysAnEditedCopyWent(t *testing.T) {
 	t.Parallel()
-	h, claude, cursor := absentHarness(t)
-	writeFile(t, filepath.Join(cursor, "SKILL.md"), skill("alpha", "Edited in the copy"))
+	h, claude, cortex := absentHarness(t)
+	writeFile(t, filepath.Join(cortex, "SKILL.md"), skill("alpha", "Edited in the copy"))
 
 	out := h.run("--json", "skill", "remove", "alpha")
 	if out.exit != 0 {
 		t.Fatalf("remove: exit %d\n%s", out.exit, out.stderr)
 	}
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
-		"cursor's copy of alpha was different from its base version; removing it deleted those changes ("+cursor+")")
+		"cortex's copy of alpha was different from its base version; removing it deleted those changes ("+cortex+")")
 	nothingAt(t, "claude-code's link", claude)
-	nothingAt(t, "cursor's copy", cursor)
+	nothingAt(t, "cortex's copy", cortex)
 	equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), "")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "removed alpha, which the library no longer held: its import branch and 2 placements")
 }
@@ -120,7 +120,7 @@ func TestSkillRemoveOfAnAbsentSkillSaysAnEditedCopyWent(t *testing.T) {
 // warning, never silently.
 func TestSkillRemoveOfAnAbsentSkillWithNoLineageSaysEveryCopyWent(t *testing.T) {
 	t.Parallel()
-	h, claude, cursor := absentHarness(t)
+	h, claude, cortex := absentHarness(t)
 	h.accountGit("update-ref", "refs/heads/managed/alpha", h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-m", "no lineage"))
 
 	out := h.run("--json", "skill", "remove", "alpha")
@@ -128,9 +128,9 @@ func TestSkillRemoveOfAnAbsentSkillWithNoLineageSaysEveryCopyWent(t *testing.T) 
 		t.Fatalf("remove: exit %d\n%s", out.exit, out.stderr)
 	}
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
-		"cursor's copy of alpha was different from its base version; removing it deleted those changes ("+cursor+")")
+		"cortex's copy of alpha was different from its base version; removing it deleted those changes ("+cortex+")")
 	nothingAt(t, "claude-code's link", claude)
-	nothingAt(t, "cursor's copy", cursor)
+	nothingAt(t, "cortex's copy", cortex)
 	equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), "")
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
 	equal(t, "journals", journalCount(t, h), 0)
@@ -161,7 +161,7 @@ func TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock(t *testing.T) 
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			h, claude, cursor := absentHarness(t)
+			h, claude, cortex := absentHarness(t)
 			tip := refValue(t, h, "refs/heads/managed/alpha")
 			lib := filepath.Join(h.library, "alpha")
 			change := real + " --git-dir=" + shellWord(gitx.AccountRepoPath(h.agentx)) + " update-ref " + c.fork + " " + tip + " || exit 1"
@@ -201,17 +201,17 @@ exec `+real+` "$@"
 			if _, ok := isSymlink(t, claude); !ok {
 				t.Errorf("claude-code's link is gone")
 			}
-			if info, err := os.Lstat(cursor); err != nil || !info.IsDir() {
-				t.Errorf("cursor's copy is gone: %v", err)
+			if info, err := os.Lstat(cortex); err != nil || !info.IsDir() {
+				t.Errorf("cortex's copy is gone: %v", err)
 			}
-			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
+			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cortex")
 			equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), tip)
 			if c.fork == "" {
 				equal(t, "the SKILL.md written meanwhile", fileBody(t, filepath.Join(lib, "SKILL.md")), skill("alpha", "Back again"))
 			} else {
 				equal(t, "the fork written meanwhile", refValue(t, h, c.fork), tip)
 			}
-			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
+			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cortex)} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}
 		})
@@ -239,7 +239,7 @@ func TestSkillRemoveLeavesADirectoryThatLostItsSKILLmd(t *testing.T) {
 	equal(t, "the warning", out.stderr, "warning: "+lib+" holds no skill and was left as it is; move it aside before installing alpha again\n")
 	sameTree(t, "the directory left", libraryTree(t, lib), left)
 	nothingAt(t, "claude-code's link", filepath.Join(h.home, ".claude", "skills", "alpha"))
-	nothingAt(t, "cursor's link", filepath.Join(h.home, ".cursor", "skills", "alpha"))
+	nothingAt(t, "cortex's link", filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha"))
 	equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), "")
 	equal(t, "the listing's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"), "")
 }
@@ -300,13 +300,13 @@ exec %GIT% "$@"
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			h, claude, cursor := absentHarness(t)
+			h, claude, cortex := absentHarness(t)
 			branch := refValue(t, h, "refs/heads/managed/alpha")
 
 			out := killedChild(t, h, "TestRemoveChildProcess", removeChildEnv, "alpha", c.script)
 			equal(t, "journals when the removal was killed", journalCount(t, h), 1)
 			nothingAt(t, "claude-code's link", claude)
-			nothingAt(t, "cursor's copy", cursor)
+			nothingAt(t, "cortex's copy", cortex)
 			if c.branch {
 				equal(t, "the import branch when the removal was killed", refValue(t, h, "refs/heads/managed/alpha"), branch)
 			} else {
@@ -319,7 +319,7 @@ exec %GIT% "$@"
 			equal(t, "journals after recovery", journalCount(t, h), 0)
 			equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), "")
 			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
-			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
+			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cortex)} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}
 			equal(t, "the listing's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"), "")

@@ -10,11 +10,25 @@ import (
 
 type githubCopilot struct{}
 
-func (githubCopilot) Slug() string                 { return "github-copilot" }
-func (githubCopilot) Name() string                 { return "GitHub Copilot" }
-func (githubCopilot) ConfigDir(d home.Dirs) string { return filepath.Join(d.User, ".copilot") }
+func (githubCopilot) Slug() string { return "github-copilot" }
+func (githubCopilot) Name() string { return "GitHub Copilot" }
+
+// ConfigDir is COPILOT_HOME when it is set, else ~/.copilot.
+func (githubCopilot) ConfigDir(d home.Dirs) string {
+	if d.CopilotHome != "" {
+		return d.CopilotHome
+	}
+	return filepath.Join(d.User, ".copilot")
+}
+
+// SkillsDirs: Copilot CLI reads the library too (since 1.0.11), except when
+// COPILOT_HOME is set, which stops it reading the library (since 1.0.66).
 func (c githubCopilot) SkillsDirs(d home.Dirs) []string {
-	return []string{filepath.Join(c.ConfigDir(d), "skills")}
+	dirs := []string{filepath.Join(c.ConfigDir(d), "skills")}
+	if d.CopilotHome == "" {
+		dirs = append(dirs, d.Library)
+	}
+	return dirs
 }
 func (githubCopilot) ProjectSkillsDirs() []string {
 	return []string{".github/skills", ".agents/skills"}

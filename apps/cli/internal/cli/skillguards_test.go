@@ -22,7 +22,7 @@ import (
 func TestACopyIsNotPublishedUnlessItHashesToTheVersion(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".cursor"}})
+	h.build(t, fixture{dirs: []string{".claude", ".snowflake/cortex"}})
 	lib := filepath.Join(h.library, "mine")
 	if err := os.MkdirAll(lib, 0o755); err != nil {
 		t.Fatal(err)
@@ -33,15 +33,15 @@ func TestACopyIsNotPublishedUnlessItHashesToTheVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	place := filepath.Join(h.home, ".cursor", "skills", "mine")
-	out := h.run("skill", "place", "mine", "--to", "cursor", "--copy")
+	place := filepath.Join(h.home, ".snowflake/cortex", "skills", "mine")
+	out := h.run("skill", "place", "mine", "--to", "cortex", "--copy")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "the warning", out.stderr, "the staged copy of mine hashes to")
-	contains(t, "the warning", out.stderr, "no placement was made for cursor")
+	contains(t, "the warning", out.stderr, "no placement was made for cortex")
 	contains(t, "the result", out.stdout, "placed mine in 0 configurations, 1 placement skipped")
 	nothingAt(t, "the copy", place)
 	// Nothing of the refused copy is left beside the live path either.
-	equal(t, "staged directories", len(stagingIn(t, filepath.Join(h.home, ".cursor", "skills"))), 0)
+	equal(t, "staged directories", len(stagingIn(t, filepath.Join(h.home, ".snowflake/cortex", "skills"))), 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "mine"), "")
 }
 
@@ -55,16 +55,16 @@ func TestRemovalCoversADisabledConfiguration(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	place := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	if _, ok := isSymlink(t, place); !ok {
 		t.Fatalf("the install made no placement at %s", place)
 	}
-	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
+	equal(t, "disable", h.run("config", "disable", "cortex").exit, 0)
 
 	out := h.run("skill", "remove", "alpha")
 	equal(t, "exit", out.exit, 0)
 	nothingAt(t, "the placement of a disabled configuration", place)
-	contains(t, "the output", out.stdout, "cursor")
+	contains(t, "the output", out.stdout, "cortex")
 }
 
 // TestRemovalFailsWhenTheLibraryStillHoldsTheName is the check that the

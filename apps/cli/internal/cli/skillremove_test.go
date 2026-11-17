@@ -12,7 +12,7 @@ import (
 )
 
 // placementHarness is a machine with six configurations, one source added
-// and nothing installed yet. Claude Code, Cursor, Windsurf and GitHub
+// and nothing installed yet. Claude Code, Cortex Code, Windsurf and GitHub
 // Copilot keep their own skills directories, which gives a command four
 // placement paths to put four different things at; Codex and Gemini CLI
 // read the library itself, so their occurrence is the library entry.
@@ -25,7 +25,7 @@ func placementHarness(t *testing.T) (*harness, *sourceRepo) {
 // placementHome is the home placementHarness hands out.
 var placementHome = &fixtureHome{
 	source: "skills",
-	dirs:   []string{".claude", ".cursor", ".codeium/windsurf", ".copilot", ".codex", ".gemini"},
+	dirs:   []string{".claude", ".snowflake/cortex", ".codeium/windsurf", ".copilot", ".codex", ".gemini"},
 	build: func(h *harness, s *sourceRepo) []string {
 		buildExecutable(s)
 		h.mustRun("source", "add", s.url)
@@ -116,9 +116,9 @@ func TestSkillRemoveFromOneConfiguration(t *testing.T) {
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	before := mutationVersion(t, h)
 
-	out := h.run("--json", "skill", "remove", "alpha", "--from", "cursor")
+	out := h.run("--json", "skill", "remove", "alpha", "--from", "cortex")
 	equal(t, "exit", out.exit, 0)
-	nothingAt(t, "the cursor placement", filepath.Join(h.home, ".cursor", "skills", "alpha"))
+	nothingAt(t, "the cortex placement", filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha"))
 	if _, ok := isSymlink(t, filepath.Join(h.home, ".claude", "skills", "alpha")); !ok {
 		t.Error("a placement the command did not name was removed")
 	}
@@ -130,23 +130,11 @@ func TestSkillRemoveFromOneConfiguration(t *testing.T) {
 	equal(t, "journals left behind", journalCount(t, h), 0)
 
 	// The targeted rescan reports on the configuration the command covered,
-	// as it found it: Cursor's own placement is gone, and what it still sees
-	// is Claude Code's directory, which Cursor reads too. The event says what
-	// is there rather than what the command meant to do.
+	// as it found it: Cortex Code no longer sees the skill.
 	ev := h.one(out.stdout, "library_skill")
 	equal(t, "kind", ev["kind"], "managed")
-	places := placementsOf(t, ev)
-	equal(t, "placements", strings.Join(places, ";"), "cursor symlink symlink")
-	for _, p := range ev["placements"].([]any) {
-		equal(t, "the placement Cursor still sees", p.(map[string]any)["path"], filepath.Join(h.home, ".claude", "skills", "alpha"))
-	}
-	contains(t, "the result", out.stdout, "removed alpha from cursor: 1 placement")
-	// The run warns that Cursor keeps the skill, at warn level, which the
-	// desktop app shows.
-	warning := h.one(out.stderr, "log")
-	equal(t, "the warning level", warning["level"], "warn")
-	contains(t, "the warning", warning["message"].(string), "cursor still sees alpha through claude-code's placement at "+
-		filepath.Join(h.home, ".claude", "skills", "alpha")+"; remove it from claude-code to take it from both")
+	equal(t, "placements", strings.Join(placementsOf(t, ev), ";"), "")
+	contains(t, "the result", out.stdout, "removed alpha from cortex: 1 placement")
 }
 
 // TestSkillRemoveFromASharedPlace: Zencoder and Zenflow share one skills
@@ -177,7 +165,7 @@ func TestSkillRemoveTakesTheSkillOffTheMachine(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--copy").exit, 0)
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cursor,github-copilot,windsurf")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cortex,github-copilot,windsurf")
 	// A candidate ref, which a later spec writes and this command deletes.
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	h.accountGit("update-ref", "refs/agentx/candidate/alpha", strings.TrimSpace(head))
@@ -185,7 +173,7 @@ func TestSkillRemoveTakesTheSkillOffTheMachine(t *testing.T) {
 
 	out := h.run("--json", "skill", "remove", "alpha")
 	equal(t, "exit", out.exit, 0)
-	for _, rel := range []string{".claude/skills/alpha", ".cursor/skills/alpha", ".codeium/windsurf/skills/alpha", ".copilot/skills/alpha"} {
+	for _, rel := range []string{".claude/skills/alpha", ".snowflake/cortex/skills/alpha", ".codeium/windsurf/skills/alpha", ".copilot/skills/alpha"} {
 		nothingAt(t, "the placement", filepath.Join(h.home, filepath.FromSlash(rel)))
 	}
 	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
@@ -207,11 +195,11 @@ func TestSkillRemoveTakesTheSkillOffTheMachine(t *testing.T) {
 func TestSkillRemoveDeletesOnlyWhatAgentxMade(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	// Claude Code gets the symlink an install makes; Cursor gets a copy
+	// Claude Code gets the symlink an install makes; Cortex Code gets a copy
 	// agentx records; Windsurf and GitHub Copilot get placements of the
 	// user's own that agentx must not touch.
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code").exit, 0)
-	equal(t, "place", h.run("skill", "place", "alpha", "--to", "cursor", "--copy").exit, 0)
+	equal(t, "place", h.run("skill", "place", "alpha", "--to", "cortex", "--copy").exit, 0)
 
 	// A real directory holding exactly the library's version, which nothing
 	// recorded as a copy: it looks like agentx's work and is not.
@@ -234,7 +222,7 @@ func TestSkillRemoveDeletesOnlyWhatAgentxMade(t *testing.T) {
 
 	// What agentx made is gone.
 	nothingAt(t, "the symlink placement", filepath.Join(h.home, ".claude", "skills", "alpha"))
-	nothingAt(t, "the recorded copy", filepath.Join(h.home, ".cursor", "skills", "alpha"))
+	nothingAt(t, "the recorded copy", filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha"))
 	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
 
 	// What the user made is where they left it, bytes and all.
@@ -268,7 +256,7 @@ func TestSkillRemoveLeavesAFileAndAHandMadeDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFile(t, aFile, "not a skill at all\n")
-	handMade := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	handMade := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 	if err := os.MkdirAll(handMade, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +270,7 @@ func TestSkillRemoveLeavesAFileAndAHandMadeDirectory(t *testing.T) {
 	contains(t, "stderr", out.stderr, aFile+" is not a placement agentx made")
 	contains(t, "stderr", out.stderr, handMade+" is a directory agentx did not place there")
 	contains(t, "the result", out.stdout, "2 placements left in place")
-	// Cursor still sees the skill in the directory left, and the warning
+	// Cortex Code still sees the skill in the directory left, and the warning
 	// that left it said so: the one that names what a client still sees
 	// after a whole removal does not name it a second time.
 	if n := strings.Count(out.stderr, handMade); n != 1 {
@@ -304,15 +292,13 @@ func TestWholeRemovalSaysWhoStillSeesTheSkill(t *testing.T) {
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
 	// Codex reads the library, so the removal never examines its own skills
-	// directory. Cursor reads that directory too, so both clients keep the
-	// skill after the library entry goes.
+	// directory, and Codex keeps the skill after the library entry goes.
 	leftover := filepath.Join(h.home, ".codex", "skills", "alpha")
 	writeFile(t, mkdirs(t, leftover, "SKILL.md"), skill("alpha", "A leftover of mine"))
 
 	out := h.run("skill", "remove", "alpha")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "the warning", out.stderr, "codex still sees alpha at "+leftover)
-	contains(t, "the warning", out.stderr, "cursor still sees alpha at "+leftover)
 
 	// What a scan says a moment later is what the run said, not the
 	// opposite of it.
@@ -327,12 +313,12 @@ func TestSkillRemoveDropsTheCopyModeOfWhatItRemoved(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--copy").exit, 0)
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cursor,github-copilot,windsurf")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cortex,github-copilot,windsurf")
 
-	out := h.run("skill", "remove", "alpha", "--from", "cursor")
+	out := h.run("skill", "remove", "alpha", "--from", "cortex")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,github-copilot,windsurf")
-	nothingAt(t, "the copy", filepath.Join(h.home, ".cursor", "skills", "alpha"))
+	nothingAt(t, "the copy", filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha"))
 	if _, err := os.Stat(filepath.Join(h.home, ".claude", "skills", "alpha", "SKILL.md")); err != nil {
 		t.Errorf("another configuration's copy was removed: %v", err)
 	}
@@ -366,15 +352,15 @@ func TestSkillRemoveSaysACopyWasNotTheLibraryVersion(t *testing.T) {
 		build func(t *testing.T, place string)
 		args  []string // after skill remove alpha
 	}{
-		{"a copy the user edited, from cursor", edit, []string{"--from", "cursor"}},
+		{"a copy the user edited, from cortex", edit, []string{"--from", "cortex"}},
 		{"a copy the user replaced, from universal with --json", replace, []string{"--from", "universal", "--json"}},
 		{"a copy the user replaced, off the machine", replace, nil},
 	} {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
-			equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy").exit, 0)
-			place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+			equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "cortex", "--copy").exit, 0)
+			place := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
 			c.build(t, place)
 
 			out := h.run(append([]string{"skill", "remove", "alpha"}, c.args...)...)
@@ -390,11 +376,11 @@ func TestSkillRemoveSaysACopyWasNotTheLibraryVersion(t *testing.T) {
 	}
 }
 
-// removedCopyWarning is the warning a removal gives for Cursor's copy of
+// removedCopyWarning is the warning a removal gives for Cortex Code's copy of
 // name at place when that copy did not hold the library's version: the
 // message of its log event, and the text line after "warning: ".
 func removedCopyWarning(place, name string) string {
-	return "cursor's copy of " + name + " was different from the library; removing it deleted those changes (" + place + ")"
+	return "cortex's copy of " + name + " was different from the library; removing it deleted those changes (" + place + ")"
 }
 
 // TestSkillRemoveRefusesWhatItCannotFind answers for a skill the library
@@ -432,9 +418,9 @@ func TestSkillRemoveHandlesAPlacementThatIsNotThere(t *testing.T) {
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code").exit, 0)
 
-	out := h.run("--json", "skill", "remove", "alpha", "--from", "cursor")
+	out := h.run("--json", "skill", "remove", "alpha", "--from", "cortex")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "the result", out.stdout, "removed alpha from cursor: 0 placements")
+	contains(t, "the result", out.stdout, "removed alpha from cortex: 0 placements")
 	if _, ok := isSymlink(t, filepath.Join(h.home, ".claude", "skills", "alpha")); !ok {
 		t.Error("a removal from another configuration took this one's placement")
 	}
@@ -452,17 +438,17 @@ func TestSkillRemoveHandlesAPlacementThatIsNotThere(t *testing.T) {
 func TestSkillRemoveSanitisesTheNameAndQuotesThePaths(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".cursor"}})
+	h.build(t, fixture{dirs: []string{".snowflake/cortex"}})
 	const name = "two\nrows \x1b[31mRED\x1b[0m"
 	writeFile(t, mkdirs(t, filepath.Join(h.library, name), "SKILL.md"), skill("mine", "made here"))
-	h.mustRun("skill", "place", name, "--to", "cursor")
+	h.mustRun("skill", "place", name, "--to", "cortex")
 
 	out := h.run("skill", "remove", name)
 	equal(t, "exit", out.exit, 0)
 	quoted := string(filepath.Separator) + `two\nrows \033[31mRED\033[0m"`
 	lines := strings.Split(strings.TrimSuffix(out.stdout, "\n"), "\n")
 	equal(t, "the first line", lines[0], "✓ removed two rows [31mRED [0m from the library: 1 placement")
-	contains(t, "the row", out.stdout, "  cursor  symlink  \""+filepath.Join(h.home, ".cursor", "skills")+quoted+"\n")
+	contains(t, "the row", out.stdout, "  cortex  symlink  \""+filepath.Join(h.home, ".snowflake/cortex", "skills")+quoted+"\n")
 	contains(t, "what was deleted", out.stdout, "  deleted \""+h.library+quoted+"\n")
 	equal(t, "lines", len(lines), 3)
 }

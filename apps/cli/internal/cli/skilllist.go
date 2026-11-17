@@ -173,10 +173,10 @@ func row(out *writer, ev librarySkillEvent, account string) []cell {
 }
 
 // placedIn counts the configurations among the placements, each once
-// however many paths it sees the skill through. Cursor reads Claude Code's
-// skills directory as well as its own, so a skill placed in both is seen
-// by Cursor twice, and counting paths would give Cursor a placement nobody
-// made for it. Counted this way the column agrees with the rows an install
+// however many paths it sees the skill through. A client that reads
+// another client's skills directory as well as its own sees a skill placed
+// in both twice, and counting paths would give it a placement nobody made
+// for it. Counted this way the column agrees with the rows an install
 // prints, one per configuration, and the event above still carries every
 // path.
 func placedIn(places []placementEvent) int {

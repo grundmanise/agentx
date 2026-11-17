@@ -12,7 +12,7 @@ import (
 
 // bulkHarness is a machine with four configurations and one source holding
 // three skills, none of them installed: the starting point of the bulk
-// tests. Claude Code and Cursor keep their own skills directories; Codex
+// tests. Claude Code and Cortex Code keep their own skills directories; Codex
 // and Gemini CLI read the library itself.
 func bulkHarness(t *testing.T) (*harness, *sourceRepo) {
 	t.Helper()
@@ -23,7 +23,7 @@ func bulkHarness(t *testing.T) (*harness, *sourceRepo) {
 // bulkHome is the home bulkHarness hands out.
 var bulkHome = &fixtureHome{
 	source: "bulk",
-	dirs:   []string{".claude", ".cursor", ".codex", ".gemini"},
+	dirs:   []string{".claude", ".snowflake/cortex", ".codex", ".gemini"},
 	build: func(h *harness, s *sourceRepo) []string {
 		for _, name := range bulkSkills {
 			s.skill("skills/"+name, name, "The "+name+" skill", map[string]string{"notes.md": name + " notes\n"})
@@ -77,7 +77,7 @@ func TestSkillAddAllSelectsEverySkill(t *testing.T) {
 		if h.accountGit("rev-parse", "refs/heads/managed/"+name) == "" {
 			t.Errorf("%s has no import branch", name)
 		}
-		for _, rel := range []string{".claude/skills/", ".cursor/skills/"} {
+		for _, rel := range []string{".claude/skills/", ".snowflake/cortex/skills/"} {
 			if _, err := os.Readlink(filepath.Join(h.home, rel+name)); err != nil {
 				t.Errorf("%s%s: %v", rel, name, err)
 			}
@@ -305,14 +305,14 @@ func TestSkillAddKeepsTheBatchEdgeCasesApart(t *testing.T) {
 		t.Fatal(err)
 	}
 	// gamma's placement in Claude Code already holds exactly this version,
-	// and its placement in Cursor holds something else.
+	// and its placement in Cortex Code holds something else.
 	claude := filepath.Join(h.home, ".claude", "skills", "gamma")
 	copyTree(t, filepath.Join(s.work, "skills", "gamma"), claude)
-	cursor := filepath.Join(h.home, ".cursor", "skills", "gamma")
-	if err := os.MkdirAll(cursor, 0o755); err != nil {
+	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "gamma")
+	if err := os.MkdirAll(cortex, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(cursor, "SKILL.md"), "---\nname: gamma\ndescription: mine\n---\n\nmine\n")
+	writeFile(t, filepath.Join(cortex, "SKILL.md"), "---\nname: gamma\ndescription: mine\n---\n\nmine\n")
 
 	out := h.run("--json", "skill", "add", s.url, "--all")
 	equal(t, "exit", out.exit, 0)
@@ -334,10 +334,10 @@ func TestSkillAddKeepsTheBatchEdgeCasesApart(t *testing.T) {
 	if info, err := os.Lstat(claude); err != nil || info.Mode()&os.ModeSymlink == 0 {
 		t.Errorf("the placement of this version was not adopted as a symlink: %v", err)
 	}
-	if info, err := os.Lstat(cursor); err != nil || info.Mode()&os.ModeSymlink != 0 {
+	if info, err := os.Lstat(cortex); err != nil || info.Mode()&os.ModeSymlink != 0 {
 		t.Errorf("a placement that is not this skill was replaced: %v", err)
 	}
-	contains(t, "stderr", out.stderr, cursor)
+	contains(t, "stderr", out.stderr, cortex)
 	summary := h.one(out.stdout, "result")["summary"].(string)
 	for _, want := range []string{"1 already in the library", "1 placement adopted", "1 placement skipped"} {
 		contains(t, "the result", summary, want)
@@ -458,7 +458,7 @@ func TestSkillAddCopyRecordsEverySkillInOneWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range bulkSkills {
-		equal(t, "copy_mode of "+name, strings.Join(settings.CopyMode[name], ","), "claude-code,cursor")
+		equal(t, "copy_mode of "+name, strings.Join(settings.CopyMode[name], ","), "claude-code,cortex")
 		place := filepath.Join(h.home, ".claude", "skills", name)
 		info, err := os.Lstat(place)
 		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
@@ -606,7 +606,7 @@ func TestSkillAddLeavesNothingStagedWhenItGivesUpLate(t *testing.T) {
 	// A string where the list belongs is a settings file this run cannot
 	// finish, and it is found only once every skill is staged.
 	settings := readSettingsFile(t, h)
-	settings["copy_mode"] = map[string]any{"alpha": "cursor"}
+	settings["copy_mode"] = map[string]any{"alpha": "cortex"}
 	b, err := json.Marshal(settings)
 	if err != nil {
 		t.Fatal(err)
@@ -616,7 +616,7 @@ func TestSkillAddLeavesNothingStagedWhenItGivesUpLate(t *testing.T) {
 	out := h.run("skill", "add", s.url, "--all", "--copy")
 	equal(t, "exit", out.exit, 10)
 	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "")
-	for _, dir := range []string{h.library, filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".cursor", "skills")} {
+	for _, dir := range []string{h.library, filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".snowflake/cortex", "skills")} {
 		if left := stagingIn(t, dir); len(left) > 0 {
 			t.Errorf("the run that gave up left %d staged entries in %s: %v", len(left), dir, left)
 		}

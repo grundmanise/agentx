@@ -1,18 +1,18 @@
-The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to cursor` turns a symlink into a copy. To convert every placement already in the client as well, add `--convert`:
+The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to windsurf` turns a symlink into a copy. To convert every placement already in the client as well, add `--convert`:
 
 ```sh
-agentx config placement cursor copy --convert
+agentx config placement windsurf copy --convert
 ```
 
 ```text
-✓ cursor now places copies, 2 skills converted
-  alpha  copy  /home/me/.cursor/skills/alpha
-  beta   copy  /home/me/.cursor/skills/beta
+✓ windsurf now places copies, 2 skills converted
+  alpha  copy  /home/me/.codeium/windsurf/skills/alpha
+  beta   copy  /home/me/.codeium/windsurf/skills/beta
 ```
 
 To copies, every symlink to the library becomes a copy. To symlinks, every copy agentx placed becomes a symlink to the library. `--convert` places no skill that is not in the client already, and leaves your own directories and links as they are.
 
-A copy you edited in place is different from the library, so `--convert` keeps it as a copy, warns, and counts it as skipped. To discard your edits and get a symlink, run `agentx skill remove <name> --from cursor`, then `agentx skill place <name> --to cursor`.
+A copy you edited in place is different from the library, so `--convert` keeps it as a copy, warns, and counts it as skipped. To discard your edits and get a symlink, run `agentx skill remove <name> --from windsurf`, then `agentx skill place <name> --to windsurf`.
 
 ---
 title: "agentx config"
@@ -104,17 +104,17 @@ A client that reads the library directly, such as Codex, still sees every skill 
 Enabling a client changes only where later installs go. To also place every skill in your library in that client, add `--place-all`:
 
 ```sh
-agentx config enable cursor --place-all
+agentx config enable windsurf --place-all
 ```
 
 ```text
-✓ cursor is now enabled
-✓ placed 2 skills in cursor
-  pdf   symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
-  xlsx  symlink  /home/me/.cursor/skills/xlsx -> /home/me/.agents/skills/xlsx
+✓ windsurf is now enabled
+✓ placed 2 skills in windsurf
+  pdf   symlink  /home/me/.codeium/windsurf/skills/pdf -> /home/me/.agents/skills/pdf
+  xlsx  symlink  /home/me/.codeium/windsurf/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
-The output has one row for each skill, with its path in Cursor's skills directory.
+The output has one row for each skill, with its path in Windsurf's skills directory.
 
 agentx places each skill as a symlink. If agentx already keeps a copy of a skill for this client, it places a copy. See [Copy instead of link](/cli/skill#copy-instead-of-link).
 
@@ -136,22 +136,22 @@ To place one skill at a time, use [`agentx skill place`](/cli/skill#place-a-skil
 agentx skips a placement when something of yours is already at the path, or when it cannot write to the client's skills directory. It prints a warning for each skipped path, places the other skills, and exits with code 0. The client is then enabled with only some of your skills:
 
 ```text
-warning: /home/me/.cursor/skills/pdf is not this skill and was left as it is; no placement was made for cursor
-✓ cursor is now enabled
-✓ placed 1 skill in cursor, 1 placement skipped
-  xlsx  symlink  /home/me/.cursor/skills/xlsx -> /home/me/.agents/skills/xlsx
+warning: /home/me/.codeium/windsurf/skills/pdf is not this skill and was left as it is; no placement was made for windsurf
+✓ windsurf is now enabled
+✓ placed 1 skill in windsurf, 1 placement skipped
+  xlsx  symlink  /home/me/.codeium/windsurf/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
-Cursor does not see pdf, so pdf has no row. If Cursor sees pdf through another client's directory, such as Claude Code's, the row shows that path.
+Windsurf does not see pdf, so pdf has no row.
 
 agentx also skips a copy it keeps for the client when the copy differs from the library, for example because you edited it. The copy stays as it is. The warning names the commands that replace it:
 
 ```text
-warning: cursor's copy of pdf is different from the library, so it was left unchanged (/home/me/.cursor/skills/pdf)
-  to replace it with the library version: agentx skill remove pdf --from cursor && agentx skill place pdf --to cursor --copy
-✓ cursor is now enabled
-✓ placed 1 skill in cursor, 1 placement skipped
-  xlsx  symlink  /home/me/.cursor/skills/xlsx -> /home/me/.agents/skills/xlsx
+warning: windsurf's copy of pdf is different from the library, so it was left unchanged (/home/me/.codeium/windsurf/skills/pdf)
+  to replace it with the library version: agentx skill remove pdf --from windsurf && agentx skill place pdf --to windsurf --copy
+✓ windsurf is now enabled
+✓ placed 1 skill in windsurf, 1 placement skipped
+  xlsx  symlink  /home/me/.codeium/windsurf/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
 See [A copy that differs from the library](/cli/skill#a-copy-that-differs-from-the-library).
@@ -161,18 +161,18 @@ See [A copy that differs from the library](/cli/skill#a-copy-that-differs-from-t
 agentx places a skill in a client as a symlink to the library by default. For a client that does not follow symlinks, choose a copy:
 
 ```sh
-agentx config placement cursor copy
-agentx config placement cursor symlink
+agentx config placement windsurf copy
+agentx config placement windsurf symlink
 ```
 
 ```text
-✓ cursor now places copies
-✓ cursor now places symlinks
+✓ windsurf now places copies
+✓ windsurf now places symlinks
 ```
 
 The choice applies to every later placement in that client: `agentx skill add`, `agentx skill place`, `agentx skill new`, `agentx skill fork` and `agentx config enable --place-all`. `--copy` still places a copy in every client it covers.
 
-The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to cursor` turns a symlink into a copy. To turn every symlink in the client into a copy at once, run `agentx config enable cursor --place-all`. To turn a copy back into a symlink, run `agentx skill remove <name> --from cursor`, then `agentx skill place <name> --to cursor`.
+The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to windsurf` turns a symlink into a copy. To turn every symlink in the client into a copy at once, run `agentx config enable windsurf --place-all`. To turn a copy back into a symlink, run `agentx skill remove <name> --from windsurf`, then `agentx skill place <name> --to windsurf`.
 
 A client that reads the library directly, such as Codex, has no choice to make: the command exits with code 1. In the desktop app, choose on the agent's card under **Agents**. See [Choose symlink or copy for an agent](/agent-placement).
 
