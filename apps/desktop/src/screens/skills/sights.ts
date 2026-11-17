@@ -281,7 +281,7 @@ export interface SightsRow {
   clash: boolean;
 }
 
-/** The table of the popover: a column per place, a row per agent or per agents that see alike. */
+/** The table of the hover card: a column per place, a row per agent or per agents that see alike. */
 export interface SightsTable {
   title: string;
   columns: SightsColumn[];
@@ -313,7 +313,7 @@ const headingOf = (place: Place) => {
 };
 
 /**
- * The popover's table: the agents that see more than one skill of the name first, a row each,
+ * The hover card's table: the agents that see more than one skill of the name first, a row each,
  * highlighted; then the agents that see one, a row for those that see the same one.
  */
 export const sightsTable = (sights: NameSights): SightsTable => {
@@ -350,18 +350,16 @@ export const sightsTable = (sights: NameSights): SightsTable => {
   };
   if (clashing.length > 0) {
     const two = clashing.every((a) => placesOf(a).length === 2);
-    const who =
-      clashing.length === 1
-        ? "The highlighted agent sees"
-        : "Highlighted agents see";
+    const one = clashing.length === 1;
+    const sees = one
+      ? "The highlighted agent sees"
+      : "The highlighted agents see";
     const lines = [
-      `${who} ${two ? "both" : "more than one"}.`,
-      clashing.length === 1
-        ? "agentx can't tell which one it uses."
-        : "agentx can't tell which one they use.",
+      `${sees} ${two ? "both skills" : "all of them"}.`,
+      `It's up to ${one ? "the agent" : "each agent"} to decide which one to use.`,
     ];
     if (renamable) {
-      lines.push("To keep them apart, rename yours.");
+      lines.push("To prevent possible clashes, rename your skill.");
     }
     table.footer = lines.join(" ");
   }

@@ -1,4 +1,4 @@
-// What each agent sees, as tables over the pure functions: the popover's table (`sightsTable`) and
+// What each agent sees, as tables over the pure functions: the hover card's table (`sightsTable`) and
 // the notice under AGENTS (`clashText`), for the places that hold a skill of one name.
 import { expect, test } from "@playwright/test";
 
@@ -65,7 +65,7 @@ const cases: {
 }[] = [
   {
     footer:
-      "Highlighted agents see both. agentx can't tell which one they use. To keep them apart, rename yours.",
+      "The highlighted agents see both skills. It's up to each agent to decide which one to use. To prevent possible clashes, rename your skill.",
     name: "your fork of a plugin's skill under its name",
     notice:
       "Claude Code, Codex and Gemini CLI also see the chrome-devtools-mcp plugin's a11y-debugging. Each picks one of the two.",
@@ -80,7 +80,7 @@ const cases: {
   },
   {
     footer:
-      "The highlighted agent sees both. agentx can't tell which one it uses. To keep them apart, rename yours.",
+      "The highlighted agent sees both skills. It's up to the agent to decide which one to use. To prevent possible clashes, rename your skill.",
     name: "the plugin's skill, seen beside yours by one agent",
     notice:
       "Claude Code also sees your a11y-debugging. It picks one of the two.",
@@ -92,7 +92,7 @@ const cases: {
   },
   {
     footer:
-      "Highlighted agents see more than one. agentx can't tell which one they use. To keep them apart, rename yours.",
+      "The highlighted agents see all of them. It's up to each agent to decide which one to use. To prevent possible clashes, rename your skill.",
     name: "three skills: an agent's own copy too",
     notice:
       "Claude Code and Gemini CLI also see the chrome-devtools-mcp plugin's a11y-debugging. Codex also sees the chrome-devtools-mcp plugin's a11y-debugging and the copy in Codex's folder. Each picks one of them.",
@@ -107,7 +107,7 @@ const cases: {
   },
   {
     footer:
-      "The highlighted agent sees both. agentx can't tell which one it uses.",
+      "The highlighted agent sees both skills. It's up to the agent to decide which one to use.",
     name: "two plugins, none of yours",
     notice:
       "Claude Code also sees the beta plugin's a11y-debugging. It picks one of the two.",
