@@ -3,9 +3,10 @@
 // what the dialog says the fork does for each kind of skill, and a refusal's hint in the dialog's
 // own words (docs/spec/cli-contract.md, "Forking a skill").
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { ErrorEvent, SkillNode } from "#/cli/events.gen.ts";
+import type { ErrorEvent, LibraryEntry, SkillNode } from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
+import { SKILL_NAME_LIMIT } from "#/lib/skill-name.ts";
 import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
@@ -20,9 +21,14 @@ export const canFork = (row: SkillRow) =>
 /**
  * How `skill fork` names `row`: a library skill by its name; a plugin's skill by its directory,
  * as `<plugin>:<directory>` when the plugins of the machine provide more than one skill of that
- * directory's name, which the CLI otherwise refuses.
+ * directory's name, which the CLI otherwise refuses, or when the library holds a skill of that
+ * name, which the CLI looks up first and would fork instead.
  */
-export const forkTarget = (row: SkillRow, skills: SkillNode[]): string => {
+export const forkTarget = (
+  row: SkillRow,
+  skills: SkillNode[],
+  library: LibraryEntry[]
+): string => {
   const occurrence = row.kind === "plugin" ? occurrenceOf(row) : undefined;
   if (occurrence?.plugin === undefined) {
     return row.name;
@@ -36,7 +42,10 @@ export const forkTarget = (row: SkillRow, skills: SkillNode[]): string => {
       )
       .map((o) => o.plugin)
   );
-  return plugins.size > 1 ? `${occurrence.plugin}:${directory}` : directory;
+  const inLibrary = library.some((e) => e.name === directory);
+  return plugins.size > 1 || inLibrary
+    ? `${occurrence.plugin}:${directory}`
+    : directory;
 };
 
 /** `skill fork <target>`, with `--name <new>` for a fork under a new name. */
@@ -57,9 +66,16 @@ export const forkText = (row: SkillRow): string =>
  */
 export const renamesAtFirst = (row: SkillRow) => row.kind === "plugin";
 
-/** The name the Name field starts with: `my-<name>` for a plugin's skill, so Fork works at once. */
+const PREFIX = "my-";
+
+/**
+ * The name the Name field starts with: `my-<name>` for a plugin's skill, so Fork works at once; a
+ * name too long to take the prefix is cut to the limit, without a hyphen at its end.
+ */
 export const firstName = (row: SkillRow) =>
-  renamesAtFirst(row) ? `my-${row.name}` : "";
+  renamesAtFirst(row)
+    ? `${PREFIX}${row.name}`.slice(0, SKILL_NAME_LIMIT).replace(/-+$/u, "")
+    : "";
 
 /**
  * The Use a different name switch and the name field as they stand once a refusal shows: off; on with

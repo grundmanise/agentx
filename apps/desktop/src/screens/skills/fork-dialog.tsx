@@ -124,6 +124,7 @@ export const ForkButton = ({ row }: { row: SkillRow }) => {
 /** The Fork dialog's form, mounted while it is open for `row`, so it opens clean each time. */
 const ForkForm = ({ row }: { row: SkillRow }) => {
   const skills = useAppStore((s) => s.inventory?.skills);
+  const library = useAppStore((s) => s.inventory?.library);
   const [renaming, setRenaming] = useState(() => renamesAtFirst(row));
   const [name, setName] = useState(() => firstName(row));
   const [refusal, setRefusal] = useState<Refusal | undefined>();
@@ -145,7 +146,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       return;
     }
     setRefusal(undefined);
-    const target = forkTarget(row, skills ?? []);
+    const target = forkTarget(row, skills ?? [], library ?? []);
     const outcome = await runUntilSettled(
       forkArgs(target, renaming ? name : undefined),
       {
