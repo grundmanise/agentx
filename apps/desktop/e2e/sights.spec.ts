@@ -99,7 +99,7 @@ const cases: {
   },
   {
     footer:
-      "To avoid clashes, make sure each agent sees only one. You can rename your skill, uninstall the chrome-devtools-mcp plugin or remove the copy in Codex's folder.",
+      "To avoid clashes, make sure each agent sees only one. You can rename your skill, uninstall the plugin or remove the copy from the agent's folder.",
     name: "three skills: an agent's own copy too",
     notice: "Found 3 skills named a11y-debugging.",
     sights: sights([yours, devtools, codexFolder], [yours]),
@@ -121,6 +121,25 @@ const cases: {
       [place("plugin", [claude], "alpha")]
     ),
     table: ["Agent | alpha | beta", "! Claude Code | ✓ | ✓"],
+  },
+  {
+    footer:
+      "To avoid clashes, make sure each agent sees only one. You can rename your skill or uninstall one of the plugins.",
+    name: "three skills: yours and two plugins",
+    notice: "Found 3 skills named a11y-debugging.",
+    sights: sights(
+      [
+        yours,
+        place("plugin", [claude], "alpha"),
+        place("plugin", [claude], "beta"),
+      ],
+      [yours]
+    ),
+    table: [
+      "Agent | Your skill | alpha | beta",
+      "! Claude Code | ✓ | ✓ | ✓",
+      "Cursor, Codex, GitHub Copilot, Gemini CLI, OpenCode, Cline | ✓ | – | –",
+    ],
   },
   {
     name: "no agent sees two",
