@@ -1,6 +1,6 @@
 // The Skills list on a machine with hundreds of skills: only the rows near the part of the list
 // that shows are in the document, the selected row comes into view, and each plugin's skills sit
-// in a subgroup that collapses.
+// in a subgroup that starts collapsed.
 import type { Page } from "@playwright/test";
 
 import {
@@ -62,6 +62,13 @@ test("a list of hundreds of skills holds only the rows near what shows, and brin
   const drawn = await list(page).getByRole("listitem").count();
   expect(drawn).toBeLessThan(50);
 
+  // Every plugin's subgroup opened, from the PLUGINS group's header.
+  await list(page).evaluate((nav) => {
+    nav.scrollTop = 0;
+  });
+  await list(page).getByRole("button", { name: "Collapse all" }).click();
+  await list(page).getByRole("button", { name: "Expand all" }).click();
+
   // The keys move the selection past the rows that were drawn and from one plugin to the next,
   // one key after the other, and the list follows.
   for (let i = 301; i <= 320; i += 1) {
@@ -79,31 +86,45 @@ test("a list of hundreds of skills holds only the rows near what shows, and brin
   expect(await list(page).getByRole("listitem").count()).toBeLessThan(50);
 });
 
-test("a plugin's subgroup collapses to its header, and the keys skip its rows", async ({
+test("plugins' subgroups start collapsed, but the opened skill's; Collapse all and Expand all", async ({
   cli,
   page,
 }) => {
-  // The first plugin's first skill, so its header is drawn beside it.
+  // The first generated plugin's first skill, so its header is drawn beside it.
   const first = listedPluginSkill(0);
   await openAt(cli, page, first.name);
   const plugin = list(page).getByRole("region", {
     name: `${first.plugin} (${SKILLS_PER_PLUGIN})`,
   });
-  const toggle = plugin.getByRole("button", {
-    exact: true,
-    name: `${first.plugin} ${SKILLS_PER_PLUGIN}`,
-  });
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  const toggle = (name: string, count = SKILLS_PER_PLUGIN) =>
+    list(page).getByRole("button", { exact: true, name: `${name} ${count}` });
+  await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "true");
+  await expect(toggle("ACME-TOOLS", 1)).toHaveAttribute(
+    "aria-expanded",
+    "false"
+  );
+
+  // Collapse all collapses every subgroup to its header; the detail pane keeps the selected skill.
+  await list(page).getByRole("button", { name: "Collapse all" }).click();
+  await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "false");
   await expect(plugin.getByRole("listitem")).toHaveCount(0);
-  // The detail pane keeps the selected skill; the next key moves to the next plugin's first.
   await expect(pane(page, first.name)).toBeVisible();
+
+  // Expand all opens every one.
+  await list(page).getByRole("button", { name: "Expand all" }).click();
+  await expect(toggle("ACME-TOOLS", 1)).toHaveAttribute(
+    "aria-expanded",
+    "true"
+  );
+  await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "true");
+
+  // A collapsed subgroup's rows are skipped by the keys.
+  await toggle(first.plugin).click();
+  await expect(toggle(first.plugin)).toHaveAttribute("aria-expanded", "false");
   const next = listedPluginSkill(SKILLS_PER_PLUGIN).name;
   await page.keyboard.press("j");
   await expect(row(page, next)).toHaveAttribute("aria-current", "true");
-  // Expanded again, it lists its rows.
-  await toggle.click();
+  await toggle(first.plugin).click();
   await expect(row(page, first.name)).toBeVisible();
 });
 
@@ -135,13 +156,19 @@ test("while the list scrolls, the header of its group and of its plugin stay pin
   const opened = await row(page, start.name).boundingBox();
   expect((opened?.y ?? 0) - top).toBeGreaterThanOrEqual(50);
 
-  // Moved to the next plugin and scrolled into it, its header takes the pinned place.
+  // Moved to the last skill of its plugin, then into the next plugin, opened from its header,
+  // and scrolled into it, the next plugin's header takes the pinned place.
   const firstOfNext = Math.ceil(301 / SKILLS_PER_PLUGIN) * SKILLS_PER_PLUGIN;
   const next = listedPluginSkill(firstOfNext).plugin;
-  for (let i = 300; i < firstOfNext; i += 1) {
+  for (let i = 300; i < firstOfNext - 1; i += 1) {
     // oxlint-disable-next-line no-await-in-loop
     await page.keyboard.press("j");
   }
+  await expect(
+    row(page, listedPluginSkill(firstOfNext - 1).name)
+  ).toHaveAttribute("aria-current", "true");
+  await header(next).click();
+  await page.keyboard.press("j");
   await expect(row(page, listedPluginSkill(firstOfNext).name)).toHaveAttribute(
     "aria-current",
     "true"

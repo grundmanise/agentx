@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 
 import { useRouteKey } from "#/lib/route-key.ts";
@@ -8,8 +8,10 @@ import {
   filterRows,
   forksOf,
   groupRows,
+  GROUP_PLUGINS,
   inCollapsed,
   projectRows,
+  subgroupKey,
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { SkillDetail } from "#/screens/skills/skill-detail.tsx";
@@ -17,7 +19,8 @@ import { SkillList } from "#/screens/skills/skill-list.tsx";
 import {
   setFilters,
   setOrder,
-  toggleCollapsed,
+  setExpanded,
+  toggleExpanded,
   useSkillsView,
 } from "#/screens/skills/view.ts";
 import { useStartup } from "#/startup/startup.ts";
@@ -42,7 +45,7 @@ const nextShown = (
   flat: SkillRow[],
   at: number,
   step: number,
-  collapsed: ReadonlySet<string>
+  expanded: ReadonlySet<string>
 ) => {
   const by = at === -1 ? 1 : step;
   const from = at === -1 ? 0 : at + step;
@@ -50,7 +53,7 @@ const nextShown = (
   return Array.from(
     { length: Math.max(0, count) },
     (_, n) => flat[from + n * by]
-  ).find((row) => row !== undefined && !inCollapsed(row, collapsed));
+  ).find((row) => row !== undefined && !inCollapsed(row, expanded));
 };
 
 /** Whether a key press belongs to a field or an overlay, which the list then leaves alone. */
@@ -72,10 +75,10 @@ export const SkillsScreen = () => {
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
-  // The search, filters, sort order and collapsed subgroups stay while another screen shows.
+  // The search, filters, sort order and open subgroups stay while another screen shows.
   const filters = useSkillsView((s) => s.filters);
   const order = useSkillsView((s) => s.order);
-  const collapsed = useSkillsView((s) => s.collapsed);
+  const expanded = useSkillsView((s) => s.expanded);
 
   const rows = useMemo(
     () =>
@@ -89,24 +92,59 @@ export const SkillsScreen = () => {
     [rows, filters, order]
   );
   const flat = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
+  // Collapse all closes every plugin's subgroup; Expand all opens each one the filters list.
+  const toggleAll = (open: boolean) => {
+    const keys =
+      groups
+        .find((g) => g.key === GROUP_PLUGINS)
+        ?.subgroups?.map((s) => s.key) ?? [];
+    setExpanded(open ? keys : []);
+  };
   const selected =
     (routeKey === undefined
       ? undefined
       : (rows.find((r) => r.key === routeKey) ??
         rows.find((r) => r.name === routeKey))) ??
-    flat.find((r) => !inCollapsed(r, collapsed)) ??
+    // The first row whatever is collapsed, so collapsing a subgroup never changes the selection.
     flat[0];
+  // A newly selected row in a collapsed subgroup, such as a plugin's skill another screen opens,
+  // opens its subgroup so the list shows it. Collapsing that subgroup later keeps it collapsed.
+  const reveal = useEffectEvent((key: string | undefined) => {
+    if (
+      selected !== undefined &&
+      selected.key === key &&
+      inCollapsed(selected, expanded)
+    ) {
+      setExpanded([...expanded, subgroupKey(selected)]);
+    }
+  });
+  const shownKey = selected?.key;
+  useEffect(() => {
+    reveal(shownKey);
+  }, [shownKey]);
   const configurations = inventory?.configurations ?? [];
 
   // The key the next key press moves from: the last selection made, which the route may not show
-  // yet when keys come fast.
+  // yet when keys come fast. `requested` queues the selections made here whose routes have not
+  // shown yet; the routes show them in order. A route in the queue drops it up to that entry, and
+  // `current` stays: a newer selection may still be on its way. Any other route, such as a skill
+  // another screen opens, takes over.
   const current = useRef(selected?.key);
+  const requested = useRef<string[]>([]);
   const selectedKey = selected?.key;
   useEffect(() => {
-    current.current = selectedKey;
+    const at =
+      selectedKey === undefined ? -1 : requested.current.indexOf(selectedKey);
+    if (at === -1) {
+      requested.current = [];
+      current.current = selectedKey;
+    } else {
+      requested.current = requested.current.slice(at + 1);
+    }
   }, [selectedKey]);
   const select = (row: SkillRow) => {
     current.current = row.key;
+    requested.current = [...requested.current, row.key];
     void navigate(skillPath(row.key));
   };
 
@@ -129,7 +167,7 @@ export const SkillsScreen = () => {
       }
       e.preventDefault();
       const at = flat.findIndex((r) => r.key === current.current);
-      const next = nextShown(flat, at, step, collapsed);
+      const next = nextShown(flat, at, step, expanded);
       if (next !== undefined && next.key !== current.current) {
         select(next);
       }
@@ -152,8 +190,9 @@ export const SkillsScreen = () => {
         onOrder={setOrder}
         selectedKey={selected?.key}
         onSelect={select}
-        collapsed={collapsed}
-        onToggle={toggleCollapsed}
+        expanded={expanded}
+        onToggle={toggleExpanded}
+        onToggleAll={toggleAll}
       />
       <section
         aria-label="Skill details"
