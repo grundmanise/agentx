@@ -125,8 +125,6 @@ warning: pdf under skills/pdf-v2 was skipped: the source has another skill named
 
 Some clients read the library directly: Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode and Cline, among others. These are universal clients. They see every skill in the library, so they get no link of their own. GitHub Copilot reads the library only while `COPILOT_HOME` is not set; with `COPILOT_HOME` set, it gets a link in `$COPILOT_HOME/skills`. A client also becomes universal when its skills directory and the library are one directory through a symlink. For example, if `~/.claude/skills` is a symlink to the library, Claude Code reads the library.
 
-Earlier versions of agentx linked skills into Cursor, GitHub Copilot and OpenCode, so these clients could list a skill twice. The next agentx command that changes anything removes those links. It removes only a link that points straight at the library entry, and leaves your own files.
-
 Every other client gets a symlink in its own skills directory, pointing at the library.
 
 A universal client sees every skill in your library, even if you disabled that client with `agentx config disable` or left it out of `--to`. The install output ends with a line that names them:
