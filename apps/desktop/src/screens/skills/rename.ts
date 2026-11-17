@@ -10,7 +10,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 export const canRename = (row: SkillRow) => row.kind === "yours";
 
 /**
- * The skill Rename your skill renames for the pane of `row`: `row` itself when it is one of your
+ * The skill Rename skill renames for the pane of `row`: `row` itself when it is one of your
  * own, otherwise your own skill among `sameName`, the other skills of its name, such as a plugin's.
  */
 export const ownOfName = (

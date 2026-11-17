@@ -1,4 +1,4 @@
-// Rename, for one of your own skills: Rename your skill under AGENTS, on a plugin's skill your fork
+// Rename, for one of your own skills: Rename skill under AGENTS, on a plugin's skill your fork
 // of the same name sits beside, renames the fork and selects it under its new name; Rename in the
 // action row with a name another skill has keeps the dialog open with the CLI's words.
 import type { Page } from "@playwright/test";
@@ -42,7 +42,7 @@ const openSkill = async (
   await expect(pane(page, name)).toBeVisible();
 };
 
-test("Rename your skill on a plugin's skill renames your skill of that name and selects it", async ({
+test("Rename skill on a plugin's skill renames your skill of that name and selects it", async ({
   cli,
   page,
 }) => {
@@ -50,7 +50,7 @@ test("Rename your skill on a plugin's skill renames your skill of that name and 
   const notice = pane(page, "commit-helper")
     .getByRole("region", { name: "Agents" })
     .getByRole("note", { name: "Skills of the same name" });
-  await notice.getByRole("button", { name: "Rename your skill" }).click();
+  await notice.getByRole("button", { name: "Rename skill" }).click();
   const dialog = renameDialog(page, "commit-helper");
   const field = dialog.getByRole("textbox", { name: "Name" });
   await expect(field).toHaveValue("commit-helper");

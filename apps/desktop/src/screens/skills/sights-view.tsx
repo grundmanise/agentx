@@ -3,7 +3,7 @@
 // on it opens a hover card: a table with a column for each place that holds a skill of the name
 // and a row for each agent that sees more than one, highlighted, then a row for the agents that
 // see the same one (`sightsTable`). `onRename`, given while you have a skill of the name, adds
-// Rename your skill to the notice's buttons on the right, which opens the Rename dialog for it.
+// Rename skill to the notice's buttons on the right, which opens the Rename dialog for it.
 // The notice is a Callout, as the detail pane's banner is; the hover card only explains and holds
 // no button.
 import { useId } from "react";
@@ -27,7 +27,7 @@ import {
 import { clashText, sightsTable } from "#/screens/skills/sights.ts";
 import type { NameSights, SightsTable } from "#/screens/skills/sights.ts";
 
-/** Renames your library's skill of the name; Rename your skill shows only with it. */
+/** Renames your library's skill of the name; Rename skill shows only with it. */
 type OnRename = (() => void) | undefined;
 
 const RenameYours = ({
@@ -39,7 +39,7 @@ const RenameYours = ({
 }) =>
   onRename !== undefined && table.renamable ? (
     <Button variant="ghost" size="sm" onClick={onRename}>
-      Rename your skill
+      Rename skill
     </Button>
   ) : null;
 

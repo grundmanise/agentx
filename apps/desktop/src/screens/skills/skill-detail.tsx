@@ -121,7 +121,7 @@ const EditButton = ({ row }: { row: SkillRow }) => {
  * library skill; the other actions come with the changes that add them); then the description. No
  * status pill: the banner is the status. One banner, with its button; AGENTS, whose chips add and
  * remove placements, and, when some agent sees more than one skill of this name, a notice under the
- * chips whose Details shows what each agent sees, with Rename your skill while your own skill of
+ * chips whose Details shows what each agent sees, with Rename skill while your own skill of
  * the name is one of them; FILES; then DETAILS and HISTORY side by side. Every control runs one
  * command and redraws from the inventory that follows.
  */
@@ -156,7 +156,7 @@ export const SkillDetail = ({
   });
   const details = detailsOf(row, configurations);
   const sights = sightsOf(row, sameName, configurations);
-  // Rename your skill renames your own skill of the name, this one or the one beside a plugin's.
+  // Rename skill renames your own skill of the name, this one or the one beside a plugin's.
   const yours = ownOfName(row, sameName);
   const onRename =
     yours === undefined
