@@ -211,17 +211,26 @@ const clashingPlaces = (sights: NameSights): Place[] => {
   return sights.places.filter((p) => seen.has(p.key));
 };
 
+/** The notice's words: a title and the line under it. */
+export interface ClashText {
+  title: string;
+  text: string;
+}
+
 /**
  * The notice under AGENTS while some agent sees more than one skill of the name: how many skills
  * of the name such agents see, and that they may use the wrong one. Undefined when no agent sees
  * two.
  */
-export const clashText = (sights: NameSights): string | undefined => {
+export const clashText = (sights: NameSights): ClashText | undefined => {
   const places = clashingPlaces(sights);
   if (places.length === 0) {
     return undefined;
   }
-  return `Found ${places.length} skills named ${sights.name}. Agents that see more than one may use the wrong one.`;
+  return {
+    text: "Agents that see more than one may use the wrong one.",
+    title: `Found ${places.length} skills named ${sights.name}`,
+  };
 };
 
 /** What keeps a place's skill from clashing: rename it, uninstall its plugin or remove the copy. */

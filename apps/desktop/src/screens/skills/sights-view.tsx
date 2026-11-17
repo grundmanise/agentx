@@ -3,11 +3,12 @@
 // on it opens a hover card: a table with a column for each place that holds a skill of the name
 // and a row for each agent that sees more than one, highlighted, then a row for the agents that
 // see the same one (`sightsTable`). `onRename`, given while you have a skill of the name, adds
-// Rename your skill to the notice, right-aligned on the text's line, which opens the Rename dialog
-// for it. The hover card only explains: it holds no button.
+// Rename your skill to the notice's buttons on the right, which opens the Rename dialog for it.
+// The notice is a Callout, as the detail pane's banner is; the hover card only explains and holds
+// no button.
 import { useId } from "react";
 
-import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
+import { Callout } from "#/components/callout.tsx";
 import { CheckIcon } from "#/components/icons/check.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -37,7 +38,7 @@ const RenameYours = ({
   onRename: OnRename;
 }) =>
   onRename !== undefined && table.renamable ? (
-    <Button variant="primary" size="sm" onClick={onRename}>
+    <Button variant="ghost" size="sm" onClick={onRename}>
       Rename your skill
     </Button>
   ) : null;
@@ -101,8 +102,9 @@ const SightsBody = ({ table }: { table: SightsTable }) => {
 };
 
 /**
- * The notice under the chips while some agent sees more than one skill of the name: how many skills
- * of the name there are, then Details, which opens the table on hover.
+ * The notice under the chips while some agent sees more than one skill of the name, a callout: how
+ * many skills of the name there are, then Details, which opens the table on hover, and Rename your
+ * skill on the right.
  */
 export const SightsNotice = ({
   sights,
@@ -111,36 +113,32 @@ export const SightsNotice = ({
   sights: NameSights;
   onRename?: () => void;
 }) => {
-  const text = clashText(sights);
-  if (text === undefined) {
+  const clash = clashText(sights);
+  if (clash === undefined) {
     return null;
   }
   const table = sightsTable(sights);
   return (
-    <div
-      role="note"
-      aria-label="Skills of the same name"
-      className="rounded-sights-notice border-tone-attention-border bg-tone-attention-bg flex items-center gap-2.5 border px-3 py-2.5"
-    >
-      <span className="text-tone-attention-fg flex h-5 flex-none items-center self-start">
-        <AlertTriangleIcon size="xs" />
-      </span>
-      <p className="type-secondary text-text-secondary m-0 min-w-0 flex-1 text-pretty">
-        {text}{" "}
-        <HoverCard>
-          <HoverCardTrigger asChild>
-            <span className="underline decoration-dashed underline-offset-2">
-              Details
-            </span>
-          </HoverCardTrigger>
-          <HoverCardContent>
-            <SightsBody table={table} />
-          </HoverCardContent>
-        </HoverCard>
-      </p>
-      <span className="flex flex-none items-center">
-        <RenameYours table={table} onRename={onRename} />
-      </span>
-    </div>
+    <Callout
+      tone="attention"
+      label="Skills of the same name"
+      title={clash.title}
+      text={
+        <>
+          {clash.text}{" "}
+          <HoverCard>
+            <HoverCardTrigger asChild>
+              <span className="underline decoration-dashed underline-offset-2">
+                Details
+              </span>
+            </HoverCardTrigger>
+            <HoverCardContent>
+              <SightsBody table={table} />
+            </HoverCardContent>
+          </HoverCard>
+        </>
+      }
+      actions={<RenameYours table={table} onRename={onRename} />}
+    />
   );
 };

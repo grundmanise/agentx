@@ -1,5 +1,5 @@
 // What each agent sees, as tables over the pure functions: the hover card's table (`sightsTable`) and
-// the notice under AGENTS (`clashText`), for the places that hold a skill of one name.
+// the notice under AGENTS (`clashText`, its title and line joined here), for the places that hold a skill of one name.
 import { expect, test } from "@playwright/test";
 
 import type { Configuration, Occurrence } from "#/cli/events.gen.ts";
@@ -140,7 +140,9 @@ for (const c of cases) {
   test(`what each agent sees: ${c.name}`, () => {
     expect(asText(c.sights)).toEqual(c.table);
     const { footer } = sightsTable(c.sights);
-    const notice = clashText(c.sights);
+    const clash = clashText(c.sights);
+    const notice =
+      clash === undefined ? undefined : `${clash.title}. ${clash.text}`;
     if (c.exact === true || c.footer === undefined) {
       expect(footer).toBe(c.footer);
       expect(notice).toBe(c.notice);
@@ -209,9 +211,10 @@ test("sightsOf: a fork with the plugin's content still shows the plugin's copy",
   );
   const s = sightsOf(fork, [], [claudeAt]);
   expect(s.places.map((p) => p.key)).toEqual(["library", "plugin:acme"]);
-  expect(clashText(s)).toBe(
-    "Found 2 skills named review. Agents that see more than one may use the wrong one."
-  );
+  expect(clashText(s)).toEqual({
+    text: "Agents that see more than one may use the wrong one.",
+    title: "Found 2 skills named review",
+  });
 });
 
 test("sightsOf: two directories in one agent's folder are two skills", () => {
@@ -219,5 +222,5 @@ test("sightsOf: two directories in one agent's folder are two skills", () => {
   const b = row([at("claude-code", "/home/me/.claude/skills/b")]);
   const s = sightsOf(a, [b], [claudeAt]);
   expect(s.places).toHaveLength(2);
-  expect(clashText(s)).toContain("Found 2 skills named review.");
+  expect(clashText(s)?.title).toBe("Found 2 skills named review");
 });
