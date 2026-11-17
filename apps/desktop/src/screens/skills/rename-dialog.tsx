@@ -1,5 +1,5 @@
 // The Rename dialog, for one of your own skills. Rename in the detail pane's action row opens it,
-// and so does Rename skill under AGENTS, which on a plugin's skill renames your own skill of
+// and so does Rename in the notice under AGENTS, which on a plugin's skill renames your own skill of
 // that name (`ownOfName`). `RenameDialogs`, which the Skills screen mounts once, shows it, so it
 // outlives the detail pane of the skill renamed, which leaves the inventory. Rename runs `skill
 // rename <old> <new>`, and the renamed skill is selected by its new name, shown once the inventory
