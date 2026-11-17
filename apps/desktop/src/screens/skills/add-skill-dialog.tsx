@@ -309,17 +309,20 @@ const AddSkillForm = ({
         <>
           <div className="flex flex-col gap-3">
             {nothing === undefined && cards.length > 1 && (
-              <SelectAllRow
-                selected={selected.length}
-                total={selectable.length}
-                added={cards.length - selectable.length}
-                onSelectAll={() => {
-                  setSelection(new Set(selectable.map((c) => c.key)));
-                }}
-                onClear={() => {
-                  setSelection(new Set());
-                }}
-              />
+              // Inset as the rows are, so its checkbox heads their column.
+              <div className="px-3">
+                <SelectAllRow
+                  selected={selected.length}
+                  total={selectable.length}
+                  added={cards.length - selectable.length}
+                  onSelectAll={() => {
+                    setSelection(new Set(selectable.map((c) => c.key)));
+                  }}
+                  onClear={() => {
+                    setSelection(new Set());
+                  }}
+                />
+              </div>
             )}
             {nothing !== undefined && (
               <p className="type-secondary text-text-hint m-0">{nothing}</p>
