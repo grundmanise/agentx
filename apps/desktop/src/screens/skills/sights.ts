@@ -324,8 +324,8 @@ export const sightsTable = (sights: NameSights): SightsTable => {
   if (clashing.length > 0) {
     const lines = [
       clashing.length === 1
-        ? "The highlighted agent sees more than one of these skills and decides which one to use."
-        : "The highlighted agents see more than one of these skills, and each decides which one to use.",
+        ? "The highlighted agent sees more than one skill and decides which one to use."
+        : "The highlighted agents see more than one skill, and each decides which one to use.",
       `To avoid clashes, ${choiceOf(clashingPlaces(sights).map(fixOf))}.`,
     ];
     table.footer = lines.join(" ");
