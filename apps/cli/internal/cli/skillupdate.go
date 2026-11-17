@@ -22,9 +22,9 @@ import (
 func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 	var all, abort bool
 	cmd := &cobra.Command{
-		Use:         "update [<name>] [--abort]",
+		Use:         "update [<name>...] [--abort]",
 		Short:       "Apply the update the last check found",
-		Annotations: map[string]string{annotationSection: "updates", annotationSynopsis: "<name>"},
+		Annotations: map[string]string{annotationSection: "updates", annotationSynopsis: "<name>..."},
 		Long: "Replace the library directory of a managed skill with the newer upstream version\n" +
 			"'" + checkUpdatesCommand + "' found for it, and record that version as the one the\n" +
 			"skill is at. A skill edited since it was installed keeps its edits: they are\n" +
@@ -45,38 +45,58 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"latest version your other machines published, as a commit of its own. A skill\n" +
 			"made with 'agentx skill new' has no upstream: its update only brings it to the\n" +
 			"latest published version.\n\n" +
-			"Pass --all instead of a name to update every managed skill the last check found\n" +
-			"an update for, and every skill of your own placed here that your other machines\n" +
-			"published to. Read an update before you apply it with\n" +
+			"Name several skills to update them in one run, under one hold of the lock: the\n" +
+			"run goes on past a skill it cannot update, as --all does, and reports each skill\n" +
+			"as it is done with it. Pass --all instead of names to update every managed skill\n" +
+			"the last check found an update for, and every skill of your own placed here that\n" +
+			"your other machines published to. Read an update before you apply it with\n" +
 			"'agentx skill diff <name> --update'.",
 		Example: examples(
 			"agentx skill update pdf", "apply the update found for one skill",
+			"agentx skill update pdf docx", "apply the updates found for two skills in one run",
 			"agentx skill update --all", "apply every update the last check found",
 			"agentx skill update docx --abort", "give up a merge that conflicted",
 		),
-		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			const hint = "name the skill to update, or run 'agentx skill update --all' to update every skill the last check found an update for"
+			names, f := updateNames(args, all, abort)
 			switch {
-			case all && len(args) > 0:
-				return fail(exitUsage, "skill update takes a skill name or --all, not both", hint)
-			case all && abort:
-				return fail(exitUsage, "--abort gives up the merge of one skill, not of --all", "run 'agentx skill update <name> --abort' for each skill whose merge to give up")
-			case !all && len(args) == 0:
-				return fail(exitUsage, "no skill to update", hint)
+			case f != nil:
+				return f
 			case abort:
-				return inv.abortMerge(cmd.Context(), args[0])
+				return inv.abortMerge(cmd.Context(), names[0])
 			}
-			name := ""
-			if !all {
-				name = args[0]
-			}
-			return inv.skillUpdate(cmd.Context(), name)
+			return inv.skillUpdate(cmd.Context(), names)
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill the last check found an update for, and every skill of your own another machine published to")
 	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory, or the worktree and branch of one of your own, stay as they are")
 	return cmd
+}
+
+// updateNames is what one run of skill update was asked to update, from
+// its arguments: the names given, in name order, each once however often it
+// was given, or nil for --all. A name and --all together, neither, --abort
+// with --all and --abort with more than one name are usage errors, in that
+// order. Pure.
+func updateNames(args []string, all, abort bool) ([]string, *failure) {
+	const hint = "name the skills to update, or run 'agentx skill update --all' to update every skill the last check found an update for"
+	const abortHint = "run 'agentx skill update <name> --abort' for each skill whose merge to give up"
+	names := slices.Clone(args)
+	slices.Sort(names)
+	names = slices.Compact(names)
+	switch {
+	case all && len(names) > 0:
+		return nil, refuse(exitUsage, "skill update takes skill names or --all, not both", hint)
+	case all && abort:
+		return nil, refuse(exitUsage, "--abort gives up the merge of one skill, not of --all", abortHint)
+	case all:
+		return nil, nil
+	case len(names) == 0:
+		return nil, refuse(exitUsage, "no skill to update", hint)
+	case abort && len(names) > 1:
+		return nil, refuse(exitUsage, "--abort gives up the merge of one skill, not of several", abortHint)
+	}
+	return names, nil
 }
 
 // errSourceRemoved marks the refusal of a managed skill whose source was
@@ -119,15 +139,17 @@ type updating struct {
 	fork *forkUpdate
 }
 
-// updateRun is one run of agentx skill update, for one name or for --all:
-// the skills it applies an update to, those it skipped because their
-// source was removed and those it gave up on, each reported on its own
-// while the run goes on.
+// updateRun is one run of agentx skill update, for the names it was given
+// or for --all: the skills it applies an update to, those it skipped
+// because their source was removed and those it gave up on, each reported
+// on its own while the run goes on.
 type updateRun struct {
 	refusals
 	inv        *invocation
 	gitDir     string
 	all        bool
+	names      []string          // the names the run was given, in name order; nil for --all
+	ended      map[string]bool   // the named skills the run is done with, see end
 	selected   int               // the skills the run set out to update
 	sourceless []string          // the skills --all skipped because their source was removed, by name
 	ready      []*updating       // the skills judged ready to update, by name
@@ -147,10 +169,44 @@ type accountFetch struct {
 	err    error             // why git could not fetch it, which leaves the tips of the fetch before; nil when it fetched
 }
 
-// drop gives up on one skill. A run over every skill goes on with the rest,
-// with a warning naming the skill when there are others it does not apply
-// to; the error and the result name every skill it gave up on, see
-// refusals.
+// several reports whether the run was given more than one name, which
+// reports each skill as it is done with, see end.
+func (r *updateRun) several() bool { return len(r.names) > 1 }
+
+// batch reports whether the run goes on past a skill it gives up on: one
+// over every skill, or over several names.
+func (r *updateRun) batch() bool { return r.all || r.several() }
+
+// end reports, in a run of several names, that the run is done with the
+// skill called name: after the events that say what it did of the skill,
+// a library_skill, a conflict or an error naming it, or none for a skill
+// that was up to date, one progress event of phase update, so that a
+// client follows each skill as it ends. Each skill ends once.
+func (r *updateRun) end(name string) {
+	if !r.several() || r.ended[name] {
+		return
+	}
+	if r.ended == nil {
+		r.ended = map[string]bool{}
+	}
+	r.ended[name] = true
+	r.inv.out.emit(progressEvent{event: newEvent("progress"), Phase: phaseUpdate, Subject: name, Current: len(r.ended), Total: len(r.names)})
+}
+
+// about scopes the warnings written until the returned function is called
+// to the skill called name, in a run of several names, see writer.about.
+func (r *updateRun) about(name string) func() {
+	if !r.several() {
+		return func() {}
+	}
+	return r.inv.out.about(name)
+}
+
+// drop gives up on one skill. A run over every skill or over several names
+// goes on with the rest, with a warning naming the skill when there are
+// others it does not apply to, which in a run of several names is an error
+// event naming the skill with --json, see writer.skillFailed; the error and
+// the result name every skill it gave up on, see refusals.
 //
 // A skill whose source was removed from this machine is skipped by a run
 // over every skill instead, whether that was found before the lock or
@@ -165,7 +221,11 @@ func (r *updateRun) drop(name string, f *failure) {
 		return
 	}
 	r.add(name, f)
-	if r.all && r.selected > 1 {
+	switch {
+	case r.several():
+		r.inv.out.skillFailed(name, f)
+		r.end(name)
+	case r.all && r.selected > 1:
 		r.inv.out.warn(namedReason(name, f.message))
 	}
 }
@@ -179,9 +239,9 @@ func (r *updateRun) failure() error {
 	return nil
 }
 
-// skillUpdate applies the update candidate of the managed skill called
-// name, or with an empty name the candidate of every managed skill that
-// has one, in one journaled mutation for the whole run. A skill that was
+// skillUpdate applies the update candidate of each managed skill names
+// names, or with no names the candidate of every managed skill that has
+// one, in one journaled mutation for the whole run. A skill that was
 // not edited since it was installed updates by replacement: the import
 // branch moves from the version the library holds to the candidate, the
 // library directory is retained and replaced by the candidate's version
@@ -214,11 +274,12 @@ func (r *updateRun) failure() error {
 //
 // A skill whose source was removed from this machine is refused, and
 // skipped with a warning by --all, see updateRun.drop.
-func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
+func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 	r := &updateRun{
 		refusals: refusals{verb: "updated", mixed: "run 'agentx skill list' to see which skills have an update, then update the rest one at a time"},
 		inv:      inv,
-		all:      name == "",
+		all:      len(names) == 0,
+		names:    names,
 	}
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -250,10 +311,10 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	}
 	sources := sourceURLs(s)
 
-	if err := r.fetchAccount(ctx, name, records); err != nil {
+	if err := r.fetchAccount(ctx, records); err != nil {
 		return err
 	}
-	names, libs := r.selection(name, records)
+	names, libs := r.selection(records)
 	r.selected = len(names)
 	pulled, dropped, err := r.accountStep(ctx, names, records)
 	if err != nil {
@@ -291,6 +352,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			switch {
 			case slices.Contains(pulled, n):
 				inv.summary = "updated " + n + " to the latest published version; it has no upstream to update from"
+				continue // ended once it is reported, see reportForks
 			case !r.all && r.account.tips[n] == "":
 				inv.summary = n + " has no branch on the account remote; run '" + publishCommand(n) + "' to publish it"
 				inv.out.print(inv.out.paint(heading, sanitised(n)), " has no branch on the account remote; run ",
@@ -299,6 +361,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 				inv.summary = n + " is up to date with the account remote"
 				inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date with the account remote")
 			}
+			r.end(n)
 			continue
 		}
 		if fork {
@@ -311,14 +374,19 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			r.drop(n, f)
 		case u == nil && r.all: // a fork whose account step took in the update its candidate named
 			continue
-		case u == nil: // a name the last check found no update for, which only a run of one name asks about
+		case u == nil: // a name the last check found no update for, which only a run of names asks about
 			inv.summary = n + " is up to date as of the last update check; run '" + checkUpdatesCommand + "' to look again"
 			if len(pulled) > 0 {
 				inv.summary = "updated " + n + " to the latest published version; it is up to date with its upstream as of the last update check"
 			}
 			inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date as of the last update check; run ",
 				inv.out.paint(label, checkUpdatesCommand), " to look again")
-			return inv.reportForks(ctx, pulled)
+			if !r.several() {
+				return inv.reportForks(ctx, pulled)
+			}
+			if !slices.Contains(pulled, n) {
+				r.end(n) // a fork the account step moved ends once it is reported, see reportForks
+			}
 		case u.merged.conflicted && (u.fork == nil || !u.fork.start): // a merge pending with files still to resolve, left as it is
 			r.pending = append(r.pending, u)
 		case fork:
@@ -349,17 +417,23 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	if err := inv.reportForks(ctx, onlyPulled); err != nil {
 		return err
 	}
+	for _, n := range onlyPulled {
+		r.end(n)
+	}
 	if len(r.applied) > 0 || len(r.pending) > 0 {
 		if err := r.report(ctx); err != nil {
 			return err
 		}
-	} else if r.all && len(r.broken) == 0 {
+	} else if r.batch() && len(r.broken) == 0 {
 		skips, _ := r.skippedNote(inv.out)
 		inv.summary = "no skill was updated" + skips
 		if len(pulled) > 0 {
 			inv.summary = "no skill was updated from upstream" + skips
 		}
 		inv.out.print(inv.summary)
+	}
+	for _, n := range r.names {
+		r.end(n) // a skill the run said nothing more of, a fork up to date with the account remote say
 	}
 	return r.failure()
 }
@@ -392,8 +466,8 @@ func (r *updateRun) afterAccountStep(names []string, records map[string]lineage.
 }
 
 // fetchAccount fetches the account remote once for the run, before it
-// selects anything, when one is set and the run needs it: for a name, when
-// it is a fork, a skill of the account remote, with no merge pending; with
+// selects anything, when one is set and the run needs it: for names, when
+// one is a fork, a skill of the account remote, with no merge pending; with
 // --all, when any fork is placed on this machine, a worktree or a library
 // entry of its there. A run that needs no fork, the update of a skill of a
 // shared source say, never fetches the account remote, so one git cannot
@@ -402,7 +476,7 @@ func (r *updateRun) afterAccountStep(names []string, records map[string]lineage.
 // account step takes in what they hold, see accountStep. A fetch that fails
 // is no failure of the run here: the account step answers for it, and
 // --all selects from what the fetch before left.
-func (r *updateRun) fetchAccount(ctx context.Context, name string, records map[string]lineage.Record) error {
+func (r *updateRun) fetchAccount(ctx context.Context, records map[string]lineage.Record) error {
 	inv := r.inv
 	need := false
 	if r.all {
@@ -413,7 +487,9 @@ func (r *updateRun) fetchAccount(ctx context.Context, name string, records map[s
 			}
 		}
 	} else {
-		need = records[name].Kind == lineage.KindFork && !inv.mergePending(name)
+		need = slices.ContainsFunc(r.names, func(n string) bool {
+			return records[n].Kind == lineage.KindFork && !inv.mergePending(n)
+		})
 	}
 	if !need {
 		return nil
@@ -557,7 +633,7 @@ func (inv *invocation) finishJournals(ctx context.Context) error {
 }
 
 // selection is the skills a run sets out to update, in name order, with
-// what the library holds of each: the one name it was given, or with --all
+// what the library holds of each: the names it was given, or with --all
 // every managed skill with an update, a candidate agentx can read that its
 // branch does not already hold (see lineage.Record.AtCandidate), every
 // fork with one, a candidate other than its base version (see
@@ -570,13 +646,15 @@ func (inv *invocation) finishJournals(ctx context.Context) error {
 // those with a merge pending. A skill with no
 // candidate has nothing to update, an upstream-removed one included, since
 // the check that marks a skill deletes its candidate.
-func (r *updateRun) selection(name string, records map[string]lineage.Record) ([]string, map[string]scan.LibrarySkill) {
+func (r *updateRun) selection(records map[string]lineage.Record) ([]string, map[string]scan.LibrarySkill) {
 	libs := map[string]scan.LibrarySkill{}
 	if !r.all {
-		if lib, ok := librarySkill(r.inv.dirs.Library, name); ok {
-			libs[name] = lib
+		for _, n := range r.names {
+			if lib, ok := librarySkill(r.inv.dirs.Library, n); ok {
+				libs[n] = lib
+			}
 		}
-		return []string{name}, libs
+		return r.names, libs
 	}
 	var names []string
 	for n, rec := range records {
@@ -951,7 +1029,10 @@ func (r *updateRun) apply(ctx context.Context) error {
 		}
 		m := home.NewMutation(inv.dirs.Home)
 		for _, u := range live {
-			if err := inv.stageUpdate(ctx, m, r.gitDir, u, r.bodies, edit.copiesOf(u.name)); err != nil {
+			restore := r.about(u.name)
+			err := inv.stageUpdate(ctx, m, r.gitDir, u, r.bodies, edit.copiesOf(u.name))
+			restore()
+			if err != nil {
 				m.Discard()
 				return err
 			}
@@ -1084,7 +1165,7 @@ func (inv *invocation) stageUpdate(ctx context.Context, m *home.Mutation, gitDir
 }
 
 // report reports every skill the run updated and every merge it left
-// pending. The machine is read again for the skills it updated, which are
+// pending, and in a run of several names ends each, see end. The machine is read again for the skills it updated, which are
 // reported as they now stand, in name order: a warning for each whose new
 // version names it otherwise, one library_skill event each, carrying every
 // placement as skill list reports them, and the line that says what the
@@ -1158,21 +1239,25 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 	libs := librarySkills(inv.dirs.Library)
 	for _, u := range r.applied {
 		if u.upstreamName != "" {
+			restore := r.about(u.name)
 			inv.out.warn(renameWarning(u.name, u.upstreamName))
+			restore()
 		}
 	}
 	for _, u := range r.applied {
 		lib, ok := libs[u.name]
 		switch {
 		case !ok && u.fork != nil: // a fork whose library entry is elsewhere has nothing in the library to report
+			r.end(u.name)
 			continue
 		case !ok:
 			return fail(exitInternal, "the library holds no "+u.name+" after updating it", "run 'agentx doctor' and check the library it names")
 		}
 		inv.out.emit(sc.librarySkillEventFor(ctx, inv, inventory, lib, nil))
+		r.end(u.name)
 	}
 	out := inv.out
-	if !r.all {
+	if !r.batch() {
 		u := r.applied[0]
 		moved := " from " + short(u.rec.Import.Commit) + " to " + short(u.next.Import.Commit)
 		switch {

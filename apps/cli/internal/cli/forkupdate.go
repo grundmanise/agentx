@@ -295,7 +295,9 @@ func (inv *invocation) layFork(ctx context.Context, u *updating, commit string) 
 // candidate that base passed, see forkUpdate.stale.
 func (r *updateRun) applyFork(ctx context.Context, u *updating) error {
 	inv := r.inv
+	restore := r.about(u.name)
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error { return inv.applyForkUpdate(ctx, r.gitDir, u) })
+	restore()
 	var f *failure
 	switch {
 	case errors.Is(err, home.ErrMovedBeforeApply):

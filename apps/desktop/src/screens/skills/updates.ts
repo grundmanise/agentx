@@ -1,10 +1,10 @@
 // Updates on the Skills screen: Check updates (`skill check-updates`), which opens the Update
 // skills dialog (`update-dialog.tsx`) when it found an update, the Update of one skill
 // (`skill update <name>`, from its banner) and the run of that dialog, which the sidebar's update
-// pill opens too: `skill update <name>` for each skill selected, one after another, each row
-// following its own command. Each runs through the runner and says what
-// happened by what the CLI emitted; the list redraws from the inventory and the update check
-// that follow, never from a result predicted here.
+// pill opens too: one `skill update <name>...` for every skill selected, each row following what
+// the CLI emits about its skill. Each runs through the runner and says what happened by what the
+// CLI emitted; the list redraws from the inventory and the update check that follow, never from a
+// result predicted here.
 import { useMemo } from "react";
 import { create } from "zustand";
 
@@ -13,10 +13,12 @@ import type {
   CliEvent,
   ErrorEvent,
   LibraryEntry,
+  LogEvent,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
 import { dismissToast, notify } from "#/components/toast.tsx";
 import type { ToastAction } from "#/components/toast.tsx";
+import { andList } from "#/lib/plural.ts";
 import { checkingText } from "#/screens/skills/checking-text.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
@@ -38,6 +40,10 @@ const plural = (n: number, one: string, many: string) =>
 /** The skills a command updated, by the `library_skill` events it emitted. */
 const updatedIn = (events: CliEvent[]) =>
   events.filter((e) => e.type === "library_skill");
+
+/** The errors a command emitted: its own, and in a run of several names, one per skill it gave up on. */
+const errorsIn = (events: CliEvent[]) =>
+  events.flatMap((e) => (e.type === "error" ? [e] : []));
 
 /** How many merges a command left for the user to finish, by its `conflict` events. */
 const conflictsIn = (events: CliEvent[]) =>
@@ -241,9 +247,10 @@ export const checkUpdates = async () => {
 
 /**
  * Where a skill of the Update skills dialog is in its run. Before the run every selected skill is
- * `waiting` and every other one `skipped`; its command makes it `running`, then it ends `updated`
- * (`merged` when its edits were merged in), `current` when there was nothing to update after all,
- * `conflict` when the merge waits for the user, or `failed` with the CLI's reason.
+ * `waiting` and every other one `skipped`; the run's command makes every selected skill `running`,
+ * then each ends `updated` (`merged` when its edits were merged in), `current` when there was
+ * nothing to update after all, `conflict` when the merge waits for the user, or `failed` with the
+ * CLI's reason. A skill the run never reached goes back to `waiting` when it stopped.
  */
 export type UpdateStatus =
   | "waiting"
@@ -269,7 +276,7 @@ export interface UpdateRunRow {
 
 /** The run of the dialog: its rows and how far it is. */
 export interface UpdateRun {
-  /** `running` until the last command ends; `failed` when one ended in a way that stops the run. */
+  /** `running` until its command ends; `failed` when it ended with no word from the CLI. */
   phase: "running" | "ended" | "failed";
   rows: UpdateRunRow[];
   /** Why the run stopped, as the CLI or the app says it. */
@@ -305,11 +312,16 @@ export const dismissUpdateRun = () => {
 const selectedRows = (run: UpdateRun) =>
   run.rows.filter((r) => r.status !== "skipped");
 
-/** "Updating 2 of 4…": the skill whose command runs, of those selected. */
+/**
+ * "Updating 2 of 4…": the skill the run is on, of those selected. Every selected skill runs at
+ * once, so it counts the skills done, plus the one under way.
+ */
 export const runProgressText = (run: UpdateRun) => {
   const selected = selectedRows(run);
-  const started = selected.filter((r) => r.status !== "waiting").length;
-  return `Updating ${Math.max(1, started)} of ${selected.length}…`;
+  const done = selected.filter(
+    (r) => r.status !== "waiting" && r.status !== "running"
+  ).length;
+  return `Updating ${Math.min(done + 1, selected.length)} of ${selected.length}…`;
 };
 
 /** The statuses of a skill the run updated, or found up to date already. */
@@ -326,20 +338,85 @@ export const runSummaryText = (run: UpdateRun) => {
   return `${updated} of ${plural(rows.length, "skill", "skills")} updated`;
 };
 
-/** Where one skill's `skill update <name>` left it. */
-const statusOf = (name: string, outcome: Outcome): UpdateStatus => {
-  if (outcome.exitCode === EXIT_CODES.ok) {
-    const updated = updatedIn(outcome.events).find((e) => e.name === name);
-    if (updated === undefined) {
-      return "current";
-    }
-    return updated.state === "modified" ? "merged" : "updated";
+/** Where the run left a skill, and the CLI's reason when it did not update it. */
+interface Settled {
+  status: UpdateStatus;
+  reason?: string;
+}
+
+/** Whether `event` says the run is done with `name`: the `progress` event that follows its outcome. */
+const doneWith = (event: CliEvent, name: string) =>
+  event.type === "progress" &&
+  event.phase === "update" &&
+  event.subject === name;
+
+/**
+ * Where the events of a `skill update` left `name`, by what they say of it: updated, conflicting,
+ * given up on, or done with nothing to update. Undefined while they say nothing of it.
+ */
+const settledIn = (name: string, events: CliEvent[]): Settled | undefined => {
+  const updated = updatedIn(events).find((e) => e.name === name);
+  if (updated !== undefined) {
+    return { status: updated.state === "modified" ? "merged" : "updated" };
   }
-  return outcome.exitCode === EXIT_CODES.pending_merge &&
-    outcome.events.some((e) => e.type === "conflict" && e.name === name)
-    ? "conflict"
-    : "failed";
+  if (events.some((e) => e.type === "conflict" && e.name === name)) {
+    return { status: "conflict" };
+  }
+  const error = errorsIn(events).find((e) => e.skill === name);
+  if (error !== undefined) {
+    return { reason: error.message, status: "failed" };
+  }
+  return events.some((e) => doneWith(e, name))
+    ? { status: "current" }
+    : undefined;
 };
+
+/**
+ * Where the ended run left `name`: what its events say of it; else up to date when the run
+ * succeeded, as a run of one name says nothing of a skill it had nothing to update; else failed
+ * with the run's own error, the refusal of a run of one name or a failure of the whole run before
+ * it reached the skill. Undefined when the CLI said nothing at all.
+ */
+const settledBy = (name: string, outcome: Outcome): Settled | undefined => {
+  const settled = settledIn(name, outcome.events);
+  if (settled !== undefined) {
+    return settled;
+  }
+  if (outcome.exitCode === EXIT_CODES.ok) {
+    return { status: "current" };
+  }
+  const error = errorsIn(outcome.events).find((e) => e.skill === undefined);
+  return error === undefined
+    ? undefined
+    : { reason: error.message, status: "failed" };
+};
+
+/**
+ * What the CLI warned about while it updated `name`: in a run of several names, the warnings it
+ * logged for that skill; in a run of one, every warning of the run.
+ */
+const warningsOf = (name: string, names: string[], logs: LogEvent[]) =>
+  logs
+    .filter(
+      (l) => l.level === "warn" && (names.length === 1 || l.skill === name)
+    )
+    .map((l) => l.message);
+
+/** A row's status and reason, and its warnings when it has any. */
+const rowChange = (
+  settled: Settled,
+  warnings: string[]
+): Partial<UpdateRunRow> => ({
+  status: settled.status,
+  ...(settled.reason === undefined ? {} : { reason: settled.reason }),
+  ...(warnings.length > 0 ? { warnings } : {}),
+});
+
+/** The activity entry of merges that wait for the user: "review skill has conflicts. …". */
+const conflictsText = (names: string[]) =>
+  names.length === 1
+    ? `${names[0]} skill has conflicts. Resolve them to finish the update`
+    : `${andList(names)} skills have conflicts. Resolve them to finish the updates`;
 
 /** Whether a command ended in a way the runner answers itself: the lock, the account repo, a cancel. */
 const answeredByRunner = (outcome: Outcome) =>
@@ -365,79 +442,94 @@ const logRun = (run: UpdateRun) => {
 };
 
 /**
- * Updates the skills of `rows` that are selected, one `skill update <name>` after another, in
- * the dialog's order: the CLI takes one name, or every update at once. Each row follows its own
- * command. A merge that conflicts stays on its row and opens no skill; the dialog shows the
- * result, so no toast does. A command that ends in a way the runner answers (the lock, the
- * account repo, a cancel) puts the dialog back as it was before the run, with the skills already
- * updated gone from it; one that ends with no word from the CLI stops the run with its problem.
+ * Updates the skills of `rows` that are selected in one `skill update <name>...`, the names in the
+ * dialog's order. Every selected row runs at once, and each takes its state as the CLI says it is
+ * done with its skill, then once more from the whole outcome when the command ended, since a
+ * warning on stderr may come after. A merge that conflicts stays on its row and opens no skill;
+ * the dialog shows the result, so no toast does. A command that ends in a way the runner answers
+ * (the lock, the account repo, a cancel) puts the dialog back as it was before the run, with the
+ * skills already updated gone from it; one that ends with no word from the CLI stops the run with
+ * its problem, the skills it never reached waiting again.
  */
 export const updateSkills = async (rows: UpdateRunRow[]) => {
   if (useUpdateRun.getState().run !== undefined) {
     return;
   }
-  useUpdateRun.setState({ run: { phase: "running", rows } });
-  for (const row of rows.filter((r) => r.status === "waiting")) {
-    const { name } = row.update;
-    // A run that stopped starts nothing more.
-    if (useUpdateRun.getState().run?.phase !== "running") {
-      break;
-    }
-    setRow(name, { status: "running" });
-    // One skill after another: the CLI's lock admits one run at a time.
-    // oxlint-disable-next-line no-await-in-loop
-    const outcome = await runUntilSettled(["skill", "update", name], {
-      keep: [name],
-      label: updateLabel(name),
-      ownActivity: (ended) =>
-        statusOf(name, ended) === "conflict"
-          ? {
-              message: `${name} skill has conflicts. Resolve them to finish the update`,
-              tone: "attention",
-            }
-          : undefined,
-      ownFailure: true,
-      retry: () => {
-        openUpdateDialog();
-      },
-      stayOnConflict: true,
-    });
-    if (answeredByRunner(outcome)) {
-      useUpdateRun.setState({ run: undefined });
-      return;
-    }
-    const error = outcome.events.find((e) => e.type === "error");
-    const status = statusOf(name, outcome);
-    if (status === "failed" && error === undefined) {
-      setRow(name, { status: "waiting" });
-      useUpdateRun.setState(({ run }) =>
-        run === undefined
-          ? { run }
-          : {
-              run: {
-                ...run,
-                failure: stoppedProblem(outcome),
-                phase: "failed",
-              },
-            }
+  const names = rows
+    .filter((r) => r.status === "waiting")
+    .map((r) => r.update.name);
+  if (names.length === 0) {
+    return;
+  }
+  useUpdateRun.setState({
+    run: {
+      phase: "running",
+      rows: rows.map((r) =>
+        r.status === "waiting" ? { ...r, status: "running" } : r
+      ),
+    },
+  });
+  const events: CliEvent[] = [];
+  const logs: LogEvent[] = [];
+  const outcome = await runUntilSettled(["skill", "update", ...names], {
+    keep: names,
+    label: updateLabel(names.join(" ")),
+    onEvent: (event) => {
+      events.push(event);
+      const name = names.find((n) => doneWith(event, n));
+      const settled = name === undefined ? undefined : settledIn(name, events);
+      if (name !== undefined && settled !== undefined) {
+        setRow(name, rowChange(settled, warningsOf(name, names, logs)));
+      }
+    },
+    onLog: (log) => {
+      logs.push(log);
+      for (const name of names) {
+        const warnings = warningsOf(name, names, logs);
+        if (warnings.length > 0) {
+          setRow(name, { warnings });
+        }
+      }
+    },
+    ownActivity: (ended) => {
+      const conflicts = names.filter((name) =>
+        ended.events.some((e) => e.type === "conflict" && e.name === name)
       );
-      break;
+      return ended.exitCode === EXIT_CODES.pending_merge && conflicts.length > 0
+        ? { message: conflictsText(conflicts), tone: "attention" }
+        : undefined;
+    },
+    ownFailure: true,
+    retry: () => {
+      openUpdateDialog();
+    },
+    stayOnConflict: true,
+  });
+  if (answeredByRunner(outcome)) {
+    useUpdateRun.setState({ run: undefined });
+    return;
+  }
+  let stopped = false;
+  for (const name of names) {
+    const settled = settledBy(name, outcome);
+    if (settled === undefined) {
+      stopped = true;
+      setRow(name, { status: "waiting" });
+    } else {
+      setRow(name, rowChange(settled, warningsOf(name, names, outcome.logs)));
     }
-    const warnings = outcome.logs
-      .filter((l) => l.level === "warn")
-      .map((l) => l.message);
-    setRow(name, {
-      status,
-      ...(warnings.length > 0 ? { warnings } : {}),
-      ...(status === "failed" && error !== undefined
-        ? { reason: error.message }
-        : {}),
-    });
   }
   const { run } = useUpdateRun.getState();
-  if (run?.phase === "running") {
-    const ended: UpdateRun = { ...run, phase: "ended" };
-    useUpdateRun.setState({ run: ended });
-    logRun(ended);
+  if (run === undefined) {
+    return;
   }
+  if (stopped) {
+    useUpdateRun.setState({
+      run: { ...run, failure: stoppedProblem(outcome), phase: "failed" },
+    });
+    return;
+  }
+  const ended: UpdateRun = { ...run, phase: "ended" };
+  useUpdateRun.setState({ run: ended });
+  logRun(ended);
 };

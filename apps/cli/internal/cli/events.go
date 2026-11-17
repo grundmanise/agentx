@@ -87,6 +87,7 @@ type logEvent struct {
 	event
 	Level   string `json:"level"`
 	Message string `json:"message"`
+	Skill   string `json:"skill,omitempty"` // the skill a warning of a run over several skills is about, see writer.about
 }
 
 type errorEvent struct {
@@ -94,6 +95,7 @@ type errorEvent struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Hint    string `json:"hint,omitempty"`
+	Skill   string `json:"skill,omitempty"` // the skill a run over several skills gave up on, see writer.skillFailed; absent for the run's own error
 }
 
 type resultEvent struct {
@@ -141,6 +143,10 @@ type writer struct {
 	// mode, before it is written: a command that runs the work of another
 	// inside it reads what that one reported, see quietlyCatching.
 	caught func(ev any)
+
+	// skill, when set, is the skill every warning written meanwhile is
+	// about, which its log event names, see about.
+	skill string
 }
 
 // out is the ink for stdout; err the ink for stderr.
@@ -214,10 +220,34 @@ func (w *writer) hint(msg string) {
 	}
 }
 
+// about makes every warning written until the returned function is called
+// one about the skill called name: with --json its log event names it, so
+// that a client of a run over several skills shows the warning with the
+// skill. The text is the same either way.
+func (w *writer) about(name string) (restore func()) {
+	w.mu.Lock()
+	before := w.skill
+	w.skill = name
+	w.mu.Unlock()
+	return func() {
+		w.mu.Lock()
+		w.skill = before
+		w.mu.Unlock()
+	}
+}
+
+// warnEvent is the log event of a warning, naming the skill it is about,
+// see about.
+func (w *writer) warnEvent(msg string) logEvent {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return logEvent{event: newEvent("log"), Level: levelWarn, Message: msg, Skill: w.skill}
+}
+
 // warn logs at warn level.
 func (w *writer) warn(msg string) {
 	if w.json {
-		w.line(w.stderr, logEvent{event: newEvent("log"), Level: levelWarn, Message: msg})
+		w.line(w.stderr, w.warnEvent(msg))
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg)))
@@ -229,7 +259,7 @@ func (w *writer) warn(msg string) {
 // both, joined by "; ", and a script finds the way on where a person does.
 func (w *writer) warnWith(msg, next string) {
 	if w.json {
-		w.line(w.stderr, logEvent{event: newEvent("log"), Level: levelWarn, Message: msg + "; " + next})
+		w.line(w.stderr, w.warnEvent(msg+"; "+next))
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n  %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg), sanitised(next)))
@@ -246,6 +276,17 @@ func (w *writer) debugf(format string, args ...any) {
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(muted, "debug:"), sanitised(msg)))
+}
+
+// skillFailed reports one skill a run over several gave up on while the
+// run goes on: with --json an error event naming the skill, the run's own
+// error still to come; otherwise a warning naming it.
+func (w *writer) skillFailed(name string, f *failure) {
+	if w.json {
+		w.emit(errorEvent{event: newEvent("error"), Code: f.status.code, Message: f.message, Hint: f.hint, Skill: name})
+		return
+	}
+	w.warn(namedReason(name, f.message))
 }
 
 func (w *writer) fail(f *failure) {
