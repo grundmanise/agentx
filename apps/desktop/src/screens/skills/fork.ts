@@ -3,7 +3,7 @@
 // what the dialog says the fork does for each kind of skill, and a refusal's hint in the dialog's
 // own words (docs/spec/cli-contract.md, "Forking a skill").
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { ErrorEvent, LibraryEntry, SkillNode } from "#/cli/events.gen.ts";
+import type { ErrorEvent } from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { SKILL_NAME_LIMIT } from "#/lib/skill-name.ts";
@@ -19,33 +19,14 @@ export const canFork = (row: SkillRow) =>
   row.kind === "source" || row.kind === "plugin";
 
 /**
- * How `skill fork` names `row`: a library skill by its name; a plugin's skill by its directory,
- * as `<plugin>:<directory>` when the plugins of the machine provide more than one skill of that
- * directory's name, which the CLI otherwise refuses, or when the library holds a skill of that
- * name, which the CLI looks up first and would fork instead.
+ * How `skill fork` names `row`: a library skill by its name, and a plugin's skill always as
+ * `<plugin>:<directory>`, which names that plugin's copy and nothing else.
  */
-export const forkTarget = (
-  row: SkillRow,
-  skills: SkillNode[],
-  library: LibraryEntry[]
-): string => {
+export const forkTarget = (row: SkillRow): string => {
   const occurrence = row.kind === "plugin" ? occurrenceOf(row) : undefined;
-  if (occurrence?.plugin === undefined) {
-    return row.name;
-  }
-  const directory = directoryName(occurrence.path);
-  const plugins = new Set(
-    skills
-      .flatMap((node) => node.occurrences)
-      .filter(
-        (o) => o.plugin !== undefined && directoryName(o.path) === directory
-      )
-      .map((o) => o.plugin)
-  );
-  const inLibrary = library.some((e) => e.name === directory);
-  return plugins.size > 1 || inLibrary
-    ? `${occurrence.plugin}:${directory}`
-    : directory;
+  return occurrence?.plugin === undefined
+    ? row.name
+    : `${occurrence.plugin}:${directoryName(occurrence.path)}`;
 };
 
 /** `skill fork <target>`, with `--name <new>` for a fork under a new name. */

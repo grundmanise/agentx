@@ -2,7 +2,7 @@
 // over the pure functions of fork.ts.
 import { expect, test } from "@playwright/test";
 
-import type { LibraryEntry, Occurrence, SkillNode } from "#/cli/events.gen.ts";
+import type { Occurrence } from "#/cli/events.gen.ts";
 import { firstName, forkTarget } from "#/screens/skills/fork.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
@@ -35,41 +35,10 @@ const pluginRow = (name: string, occurrences: Occurrence[]): SkillRow => ({
   universal: false,
 });
 
-const node = (occurrences: Occurrence[]): SkillNode => ({
-  content_hash: "",
-  description: "",
-  logical_id: "",
-  name: "",
-  occurrences,
-  physical_id: "",
-});
-
-const entry = (name: string): LibraryEntry => ({
-  content_hash: "",
-  kind: "managed",
-  name,
-  placements: [],
-  universal: [],
-});
-
-test("forkTarget: a plugin's skill by its directory alone", () => {
-  const o = at("acme", "review");
-  expect(forkTarget(pluginRow("review", [o]), [node([o])], [])).toBe("review");
-});
-
-test("forkTarget: by plugin when several plugins provide the name", () => {
-  const a = at("acme", "review");
-  const b = at("tools", "review");
-  expect(forkTarget(pluginRow("review", [a]), [node([a]), node([b])], [])).toBe(
+test("forkTarget: a plugin's skill always as <plugin>:<skill>", () => {
+  expect(forkTarget(pluginRow("review", [at("acme", "review")]))).toBe(
     "acme:review"
   );
-});
-
-test("forkTarget: by plugin when the library holds the name, which the CLI looks up first", () => {
-  const o = at("acme", "review");
-  expect(
-    forkTarget(pluginRow("review", [o]), [node([o])], [entry("review")])
-  ).toBe("acme:review");
 });
 
 test("firstName: my-<name>, cut to the limit without a hyphen at its end", () => {
