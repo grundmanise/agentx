@@ -60,7 +60,7 @@ const placeOf = (
 
 /**
  * The agents that see a library skill: each agent that reads the library and sees it, and each
- * other agent that has it, through a link or a copy.
+ * other agent that has it, through a link or a copy outside a plugin.
  */
 const libraryAgents = (
   row: SkillRow,
@@ -74,9 +74,11 @@ const libraryAgents = (
       seen.set(id, c);
     }
   }
+  // A plugin's copy is a place of its own, see sightsOf, so an agent that has only that does not
+  // see the library's.
   for (const o of row.occurrences) {
     const c = byId.get(o.configuration);
-    if (c !== undefined) {
+    if (c !== undefined && o.plugin === undefined) {
       seen.set(c.id, c);
     }
   }

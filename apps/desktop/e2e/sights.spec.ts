@@ -236,6 +236,30 @@ test("sightsOf: a fork with the plugin's content still shows the plugin's copy",
   });
 });
 
+test("sightsOf: an agent with only the plugin's copy does not see the library's", () => {
+  const plugin = "/home/me/.claude/plugins/cache/m/acme/1/skills/review";
+  const codexReads = configuration("codex", {
+    name: "Codex",
+    reads_library: true,
+  });
+  const fork = row([at("claude-code", plugin, "acme")], {
+    agents: ["claude-code", "codex"],
+    entry: {
+      content_hash: "",
+      kind: "managed",
+      name: "review",
+      placements: [],
+      universal: [],
+    },
+    kind: "yours",
+  });
+  const s = sightsOf(fork, [], [claudeAt, codexReads]);
+  expect(
+    s.places.map((p) => `${p.key}: ${p.agents.map((a) => a.id).join(",")}`)
+  ).toEqual(["library: codex", "plugin:acme: claude-code"]);
+  expect(clashText(s)).toBeUndefined();
+});
+
 test("sightsOf: two directories in one agent's folder are two skills", () => {
   const a = row([at("claude-code", "/home/me/.claude/skills/a")]);
   const b = row([at("claude-code", "/home/me/.claude/skills/b")]);
