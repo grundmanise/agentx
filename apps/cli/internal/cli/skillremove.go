@@ -54,7 +54,7 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"machine's disk changes.",
 		Example: examples(
 			"agentx skill remove pdf", "take the skill off this machine",
-			"agentx skill remove pdf --from cursor", "remove only its placement in one client",
+			"agentx skill remove pdf --from windsurf", "remove only its placement in one client",
 			"agentx skill remove release-notes --remote", "also delete its branch on the account remote",
 			"agentx skill remove pdf --machine cloud", "remove it from the cloud machine",
 		),
