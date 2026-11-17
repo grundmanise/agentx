@@ -72,7 +72,7 @@ const cases: {
       "The highlighted agents see more than one skill, and each decides which one to use. To avoid clashes, rename your skill or uninstall the chrome-devtools-mcp plugin.",
     name: "your fork of a plugin's skill under its name",
     notice:
-      "Found 2 skills named a11y-debugging. Agents that see more than one may use the wrong one.",
+      "Found 2 skills named a11y-debugging. Agents that see more than one may pick the wrong skill.",
     sights: sights([yours, devtools], [yours]),
     table: [
       "Agent | Your skill | chrome-devtools-mcp",
@@ -231,7 +231,7 @@ test("sightsOf: a fork with the plugin's content still shows the plugin's copy",
   const s = sightsOf(fork, [], [claudeAt]);
   expect(s.places.map((p) => p.key)).toEqual(["library", "plugin:acme"]);
   expect(clashText(s)).toEqual({
-    text: "Agents that see more than one may use the wrong one.",
+    text: "Agents that see more than one may pick the wrong skill.",
     title: "Found 2 skills named review",
   });
 });

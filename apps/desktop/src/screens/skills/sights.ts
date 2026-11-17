@@ -221,7 +221,7 @@ export interface ClashText {
 
 /**
  * The notice under AGENTS while some agent sees more than one skill of the name: how many skills
- * of the name such agents see, and that they may use the wrong one. Undefined when no agent sees
+ * of the name such agents see, and that they may pick the wrong skill. Undefined when no agent sees
  * two.
  */
 export const clashText = (sights: NameSights): ClashText | undefined => {
@@ -230,7 +230,7 @@ export const clashText = (sights: NameSights): ClashText | undefined => {
     return undefined;
   }
   return {
-    text: "Agents that see more than one may use the wrong one.",
+    text: "Agents that see more than one may pick the wrong skill.",
     title: `Found ${places.length} skills named ${sights.name}`,
   };
 };
