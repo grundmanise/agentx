@@ -40,7 +40,11 @@ export const SectionToggle = ({
   title?: string;
   /** How many rows the section holds; left out, the header shows no count. */
   count?: number;
-  /** A dim note at the row's right end, such as a plugin's marketplace; it truncates first. */
+  /**
+   * A dim note at the row's right end, such as a plugin's marketplace. It takes only the space
+   * the caption and count leave, so it truncates first and disappears when none is left; its
+   * tooltip shows it in full.
+   */
   detail?: string;
   open: boolean;
   onToggle: () => void;
@@ -71,7 +75,10 @@ export const SectionToggle = ({
         <span className="type-technical-sm text-subgroup-count">{count}</span>
       )}
       {detail !== undefined && (
-        <span className="type-technical-sm text-subgroup-source ml-auto min-w-0 truncate">
+        <span
+          title={detail}
+          className="type-technical-sm text-subgroup-source min-w-0 flex-1 truncate text-right"
+        >
           {detail}
         </span>
       )}
