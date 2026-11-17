@@ -53,7 +53,7 @@ export const forkText = (row: SkillRow): string =>
 
 /**
  * Whether Use a different name starts on: for a plugin's skill, whose fork under its own name
- * leaves two skills of that name for the agents with the plugin.
+ * leaves more than one skill of that name for the agents with the plugin.
  */
 export const renamesAtFirst = (row: SkillRow) => row.kind === "plugin";
 

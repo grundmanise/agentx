@@ -4,7 +4,7 @@
 // Use a different name on, and the screen redraws from the inventory that follows: the fork is
 // selected by the name the CLI reports, and shows once that inventory holds it. For a plugin's
 // skill the switch starts on, with `my-<name>` in the Name field; turned off, a line says that the
-// agents with the plugin will see two skills of the name. A refusal (exit 6), such as a library
+// agents with the plugin will see more than one skill of the name. A refusal (exit 6), such as a library
 // entry that is a symlink, keeps the dialog open with the CLI's message and a hint in the dialog's
 // own words (`forkHint`), as one sentence-cased paragraph (`ProblemText`), the skill's name and
 // the new one keeping their case, and turns Use a different name on, since forking beside the
@@ -208,7 +208,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
         </label>
         {!renaming && row.kind === "plugin" && (
           <p className="type-secondary text-text-muted m-0">
-            {`Agents with the plugin will see two skills named ${row.name}.`}
+            {`Agents with the plugin will see more than one skill named ${row.name}.`}
           </p>
         )}
         {renaming && (

@@ -118,12 +118,12 @@ agentx skill fork format
   claude-code  symlink  /home/me/.claude/skills/format -> /home/me/.agents/skills/format
   codex        library  /home/me/.agents/skills/format
   always available to universal clients: codex, cursor, gemini-cli
-• claude-code, codex now see two skills named format; rename the fork with 'agentx skill rename format <new>' to keep them apart
+• claude-code, codex now see more than one skill named format; rename the fork with 'agentx skill rename format <new>' to keep them apart
 ```
 
 - The plugin keeps its skill. agentx cannot change or remove it.
 - The fork goes into your library and into the enabled clients that have the plugin. Clients that read the library also see it.
-- A client that has the plugin and sees the fork has two skills named `format`. The client decides which one it uses. The last line names those clients.
+- A client that has the plugin and sees the fork has more than one skill named `format`. The client decides which one it uses. The last line names those clients.
 - To avoid two skills with the same name, fork it under a new name: `agentx skill fork format --name my-format`. In the desktop app, **Use a different name** starts on for a plugin's skill.
 - When several plugins provide a skill of the same name, name the plugin: `agentx skill fork formatter:format`.
 
@@ -135,10 +135,10 @@ A client sees every skill in every folder it reads. A fork changes your library,
 |---|---|---|
 | `agentx skill fork pdf`, for an installed skill | The fork takes the place of `pdf`. | A client that reads the library, or has a link to `pdf`, sees the fork. A client with a copy of `pdf` keeps its copy: your edits to the fork do not reach it. A `pdf` folder of a client's own stays as it is. |
 | `agentx skill fork pdf --name my-pdf` | The fork sits beside `pdf`. | A client that has `pdf` also gets `my-pdf`, so it sees both skills, under two names. |
-| `agentx skill fork format`, for a plugin's skill | The fork goes in as `format`. The plugin keeps its own `format`. | A client that has the plugin and sees the fork has two skills named `format`. The client decides which one it uses. |
+| `agentx skill fork format`, for a plugin's skill | The fork goes in as `format`. The plugin keeps its own `format`. | A client that has the plugin and sees the fork has more than one skill named `format`. The client decides which one it uses. |
 | `agentx skill rename my-pdf pdf-letters` | The skill moves to the new name. | One skill, under the new name, where the old one was. |
 
-When a client has two skills with the same name, the client decides which one it uses, or it shows both. agentx does not control this. To keep them apart, fork under a new name, or rename your fork.
+When a client has more than one skill with the same name, the client decides which one it uses, or it shows them all. agentx does not control this. To keep them apart, fork under a new name, or rename your fork.
 
 ## Publish your edits
 
