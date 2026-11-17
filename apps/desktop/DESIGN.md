@@ -772,7 +772,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `floating-bar.radius` | 9999 |  |
 | `check.mark-radius` | 50% | Startup status circle |
 | `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
-| `sights-notice.radius` | 12 | The notice under AGENTS when an agent sees two skills of one name |
+| `sights-notice.radius` | 12 | The notice under AGENTS when an agent sees more than one skill of one name |
 | `startup.logo-radius` | 12 | Product mark on the startup layer |
 | `tooltip.radius` | 8 | Tooltip |
 

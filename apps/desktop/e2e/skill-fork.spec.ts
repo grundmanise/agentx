@@ -260,7 +260,7 @@ test("refused in place with Use a different name on: the hint leaves the switch 
   ]);
 });
 
-test("a plugin's skill: Use a different name starts on; turned off, Fork runs skill fork <skill> and AGENTS says who sees two skills", async ({
+test("a plugin's skill: Use a different name starts on; turned off, Fork runs skill fork <skill> and AGENTS says who sees more than one skill", async ({
   cli,
   page,
 }) => {
@@ -279,7 +279,7 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   await expect(field).toBeFocused();
   await toggle.click();
   await expect(dialog).toContainText(
-    "Agents with the plugin will see two skills named commit-helper."
+    "Agents with the plugin will see more than one skill named commit-helper."
   );
   cli.register(["skill", "fork", "commit-helper"], {
     events: [forked("commit-helper")],
@@ -301,6 +301,8 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   const agents = fork.getByRole("region", { name: "Agents" });
   const notice = agents.getByRole("note", { name: "Skills of the same name" });
   await expect(notice).toContainText("Found 2 skills named commit-helper.");
+  // The pointer may already rest where Details shows up, which opens nothing: move it off first.
+  await page.mouse.move(0, 0);
   await notice.getByText("Details", { exact: true }).hover();
   const table = page.getByRole("table", {
     name: "Skills named commit-helper",

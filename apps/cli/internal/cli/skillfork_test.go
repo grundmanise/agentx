@@ -171,7 +171,7 @@ func pluginHome(t *testing.T, h *harness) []string {
 // name: the bare name is refused, naming both, and the plugin is named.
 // The fork is a branch of its own, placed into the configuration that
 // has the plugin, and the text output names the configurations that now
-// see two skills of the name: those with the plugin that have the fork,
+// see more than one skill of the name: those with the plugin that have the fork,
 // placed or read through the library. With the one configuration that
 // has the plugin disabled, the fork has no placement. Every plugin
 // directory is left byte for byte as it was. The history of each fork
@@ -192,7 +192,7 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 
 	out = h.run("skill", "fork", "formatter:format")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "the text output", out.stdout, "• claude-code, codex now see two skills named format; rename the fork with 'agentx skill rename format <new>' to keep them apart\n")
+	contains(t, "the text output", out.stdout, "• claude-code, codex now see more than one skill named format; rename the fork with 'agentx skill rename format <new>' to keep them apart\n")
 	tip := h.ref(lineage.ForkRef("format"))
 	equal(t, "the history", h.accountGit("rev-list", lineage.ForkRef("format")), tip)
 	equal(t, "the subject", h.accountGit("log", "-1", "--format=%s", tip), "Fork format from plugin formatter")

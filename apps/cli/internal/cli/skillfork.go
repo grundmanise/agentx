@@ -854,7 +854,7 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 	inv.printUniversal(ev.Universal)
 	if src.kind == kindPlugin && fk.target == src.name {
 		if both := seeBoth(pluginConfigurations(inventory, src.plugin), targetIDs(done.placed), ev.Universal); len(both) > 0 {
-			out.print(out.paint(infoStyle, glyphInfo), " ", strings.Join(both, ", "), " now see two skills named ", name, "; rename the fork with 'agentx skill rename ", name, " <new>' to keep them apart")
+			out.print(out.paint(infoStyle, glyphInfo), " ", strings.Join(both, ", "), " now see more than one skill named ", name, "; rename the fork with 'agentx skill rename ", name, " <new>' to keep them apart")
 		}
 	}
 	inv.noAccountRemoteHint(ev)
@@ -862,7 +862,7 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 	return nil
 }
 
-// seeBoth are the configurations that see two skills of one name after a
+// seeBoth are the configurations that see more than one skill of one name after a
 // plugin's skill is forked under its own name: those that have the plugin
 // and have the fork too, placed into them or read through the library.
 // Sorted. Pure.
