@@ -1,5 +1,6 @@
 // The skills of a listing as rows to check, for the Add skill dialog (`src/screens/skills/add-skill-dialog.tsx`).
 import { useId } from "react";
+import type { ReactNode } from "react";
 
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import { statusLabels } from "#/screens/sources/projection.ts";
@@ -7,9 +8,10 @@ import type { SkillCard } from "#/screens/sources/projection.ts";
 import { statusVariants } from "#/screens/sources/skill-list.tsx";
 
 /**
- * One skill as a row of the Add skill dialog's list: its name over its description, then the
- * round checkbox, or, for a skill this machine holds already, its status in the card's colour in
- * place of the checkbox. A selectable row is the whole hit target.
+ * One skill as a row of the Add skill dialog's list: the round checkbox before the name, the
+ * description under the name. A skill this machine holds already has an empty slot in place of
+ * the checkbox, so the names keep one column, and its status in the card's colour at the right.
+ * A selectable row is the whole hit target.
  */
 const SkillRow = ({
   card,
@@ -22,13 +24,20 @@ const SkillRow = ({
 }) => {
   const id = useId();
   const descriptionId = useId();
-  const text = (
+  // The first line opens with a 16 slot, `gap-2` before the name, as in the Update skills
+  // dialog; the description starts under the name.
+  const text = (lead: ReactNode) => (
     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="type-body text-text-primary truncate">{card.name}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        {lead}
+        <span className="type-body text-text-primary truncate">
+          {card.name}
+        </span>
+      </span>
       {card.description !== "" && (
         <span
           id={descriptionId}
-          className="type-secondary text-text-muted line-clamp-2"
+          className="type-secondary text-text-muted line-clamp-2 pl-6"
         >
           {card.description}
         </span>
@@ -38,7 +47,7 @@ const SkillRow = ({
   if (card.status !== undefined) {
     return (
       <li title={card.title} className="flex items-center gap-3 px-3 py-2">
-        {text}
+        {text(<span aria-hidden className="size-checkbox flex-none" />)}
         <span className={statusVariants({ status: card.status })}>
           {statusLabels[card.status]}
         </span>
@@ -51,14 +60,17 @@ const SkillRow = ({
         htmlFor={id}
         className="rounded-add-skill-row hover:bg-add-skill-row-hover has-focus-visible:outline-shell-focus-ring flex cursor-pointer items-center gap-3 px-3 py-2 has-focus-visible:outline-2 has-focus-visible:-outline-offset-2"
       >
-        {text}
-        <Checkbox
-          id={id}
-          aria-label={card.name}
-          aria-describedby={card.description === "" ? undefined : descriptionId}
-          checked={checked}
-          onCheckedChange={onToggle}
-        />
+        {text(
+          <Checkbox
+            id={id}
+            aria-label={card.name}
+            aria-describedby={
+              card.description === "" ? undefined : descriptionId
+            }
+            checked={checked}
+            onCheckedChange={onToggle}
+          />
+        )}
       </label>
     </li>
   );
