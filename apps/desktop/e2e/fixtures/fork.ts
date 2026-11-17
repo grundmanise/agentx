@@ -1,6 +1,6 @@
-// The machine the Fork tests run against: the Agents fixture's machine, the inventories serve
-// reports after each fork, a second plugin that provides a skill of the same name, and the
-// events `skill fork` answers with.
+// The machine the Fork and Rename tests run against: the Agents fixture's machine, the inventories
+// serve reports after each fork and a rename, a second plugin that provides a skill of the same
+// name, and the events `skill fork` answers with.
 import type { LibraryEntry, Plugin, SkillNode } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
@@ -113,6 +113,24 @@ export const commitHelperForked = {
     ownNode(
       "commit-helper",
       "h-commit-fork",
+      "Write commit messages the way the team does"
+    ),
+  ],
+} satisfies InlineEvent;
+
+/** After `skill rename commit-helper my-commit-helper`: the fork under its new name. */
+export const commitHelperRenamed = {
+  ...inventory,
+  library: [
+    ...inventory.library,
+    ownEntry("my-commit-helper", "h-commit-renamed"),
+  ],
+  scan_counter: 3,
+  skills: [
+    ...inventory.skills,
+    ownNode(
+      "my-commit-helper",
+      "h-commit-renamed",
       "Write commit messages the way the team does"
     ),
   ],

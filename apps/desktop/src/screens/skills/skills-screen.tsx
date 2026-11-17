@@ -14,6 +14,7 @@ import {
   subgroupKey,
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import { RenameDialogs } from "#/screens/skills/rename-dialog.tsx";
 import { SkillDetail } from "#/screens/skills/skill-detail.tsx";
 import { SkillList } from "#/screens/skills/skill-list.tsx";
 import {
@@ -215,6 +216,7 @@ export const SkillsScreen = () => {
         )}
       </section>
       <ForkDialogs />
+      <RenameDialogs />
     </div>
   );
 };

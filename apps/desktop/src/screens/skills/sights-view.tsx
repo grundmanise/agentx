@@ -36,7 +36,7 @@ import type { NameSights, SightsTable } from "#/screens/skills/sights.ts";
 
 const TITLE = "What each agent sees";
 
-/** Renames your library's skill of the name; Rename yours shows only with it. */
+/** Renames your library's skill of the name; Rename your skill shows only with it. */
 type OnRename = (() => void) | undefined;
 
 const RenameYours = ({
@@ -48,7 +48,7 @@ const RenameYours = ({
 }) =>
   onRename !== undefined && table.renamable ? (
     <Button variant="primary" size="sm" onClick={onRename}>
-      Rename yours
+      Rename your skill
     </Button>
   ) : null;
 
