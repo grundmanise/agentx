@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
+import { lastRoute } from "#/app/kept-screens.tsx";
 import { useSyncState } from "#/app/publish-status.tsx";
 import { allScreens } from "#/app/screens.ts";
 import { AddIcon } from "#/components/icons/add.tsx";
@@ -178,7 +179,8 @@ export const CommandPalette = ({
     id: `go:${s.path}`,
     label: s.label,
     run: () => {
-      void navigate(s.path);
+      // The screen as the user left it, as from the sidebar.
+      void navigate(lastRoute(s.path));
     },
   }));
   const skills = skillItems(rows);

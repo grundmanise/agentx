@@ -30,6 +30,10 @@ const buttonVariants = cva(
           "type-button-sm min-h-8.5 items-start justify-start px-3.5 py-1.5 text-left whitespace-normal",
       },
       variant: {
+        // The plain inline shape in the accent: the call to action at the end of a list's group
+        // header, such as Adopt all, beside plain text buttons such as Collapse all.
+        accent:
+          "text-accent-primary hover:text-accent-primary-hover font-medium",
         danger:
           "text-button-danger-text bg-button-danger-bg hover:bg-button-danger-hover font-medium",
         ghost:

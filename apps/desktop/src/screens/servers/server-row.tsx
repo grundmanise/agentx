@@ -1,8 +1,9 @@
 import { cva } from "class-variance-authority";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { LogoStack } from "#/components/agent-logo.tsx";
+import { useOnNewKey } from "#/lib/new-key.ts";
 import type { Failure, ServerRow } from "#/screens/servers/projection.ts";
 
 const failureVariants = cva("type-secondary whitespace-nowrap", {
@@ -83,11 +84,9 @@ export const ServerRowItem = ({
   inView?: boolean;
 }) => {
   const ref = useRef<HTMLTableRowElement>(null);
-  useEffect(() => {
-    if (inView) {
-      ref.current?.scrollIntoView({ block: "center" });
-    }
-  }, [inView]);
+  useOnNewKey(inView ? row.key : undefined, () => {
+    ref.current?.scrollIntoView({ block: "center" });
+  });
   return (
     <tr
       ref={ref}

@@ -49,7 +49,7 @@ test-cli:
 
 # The desktop app in apps/desktop: the pnpm install at the root, the frontend's formatting, lint
 # (which also checks the types), end-to-end tests and build, then the Tauri shell's formatting,
-# Clippy and tests. Needs Node 24 or later, pnpm 12, Playwright's Chromium and Rust; on Linux also
+# Clippy and tests. Needs Node 26 or later, pnpm 12, Playwright's Chromium and Rust; on Linux also
 # the WebKitGTK development packages.
 check-desktop:
 	pnpm install --frozen-lockfile

@@ -497,12 +497,14 @@ const useOffsetIn = (
       setOffset((previous) => (previous === next ? previous : next));
     };
     const sizes = new ResizeObserver(measure);
+    // Only what comes before the list moves where it starts.
     const observeSiblings = () => {
       sizes.disconnect();
       for (const child of parent?.children ?? []) {
-        if (child !== element) {
-          sizes.observe(child);
+        if (child === element) {
+          break;
         }
+        sizes.observe(child);
       }
       measure();
     };
