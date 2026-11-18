@@ -775,9 +775,13 @@ export const locationsOf = (
   return locations;
 };
 
-/** The version a skill's files are read for: a new read when its content or its state changed. */
+/**
+ * The version a skill's files are read for: a new read when its content, its state or the base its
+ * edits are compared with changed.
+ */
 export const filesVersionOf = (row: SkillRow) =>
   [
     row.entry?.content_hash ?? row.node?.content_hash ?? "",
     row.entry?.state ?? "",
+    row.entry?.base_hash ?? "",
   ].join(":");

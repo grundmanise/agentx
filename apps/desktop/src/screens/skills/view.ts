@@ -1,34 +1,10 @@
 // How the user set up the Skills list: the search, the filters, the sort order, the collapsed
-// groups and the open plugin subgroups. It lives outside the screen, so it stays while another
-// screen shows, and it lasts until the app quits.
-import { create } from "zustand";
+// groups and the open plugin subgroups. It is the screen's own state: the screen stays mounted
+// while another one shows (see app/kept-screens.tsx), so it stays until the app quits.
+import { useMemo, useState } from "react";
 
 import { noFilters } from "#/screens/skills/projection.ts";
 import type { Filters, SortOrder } from "#/screens/skills/projection.ts";
-
-export interface SkillsView {
-  filters: Filters;
-  order: SortOrder;
-  /** The keys of the collapsed groups; every other one is open. */
-  collapsed: ReadonlySet<string>;
-  /** The keys of the open plugin subgroups; every other one is collapsed. */
-  expanded: ReadonlySet<string>;
-}
-
-export const useSkillsView = create<SkillsView>()(() => ({
-  collapsed: new Set<string>(),
-  expanded: new Set<string>(),
-  filters: noFilters,
-  order: "asc",
-}));
-
-export const setFilters = (filters: Filters) => {
-  useSkillsView.setState({ filters });
-};
-
-export const setOrder = (order: SortOrder) => {
-  useSkillsView.setState({ order });
-};
 
 /** A copy of `keys` with `key` taken out if it is in, else put in. */
 const flipped = (keys: ReadonlySet<string>, key: string) => {
@@ -39,34 +15,45 @@ const flipped = (keys: ReadonlySet<string>, key: string) => {
   return next;
 };
 
-/** Collapses or expands a group, by its key. */
-export const toggleCollapsed = (key: string) => {
-  useSkillsView.setState(({ collapsed }) => ({
-    collapsed: flipped(collapsed, key),
-  }));
-};
+const noKeys: ReadonlySet<string> = new Set<string>();
 
-/** Collapses or expands a plugin's subgroup, by its key. */
-export const toggleExpanded = (key: string) => {
-  useSkillsView.setState(({ expanded }) => ({
-    expanded: flipped(expanded, key),
-  }));
-};
-
-/** Opens exactly the plugin subgroups with these keys; every other one is collapsed. */
-export const setExpanded = (keys: Iterable<string>) => {
-  useSkillsView.setState({ expanded: new Set(keys) });
-};
-
-/** Opens a group and, for a plugin's skill, its subgroup, so the list shows the row. */
-export const openSections = (group: string, subgroup?: string) => {
-  useSkillsView.setState(({ collapsed, expanded }) => {
-    const nextCollapsed = new Set(collapsed);
-    nextCollapsed.delete(group);
-    const nextExpanded = new Set(expanded);
-    if (subgroup !== undefined) {
-      nextExpanded.add(subgroup);
-    }
-    return { collapsed: nextCollapsed, expanded: nextExpanded };
-  });
+/** The Skills list's setup, and the changes the list makes to it. */
+export const useSkillsView = () => {
+  const [filters, setFilters] = useState<Filters>(noFilters);
+  const [order, setOrder] = useState<SortOrder>("asc");
+  /** The keys of the collapsed groups; every other one is open. */
+  const [collapsed, setCollapsed] = useState(noKeys);
+  /** The keys of the open plugin subgroups; every other one is collapsed. */
+  const [expanded, setExpanded] = useState(noKeys);
+  const actions = useMemo(
+    () => ({
+      /** Opens a group and, for a plugin's skill, its subgroup, so the list shows the row. */
+      openSections: (group: string, subgroup?: string) => {
+        setCollapsed((keys) => {
+          const next = new Set(keys);
+          next.delete(group);
+          return next;
+        });
+        if (subgroup !== undefined) {
+          setExpanded((keys) => new Set([...keys, subgroup]));
+        }
+      },
+      /** Opens exactly the plugin subgroups with these keys; every other one is collapsed. */
+      setExpanded: (keys: Iterable<string>) => {
+        setExpanded(new Set(keys));
+      },
+      setFilters,
+      setOrder,
+      /** Collapses or expands a group, by its key. */
+      toggleCollapsed: (key: string) => {
+        setCollapsed((keys) => flipped(keys, key));
+      },
+      /** Collapses or expands a plugin's subgroup, by its key. */
+      toggleExpanded: (key: string) => {
+        setExpanded((keys) => flipped(keys, key));
+      },
+    }),
+    []
+  );
+  return { collapsed, expanded, filters, order, ...actions };
 };

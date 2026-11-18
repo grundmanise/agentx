@@ -61,6 +61,7 @@ const countVariants = cva("type-technical-sm", {
  */
 export const SectionToggle = ({
   label,
+  icon,
   title,
   count,
   detail,
@@ -71,6 +72,8 @@ export const SectionToggle = ({
 }: {
   /** The section's caption, uppercase like every caption. */
   label: string;
+  /** A small mark before the caption, such as an agent's logo. */
+  icon?: ReactNode;
   /** The caption's tooltip, such as a source's full URL. */
   title?: string;
   /** How many rows the section holds; left out, the header shows no count. */
@@ -107,6 +110,7 @@ export const SectionToggle = ({
       >
         <ChevronIcon size="xs" />
       </span>
+      {icon !== undefined && <span className="flex flex-none">{icon}</span>}
       {title === undefined ? (
         caption
       ) : (

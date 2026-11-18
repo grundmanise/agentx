@@ -17,15 +17,7 @@ import type { Sections, SkillRow } from "#/screens/skills/projection.ts";
 import { RenameDialogs } from "#/screens/skills/rename-dialog.tsx";
 import { SkillDetail } from "#/screens/skills/skill-detail.tsx";
 import { SkillList } from "#/screens/skills/skill-list.tsx";
-import {
-  openSections,
-  setFilters,
-  setOrder,
-  setExpanded,
-  toggleCollapsed,
-  toggleExpanded,
-  useSkillsView,
-} from "#/screens/skills/view.ts";
+import { useSkillsView } from "#/screens/skills/view.ts";
 import { useStartup } from "#/startup/startup.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -79,10 +71,18 @@ export const SkillsScreen = () => {
   const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
   // The search, filters, sort order and collapsed sections stay while another screen shows.
-  const filters = useSkillsView((s) => s.filters);
-  const order = useSkillsView((s) => s.order);
-  const collapsed = useSkillsView((s) => s.collapsed);
-  const expanded = useSkillsView((s) => s.expanded);
+  const {
+    collapsed,
+    expanded,
+    filters,
+    openSections,
+    order,
+    setExpanded,
+    setFilters,
+    setOrder,
+    toggleCollapsed,
+    toggleExpanded,
+  } = useSkillsView();
   const sections = useMemo(
     () => ({ collapsed, expanded }),
     [collapsed, expanded]
@@ -116,7 +116,8 @@ export const SkillsScreen = () => {
     // The first row whatever is collapsed, so collapsing a section never changes the selection.
     flat[0];
   // A newly selected row in a collapsed group or subgroup, such as a plugin's skill another screen
-  // opens, opens its sections so the list shows it. Collapsing one later keeps it collapsed.
+  // opens, opens its sections so the list shows it. Collapsing one later keeps it collapsed, and so
+  // does coming back to the screen, when the effect runs again for the same row.
   const reveal = useEffectEvent((key: string | undefined) => {
     if (
       selected !== undefined &&
@@ -130,8 +131,12 @@ export const SkillsScreen = () => {
     }
   });
   const shownKey = selected?.key;
+  const revealed = useRef<string | null>(null);
   useEffect(() => {
-    reveal(shownKey);
+    if (shownKey !== undefined && shownKey !== revealed.current) {
+      revealed.current = shownKey;
+      reveal(shownKey);
+    }
   }, [shownKey]);
   const configurations = inventory?.configurations ?? [];
 
