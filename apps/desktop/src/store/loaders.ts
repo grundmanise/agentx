@@ -3,11 +3,25 @@
 // `skill check-updates` replaces the update candidates serve found and sets when the last check
 // ended, and `skill update` takes away those of the skills it updated.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { CliEvent } from "#/cli/events.gen.ts";
+import type {
+  CliEvent,
+  DiffEvent,
+  HistoryEvent,
+  InstallableSkillEvent,
+  SkillFileEvent,
+  SourceSkillEvent,
+} from "#/cli/events.gen.ts";
+import { cachedRead, keepRead } from "#/store/read-cache.ts";
 import { onFinished, runCommand } from "#/store/runner.ts";
 import type { Finished } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { AppState, FilesRead } from "#/store/store.ts";
+
+/**
+ * Whether a skill's version names its content: it starts with the content hash. A read of a
+ * version without one is not kept for the next launch, since it names no content.
+ */
+const hashed = (version: string) => !version.startsWith(":");
 
 // Each read's latest run: a slower earlier run of the same read does not overwrite a later one.
 const latest = new Map<string, number>();
@@ -69,26 +83,59 @@ export const loadSources = async () => {
 
 /**
  * Loads the skills of a source: `source skills <id>`, a read of the last fetch. The Add screen
- * calls it when a source's pill opens, and again after it fetches the source.
+ * calls it when a source's pill opens, and again after it fetches the source. The listing kept
+ * from an earlier launch shows while it runs.
  */
 export const loadListing = async (id: string) => {
+  if (useAppStore.getState().listings[id] === undefined) {
+    const kept = await cachedRead<SourceSkillEvent[]>("listing", id, "");
+    if (
+      kept !== undefined &&
+      useAppStore.getState().listings[id] === undefined
+    ) {
+      useAppStore.setState((s) => ({
+        listings: { ...s.listings, [id]: kept },
+      }));
+    }
+  }
   await load(["source", "skills", id], (events, state) => ({
     listings: {
       ...state.listings,
       [id]: events.filter((e) => e.type === "source_skill"),
     },
   }));
+  const listing = useAppStore.getState().listings[id];
+  if (listing !== undefined) {
+    void keepRead("listing", id, "", listing);
+  }
 };
 
 /**
  * Loads your skills the account remote holds that this machine has not installed:
  * `skill list --remote`, which fetches the account remote. The Add screen calls it when the Your
- * skills pill opens.
+ * skills pill opens. The list kept from an earlier launch shows while it runs.
  */
 export const loadInstallable = async () => {
+  if (useAppStore.getState().installable === undefined) {
+    const kept = await cachedRead<InstallableSkillEvent[]>(
+      "installable",
+      "",
+      ""
+    );
+    if (
+      kept !== undefined &&
+      useAppStore.getState().installable === undefined
+    ) {
+      useAppStore.setState({ installable: kept });
+    }
+  }
   await load(["skill", "list", "--remote"], (events) => ({
     installable: events.filter((e) => e.type === "installable_skill"),
   }));
+  const { installable } = useAppStore.getState();
+  if (installable !== undefined) {
+    void keepRead("installable", "", "", installable);
+  }
 };
 
 /** Loads what `adopt` would take over, from its preview, which writes nothing. */
@@ -118,6 +165,19 @@ export const loadHistory = async (name: string, version: string) => {
       ? s
       : { histories: rest };
   });
+  // A history kept from an earlier launch for this version is this version's.
+  const kept = hashed(version)
+    ? await cachedRead<HistoryEvent[]>("history", name, version)
+    : undefined;
+  if (historyVersions.get(name) !== version) {
+    return;
+  }
+  if (kept !== undefined) {
+    useAppStore.setState((s) => ({
+      histories: { ...s.histories, [name]: { entries: kept, version } },
+    }));
+    return;
+  }
   const outcome = await runCommand(["skill", "history", name], {
     label: `history ${name}`,
   });
@@ -125,15 +185,13 @@ export const loadHistory = async (name: string, version: string) => {
     return;
   }
   if (outcome.exitCode === 0) {
+    const entries = outcome.events.filter((e) => e.type === "history");
     useAppStore.setState((s) => ({
-      histories: {
-        ...s.histories,
-        [name]: {
-          entries: outcome.events.filter((e) => e.type === "history"),
-          version,
-        },
-      },
+      histories: { ...s.histories, [name]: { entries, version } },
     }));
+    if (hashed(version)) {
+      void keepRead("history", name, version, entries);
+    }
   } else {
     // A failed read is kept as such, and tried again the next time the skill is selected.
     useAppStore.setState((s) => ({
@@ -174,6 +232,17 @@ export const loadFiles = async (
       ? s
       : { files: rest };
   });
+  // The files kept from an earlier launch for this version are this version's.
+  const kept = hashed(version)
+    ? await cachedRead<FilesRead>("files", key, version)
+    : undefined;
+  if (fileVersions.get(key) !== version) {
+    return;
+  }
+  if (kept !== undefined) {
+    useAppStore.setState((s) => ({ files: { ...s.files, [key]: kept } }));
+    return;
+  }
   const [files, diff] = await Promise.all([
     runCommand(["skill", "files", ...request.args], { label: `files ${key}` }),
     request.diff === undefined
@@ -206,6 +275,9 @@ export const loadFiles = async (
     }
   }
   useAppStore.setState((s) => ({ files: { ...s.files, [key]: read } }));
+  if (hashed(version) && read.diffFailed !== true) {
+    void keepRead("files", key, version, read);
+  }
 };
 
 // The version of each skill of a source whose SKILL.md was read, or is being read: card key →
@@ -238,6 +310,20 @@ export const loadSkillMd = async (key: string, request: SkillMdRequest) => {
       ? s
       : { skillMds: rest };
   });
+  // The SKILL.md kept from an earlier launch for this tree is this tree's.
+  const kept =
+    request.tree === ""
+      ? undefined
+      : await cachedRead<SkillFileEvent>("skill-md", key, version);
+  if (skillMdVersions.get(key) !== version) {
+    return;
+  }
+  if (kept !== undefined) {
+    useAppStore.setState((s) => ({
+      skillMds: { ...s.skillMds, [key]: { file: kept, version } },
+    }));
+    return;
+  }
   const subpath = request.subpath === "" ? "." : request.subpath;
   const outcome = await runCommand(
     ["source", "read", request.source, subpath],
@@ -261,6 +347,9 @@ export const loadSkillMd = async (key: string, request: SkillMdRequest) => {
   useAppStore.setState((s) => ({
     skillMds: { ...s.skillMds, [key]: { file, version } },
   }));
+  if (request.tree !== "") {
+    void keepRead("skill-md", key, version, file);
+  }
 };
 
 // The candidate of each update whose changes were read, or are being read: name → candidate.
@@ -286,6 +375,17 @@ export const loadUpdateDiff = async (name: string, candidate: string) => {
       ? s
       : { updateDiffs: rest };
   });
+  // The changes kept from an earlier launch for this candidate are this update's.
+  const kept = await cachedRead<DiffEvent[]>("update-diff", name, candidate);
+  if (updateDiffCandidates.get(name) !== candidate) {
+    return;
+  }
+  if (kept !== undefined) {
+    useAppStore.setState((s) => ({
+      updateDiffs: { ...s.updateDiffs, [name]: { candidate, diffs: kept } },
+    }));
+    return;
+  }
   const outcome = await runCommand(["skill", "diff", name, "--update"], {
     label: updateDiffLabel(name),
     ownFailure: true,
@@ -294,15 +394,11 @@ export const loadUpdateDiff = async (name: string, candidate: string) => {
     return;
   }
   if (outcome.exitCode === 0) {
+    const diffs = outcome.events.filter((e) => e.type === "diff");
     useAppStore.setState((s) => ({
-      updateDiffs: {
-        ...s.updateDiffs,
-        [name]: {
-          candidate,
-          diffs: outcome.events.filter((e) => e.type === "diff"),
-        },
-      },
+      updateDiffs: { ...s.updateDiffs, [name]: { candidate, diffs } },
     }));
+    void keepRead("update-diff", name, candidate, diffs);
     return;
   }
   const error = outcome.events.find((e) => e.type === "error");
