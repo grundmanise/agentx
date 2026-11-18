@@ -569,7 +569,7 @@ test.describe("the detail pane", () => {
       - article "pdf":
         - text: Skill · Enabled
         - heading "pdf" [level=1]
-        - text: acme/skills
+        - link "acme/skills"
         - button "Forked as pdf-letters"
         - paragraph: Read and convert PDF files
         - region "Agents":
@@ -589,6 +589,11 @@ test.describe("the detail pane", () => {
           - term: State
           - definition: current
     `);
+    // The origin opens its source's page, as Source in Details does.
+    await article
+      .getByRole("link", { exact: true, name: "acme/skills" })
+      .click();
+    expect(cli.openedUrls).toEqual(["https://github.com/acme/skills"]);
     // The fork pill opens the fork.
     await article
       .getByRole("button", { name: "Forked as pdf-letters" })
@@ -612,7 +617,7 @@ test.describe("the detail pane", () => {
       - article "pdf-letters":
         - text: Personal skill · Enabled
         - heading "pdf-letters" [level=1]
-        - text: from acme/skills
+        - link "from acme/skills"
         - paragraph: Read PDFs and write letters from them
         - region "Agents":
           - heading "Agents" [level=2]
