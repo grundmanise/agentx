@@ -37,16 +37,13 @@ const buttonVariants = cva(
         // A link inside a line of text that opens something, such as See changes on a row of the
         // Update skills dialog: underlined on hover.
         link: "text-text-secondary hover:text-text-primary font-medium hover:underline",
-        // No fill: a line of text that expands, such as an entry of the History sheet.
+        // No fill: a line of text that expands, such as an entry of the History sheet, or, small, a
+        // toast's action, such as Undo.
         plain: "text-button-ghost-text hover:text-text-primary",
         primary:
           "bg-button-primary-bg text-button-primary-text hover:bg-button-primary-hover font-semibold",
         secondary:
           "bg-button-secondary-bg text-button-secondary-text hover:bg-button-secondary-hover font-medium",
-        // No fill, in a light gray: a toast's action, such as Undo, which must not read as a CTA in
-        // the toast's tint.
-        toast:
-          "text-button-toast-action-text hover:text-text-primary font-medium",
       },
     },
   }

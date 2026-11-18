@@ -58,7 +58,7 @@ export interface ToastAction {
 }
 
 /**
- * A toast's action, such as Undo, Retry or Cancel, as the app's small toast button (DESIGN.md §6
+ * A toast's action, such as Undo, Retry or Cancel, as the app's small plain button (DESIGN.md §6
  * "Buttons") in place of Sonner's: Sonner shows an element given as its action as it is, at the end
  * of the toast's row. A click runs the action and takes the toast away.
  */
@@ -66,7 +66,7 @@ const actionButton = (id: string | number, action: ToastAction | undefined) =>
   action === undefined ? undefined : (
     <span className="ml-auto flex-none">
       <Button
-        variant="toast"
+        variant="plain"
         size="sm"
         onClick={() => {
           toast.dismiss(id);
