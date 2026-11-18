@@ -228,6 +228,32 @@ test("the same plugin in another agent opens from Also installed in", async ({
   ).toBeVisible();
 });
 
+test("an agent's group collapses from its header, and opens for a plugin selected in it", async ({
+  cli,
+  page,
+}) => {
+  await openPlugins(cli, page, moreInventory);
+  const cursor = list(page).getByRole("button", { name: "Cursor 2" });
+  await expect(cursor).toHaveAttribute("aria-expanded", "true");
+  await cursor.click();
+  await expect(cursor).toHaveAttribute("aria-expanded", "false");
+  // The collapsed group keeps its header and count; its rows hide.
+  expect(await rowNames(page)).toEqual([
+    "aaa-off",
+    "acme-tools",
+    "codex-review",
+  ]);
+  // A plugin in the collapsed group, opened from another agent, opens its group.
+  await row(page, "acme-tools").first().click();
+  await detail(page).getByRole("button", { name: "Cursor 1.3.0" }).click();
+  await expect(cursor).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    list(page)
+      .getByRole("region", { name: "Cursor" })
+      .getByRole("button", { name: "acme-tools" })
+  ).toHaveAttribute("aria-current", "true");
+});
+
 test("a machine with no plugin shows the empty state", async ({
   cli,
   page,

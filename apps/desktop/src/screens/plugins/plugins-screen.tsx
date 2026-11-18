@@ -40,6 +40,19 @@ export const PluginsScreen = () => {
   const [filters, setFilters] = useState<PluginFilters>(noPluginFilters);
   const [order, setOrder] = useState<PluginOrder>("asc");
   const [selectedKey, setSelectedKey] = useState<string | undefined>();
+  // The agent configurations whose groups are collapsed; every group is open at first.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
+    () => new Set<string>()
+  );
+  const toggleGroup = (id: string) => {
+    setCollapsed((was) => {
+      const next = new Set(was);
+      if (!next.delete(id)) {
+        next.add(id);
+      }
+      return next;
+    });
+  };
   const groups = useMemo(
     () => groupPlugins(rows, configurations, filters, order),
     [rows, configurations, filters, order]
@@ -64,6 +77,8 @@ export const PluginsScreen = () => {
         onSelect={(row) => {
           setSelectedKey(row.key);
         }}
+        collapsed={collapsed}
+        onToggleGroup={toggleGroup}
       />
       <section
         aria-label="Plugin details"
@@ -80,6 +95,10 @@ export const PluginsScreen = () => {
               // A plugin the filters hide shows once they are cleared.
               if (!shown.includes(row)) {
                 setFilters(noPluginFilters);
+              }
+              // A plugin in a collapsed group opens its group, so the list shows it.
+              if (collapsed.has(row.configuration)) {
+                toggleGroup(row.configuration);
               }
               setSelectedKey(row.key);
             }}

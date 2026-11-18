@@ -1,9 +1,11 @@
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
 import { SortToggle } from "#/components/filter-controls.tsx";
+import { LIST_GUIDE } from "#/components/list-guide.ts";
 import { ListRow } from "#/components/list-row.tsx";
 import { Pill } from "#/components/pill.tsx";
 import { SearchField } from "#/components/search-field.tsx";
+import { SectionToggle } from "#/components/section-toggle.tsx";
 import { plural } from "#/lib/plural.ts";
 import { PluginFilterPopover } from "#/screens/plugins/filter-popover.tsx";
 import { PluginTile } from "#/screens/plugins/plugin-tile.tsx";
@@ -77,18 +79,10 @@ const PluginRowView = ({
   );
 };
 
-/** An agent configuration's header: its logo, its name and how many plugins it holds. */
-const GroupHeader = ({ group }: { group: PluginGroup }) => (
-  <h2 className="pt-group-top px-group pb-group-bottom gap-group min-h-group-header bg-shell-content-bg sticky top-0 z-10 m-0 flex items-center">
-    <AgentLogo client={group.configuration} size={16} decorative />
-    <span className="type-caption text-group-label truncate">
-      {group.configuration.name}
-    </span>
-    <span className="type-technical-sm text-group-count">
-      {group.rows.length}
-    </span>
-  </h2>
-);
+/** A plugin's row, inset under its group's caption, beside the group's guide line. */
+const ROW = `pl-subgroup-indent relative flex ${LIST_GUIDE}`;
+/** A row after the first of its group, `row.spacing` below the row before it. */
+const ROW_AFTER = `pt-rows ${ROW}`;
 
 /**
  * The Plugins list column: the title and count, Search, the Filter button with its agents chip and
@@ -104,6 +98,8 @@ export const PluginList = ({
   onOrder,
   selectedKey,
   onSelect,
+  collapsed,
+  onToggleGroup,
 }: {
   /** Every row, before the filters. */
   rows: PluginRow[];
@@ -117,6 +113,9 @@ export const PluginList = ({
   onOrder: (order: PluginOrder) => void;
   selectedKey: string | undefined;
   onSelect: (row: PluginRow) => void;
+  /** The agent configurations whose groups are collapsed. */
+  collapsed: ReadonlySet<string>;
+  onToggleGroup: (configuration: string) => void;
 }) => (
   <section
     aria-label="Plugins list"
@@ -182,20 +181,39 @@ export const PluginList = ({
               i === 0 ? "flex flex-col" : "pt-group-spacing flex flex-col"
             }
           >
-            <GroupHeader group={group} />
-            <ul className="gap-rows m-0 flex list-none flex-col p-0">
-              {group.rows.map((row) => (
-                <li key={row.key} className="flex">
-                  <PluginRowView
-                    row={row}
-                    selected={row.key === selectedKey}
-                    onSelect={() => {
-                      onSelect(row);
-                    }}
+            <h2 className="bg-shell-content-bg sticky top-0 z-10 m-0">
+              <SectionToggle
+                level="group"
+                label={group.configuration.name}
+                icon={
+                  <AgentLogo
+                    client={group.configuration}
+                    size={16}
+                    decorative
                   />
-                </li>
-              ))}
-            </ul>
+                }
+                count={group.rows.length}
+                open={!collapsed.has(group.configuration.id)}
+                onToggle={() => {
+                  onToggleGroup(group.configuration.id);
+                }}
+              />
+            </h2>
+            {!collapsed.has(group.configuration.id) && (
+              <ul className="m-0 flex list-none flex-col p-0">
+                {group.rows.map((row, at) => (
+                  <li key={row.key} className={at === 0 ? ROW : ROW_AFTER}>
+                    <PluginRowView
+                      row={row}
+                      selected={row.key === selectedKey}
+                      onSelect={() => {
+                        onSelect(row);
+                      }}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         ))
       )}
