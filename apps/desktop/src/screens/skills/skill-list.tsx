@@ -14,6 +14,7 @@ import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
+import { LIST_GUIDE, LIST_GUIDE_NESTED } from "#/components/list-guide.ts";
 import { SearchField } from "#/components/search-field.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
 import { Spinner } from "#/components/spinner.tsx";
@@ -354,7 +355,7 @@ const OVERSCAN = 8;
 
 /** A drawn space above a group or plugin: the list sets its offset from the top. */
 const PLACED_GAP_GROUP = "pt-group-spacing absolute top-0 left-0 w-full";
-const PLACED_GAP_SUBGROUP = "pt-subgroup-top absolute top-0 left-0 w-full";
+const PLACED_GAP_SUBGROUP = `pt-subgroup-top absolute top-0 left-0 w-full ${LIST_GUIDE}`;
 /**
  * A group's rail: the list sets its offset from the top. It keeps no height; its span covers the
  * group, lets the pointer through to the rows under it, and holds the group's header, which pins
@@ -368,17 +369,17 @@ const RAIL_SUBGROUP = "absolute top-0 left-0 z-5 h-0 w-full";
 const RAIL_SPAN = "pointer-events-none absolute top-0 left-0 w-full";
 /** A header in its rail: the list's background behind it, and the pointer on it. */
 const PINNED_GROUP = "bg-shell-content-bg pointer-events-auto sticky top-0";
-const PINNED_SUBGROUP =
-  "bg-shell-content-bg top-group-header pointer-events-auto sticky flex";
-const PLACED_ROW = "absolute top-0 left-0 flex w-full";
+/** A plugin's header, inset under its group's caption, beside its group's guide line. */
+const PINNED_SUBGROUP = `bg-shell-content-bg top-group-header pl-subgroup-indent pointer-events-auto sticky flex ${LIST_GUIDE}`;
+/** A row of a group, inset so its glyph sits under the group's caption. */
+const PLACED_ROW = `pl-subgroup-indent absolute top-0 left-0 flex w-full ${LIST_GUIDE}`;
 /** A row after the first of its group, `row.spacing` below the row before it. */
-const PLACED_ROW_AFTER = "pt-rows absolute top-0 left-0 flex w-full";
-/** A row of a plugin's subgroup, indented so its glyph sits under the plugin's name. */
-const PLACED_SUBROW = "pl-subgroup-indent absolute top-0 left-0 flex w-full";
-const PLACED_SUBROW_AFTER =
-  "pt-rows pl-subgroup-indent absolute top-0 left-0 flex w-full";
+const PLACED_ROW_AFTER = `pt-rows pl-subgroup-indent absolute top-0 left-0 flex w-full ${LIST_GUIDE}`;
+/** A row of a plugin's subgroup, inset so its glyph sits under the plugin's name. */
+const PLACED_SUBROW = `pl-subgroup-nested absolute top-0 left-0 flex w-full ${LIST_GUIDE_NESTED}`;
+const PLACED_SUBROW_AFTER = `pt-rows pl-subgroup-nested absolute top-0 left-0 flex w-full ${LIST_GUIDE_NESTED}`;
 
-/** Where a row is placed: after the first of its block, `row.spacing` lower; in a subgroup, indented. */
+/** Where a row is placed: after the first of its block, `row.spacing` lower; in a subgroup, further in. */
 const placedRow = (item: { at: number; subgroup?: Subgroup }) => {
   if (item.subgroup === undefined) {
     return item.at === 0 ? PLACED_ROW : PLACED_ROW_AFTER;
