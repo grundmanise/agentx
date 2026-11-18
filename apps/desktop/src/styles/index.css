@@ -7,6 +7,8 @@
 @import "@fontsource/instrument-serif/400.css";
 @import "@fontsource/instrument-serif/400-italic.css";
 @import "./tokens.css";
+/* After tokens.css, so its reset leaves the plugin's theme in place: shadcn's animation classes. */
+@import "tw-animate-css";
 
 @layer base {
   html,
