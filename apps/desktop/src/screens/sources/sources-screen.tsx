@@ -490,8 +490,8 @@ export const SourcesScreen = () => {
           />
         </div>
         <SourceRow pills={pills} active={activeKey} now={now} onOpen={open} />
-        {/* The card of the open source; a search looks across every source, so it hides. */}
-        {activePill !== undefined && query.trim() === "" && (
+        {/* The card of the open source; it stays while a search looks across every source. */}
+        {activePill !== undefined && (
           <OpenSource
             // A new source gets a new card, so a Remove dialog open on the old one closes.
             key={activePill.key}

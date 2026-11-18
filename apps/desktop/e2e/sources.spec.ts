@@ -187,9 +187,11 @@ test("the open source's card: its name, its full URL linking to the repository, 
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
 
-  // A search answers across every source: the card hides.
+  // A search answers across every source: the card stays.
   await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
-  await expect(details(page)).toHaveCount(0);
+  await expect(
+    details(page).getByRole("heading", { name: "me/account" })
+  ).toBeVisible();
 });
 
 test("a source listing: selectable skills first, then each state with its label and, once open, its reason", async ({
