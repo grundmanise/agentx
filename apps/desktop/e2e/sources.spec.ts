@@ -764,7 +764,8 @@ test("while the install runs, Add keeps its size and turns into Stop, and the ri
   await check(page, "docx").click();
   const addButton = bar(page).getByRole("button", { name: "Add 2" });
   const before = await addButton.boundingBox();
-  await addButton.click();
+  // A double-click starts the install; its second click does not stop it.
+  await addButton.dblclick();
   await add.started;
   const stop = bar(page).getByRole("button", { name: "Stop adding" });
   await expect(stop).toHaveAttribute("aria-busy", "true");

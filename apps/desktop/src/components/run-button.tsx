@@ -34,7 +34,10 @@ export const RunButton = ({
       aria-label={running ? stopLabel : undefined}
       onClick={(event) => {
         if (running) {
-          onStop();
+          // The second click of a double-click on Add lands on the spinner, not on Stop.
+          if (!(clicked && event.detail > 1)) {
+            onStop();
+          }
           return;
         }
         // A key's click has no pointer on the button.
