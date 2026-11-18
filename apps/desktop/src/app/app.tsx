@@ -11,7 +11,7 @@ import { Sidebar } from "#/app/sidebar.tsx";
 import { StaleBar } from "#/app/stale-bar.tsx";
 import { StartupLayer } from "#/app/startup-layer.tsx";
 import { TopBar } from "#/app/top-bar.tsx";
-import { Toaster } from "#/components/toast.tsx";
+import { Toaster } from "#/components/ui/sonner.tsx";
 import { setNavigate } from "#/lib/navigate.ts";
 import { cn } from "#/lib/utils.ts";
 import { AgentsScreen } from "#/screens/agents/agents-screen.tsx";

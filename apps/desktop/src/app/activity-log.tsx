@@ -4,7 +4,7 @@
 import { cva } from "class-variance-authority";
 import { useId, useLayoutEffect, useRef } from "react";
 
-import { notify } from "#/components/toast.tsx";
+import { notify, notifyFailure } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Sheet,
@@ -71,7 +71,7 @@ const copy = async (text: string) => {
     await navigator.clipboard.writeText(text);
     notify("Copied");
   } catch {
-    notify("Couldn't copy to the clipboard");
+    notifyFailure("Couldn't copy to the clipboard");
   }
 };
 
@@ -79,7 +79,7 @@ const copy = async (text: string) => {
 const showServeLog = async () => {
   const path = await serveLogPath();
   if (path === undefined) {
-    notify("Couldn't find the serve log");
+    notifyFailure("Couldn't find the serve log");
     return;
   }
   await revealInFinder(path);

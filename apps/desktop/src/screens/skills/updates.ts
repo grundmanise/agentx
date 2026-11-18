@@ -103,7 +103,9 @@ export const updateSkill = async (row: SkillRow) => {
     conflictsIn(outcome.events) > 0
   ) {
     notify(
-      `${row.name} skill has conflicts. Resolve them to finish the update`
+      `${row.name} skill has conflicts. Resolve them to finish the update`,
+      undefined,
+      { kind: "warning" }
     );
   }
 };
@@ -217,7 +219,7 @@ export const checkUpdates = async () => {
       void cancelCommand(CHECK_UPDATES);
     },
   };
-  notify(checkingText(), cancel, { lasting: true });
+  notify(checkingText(), cancel, { kind: "progress", lasting: true });
   const { exitCode } = await runCommand(["skill", "check-updates"], {
     failure: unreachableFailure,
     label: CHECK_UPDATES,
@@ -225,6 +227,7 @@ export const checkUpdates = async () => {
       if (event.phase === "fetch") {
         notify(checkingText(event.current, event.total), cancel, {
           inPlace: true,
+          kind: "progress",
           lasting: true,
         });
       }

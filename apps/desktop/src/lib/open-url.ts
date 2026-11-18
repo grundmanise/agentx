@@ -4,13 +4,13 @@
 // CLI records every call.
 import { openUrl } from "@tauri-apps/plugin-opener";
 
-import { notify } from "#/components/toast.tsx";
+import { notifyFailure } from "#/components/toast.tsx";
 
 /** Opens `url`, an https URL, in the default browser. */
 export const openInBrowser = async (url: string) => {
   try {
     await openUrl(url);
   } catch {
-    notify(`Couldn't open ${url}`);
+    notifyFailure(`Couldn't open ${url}`);
   }
 };

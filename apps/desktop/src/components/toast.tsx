@@ -1,30 +1,11 @@
 import type { ReactNode } from "react";
-import { toast, Toaster as Sonner } from "sonner";
+import { toast } from "sonner";
 import type { ExternalToast } from "sonner";
 
 import { problemSentence } from "#/lib/problem-text.ts";
-import { cn } from "#/lib/utils.ts";
 
 // The toast last shown, which the next one replaces.
 let shown: string | number | undefined;
-
-// Wrapped in cn() so the design-system lint reads these strings as classes.
-const classNames = {
-  actionButton: cn(
-    "rounded-button type-toast-action text-button-toast-action-text bg-button-ghost-bg hover:bg-button-ghost-hover h-7.5 px-3.5"
-  ),
-  detail: cn(
-    "rounded-toast-detail border-overlay-border bg-overlay-bg shadow-popover w-toast-detail py-toast-detail pl-toast flex border pr-1.5"
-  ),
-  detailContent: cn("min-w-0 flex-1"),
-  title: cn("pr-3"),
-  // As wide as its text, up to `toast.max-width`, then the text wraps; centred on the window,
-  // which Sonner's narrower toaster box does not do for a wider toast. The action keeps its
-  // width beside the text, centred on the pill like a one-line toast's.
-  toast: cn(
-    "rounded-toast border-overlay-border bg-overlay-bg type-toast text-toast-text shadow-popover min-h-toast max-w-toast py-toast-y pl-toast left-1/2 flex w-max -translate-x-1/2 items-center gap-3 border pr-1.5 [&_[data-button]]:flex-none"
-  ),
-};
 
 /** Shows a toast in place of the one showing. */
 const replace = (show: () => string | number) => {
@@ -69,33 +50,63 @@ export interface ToastAction {
 }
 
 /**
+ * What a toast reports (DESIGN.md §6 "Toast"), which sets its icon and its tint: a command that
+ * succeeded, one that failed, one that succeeded with warnings, one that runs, or a plain report
+ * with no outcome, such as Copied.
+ */
+export type ToastKind = "success" | "error" | "warning" | "progress" | "plain";
+
+const show = {
+  error: toast.error,
+  plain: toast,
+  progress: toast.loading,
+  success: toast.success,
+  warning: toast.warning,
+} satisfies Record<
+  ToastKind,
+  (message: ReactNode, data?: ExternalToast) => string | number
+>;
+
+/**
  * One toast at a time (DESIGN.md §6 "Toast"). A toast with an action stays 5s, one without 2.6s,
  * and a `lasting` one, for a command that runs with its Cancel, until the next toast replaces it.
  * A new toast replaces the one showing; with `inPlace`, it changes the text of the one showing
- * instead, as a running command's toast does when its progress moves.
+ * instead, as a running command's toast does when its progress moves. A `progress` toast shows its
+ * action as Sonner's cancel button, beside the spinner.
  */
 export const notify = (
   message: ReactNode,
   action?: ToastAction,
   {
+    kind = "plain",
     lasting = false,
     inPlace = false,
-  }: { lasting?: boolean; inPlace?: boolean } = {}
+  }: { kind?: ToastKind; lasting?: boolean; inPlace?: boolean } = {}
 ) => {
+  const button = action && { label: action.label, onClick: action.onClick };
   const options: ExternalToast = {
-    action: action && { label: action.label, onClick: action.onClick },
-    classNames: { title: classNames.title, toast: classNames.toast },
+    action: kind === "progress" ? undefined : button,
+    cancel: kind === "progress" ? button : undefined,
     duration: durationOf(action !== undefined, lasting),
   };
   if (inPlace && shown !== undefined) {
-    return toast(message, { ...options, id: shown });
+    return show[kind](message, { ...options, id: shown });
   }
-  return replace(() => toast(message, options));
+  return replace(() => show[kind](message, options));
 };
 
+/** Reports that a command succeeded: `notify` with the success icon and tint. */
+export const notifySuccess = (message: ReactNode, action?: ToastAction) =>
+  notify(message, action, { kind: "success" });
+
+/** Reports that something the app tried failed, in its own words: `notify` with the error icon and tint. */
+export const notifyFailure = (message: ReactNode, action?: ToastAction) =>
+  notify(message, action, { kind: "error" });
+
 interface DetailToast {
+  kind: "error" | "warning";
   message: string;
-  /** More lines about what happened, under the message, in `type.notice` `text.muted`. */
+  /** More lines about what happened, under the message, in `toast.description`. */
   details?: string[];
   /** Under the message and the details, in `tone.attention.fg`. */
   warnings?: string[];
@@ -104,70 +115,39 @@ interface DetailToast {
 }
 
 /**
- * The wide toast with lines under its message (DESIGN.md §6 "Attention toast" and "Error
- * toast"), its action when it has one, then a ghost Dismiss.
+ * A toast with lines under its message (DESIGN.md §6 "Attention toast" and "Error toast"): Sonner's
+ * description holds them, then its action when it has one, and its close button, named Dismiss.
  */
 const notifyDetail = ({
+  kind,
   message,
   details = [],
   warnings = [],
   action,
   duration,
-}: DetailToast) =>
-  replace(() => {
-    const options: ExternalToast = {
-      classNames: {
-        content: classNames.detailContent,
-        toast: classNames.detail,
-      },
-      duration,
-    };
-    return toast.custom(
-      (id) => (
-        // Sonner puts this in its title element, a block: the row is this element's own.
-        <div className="flex items-start gap-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-1 wrap-break-word">
-            <p className="type-toast text-toast-text m-0">{message}</p>
-            {details.map((detail) => (
-              <p key={detail} className="type-notice text-text-muted m-0">
-                {detail}
-              </p>
-            ))}
-            {warnings.map((warning) => (
-              <p
-                key={warning}
-                className="type-notice text-tone-attention-fg m-0"
-              >
-                {warning}
-              </p>
-            ))}
-          </div>
-          {action !== undefined && (
-            <button
-              type="button"
-              className={classNames.actionButton}
-              onClick={() => {
-                toast.dismiss(id);
-                action.onClick();
-              }}
-            >
-              {action.label}
-            </button>
-          )}
-          <button
-            type="button"
-            className={classNames.actionButton}
-            onClick={() => {
-              toast.dismiss(id);
-            }}
-          >
-            Dismiss
-          </button>
-        </div>
-      ),
-      options
+}: DetailToast) => {
+  const lines =
+    details.length + warnings.length === 0 ? undefined : (
+      <span className="flex flex-col gap-1 wrap-break-word">
+        {details.map((detail) => (
+          <span key={detail}>{detail}</span>
+        ))}
+        {warnings.map((warning) => (
+          <span key={warning} className="text-tone-attention-fg">
+            {warning}
+          </span>
+        ))}
+      </span>
     );
-  });
+  return replace(() =>
+    show[kind](message, {
+      action: action && { label: action.label, onClick: action.onClick },
+      closeButton: true,
+      description: lines,
+      duration,
+    })
+  );
+};
 
 export interface AttentionToast {
   message: string;
@@ -185,17 +165,17 @@ export const notifyAttention = ({
   warnings,
   action,
 }: AttentionToast) =>
-  notifyDetail({ action, duration: 5000, message, warnings });
+  notifyDetail({ action, duration: 5000, kind: "warning", message, warnings });
 
 export interface ErrorToast {
   message: string;
   /** The CLI's fix, after the message: the toast then stays until dismissed. */
   hint?: string;
-  /** More lines about what happened, under the message, in `type.notice` `text.muted`. */
+  /** More lines about what happened, under the message, in `toast.description`. */
   details?: string[];
   /** The command's warnings, under the error. */
   warnings?: string[];
-  /** A way out, such as Add source, before Dismiss. */
+  /** A way out, such as Add source, beside the message. */
   action?: ToastAction;
   /** Names that keep their case when one starts the message or the hint, such as the skills the app holds. */
   keep?: readonly string[];
@@ -218,22 +198,10 @@ export const notifyError = ({
     action,
     details,
     duration: hint === undefined ? 5000 : Number.POSITIVE_INFINITY,
+    kind: "error",
     message: problemSentence(
       hint === undefined ? { message } : { hint, message },
       { keep }
     ),
     warnings,
   });
-
-export const Toaster = () => (
-  <Sonner
-    position="bottom-center"
-    // toast.offset
-    offset={24}
-    visibleToasts={1}
-    toastOptions={{
-      classNames: { actionButton: classNames.actionButton },
-      unstyled: true,
-    }}
-  />
-);

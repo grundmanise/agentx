@@ -4,7 +4,7 @@
 // name with what this module exports, never with a platform check of their own.
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
-import { notify } from "#/components/toast.tsx";
+import { notifyFailure } from "#/components/toast.tsx";
 import { isMac } from "#/lib/platform.ts";
 
 /** The file manager's name: "Finder" on macOS, "file manager" on Linux. */
@@ -24,6 +24,6 @@ export const revealInFinder = async (absolutePath: string) => {
   try {
     await revealItemInDir(absolutePath);
   } catch {
-    notify(`"${absolutePath}" doesn't exist`);
+    notifyFailure(`"${absolutePath}" doesn't exist`);
   }
 };

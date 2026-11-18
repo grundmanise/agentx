@@ -8,7 +8,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 
-import { notify } from "#/components/toast.tsx";
+import { notifyFailure } from "#/components/toast.tsx";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 
 /** The editor a skill opens in, as the app's preferences keep it. */
@@ -47,7 +47,7 @@ export const saveEditor = async (editor: EditorChoice): Promise<boolean> => {
     await invoke("preferences_write", { preferences: { editor } });
     return true;
   } catch {
-    notify("Couldn't save the editor");
+    notifyFailure("Couldn't save the editor");
     return false;
   }
 };
@@ -96,11 +96,14 @@ export const openInEditor = async (absolutePath: string) => {
       ? openPath(absolutePath)
       : invoke("editor_open", { path: absolutePath }));
   } catch {
-    notify(`Couldn't open ${fileName(absolutePath)} in ${editorName(editor)}`, {
-      label: showInLabel(),
-      onClick: () => {
-        void revealInFinder(absolutePath);
-      },
-    });
+    notifyFailure(
+      `Couldn't open ${fileName(absolutePath)} in ${editorName(editor)}`,
+      {
+        label: showInLabel(),
+        onClick: () => {
+          void revealInFinder(absolutePath);
+        },
+      }
+    );
   }
 };

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router";
 import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { CheckRow } from "#/components/check-row.tsx";
 import { Spinner } from "#/components/spinner.tsx";
-import { notify } from "#/components/toast.tsx";
+import { notify, notifyFailure } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { readChecks, report } from "#/startup/checks.ts";
 import { closeChecks, retry, useStartup } from "#/startup/startup.ts";
@@ -14,7 +14,7 @@ const copy = async (text: string, toast: string) => {
     await navigator.clipboard.writeText(text);
     notify(toast);
   } catch {
-    notify("Couldn't copy to the clipboard");
+    notifyFailure("Couldn't copy to the clipboard");
   }
 };
 

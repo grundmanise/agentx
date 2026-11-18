@@ -8,7 +8,7 @@ import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { PublishEvent } from "#/cli/events.gen.ts";
-import { notify } from "#/components/toast.tsx";
+import { notify, notifySuccess } from "#/components/toast.tsx";
 import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
@@ -148,12 +148,16 @@ export const refusedForAccountRemote = (
 
 /** "Set an account remote to publish", with Open Settings. */
 export const notifyNoAccountRemote = () => {
-  notify("Set an account remote to publish", {
-    label: "Open Settings",
-    onClick: () => {
-      navigateTo("/settings");
+  notify(
+    "Set an account remote to publish",
+    {
+      label: "Open Settings",
+      onClick: () => {
+        navigateTo("/settings");
+      },
     },
-  });
+    { kind: "warning" }
+  );
 };
 
 /** One of your own skills to publish: edited since it was published, or never published. */
@@ -227,7 +231,7 @@ const reportPublishAll = (outcome: Outcome) => {
   }
   if (moved !== undefined) {
     const text = changedElsewhere(moved.name);
-    notify(text, updateAction(moved.name));
+    notify(text, updateAction(moved.name), { kind: "warning" });
     // A refused publish is in the activity list already, in the CLI's words.
     if (ok) {
       addActivity("attention", text);
@@ -239,7 +243,12 @@ const reportPublishAll = (outcome: Outcome) => {
     pushed === 0
       ? nonePublished(results.length)
       : `Published ${plural(pushed, "skill", "skills")}`;
-  notify(text);
+  // Nothing pushed is no success: a plain report says so.
+  if (pushed === 0) {
+    notify(text);
+  } else {
+    notifySuccess(text);
+  }
   addActivity(pushed === 0 ? "attention" : "success", text);
 };
 

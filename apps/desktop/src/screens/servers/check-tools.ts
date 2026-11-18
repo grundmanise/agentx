@@ -36,7 +36,7 @@ export const checkTools = async () => {
         void cancelCommand(CHECK_TOOLS);
       },
     },
-    { lasting: true }
+    { kind: "progress", lasting: true }
   );
   const outcome = await runCommand(["scan", "--handshake"], {
     deadlineMs: CHECK_DEADLINE_MS,
