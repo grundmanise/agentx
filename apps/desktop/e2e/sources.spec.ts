@@ -844,6 +844,38 @@ test("Refresh fetches the source, then reads the listing of the new fetch", asyn
     ]);
 });
 
+test("Refresh all fetches every source in one run, pending until it ends", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  const fetch = cli.register(["source", "fetch", "--all"], {
+    events: [{ id: ACME_ID, type: "source", url: ACME }],
+    holdAfter: 0,
+  });
+  const now = new Date().toISOString();
+  cli.register(["source", "list"], {
+    events: sources.map((s) =>
+      s.id === ACME_ID ? { ...s, last_fetched: now } : s
+    ),
+  });
+  const refreshAll = page.getByRole("button", { name: "Refresh all" });
+  await refreshAll.click();
+  await fetch.started;
+  await expect(refreshAll).toHaveAttribute("aria-busy", "true");
+  await expect(refreshAll).toBeDisabled();
+  fetch.release();
+  await expect(refreshAll).toBeEnabled();
+  await expect(fact(page, "Fetched")).toHaveText("just now");
+  await expect
+    .poll(() => commandLines(cli))
+    .toEqual([
+      `source skills ${ACME_ID}`,
+      "source fetch --all",
+      `source skills ${ACME_ID}`,
+    ]);
+});
+
 test("Remove with its installed skills removes each skill, then the source", async ({
   cli,
   page,
