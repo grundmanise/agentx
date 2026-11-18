@@ -7,6 +7,7 @@ import {
   inventory,
   LIBRARY,
   manyAgentsInventory,
+  manyConfigurations,
   sources,
 } from "./fixtures/agents.ts";
 import {
@@ -418,6 +419,36 @@ test.describe("many agents", () => {
     const again = await chipsInView(article);
     expect(again.rows).toBe(2);
     expect(again.names.at(-1)).toBe("Zenflow");
+  });
+
+  test("the Remove dialog stays in the window: only its list of agents scrolls", async ({
+    cli,
+    page,
+  }) => {
+    await page.setViewportSize({ height: 600, width: 1440 });
+    await openSkill(
+      cli,
+      page,
+      "pdf",
+      "pdf",
+      manyAgentsInventory(manyConfigurations.map((c) => c.id))
+    );
+    await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
+    const dialog = page.getByRole("dialog", { name: "Remove pdf?" });
+    const list = dialog.getByRole("list", { name: "Agents that see it" });
+    await expect(list.getByRole("listitem")).toHaveCount(28);
+    const box = await dialog.boundingBox();
+    expect(box?.y).toBeGreaterThanOrEqual(0);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(600);
+    await expect(
+      dialog.getByRole("heading", { name: "Remove pdf?" })
+    ).toBeInViewport();
+    await expect(
+      dialog.getByRole("button", { name: "Remove" })
+    ).toBeInViewport();
+    expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(
+      true
+    );
   });
 });
 

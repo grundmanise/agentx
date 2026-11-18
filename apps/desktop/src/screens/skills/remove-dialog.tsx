@@ -104,9 +104,11 @@ export const RemoveDialog = ({
               : "It will be deleted from every agent on this machine:"}
           </DialogDescription>
         </DialogHeader>
+        {/* The one block that scrolls: past the dialog's height, the header, the consequence and
+            the buttons stay, and the agents scroll between them. */}
         <ul
           aria-label="Agents that see it"
-          className="type-body text-text-secondary m-0 flex list-none flex-col gap-2 p-0"
+          className="type-body text-text-secondary m-0 flex min-h-0 list-none flex-col gap-2 overflow-y-auto p-0"
         >
           {agents.map((c) => (
             <li key={c.id} className="flex items-center gap-2.5">
