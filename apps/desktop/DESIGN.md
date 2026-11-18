@@ -905,6 +905,7 @@ A callout (§6 "Callout").
 
 - The detail pane shows one banner, the first that applies in the ordered table in `src/screens/skills/banners.ts`. The header shows no status pills: the banner is the status.
 - A banner that says where the skill came from sets `coversOrigin`, and the header then leaves out the origin text beside the name. Today only the banner of a skill another tool added does.
+- The origin text beside the name of a source's skill, or of a fork of one, is a link when its source has an https page, the page Source or Forked from in Details opens: `text.caption`, `text.secondary` and underlined on hover, the URL as its tooltip.
 
 | Banner, by what it reports | Tone |
 | --- | --- |
