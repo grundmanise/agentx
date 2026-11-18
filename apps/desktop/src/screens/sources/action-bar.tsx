@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { ProgressRim } from "#/components/progress-rim/progress-rim.tsx";
@@ -49,14 +49,23 @@ export const ActionBar = ({
   onAdd,
   onCancel,
   leaving = false,
+  onLeft,
 }: ActionBarProps & {
   /** The bar slides down and out, showing what it last showed. */
   leaving?: boolean;
+  /** The bar has slid out. */
+  onLeft?: () => void;
 }) => (
   <div
     role="toolbar"
     aria-label="Selected skills"
     data-leaving={leaving ? "" : undefined}
+    onAnimationEnd={(event) => {
+      // Its own slide, not one of its children's animations.
+      if (leaving && event.target === event.currentTarget) {
+        onLeft?.();
+      }
+    }}
     className="bottom-floating-bar animate-floating-bar data-leaving:animate-floating-bar-out rounded-floating-bar border-overlay-border bg-overlay-bg shadow-popover h-floating-bar absolute left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 border pr-2 pl-4 data-leaving:pointer-events-none"
   >
     <ProgressRim run={rim} onSettled={onRimSettled} />
@@ -86,12 +95,9 @@ const sameProps = (a: ActionBarProps, b: ActionBarProps) =>
     Object.is(Reflect.get(a, key), value)
   );
 
-/** How long the bar takes to slide out (`--animate-floating-bar-out`), in ms. */
-const LEAVE_MS = 220;
-
 /**
- * The floating action bar while `shown`, sliding up from below the window's edge, and for a
- * moment after, sliding back down (DESIGN.md §4 "Overlays"). While it leaves it shows what it last
+ * The floating action bar while `shown`, sliding up from below the window's edge, and through
+ * its slide back down (DESIGN.md §4 "Overlays"). While it leaves it shows what it last
  * showed, so its count does not drop to 0 on the way out.
  */
 export const FloatingActionBar = ({
@@ -108,19 +114,19 @@ export const FloatingActionBar = ({
   if (shown && !mounted) {
     setMounted(true);
   }
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    if (!shown && mounted) {
-      timer = setTimeout(() => {
-        setMounted(false);
-      }, LEAVE_MS);
-    }
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [shown, mounted]);
   if (!mounted) {
     return null;
   }
-  return shown ? <ActionBar {...props} /> : <ActionBar {...last} leaving />;
+  // It goes once its slide out ends.
+  return shown ? (
+    <ActionBar {...props} />
+  ) : (
+    <ActionBar
+      {...last}
+      leaving
+      onLeft={() => {
+        setMounted(false);
+      }}
+    />
+  );
 };
