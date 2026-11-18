@@ -665,6 +665,8 @@
   --width-dialog: 480px;
   --padding-dialog: 32px;
   --gap-dialog: 22px;
+  /* The window's height less dialog.window-inset, 32, above and below. */
+  --max-height-dialog: calc(100vh - 64px);
   --gap-popover: 16px;
   --width-popover: 360px;
   --min-width-menu: 240px;
