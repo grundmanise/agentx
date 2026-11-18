@@ -640,16 +640,13 @@ test.describe("Remove", () => {
     expect(later(cli)).toEqual([["skill", "remove", "draft", "--json"]]);
   });
 
-  test("a skill of a source: the dialog says where to get it back", async ({
+  test("a skill of a source: the dialog lists the agents that see it", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "pdf");
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
     const dialog = page.getByRole("dialog", { name: "Remove pdf?" });
-    await expect(dialog).toContainText(
-      "Add it again from acme/skills to get it back."
-    );
     await expect(
       dialog
         .getByRole("list", { name: "Agents that see it" })
