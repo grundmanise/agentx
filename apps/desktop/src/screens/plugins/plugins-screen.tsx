@@ -67,7 +67,7 @@ export const PluginsScreen = () => {
       />
       <section
         aria-label="Plugin details"
-        className="bg-shell-content-bg min-w-0 flex-1 overflow-auto"
+        className="bg-shell-content-bg flex min-w-0 flex-1 flex-col overflow-hidden"
       >
         {selected !== undefined && configuration !== undefined && (
           <PluginDetail

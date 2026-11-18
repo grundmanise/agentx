@@ -7,8 +7,23 @@ import type { VariantProps } from "class-variance-authority";
 
 import type { OwnProps } from "#/lib/utils.ts";
 
-const Table = ({ ...props }: OwnProps<"table">) => (
-  <div data-slot="table-container" className="relative w-full overflow-x-auto">
+// With `scroll`, the table takes the rest of a column's height and scrolls on its own, its column
+// captions pinned to the top (`TableHead` `sticky`).
+const tableContainerVariants = cva("relative w-full", {
+  defaultVariants: { scroll: false },
+  variants: {
+    scroll: { false: "overflow-x-auto", true: "min-h-0 flex-1 overflow-auto" },
+  },
+});
+
+const Table = ({
+  scroll,
+  ...props
+}: OwnProps<"table"> & VariantProps<typeof tableContainerVariants>) => (
+  <div
+    data-slot="table-container"
+    className={tableContainerVariants({ scroll })}
+  >
     <table
       data-slot="table"
       className="type-secondary w-full border-collapse"
@@ -49,19 +64,27 @@ const alignVariants = {
   start: "text-left",
 };
 
-// A column caption in `table.header-text`.
+// A column caption in `table.header-text`; `sticky` pins it to the top of a scrolling table, on
+// the content background so rows pass under it.
 const tableHeadVariants = cva(
   "text-table-header-text px-2 pb-1.5 align-bottom font-normal wrap-break-word",
-  { defaultVariants: { align: "start" }, variants: { align: alignVariants } }
+  {
+    defaultVariants: { align: "start", sticky: false },
+    variants: {
+      align: alignVariants,
+      sticky: { false: "", true: "bg-shell-content-bg sticky top-0 z-10" },
+    },
+  }
 );
 
 const TableHead = ({
   align,
+  sticky,
   ...props
 }: OwnProps<"th"> & VariantProps<typeof tableHeadVariants>) => (
   <th
     data-slot="table-head"
-    className={tableHeadVariants({ align })}
+    className={tableHeadVariants({ align, sticky })}
     {...props}
   />
 );

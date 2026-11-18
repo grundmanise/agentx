@@ -130,6 +130,41 @@ test("the list groups the plugins by agent, and the first one opens with its det
   await expect(pane.getByRole("tablist")).toHaveCount(0);
 });
 
+test("only the table scrolls, under its pinned column captions", async ({
+  cli,
+  page,
+}) => {
+  // A short window, so the two hooks of acme-tools overflow the table.
+  await page.setViewportSize({ height: 460, width: 1100 });
+  await openPlugins(cli, page);
+  await detail(page)
+    .getByRole("tab", { name: /^Hooks/u })
+    .click();
+  const table = detail(page).getByRole("table", { name: "Hooks" });
+  const scroller = table.locator("xpath=..");
+  const scrolls = await scroller.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+    return el.scrollTop > 0;
+  });
+  expect(scrolls).toBe(true);
+  // The pane itself does not scroll: the title and the tabs stay in view.
+  expect(
+    await detail(page).evaluate((el) => el.scrollHeight <= el.clientHeight)
+  ).toBe(true);
+  await expect(
+    detail(page).getByRole("heading", { level: 1, name: "acme-tools" })
+  ).toBeInViewport();
+  await expect(detail(page).getByRole("tablist")).toBeInViewport();
+  // The column captions stay at the top of the table as it scrolls.
+  const [captionTop, scrollerTop] = await Promise.all([
+    table
+      .getByRole("columnheader", { name: "Hook" })
+      .evaluate((el) => el.getBoundingClientRect().top),
+    scroller.evaluate((el) => el.getBoundingClientRect().top),
+  ]);
+  expect(captionTop).toBe(scrollerTop);
+});
+
 test("Search, the agent filter and the sort toggle", async ({ cli, page }) => {
   await openPlugins(cli, page, moreInventory);
   // A to Z by name at first: the plugin turned off sorts with the rest.

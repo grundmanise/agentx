@@ -66,11 +66,11 @@ const ItemTable = ({
   items: PluginItem[];
   onOpen?: (item: PluginItem) => void;
 }) => (
-  <Table aria-label={label}>
+  <Table aria-label={label} scroll>
     <TableHeader>
       <TableRow tone="header">
-        <TableHead>{columns[0]}</TableHead>
-        <TableHead>{columns[1]}</TableHead>
+        <TableHead sticky>{columns[0]}</TableHead>
+        <TableHead sticky>{columns[1]}</TableHead>
       </TableRow>
     </TableHeader>
     <TableBody>
@@ -108,7 +108,8 @@ const ItemTable = ({
  * The open plugin (DESIGN.md §6 "Plugins screen"): its tile, name, version and Disabled pills;
  * under them one wrapped row of details, the agent with its logo, the marketplace, the path, which
  * shows it in Finder, and the other agents that hold the same plugin; then a tab for each of its
- * skills, MCP servers and hooks that it has, each a table.
+ * skills, MCP servers and hooks that it has, each a table. Only the table scrolls: the title,
+ * details and tabs stay put, and the table's column captions pin to its top.
  */
 export const PluginDetail = ({
   row,
@@ -136,9 +137,9 @@ export const PluginDetail = ({
   return (
     <article
       aria-label={row.name}
-      className="pt-detail-top px-detail pb-detail-bottom max-w-detail gap-detail-section flex flex-col"
+      className="pt-detail-top px-detail pb-detail-bottom max-w-detail gap-detail-section flex h-full min-h-0 flex-col"
     >
-      <header className="gap-detail-section flex flex-col">
+      <header className="gap-detail-section flex flex-none flex-col">
         <div className="flex flex-wrap items-center gap-3">
           <PluginTile name={row.name} icon={row.icon} size="detail" />
           <h1 className="type-plugin-name text-text-primary m-0 break-all select-text">
@@ -208,6 +209,7 @@ export const PluginDetail = ({
       </header>
       {tabs.length > 0 && (
         <Tabs
+          fill
           value={tabs.some((t) => t.value === tab) ? tab : tabs[0]?.value}
           onValueChange={(value) => {
             setTab(value);
@@ -223,7 +225,7 @@ export const PluginDetail = ({
               </TabsTrigger>
             ))}
           </TabsList>
-          <TabsContent value="skills">
+          <TabsContent value="skills" fill>
             <ItemTable
               label="Skills"
               columns={["Skill", "Description"]}
@@ -233,7 +235,7 @@ export const PluginDetail = ({
               }}
             />
           </TabsContent>
-          <TabsContent value="servers">
+          <TabsContent value="servers" fill>
             <ItemTable
               label="MCP servers"
               columns={["Server", "Transport"]}
@@ -243,7 +245,7 @@ export const PluginDetail = ({
               }}
             />
           </TabsContent>
-          <TabsContent value="hooks">
+          <TabsContent value="hooks" fill>
             <ItemTable
               label="Hooks"
               columns={["Hook", "Event"]}

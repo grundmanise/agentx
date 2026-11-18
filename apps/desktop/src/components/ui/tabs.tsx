@@ -1,15 +1,26 @@
 // shadcn/ui Tabs (`pnpm dlx shadcn@latest add tabs`), on our tokens: DESIGN.md §6 "Tabs". It keeps
 // shadcn's parts, their `data-slot` attributes and their default look (a filled track with the
 // active tab raised on it), and takes no `className`. Only the horizontal default variant is kept:
-// the app has no vertical or line tabs.
+// the app has no vertical or line tabs. With `fill`, the tabs take the rest of a column's height
+// and the content scrolls on its own.
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 import { Tabs as TabsPrimitive } from "radix-ui";
 
 import type { OwnProps } from "#/lib/utils.ts";
 
-const Tabs = ({ ...props }: OwnProps<typeof TabsPrimitive.Root>) => (
+const tabsVariants = cva("gap-tabs flex flex-col", {
+  defaultVariants: { fill: false },
+  variants: { fill: { false: "", true: "min-h-0 flex-1" } },
+});
+
+const Tabs = ({
+  fill,
+  ...props
+}: OwnProps<typeof TabsPrimitive.Root> & VariantProps<typeof tabsVariants>) => (
   <TabsPrimitive.Root
     data-slot="tabs"
-    className="gap-tabs flex flex-col"
+    className={tabsVariants({ fill })}
     {...props}
   />
 );
@@ -30,10 +41,19 @@ const TabsTrigger = ({ ...props }: OwnProps<typeof TabsPrimitive.Trigger>) => (
   />
 );
 
-const TabsContent = ({ ...props }: OwnProps<typeof TabsPrimitive.Content>) => (
+const tabsContentVariants = cva("flex-1 outline-none", {
+  defaultVariants: { fill: false },
+  variants: { fill: { false: "", true: "flex min-h-0 flex-col" } },
+});
+
+const TabsContent = ({
+  fill,
+  ...props
+}: OwnProps<typeof TabsPrimitive.Content> &
+  VariantProps<typeof tabsContentVariants>) => (
   <TabsPrimitive.Content
     data-slot="tabs-content"
-    className="flex-1 outline-none"
+    className={tabsContentVariants({ fill })}
     {...props}
   />
 );
