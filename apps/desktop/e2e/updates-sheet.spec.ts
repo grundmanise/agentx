@@ -72,10 +72,12 @@ test.describe("the What's new sheet", () => {
     await expect(sheet(page)).toContainText("pdf");
     // The two versions, by date where the CLI dates them.
     await expect(sheet(page)).toContainText("Sep 14 → Sep 28");
-    await expect(sheet(page)).toContainText("Reading the changes…");
+    // While it reads: the first changed file's block, open, over the loading pane.
+    await expect(block(page, "SKILL.md")).toBeVisible();
+    await expect(sheet(page).getByText("Reading the changes…")).toBeAttached();
     read.release();
 
-    await expect(block(page, "SKILL.md")).toBeVisible();
+    await expect(block(page, "scripts/convert.py")).toBeVisible();
     expect(updateDiffs(cli)).toEqual([
       ["skill", "diff", "pdf", "--update", "--json"],
     ]);

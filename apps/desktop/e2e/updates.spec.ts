@@ -81,7 +81,7 @@ const expectOffered = async (page: Page, name: string) => {
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
 const updateDialog = (page: Page) =>
-  page.getByRole("dialog", { name: "Update skills" });
+  page.getByRole("dialog", { name: "Updates available" });
 /** The row of `name` in the Update skills dialog, before its run. */
 const dialogRow = (page: Page, name: string) =>
   updateDialog(page)

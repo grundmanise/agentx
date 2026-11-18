@@ -3,8 +3,12 @@
 import { useRef } from "react";
 import type { ReactNode } from "react";
 
-/** Its look: `muted` under a source's name, `secondary` as a value of Details. */
+/**
+ * Its look: `caption` as the origin beside a skill's name, `muted` under a source's name,
+ * `secondary` as a value of Details.
+ */
 const TONES = {
+  caption: "text-text-caption hover:text-text-secondary hover:underline",
   muted: "text-text-muted hover:underline",
   secondary: "text-text-secondary hover:text-text-primary hover:underline",
 } as const;
