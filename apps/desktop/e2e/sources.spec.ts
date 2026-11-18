@@ -547,20 +547,62 @@ test("progress shows from the progress events, and Cancel stops the run", async 
     ["skill", "add", ACME, "--name", "artifacts", "--name", "docx"],
     {
       events: [
-        { current: 1, phase: "install", total: 3, type: "progress" },
-        { current: 2, phase: "install", total: 3, type: "progress" },
-        { current: 3, phase: "rescan", total: 3, type: "progress" },
+        // Three steps per skill and one rescan: the bar counts skills, not steps.
+        {
+          current: 1,
+          phase: "blobs",
+          subject: "artifacts",
+          total: 7,
+          type: "progress",
+        },
+        {
+          current: 2,
+          phase: "blobs",
+          subject: "docx",
+          total: 7,
+          type: "progress",
+        },
+        {
+          current: 3,
+          phase: "import",
+          subject: "artifacts",
+          total: 7,
+          type: "progress",
+        },
+        {
+          current: 4,
+          phase: "import",
+          subject: "docx",
+          total: 7,
+          type: "progress",
+        },
+        {
+          current: 5,
+          phase: "install",
+          subject: "artifacts",
+          total: 7,
+          type: "progress",
+        },
+        {
+          current: 6,
+          phase: "install",
+          subject: "docx",
+          total: 7,
+          type: "progress",
+        },
+        { current: 7, phase: "rescan", total: 7, type: "progress" },
         { name: "artifacts", type: "library_skill" },
         { name: "docx", type: "library_skill" },
       ],
-      holdAfter: 2,
+      holdAfter: 6,
     }
   );
   await check(page, "artifacts").click();
   await check(page, "docx").click();
   await bar(page).getByRole("button", { name: "Add 2" }).click();
   await add.started;
-  await expect(bar(page)).toContainText("Adding 2 of 3");
+  await expect(bar(page)).toContainText("Adding 2 of 2");
+  await expect(bar(page)).not.toContainText("of 7");
   await bar(page).getByRole("button", { name: "Cancel" }).click();
   await expect(
     toasts(page).getByText("Stopped. 2 skills were added.")

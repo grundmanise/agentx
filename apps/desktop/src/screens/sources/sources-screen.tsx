@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   LibraryEntry,
-  ProgressEvent,
   SearchResult,
   SourceEvent,
   SourceSkillEvent,
@@ -13,6 +12,7 @@ import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { skillNamesOf } from "#/lib/problem-text.ts";
 import { ActionBar } from "#/screens/sources/action-bar.tsx";
+import type { AddProgress } from "#/screens/sources/action-bar.tsx";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
 import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
@@ -172,7 +172,7 @@ export const SourcesScreen = () => {
   const [selection, setSelection] = useState<Selection>(noSelection);
   // The user started from Select all or the preselection: the listing's source takes `--all`.
   const [allMode, setAllMode] = useState(false);
-  const [progress, setProgress] = useState<ProgressEvent | undefined>();
+  const [progress, setProgress] = useState<AddProgress | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   // The pill opened last, "" before any, for a load that finishes after the user moved on.
@@ -351,10 +351,19 @@ export const SourcesScreen = () => {
     if (plan === undefined) {
       return;
     }
-    setProgress(undefined);
+    const total = plan.names.length;
+    setProgress({ started: 0, total });
     const outcome = await runCommand(plan.args, {
       label: ADD_LABEL,
-      onProgress: setProgress,
+      // A skill starts with its `blobs` step; `import`, `install` and the one `rescan` follow.
+      onProgress: (event) => {
+        if (event.phase === "blobs") {
+          setProgress((prev) => ({
+            started: Math.min((prev?.started ?? 0) + 1, total),
+            total,
+          }));
+        }
+      },
       success: () => `Added ${count(plan.names.length, "skill")}`,
     });
     const installed = outcome.events

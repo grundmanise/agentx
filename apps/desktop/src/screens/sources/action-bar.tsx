@@ -1,16 +1,21 @@
-import type { Configuration, ProgressEvent } from "#/cli/events.gen.ts";
+import type { Configuration } from "#/cli/events.gen.ts";
 import { Button } from "#/components/ui/button.tsx";
 import { AgentTargets } from "#/screens/sources/agent-targets.tsx";
 
-/** "Adding 2 of 7" from the last progress event, or "Adding…" before the first. */
-const progressText = (progress: ProgressEvent | undefined) => {
-  if (progress === undefined) {
-    return "Adding…";
-  }
-  return progress.total === undefined
-    ? `Adding ${progress.current}`
-    : `Adding ${progress.current} of ${progress.total}`;
-};
+/** How far an install got: the skills it started, out of the skills it installs. */
+export interface AddProgress {
+  started: number;
+  total: number;
+}
+
+/**
+ * "Adding 2 of 7": skills, not steps. The CLI reports three steps per skill and one rescan, so
+ * its own `current` and `total` count steps (docs/spec/cli-contract.md, "After the install").
+ */
+const progressText = (progress: AddProgress | undefined) =>
+  progress === undefined || progress.started === 0
+    ? "Adding…"
+    : `Adding ${progress.started} of ${progress.total}`;
 
 const Divider = () => (
   <span aria-hidden className="bg-shell-divider h-6 w-px flex-none" />
@@ -45,8 +50,8 @@ export const ActionBar = ({
   onClearTargets: () => void;
   /** The install runs. */
   adding: boolean;
-  /** The last progress event of the run. */
-  progress: ProgressEvent | undefined;
+  /** The skills the run started, out of those it installs. */
+  progress: AddProgress | undefined;
   onAdd: () => void;
   onCancel: () => void;
 }) => (
