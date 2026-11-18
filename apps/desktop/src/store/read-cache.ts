@@ -152,6 +152,11 @@ export const keepRead = async (
     // The read kept before is older than this one, which is not kept: neither shows next launch.
     if (kept.entries.delete(key)) {
       await writeIndex(kept);
+      try {
+        await storage.removeItem(key);
+      } catch {
+        // No storage: the next launch drops the value, which the index no longer names.
+      }
     }
     return;
   }

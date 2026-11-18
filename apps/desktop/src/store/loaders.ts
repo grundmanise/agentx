@@ -141,7 +141,11 @@ export const loadInstallable = async () => {
     read = events.filter((e) => e.type === "installable_skill");
     return { installable: read };
   });
-  if (remote !== undefined && read !== undefined) {
+  // The list belongs to the remote set when the command ran: kept only if that is still this one.
+  const now = useAppStore
+    .getState()
+    .settings?.sources.find((s) => s.account === true)?.url;
+  if (remote !== undefined && read !== undefined && now === remote) {
     void keepRead("installable", remote, "", read);
   }
 };
