@@ -1,8 +1,9 @@
 // The screens stay as the user left them: each screen visited stays mounted, hidden while
-// another one shows, with its state, its selection and where each of its panes is scrolled. A
+// another one shows, with its state, its selection and where each of its panes is scrolled: the
+// browser keeps a hidden pane's scroll, WebKit as Chromium. A
 // hidden screen keeps the route it last showed, so its selection stays, and the sidebar and the
 // palette go back to that route.
-import { Activity, useLayoutEffect, useRef, useState } from "react";
+import { Activity, useLayoutEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Route, Routes, useLocation } from "react-router";
 import type { Location } from "react-router";
@@ -26,33 +27,6 @@ export const useLastRoute = (path: string) =>
 /** The same, read outside React, as the palette does when an item runs. */
 export const lastRoute = (path: string) =>
   useLastRoutes.getState()[path] ?? path;
-
-/**
- * One kept screen. Where each of its panes is scrolled is noted as it scrolls, and set back when
- * the screen shows again: a browser may scroll a hidden pane back to the top.
- */
-const KeptScreen = ({ children }: { children: ReactNode }) => {
-  const scrolled = useRef(new Map<Element, number>());
-  useLayoutEffect(() => {
-    for (const [pane, top] of scrolled.current) {
-      if (pane.isConnected && pane.scrollTop !== top) {
-        pane.scrollTop = top;
-      }
-    }
-  }, []);
-  return (
-    <div
-      className="flex min-h-0 flex-1 flex-col"
-      onScrollCapture={(e) => {
-        if (e.target instanceof Element) {
-          scrolled.current.set(e.target, e.target.scrollTop);
-        }
-      }}
-    >
-      {children}
-    </div>
-  );
-};
 
 /** Every screen visited so far, the current route's shown and the others hidden. */
 export const KeptScreens = ({
@@ -83,11 +57,9 @@ export const KeptScreens = ({
     const at = s.path === current.path ? location : kept[s.path];
     return at === undefined ? null : (
       <Activity key={s.path} mode={s === current ? "visible" : "hidden"}>
-        <KeptScreen>
-          <Routes location={at}>
-            <Route path={`${s.path}/*`} element={elementOf(s.path)} />
-          </Routes>
-        </KeptScreen>
+        <Routes location={at}>
+          <Route path={`${s.path}/*`} element={elementOf(s.path)} />
+        </Routes>
       </Activity>
     );
   });

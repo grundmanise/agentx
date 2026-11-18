@@ -17,15 +17,7 @@ import type { Sections, SkillRow } from "#/screens/skills/projection.ts";
 import { RenameDialogs } from "#/screens/skills/rename-dialog.tsx";
 import { SkillDetail } from "#/screens/skills/skill-detail.tsx";
 import { SkillList } from "#/screens/skills/skill-list.tsx";
-import {
-  openSections,
-  setFilters,
-  setOrder,
-  setExpanded,
-  toggleCollapsed,
-  toggleExpanded,
-  useSkillsView,
-} from "#/screens/skills/view.ts";
+import { useSkillsView } from "#/screens/skills/view.ts";
 import { useStartup } from "#/startup/startup.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -79,10 +71,18 @@ export const SkillsScreen = () => {
   const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
   // The search, filters, sort order and collapsed sections stay while another screen shows.
-  const filters = useSkillsView((s) => s.filters);
-  const order = useSkillsView((s) => s.order);
-  const collapsed = useSkillsView((s) => s.collapsed);
-  const expanded = useSkillsView((s) => s.expanded);
+  const {
+    collapsed,
+    expanded,
+    filters,
+    openSections,
+    order,
+    setExpanded,
+    setFilters,
+    setOrder,
+    toggleCollapsed,
+    toggleExpanded,
+  } = useSkillsView();
   const sections = useMemo(
     () => ({ collapsed, expanded }),
     [collapsed, expanded]

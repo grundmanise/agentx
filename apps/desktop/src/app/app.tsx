@@ -1,5 +1,5 @@
 import { cva } from "class-variance-authority";
-import { useEffect, useState } from "react";
+import { Activity, useEffect, useState } from "react";
 import type { ReactElement } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 
@@ -158,9 +158,9 @@ export const App = () => {
         }}
       />
       {!known && <Navigate to="/skills" replace />}
-      {startup.open ? (
-        <StartupLayer />
-      ) : (
+      {startup.open && <StartupLayer />}
+      {/* Hidden, not unmounted, while the startup layer shows: the screens stay as they were. */}
+      <Activity mode={startup.open ? "hidden" : "visible"}>
         <div className="flex min-h-0 flex-1">
           {/* Until the checks pass, nothing in the window but the frosted pane can be reached. */}
           <div inert={!startup.ready} className="contents">
@@ -181,7 +181,7 @@ export const App = () => {
             <Screen cached={startup.cached} ready={startup.ready} />
           </main>
         </div>
-      )}
+      </Activity>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ActivityLogSheet />
       <Toaster />
