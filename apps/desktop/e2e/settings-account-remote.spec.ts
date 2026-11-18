@@ -204,7 +204,7 @@ test("Change… warns before it replaces the account remote", async ({
   await expect(save).toBeDisabled();
   await urlField(page).fill(next);
   await save.click();
-  const confirm = page.getByRole("dialog", {
+  const confirm = page.getByRole("alertdialog", {
     name: "Replace the account remote?",
   });
   await expect(confirm).toContainText(
@@ -229,7 +229,7 @@ test("Detach warns, runs source remove and shows the field once source list has 
 }) => {
   await openSettings(cli, page);
   await accountRemote(page).getByRole("button", { name: "Detach" }).click();
-  const confirm = page.getByRole("dialog", {
+  const confirm = page.getByRole("alertdialog", {
     name: "Detach the account remote?",
   });
   await expect(confirm).toContainText(

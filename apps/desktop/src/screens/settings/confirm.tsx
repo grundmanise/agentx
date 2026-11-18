@@ -1,15 +1,15 @@
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/components/ui/alert-dialog.tsx";
 // The confirm dialog of the Settings sections and of removing an agent on the Agents page: a
 // title, a line, an optional path, and Cancel beside one danger button that runs the command.
 import { Button } from "#/components/ui/button.tsx";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "#/components/ui/dialog.tsx";
 
 /** A confirm dialog with Cancel and one button that runs the command. */
 export const Confirm = ({
@@ -30,25 +30,25 @@ export const Confirm = ({
   action: string;
   onConfirm: () => void;
 }) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent>
-      <DialogHeader showCloseButton={false}>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
+  <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
+        <AlertDialogDescription>{description}</AlertDialogDescription>
+      </AlertDialogHeader>
       {detail !== undefined && (
         <p className="type-technical text-text-caption m-0 break-all">
           {detail}
         </p>
       )}
-      <DialogFooter>
-        <DialogClose asChild>
+      <AlertDialogFooter>
+        <AlertDialogCancel asChild>
           <Button variant="ghost">Cancel</Button>
-        </DialogClose>
+        </AlertDialogCancel>
         <Button variant="danger" onClick={onConfirm}>
           {action}
         </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 );

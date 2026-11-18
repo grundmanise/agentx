@@ -732,7 +732,7 @@ test.describe("the Update skills dialog", () => {
 const conflictBanner = (page: Page) =>
   pane(page, "draft").getByRole("note", { name: "Update has conflicts" });
 const abortDialog = (page: Page) =>
-  page.getByRole("dialog", { name: "Abort the update of draft?" });
+  page.getByRole("alertdialog", { name: "Abort the update of draft?" });
 
 test.describe("a pending merge", () => {
   const banner = conflictBanner;

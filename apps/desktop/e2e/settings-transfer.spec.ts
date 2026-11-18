@@ -126,7 +126,7 @@ test("asks before it replaces a file in the library, then exports with --force",
   await exportSettings(page)
     .getByRole("button", { exact: true, name: "Export" })
     .click();
-  const confirm = page.getByRole("dialog", {
+  const confirm = page.getByRole("alertdialog", {
     name: "Replace agentx-export.json?",
   });
   await expect(confirm).toBeVisible();
@@ -168,7 +168,7 @@ test("imports the picked file after its confirm, adds the sources it names witho
   const importButton = section.getByRole("button", { name: "Import…" });
   await importButton.click();
 
-  const confirm = page.getByRole("dialog", {
+  const confirm = page.getByRole("alertdialog", {
     name: "Replace settings with agentx-export.json?",
   });
   await expect(confirm).toBeVisible();
@@ -235,7 +235,9 @@ test("an import that installed, updated and skipped nothing says so", async ({
   const section = importSettings(page);
   await section.getByRole("button", { name: "Import…" }).click();
   await page
-    .getByRole("dialog", { name: "Replace settings with agentx-export.json?" })
+    .getByRole("alertdialog", {
+      name: "Replace settings with agentx-export.json?",
+    })
     .getByRole("button", { name: "Import" })
     .click();
   const result = section.getByRole("region", { name: "Import result" });
