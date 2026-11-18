@@ -647,9 +647,29 @@ test.describe("the detail pane", () => {
 
     // A URL opens in the browser, the skill's files show in the file manager.
     const details = article.getByRole("region", { name: "Details" });
-    await details
-      .getByRole("link", { name: "https://github.com/acme/skills/pdf" })
-      .click();
+    const forkedFrom = details.getByRole("link", {
+      name: "https://github.com/acme/skills/pdf",
+    });
+    // A value is selectable: a drag across a link selects its text and opens nothing. The link
+    // may wrap, so the drag runs from its first line's start to its last line's end.
+    await forkedFrom.scrollIntoViewIfNeeded();
+    const linkBox = await forkedFrom.boundingBox();
+    if (linkBox === null) {
+      throw new Error("the link has no box");
+    }
+    await page.mouse.move(linkBox.x + 1, linkBox.y + 4);
+    await page.mouse.down();
+    await page.mouse.move(
+      linkBox.x + linkBox.width - 1,
+      linkBox.y + linkBox.height - 4,
+      { steps: 5 }
+    );
+    await page.mouse.up();
+    expect(
+      await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    ).toContain("acme/skills/pdf");
+    expect(cli.openedUrls).toEqual([]);
+    await forkedFrom.click();
     expect(cli.openedUrls).toEqual(["https://github.com/acme/skills"]);
     await details
       .getByRole("link", {

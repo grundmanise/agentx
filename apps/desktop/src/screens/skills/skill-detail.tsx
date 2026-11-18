@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { PillButton } from "#/components/pill.tsx";
+import { SelectableLink } from "#/components/selectable-link.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -40,7 +41,7 @@ const Caption = ({ children }: { children: string }) => (
 
 /**
  * A value of DETAILS: a link that opens its URL in the browser, or shows its directory in Finder,
- * when it has one.
+ * when it has one. Like every value, it is selectable.
  */
 const DetailValue = ({ detail }: { detail: Detail }) => {
   const { link, value } = detail;
@@ -49,12 +50,11 @@ const DetailValue = ({ detail }: { detail: Detail }) => {
   }
   const page = link.kind === "page";
   return (
-    <a
+    <SelectableLink
       href={page ? link.url : `file://${link.path}`}
       title={page ? link.url : showInLabel()}
-      className="text-text-secondary hover:text-text-primary hover:underline"
-      onClick={(e) => {
-        e.preventDefault();
+      tone="secondary"
+      onOpen={() => {
         if (page) {
           void openInBrowser(link.url);
         } else {
@@ -63,7 +63,7 @@ const DetailValue = ({ detail }: { detail: Detail }) => {
       }}
     >
       {value}
-    </a>
+    </SelectableLink>
   );
 };
 

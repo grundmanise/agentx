@@ -27,8 +27,10 @@
   button {
     cursor: pointer;
   }
+  /* The value of a label/value pair is selectable, so it can be copied (DESIGN.md §6 "Values"). */
   input,
-  textarea {
+  textarea,
+  dd {
     user-select: text;
   }
   input::placeholder,

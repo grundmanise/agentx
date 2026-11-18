@@ -783,6 +783,10 @@ A control that runs a command is pending from the command until the inventory th
 
 Finder in this file means the platform's file manager. `src/lib/reveal.ts` names it for the platform `src/lib/platform.ts` reads; a screen never checks the platform itself.
 
+### Values
+
+The value of a label/value pair (a `<dd>`: the skill's Details, a source's facts, Settings › Storage) is selectable, so it can be copied; its label is not. A value that is a link (`src/components/selectable-link.tsx`) opens on a click, while a drag across it selects its text and opens nothing.
+
 ### Buttons (height / padding / colours)
 
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert, never a grey fill.
