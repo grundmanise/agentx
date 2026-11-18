@@ -1,4 +1,4 @@
-// Opening a skill from another screen: the palette, a plugin card, or the command runner on exit
+// Opening a skill from another screen: the palette, the Plugins screen, or the command runner on exit
 // code 4 all come here. The Skills screen selects the skill its route names and scrolls to it.
 import { navigateTo } from "#/lib/navigate.ts";
 
