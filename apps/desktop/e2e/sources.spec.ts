@@ -259,6 +259,112 @@ test("a source listing: selectable skills first, then each state with its label 
   ]);
 });
 
+/**
+ * The drawn rows of the list, in its order: the name of each and where it shows, in px. One read
+ * in the page, so that no row the list takes out meanwhile is among them.
+ */
+const drawnRows = async (page: Page) =>
+  await page.evaluate(() => {
+    const items = document.querySelectorAll<HTMLElement>("[data-index]");
+    const rows = [...items].map((item) => {
+      const box = item.getBoundingClientRect();
+      return {
+        bottom: box.bottom,
+        index: Number(item.dataset.index),
+        name:
+          item
+            .querySelector("button[aria-label]")
+            ?.getAttribute("aria-label") ?? "",
+        top: box.top,
+      };
+    });
+    rows.sort((a, b) => a.index - b.index);
+    return rows;
+  });
+
+test("a source of plugins whose skills share names: a row each, drawn once, the later of a name in use", async ({
+  cli,
+  page,
+}) => {
+  // As cursor/plugins has: each of 90 names in two plugins, in a window as large as a full screen.
+  const height = 1440;
+  await page.setViewportSize({ height, width: 2560 });
+  const shared = Array.from(
+    { length: 90 },
+    (_, i) => `skill-${String(i).padStart(2, "0")}`
+  );
+  const listing = ["alpha", "beta"].flatMap((plugin) =>
+    shared.map((name): InlineEvent => ({
+      description: `${name} of ${plugin}`,
+      name,
+      source: ACME_ID,
+      subpath: `${plugin}/skills/${name}`,
+      tree: `t-${plugin}-${name}`,
+      type: "source_skill",
+    }))
+  );
+  cli.onServeStart({ events: [inventory] });
+  cli.register(["source", "list"], { events: sources });
+  cli.register(["source", "skills", ACME_ID], { events: listing });
+  cli.register(["source", "skills", ZETA_ID], { events: [] });
+  cli.register(["skill", "list", "--remote"], { events: installable });
+  await page.goto("/#/sources");
+  await expect(row(page, "skill-00")).toBeVisible();
+
+  // Scrolled through, each row is drawn once and none over another.
+  const scroller = page
+    .locator(".overflow-auto")
+    .filter({ has: page.getByRole("heading", { level: 1, name: "Sources" }) });
+  const middle = height / 2;
+  /** Whether the list has drawn the rows at the new offset: one of them covers the middle. */
+  const drawnAtMiddle = async () => {
+    const rows = await drawnRows(page);
+    return rows.some((r) => r.top <= middle && r.bottom >= middle);
+  };
+  const seen = new Map<number, string>();
+  // Half a window at a time, until the list's end shows.
+  let last = false;
+  while (!last) {
+    // oxlint-disable-next-line no-await-in-loop
+    last = await scroller.evaluate((element, by) => {
+      const end = element.scrollHeight - element.clientHeight;
+      const at = element.scrollTop >= end - 1;
+      element.scrollTop += by;
+      return at;
+    }, middle);
+    // oxlint-disable-next-line no-await-in-loop
+    await expect.poll(drawnAtMiddle).toBe(true);
+    // oxlint-disable-next-line no-await-in-loop
+    const rows = await drawnRows(page);
+    expect(new Set(rows.map((r) => r.index)).size).toBe(rows.length);
+    for (const [i, r] of rows.entries()) {
+      expect(r.top).toBeGreaterThanOrEqual(rows[i - 1]?.bottom ?? r.top);
+      seen.set(r.index, r.name);
+    }
+  }
+  const drawnNames = [...seen.values()];
+  drawnNames.sort((a, b) => a.localeCompare(b));
+  expect(drawnNames).toEqual(shared.flatMap((name) => [name, name]));
+
+  // The later skill of a name cannot be selected, and says why once open.
+  const second = rowLine(page, "skill-89").last();
+  await expect(second.getByText("Name in use", { exact: true })).toBeVisible();
+  await expect(
+    second.getByRole("button", { name: "Select skill-89" })
+  ).toHaveCount(0);
+  cli.register(["source", "read", ACME_ID, "beta/skills/skill-89"], {
+    events: [skillMd("skill-89", "# skill-89\n")],
+  });
+  await row(page, "skill-89").last().click();
+  await expect(opened(page, "skill-89")).toContainText(
+    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added"
+  );
+  expect(commandLines(cli)).toEqual([
+    `source skills ${ACME_ID}`,
+    `source read ${ACME_ID} beta/skills/skill-89`,
+  ]);
+});
+
 test("opening a row reads its SKILL.md once, then opens, and links to the skill", async ({
   cli,
   page,
