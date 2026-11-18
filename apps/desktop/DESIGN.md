@@ -15,7 +15,7 @@ The Tailwind theme holds only these tokens. `tokens.css` resets Tailwind's whole
 
 ## 1. Character
 
-A dark, quiet desktop tool. One accent (lime) carries the accent and action signals; everything else is near-black and grey. Serif for page titles only; a mono face for anything technical (paths, ids, dates, captions). Surfaces are flat: elevation comes from one shade step and, on floating layers, a soft black shadow. No gradients, no emoji, no icon-per-row decoration.
+A dark, quiet desktop tool. One accent (lime) carries the accent and action signals; everything else is near-black and grey. Serif for page titles only; a mono face for anything technical (paths, ids, dates, captions). Surfaces are flat: elevation comes from one shade step and, on floating layers, a soft black shadow. No gradients, no emoji, no icon-per-row decoration. The page declares `color-scheme: dark`, so the system draws native controls such as scrollbars for a dark background; the app never styles a scrollbar.
 
 ## 2. Color
 
