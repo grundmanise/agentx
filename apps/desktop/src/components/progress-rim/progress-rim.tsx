@@ -157,12 +157,18 @@ export const ProgressRim = ({
         "(prefers-reduced-motion: reduce)"
       ).matches;
       let frame: RimFrame = RIM_START;
+      let lastState: RimRun["state"] = "running";
       let last = performance.now();
       const draw = (now: number) => {
         const current = currentRun();
         if (current === undefined) {
           return;
         }
+        // A new run that starts while the last one's rim still fades starts over, from its light.
+        if (current.state === "running" && lastState !== "running") {
+          frame = { ...RIM_START, alpha: frame.alpha };
+        }
+        lastState = current.state;
         frame = stepRim(frame, current, Math.min(0.05, (now - last) / 1000));
         last = now;
         canvas.dataset.progress = frame.progress.toFixed(3);

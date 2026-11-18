@@ -302,8 +302,12 @@ export const publishAll = async (names: readonly string[]) => {
     rim: { fraction: done ? 1 : 0, state: done ? "done" : "stopped" },
   });
   // The pill stays busy until the inventory that follows arrives: it keeps the last count till then.
+  // A run that started since owns the count, so only this run's count goes.
+  const { progress } = useProgressStore.getState();
   afterSettled(() => {
-    useProgressStore.setState({ progress: undefined });
+    if (useProgressStore.getState().progress === progress) {
+      useProgressStore.setState({ progress: undefined });
+    }
   });
   const accountRemoteSet =
     accountRemoteOf(useAppStore.getState().sources) !== undefined;
