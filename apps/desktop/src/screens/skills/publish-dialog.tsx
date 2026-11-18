@@ -12,7 +12,7 @@ import { useId, useRef, useState } from "react";
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { DiffEvent, ProgressEvent } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
-import { notify } from "#/components/toast.tsx";
+import { notify, notifySuccess } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
@@ -83,12 +83,16 @@ const reportPublish = (
       name,
       row.kind === "source" ? row.entry?.source : undefined
     );
-    notify(text, {
-      label: "Update",
-      onClick: () => {
-        update(name);
+    notify(
+      text,
+      {
+        label: "Update",
+        onClick: () => {
+          update(name);
+        },
       },
-    });
+      { kind: "warning" }
+    );
     // A refused publish is in the activity list already, in the CLI's words.
     if (outcome.exitCode === EXIT_CODES.ok) {
       addActivity("attention", text);
@@ -104,7 +108,7 @@ const reportPublish = (
   }
   if (outcome.exitCode === EXIT_CODES.ok) {
     const text = `Published ${name} skill`;
-    notify(text);
+    notifySuccess(text);
     addActivity("success", text);
     return;
   }

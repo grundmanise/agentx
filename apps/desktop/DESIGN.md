@@ -160,7 +160,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `button.secondary-hover` | `gray-850` |  |
 | `button.secondary-text` | `gray-50` |  |
 | `button.ghost-text` | `gray-200` | Ghost button label (or `text.muted` in quiet spots) |
-| `button.ghost-bg` | `gray-50/3.5` | Ghost and icon button at rest, toast action, sort toggle, publish status |
+| `button.ghost-bg` | `gray-50/3.5` | Ghost and icon button at rest, sort toggle, publish status |
 | `button.ghost-hover` | `gray-50/7.5` | Ghost / icon button hover |
 | `button.danger-text` | `accent.danger` | Danger ghost (Remove, Cancel, Restore base version) |
 | `button.danger-bg` | `red-400/10` | Danger button at rest |
@@ -170,7 +170,6 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `source-pill.active-text` | `on-accent` |  |
 | `source-pill.count` | `gray-400` | Skill count after the name of an inactive source pill: 4.8:1 on `source-pill.bg` |
 | `source-pill.active-count` | `gray-600` | Skill count on the active source pill: 7.5:1 on `source-pill.active-bg`, the one use of `gray-600` as text, on a light fill |
-| `button.toast-action-text` | `accent.primary` | Action inside a toast |
 | `button.split-divider` | `gray-800` | The 1px separator between the buttons of a button group |
 
 #### Status pills
@@ -363,7 +362,17 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `sheet.bg` | `gray-960` | History sheet body |
 | `sheet.border` | `gray-850` |  |
 | `sheet.handle` | `gray-700` | A sheet's handle on hover and while it drags |
-| `toast.text` | `gray-50` |  |
+| `toast.text` | `gray-50` | A plain toast's text |
+| `toast.description` | `gray-300` | The lines under a toast's message, tinted or not |
+| `toast.success-bg` | `accent.primary` 9% over `overlay.bg` | Success toast fill, solid |
+| `toast.success-border` | `accent.primary` 28% over `overlay.bg` |  |
+| `toast.success-text` | `tone.primary.fg` | Success toast message and icon |
+| `toast.error-bg` | `accent.danger` 9% over `overlay.bg` | Error toast fill, solid |
+| `toast.error-border` | `accent.danger` 28% over `overlay.bg` |  |
+| `toast.error-text` | `tone.danger.fg` | Error toast message and icon |
+| `toast.warning-bg` | `accent.attention` 9% over `overlay.bg` | Attention toast fill, solid |
+| `toast.warning-border` | `accent.attention` 28% over `overlay.bg` |  |
+| `toast.warning-text` | `tone.attention.fg` | Attention toast message and icon |
 
 #### Code, file tree and diffs
 
@@ -480,8 +489,6 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.palette-input` | sans | 17 | 400 |  |  |  | Palette search input |
 | `type.palette-hint` | mono | 12 | 400 |  |  |  | Hint at the end of a palette row, keys in the palette footer |
 | `type.palette-footer` | sans | 12 | 400 |  |  |  | Palette footer (`text.hint`) |
-| `type.toast` | sans | 13.5 | 400 |  |  |  | Toast message |
-| `type.toast-action` | sans | 13 | 600 |  |  |  | Action inside a toast |
 | `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`), selectable |
 | `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
@@ -489,7 +496,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.agent-card-name` | sans | 16 | 600 |  |  |  | Agent client name on an Agents page card, and the Universal card's title |
 | `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the chevron beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
-| `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
+| `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text |
 | `type.server-name` | sans | 14.5 | 500 |  |  |  | Server name in a server row (`text.primary`) |
 | `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
 | `type.settings-label` | sans | 14 | 500 |  |  |  | Settings section label (`text.primary`); the line under it is `type.secondary` in `text.muted` |
@@ -692,13 +699,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `add-skill.list-max-height` | 264 | `max-h-add-skill-list` | The Add skill dialog's list of skills found; it scrolls past it |
 | `update-skills.list-max-height` | 280 | `max-h-update-skills-list` | The Update skills dialog's list of skills; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
-| `toast.min-height` | 44 | `min-h-toast` | The height of a one-line toast |
-| `toast.max-width` | 640 | `max-w-toast` | Past it the text wraps; leaves 230 on each side of the 1100 minimum window |
-| `toast.padding` | 10 18 | `py-toast-y pl-toast` | 10 6 10 18: the action sits 6 from the right edge |
-| `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` | From the bottom edge |
-| `toast.detail-width` | 440 | `w-toast-detail` | Error toast |
-| `toast.detail-padding` | 12 6 12 18 | `py-toast-detail pr-1.5 pl-toast` |  |
-| `toast.count-min-width` | 5ch | `min-w-toast-count` | The count of a progress toast, such as Check updates' "1/10", in `tabular-nums`: room for "99/99" from the start, so the toast keeps its width as the count comes |
+| `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | From the top and right edges |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
 
@@ -781,8 +782,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `palette.radius` | 20 |  |
 | `palette.row-radius` | 12 | Palette rows |
 | `key-hint.radius` | 9999 | Key hint |
-| `toast.radius` | 9999 |  |
-| `toast.detail-radius` | 18 | Error toast |
+| `toast.radius` | 12 | Sonner's `--border-radius` |
 | `floating-bar.radius` | 9999 |  |
 | `check.mark-radius` | 50% | Startup status circle |
 | `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
@@ -807,13 +807,14 @@ The value of a label/value pair (a `<dd>`: the skill's Details, a source's facts
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / `button.ghost-bg`, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
 - **Small, wrapping** – for a label that may wrap, such as Show all under HISTORY: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
-- **Plain, inline** – no fill, no padding, no radius, as tall as its text; `button.ghost-text`, hover `text.primary`. Only for a line of text that expands, such as an entry of the History sheet.
+- **Plain, inline** – no fill, no padding, no radius, as tall as its text; `button.ghost-text`, hover `text.primary`. For a line of text that expands, such as an entry of the History sheet; small (`sm`) with its padding, a toast's action (§6 "Toast action").
+- **Accent, inline** – the plain inline shape in `accent.primary`, 500, hover `accent.primary-hover`. Only for the call to action at the end of a list's group header, such as Adopt all, so it sits beside plain inline buttons such as Collapse all.
 - **Link, inline** – the plain inline shape in `text.secondary`, 500, hover `text.primary` and underlined. Only for a link-like action inside a line of text that opens something, such as See changes on a row of the Update skills dialog.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
-- **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
+- **Toast action** – the app's small plain button (Undo, Retry, Cancel), in place of Sonner's: no fill, `button.ghost-text`, hover `text.primary`. It is never the toast's tint, so it does not read as a CTA. A toast's Dismiss stays Sonner's corner close button: app buttons are for actions.
 
-Every button but the plain inline one has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
+Every button but the inline ones has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
 
 Two buttons side by side: `button.gap`, primary on the right.
 
@@ -905,7 +906,7 @@ Sort toggle, at the right end of the filter row: the list always sorts by name w
 
 ### Group header (lists)
 
-Every group's header is a section toggle (`src/components/section-toggle.tsx`, `level="group"`), like a plugin's below but with `group.padding` and the group's colours: a `xs` chevron in `text.caption`, `type.caption` in `group.label`, then the count in `group.count`. A click collapses or expands the group's rows (`aria-expanded`); a collapsed group keeps its header and count, and j/k skip its rows. Every group is open when the app starts, and the list keeps which are collapsed while another screen shows. A skill selected in a collapsed group, such as one another screen opens, opens its group. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding`, with `group.spacing` above each group but the first, and at least `group.header-height` tall. A header can end with one control at its right edge: the Unmanaged group's adopt button, a small primary button, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool. While open, the PLUGINS group's header ends with a plain button in `type.button-sm`, as tall as its text, so the header stays `group.header-height` tall and the plugin's header pinned under it shows whole: Collapse all while a plugin's subgroup is open, which collapses every one, and Expand all while all are collapsed, which opens every one the filters list.
+Every group's header is a section toggle (`src/components/section-toggle.tsx`, `level="group"`), like a plugin's below but with `group.padding` and the group's colours: a `xs` chevron in `text.caption`, `type.caption` in `group.label`, then the count in `group.count`. A click collapses or expands the group's rows (`aria-expanded`); a collapsed group keeps its header and count, and j/k skip its rows. Every group is open when the app starts, and the list keeps which are collapsed while another screen shows. A skill selected in a collapsed group, such as one another screen opens, opens its group. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding`, with `group.spacing` above each group but the first, and at least `group.header-height` tall. A header can end with one control at its right edge: the Unmanaged group's Adopt all, an accent inline button (§6 "Buttons") in `type.button-sm`, as tall as its text, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool. While open, the PLUGINS group's header ends with a plain button in `type.button-sm`, as tall as its text, so the header stays `group.header-height` tall and the plugin's header pinned under it shows whole: Collapse all while a plugin's subgroup is open, which collapses every one, and Expand all while all are collapsed, which opens every one the filters list.
 
 Nesting: what a group holds is inset by `subgroup.indent`, so a row's glyph and a plugin's chevron sit under the group's caption, and a 1px `list.guide` line runs down the left of it, under the group's chevron (`list.guide-inset`). A plugin's rows sit one level further in (`subgroup.nested`), with a second line under the plugin's chevron (`list.guide-nested-inset`). Each placed item draws its own piece of the line (`src/components/list-guide.ts`), so the line runs on through the rows and the spaces between them. Any other grouped list with section toggles uses the same pattern: the tokens and `LIST_GUIDE` / `LIST_GUIDE_NESTED`.
 
@@ -1044,25 +1045,39 @@ The Plugins screen (`src/screens/plugins`) is a split, as Skills is: the list co
 - Only the table scrolls. The title, the details and the tabs stay in place, and the table's column captions pin to its top on `shell.content-bg`, so rows pass under them.
 - The tile is the plugin's own icon from the inventory, or the name's first letter in `type.plugin-tile` on `button.secondary-bg`.
 
+### Copy button
+
+`src/components/copy-button.tsx`: a ghost button with the copy icon before its label, such as Copy in the activity log and Copy report on the startup layer. Once the text is on the clipboard, the icon is a check in `tone.primary.fg` for 2s and a screen reader hears Copied; no toast shows, as the button answers itself. A copy that fails is an error toast.
+
 ### Toast
 
-`toast.offset` from the bottom, centred on the window; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.min-height`, `toast.padding`; text `type.toast` `toast.text`; an optional action in `button.toast-action-text`.
+A toast reports what happened; it asks for nothing. A control the user is expected to use, such as the Add skills bar (§6 "Agent picker"), is a floating bar at the bottom instead, so the two never cover each other.
 
-- As wide as its text, up to `toast.max-width`; past it the text wraps and the toast grows taller. A one-line toast keeps `toast.min-height`, so it looks as it did before toasts wrapped.
-- The action keeps its width on the right of the text and is centred on the toast's height, wrapped or not: the toast is a pill, so its middle is the line the eye follows, and a short action lined up with one line of two would look misplaced on the rounded end.
-- A toast whose command counts its progress keeps room for the count after its text from the start, `toast.count-min-width`, empty until the count comes, so the toast keeps its width: Check updates says "Checking for updates…", then "Checking for updates… 1/10".
+shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, its corner close button, the app's button for its action (§6 "Buttons", "Toast action") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` from the top and right edges of the window; `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
 
+Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint, Sonner's rich colours: the fill, the border, the message and the icon take the kind's toast tokens.
+
+| Kind | Icon | Colours | For |
+| --- | --- | --- | --- |
+| Success | `CircleCheckIcon` | `toast.success-*` | A command that succeeded, such as "Added 2 skills" |
+| Error | `CircleXIcon` | `toast.error-*` | A command that failed, or something the app tried that failed, such as "Couldn't open …" |
+| Warning | `AlertTriangleIcon` | `toast.warning-*` | A command that succeeded with warnings, or one that needs the user first, such as "Another agentx command is running" with Retry |
+| Progress | `Spinner` | plain | A command that runs, with its Cancel |
+| Plain | none | plain | A report with no outcome, such as Stopped, or an action that did nothing |
+
+- Lines under the message, such as an error's details, are Sonner's description in `toast.description`; a warning among them in `tone.attention.fg`.
+- An action, such as Undo or a progress toast's Cancel, is a small plain button (§6 "Buttons", "Toast action") at the end of the row; clicking it also takes the toast away.
 - One toast at a time: a new one replaces the one showing.
 - It goes after 2.6s, or 5s with an action.
-- A toast for a command that runs, with its cancel, stays until the command ends and the toast of its outcome replaces it. Progress changes its text in place.
+- A toast for a command that runs, with its cancel, stays until the command ends and the toast of its outcome replaces it. Progress changes its text in place, the count in `tabular-nums`: Check updates says "Checking for updates…", then "Checking for updates… 1/10".
 
 ### Attention toast
 
-A command that exited 0 and logged warnings. The error toast's shape, with the success text in `type.toast` `toast.text` and each warning in `type.notice` `tone.attention.fg`, its action when it has one, and a ghost dismiss. It goes after 5s, and its activity entry is `attention`, not `success`.
+A command that exited 0 and logged warnings: a warning toast with the success text, each warning the CLI logged under it, its action when it has one, and Sonner's close button, named Dismiss. It goes after 5s, and its activity entry is `attention`, not `success`.
 
 ### Error toast
 
-A command that fails for a reason the app does not handle itself (`src/store/runner.ts`). The toast's place, `overlay.bg` and `overlay.border`, with `popover.shadow`, `toast.detail-radius`, `toast.detail-width` and `toast.detail-padding`. The CLI's message and hint as one paragraph (§6 "Refusal under a field") in `type.toast` `toast.text`; lines that say more below it, as the CLI wrote them, in `type.notice` `text.muted`; each warning in `type.notice` `tone.attention.fg`. A ghost dismiss on the right. It stays until dismissed when it has a hint, and goes after 5s without one.
+A command that fails for a reason the app does not handle itself (`src/store/runner.ts`): an error toast with the CLI's message and hint as one paragraph (§6 "Refusal under a field"), the lines that say more under it, as the CLI wrote them, then each warning; its action when it has one, and Sonner's close button, named Dismiss. It stays until dismissed when it has a hint, and goes after 5s without one.
 
 ### Stale bar
 
@@ -1240,6 +1255,7 @@ Nothing loops forever, and nothing waits on purpose. Two things loop, each only 
 - File list chevron: `rotate(90deg)` in `.15s`. The History sheet's chevron turns with no transition.
 - File row: the meta and the Show in Finder button swap by opacity in `.15s`.
 - Files read (`animate-code-reveal`, `animate-code-loading-out`): when a skill's files come in, the blurred stand-in SKILL.md and its spinner fade out while the real SKILL.md fades in, its blur going from `code.loading-blur` to none, both `.3s ease-out`. A skill whose files are already read shows them at once.
+- Dialogs and the palette: shadcn's own open and close classes (tw-animate-css). The content fades and zooms from 95% in `.2s`, and back the same way when it closes; its `shell.scrim-strong` fades in and out in `.15s`. Sheets open and close with no transition.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0` and opacity 0 → 1, `.22s ease`, when it appears.
 - Add progress (`src/screens/sources/add-rim.tsx`, `rim-progress.ts`, `rim-shader.ts`): while `skill add` runs, two arcs of light grow on the floating bar's border from its bottom centre, up each side, and meet at the top. A WebGL shader draws them on a canvas 26px larger than the bar on each side: a thin line in `floating-bar.rim` with `floating-bar.rim-flow` drifting through it, a soft glow outward that breathes, light that is faint at the tail and brightest at the head, and a 42px soft leading edge. The rim fades in over `.5s`. It never shows the CLI's steps as they come, since they arrive in bursts (three per skill and a rescan): it creeps toward 90% on its own, as a browser's loading bar does, and the steps only raise the floor it eases toward, at most 16% a second, so it never jumps and never reads as done before the run is. When the run ends, it eases into 100% in `1.2s`, the two arcs join over `.9s`, the full rim holds, then fades over `1.1s` (smootherstep), and only then does the bar close if no skill is selected. A stopped or failed run drains back and fades. Reduced motion keeps the light still; the progress itself still grows. Without WebGL nothing is drawn and the bar keeps the same timing.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.

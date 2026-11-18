@@ -8,7 +8,12 @@ import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LogEvent, ProgressEvent } from "#/cli/events.gen.ts";
 import { cancel, run } from "#/cli/transport.ts";
 import type { RunLine } from "#/cli/transport.ts";
-import { notify, notifyAttention, notifyError } from "#/components/toast.tsx";
+import {
+  notify,
+  notifyAttention,
+  notifyError,
+  notifySuccess,
+} from "#/components/toast.tsx";
 import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
 import { skillNamesOf } from "#/lib/problem-text.ts";
@@ -307,7 +312,7 @@ const report = (
       if (warnings.length > 0) {
         notifyAttention({ action, message: text, warnings });
       } else {
-        notify(text, action);
+        notifySuccess(text, action);
       }
       if (log) {
         addActivity(warnings.length > 0 ? "attention" : "success", text);
@@ -317,10 +322,14 @@ const report = (
   }
   if (exitCode === EXIT_CODES.locked) {
     const text = "Another agentx command is running";
-    notify(text, {
-      label: "Retry",
-      onClick: again,
-    });
+    notify(
+      text,
+      {
+        label: "Retry",
+        onClick: again,
+      },
+      { kind: "warning" }
+    );
     if (log) {
       addActivity("attention", text);
     }

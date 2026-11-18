@@ -26,6 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { useOnNewKey } from "#/lib/new-key.ts";
 import { AddSkillDialog } from "#/screens/skills/add-skill-dialog.tsx";
 import { AdoptDialog } from "#/screens/skills/adopt-dialog.tsx";
 import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
@@ -137,8 +138,8 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
     return null;
   }
   return (
-    <Button variant="primary" size="sm" disabled={busy} onClick={onOpen}>
-      Adopt all
+    <Button variant="accent" size="inline" disabled={busy} onClick={onOpen}>
+      <span className="type-button-sm">Adopt all</span>
     </Button>
   );
 };
@@ -307,6 +308,19 @@ const headersOf = (items: Item[]): number[][] => {
     return item.subgroup === undefined ? [header] : [header, subheader];
   });
 };
+
+/** The height of the headers pinned above the item at `index`, in px, not counting the item. */
+const pinnedAbove = (
+  headers: number[][],
+  virtualizer: { measurementsCache: { size: number }[] },
+  index: number
+) =>
+  (headers[index] ?? [])
+    .filter((header) => header !== index)
+    .reduce(
+      (sum, header) => sum + (virtualizer.measurementsCache[header]?.size ?? 0),
+      0
+    );
 
 /** Each header's section, by the header's index: the index of the last item under it. */
 const sectionsOf = (headers: number[][]) => {
@@ -572,14 +586,7 @@ const SkillGroups = ({
     sizeRails(virtualizer, sections);
   });
   useLayoutEffect(() => {
-    const pinned = (headers[selectedIndex] ?? [])
-      .filter((header) => header !== selectedIndex)
-      .reduce(
-        (sum, header) =>
-          sum + (virtualizer.measurementsCache[header]?.size ?? 0),
-        0
-      );
-    setPinnedHeight(pinned);
+    setPinnedHeight(pinnedAbove(headers, virtualizer, selectedIndex));
   }, [headers, selectedIndex, virtualizer]);
 
   // A header that is pinned stays at the top when a click collapses or expands its section: the
@@ -588,13 +595,7 @@ const SkillGroups = ({
     const header = virtualizer.measurementsCache[index];
     const offset = virtualizer.scrollOffset ?? 0;
     if (header !== undefined) {
-      const above = (headers[index] ?? [])
-        .filter((at) => at !== index)
-        .reduce(
-          (sum, at) => sum + (virtualizer.measurementsCache[at]?.size ?? 0),
-          0
-        );
-      const place = header.start - above;
+      const place = header.start - pinnedAbove(headers, virtualizer, index);
       if (offset > place) {
         virtualizer.scrollToOffset(place);
       }
@@ -607,37 +608,13 @@ const SkillGroups = ({
   // same selected row stays where it is, and so does a list shown again after another screen. The
   // first time, such as a skill the Plugins screen opens, the row comes to the top, under its pinned
   // headers; after that the list scrolls as little as it can.
-  const latestIndex = useRef(selectedIndex);
-  useEffect(() => {
-    latestIndex.current = selectedIndex;
-  }, [selectedIndex]);
   const scrolled = useRef(false);
-  const listed = selectedIndex !== -1;
-  // The row last brought into view while it was listed: the effect runs again when the screen
-  // shows again, and the row is in view as the user left it. A scroll cut short within its first
-  // frame, as when StrictMode runs the effect twice, is made again.
-  const shownRow = useRef<string | null>(null);
-  useEffect(() => {
-    const key = listed ? selectedKey : undefined;
-    const scroll = key !== undefined && key !== shownRow.current;
-    shownRow.current = key ?? null;
-    if (scroll) {
-      virtualizer.scrollToIndex(latestIndex.current, {
-        align: scrolled.current ? "auto" : "start",
-      });
-      scrolled.current = true;
-    }
-    let started = !scroll;
-    const frame = requestAnimationFrame(() => {
-      started = true;
+  useOnNewKey(selectedIndex === -1 ? undefined : selectedKey, () => {
+    virtualizer.scrollToIndex(selectedIndex, {
+      align: scrolled.current ? "auto" : "start",
     });
-    return () => {
-      cancelAnimationFrame(frame);
-      if (!started) {
-        shownRow.current = null;
-      }
-    };
-  }, [selectedKey, listed, virtualizer]);
+    scrolled.current = true;
+  });
 
   const drawn = drawnGroups(
     items,

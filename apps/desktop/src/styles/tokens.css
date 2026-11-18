@@ -177,7 +177,6 @@
   --color-source-pill-active-text: var(--color-on-accent);
   --color-source-pill-count: var(--gray-400);
   --color-source-pill-active-count: var(--gray-600);
-  --color-button-toast-action-text: var(--color-accent-primary);
   --color-button-split-divider: var(--gray-800);
 
   /* Status pills */
@@ -346,6 +345,18 @@
   --color-sheet-border: var(--gray-850);
   --color-sheet-handle: var(--gray-700);
   --color-toast-text: var(--gray-50);
+  --color-toast-description: var(--gray-300);
+  /* A tinted toast: its tone's colour mixed into `overlay.bg`, 9% for the fill and 28% for the
+     border, solid so the page does not show through. */
+  --color-toast-success-bg: rgb(38 42 28);
+  --color-toast-success-border: rgb(75 87 39);
+  --color-toast-success-text: var(--color-tone-primary-fg);
+  --color-toast-error-bg: rgb(42 30 31);
+  --color-toast-error-border: rgb(87 50 48);
+  --color-toast-error-text: var(--color-tone-danger-fg);
+  --color-toast-warning-bg: rgb(42 36 29);
+  --color-toast-warning-border: rgb(87 69 43);
+  --color-toast-warning-text: var(--color-tone-attention-fg);
 
   /* Code, file tree and diffs */
   --color-code-bg: var(--gray-980);
@@ -492,8 +503,7 @@
   --radius-menu: 12px;
   --radius-menu-row: 8px;
   --radius-key-hint: 9999px;
-  --radius-toast: 9999px;
-  --radius-toast-detail: 18px;
+  --radius-toast: 12px;
   --radius-floating-bar: 9999px;
   --radius-check-mark: 50%;
   --radius-check-hint: 8px;
@@ -706,14 +716,7 @@
   --max-height-update-skills-list: 280px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
-  --min-height-toast: 44px;
-  --max-width-toast: 640px;
   --max-width-tooltip-text: 280px;
-  --padding-toast: 18px;
-  --padding-toast-y: 10px;
-  --width-toast-detail: 440px;
-  --padding-toast-detail: 12px;
-  --min-width-toast-count: 5ch;
   --height-stale-bar: 36px;
   --padding-stale-bar: 16px;
   --inset-floating-bar: 24px;
@@ -895,21 +898,11 @@
   font-size: 12px;
   font-weight: 400;
 }
-@utility type-toast {
-  font-family: var(--font-sans);
-  font-size: 13.5px;
-  font-weight: 400;
-}
 @utility type-notice {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 400;
   line-height: 1.5;
-}
-@utility type-toast-action {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
 }
 @utility type-technical {
   font-family: var(--font-mono);
