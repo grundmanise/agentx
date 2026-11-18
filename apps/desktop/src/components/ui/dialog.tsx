@@ -47,9 +47,10 @@ const dialogContentVariants = cva(
     defaultVariants: { kind: "dialog" },
     variants: {
       kind: {
-        // Centred, `dialog.width`, `dialog.padding` and `dialog.gap` between its blocks.
+        // Centred, `dialog.width`, `dialog.padding` and `dialog.gap` between its blocks, at most
+        // `dialog.max-height` high: a block with `min-h-0` and its own scroll gives up the room.
         dialog:
-          "rounded-dialog w-dialog p-dialog gap-dialog top-1/2 -translate-y-1/2",
+          "rounded-dialog w-dialog p-dialog gap-dialog max-h-dialog top-1/2 -translate-y-1/2",
         // The palette: `palette.top` from the window top, `palette.width`, no padding of its own.
         palette: "rounded-palette top-palette w-palette overflow-hidden",
       },

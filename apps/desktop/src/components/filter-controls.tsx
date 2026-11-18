@@ -84,7 +84,6 @@ const sortVariants = cva(
     variants: {
       order: {
         asc: "",
-        default: "",
         desc: "[&>svg]:rotate-180",
       },
     },
@@ -94,20 +93,18 @@ const sortVariants = cva(
 /** What the sort toggle shows and says for each order. */
 const sortLabels = {
   asc: { name: "A to Z", shown: "A-Z" },
-  default: { name: "Enabled first, A to Z", shown: "None" },
   desc: { name: "Z to A", shown: "Z-A" },
 } as const;
 
 /**
- * The sort toggle. It always shows its state on the ghost fill: None until a click, and the list
- * keeps its own order (enabled skills first, then disabled ones, each A to Z). Each click steps
- * on: A-Z with the arrow, then Z-A with the arrow turned, by name alone, then None again.
+ * The sort toggle. The list always sorts by name, and the toggle always shows it on the ghost
+ * fill: A-Z with the arrow, which turns around for Z-A. Each click flips the order.
  */
 export const SortToggle = ({
   order,
   onToggle,
 }: {
-  order: "default" | "asc" | "desc";
+  order: "asc" | "desc";
   onToggle: () => void;
 }) => (
   <button
@@ -118,7 +115,7 @@ export const SortToggle = ({
     className={sortVariants({ order })}
   >
     <span aria-hidden>{sortLabels[order].shown}</span>
-    {order !== "default" && <ArrowDownIcon size="xs" />}
+    <ArrowDownIcon size="xs" />
   </button>
 );
 

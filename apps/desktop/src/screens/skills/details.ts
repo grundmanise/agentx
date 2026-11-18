@@ -20,6 +20,20 @@ export interface Detail {
 const pageLink = (url: string | undefined): DetailLink | undefined =>
   url?.startsWith("https://") === true ? { kind: "page", url } : undefined;
 
+/**
+ * The page the origin beside the skill's name opens: its source's, or the source it was forked
+ * from, the page Source or Forked from in DETAILS opens. Other skills have none.
+ */
+export const originPage = (row: SkillRow): string | undefined => {
+  let url: string | undefined;
+  if (row.kind === "source") {
+    url = row.entry?.source;
+  } else if (row.kind === "yours") {
+    url = row.entry?.upstream;
+  }
+  return url?.startsWith("https://") === true ? url : undefined;
+};
+
 /** `path` shown in Finder, when it is absolute. */
 const pathLink = (path: string): DetailLink | undefined =>
   path.startsWith("/") ? { kind: "path", path } : undefined;
