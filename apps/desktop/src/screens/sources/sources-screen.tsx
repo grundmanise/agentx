@@ -14,7 +14,7 @@ import { notify, notifyError } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { skillNamesOf } from "#/lib/problem-text.ts";
-import { ActionBar } from "#/screens/sources/action-bar.tsx";
+import { FloatingActionBar } from "#/screens/sources/action-bar.tsx";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
 import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
@@ -36,7 +36,6 @@ import type {
   SkillCard,
   SourcePill,
 } from "#/screens/sources/projection.ts";
-import type { RimRun } from "#/screens/sources/rim-progress.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillList } from "#/screens/sources/skill-list.tsx";
 import { SourceRow } from "#/screens/sources/source-row.tsx";
@@ -589,27 +588,26 @@ export const SourcesScreen = () => {
         {/* Room for the floating bar over the last skill of the list. */}
         {selection.size > 0 && <div className="h-floating-bar flex-none" />}
       </div>
-      {(selection.size > 0 || rim !== undefined) && (
-        <ActionBar
-          count={selection.size}
-          direct={direct}
-          universal={universal}
-          targets={chosen}
-          onToggleTarget={toggleTarget}
-          onClearTargets={clearTargets}
-          adding={adding || rim !== undefined}
-          rim={rim}
-          onRimSettled={() => {
-            setRim(undefined);
-          }}
-          onAdd={() => {
-            void add();
-          }}
-          onCancel={() => {
-            void cancelCommand(ADD_LABEL);
-          }}
-        />
-      )}
+      <FloatingActionBar
+        shown={selection.size > 0 || rim !== undefined}
+        count={selection.size}
+        direct={direct}
+        universal={universal}
+        targets={chosen}
+        onToggleTarget={toggleTarget}
+        onClearTargets={clearTargets}
+        adding={adding || rim !== undefined}
+        rim={rim}
+        onRimSettled={() => {
+          setRim(undefined);
+        }}
+        onAdd={() => {
+          void add();
+        }}
+        onCancel={() => {
+          void cancelCommand(ADD_LABEL);
+        }}
+      />
       <AddSourceDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}

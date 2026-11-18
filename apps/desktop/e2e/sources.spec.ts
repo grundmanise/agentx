@@ -420,6 +420,31 @@ test("opening a row reads its SKILL.md once, then opens, and links to the skill"
   ]);
 });
 
+test("the bar slides up from below the edge, and back down once nothing is selected", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await check(page, "docx").click();
+  await expect(bar(page)).toHaveCSS("animation-name", "floating-bar");
+  await expect(bar(page)).not.toHaveAttribute("data-leaving");
+  await check(page, "docx").click();
+  // On its way out it keeps its count, then it goes.
+  await expect(bar(page)).toHaveAttribute("data-leaving", "");
+  await expect(bar(page)).toHaveCSS("animation-name", "floating-bar-out");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 1" })
+  ).toBeVisible();
+  await expect(bar(page)).toHaveCount(0);
+  // Selected again while it leaves, it comes back.
+  await check(page, "docx").click();
+  await check(page, "docx").click();
+  await check(page, "docx").click();
+  await expect(bar(page)).not.toHaveAttribute("data-leaving");
+  await page.waitForTimeout(400);
+  await expect(bar(page)).toBeVisible();
+});
+
 test("names and targets: two cards and one enabled agent turned off", async ({
   cli,
   page,
