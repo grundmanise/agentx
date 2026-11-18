@@ -257,8 +257,11 @@ export const SourcesScreen = () => {
         ? undefined
         : groupCards(
             orderCards(
-              resultCards(results, library, (url) =>
-                pageRef(sources.find((s) => s.url === url))
+              resultCards(
+                // A source removed while the answer is shown takes its results with it.
+                results.filter((r) => sources.some((s) => s.url === r.source)),
+                library,
+                (url) => pageRef(sources.find((s) => s.url === url))
               )
             )
           ),
