@@ -117,6 +117,30 @@ test("the list is as the user left it after another screen: its selection and wh
   expect(await list(page).evaluate((nav) => nav.scrollTop)).toBe(scrolled);
 });
 
+test("a subgroup the user collapsed stays collapsed after another screen, the selected skill's too", async ({
+  cli,
+  page,
+}) => {
+  const first = listedPluginSkill(0);
+  await openAt(cli, page, first.name);
+  const toggle = list(page).getByRole("button", {
+    exact: true,
+    name: `${first.plugin} ${SKILLS_PER_PLUGIN} acme-marketplace`,
+  });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  const main = page.getByRole("navigation", { name: "Main" });
+  await main.getByRole("link", { name: "Agents" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Agents" })
+  ).toBeVisible();
+  await main.getByRole("link", { name: "Skills" }).click();
+
+  await expect(pane(page, first.name)).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
 test("plugins' subgroups start collapsed, but the opened skill's; Collapse all and Expand all", async ({
   cli,
   page,

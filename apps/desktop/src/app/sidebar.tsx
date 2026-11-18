@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router";
 
-import { screenOf, useLastRoute } from "#/app/kept-screens.tsx";
+import { backState, screenOf, useLastRoute } from "#/app/kept-screens.tsx";
 import { screens } from "#/app/screens.ts";
 import type { Screen } from "#/app/screens.ts";
 import { AgentxMark } from "#/components/agentx-mark.tsx";
@@ -39,6 +39,7 @@ const NavItem = ({
   const active = screenOf(useLocation().pathname)?.path === path;
   return (
     <Link
+      state={backState}
       to={useLastRoute(path)}
       aria-current={active ? "page" : undefined}
       className={cn(
