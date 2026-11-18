@@ -662,9 +662,28 @@ test("search asks serve once per settled query and shows only the latest answer"
   expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
   expect(await skillNames(grid(page, "zeta/tools"))).toEqual(["docgen"]);
 
-  // Clearing the query shows the listing again.
+  // While the next query waits, the last answer stays: the listing does not come back between.
+  await field.fill("pdfz");
+  await expect.poll(() => cli.serveRequests.length).toBe(3);
+  await expect(row(page, "artifacts")).toHaveCount(0);
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
+  await cli.serveEmit([
+    {
+      query: "pdfz",
+      request_id: lastSearch(cli).request_id,
+      results: [],
+      type: "search",
+    },
+  ]);
+  await expect(page.getByText("No skills match")).toBeVisible();
+
+  // Clearing the query shows the listing again, and the next query starts from it.
   await field.fill("");
   await expect(row(page, "artifacts")).toBeVisible();
+  await field.fill("x");
+  await expect.poll(() => cli.serveRequests.length).toBe(4);
+  await expect(row(page, "artifacts")).toBeVisible();
+  await expect(page.getByText("No skills match")).toHaveCount(0);
 });
 
 test("Add source runs source add, then opens the new source fully preselected", async ({
