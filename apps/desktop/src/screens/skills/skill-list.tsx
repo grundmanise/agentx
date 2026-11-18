@@ -138,8 +138,8 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
     return null;
   }
   return (
-    <Button variant="primary" size="sm" disabled={busy} onClick={onOpen}>
-      Adopt all
+    <Button variant="accent" size="inline" disabled={busy} onClick={onOpen}>
+      <span className="type-button-sm">Adopt all</span>
     </Button>
   );
 };
