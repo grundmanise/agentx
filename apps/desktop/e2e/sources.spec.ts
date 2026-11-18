@@ -1,6 +1,12 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { skillPage, webUrl } from "#/screens/sources/projection.ts";
+import type { SourceSkillEvent } from "#/cli/events.gen.ts";
+import {
+  listingCards,
+  planAdds,
+  skillPage,
+  webUrl,
+} from "#/screens/sources/projection.ts";
 
 import {
   ACME,
@@ -1063,6 +1069,39 @@ test("Remove alone removes the source and keeps its skills", async ({
     `source skills ${ACME_ID}`,
     `source skills ${ZETA_ID}`,
     `source remove ${ZETA}`,
+  ]);
+});
+
+test("Select all in a source whose skills share a name: --all keeps the selected one of the name", () => {
+  const listing: SourceSkillEvent[] = [
+    ["alpha/pdf", "pdf"],
+    ["beta/pdf", "pdf"],
+    ["format", "format"],
+  ].map(([subpath = "", name = ""]) => ({
+    description: name,
+    name,
+    schema_version: 4,
+    source: ACME_ID,
+    subpath,
+    tree: `t-${subpath}`,
+    type: "source_skill",
+  }));
+  const cards = listingCards(listing, ACME, []);
+  const selectable = cards.filter((c) => c.status === undefined);
+  expect(selectable.map((c) => c.skillMd?.subpath)).toEqual([
+    "alpha/pdf",
+    "format",
+  ]);
+  const plan = (selected: typeof cards) =>
+    planAdds({
+      allOf: { cards, source: ACME },
+      enabled: [],
+      selected,
+      targets: [],
+    }).map((p) => p.args);
+  expect(plan(selectable)).toEqual([["skill", "add", ACME, "--all"]]);
+  expect(plan(selectable.filter((c) => c.name !== "pdf"))).toEqual([
+    ["skill", "add", ACME, "--all", "--except", "pdf", "--except", "pdf"],
   ]);
 });
 

@@ -563,8 +563,16 @@ export const planAdds = ({
       allOf !== undefined && allOf.source === source
         ? [
             "--all",
+            // --except leaves out every skill of a name, so a name with a selected card stays in:
+            // the CLI installs the first of it, which is the one that can be selected.
             ...allOf.cards.flatMap((c) =>
-              cards.some((s) => s.key === c.key) ? [] : ["--except", c.name]
+              cards.some(
+                (s) =>
+                  s.key === c.key ||
+                  s.name.toLowerCase() === c.name.toLowerCase()
+              )
+                ? []
+                : ["--except", c.name]
             ),
           ]
         : nameFlags(names);
