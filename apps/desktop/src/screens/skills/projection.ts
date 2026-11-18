@@ -429,12 +429,16 @@ const pluginNameOf = (row: SkillRow) =>
 export const subgroupKey = (row: SkillRow) =>
   `${GROUP_PLUGINS}:${pluginNameOf(row)}@${row.plugin?.marketplace ?? ""}`;
 
-/**
- * Whether a row is in a plugin's subgroup that is collapsed, so the list hides it. Every plugin's
- * subgroup is collapsed but the ones in `expanded`.
- */
-export const inCollapsed = (row: SkillRow, expanded: ReadonlySet<string>) =>
-  row.group === GROUP_PLUGINS && !expanded.has(subgroupKey(row));
+/** Which sections of the list are collapsed: groups are open but the ones in `collapsed`, plugins' subgroups collapsed but the ones in `expanded`. */
+export interface Sections {
+  collapsed: ReadonlySet<string>;
+  expanded: ReadonlySet<string>;
+}
+
+/** Whether a row is in a group or a plugin's subgroup that is collapsed, so the list hides it. */
+export const inCollapsed = (row: SkillRow, sections: Sections) =>
+  sections.collapsed.has(row.group) ||
+  (row.group === GROUP_PLUGINS && !sections.expanded.has(subgroupKey(row)));
 
 /** A plugin group's skills by plugin, A to Z by the plugin's name; each keeps the order of `rows`. */
 const pluginSubgroups = (rows: SkillRow[]): Subgroup[] => {
