@@ -4,14 +4,10 @@ declare global {
   interface Window {
     /** Set by e2e/harness/toast-kinds.ts: shows a failure toast. */
     showFailure?: () => void;
-    /** Set by e2e/harness/running-toast.ts: shows the running command's outcome. */
-    showOutcome?: () => void;
   }
 }
 
-test("stacks toasts, the newest in front, each with its action", async ({
-  page,
-}) => {
+test("shows one toast at a time, with its action", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
 
@@ -21,37 +17,29 @@ test("stacks toasts, the newest in front, each with its action", async ({
     url: "/e2e/harness/two-toasts.ts",
   });
 
-  const toasts = page.locator("[data-sonner-toast]");
-  await expect(toasts).toHaveCount(2);
-  await expect(toasts.first()).toHaveAttribute("data-front", "true");
-  await expect(toasts.first()).toContainText("Removed pdf from Cursor");
-  await expect(toasts.nth(1)).toContainText("Added pdf to Cursor");
+  await expect(page.getByText("Removed pdf from Cursor")).toBeVisible();
+  // The first toast would stay 2.6s on its own; it must go well before that.
+  await expect(page.getByText("Added pdf to Cursor")).toHaveCount(0, {
+    timeout: 1000,
+  });
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(page).toHaveTitle("undone");
 });
 
-test("puts a running command's outcome in place of its toast", async ({
-  page,
-}) => {
+test("replaces the toast even when timers run late", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
 
+  // The harness module delays every timer set while it calls notify() twice.
   await page.addScriptTag({
     type: "module",
-    url: "/e2e/harness/running-toast.ts",
+    url: "/e2e/harness/two-toasts-busy.ts",
   });
 
-  const toasts = page.locator("[data-sonner-toast]");
-  await expect(toasts).toHaveCount(1);
-  await expect(toasts).toContainText("Checking for updates… 1/2");
-  await expect(toasts).toHaveAttribute("data-type", "loading");
-
-  await page.evaluate(() => {
-    window.showOutcome?.();
+  await expect(page.getByText("Removed pdf from Cursor")).toBeVisible();
+  await expect(page.getByText("Added pdf to Cursor")).toHaveCount(0, {
+    timeout: 1000,
   });
-  await expect(toasts).toHaveCount(1);
-  await expect(toasts).toContainText("All skills are up to date");
-  await expect(toasts).toHaveAttribute("data-type", "success");
 });
 
 test("shows a report at the top right, with its outcome's icon and tint", async ({
@@ -81,5 +69,5 @@ test("shows a report at the top right, with its outcome's icon and tint", async 
     hasText: "Couldn't open the file dialog",
   });
   await expect(failure).toHaveAttribute("data-type", "error");
-  await expect(failure).toHaveAttribute("data-front", "true");
+  await expect(success).toHaveCount(0, { timeout: 1000 });
 });

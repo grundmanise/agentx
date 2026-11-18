@@ -226,6 +226,7 @@ export const checkUpdates = async () => {
     onProgress: (event) => {
       if (event.phase === "fetch") {
         notify(checkingText(event.current, event.total), cancel, {
+          inPlace: true,
           kind: "progress",
           lasting: true,
         });

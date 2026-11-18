@@ -12,7 +12,7 @@ import { Spinner } from "#/components/spinner.tsx";
 
 /**
  * Where toasts show (DESIGN.md §6 "Toast"): top right, `toast.offset` from the window's edges,
- * up to 3 stacked, newest in front, tinted by outcome with Sonner's rich colours.
+ * one at a time, tinted by outcome with Sonner's rich colours.
  */
 export const Toaster = () => (
   <Sonner
@@ -20,7 +20,7 @@ export const Toaster = () => (
     position="top-right"
     // toast.offset
     offset={24}
-    visibleToasts={3}
+    visibleToasts={1}
     richColors
     icons={{
       error: <CircleXIcon />,
