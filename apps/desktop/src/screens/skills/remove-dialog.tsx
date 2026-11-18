@@ -1,8 +1,8 @@
 // The Remove dialog (DESIGN.md §6 "Banner actions and dialogs"): what leaves the machine with the
 // skill, and for one of your own, whether its branch leaves the account remote too. Opened from the
 // Universal chip, it says why the skill leaves every agent: those agents read the library. Remove runs
-// `skill remove <name>`, with --remote when that is checked, and never offers an Undo: a skill of a
-// source is added again from its source, and unpublished edits of your own are gone.
+// `skill remove <name>`, with --remote when that is checked, and never offers an Undo: unpublished
+// edits of your own are gone.
 import { useId, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -19,7 +19,6 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { seenBy } from "#/screens/skills/placements.ts";
-import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { runUntilSettled } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -27,15 +26,8 @@ import { useAppStore } from "#/store/store.ts";
 /** The label of the Remove control for `row`: the runner's name for it. */
 export const removeLabel = (row: SkillRow) => `remove ${row.key}`;
 
-/** What getting the skill back takes, by where it came from. */
+/** What is lost with the skill: the unpublished edits of one of your own. */
 const Consequence = ({ row }: { row: SkillRow }) => {
-  if (row.kind === "source") {
-    return (
-      <p className="type-body text-text-secondary m-0">
-        {`Add it again from ${shortSource(row.entry?.source ?? "")} to get it back.`}
-      </p>
-    );
-  }
   if (row.kind === "yours") {
     return (
       <p className="type-body text-text-secondary m-0">
@@ -100,8 +92,8 @@ export const RemoveDialog = ({
           <DialogTitle>{`Remove ${row.name}?`}</DialogTitle>
           <DialogDescription>
             {fromUniversal
-              ? "Universal agents read your library, where agentx keeps this skill. Removing it there deletes it from every agent on this machine:"
-              : "It will be deleted from every agent on this machine:"}
+              ? "Universal agents read your library, where agentx keeps this skill. Removing it there removes it from every agent that has it:"
+              : "It will be removed from every agent that has it:"}
           </DialogDescription>
         </DialogHeader>
         <ul

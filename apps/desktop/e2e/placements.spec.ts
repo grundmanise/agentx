@@ -555,7 +555,7 @@ test.describe("Remove", () => {
     // only with the library.
     await chip(article, "Universal").click();
     await expect(dialog).toContainText(
-      "Universal agents read your library, where agentx keeps this skill. Removing it there deletes it from every agent on this machine:"
+      "Universal agents read your library, where agentx keeps this skill. Removing it there removes it from every agent that has it:"
     );
     await expect(
       dialog
@@ -578,7 +578,7 @@ test.describe("Remove", () => {
     await article.getByRole("button", { name: "Remove" }).click();
     // The Remove button has no reason to give: the dialog says only what goes.
     await expect(
-      dialog.getByText("It will be deleted from every agent on this machine:", {
+      dialog.getByText("It will be removed from every agent that has it:", {
         exact: true,
       })
     ).toBeVisible();
@@ -640,16 +640,13 @@ test.describe("Remove", () => {
     expect(later(cli)).toEqual([["skill", "remove", "draft", "--json"]]);
   });
 
-  test("a skill of a source: the dialog says where to get it back", async ({
+  test("a skill of a source: the dialog lists the agents that see it", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "pdf");
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
     const dialog = page.getByRole("dialog", { name: "Remove pdf?" });
-    await expect(dialog).toContainText(
-      "Add it again from acme/skills to get it back."
-    );
     await expect(
       dialog
         .getByRole("list", { name: "Agents that see it" })

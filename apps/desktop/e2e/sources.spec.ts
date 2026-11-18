@@ -400,7 +400,7 @@ test("Remove on an Added skill confirms, then runs skill remove for every agent"
   await remove.click();
   const confirm = page.getByRole("dialog", { name: "Remove pdf?" });
   await expect(confirm).toContainText(
-    "It will be deleted from every agent on this machine:"
+    "It will be removed from every agent that has it:"
   );
   await expect(
     confirm.getByRole("list", { name: "Agents that see it" })

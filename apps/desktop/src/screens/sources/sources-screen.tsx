@@ -503,6 +503,7 @@ export const SourcesScreen = () => {
         )}
         {allCards.length > 0 && (
           <SelectAllRow
+            align="end"
             selected={selectedCount}
             total={selectable.length}
             onSelectAll={selectAll}
