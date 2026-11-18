@@ -24,7 +24,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { currentRows } from "#/screens/skills/rows.ts";
 import { addSource, updateSkill } from "#/screens/skills/updates.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { runUntilSettled } from "#/store/settle.ts";
+import { afterSettled, runUntilSettled } from "#/store/settle.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 
 /** The label of Publish all, which shows as pending while its publish runs. */
@@ -195,7 +195,7 @@ const useProgressStore = create<{ progress?: Progress; rim?: RimRun }>()(
   () => ({})
 );
 
-/** How far the running Publish all got; undefined before its first skill and once it ends. */
+/** How far the running Publish all got; undefined before its first skill and once its inventory arrives. */
 export const usePublishProgress = () => useProgressStore((s) => s.progress);
 
 /** The Publish all the title bar's rim shows: while it runs, then until the rim has faded. */
@@ -299,8 +299,11 @@ export const publishAll = async (names: readonly string[]) => {
   });
   const done = outcome.exitCode === EXIT_CODES.ok && !outcome.cancelled;
   useProgressStore.setState({
-    progress: undefined,
     rim: { fraction: done ? 1 : 0, state: done ? "done" : "stopped" },
+  });
+  // The pill stays busy until the inventory that follows arrives: it keeps the last count till then.
+  afterSettled(() => {
+    useProgressStore.setState({ progress: undefined });
   });
   const accountRemoteSet =
     accountRemoteOf(useAppStore.getState().sources) !== undefined;

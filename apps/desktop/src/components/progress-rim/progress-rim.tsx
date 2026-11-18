@@ -1,8 +1,14 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
 
 import { RIM_START, stepRim } from "#/components/progress-rim/rim-progress.ts";
-import type { RimFrame, RimRun } from "#/components/progress-rim/rim-progress.ts";
-import { RIM_FRAGMENT, RIM_VERTEX } from "#/components/progress-rim/rim-shader.ts";
+import type {
+  RimFrame,
+  RimRun,
+} from "#/components/progress-rim/rim-progress.ts";
+import {
+  RIM_FRAGMENT,
+  RIM_VERTEX,
+} from "#/components/progress-rim/rim-shader.ts";
 
 /** Each size: the room around the pill for the glow, in px; how wide the glow and head are; how bright the glow is. */
 const SIZES = {

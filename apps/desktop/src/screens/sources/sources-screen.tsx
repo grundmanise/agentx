@@ -8,6 +8,7 @@ import type {
 } from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
+import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -35,7 +36,6 @@ import type {
   SkillCard,
   SourcePill,
 } from "#/screens/sources/projection.ts";
-import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillList } from "#/screens/sources/skill-list.tsx";
 import { SourceRow } from "#/screens/sources/source-row.tsx";

@@ -1,8 +1,8 @@
 import type { Configuration } from "#/cli/events.gen.ts";
-import { RunButton } from "#/components/run-button.tsx";
 import { ProgressRim } from "#/components/progress-rim/progress-rim.tsx";
-import { AgentTargets } from "#/screens/sources/agent-targets.tsx";
 import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
+import { RunButton } from "#/components/run-button.tsx";
+import { AgentTargets } from "#/screens/sources/agent-targets.tsx";
 
 const Divider = () => (
   <span aria-hidden className="bg-shell-divider h-6 w-px flex-none" />

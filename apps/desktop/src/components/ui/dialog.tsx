@@ -109,6 +109,18 @@ const DialogFooter = ({ ...props }: OwnProps<"div">) => (
   />
 );
 
+/**
+ * The footer's left side, where a dialog says how its run stands, such as "Updating 2 of 4…", then
+ * how it went (DESIGN.md §6 "Dialog"). One look in every dialog that runs a command.
+ */
+const DialogStatus = ({ ...props }: OwnProps<"output">) => (
+  <output
+    data-slot="dialog-status"
+    className="type-secondary text-text-hint flex min-w-0 flex-1 items-center"
+    {...props}
+  />
+);
+
 const DialogTitle = ({ ...props }: OwnProps<typeof DialogPrimitive.Title>) => (
   <DialogPrimitive.Title
     data-slot="dialog-title"
@@ -136,6 +148,7 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogStatus,
   DialogTitle,
   DialogTrigger,
 };

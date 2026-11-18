@@ -15,6 +15,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogStatus,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { plural } from "#/lib/plural.ts";
@@ -242,9 +243,9 @@ export const AdoptDialog = ({
           ))}
         <DialogFooter>
           {run !== undefined && (
-            <output className="type-secondary text-text-hint flex min-w-0 flex-1 items-center">
+            <DialogStatus>
               {run.phase === "running" ? progressText(run) : summaryText(run)}
-            </output>
+            </DialogStatus>
           )}
           {run === undefined || running ? (
             <>

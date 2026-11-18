@@ -22,6 +22,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogStatus,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
@@ -306,11 +307,7 @@ const PublishForm = ({
         <ChangedFiles files={files} />
       </section>
       <DialogFooter>
-        {running && (
-          <output className="type-secondary text-text-hint flex min-w-0 flex-1 items-center">
-            {progressText(name, progress)}
-          </output>
-        )}
+        {running && <DialogStatus>{progressText(name, progress)}</DialogStatus>}
         <DialogClose asChild>
           <Button variant="ghost">Cancel</Button>
         </DialogClose>

@@ -274,6 +274,8 @@ test.describe("publish", () => {
       "There is a newer version of notes skill on the account remote. Update it first, then publish your changes."
     );
     expect(ran(cli, ["skill", "publish", ...OUTGOING])).toBe(true);
+    // Until the inventory that follows arrives, the pill keeps the last count.
+    await expect(status(page)).toHaveText("Publishing 3 of 3");
     await answerRefreshes(cli);
     await expect(status(page)).toHaveText("3 to publish");
 

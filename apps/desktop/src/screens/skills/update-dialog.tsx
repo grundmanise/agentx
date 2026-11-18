@@ -27,6 +27,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogStatus,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { formatAgo, formatDate } from "#/lib/dates.ts";
@@ -681,9 +682,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
         )}
         {run?.failure !== undefined && <ProblemText problem={run.failure} />}
         <DialogFooter>
-          <output className="type-secondary text-text-hint flex min-w-0 flex-1 items-center">
-            {status}
-          </output>
+          <DialogStatus>{status}</DialogStatus>
           {run === undefined || running ? (
             <>
               <DialogClose asChild>
