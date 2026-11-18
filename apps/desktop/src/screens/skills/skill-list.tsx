@@ -863,7 +863,7 @@ export const SkillList = ({
       <div className="pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left gap-split-toolbar flex flex-col">
         <SearchField
           label="Filter skills by name"
-          placeholder="Filter"
+          placeholder="Search"
           value={filters.name}
           onChange={(name) => {
             onFilters({ ...filters, name });
