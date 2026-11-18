@@ -64,8 +64,8 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          # The latest LTS; package.json requires Node 24 or later.
-          node-version: lts/*
+          # The Node version in .node-version, which engines in package.json requires.
+          node-version-file: .node-version
           cache: pnpm
 
       - name: Install WebKitGTK
