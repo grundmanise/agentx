@@ -6,7 +6,11 @@
 import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
 
-import type { FileStatus, UpdateAvailableEvent } from "#/cli/events.gen.ts";
+import type {
+  ChangedFile,
+  FileStatus,
+  UpdateAvailableEvent,
+} from "#/cli/events.gen.ts";
 import { CodePane, parsePatch } from "#/components/code-pane.tsx";
 import {
   Accordion,
@@ -21,6 +25,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "#/components/ui/sheet.tsx";
+import { LoadingPane } from "#/screens/skills/files.tsx";
 import { fromAnotherMachine } from "#/screens/skills/projection.ts";
 import { loadUpdateDiff } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -54,6 +59,8 @@ const Path = ({ path }: { path: string }) => (
 const Hint = ({ children }: { children: string }) => (
   <p className="type-secondary text-text-hint m-0">{children}</p>
 );
+
+const READING = "Reading the changes…";
 
 const BINARY = /^Binary files /mu;
 
@@ -90,19 +97,83 @@ const FilesOnly = ({ update }: { update: UpdateAvailableEvent }) => (
   </div>
 );
 
+const revealVariants = cva("", {
+  variants: {
+    revealing: {
+      false: "",
+      true: "animate-code-reveal",
+    },
+  },
+});
+
+/**
+ * The changes while they are read: the first changed file's block, open, over the loading pane of
+ * the skill's Files, so the block keeps its place when its patch comes in.
+ */
+const Reading = ({
+  file,
+  closed,
+  onClosedChange,
+}: {
+  file: ChangedFile | undefined;
+  closed: string[];
+  onClosedChange: (closed: string[]) => void;
+}) => {
+  if (file === undefined) {
+    return <LoadingPane label={READING} />;
+  }
+  const isOpen = !closed.includes(file.path);
+  return (
+    <Accordion
+      label="Changes"
+      value={isOpen ? [file.path] : []}
+      onValueChange={(value) => {
+        onClosedChange(value.includes(file.path) ? [] : [file.path]);
+      }}
+    >
+      <AccordionItem value={file.path}>
+        <AccordionTrigger label={file.path} open={isOpen}>
+          <Status status={file.status} />
+          <Path path={file.path} />
+        </AccordionTrigger>
+        <AccordionContent>
+          <LoadingPane label={READING} />
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+};
+
 /** What the update changes, from `skill diff <name> --update`, one block per file, all open. */
 const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
-  const read = useAppStore((s) => s.updateDiffs[update.name]);
+  const stored = useAppStore((s) => s.updateDiffs[update.name]);
+  // A read of another candidate is not what this update changes.
+  const read = stored?.candidate === update.candidate ? stored : undefined;
   // Every block starts open; these are the ones the user closed.
   const [closed, setClosed] = useState<string[]>([]);
+  // A patch that comes in while the loading pane shows cross-fades into it, as in the skill's
+  // Files; one read before the sheet opened shows at once.
+  const [shown, setShown] = useState(read);
+  const [revealing, setRevealing] = useState(false);
+  if (read !== shown) {
+    setShown(read);
+    if (shown === undefined && read?.failed !== true) {
+      setRevealing(true);
+    }
+  }
 
   useEffect(() => {
     void loadUpdateDiff(update.name, update.candidate);
   }, [update.name, update.candidate]);
 
-  // A read of another candidate is not what this update changes.
-  if (read === undefined || read.candidate !== update.candidate) {
-    return <Hint>Reading the changes…</Hint>;
+  if (read === undefined) {
+    return (
+      <Reading
+        file={update.files[0]}
+        closed={closed}
+        onClosedChange={setClosed}
+      />
+    );
   }
   if (read.failed === true) {
     return (
@@ -128,14 +199,29 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
         setClosed(paths.filter((p) => !value.includes(p)));
       }}
     >
-      {diffs.map((diff) => (
+      {diffs.map((diff, i) => (
         <AccordionItem key={diff.path} value={diff.path}>
           <AccordionTrigger label={diff.path} open={open.includes(diff.path)}>
             <Status status={diff.status} />
             <Path path={diff.path} />
           </AccordionTrigger>
           <AccordionContent>
-            <Patch path={diff.path} patch={diff.patch} />
+            {/* One tree, faded in or not, so that the pane is not remounted when the fade ends. */}
+            <div className="relative">
+              <div
+                className={revealVariants({ revealing: revealing && i === 0 })}
+              >
+                <Patch path={diff.path} patch={diff.patch} />
+              </div>
+              {revealing && i === 0 && (
+                <LoadingPane
+                  leaving
+                  onLeft={() => {
+                    setRevealing(false);
+                  }}
+                />
+              )}
+            </div>
           </AccordionContent>
         </AccordionItem>
       ))}
