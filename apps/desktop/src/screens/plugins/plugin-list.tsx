@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
@@ -8,6 +8,7 @@ import { ListRow } from "#/components/list-row.tsx";
 import { Pill } from "#/components/pill.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
+import { useOnNewKey } from "#/lib/new-key.ts";
 import { plural } from "#/lib/plural.ts";
 import { PluginFilterPopover } from "#/screens/plugins/filter-popover.tsx";
 import { PluginTile } from "#/screens/plugins/plugin-tile.tsx";
@@ -83,8 +84,6 @@ const PluginRowView = ({
 
 /** A plugin's row, inset under its group's caption, beside the group's guide line. */
 const ROW = `pl-subgroup-indent relative flex ${LIST_GUIDE}`;
-/** The height of a group's pinned header, which covers the top of the list. */
-const GROUP_HEADER = 30;
 /** A row after the first of its group, `row.spacing` below the row before it. */
 const ROW_AFTER = `pt-rows ${ROW}`;
 
@@ -104,18 +103,21 @@ const PluginItem = ({
   onSelect: () => void;
 }) => {
   const ref = useRef<HTMLLIElement>(null);
-  useEffect(() => {
+  useOnNewKey(selected ? row.key : undefined, () => {
     const item = ref.current;
     const list = item?.closest("[data-plugin-scroll]");
-    if (!selected || item === null || list === null || list === undefined) {
+    const header = item?.closest("section")?.querySelector("h2");
+    if (!item || !list || !header) {
       return;
     }
     const at = item.getBoundingClientRect();
-    const view = list.getBoundingClientRect();
-    if (at.top < view.top + GROUP_HEADER || at.bottom > view.bottom) {
+    if (
+      at.top < header.getBoundingClientRect().bottom ||
+      at.bottom > list.getBoundingClientRect().bottom
+    ) {
       item.scrollIntoView({ block: "center" });
     }
-  }, [selected]);
+  });
   return (
     <li ref={ref} className={first ? ROW : ROW_AFTER}>
       <PluginRowView row={row} selected={selected} onSelect={onSelect} />
