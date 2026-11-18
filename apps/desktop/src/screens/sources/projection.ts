@@ -234,7 +234,10 @@ export interface SkillMdRef {
 }
 
 export interface SkillCard {
-  /** The card's own key: its source and name. */
+  /**
+   * The card's own key: its source and name, and for a skill read from a source, its subpath, as
+   * two directories of one source can hold skills of the same name.
+   */
   key: string;
   /** Where the card installs from: the source's canonical URL, or YOUR_SKILLS. */
   source: string;
@@ -248,10 +251,17 @@ export interface SkillCard {
   skillMd?: SkillMdRef;
   /** The skill's directory on its source's web page, when agentx knows the host's pages. */
   page?: string;
+  /**
+   * The subpath of the skill at an earlier subpath of the same source that has this card's name,
+   * which `skill add` installs instead: the card is in use by name, not added.
+   */
+  sharedWith?: string;
 }
 
-export const cardKey = (source: string, name: string) =>
-  `${source}\u0000${name}`;
+export const cardKey = (source: string, name: string, subpath?: string) =>
+  subpath === undefined
+    ? `${source}\u0000${name}`
+    : `${source}\u0000${name}\u0000${subpath}`;
 
 const card = (
   source: string,
@@ -263,7 +273,7 @@ const card = (
 ): SkillCard => {
   const c: SkillCard = {
     description,
-    key: cardKey(source, name),
+    key: cardKey(source, name, skillMd?.subpath),
     name,
     source,
   };
@@ -313,6 +323,42 @@ const sourceSkillStatus = (
   return named.kind === "unmanaged" ? "on-disk" : "name-in-use";
 };
 
+/** Where a skill sits in its source, for a reason that names it. */
+const placeOf = (subpath: string) => (subpath === "" ? "the root" : subpath);
+
+/**
+ * The cards with each skill a source holds under the name of a skill at an earlier subpath, in
+ * any case, as not selectable: the library holds one skill per name, and `skill add` installs
+ * the first of a name and skips the rest. A card that cannot be selected already keeps its reason.
+ */
+const withSharedNames = (cards: SkillCard[]): SkillCard[] => {
+  const nameOf = (c: SkillCard) => `${c.source}\u0000${c.name.toLowerCase()}`;
+  const first = new Map<string, string>();
+  for (const c of cards) {
+    const subpath = c.skillMd?.subpath;
+    const earlier = first.get(nameOf(c));
+    if (subpath !== undefined && (earlier === undefined || subpath < earlier)) {
+      first.set(nameOf(c), subpath);
+    }
+  }
+  return cards.map((c) => {
+    const earlier = first.get(nameOf(c));
+    if (
+      c.status !== undefined ||
+      earlier === undefined ||
+      earlier === c.skillMd?.subpath
+    ) {
+      return c;
+    }
+    return {
+      ...c,
+      sharedWith: earlier,
+      status: "name-in-use",
+      title: `The skill at ${placeOf(earlier)} in this source is named ${c.name} too, and only the first of a name can be added`,
+    };
+  });
+};
+
 /** The cards of a source's listing, as `source skills <id>` gave it. */
 export const listingCards = (
   listing: SourceSkillEvent[],
@@ -321,14 +367,16 @@ export const listingCards = (
   /** The ref the skills' pages are at: `pageRef` of the source. */
   ref = "HEAD"
 ): SkillCard[] =>
-  listing.map((s) =>
-    card(
-      url,
-      s.name,
-      s.description,
-      sourceSkillStatus(url, s.subpath, s.name, library),
-      { source: s.source, subpath: s.subpath, tree: s.tree },
-      skillPage(url, ref, s.subpath)
+  withSharedNames(
+    listing.map((s) =>
+      card(
+        url,
+        s.name,
+        s.description,
+        sourceSkillStatus(url, s.subpath, s.name, library),
+        { source: s.source, subpath: s.subpath, tree: s.tree },
+        skillPage(url, ref, s.subpath)
+      )
     )
   );
 
@@ -378,14 +426,16 @@ export const resultCards = (
   /** The ref a source's pages are at, by its URL: `pageRef` of the source. */
   refOf: (url: string) => string = () => "HEAD"
 ): SkillCard[] =>
-  results.map((r) =>
-    card(
-      r.source,
-      r.name,
-      r.description,
-      sourceSkillStatus(r.source, r.subpath, r.name, library),
-      { source: r.source, subpath: r.subpath, tree: r.tree },
-      skillPage(r.source, refOf(r.source), r.subpath)
+  withSharedNames(
+    results.map((r) =>
+      card(
+        r.source,
+        r.name,
+        r.description,
+        sourceSkillStatus(r.source, r.subpath, r.name, library),
+        { source: r.source, subpath: r.subpath, tree: r.tree },
+        skillPage(r.source, refOf(r.source), r.subpath)
+      )
     )
   );
 
@@ -519,8 +569,16 @@ export const planAdds = ({
       allOf !== undefined && allOf.source === source
         ? [
             "--all",
+            // --except leaves out every skill of a name, so a name with a selected card stays in:
+            // the CLI installs the first of it, which is the one that can be selected.
             ...allOf.cards.flatMap((c) =>
-              cards.some((s) => s.key === c.key) ? [] : ["--except", c.name]
+              cards.some(
+                (s) =>
+                  s.key === c.key ||
+                  s.name.toLowerCase() === c.name.toLowerCase()
+              )
+                ? []
+                : ["--except", c.name]
             ),
           ]
         : nameFlags(names);
