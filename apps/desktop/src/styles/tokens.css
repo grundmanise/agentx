@@ -7,7 +7,9 @@
  * no default colours, spacing, radii, shadows, font sizes, weights, line heights, tracking,
  * breakpoints, containers, blurs, easings or animations. A class works only when it names a
  * token declared in this file. Do not add a token to make one class work; add it when the
- * design (DESIGN.md) calls for a new value.
+ * design (DESIGN.md) calls for a new value. The one exception is shadcn's animation classes
+ * (`animate-in`, `fade-in-0`, `zoom-in-95`, ...): tw-animate-css provides them, imported after
+ * this file in index.css so that the reset above leaves its theme in place.
  *
  * Sections:
  *   1. Primitives          raw palette, outside the theme (never used by components)
@@ -229,7 +231,6 @@
   --color-filter-chip-text: var(--gray-150);
   --color-filter-chip-hover: var(--gray-880);
   --color-filter-sort-text: var(--gray-200);
-  --color-filter-sort-off-text: var(--color-text-caption);
 
   /* Lists and rows */
   --color-row-hover: var(--gray-920);
@@ -693,6 +694,8 @@
   --width-dialog: 480px;
   --padding-dialog: 32px;
   --gap-dialog: 22px;
+  /* The window's height less dialog.window-inset, 32, above and below. */
+  --max-height-dialog: calc(100vh - 64px);
   --gap-popover: 16px;
   --width-popover: 360px;
   --min-width-menu: 240px;

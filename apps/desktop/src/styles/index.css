@@ -7,12 +7,19 @@
 @import "@fontsource/instrument-serif/400.css";
 @import "@fontsource/instrument-serif/400-italic.css";
 @import "./tokens.css";
+/* After tokens.css, so its reset leaves the plugin's theme in place: shadcn's animation classes. */
+@import "tw-animate-css";
 
 @layer base {
   html,
   body,
   #root {
     height: 100%;
+  }
+  /* The app is dark only. A dark colour scheme makes WebKit draw its native controls, such as
+     scrollbars, for a dark background (DESIGN.md §1). */
+  html {
+    color-scheme: dark;
   }
   body {
     @apply type-body;
@@ -27,8 +34,10 @@
   button {
     cursor: pointer;
   }
+  /* The value of a label/value pair is selectable, so it can be copied (DESIGN.md §6 "Values"). */
   input,
-  textarea {
+  textarea,
+  dd {
     user-select: text;
   }
   input::placeholder,

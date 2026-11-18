@@ -59,12 +59,6 @@ const noCards: SkillCard[] = [];
 type Selection = ReadonlyMap<string, SkillCard>;
 const noSelection: Selection = new Map();
 
-/** A search answer, kept with the query it answers. */
-interface Found {
-  query: string;
-  results: SearchResult[];
-}
-
 /** Loads what a pill shows: a source's listing, or your skills on the account remote. */
 const loadPill = async (key: string) => {
   await (key === YOUR_SKILLS ? loadInstallable() : loadListing(key));
@@ -168,7 +162,7 @@ export const SourcesScreen = () => {
   // The pill the user opened; before any, the first pill is open.
   const [active, setActive] = useState<string | undefined>();
   const [query, setQuery] = useState("");
-  const [found, setFound] = useState<Found | undefined>();
+  const [found, setFound] = useState<SearchResult[] | undefined>();
   const [selection, setSelection] = useState<Selection>(noSelection);
   // The user started from Select all or the preselection: the listing's source takes `--all`.
   const [allMode, setAllMode] = useState(false);
@@ -208,13 +202,21 @@ export const SourcesScreen = () => {
 
   useLoadUnopened(activePill, active);
 
+  /** Sets the query; an empty one shows the listing, and the next search starts from it. */
+  const changeQuery = (text: string) => {
+    setQuery(text);
+    if (text.trim() === "") {
+      setFound(undefined);
+    }
+  };
+
   /** Makes `key` the open pill, with nothing selected and no search. */
   const select = (key: string) => {
     opened.current = key;
     setActive(key);
     setSelection(noSelection);
     setAllMode(false);
-    setQuery("");
+    changeQuery("");
     setNow(Date.now());
   };
   const open = (key: string) => {
@@ -246,19 +248,20 @@ export const SourcesScreen = () => {
           )
         );
   }, [activePill, installable, listing, library, sources]);
-  // A search answer replaces the listing while it answers the query as it stands.
-  const results =
-    found !== undefined && found.query === query.trim()
-      ? found.results
-      : undefined;
+  // A search answer replaces the listing. While the latest query waits for its answer, the last
+  // answer stays, so the list and its Select all count change once, not back to the listing between.
+  const results = query.trim() === "" ? undefined : found;
   const resultGroups = useMemo(
     () =>
       results === undefined
         ? undefined
         : groupCards(
             orderCards(
-              resultCards(results, library, (url) =>
-                pageRef(sources.find((s) => s.url === url))
+              resultCards(
+                // A source removed while the answer is shown takes its results with it.
+                results.filter((r) => sources.some((s) => s.url === r.source)),
+                library,
+                (url) => pageRef(sources.find((s) => s.url === url))
               )
             )
           ),
@@ -293,7 +296,7 @@ export const SourcesScreen = () => {
             void (async () => {
               const answer = await search(text);
               if (!stale && answer !== undefined) {
-                setFound({ query: text, results: answer });
+                setFound(answer);
               }
             })();
           }, SEARCH_DEBOUNCE_MS);
@@ -485,13 +488,13 @@ export const SourcesScreen = () => {
             placeholder="Search all sources"
             value={query}
             onChange={(e) => {
-              setQuery(e.target.value);
+              changeQuery(e.target.value);
             }}
           />
         </div>
         <SourceRow pills={pills} active={activeKey} now={now} onOpen={open} />
-        {/* The card of the open source; a search looks across every source, so it hides. */}
-        {activePill !== undefined && query.trim() === "" && (
+        {/* The card of the open source; it stays while a search looks across every source. */}
+        {activePill !== undefined && (
           <OpenSource
             // A new source gets a new card, so a Remove dialog open on the old one closes.
             key={activePill.key}
@@ -505,7 +508,12 @@ export const SourcesScreen = () => {
           <SelectAllRow
             selected={selectedCount}
             total={selectable.length}
-            added={allCards.length - selectable.length}
+            added={
+              // A skill whose name an earlier skill of its source has is not on this machine.
+              allCards.filter(
+                (c) => c.status !== undefined && c.sharedWith === undefined
+              ).length
+            }
             onSelectAll={selectAll}
             onClear={clear}
           />
