@@ -234,12 +234,13 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
     .poll(() => commands())
     .toEqual(
       expect.arrayContaining([
-        ["skill", "files", "notes", "--json"],
         ["skill", "place", "notes", "--json"],
         ...loadLines,
       ])
     );
   expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
+  // The skill's files show from the read the first launch kept.
+  expect(commands()).not.toContainEqual(["skill", "files", "notes", "--json"]);
   expect(cli.serveStarts).toBe(2);
 });
 

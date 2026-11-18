@@ -98,28 +98,34 @@ export const loadListing = async (id: string) => {
       }));
     }
   }
-  await load(["source", "skills", id], (events, state) => ({
-    listings: {
-      ...state.listings,
-      [id]: events.filter((e) => e.type === "source_skill"),
-    },
-  }));
-  const listing = useAppStore.getState().listings[id];
-  if (listing !== undefined) {
-    void keepRead("listing", id, "", listing);
+  // Only what this run read is kept: a failed run leaves the listing as it was.
+  let read: SourceSkillEvent[] | undefined;
+  await load(["source", "skills", id], (events, state) => {
+    read = events.filter((e) => e.type === "source_skill");
+    return { listings: { ...state.listings, [id]: read } };
+  });
+  if (read !== undefined) {
+    void keepRead("listing", id, "", read);
   }
 };
 
 /**
  * Loads your skills the account remote holds that this machine has not installed:
  * `skill list --remote`, which fetches the account remote. The Add screen calls it when the Your
- * skills pill opens. The list kept from an earlier launch shows while it runs.
+ * skills pill opens. The list kept from an earlier launch for the same account remote shows while
+ * it runs.
  */
 export const loadInstallable = async () => {
-  if (useAppStore.getState().installable === undefined) {
+  const remote = useAppStore
+    .getState()
+    .settings?.sources.find((s) => s.account === true)?.url;
+  if (
+    remote !== undefined &&
+    useAppStore.getState().installable === undefined
+  ) {
     const kept = await cachedRead<InstallableSkillEvent[]>(
       "installable",
-      "",
+      remote,
       ""
     );
     if (
@@ -129,12 +135,14 @@ export const loadInstallable = async () => {
       useAppStore.setState({ installable: kept });
     }
   }
-  await load(["skill", "list", "--remote"], (events) => ({
-    installable: events.filter((e) => e.type === "installable_skill"),
-  }));
-  const { installable } = useAppStore.getState();
-  if (installable !== undefined) {
-    void keepRead("installable", "", "", installable);
+  // Only what this run read is kept: a failed run leaves the list as it was.
+  let read: InstallableSkillEvent[] | undefined;
+  await load(["skill", "list", "--remote"], (events) => {
+    read = events.filter((e) => e.type === "installable_skill");
+    return { installable: read };
+  });
+  if (remote !== undefined && read !== undefined) {
+    void keepRead("installable", remote, "", read);
   }
 };
 
@@ -364,7 +372,11 @@ export const updateDiffLabel = (name: string) => `update diff ${name}`;
  * however often its changes are opened, and a newer one reads again. A failed read is kept with
  * the CLI's message, and tried again the next time the changes are opened.
  */
-export const loadUpdateDiff = async (name: string, candidate: string) => {
+export const loadUpdateDiff = async (
+  name: string,
+  candidate: string,
+  base: string
+) => {
   if (updateDiffCandidates.get(name) === candidate) {
     return;
   }
@@ -375,8 +387,12 @@ export const loadUpdateDiff = async (name: string, candidate: string) => {
       ? s
       : { updateDiffs: rest };
   });
-  // The changes kept from an earlier launch for this candidate are this update's.
-  const kept = await cachedRead<DiffEvent[]>("update-diff", name, candidate);
+  // The changes kept from an earlier launch from this base to this candidate are this update's.
+  const kept = await cachedRead<DiffEvent[]>(
+    "update-diff",
+    name,
+    `${base}:${candidate}`
+  );
   if (updateDiffCandidates.get(name) !== candidate) {
     return;
   }
@@ -398,7 +414,7 @@ export const loadUpdateDiff = async (name: string, candidate: string) => {
     useAppStore.setState((s) => ({
       updateDiffs: { ...s.updateDiffs, [name]: { candidate, diffs } },
     }));
-    void keepRead("update-diff", name, candidate, diffs);
+    void keepRead("update-diff", name, `${base}:${candidate}`, diffs);
     return;
   }
   const error = outcome.events.find((e) => e.type === "error");

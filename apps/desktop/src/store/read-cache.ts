@@ -143,12 +143,20 @@ export const keepRead = async (
   value: unknown
 ) => {
   const kept = await theIndex();
-  const size = JSON.stringify(value).length;
-  if (kept === undefined || size > CACHE_BYTES / 4) {
+  if (kept === undefined) {
     return;
   }
   const key = keyOf(kind, id);
-  kept.entries.set(key, { at: Date.now(), size });
+  const size = JSON.stringify(value).length;
+  if (size > CACHE_BYTES / 4) {
+    // The read kept before is older than this one, which is not kept: neither shows next launch.
+    if (kept.entries.delete(key)) {
+      await writeIndex(kept);
+    }
+    return;
+  }
+  const mine = { at: Date.now(), size };
+  kept.entries.set(key, mine);
   const byUse = [...kept.entries];
   byUse.sort(([, a], [, b]) => a.at - b.at);
   let total = byUse.reduce((sum, [, use]) => sum + use.size, 0);
@@ -172,8 +180,13 @@ export const keepRead = async (
       }),
     ]);
   } catch {
-    // No storage, or no room in it: the read is not kept, and the index does not name it.
-    kept.entries.delete(key);
+    // No storage, or no room in it: the read is not kept, and the index does not name it, unless
+    // a later read of the same key took its place meanwhile.
+    if (kept.entries.get(key) === mine) {
+      kept.entries.delete(key);
+    }
   }
-  scheduleIndexWrite(kept);
+  // The index names the read as soon as it is written, so a read kept just before the app quits
+  // is there next launch.
+  await writeIndex(kept);
 };

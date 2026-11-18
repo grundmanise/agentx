@@ -72,6 +72,16 @@ const rowNames = async (where: Locator) =>
         .map((b) => b.getAttribute("aria-label"))
     );
 
+/** The keys of the reads the kept reads' index in IndexedDB names. */
+const keptReads = async (page: Page) => {
+  await page.addScriptTag({
+    type: "module",
+    url: "/e2e/harness/kept-reads.ts",
+  });
+  await page.waitForFunction(() => "keptReads" in window);
+  return await page.evaluate(async () => await window.keptReads());
+};
+
 /** Opens the Skills screen on the fixture machine at `path`, with every read registered. */
 const openSkills = async (
   cli: MockCli,
@@ -170,8 +180,8 @@ test("after a relaunch, a skill's files show from the kept read, without reading
   await expect(fileRow(files(page, "pdf"), "SKILL.md")).toContainText(
     "6 lines"
   );
-  // The read is kept once it is written, a moment after it shows.
-  await page.waitForTimeout(1500);
+  // The read is kept once the index in IndexedDB names it.
+  await expect.poll(async () => await keptReads(page)).toContain("files:pdf");
 
   const before = cli.commands.length;
   cli.restart();
