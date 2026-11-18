@@ -36,6 +36,7 @@ import type {
   SkillCard,
   SourcePill,
 } from "#/screens/sources/projection.ts";
+import type { RimRun } from "#/screens/sources/rim-progress.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillList } from "#/screens/sources/skill-list.tsx";
 import { SourceRow } from "#/screens/sources/source-row.tsx";
