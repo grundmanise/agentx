@@ -649,15 +649,20 @@ test.describe("the detail pane", () => {
     const forkedFrom = details.getByRole("link", {
       name: "https://github.com/acme/skills/pdf",
     });
-    // A value is selectable: a drag across a link selects its text and opens nothing.
+    // A value is selectable: a drag across a link selects its text and opens nothing. The link
+    // may wrap, so the drag runs from its first line's start to its last line's end.
+    await forkedFrom.scrollIntoViewIfNeeded();
     const linkBox = await forkedFrom.boundingBox();
     if (linkBox === null) {
       throw new Error("the link has no box");
     }
-    const middle = linkBox.y + linkBox.height / 2;
-    await page.mouse.move(linkBox.x + 1, middle);
+    await page.mouse.move(linkBox.x + 1, linkBox.y + 4);
     await page.mouse.down();
-    await page.mouse.move(linkBox.x + linkBox.width - 1, middle, { steps: 5 });
+    await page.mouse.move(
+      linkBox.x + linkBox.width - 1,
+      linkBox.y + linkBox.height - 4,
+      { steps: 5 }
+    );
     await page.mouse.up();
     expect(
       await page.evaluate(() => window.getSelection()?.toString() ?? "")
