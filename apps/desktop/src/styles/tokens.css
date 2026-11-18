@@ -304,6 +304,7 @@
   --color-add-card-status-forked: var(--color-accent-yours);
   --color-add-card-status-disk: var(--color-accent-attention);
   --color-add-card-status-in-use: var(--gray-400);
+  --color-add-card-status-remove: var(--color-accent-danger);
   --color-add-card-check-ring: var(--gray-700);
   --color-source-card-bg: var(--gray-950);
   --color-source-card-border: var(--gray-870);
