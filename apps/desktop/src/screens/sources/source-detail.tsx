@@ -3,12 +3,12 @@
 // which opens the repository in the browser, Refresh and Remove, and a strip of facts from
 // `source list` and its listing. The name, the URL and the facts' values are selectable.
 // The card of Personal, the account remote, has no Remove: Settings manages the account remote.
-import { useRef } from "react";
 import type { Ref } from "react";
 
 import type { SourceEvent } from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { Pill } from "#/components/pill.tsx";
+import { SelectableLink } from "#/components/selectable-link.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
@@ -50,9 +50,6 @@ const Fact = ({
   </div>
 );
 
-/** How far the pointer may move between press and release for the release to count as a click. */
-const CLICK_SLOP = 4;
-
 /**
  * The full URL under the name, a link to its repository when its URL names one. It is
  * selectable: a drag selects its text, and the release that ends the drag opens nothing.
@@ -60,33 +57,20 @@ const CLICK_SLOP = 4;
 const SourceUrl = ({ source }: { source: SourceEvent }) => {
   const text = fullSource(source);
   const page = webUrl(source.url);
-  const pressedAt = useRef<{ x: number; y: number } | null>(null);
   return (
     <p className="type-technical-sm text-text-muted m-0 truncate select-text">
       {page === undefined ? (
         text
       ) : (
-        <a
+        <SelectableLink
           href={page}
-          draggable={false}
-          className="text-text-muted hover:underline"
-          onPointerDown={(e) => {
-            pressedAt.current = { x: e.clientX, y: e.clientY };
-          }}
-          onClick={(e) => {
-            e.preventDefault();
-            const from = pressedAt.current;
-            pressedAt.current = null;
-            const dragged =
-              from !== null &&
-              Math.hypot(e.clientX - from.x, e.clientY - from.y) > CLICK_SLOP;
-            if (!dragged) {
-              void openInBrowser(page);
-            }
+          tone="muted"
+          onOpen={() => {
+            void openInBrowser(page);
           }}
         >
           {text}
-        </a>
+        </SelectableLink>
       )}
     </p>
   );
