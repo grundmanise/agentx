@@ -4,7 +4,8 @@
 import { cva } from "class-variance-authority";
 import { useId, useLayoutEffect, useRef } from "react";
 
-import { notify, notifyFailure } from "#/components/toast.tsx";
+import { CopyButton } from "#/components/copy-button.tsx";
+import { notifyFailure } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Sheet,
@@ -65,15 +66,6 @@ const timeOf = (at: number) =>
   });
 
 const count = (n: number) => n.toLocaleString("en-US");
-
-const copy = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text);
-    notify("Copied");
-  } catch {
-    notifyFailure("Couldn't copy to the clipboard");
-  }
-};
 
 /** Shows the serve log file in the file manager. */
 const showServeLog = async () => {
@@ -193,16 +185,12 @@ export const ActivityLogSheet = () => {
         <DebugOutput />
         <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="gap-button flex">
-            <Button
-              variant="ghost"
+            <CopyButton
+              label="Copy"
               size="sm"
               disabled={lines.length === 0}
-              onClick={() => {
-                void copy(logText(lines));
-              }}
-            >
-              Copy
-            </Button>
+              text={() => logText(lines)}
+            />
             <Button
               variant="ghost"
               size="sm"

@@ -3,20 +3,11 @@ import { useNavigate } from "react-router";
 
 import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { CheckRow } from "#/components/check-row.tsx";
+import { CopyButton } from "#/components/copy-button.tsx";
 import { Spinner } from "#/components/spinner.tsx";
-import { notify, notifyFailure } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { readChecks, report } from "#/startup/checks.ts";
 import { closeChecks, retry, useStartup } from "#/startup/startup.ts";
-
-const copy = async (text: string, toast: string) => {
-  try {
-    await navigator.clipboard.writeText(text);
-    notify(toast);
-  } catch {
-    notifyFailure("Couldn't copy to the clipboard");
-  }
-};
 
 /**
  * The startup layer: shows when a check that this machine can run agentx fails. It names the
@@ -97,14 +88,7 @@ export const StartupLayer = () => {
             </Button>
           )}
           {showReport && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                void copy(report(findings), "Report copied");
-              }}
-            >
-              Copy report
-            </Button>
+            <CopyButton label="Copy report" text={() => report(findings)} />
           )}
         </div>
       </div>

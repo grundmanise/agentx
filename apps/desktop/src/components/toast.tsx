@@ -2,14 +2,13 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 import type { ExternalToast } from "sonner";
 
-import { CloseIcon } from "#/components/icons/close.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { problemSentence } from "#/lib/problem-text.ts";
 
 // The toast last shown, which the next one replaces.
 let shown: string | number | undefined;
 
-// The id the next toast takes, so its buttons can dismiss it.
+// The id the next toast takes, so its action can dismiss it.
 let count = 0;
 const nextId = () => {
   count += 1;
@@ -59,48 +58,30 @@ export interface ToastAction {
 }
 
 /**
- * A toast's buttons, the app's own (DESIGN.md §6 "Buttons") in place of Sonner's: its action as a
- * small ghost button, then, on a toast that stays until dismissed, a ghost icon button named
- * Dismiss. Sonner shows an element given as its action as it is, at the end of the toast's row.
+ * A toast's action, such as Undo, Retry or Cancel, as the app's small ghost button (DESIGN.md §6
+ * "Buttons") in place of Sonner's: Sonner shows an element given as its action as it is, at the end
+ * of the toast's row. A click runs the action and takes the toast away.
  */
-const toastButtons = (
-  id: string | number,
-  action: ToastAction | undefined,
-  dismiss: boolean
-) =>
-  action === undefined && !dismiss ? undefined : (
-    <span className="ml-auto flex flex-none items-center gap-1">
-      {action !== undefined && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            toast.dismiss(id);
-            action.onClick();
-          }}
-        >
-          {action.label}
-        </Button>
-      )}
-      {dismiss && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Dismiss"
-          onClick={() => {
-            toast.dismiss(id);
-          }}
-        >
-          <CloseIcon />
-        </Button>
-      )}
+const actionButton = (id: string | number, action: ToastAction | undefined) =>
+  action === undefined ? undefined : (
+    <span className="ml-auto flex-none">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          toast.dismiss(id);
+          action.onClick();
+        }}
+      >
+        {action.label}
+      </Button>
     </span>
   );
 
 /**
  * What a toast reports (DESIGN.md §6 "Toast"), which sets its icon and its tint: a command that
  * succeeded, one that failed, one that succeeded with warnings, one that runs, or a plain report
- * with no outcome, such as Copied.
+ * with no outcome, such as Stopped.
  */
 export type ToastKind = "success" | "error" | "warning" | "progress" | "plain";
 
@@ -132,7 +113,7 @@ export const notify = (
 ) => {
   const id = inPlace && shown !== undefined ? shown : nextId();
   const options: ExternalToast = {
-    action: toastButtons(id, action, false),
+    action: actionButton(id, action),
     duration: durationOf(action !== undefined, lasting),
     id,
   };
@@ -163,7 +144,7 @@ interface DetailToast {
 
 /**
  * A toast with lines under its message (DESIGN.md §6 "Attention toast" and "Error toast"): Sonner's
- * description holds them, then its action when it has one, and Dismiss.
+ * description holds them, then its action when it has one, and Sonner's close button, named Dismiss.
  */
 const notifyDetail = ({
   kind,
@@ -189,7 +170,8 @@ const notifyDetail = ({
   const id = nextId();
   return replace(() =>
     show[kind](message, {
-      action: toastButtons(id, action, true),
+      action: actionButton(id, action),
+      closeButton: true,
       description: lines,
       duration,
       id,

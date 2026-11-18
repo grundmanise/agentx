@@ -447,7 +447,9 @@ test("Copy report copies doctor's output in the CLI's layout", async ({
   await page.goto("/");
   await expect(title(page)).toHaveText("Update git to continue");
   await page.getByRole("button", { name: "Copy report" }).click();
-  await expect(page.getByText("Report copied")).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Copied" })
+  ).toHaveCount(1);
   const text = await page.evaluate(
     async () => await navigator.clipboard.readText()
   );

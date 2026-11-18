@@ -799,7 +799,7 @@ The value of a label/value pair (a `<dd>`: the skill's Details, a source's facts
 - **Link, inline** – the plain inline shape in `text.secondary`, 500, hover `text.primary` and underlined. Only for a link-like action inside a line of text that opens something, such as See changes on a row of the Update skills dialog.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
-- **Toast buttons** – the app's own, in place of Sonner's: the action (Undo, Retry, Cancel) a small ghost, Dismiss a ghost `icon-sm` with the close icon.
+- **Toast action** – the app's small ghost (Undo, Retry, Cancel), in place of Sonner's. A toast's Dismiss stays Sonner's corner close button: app buttons are for actions.
 
 Every button but the plain inline one has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
 
@@ -1019,11 +1019,15 @@ One full-width card below the grid, the same surface, for every configuration wh
 - Then the name in `type.plugin-name` and the agent and marketplace in `text.muted`.
 - Contents under a `card.border` hairline: the groups for skills, servers and hooks, each a caption and `plugin-card.row-height` tree rows with a `plugin.connector` line (the last row's stops at the middle), the group's dot, the name and mono meta (`type.technical-sm`, `text.caption`). A skill or server row has a chevron, opens the skill in Skills or the server in MCP servers, and hovers `plugin.row-hover`; a hook row opens nothing.
 
+### Copy button
+
+`src/components/copy-button.tsx`: a ghost button with the copy icon before its label, such as Copy in the activity log and Copy report on the startup layer. Once the text is on the clipboard, the icon is a check in `tone.primary.fg` for 2s and a screen reader hears Copied; no toast shows, as the button answers itself. A copy that fails is an error toast.
+
 ### Toast
 
 A toast reports what happened; it asks for nothing. A control the user is expected to use, such as the Add skills bar (§6 "Agent picker"), is a floating bar at the bottom instead, so the two never cover each other.
 
-shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, the app's buttons (§6 "Buttons", "Toast buttons") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` from the top and right edges of the window; `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
+shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, its corner close button, the app's button for its action (§6 "Buttons", "Toast action") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` from the top and right edges of the window; `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
 
 Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint, Sonner's rich colours: the fill, the border, the message and the icon take the kind's toast tokens.
 
@@ -1033,7 +1037,7 @@ Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint,
 | Error | `CircleXIcon` | `toast.error-*` | A command that failed, or something the app tried that failed, such as "Couldn't open …" |
 | Warning | `AlertTriangleIcon` | `toast.warning-*` | A command that succeeded with warnings, or one that needs the user first, such as "Another agentx command is running" with Retry |
 | Progress | `Spinner` | plain | A command that runs, with its Cancel |
-| Plain | none | plain | A report with no outcome, such as Copied or Stopped, or an action that did nothing |
+| Plain | none | plain | A report with no outcome, such as Stopped, or an action that did nothing |
 
 - Lines under the message, such as an error's details, are Sonner's description in `toast.description`; a warning among them in `tone.attention.fg`.
 - An action, such as Undo or a progress toast's Cancel, is a small ghost button at the end of the row; clicking it also takes the toast away.
@@ -1043,11 +1047,11 @@ Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint,
 
 ### Attention toast
 
-A command that exited 0 and logged warnings: a warning toast with the success text, each warning the CLI logged under it, its action when it has one, and Dismiss. It goes after 5s, and its activity entry is `attention`, not `success`.
+A command that exited 0 and logged warnings: a warning toast with the success text, each warning the CLI logged under it, its action when it has one, and Sonner's close button, named Dismiss. It goes after 5s, and its activity entry is `attention`, not `success`.
 
 ### Error toast
 
-A command that fails for a reason the app does not handle itself (`src/store/runner.ts`): an error toast with the CLI's message and hint as one paragraph (§6 "Refusal under a field"), the lines that say more under it, as the CLI wrote them, then each warning; its action when it has one, and Dismiss. It stays until dismissed when it has a hint, and goes after 5s without one.
+A command that fails for a reason the app does not handle itself (`src/store/runner.ts`): an error toast with the CLI's message and hint as one paragraph (§6 "Refusal under a field"), the lines that say more under it, as the CLI wrote them, then each warning; its action when it has one, and Sonner's close button, named Dismiss. It stays until dismissed when it has a hint, and goes after 5s without one.
 
 ### Stale bar
 
