@@ -1,6 +1,8 @@
 // shadcn/ui's Sonner toaster (https://ui.shadcn.com/docs/components/sonner), adapted to the
 // app: dark only, our icons, and the colours from tokens. Its colours are Sonner's own CSS
 // variables, which `src/styles/index.css` sets from the tokens, as shadcn sets them with `style`.
+// A toast's buttons are the app's own `Button`s, which `src/components/toast.tsx` gives Sonner as
+// its action.
 import { Toaster as Sonner } from "sonner";
 
 import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
@@ -26,6 +28,5 @@ export const Toaster = () => (
       success: <CircleCheckIcon />,
       warning: <AlertTriangleIcon />,
     }}
-    toastOptions={{ closeButtonAriaLabel: "Dismiss" }}
   />
 );

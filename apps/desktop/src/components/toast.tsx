@@ -2,10 +2,19 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 import type { ExternalToast } from "sonner";
 
+import { CloseIcon } from "#/components/icons/close.tsx";
+import { Button } from "#/components/ui/button.tsx";
 import { problemSentence } from "#/lib/problem-text.ts";
 
 // The toast last shown, which the next one replaces.
 let shown: string | number | undefined;
+
+// The id the next toast takes, so its buttons can dismiss it.
+let count = 0;
+const nextId = () => {
+  count += 1;
+  return `toast-${count}`;
+};
 
 /** Shows a toast in place of the one showing. */
 const replace = (show: () => string | number) => {
@@ -50,6 +59,45 @@ export interface ToastAction {
 }
 
 /**
+ * A toast's buttons, the app's own (DESIGN.md §6 "Buttons") in place of Sonner's: its action as a
+ * small ghost button, then, on a toast that stays until dismissed, a ghost icon button named
+ * Dismiss. Sonner shows an element given as its action as it is, at the end of the toast's row.
+ */
+const toastButtons = (
+  id: string | number,
+  action: ToastAction | undefined,
+  dismiss: boolean
+) =>
+  action === undefined && !dismiss ? undefined : (
+    <span className="ml-auto flex flex-none items-center gap-1">
+      {action !== undefined && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            toast.dismiss(id);
+            action.onClick();
+          }}
+        >
+          {action.label}
+        </Button>
+      )}
+      {dismiss && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Dismiss"
+          onClick={() => {
+            toast.dismiss(id);
+          }}
+        >
+          <CloseIcon />
+        </Button>
+      )}
+    </span>
+  );
+
+/**
  * What a toast reports (DESIGN.md §6 "Toast"), which sets its icon and its tint: a command that
  * succeeded, one that failed, one that succeeded with warnings, one that runs, or a plain report
  * with no outcome, such as Copied.
@@ -71,8 +119,7 @@ const show = {
  * One toast at a time (DESIGN.md §6 "Toast"). A toast with an action stays 5s, one without 2.6s,
  * and a `lasting` one, for a command that runs with its Cancel, until the next toast replaces it.
  * A new toast replaces the one showing; with `inPlace`, it changes the text of the one showing
- * instead, as a running command's toast does when its progress moves. A `progress` toast shows its
- * action as Sonner's cancel button, beside the spinner.
+ * instead, as a running command's toast does when its progress moves.
  */
 export const notify = (
   message: ReactNode,
@@ -83,14 +130,14 @@ export const notify = (
     inPlace = false,
   }: { kind?: ToastKind; lasting?: boolean; inPlace?: boolean } = {}
 ) => {
-  const button = action && { label: action.label, onClick: action.onClick };
+  const id = inPlace && shown !== undefined ? shown : nextId();
   const options: ExternalToast = {
-    action: kind === "progress" ? undefined : button,
-    cancel: kind === "progress" ? button : undefined,
+    action: toastButtons(id, action, false),
     duration: durationOf(action !== undefined, lasting),
+    id,
   };
-  if (inPlace && shown !== undefined) {
-    return show[kind](message, { ...options, id: shown });
+  if (id === shown) {
+    return show[kind](message, options);
   }
   return replace(() => show[kind](message, options));
 };
@@ -116,7 +163,7 @@ interface DetailToast {
 
 /**
  * A toast with lines under its message (DESIGN.md §6 "Attention toast" and "Error toast"): Sonner's
- * description holds them, then its action when it has one, and its close button, named Dismiss.
+ * description holds them, then its action when it has one, and Dismiss.
  */
 const notifyDetail = ({
   kind,
@@ -139,12 +186,13 @@ const notifyDetail = ({
         ))}
       </span>
     );
+  const id = nextId();
   return replace(() =>
     show[kind](message, {
-      action: action && { label: action.label, onClick: action.onClick },
-      closeButton: true,
+      action: toastButtons(id, action, true),
       description: lines,
       duration,
+      id,
     })
   );
 };

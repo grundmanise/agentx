@@ -358,7 +358,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `sheet.bg` | `gray-960` | History sheet body |
 | `sheet.border` | `gray-850` |  |
 | `sheet.handle` | `gray-700` | A sheet's handle on hover and while it drags |
-| `toast.text` | `gray-50` | A plain toast's text, and the action button's fill (Sonner's `--normal-text`) |
+| `toast.text` | `gray-50` | A plain toast's text |
 | `toast.description` | `gray-300` | The lines under a toast's message, tinted or not |
 | `toast.success-bg` | `accent.primary` 9% over `overlay.bg` | Success toast fill, solid |
 | `toast.success-border` | `accent.primary` 28% over `overlay.bg` |  |
@@ -799,7 +799,7 @@ The value of a label/value pair (a `<dd>`: the skill's Details, a source's facts
 - **Link, inline** – the plain inline shape in `text.secondary`, 500, hover `text.primary` and underlined. Only for a link-like action inside a line of text that opens something, such as See changes on a row of the Update skills dialog.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
-- **Toast action** – Sonner's own button, as shadcn ships it: `toast.text` fill, `overlay.bg` text.
+- **Toast buttons** – the app's own, in place of Sonner's: the action (Undo, Retry, Cancel) a small ghost, Dismiss a ghost `icon-sm` with the close icon.
 
 Every button but the plain inline one has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
 
@@ -1023,7 +1023,7 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 A toast reports what happened; it asks for nothing. A control the user is expected to use, such as the Add skills bar (§6 "Agent picker"), is a floating bar at the bottom instead, so the two never cover each other.
 
-shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type, shadow, buttons and close button, and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` from the top and right edges of the window; `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
+shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, the app's buttons (§6 "Buttons", "Toast buttons") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` from the top and right edges of the window; `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
 
 Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint, Sonner's rich colours: the fill, the border, the message and the icon take the kind's toast tokens.
 
@@ -1036,18 +1036,18 @@ Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint,
 | Plain | none | plain | A report with no outcome, such as Copied or Stopped, or an action that did nothing |
 
 - Lines under the message, such as an error's details, are Sonner's description in `toast.description`; a warning among them in `tone.attention.fg`.
-- An action, such as Undo, is Sonner's action button; a progress toast's Cancel is its cancel button.
+- An action, such as Undo or a progress toast's Cancel, is a small ghost button at the end of the row; clicking it also takes the toast away.
 - One toast at a time: a new one replaces the one showing.
 - It goes after 2.6s, or 5s with an action.
 - A toast for a command that runs, with its cancel, stays until the command ends and the toast of its outcome replaces it. Progress changes its text in place, the count in `tabular-nums`: Check updates says "Checking for updates…", then "Checking for updates… 1/10".
 
 ### Attention toast
 
-A command that exited 0 and logged warnings: a warning toast with the success text, each warning the CLI logged under it, its action when it has one, and the close button, named Dismiss. It goes after 5s, and its activity entry is `attention`, not `success`.
+A command that exited 0 and logged warnings: a warning toast with the success text, each warning the CLI logged under it, its action when it has one, and Dismiss. It goes after 5s, and its activity entry is `attention`, not `success`.
 
 ### Error toast
 
-A command that fails for a reason the app does not handle itself (`src/store/runner.ts`): an error toast with the CLI's message and hint as one paragraph (§6 "Refusal under a field"), the lines that say more under it, as the CLI wrote them, then each warning; its action when it has one, and the close button, named Dismiss. It stays until dismissed when it has a hint, and goes after 5s without one.
+A command that fails for a reason the app does not handle itself (`src/store/runner.ts`): an error toast with the CLI's message and hint as one paragraph (§6 "Refusal under a field"), the lines that say more under it, as the CLI wrote them, then each warning; its action when it has one, and Dismiss. It stays until dismissed when it has a hint, and goes after 5s without one.
 
 ### Stale bar
 
