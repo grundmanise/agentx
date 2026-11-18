@@ -1,21 +1,8 @@
 import type { Configuration } from "#/cli/events.gen.ts";
-import { Button } from "#/components/ui/button.tsx";
+import { RunButton } from "#/components/run-button.tsx";
+import { AddRim } from "#/screens/sources/add-rim.tsx";
 import { AgentTargets } from "#/screens/sources/agent-targets.tsx";
-
-/** How far an install got: the skills it started, out of the skills it installs. */
-export interface AddProgress {
-  started: number;
-  total: number;
-}
-
-/**
- * "Adding 2 of 7": skills, not steps. The CLI reports three steps per skill and one rescan, so
- * its own `current` and `total` count steps (docs/spec/cli-contract.md, "After the install").
- */
-const progressText = (progress: AddProgress | undefined) =>
-  progress === undefined || progress.started === 0
-    ? "Adding…"
-    : `Adding ${progress.started} of ${progress.total}`;
+import type { RimRun } from "#/screens/sources/rim-progress.ts";
 
 const Divider = () => (
   <span aria-hidden className="bg-shell-divider h-6 w-px flex-none" />
@@ -23,8 +10,9 @@ const Divider = () => (
 
 /**
  * The floating action bar (DESIGN.md §2.2 "Overlays", §4 "Overlays", §8): the install targets
- * (`AgentTargets`, DESIGN.md §6 "Agent picker") and Add, which counts the selected cards; while
- * the install runs, its progress first and Cancel.
+ * (`AgentTargets`, DESIGN.md §6 "Agent picker") and Add, which counts the selected cards. While
+ * the install runs, Add keeps its size and turns into its Stop (DESIGN.md §6 "Run button"), and
+ * the install's progress runs on the bar's rim (DESIGN.md §8 "Add progress").
  */
 export const ActionBar = ({
   count,
@@ -34,7 +22,8 @@ export const ActionBar = ({
   onToggleTarget,
   onClearTargets,
   adding,
-  progress,
+  rim,
+  onRimSettled,
   onAdd,
   onCancel,
 }: {
@@ -48,10 +37,11 @@ export const ActionBar = ({
   targets: string[];
   onToggleTarget: (id: string) => void;
   onClearTargets: () => void;
-  /** The install runs. */
+  /** The install runs, or its rim has not faded yet. */
   adding: boolean;
-  /** The skills the run started, out of those it installs. */
-  progress: AddProgress | undefined;
+  /** The install the rim shows; undefined once it has faded. */
+  rim: RimRun | undefined;
+  onRimSettled: () => void;
   onAdd: () => void;
   onCancel: () => void;
 }) => (
@@ -60,14 +50,7 @@ export const ActionBar = ({
     aria-label="Selected skills"
     className="bottom-floating-bar animate-floating-bar rounded-floating-bar border-overlay-border bg-overlay-bg shadow-popover h-floating-bar absolute left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 border pr-2 pl-4"
   >
-    {adding && (
-      <>
-        <output className="type-body text-text-primary font-medium whitespace-nowrap">
-          {progressText(progress)}
-        </output>
-        <Divider />
-      </>
-    )}
+    <AddRim run={rim} onSettled={onRimSettled} />
     <AgentTargets
       skills={count}
       direct={direct}
@@ -78,14 +61,12 @@ export const ActionBar = ({
       disabled={adding}
     />
     <Divider />
-    {adding ? (
-      <Button variant="ghost" size="sm" onClick={onCancel}>
-        Cancel
-      </Button>
-    ) : (
-      <Button variant="primary" onClick={onAdd}>
-        {`Add ${count}`}
-      </Button>
-    )}
+    <RunButton
+      label={`Add ${count}`}
+      running={adding}
+      stopLabel="Stop adding"
+      onRun={onAdd}
+      onStop={onCancel}
+    />
   </div>
 );

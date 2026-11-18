@@ -465,8 +465,10 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   await bar(page).getByRole("button", { name: "Add 2" }).click();
   await add.started;
   await expect(toasts(page).getByText("Added 2 skills")).toBeVisible();
-  // The selection clears; the cards turn Added only with the next inventory.
+  // The selection clears, but the bar stays while its rim fills, joins and fades.
+  await expect(bar(page).locator("canvas[data-progress]")).toBeAttached();
   await expect(bar(page)).toHaveCount(0);
+  // The cards turn Added only with the next inventory.
   await expect(check(page, "docx")).toBeVisible();
   await cli.serveEmit([
     {
@@ -699,7 +701,7 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
   expect(commandLines(cli)).toContain(line.join(" "));
 });
 
-test("progress shows from the progress events, and Cancel stops the run", async ({
+test("while the install runs, Add keeps its size and turns into Stop, and the rim grows without jumping", async ({
   cli,
   page,
 }) => {
@@ -760,11 +762,43 @@ test("progress shows from the progress events, and Cancel stops the run", async 
   );
   await check(page, "artifacts").click();
   await check(page, "docx").click();
-  await bar(page).getByRole("button", { name: "Add 2" }).click();
+  const addButton = bar(page).getByRole("button", { name: "Add 2" });
+  const before = await addButton.boundingBox();
+  await addButton.click();
   await add.started;
-  await expect(bar(page)).toContainText("Adding 2 of 2");
-  await expect(bar(page)).not.toContainText("of 7");
-  await bar(page).getByRole("button", { name: "Cancel" }).click();
+  const stop = bar(page).getByRole("button", { name: "Stop adding" });
+  await expect(stop).toHaveAttribute("aria-busy", "true");
+  const during = await stop.boundingBox();
+  expect(during?.width).toBe(before?.width);
+  // The click shows the spinner, not Stop, until the pointer leaves.
+  await expect(stop.getByText("Stop", { exact: true })).toBeHidden();
+  // No count of steps or skills: the progress is the rim's.
+  await expect(bar(page)).not.toContainText("Adding");
+  const rim = bar(page).locator("canvas[data-progress]");
+  await expect(rim).toBeAttached();
+  // Six of seven steps ended at once, yet the rim eases there: never a jump, never full early.
+  // Read in the page every 50ms, so the samples are evenly spaced; kept on the canvas.
+  await page.waitForFunction(
+    (canvas) => {
+      const read = `${canvas.dataset.samples ?? ""} ${canvas.dataset.progress}`;
+      canvas.dataset.samples = read.trim();
+      return canvas.dataset.samples.split(" ").length >= 12;
+    },
+    await rim.elementHandle(),
+    { polling: 50 }
+  );
+  const samples = ((await rim.getAttribute("data-samples")) ?? "")
+    .split(" ")
+    .map(Number);
+  expect(samples).toHaveLength(12);
+  for (const [i, value] of samples.entries()) {
+    expect(value).toBeLessThan(0.95);
+    if (i > 0) {
+      expect(value).toBeGreaterThanOrEqual(samples[i - 1] ?? 0);
+      expect(value - (samples[i - 1] ?? 0)).toBeLessThan(0.05);
+    }
+  }
+  await stop.click();
   await expect(
     toasts(page).getByText("Stopped. 2 skills were added.")
   ).toBeVisible();

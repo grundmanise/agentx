@@ -14,7 +14,6 @@ import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { skillNamesOf } from "#/lib/problem-text.ts";
 import { ActionBar } from "#/screens/sources/action-bar.tsx";
-import type { AddProgress } from "#/screens/sources/action-bar.tsx";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
 import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
@@ -36,6 +35,7 @@ import type {
   SkillCard,
   SourcePill,
 } from "#/screens/sources/projection.ts";
+import type { RimRun } from "#/screens/sources/rim-progress.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillList } from "#/screens/sources/skill-list.tsx";
 import { SourceRow } from "#/screens/sources/source-row.tsx";
@@ -187,7 +187,8 @@ export const SourcesScreen = () => {
   const [selection, setSelection] = useState<Selection>(noSelection);
   // The user started from Select all or the preselection: the listing's source takes `--all`.
   const [allMode, setAllMode] = useState(false);
-  const [progress, setProgress] = useState<AddProgress | undefined>();
+  // The install the bar's rim shows; it stays until the rim has faded.
+  const [rim, setRim] = useState<RimRun | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   // The pill opened last, "" before any, for a load that finishes after the user moved on.
@@ -373,27 +374,29 @@ export const SourcesScreen = () => {
     universal,
   } = useAgentTargets();
 
-  /** Runs the plans one after another, `addedBefore` skills having landed so far. */
+  /**
+   * Runs the plans one after another, `addedBefore` skills having landed so far and `before` of
+   * `of` plans having ended. True when every plan ran to the end with exit code 0.
+   */
   const runPlans = async (
     plans: AddPlan[],
-    addedBefore: number
-  ): Promise<void> => {
+    addedBefore: number,
+    before: number,
+    of: number
+  ): Promise<boolean> => {
     const [plan, ...rest] = plans;
     if (plan === undefined) {
-      return;
+      return true;
     }
-    const total = plan.names.length;
-    setProgress({ started: 0, total });
     const outcome = await runCommand(plan.args, {
       label: ADD_LABEL,
-      // A skill starts with its `blobs` step; `import`, `install` and the one `rescan` follow.
+      // The rim reads the CLI's steps (three per skill and a rescan) as a share of the whole install.
       onProgress: (event) => {
-        if (event.phase === "blobs") {
-          setProgress((prev) => ({
-            started: Math.min((prev?.started ?? 0) + 1, total),
-            total,
-          }));
-        }
+        const steps =
+          event.total === undefined || event.total === 0
+            ? 0
+            : event.current / event.total;
+        setRim({ fraction: (before + steps) / of, state: "running" });
       },
       success: () => `Added ${count(plan.names.length, "skill")}`,
     });
@@ -408,7 +411,7 @@ export const SourcesScreen = () => {
       notify(
         `Stopped. ${count(added, "skill")} ${added === 1 ? "was" : "were"} added.`
       );
-      return;
+      return false;
     }
     if (outcome.exitCode === 0) {
       setSelection((prev) => without(prev, (c) => c.source === plan.source));
@@ -438,23 +441,29 @@ export const SourcesScreen = () => {
         );
       }
     }
-    await runPlans(rest, addedBefore + installed.length);
+    const restOk = await runPlans(
+      rest,
+      addedBefore + installed.length,
+      before + 1,
+      of
+    );
+    return outcome.exitCode === 0 && restOk;
   };
 
   const add = async () => {
-    await runPlans(
-      planAdds({
-        allOf:
-          allMode && activePill !== undefined && results === undefined
-            ? { cards: shown, source: activePill.url ?? YOUR_SKILLS }
-            : undefined,
-        enabled,
-        selected: [...selection.values()],
-        targets: chosen,
-      }),
-      0
-    );
-    setProgress(undefined);
+    const plans = planAdds({
+      allOf:
+        allMode && activePill !== undefined && results === undefined
+          ? { cards: shown, source: activePill.url ?? YOUR_SKILLS }
+          : undefined,
+      enabled,
+      selected: [...selection.values()],
+      targets: chosen,
+    });
+    setRim({ fraction: 0, state: "running" });
+    const ok = await runPlans(plans, 0, 0, plans.length);
+    // The rim fills and fades, or drains, before the bar may close (DESIGN.md §8 "Add progress").
+    setRim({ fraction: ok ? 1 : 0, state: ok ? "done" : "stopped" });
   };
 
   /** A source just added opens with every selectable card selected, once its listing arrives. */
@@ -579,7 +588,7 @@ export const SourcesScreen = () => {
         {/* Room for the floating bar over the last skill of the list. */}
         {selection.size > 0 && <div className="h-floating-bar flex-none" />}
       </div>
-      {selection.size > 0 && (
+      {(selection.size > 0 || rim !== undefined) && (
         <ActionBar
           count={selection.size}
           direct={direct}
@@ -587,8 +596,11 @@ export const SourcesScreen = () => {
           targets={chosen}
           onToggleTarget={toggleTarget}
           onClearTargets={clearTargets}
-          adding={adding}
-          progress={progress}
+          adding={adding || rim !== undefined}
+          rim={rim}
+          onRimSettled={() => {
+            setRim(undefined);
+          }}
           onAdd={() => {
             void add();
           }}
