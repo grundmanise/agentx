@@ -329,7 +329,7 @@
   /* Overlays */
   --color-overlay-bg: var(--gray-940);
   --color-overlay-border: var(--gray-800);
-  /* The light on the floating bar's rim while an install runs (DESIGN.md §8 "Add progress"); read by its shader. */
+  /* The light on the floating bar's rim while an install runs (DESIGN.md §8 "Progress rim"); read by its shader. */
   --color-floating-bar-rim: var(--color-accent-primary);
   --color-floating-bar-rim-flow: var(--teal-200);
   --color-popover-row-hover: var(--gray-880);
@@ -438,11 +438,20 @@
       opacity: 0;
     }
   }
-  --animate-floating-bar: floating-bar 0.22s ease;
+  /* The floating bar slides up from below the window's edge, and back down once it is done. */
+  --animate-floating-bar: floating-bar 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-floating-bar-out: floating-bar-out 0.22s
+    cubic-bezier(0.55, 0, 1, 0.45) forwards;
   @keyframes floating-bar {
     from {
       opacity: 0;
-      transform: translateY(24px);
+      transform: translateY(calc(100% + var(--inset-floating-bar)));
+    }
+  }
+  @keyframes floating-bar-out {
+    to {
+      opacity: 0;
+      transform: translateY(calc(100% + var(--inset-floating-bar)));
     }
   }
 

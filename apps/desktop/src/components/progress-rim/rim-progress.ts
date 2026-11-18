@@ -1,15 +1,15 @@
 /**
- * How far the rim of the floating bar shows an install (DESIGN.md §8 "Add progress"). The CLI
- * reports three steps per skill and one rescan, in bursts, so the rim never shows them as they
- * come: it creeps toward 90% on its own, as a browser's loading bar does, and the steps only raise
+ * How far a progress rim shows a command's run (DESIGN.md §8 "Progress rim"). A CLI reports its
+ * steps in bursts, such as three per skill and one rescan for `skill add`, so the rim never shows
+ * them as they come: it creeps toward 90% on its own, as a browser's loading bar does, and the steps only raise
  * the floor it eases toward, at a capped speed, so it never jumps. When the run ends, the rim
  * eases into 100% in a fixed time, its two arcs join, it holds, and it fades.
  */
 
-/** The install the rim shows: the share of the CLI's steps that ended, and how the run stands. */
+/** The run the rim shows: the share of the CLI's steps that ended, and how the run stands. */
 export interface RimRun {
   state: "running" | "done" | "stopped";
-  /** The steps that ended, out of the steps of the whole install, 0 to 1. */
+  /** The steps that ended, out of the steps of the whole run, 0 to 1. */
   fraction: number;
 }
 

@@ -420,6 +420,31 @@ test("opening a row reads its SKILL.md once, then opens, and links to the skill"
   ]);
 });
 
+test("the bar slides up from below the edge, and back down once nothing is selected", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await check(page, "docx").click();
+  await expect(bar(page)).toHaveCSS("animation-name", "floating-bar");
+  await expect(bar(page)).not.toHaveAttribute("data-leaving");
+  await check(page, "docx").click();
+  // On its way out it keeps its count, then it goes.
+  await expect(bar(page)).toHaveAttribute("data-leaving", "");
+  await expect(bar(page)).toHaveCSS("animation-name", "floating-bar-out");
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 1" })
+  ).toBeVisible();
+  await expect(bar(page)).toHaveCount(0);
+  // Selected again while it leaves, it comes back.
+  await check(page, "docx").click();
+  await check(page, "docx").click();
+  await check(page, "docx").click();
+  await expect(bar(page)).not.toHaveAttribute("data-leaving");
+  await page.waitForTimeout(400);
+  await expect(bar(page)).toBeVisible();
+});
+
 test("names and targets: two cards and one enabled agent turned off", async ({
   cli,
   page,
@@ -808,6 +833,44 @@ test("while the install runs, Add keeps its size and turns into Stop, and the ri
   await expect(
     bar(page).getByRole("button", { exact: true, name: "Add 2" })
   ).toBeVisible();
+});
+
+test("Retry after the lock installs again, and the bar closes once it ends", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await check(page, "docx").click();
+  cli.register(["skill", "add", ACME, "--name", "docx"], {
+    events: [
+      {
+        code: "locked",
+        message: "another agentx command holds the lock",
+        type: "error",
+      },
+    ],
+    exitCode: 7,
+  });
+  await bar(page).getByRole("button", { exact: true, name: "Add 1" }).click();
+  await expect(
+    toasts(page).getByText("Another agentx command is running")
+  ).toBeVisible();
+  cli.register(["skill", "add", ACME, "--name", "docx"], {
+    events: [
+      {
+        current: 1,
+        phase: "install",
+        subject: "docx",
+        total: 2,
+        type: "progress",
+      },
+      { name: "docx", type: "library_skill" },
+    ],
+  });
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(toasts(page).getByText("Added 1 skill")).toBeVisible();
+  // The retry's rim ends and fades, so the bar, with nothing selected, goes.
+  await expect(bar(page)).toHaveCount(0, { timeout: 10_000 });
 });
 
 test("a partial failure lists what was added, the error, its hint and each skipped skill", async ({
