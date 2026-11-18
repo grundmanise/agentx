@@ -12,7 +12,7 @@ import { ListIcon } from "#/components/icons/list.tsx";
 import { PencilIcon } from "#/components/icons/pencil.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SkillsIcon } from "#/components/icons/skills.tsx";
-import { notify, notifyError } from "#/components/toast.tsx";
+import { notifyError, notifySuccess } from "#/components/toast.tsx";
 import {
   CommandDialog,
   CommandEmpty,
@@ -65,7 +65,7 @@ const rescanMachine = async () => {
     return;
   }
   if (done.ok) {
-    notify("Rescanned");
+    notifySuccess("Rescanned");
   } else {
     notifyError({ message: done.error ?? "the scan failed" });
   }

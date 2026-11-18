@@ -5,7 +5,7 @@
 // with the path the test picks.
 import { open } from "@tauri-apps/plugin-dialog";
 
-import { notify } from "#/components/toast.tsx";
+import { notifyFailure } from "#/components/toast.tsx";
 
 /**
  * Shows the open dialog for a snapshot, starting in `folder` when one is given, and returns the
@@ -22,7 +22,7 @@ export const pickSnapshot = async (folder?: string): Promise<string | null> => {
     });
     return typeof picked === "string" ? picked : null;
   } catch {
-    notify("Couldn't open the file dialog");
+    notifyFailure("Couldn't open the file dialog");
     return null;
   }
 };
