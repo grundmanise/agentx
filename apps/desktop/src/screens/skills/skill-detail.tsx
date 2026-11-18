@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { PillButton } from "#/components/pill.tsx";
+import { SelectableLink } from "#/components/selectable-link.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -11,7 +12,7 @@ import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import { AgentsSection } from "#/screens/skills/agents-section.tsx";
 import { BannerView } from "#/screens/skills/banner-view.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
-import { detailsOf } from "#/screens/skills/details.ts";
+import { detailsOf, originPage } from "#/screens/skills/details.ts";
 import type { Detail } from "#/screens/skills/details.ts";
 import { canEdit, skillFile } from "#/screens/skills/edit.ts";
 import { FilesSection } from "#/screens/skills/files.tsx";
@@ -40,7 +41,7 @@ const Caption = ({ children }: { children: string }) => (
 
 /**
  * A value of DETAILS: a link that opens its URL in the browser, or shows its directory in Finder,
- * when it has one.
+ * when it has one. Like every value, it is selectable.
  */
 const DetailValue = ({ detail }: { detail: Detail }) => {
   const { link, value } = detail;
@@ -49,12 +50,11 @@ const DetailValue = ({ detail }: { detail: Detail }) => {
   }
   const page = link.kind === "page";
   return (
-    <a
+    <SelectableLink
       href={page ? link.url : `file://${link.path}`}
       title={page ? link.url : showInLabel()}
-      className="text-text-secondary hover:text-text-primary hover:underline"
-      onClick={(e) => {
-        e.preventDefault();
+      tone="secondary"
+      onOpen={() => {
         if (page) {
           void openInBrowser(link.url);
         } else {
@@ -63,7 +63,28 @@ const DetailValue = ({ detail }: { detail: Detail }) => {
       }}
     >
       {value}
-    </a>
+    </SelectableLink>
+  );
+};
+
+/** Where the skill came from, beside its name: a link to its source's page when it has one. */
+const Origin = ({ row }: { row: SkillRow }) => {
+  const text = originOf(row);
+  const page = originPage(row);
+  if (page === undefined) {
+    return text;
+  }
+  return (
+    <SelectableLink
+      href={page}
+      title={page}
+      tone="caption"
+      onOpen={() => {
+        void openInBrowser(page);
+      }}
+    >
+      {text}
+    </SelectableLink>
   );
 };
 
@@ -174,7 +195,7 @@ export const SkillDetail = ({
           {/* Left out when the banner says where the skill came from. */}
           {banner?.coversOrigin !== true && (
             <span className="type-technical text-text-caption">
-              {originOf(row)}
+              <Origin row={row} />
             </span>
           )}
           {forks.map((fork) => (

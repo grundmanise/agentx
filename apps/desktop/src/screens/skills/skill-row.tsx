@@ -130,7 +130,7 @@ const SkillRowView = ({
             <LogoStack
               clients={shown}
               size={20}
-              extra={clients.length - shown.length}
+              hidden={clients.slice(MAX_LOGOS)}
             />
           )}
         </span>

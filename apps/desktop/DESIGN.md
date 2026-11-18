@@ -15,7 +15,7 @@ The Tailwind theme holds only these tokens. `tokens.css` resets Tailwind's whole
 
 ## 1. Character
 
-A dark, quiet desktop tool. One accent (lime) carries the accent and action signals; everything else is near-black and grey. Serif for page titles only; a mono face for anything technical (paths, ids, dates, captions). Surfaces are flat: elevation comes from one shade step and, on floating layers, a soft black shadow. No gradients, no emoji, no icon-per-row decoration.
+A dark, quiet desktop tool. One accent (lime) carries the accent and action signals; everything else is near-black and grey. Serif for page titles only; a mono face for anything technical (paths, ids, dates, captions). Surfaces are flat: elevation comes from one shade step and, on floating layers, a soft black shadow. No gradients, no emoji, no icon-per-row decoration. The page declares `color-scheme: dark`, so the system draws native controls such as scrollbars for a dark background; the app never styles a scrollbar.
 
 ## 2. Color
 
@@ -235,8 +235,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
-| `filter.sort-text` | `gray-200` | Sort toggle while it sorts by name (A-Z, Z-A) |
-| `filter.sort-off-text` | `text.caption` | Sort toggle while off |
+| `filter.sort-text` | `gray-200` | Sort toggle (A-Z, Z-A) |
 
 #### Lists and rows
 
@@ -785,6 +784,10 @@ A control that runs a command is pending from the command until the inventory th
 
 Finder in this file means the platform's file manager. `src/lib/reveal.ts` names it for the platform `src/lib/platform.ts` reads; a screen never checks the platform itself.
 
+### Values
+
+The value of a label/value pair (a `<dd>`: the skill's Details, a source's facts, Settings › Storage) is selectable, so it can be copied; its label is not. A value that is a link (`src/components/selectable-link.tsx`) opens on a click, while a drag across it selects its text and opens nothing.
+
 ### Buttons (height / padding / colours)
 
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert, never a grey fill.
@@ -879,10 +882,8 @@ The dot and fork glyphs say one thing: whether there is an action to take. `glyp
 - pencil – edited locally; `glyph.edited`.
 - fork – one of your own skills.
 
-Sort toggle, at the right end of the filter row, always reads as a sort by name: A-Z or Z-A with the arrow (turned for Z-A). It steps through three states on each click:
+Sort toggle, at the right end of the filter row: the list always sorts by name within each group, whatever the state, and the toggle always shows it in `filter.sort-text` on `button.ghost-bg`, so it never reads as unselected. A-Z with the arrow at first; each click flips between A-Z and Z-A (the arrow turned). Disabled skills sort with the rest and read as washed out.
 
-- Off – A-Z and the arrow in `filter.sort-off-text` with no fill, so the toggle reads as quiet beside the lighter, filled states and still reaches 4.5:1; hover brings back the ghost fill and `text.primary`. The list keeps its own order: within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
-- A-Z, Z-A – by name alone, whatever the state, in `filter.sort-text` on `button.ghost-bg`.
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)
@@ -903,6 +904,7 @@ A callout (§6 "Callout").
 
 - The detail pane shows one banner, the first that applies in the ordered table in `src/screens/skills/banners.ts`. The header shows no status pills: the banner is the status.
 - A banner that says where the skill came from sets `coversOrigin`, and the header then leaves out the origin text beside the name. Today only the banner of a skill another tool added does.
+- The origin text beside the name of a source's skill, or of a fork of one, is a link when its source has an https page, the page Source or Forked from in Details opens: `text.caption`, `text.secondary` and underlined on hover, the URL as its tooltip.
 
 | Banner, by what it reports | Tone |
 | --- | --- |

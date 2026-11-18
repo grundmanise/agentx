@@ -612,7 +612,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
         }}
       >
         <DialogHeader showCloseButton={false}>
-          <DialogTitle>Update skills</DialogTitle>
+          <DialogTitle>Updates available</DialogTitle>
           <DialogDescription>
             Update the selected skills to their latest version.
           </DialogDescription>
