@@ -478,10 +478,10 @@ test.describe("filters", () => {
       })),
     });
     const personal = group(page, "PERSONAL (3)");
-    // Off: enabled skills first, then disabled ones, each A to Z.
+    // None: enabled skills first, then disabled ones, each A to Z.
     const toggle = page.getByRole("button", { name: /^Sort: /u });
     await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
-    await expect(toggle).toHaveText("A-Z");
+    await expect(toggle).toHaveText("None");
     expect(await rowNames(personal)).toEqual([
       "pdf-letters",
       "release-notes",
@@ -490,6 +490,7 @@ test.describe("filters", () => {
     // A-Z: by name alone, whatever the state.
     await toggle.click();
     await expect(toggle).toHaveAccessibleName("Sort: A to Z");
+    await expect(toggle).toHaveText("A-Z");
     expect(await rowNames(personal)).toEqual([
       "draft",
       "pdf-letters",
@@ -507,7 +508,7 @@ test.describe("filters", () => {
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
       "PERSONAL (3)"
     );
-    // Off again.
+    // None again.
     await toggle.click();
     await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
     expect(await rowNames(personal)).toEqual([
