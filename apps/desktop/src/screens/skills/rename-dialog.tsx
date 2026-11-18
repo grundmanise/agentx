@@ -30,7 +30,6 @@ import {
 import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { renameArgs, renameHint } from "#/screens/skills/rename.ts";
-import { usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
@@ -88,7 +87,8 @@ export const RenameButton = ({ row }: { row: SkillRow }) => {
 const RenameForm = ({ row }: { row: SkillRow }) => {
   const [name, setName] = useState(row.name);
   const [refusal, setRefusal] = useState<Problem | undefined>();
-  const pending = usePending(renameLabel(row));
+  // Pending until the inventory that follows the command has arrived, refusal or not.
+  const pending = useSettling(renameLabel(row));
   const nameRef = useRef<HTMLInputElement>(null);
   const ruleId = useId();
   const ready = isSkillName(name) && name !== row.name;
@@ -189,7 +189,7 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
 
 /** "Rename {skill}?": the Name field, Cancel · Rename. */
 const RenameDialog = ({ row }: { row: SkillRow }) => {
-  const pending = usePending(renameLabel(row));
+  const pending = useSettling(renameLabel(row));
   return (
     <Dialog
       open
