@@ -1,7 +1,6 @@
 import { useEffect, useEffectEvent, useMemo, useRef } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 
-import { isBack } from "#/app/kept-screens.tsx";
 import { useRouteKey } from "#/lib/route-key.ts";
 import { ForkDialogs } from "#/screens/skills/fork-dialog.tsx";
 import { skillPath } from "#/screens/skills/open.ts";
@@ -118,8 +117,7 @@ export const SkillsScreen = () => {
     flat[0];
   // A newly selected row in a collapsed group or subgroup, such as a plugin's skill another screen
   // opens, opens its sections so the list shows it. Collapsing one later keeps it collapsed, and so
-  // does coming back to the screen: the effect runs again when the screen shows, and the sidebar
-  // and the palette go back to it as the user left it.
+  // does coming back to the screen, when the effect runs again for the same row.
   const reveal = useEffectEvent((key: string | undefined) => {
     if (
       selected !== undefined &&
@@ -133,18 +131,13 @@ export const SkillsScreen = () => {
     }
   });
   const shownKey = selected?.key;
-  const location = useLocation();
   const revealed = useRef<string | null>(null);
   useEffect(() => {
-    const at = `${location.key}:${shownKey}`;
-    if (at === revealed.current) {
-      return;
-    }
-    revealed.current = at;
-    if (!isBack(location)) {
+    if (shownKey !== undefined && shownKey !== revealed.current) {
+      revealed.current = shownKey;
       reveal(shownKey);
     }
-  }, [shownKey, location]);
+  }, [shownKey]);
   const configurations = inventory?.configurations ?? [];
 
   // The key the next key press moves from: the last selection made, which the route may not show

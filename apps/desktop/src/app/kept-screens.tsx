@@ -33,15 +33,6 @@ export const useLastRoute = (path: string) =>
 export const lastRoute = (path: string) =>
   routeOf(path, useLastLocations.getState()[path]);
 
-/** The state of a navigation to a screen's last route: it goes back to the screen as the user left it. */
-export const backState = { back: true };
-
-/** Whether `location` goes back to its screen as the user left it, not to a route asked for anew. */
-export const isBack = (location: Location) => {
-  const state: unknown = location.state;
-  return typeof state === "object" && state !== null && "back" in state;
-};
-
 /** Every screen visited so far, the current route's shown and the others hidden. */
 export const KeptScreens = ({
   elementOf,
