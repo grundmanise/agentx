@@ -9,12 +9,12 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ReactNode } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
+import { LIST_GUIDE, LIST_GUIDE_NESTED } from "#/components/list-guide.ts";
 import { SearchField } from "#/components/search-field.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
 import { Spinner } from "#/components/spinner.tsx";
@@ -42,6 +42,7 @@ import {
 import type {
   Filters,
   Group,
+  Sections,
   SkillRow,
   SortOrder,
   Subgroup,
@@ -69,7 +70,7 @@ const agentChipLabel = (agents: string[], chosen: Configuration[]): string => {
 };
 
 /** The chip in the filter row that echoes the agent filter: one agent, or how many. */
-const AgentFilterChip = ({
+export const AgentFilterChip = ({
   agents,
   configurations,
   onClear,
@@ -126,49 +127,6 @@ const CheckUpdates = () => {
 };
 
 /**
- * A group's caption. A source's group shows the source's full URL in a tooltip, as its caption
- * gives only the short form.
- */
-const GroupLabel = ({ label, source }: { label: string; source?: string }) => {
-  const caption = (
-    <span className="type-caption text-group-label">{label}</span>
-  );
-  if (source === undefined) {
-    return caption;
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{caption}</TooltipTrigger>
-      <TooltipContent side="top" align="start">
-        {source}
-      </TooltipContent>
-    </Tooltip>
-  );
-};
-
-const GroupHeader = ({
-  label,
-  source,
-  count,
-  action,
-}: {
-  label: string;
-  /** The full URL of a source's group, which the tooltip on its label shows. */
-  source?: string;
-  count: number;
-  /** A control at the header's right end, such as the Unmanaged group's Adopt all. */
-  action?: ReactNode;
-}) => (
-  <div className="pt-group-top px-group pb-group-bottom gap-group min-h-group-header flex items-center">
-    <span className="gap-group flex min-w-0 flex-1 items-baseline">
-      <GroupLabel label={label} source={source} />
-      <span className="type-technical-sm text-group-count">{count}</span>
-    </span>
-    {action}
-  </div>
-);
-
-/**
  * Adopt all, at the right end of the Unmanaged group's header while another tool installed skills
  * agentx can adopt: it opens the adopt dialog for every such tool.
  */
@@ -186,7 +144,7 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
 };
 
 /**
- * Collapse all, at the right end of the PLUGINS group's header while a plugin's subgroup is open:
+ * Collapse all, at the right end of the open PLUGINS group's header while a plugin's subgroup is open:
  * it collapses every one. While all are collapsed it reads Expand all and opens every one. A
  * plain button as tall as its text, so the header keeps `group.header-height` and the plugin's
  * header pinned under it shows whole.
@@ -215,15 +173,17 @@ const ToggleAll = ({
 /** The control at the right end of a group's header, if the group has one. */
 const groupAction = (
   group: Group,
-  expanded: ReadonlySet<string>,
+  collapse: Sections,
   onAdoptAll: () => void,
   onToggleAll: (open: boolean) => void
 ) => {
   if (group.key === GROUP_DISK) {
     return <AdoptAll onOpen={onAdoptAll} />;
   }
-  if (group.key === GROUP_PLUGINS) {
-    const open = (group.subgroups ?? []).some((s) => expanded.has(s.key));
+  if (group.key === GROUP_PLUGINS && !collapse.collapsed.has(group.key)) {
+    const open = (group.subgroups ?? []).some((s) =>
+      collapse.expanded.has(s.key)
+    );
     return <ToggleAll open={open} onToggleAll={onToggleAll} />;
   }
   return null;
@@ -241,7 +201,7 @@ type Item =
       /** The space above a group (`group.spacing`) or above a plugin (`subgroup.spacing`). */
       above: "group" | "subgroup";
     }
-  | { kind: "header"; key: string; group: Group }
+  | { kind: "header"; key: string; group: Group; open: boolean }
   | {
       kind: "subheader";
       key: string;
@@ -271,49 +231,58 @@ const rowItems = (group: Group, rows: SkillRow[], subgroup?: Subgroup) =>
     ...(subgroup === undefined ? {} : { subgroup }),
   }));
 
+/** The items under a group's header: its rows, or in PLUGINS each plugin's header and rows. */
+const bodyOf = (group: Group, collapse: Sections): Item[] => {
+  if (group.subgroups === undefined) {
+    return rowItems(group, group.rows);
+  }
+  return group.subgroups.flatMap((subgroup, at): Item[] => {
+    const open = collapse.expanded.has(subgroup.key);
+    return [
+      ...(at === 0
+        ? []
+        : [
+            {
+              above: "subgroup",
+              group,
+              key: `gap:subgroup:${subgroup.key}`,
+              kind: "gap",
+            } satisfies Item,
+          ]),
+      {
+        group,
+        key: `subgroup:${subgroup.key}`,
+        kind: "subheader",
+        open,
+        subgroup,
+      },
+      ...(open ? rowItems(group, subgroup.rows, subgroup) : []),
+    ];
+  });
+};
+
 /**
  * The headers and rows in the order the list shows them, with the space above each group and
- * plugin but the first; a collapsed plugin shows its header only.
+ * plugin but the first; a collapsed group or plugin shows its header only.
  */
-const itemsOf = (groups: Group[], expanded: ReadonlySet<string>): Item[] =>
-  groups.flatMap((group, i): Item[] => [
-    ...(i === 0
-      ? []
-      : [
-          {
-            above: "group",
-            group,
-            key: `gap:group:${group.key}`,
-            kind: "gap",
-          } satisfies Item,
-        ]),
-    { group, key: `group:${group.key}`, kind: "header" },
-    ...(group.subgroups === undefined
-      ? rowItems(group, group.rows)
-      : group.subgroups.flatMap((subgroup, at): Item[] => {
-          const open = expanded.has(subgroup.key);
-          return [
-            ...(at === 0
-              ? []
-              : [
-                  {
-                    above: "subgroup",
-                    group,
-                    key: `gap:subgroup:${subgroup.key}`,
-                    kind: "gap",
-                  } satisfies Item,
-                ]),
+const itemsOf = (groups: Group[], collapse: Sections): Item[] =>
+  groups.flatMap((group, i): Item[] => {
+    const open = !collapse.collapsed.has(group.key);
+    return [
+      ...(i === 0
+        ? []
+        : [
             {
+              above: "group",
               group,
-              key: `subgroup:${subgroup.key}`,
-              kind: "subheader",
-              open,
-              subgroup,
-            },
-            ...(open ? rowItems(group, subgroup.rows, subgroup) : []),
-          ];
-        })),
-  ]);
+              key: `gap:group:${group.key}`,
+              kind: "gap",
+            } satisfies Item,
+          ]),
+      { group, key: `group:${group.key}`, kind: "header", open },
+      ...(open ? bodyOf(group, collapse) : []),
+    ];
+  });
 
 /**
  * The headers each item is under, by their index: its group's header, then in PLUGINS its
@@ -386,7 +355,7 @@ const OVERSCAN = 8;
 
 /** A drawn space above a group or plugin: the list sets its offset from the top. */
 const PLACED_GAP_GROUP = "pt-group-spacing absolute top-0 left-0 w-full";
-const PLACED_GAP_SUBGROUP = "pt-subgroup-top absolute top-0 left-0 w-full";
+const PLACED_GAP_SUBGROUP = `pt-subgroup-top absolute top-0 left-0 w-full ${LIST_GUIDE}`;
 /**
  * A group's rail: the list sets its offset from the top. It keeps no height; its span covers the
  * group, lets the pointer through to the rows under it, and holds the group's header, which pins
@@ -400,17 +369,17 @@ const RAIL_SUBGROUP = "absolute top-0 left-0 z-5 h-0 w-full";
 const RAIL_SPAN = "pointer-events-none absolute top-0 left-0 w-full";
 /** A header in its rail: the list's background behind it, and the pointer on it. */
 const PINNED_GROUP = "bg-shell-content-bg pointer-events-auto sticky top-0";
-const PINNED_SUBGROUP =
-  "bg-shell-content-bg top-group-header pointer-events-auto sticky flex";
-const PLACED_ROW = "absolute top-0 left-0 flex w-full";
+/** A plugin's header, inset under its group's caption, beside its group's guide line. */
+const PINNED_SUBGROUP = `bg-shell-content-bg top-group-header pl-subgroup-indent pointer-events-auto sticky flex ${LIST_GUIDE}`;
+/** A row of a group, inset so its glyph sits under the group's caption. */
+const PLACED_ROW = `pl-subgroup-indent absolute top-0 left-0 flex w-full ${LIST_GUIDE}`;
 /** A row after the first of its group, `row.spacing` below the row before it. */
-const PLACED_ROW_AFTER = "pt-rows absolute top-0 left-0 flex w-full";
-/** A row of a plugin's subgroup, indented so its glyph sits under the plugin's name. */
-const PLACED_SUBROW = "pl-subgroup-indent absolute top-0 left-0 flex w-full";
-const PLACED_SUBROW_AFTER =
-  "pt-rows pl-subgroup-indent absolute top-0 left-0 flex w-full";
+const PLACED_ROW_AFTER = `pt-rows pl-subgroup-indent absolute top-0 left-0 flex w-full ${LIST_GUIDE}`;
+/** A row of a plugin's subgroup, inset so its glyph sits under the plugin's name. */
+const PLACED_SUBROW = `pl-subgroup-nested absolute top-0 left-0 flex w-full ${LIST_GUIDE_NESTED}`;
+const PLACED_SUBROW_AFTER = `pt-rows pl-subgroup-nested absolute top-0 left-0 flex w-full ${LIST_GUIDE_NESTED}`;
 
-/** Where a row is placed: after the first of its block, `row.spacing` lower; in a subgroup, indented. */
+/** Where a row is placed: after the first of its block, `row.spacing` lower; in a subgroup, further in. */
 const placedRow = (item: { at: number; subgroup?: Subgroup }) => {
   if (item.subgroup === undefined) {
     return item.at === 0 ? PLACED_ROW : PLACED_ROW_AFTER;
@@ -501,7 +470,8 @@ const SkillGroups = ({
   selectedKey,
   onSelect,
   onAdoptAll,
-  expanded,
+  collapse,
+  onToggleGroup,
   onToggle,
   onToggleAll,
 }: {
@@ -514,8 +484,10 @@ const SkillGroups = ({
   onSelect: (row: SkillRow) => void;
   /** Opens the adopt dialog for every tool with skills to adopt. */
   onAdoptAll: () => void;
-  /** The keys of the open plugin subgroups; every other one is collapsed. */
-  expanded: ReadonlySet<string>;
+  /** The collapsed groups and the open plugin subgroups. */
+  collapse: Sections;
+  /** Collapses or expands a group, by its key. */
+  onToggleGroup: (key: string) => void;
   /** Collapses or expands a plugin's subgroup, by its key. */
   onToggle: (key: string) => void;
   /** Expands every plugin's subgroup, or collapses every one. */
@@ -535,7 +507,7 @@ const SkillGroups = ({
     latestSelect.current(row);
   }, []);
   const scroller = useRef<HTMLElement>(null);
-  const items = useMemo(() => itemsOf(groups, expanded), [groups, expanded]);
+  const items = useMemo(() => itemsOf(groups, collapse), [groups, collapse]);
   // Where the selected row is among the items, or -1 when the filters leave it out.
   const selectedIndex = useMemo(
     () =>
@@ -610,33 +582,61 @@ const SkillGroups = ({
     setPinnedHeight(pinned);
   }, [headers, selectedIndex, virtualizer]);
 
-  // A plugin's header that is pinned stays at the top when a click collapses or expands it: the
-  // list scrolls back to where the header pins.
-  const toggle = (index: number, key: string) => {
+  // A header that is pinned stays at the top when a click collapses or expands its section: the
+  // list scrolls back to where the header pins, under the headers it is under.
+  const toggle = (index: number, onKey: () => void) => {
     const header = virtualizer.measurementsCache[index];
-    const group = virtualizer.measurementsCache[headers[index]?.[0] ?? -1];
     const offset = virtualizer.scrollOffset ?? 0;
-    if (header !== undefined && group !== undefined) {
-      const place = header.start - group.size;
+    if (header !== undefined) {
+      const above = (headers[index] ?? [])
+        .filter((at) => at !== index)
+        .reduce(
+          (sum, at) => sum + (virtualizer.measurementsCache[at]?.size ?? 0),
+          0
+        );
+      const place = header.start - above;
       if (offset > place) {
         virtualizer.scrollToOffset(place);
       }
     }
-    onToggle(key);
+    onKey();
   };
 
   // The selected row comes into view when the selection changes (a key press, a click, or a route
   // another screen opened) and when the filters list it again. A list that changes around the
-  // same selected row stays where it is.
+  // same selected row stays where it is, and so does a list shown again after another screen. The
+  // first time, such as a skill the Plugins screen opens, the row comes to the top, under its pinned
+  // headers; after that the list scrolls as little as it can.
   const latestIndex = useRef(selectedIndex);
   useEffect(() => {
     latestIndex.current = selectedIndex;
   }, [selectedIndex]);
+  const scrolled = useRef(false);
   const listed = selectedIndex !== -1;
+  // The row last brought into view while it was listed: the effect runs again when the screen
+  // shows again, and the row is in view as the user left it. A scroll cut short within its first
+  // frame, as when StrictMode runs the effect twice, is made again.
+  const shownRow = useRef<string | null>(null);
   useEffect(() => {
-    if (listed) {
-      virtualizer.scrollToIndex(latestIndex.current, { align: "auto" });
+    const key = listed ? selectedKey : undefined;
+    const scroll = key !== undefined && key !== shownRow.current;
+    shownRow.current = key ?? null;
+    if (scroll) {
+      virtualizer.scrollToIndex(latestIndex.current, {
+        align: scrolled.current ? "auto" : "start",
+      });
+      scrolled.current = true;
     }
+    let started = !scroll;
+    const frame = requestAnimationFrame(() => {
+      started = true;
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (!started) {
+        shownRow.current = null;
+      }
+    };
   }, [selectedKey, listed, virtualizer]);
 
   const drawn = drawnGroups(
@@ -683,13 +683,20 @@ const SkillGroups = ({
                 >
                   <div className={RAIL_SPAN}>
                     <div ref={railHeader} className={PINNED_GROUP}>
-                      <GroupHeader
+                      <SectionToggle
+                        level="group"
                         label={group.label}
-                        source={group.source}
+                        title={group.source}
                         count={group.rows.length}
+                        open={header.item.open}
+                        onToggle={() => {
+                          toggle(header.index, () => {
+                            onToggleGroup(group.key);
+                          });
+                        }}
                         action={groupAction(
                           group,
-                          expanded,
+                          collapse,
                           onAdoptAll,
                           onToggleAll
                         )}
@@ -746,7 +753,9 @@ const SkillGroups = ({
                               detail={subgroup.marketplace}
                               open={subheader.item.open}
                               onToggle={() => {
-                                toggle(subheader.index, subgroup.key);
+                                toggle(subheader.index, () => {
+                                  onToggle(subgroup.key);
+                                });
                               }}
                             />
                           </div>
@@ -814,7 +823,8 @@ export const SkillList = ({
   onOrder,
   selectedKey,
   onSelect,
-  expanded,
+  collapse,
+  onToggleGroup,
   onToggle,
   onToggleAll,
 }: {
@@ -829,8 +839,10 @@ export const SkillList = ({
   onOrder: (order: SortOrder) => void;
   selectedKey: string | undefined;
   onSelect: (row: SkillRow) => void;
-  /** The keys of the open plugin subgroups; every other one is collapsed. */
-  expanded: ReadonlySet<string>;
+  /** The collapsed groups and the open plugin subgroups. */
+  collapse: Sections;
+  /** Collapses or expands a group, by its key. */
+  onToggleGroup: (key: string) => void;
   /** Collapses or expands a plugin's subgroup, by its key. */
   onToggle: (key: string) => void;
   /** Expands every plugin's subgroup, or collapses every one. */
@@ -863,7 +875,7 @@ export const SkillList = ({
       <div className="pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left gap-split-toolbar flex flex-col">
         <SearchField
           label="Filter skills by name"
-          placeholder="Filter"
+          placeholder="Search"
           value={filters.name}
           onChange={(name) => {
             onFilters({ ...filters, name });
@@ -900,7 +912,8 @@ export const SkillList = ({
         configurations={configurations}
         selectedKey={selectedKey}
         onSelect={onSelect}
-        expanded={expanded}
+        collapse={collapse}
+        onToggleGroup={onToggleGroup}
         onToggle={onToggle}
         onToggleAll={onToggleAll}
         onAdoptAll={() => {

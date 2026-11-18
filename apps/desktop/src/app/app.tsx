@@ -1,12 +1,13 @@
 import { cva } from "class-variance-authority";
-import { useEffect, useState } from "react";
+import { Activity, useEffect, useState } from "react";
 import type { ReactElement } from "react";
-import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router";
+import { Navigate, useLocation, useNavigate } from "react-router";
 
 import { ActivityLogSheet } from "#/app/activity-log.tsx";
 import { CommandPalette } from "#/app/command-palette.tsx";
+import { KeptScreens, screenOf } from "#/app/kept-screens.tsx";
 import { LaunchProgress } from "#/app/launch-progress.tsx";
-import { allScreens, SOURCES_PATH, titles } from "#/app/screens.ts";
+import { SOURCES_PATH, titles } from "#/app/screens.ts";
 import { Sidebar } from "#/app/sidebar.tsx";
 import { StaleBar } from "#/app/stale-bar.tsx";
 import { StartupLayer } from "#/app/startup-layer.tsx";
@@ -25,7 +26,7 @@ import { launch, useStartup } from "#/startup/startup.ts";
 import type { Step, StartupState } from "#/startup/startup.ts";
 import { startLoaders } from "#/store/loaders.ts";
 
-/** The screens built so far, by route; the others show their placeholder. */
+/** The screens built so far, by path; the others show their placeholder. */
 const built: Record<string, ReactElement> = {
   "/agents": <AgentsScreen />,
   "/plugins": <PluginsScreen />,
@@ -35,8 +36,9 @@ const built: Record<string, ReactElement> = {
   [SOURCES_PATH]: <SourcesScreen />,
 };
 
+// `isolate` keeps a screen's own layers, such as the list's pinned headers, under the frosted pane.
 const screenVariants = cva(
-  "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+  "isolate flex min-h-0 flex-1 flex-col transition-opacity duration-200",
   {
     variants: {
       // The kept inventory is there with the first render: it does not fade in.
@@ -50,10 +52,12 @@ const screenVariants = cva(
   }
 );
 
+const elementOf = (path: string) =>
+  built[path] ?? <PlaceholderScreen title={titles[path]} />;
+
 /**
- * The screen of the current route. It mounts once the startup checks pass, faded in, or with the
- * first render when the store holds the kept inventory: under the frosted pane, out of reach, until
- * they pass.
+ * The screens. They mount once the startup checks pass, faded in, or with the first render when
+ * the store holds the kept inventory: under the frosted pane, out of reach, until they pass.
  */
 const Screen = ({ cached, ready }: Pick<StartupState, "cached" | "ready">) =>
   ready || cached ? (
@@ -64,7 +68,7 @@ const Screen = ({ cached, ready }: Pick<StartupState, "cached" | "ready">) =>
         loading: !ready,
       })}
     >
-      <Outlet />
+      <KeptScreens elementOf={elementOf} />
     </div>
   ) : null;
 
@@ -119,6 +123,10 @@ export const App = () => {
     }
   }, [startup.ready]);
 
+  // A route that is no screen's goes to Skills.
+  const { pathname } = useLocation();
+  const known = screenOf(pathname) !== undefined;
+
   // The command runner navigates from outside React, as on exit code 4.
   const navigate = useNavigate();
   useEffect(() => {
@@ -149,9 +157,10 @@ export const App = () => {
           setPaletteOpen(true);
         }}
       />
-      {startup.open ? (
-        <StartupLayer />
-      ) : (
+      {!known && <Navigate to="/skills" replace />}
+      {startup.open && <StartupLayer />}
+      {/* Hidden, not unmounted, while the startup layer shows: the screens stay as they were. */}
+      <Activity mode={startup.open ? "hidden" : "visible"}>
         <div className="flex min-h-0 flex-1">
           {/* Until the checks pass, nothing in the window but the frosted pane can be reached. */}
           <div inert={!startup.ready} className="contents">
@@ -168,30 +177,11 @@ export const App = () => {
               <LaunchVeil ready={startup.ready} step={startup.step} />
             )}
             {startup.ready && <StaleBar />}
-            <Routes>
-              {/* No command runs until the checks pass: one a screen starts waits for them. */}
-              <Route
-                element={
-                  <Screen cached={startup.cached} ready={startup.ready} />
-                }
-              >
-                {allScreens.map((s) => (
-                  <Route
-                    key={s.path}
-                    path={`${s.path}/*`}
-                    element={
-                      built[s.path] ?? (
-                        <PlaceholderScreen title={titles[s.path]} />
-                      )
-                    }
-                  />
-                ))}
-              </Route>
-              <Route path="*" element={<Navigate to="/skills" replace />} />
-            </Routes>
+            {/* No command runs until the checks pass: one a screen starts waits for them. */}
+            <Screen cached={startup.cached} ready={startup.ready} />
           </main>
         </div>
-      )}
+      </Activity>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ActivityLogSheet />
       <Toaster />

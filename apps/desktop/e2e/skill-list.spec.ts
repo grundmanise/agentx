@@ -86,6 +86,61 @@ test("a list of hundreds of skills holds only the rows near what shows, and brin
   expect(await list(page).getByRole("listitem").count()).toBeLessThan(50);
 });
 
+test("the list is as the user left it after another screen: its selection and where it is scrolled", async ({
+  cli,
+  page,
+}) => {
+  const start = listedPluginSkill(300);
+  await openAt(cli, page, start.name);
+  await expect(row(page, start.name)).toBeInViewport({ ratio: 1 });
+  // Scrolled away from the selected row.
+  await list(page).evaluate((nav) => {
+    nav.scrollTop = 1000;
+  });
+  await expect(row(page, start.name)).not.toBeInViewport();
+  // Rows drawn as it scrolls are measured, and the list may move by a few pixels as they are.
+  await page.waitForTimeout(200);
+  const scrolled = await list(page).evaluate((nav) => nav.scrollTop);
+
+  const main = page.getByRole("navigation", { name: "Main" });
+  await main.getByRole("link", { name: "Agents" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Agents" })
+  ).toBeVisible();
+  await main.getByRole("link", { name: "Skills" }).click();
+
+  await expect(page).toHaveURL(
+    `/#/skills/${encodeURIComponent(`skill:h-${start.name}`)}`
+  );
+  await expect(row(page, start.name)).toHaveAttribute("aria-current", "true");
+  await expect(pane(page, start.name)).toBeVisible();
+  expect(await list(page).evaluate((nav) => nav.scrollTop)).toBe(scrolled);
+});
+
+test("a subgroup the user collapsed stays collapsed after another screen, the selected skill's too", async ({
+  cli,
+  page,
+}) => {
+  const first = listedPluginSkill(0);
+  await openAt(cli, page, first.name);
+  const toggle = list(page).getByRole("button", {
+    exact: true,
+    name: `${first.plugin} ${SKILLS_PER_PLUGIN} acme-marketplace`,
+  });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  const main = page.getByRole("navigation", { name: "Main" });
+  await main.getByRole("link", { name: "Agents" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Agents" })
+  ).toBeVisible();
+  await main.getByRole("link", { name: "Skills" }).click();
+
+  await expect(pane(page, first.name)).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
 test("plugins' subgroups start collapsed, but the opened skill's; Collapse all and Expand all", async ({
   cli,
   page,
@@ -156,9 +211,12 @@ test("while the list scrolls, the header of its group and of its plugin stay pin
   expect(await below(group)).toBeLessThan(20);
   expect(await below(header(start.plugin))).toBeGreaterThan(20);
   expect(await below(header(start.plugin))).toBeLessThan(40);
-  // The selected row comes into view below them.
+  // The selected row comes into view at the top, right below them.
   const opened = await row(page, start.name).boundingBox();
-  expect((opened?.y ?? 0) - top).toBeGreaterThanOrEqual(50);
+  const pinned = await header(start.plugin).boundingBox();
+  const under = (pinned?.y ?? 0) + (pinned?.height ?? 0);
+  expect(opened?.y ?? 0).toBeGreaterThanOrEqual(under - 1);
+  expect(opened?.y ?? 0).toBeLessThan(under + 8);
 
   // Moved to the last skill of its plugin, then into the next plugin, opened from its header,
   // and scrolled into it, the next plugin's header takes the pinned place.

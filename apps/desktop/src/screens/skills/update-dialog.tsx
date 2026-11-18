@@ -612,7 +612,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
         }}
       >
         <DialogHeader showCloseButton={false}>
-          <DialogTitle>Update skills</DialogTitle>
+          <DialogTitle>Updates available</DialogTitle>
           <DialogDescription>
             Update the selected skills to their latest version.
           </DialogDescription>
@@ -621,7 +621,6 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
           <SelectAllRow
             selected={selected}
             total={total}
-            added={0}
             onSelectAll={() => {
               setExcluded(new Set());
             }}

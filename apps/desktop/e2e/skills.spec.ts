@@ -156,6 +156,63 @@ test.describe("the list", () => {
     ]);
   });
 
+  test("every group collapses from its header, the keys skip it, and a skill opened in it opens it", async ({
+    cli,
+    page,
+  }) => {
+    await openSkills(cli, page);
+    const header = (name: string) =>
+      list(page).getByRole("button", { exact: true, name });
+    for (const name of [
+      "PERSONAL 3",
+      "ACME/SKILLS 2",
+      "ZETA/TOOLS 1",
+      "PLUGINS 1",
+      "UNMANAGED 2",
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop
+      await expect(header(name)).toHaveAttribute("aria-expanded", "true");
+    }
+    // A collapsed source keeps its header and count; the keys skip its rows.
+    await header("ACME/SKILLS 2").click();
+    await expect(header("ACME/SKILLS 2")).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    await expect(
+      group(page, "ACME/SKILLS (2)").getByRole("listitem")
+    ).toHaveCount(0);
+    await row(page, "release-notes").click();
+    await page.keyboard.press("j");
+    await expect(row(page, "gone")).toHaveAttribute("aria-current", "true");
+    // A skill opened in a collapsed group, as from another screen, opens its group.
+    await page.evaluate(() => {
+      window.location.hash = "#/skills/review";
+    });
+    await expect(header("ACME/SKILLS 2")).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    await expect(row(page, "review")).toHaveAttribute("aria-current", "true");
+    // A collapsed PLUGINS group drops its Expand all; open again, it shows it.
+    await header("PLUGINS 1").click();
+    await expect(
+      list(page).getByRole("button", { name: "Expand all" })
+    ).toHaveCount(0);
+    await header("PLUGINS 1").click();
+    await expect(
+      list(page).getByRole("button", { name: "Expand all" })
+    ).toBeVisible();
+    // The Unmanaged group collapses too, and keeps its Adopt all.
+    await header("UNMANAGED 2").click();
+    await expect(
+      group(page, "UNMANAGED (2)").getByRole("listitem")
+    ).toHaveCount(0);
+    await expect(
+      list(page).getByRole("button", { name: "Adopt all" })
+    ).toBeVisible();
+  });
+
   test("each row shows its glyph, its one pill, an alert triangle when its banner warns, agent clients and description", async ({
     cli,
     page,
@@ -463,7 +520,7 @@ test.describe("filters", () => {
     ]);
   });
 
-  test("the sort toggle steps from enabled first through A-Z and Z-A", async ({
+  test("the sort toggle flips between A-Z and Z-A, by name alone", async ({
     cli,
     page,
   }) => {
@@ -478,18 +535,10 @@ test.describe("filters", () => {
       })),
     });
     const personal = group(page, "PERSONAL (3)");
-    // Off: enabled skills first, then disabled ones, each A to Z.
+    // A-Z at first: by name alone, whatever the state.
     const toggle = page.getByRole("button", { name: /^Sort: /u });
-    await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
-    await expect(toggle).toHaveText("A-Z");
-    expect(await rowNames(personal)).toEqual([
-      "pdf-letters",
-      "release-notes",
-      "draft",
-    ]);
-    // A-Z: by name alone, whatever the state.
-    await toggle.click();
     await expect(toggle).toHaveAccessibleName("Sort: A to Z");
+    await expect(toggle).toHaveText("A-Z");
     expect(await rowNames(personal)).toEqual([
       "draft",
       "pdf-letters",
@@ -498,6 +547,7 @@ test.describe("filters", () => {
     // Z-A.
     await toggle.click();
     await expect(toggle).toHaveAccessibleName("Sort: Z to A");
+    await expect(toggle).toHaveText("Z-A");
     expect(await rowNames(personal)).toEqual([
       "release-notes",
       "pdf-letters",
@@ -507,13 +557,13 @@ test.describe("filters", () => {
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
       "PERSONAL (3)"
     );
-    // Off again.
+    // A-Z again.
     await toggle.click();
-    await expect(toggle).toHaveAccessibleName("Sort: Enabled first, A to Z");
+    await expect(toggle).toHaveAccessibleName("Sort: A to Z");
     expect(await rowNames(personal)).toEqual([
+      "draft",
       "pdf-letters",
       "release-notes",
-      "draft",
     ]);
   });
 });
@@ -568,7 +618,7 @@ test.describe("the detail pane", () => {
       - article "pdf":
         - text: Skill · Enabled
         - heading "pdf" [level=1]
-        - text: acme/skills
+        - link "acme/skills"
         - button "Forked as pdf-letters"
         - paragraph: Read and convert PDF files
         - region "Agents":
@@ -588,6 +638,11 @@ test.describe("the detail pane", () => {
           - term: State
           - definition: current
     `);
+    // The origin opens its source's page, as Source in Details does.
+    await article
+      .getByRole("link", { exact: true, name: "acme/skills" })
+      .click();
+    expect(cli.openedUrls).toEqual(["https://github.com/acme/skills"]);
     // The fork pill opens the fork.
     await article
       .getByRole("button", { name: "Forked as pdf-letters" })
@@ -611,7 +666,7 @@ test.describe("the detail pane", () => {
       - article "pdf-letters":
         - text: Personal skill · Enabled
         - heading "pdf-letters" [level=1]
-        - text: from acme/skills
+        - link "from acme/skills"
         - paragraph: Read PDFs and write letters from them
         - region "Agents":
           - heading "Agents" [level=2]
@@ -646,9 +701,29 @@ test.describe("the detail pane", () => {
 
     // A URL opens in the browser, the skill's files show in the file manager.
     const details = article.getByRole("region", { name: "Details" });
-    await details
-      .getByRole("link", { name: "https://github.com/acme/skills/pdf" })
-      .click();
+    const forkedFrom = details.getByRole("link", {
+      name: "https://github.com/acme/skills/pdf",
+    });
+    // A value is selectable: a drag across a link selects its text and opens nothing. The link
+    // may wrap, so the drag runs from its first line's start to its last line's end.
+    await forkedFrom.scrollIntoViewIfNeeded();
+    const linkBox = await forkedFrom.boundingBox();
+    if (linkBox === null) {
+      throw new Error("the link has no box");
+    }
+    await page.mouse.move(linkBox.x + 1, linkBox.y + 4);
+    await page.mouse.down();
+    await page.mouse.move(
+      linkBox.x + linkBox.width - 1,
+      linkBox.y + linkBox.height - 4,
+      { steps: 5 }
+    );
+    await page.mouse.up();
+    expect(
+      await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    ).toContain("acme/skills/pdf");
+    expect(cli.openedUrls).toEqual([]);
+    await forkedFrom.click();
     expect(cli.openedUrls).toEqual(["https://github.com/acme/skills"]);
     await details
       .getByRole("link", {

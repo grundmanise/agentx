@@ -205,6 +205,8 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
     "Starting the app…"
   );
   await expect(screen(page)).toHaveAttribute("inert", "");
+  // The screen's own layers, such as the list's pinned group headers, stay under the pane.
+  await expect(screen(page)).toHaveCSS("isolation", "isolate");
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
   await expect(progress(page)).toHaveCount(0);
   expect(commands()).toEqual(launchLines);
@@ -232,12 +234,16 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
     .poll(() => commands())
     .toEqual(
       expect.arrayContaining([
-        ["skill", "files", "notes", "--json"],
         ["skill", "place", "notes", "--json"],
         ...loadLines,
       ])
     );
   expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
+  // The skill's files show from the read the first launch kept.
+  await expect(page.getByRole("region", { name: "Files" })).toContainText(
+    "Use this skill to notes."
+  );
+  expect(commands()).not.toContainEqual(["skill", "files", "notes", "--json"]);
   expect(cli.serveStarts).toBe(2);
 });
 

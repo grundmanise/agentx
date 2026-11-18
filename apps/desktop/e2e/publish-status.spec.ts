@@ -98,7 +98,10 @@ test.describe("states", () => {
     launch(cli, "synced", { incoming: true });
     await page.goto("/");
     await expect(status(page)).toHaveText("1 incoming");
-    await expect(page.getByRole("status")).toHaveText("1 incoming");
+    // The Skills screen may still show its own status while it reads the first skill's files.
+    await expect(
+      page.getByRole("status").filter({ hasText: "incoming" })
+    ).toHaveText("1 incoming");
   });
 
   test("an update from another machine for a skill not in the library, a plugin's skill of its name, or from another remote, is not incoming", async ({

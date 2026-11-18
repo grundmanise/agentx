@@ -79,13 +79,12 @@ export const FilterChip = ({
 );
 
 const sortVariants = cva(
-  "rounded-button type-button-sm hover:bg-button-ghost-hover hover:text-text-primary inline-flex h-7 items-center gap-1 px-2 font-medium",
+  "rounded-button type-button-sm text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary inline-flex h-7 items-center gap-1 px-2 font-medium",
   {
     variants: {
       order: {
-        asc: "bg-button-ghost-bg text-filter-sort-text",
-        default: "text-filter-sort-off-text",
-        desc: "bg-button-ghost-bg text-filter-sort-text [&>svg]:rotate-180",
+        asc: "",
+        desc: "[&>svg]:rotate-180",
       },
     },
   }
@@ -94,21 +93,18 @@ const sortVariants = cva(
 /** What the sort toggle shows and says for each order. */
 const sortLabels = {
   asc: { name: "A to Z", shown: "A-Z" },
-  default: { name: "Enabled first, A to Z", shown: "A-Z" },
   desc: { name: "Z to A", shown: "Z-A" },
 } as const;
 
 /**
- * The sort toggle. It always reads as a sort by name: A-Z with the arrow, which turns around
- * for Z-A. Until a click it is off: a quieter grey with no fill, and the list keeps its own order
- * (enabled skills first, then disabled ones, each A to Z). Each click steps on: A-Z, then Z-A,
- * by name alone, then off again.
+ * The sort toggle. The list always sorts by name, and the toggle always shows it on the ghost
+ * fill: A-Z with the arrow, which turns around for Z-A. Each click flips the order.
  */
 export const SortToggle = ({
   order,
   onToggle,
 }: {
-  order: "default" | "asc" | "desc";
+  order: "asc" | "desc";
   onToggle: () => void;
 }) => (
   <button

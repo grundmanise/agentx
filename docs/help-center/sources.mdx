@@ -1,6 +1,6 @@
 ---
 title: "Sources in the app"
-description: "Browse the sources you added, add skills from them or from a link, and refresh or remove a source in the desktop app."
+description: "Browse the sources you added, add skills from them or from a link, and refresh or remove sources in the desktop app."
 ---
 
 A source is a git repository that holds skills. In the desktop app, open **Skills**, then **Sources** under it, to see every source you added and add skills from them.
@@ -20,7 +20,7 @@ Select a pill to open the source. Its card shows:
 
 Under the card, the source's skills are listed one per row, with a line of each skill's description.
 
-To look in every source at once, type in **Search all sources**. The card hides while you search.
+To look in every source at once, type in **Search all sources**. The card of the open source stays while you search.
 
 ## Read a skill before you add it
 
@@ -30,11 +30,19 @@ For a skill you cannot add, the open row says why. A skill under **Personal** sh
 
 ## Add skills
 
-1. Select the round check at the end of each skill you want, or select the checkbox above them to select every skill you do not have yet. Select it again once all are selected to clear the selection.
+1. Select the round check at the end of each skill you want, or select the **Select all** checkbox above them, at the right, to select every skill you do not have yet. Select it again once all are selected to clear the selection.
 2. In the bar at the bottom, choose the agents to add them to. Universal agents, marked with a lock, always get them.
 3. Select **Add**.
 
-Skills this machine already has show their status in place of the check, such as **Added**, and you cannot select them. The count at the right of the checkbox says how many.
+Skills this machine already has show their status in place of the check, such as **Added**, and you cannot select them. Skills stay in A to Z order when you add them.
+
+## Remove an added skill
+
+1. Hover over **Added** at the end of the skill's row. It changes to **Remove**.
+2. Select **Remove**. A dialog lists every agent that sees the skill.
+3. Select **Remove** to delete the skill from your library and from every agent agentx placed it in, universal agents too, or **Cancel** to keep it. A copy of the same name that agentx did not place stays where it is.
+
+To get the skill back, add it again from its source.
 
 ## Add skills from a link
 
@@ -58,6 +66,8 @@ The new source opens with every skill selected.
 ## Refresh a source
 
 On the source's card, select **Refresh**. agentx fetches the source again and lists its skills from the new fetch.
+
+To refresh every source at once, select **Refresh all** next to **Add source**. The button shows a spinner until every source is fetched.
 
 ## Remove a source
 

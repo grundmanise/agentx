@@ -60,26 +60,32 @@ const AGENTS_SHOWN = 6;
  * Universal where its most used client would stand. The order is fixed when the popover opens,
  * so a row stays in place when it is checked. A machine can have dozens of configurations, so
  * the list shows the first few and every choice that is checked, or was since the popover
- * opened, and a button shows the rest.
+ * opened, and a button shows the rest. With `universal` off, as on the Plugins screen, every
+ * configuration is a choice of its own and there is no Universal.
  */
-const AgentChoices = ({
+export const AgentChoices = ({
   configurations,
   checked,
   onToggle,
+  universal: withUniversal = true,
 }: {
   configurations: Configuration[];
+  /** Whether the clients that read the library are one Universal choice. */
+  universal?: boolean;
   /** The agents of the filters: configuration ids, and UNIVERSAL. */
   checked: string[];
   onToggle: (agent: string, checked: boolean) => void;
 }) => {
-  const universal = configurations.filter((c) => c.reads_library);
+  const universal = withUniversal
+    ? configurations.filter((c) => c.reads_library)
+    : [];
   const choices: {
     id: string;
     name: string;
     rank: number;
     label: ReactNode;
   }[] = configurations
-    .filter((c) => !c.reads_library)
+    .filter((c) => !universal.includes(c))
     .map((c) => ({
       id: c.id,
       label: (
