@@ -15,7 +15,6 @@ import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { pickSnapshot } from "#/lib/file-dialog.ts";
-import { useKept } from "#/lib/kept-value.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import {
@@ -131,8 +130,9 @@ const Result = ({ result }: { result: ImportResult }) => {
 /** Import…: the open dialog, the confirm, `import <file> --yes`, the sources, and the result. */
 const ImportFile = () => {
   const library = useAppStore((s) => s.machine?.library);
+  // The file picked last. It stays while its confirm closes, so the confirm's text does not change.
   const [picked, setPicked] = useState<string>();
-  const shown = useKept(picked);
+  const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<ImportResult>();
   const [adding, setAdding] = useState(false);
   const pending = useSettling(IMPORT_LABEL) || adding;
@@ -141,6 +141,7 @@ const ImportFile = () => {
     const path = await pickSnapshot(library);
     if (path !== null) {
       setPicked(path);
+      setConfirming(true);
     }
   };
 
@@ -164,7 +165,7 @@ const ImportFile = () => {
   };
 
   const importFile = async (path: string) => {
-    setPicked(undefined);
+    setConfirming(false);
     setResult(undefined);
     setAdding(true);
     const done = await runImport(path);
@@ -188,15 +189,15 @@ const ImportFile = () => {
         </Button>
       </span>
       <Confirm
-        open={picked !== undefined}
+        open={confirming}
         onOpenChange={(open) => {
           if (!open) {
-            setPicked(undefined);
+            setConfirming(false);
           }
         }}
-        title={`Replace settings with ${fileName(shown ?? "")}?`}
+        title={`Replace settings with ${fileName(picked ?? "")}?`}
         description="Missing skills will be installed during import, and existing might get updated."
-        detail={shown}
+        detail={picked}
         action="Import"
         onConfirm={() => {
           if (picked !== undefined) {
