@@ -5,13 +5,11 @@ import { selectAllLabel } from "#/screens/sources/projection.ts";
 
 /**
  * The row above the cards: one checkbox that selects every selectable card, checked, unchecked or
- * mixed as the selection is, and that clears the selection once every card is selected; at the
- * right, how many cards this machine already holds.
+ * mixed as the selection is, and that clears the selection once every card is selected.
  */
 export const SelectAllRow = ({
   selected,
   total,
-  added,
   onSelectAll,
   onClear,
 }: {
@@ -19,8 +17,6 @@ export const SelectAllRow = ({
   selected: number;
   /** How many cards can be selected. */
   total: number;
-  /** How many cards cannot be selected. */
-  added: number;
   onSelectAll: () => void;
   onClear: () => void;
 }) => {
@@ -33,7 +29,7 @@ export const SelectAllRow = ({
     checked = "indeterminate";
   }
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center">
       <label htmlFor={id} className="flex items-center gap-2.5">
         <Checkbox
           id={id}
@@ -51,10 +47,6 @@ export const SelectAllRow = ({
           {selectAllLabel(selected, total)}
         </span>
       </label>
-      <span className="flex-1" />
-      {added > 0 && (
-        <span className="type-secondary text-text-hint">{`${added} already added`}</span>
-      )}
     </div>
   );
 };

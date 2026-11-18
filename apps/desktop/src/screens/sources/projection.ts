@@ -389,17 +389,46 @@ export const resultCards = (
     )
   );
 
+const byName = (a: SkillCard, b: SkillCard) =>
+  compareLabels(a.name, b.name) || a.key.localeCompare(b.key);
+
+/**
+ * The cards of the Sources list A to Z by name, whatever their state, so that a card keeps its
+ * place when its skill is added or removed.
+ */
+export const nameOrder = (cards: SkillCard[]): SkillCard[] => {
+  const ordered = [...cards];
+  ordered.sort(byName);
+  return ordered;
+};
+
 /** The cards in their order: selectable first, then by name. */
 export const orderCards = (cards: SkillCard[]): SkillCard[] => {
   const ordered = [...cards];
   ordered.sort(
     (a, b) =>
       Number(a.status !== undefined) - Number(b.status !== undefined) ||
-      compareLabels(a.name, b.name) ||
-      a.key.localeCompare(b.key)
+      byName(a, b)
   );
   return ordered;
 };
+
+/**
+ * The library name of the skill an Added card installed: the managed entry of the card's source
+ * and subpath, which `skill remove` takes. Undefined for any other card.
+ */
+export const addedName = (
+  added: SkillCard,
+  library: LibraryEntry[]
+): string | undefined =>
+  added.status === "added" && added.skillMd !== undefined
+    ? library.find(
+        (e) =>
+          e.kind === "managed" &&
+          e.source === added.source &&
+          e.subpath === added.skillMd?.subpath
+      )?.name
+    : undefined;
 
 export interface CardGroup {
   /** The source URL, or YOUR_SKILLS. */

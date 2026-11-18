@@ -22,7 +22,7 @@ import {
   installableCards,
   listingCards,
   pageRef,
-  orderCards,
+  nameOrder,
   planAdds,
   resultCards,
   sourcePills,
@@ -233,11 +233,11 @@ export const SourcesScreen = () => {
     if (activePill.key === YOUR_SKILLS) {
       return installable === undefined
         ? noCards
-        : orderCards(installableCards(installable, library));
+        : nameOrder(installableCards(installable, library));
     }
     return listing === undefined || activePill.url === undefined
       ? noCards
-      : orderCards(
+      : nameOrder(
           listingCards(
             listing,
             activePill.url,
@@ -256,7 +256,7 @@ export const SourcesScreen = () => {
       results === undefined
         ? undefined
         : groupCards(
-            orderCards(
+            nameOrder(
               resultCards(results, library, (url) =>
                 pageRef(sources.find((s) => s.url === url))
               )
@@ -505,7 +505,6 @@ export const SourcesScreen = () => {
           <SelectAllRow
             selected={selectedCount}
             total={selectable.length}
-            added={allCards.length - selectable.length}
             onSelectAll={selectAll}
             onClear={clear}
           />

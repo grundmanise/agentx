@@ -621,7 +621,6 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
           <SelectAllRow
             selected={selected}
             total={total}
-            added={0}
             onSelectAll={() => {
               setExcluded(new Set());
             }}

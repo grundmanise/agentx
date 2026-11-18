@@ -10,7 +10,9 @@ import {
 } from "react";
 import type { ReactNode, RefObject } from "react";
 
+import type { Configuration } from "#/cli/events.gen.ts";
 import { CodePane } from "#/components/code-pane.tsx";
+import { RemoveSwap } from "#/components/remove-swap.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import {
   Accordion,
@@ -26,17 +28,23 @@ import {
 } from "#/components/ui/tooltip.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
-import { statusLabels } from "#/screens/sources/projection.ts";
+import type { SkillRow } from "#/screens/skills/projection.ts";
+import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
+import { currentRows } from "#/screens/skills/rows.ts";
+import { addedName, statusLabels } from "#/screens/sources/projection.ts";
 import type {
   CardGroup,
   SkillCard,
   SkillMdRef,
 } from "#/screens/sources/projection.ts";
 import { loadSkillMd } from "#/store/loaders.ts";
+import { useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { SkillMdRead } from "#/store/store.ts";
 
 const SKILL_MD = "SKILL.md";
+
+const noConfigurations: Configuration[] = [];
 
 /** Which read of a skill's SKILL.md a read in the store is: its subpath at its tree. */
 const versionOf = ({ subpath, tree }: SkillMdRef) => `${subpath}\u0000${tree}`;
@@ -214,10 +222,44 @@ const Loading = () => (
   </output>
 );
 
+const noLibrary: never[] = [];
+
+/**
+ * The Added status of a card whose skill this machine installed from it: a red Remove while
+ * hovered or focused, which asks to remove the skill from every agent. It stays Remove, disabled,
+ * while that removal runs and until the inventory after it arrives.
+ */
+const AddedRemove = ({
+  card,
+  onRemove,
+}: {
+  card: SkillCard;
+  onRemove: (name: string) => void;
+}) => {
+  const name = useAppStore((s) =>
+    addedName(card, s.inventory?.library ?? noLibrary)
+  );
+  // The Remove dialog's command, as it labels it (`removeLabel`).
+  const busy = useSettling(`remove ${name ?? ""}`);
+  return (
+    <RemoveSwap
+      status={statusLabels.added}
+      label={`Remove ${name ?? card.name}`}
+      busy={name !== undefined && busy}
+      onClick={() => {
+        if (name !== undefined) {
+          onRemove(name);
+        }
+      }}
+    />
+  );
+};
+
 /**
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its
  * description while closed, View skill beside the name while open) and, at its end, the round
- * check that selects it, or for a skill this machine holds already its status. The row is named
+ * check that selects it, or for a skill this machine holds already its status, which for an Added
+ * skill turns into Remove on hover. The row is named
  * by the skill alone; its status and description are read as its description. A row asked to
  * open reads its SKILL.md first, with a spinner in the description's place, and opens once the
  * read ends.
@@ -228,6 +270,7 @@ const SkillItem = ({
   loading,
   selected,
   onToggle,
+  onRemove,
 }: {
   card: SkillCard;
   open: boolean;
@@ -235,6 +278,8 @@ const SkillItem = ({
   loading: boolean;
   selected: boolean;
   onToggle: (card: SkillCard) => void;
+  /** Asks to remove the library skill of that name. */
+  onRemove: (name: string) => void;
 }) => {
   const descriptionId = useId();
   const wanted = open || loading;
@@ -256,6 +301,23 @@ const SkillItem = ({
   const description = [status, card.description]
     .filter((part) => part !== undefined && part !== "")
     .join(". ");
+  let action: ReactNode;
+  if (card.status === undefined) {
+    action = (
+      <Toggle
+        kind="check"
+        pressed={selected}
+        onPressedChange={() => {
+          onToggle(card);
+        }}
+        aria-label={`Select ${card.name}`}
+      >
+        <CheckMark checked={selected} />
+      </Toggle>
+    );
+  } else if (card.status === "added") {
+    action = <AddedRemove card={card} onRemove={onRemove} />;
+  }
   return (
     <AccordionItem variant="list" value={card.key} selected={selected}>
       <AccordionTrigger
@@ -265,26 +327,13 @@ const SkillItem = ({
         open={open}
         busy={loading}
         meta={
-          status === undefined ? undefined : (
+          status === undefined || card.status === "added" ? undefined : (
             <span className={statusVariants({ status: card.status })}>
               {status}
             </span>
           )
         }
-        action={
-          card.status === undefined ? (
-            <Toggle
-              kind="check"
-              pressed={selected}
-              onPressedChange={() => {
-                onToggle(card);
-              }}
-              aria-label={`Select ${card.name}`}
-            >
-              <CheckMark checked={selected} />
-            </Toggle>
-          ) : undefined
-        }
+        action={action}
       >
         {/* The name and View skill share a baseline, as their sizes differ. */}
         <span className="flex min-w-0 flex-initial items-baseline gap-3">
@@ -489,6 +538,19 @@ export const SkillList = ({
   const toggle = useCallback((card: SkillCard) => {
     latestToggle.current(card);
   }, []);
+  // The skill the Remove dialog asks about. It stays while the dialog closes, so the dialog keeps
+  // its text as it goes.
+  const [removing, setRemoving] = useState<SkillRow>();
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const configurations =
+    useAppStore((s) => s.inventory?.configurations) ?? noConfigurations;
+  const remove = useCallback((name: string) => {
+    const row = currentRows().find((r) => r.key === name);
+    if (row !== undefined) {
+      setRemoving(row);
+      setRemoveOpen(true);
+    }
+  }, []);
   // The virtualizer's functions return new values while they stay the same functions, which
   // React Compiler cannot memoize. The app is built without it, and this component reads them
   // on every render and passes none of them to a memoized component.
@@ -544,6 +606,7 @@ export const SkillList = ({
             }
             selected={selected.has(item.card.key)}
             onToggle={toggle}
+            onRemove={remove}
           />
         </div>
       )
@@ -570,6 +633,17 @@ export const SkillList = ({
           ))}
         </div>
       </Accordion>
+      {removing !== undefined && (
+        <RemoveDialog
+          row={removing}
+          configurations={configurations}
+          open={removeOpen}
+          fromUniversal={false}
+          onClose={() => {
+            setRemoveOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 };

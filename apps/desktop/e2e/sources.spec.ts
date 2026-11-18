@@ -192,21 +192,24 @@ test("the open source's card: its name, its full URL linking to the repository, 
   await expect(details(page)).toHaveCount(0);
 });
 
-test("a source listing: selectable skills first, then each state with its label and, once open, its reason", async ({
+/** acme's skills A to Z, the order the list keeps whatever their state. */
+const acmeNames = [
+  "artifacts",
+  "docx",
+  "forms",
+  "letters",
+  "pdf",
+  "scratch",
+  "slides",
+  "xlsx",
+];
+
+test("a source listing: the skills A to Z, each state with its label and, once open, its reason", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
-  expect(await skillNames(grid(page, "acme/skills"))).toEqual([
-    "artifacts",
-    "docx",
-    "forms",
-    "slides",
-    "letters",
-    "pdf",
-    "scratch",
-    "xlsx",
-  ]);
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(acmeNames);
   await expect(check(page, "artifacts")).toHaveAttribute(
     "aria-pressed",
     "false"
@@ -368,9 +371,44 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   await expect(
     rowLine(page, "docx").getByText("Added", { exact: true })
   ).toBeVisible();
+  // An added skill keeps its place.
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(acmeNames);
   expect(commandLines(cli)).toContain(
     `skill add ${ACME} --name artifacts --name docx --to claude-code`
   );
+});
+
+test("Remove on an Added skill confirms, then runs skill remove for every agent", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  const remove = rowLine(page, "pdf").getByRole("button", {
+    exact: true,
+    name: "Remove pdf",
+  });
+  const word = (text: string) =>
+    rowLine(page, "pdf").getByText(text, { exact: true });
+  await expect(word("Added")).toHaveCSS("opacity", "1");
+  await expect(word("Remove")).toHaveCSS("opacity", "0");
+  await remove.hover();
+  await expect(word("Added")).toHaveCSS("opacity", "0");
+  await expect(word("Remove")).toHaveCSS("opacity", "1");
+  const run = cli.register(["skill", "remove", "pdf"], {
+    events: [{ ok: true, summary: "removed pdf", type: "result" }],
+  });
+  await remove.click();
+  const confirm = page.getByRole("dialog", { name: "Remove pdf?" });
+  await expect(confirm).toContainText(
+    "It will be deleted from every agent on this machine:"
+  );
+  await expect(
+    confirm.getByRole("list", { name: "Agents that see it" })
+  ).toContainText("Codex");
+  await confirm.getByRole("button", { exact: true, name: "Remove" }).click();
+  await run.started;
+  await expect(toasts(page).getByText("Removed pdf skill")).toBeVisible();
+  expect(commandLines(cli)).toContain("skill remove pdf");
 });
 
 test("many agents: five logos and +n, the agent picker toggles a target, two-letter monograms", async ({
@@ -513,7 +551,6 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
       { name: "slides", type: "library_skill" },
     ],
   });
-  await expect(page.getByText("4 already added")).toBeVisible();
   await expect(selectAll(page)).toHaveAccessibleName("Select all 4");
   await selectAll(page).click();
   await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
