@@ -162,6 +162,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `button.ghost-text` | `gray-200` | Ghost button label (or `text.muted` in quiet spots) |
 | `button.ghost-bg` | `gray-50/3.5` | Ghost and icon button at rest, sort toggle, publish status |
 | `button.ghost-hover` | `gray-50/7.5` | Ghost / icon button hover |
+| `button.toast-action-text` | `gray-100` | A toast's action, such as Undo: a light gray, not the toast's tint |
 | `button.danger-text` | `accent.danger` | Danger ghost (Remove, Cancel, Restore base version) |
 | `button.danger-bg` | `red-400/10` | Danger button at rest |
 | `button.danger-hover` | `red-400/17` |  |
@@ -804,7 +805,7 @@ The value of a label/value pair (a `<dd>`: the skill's Details, a source's facts
 - **Link, inline** – the plain inline shape in `text.secondary`, 500, hover `text.primary` and underlined. Only for a link-like action inside a line of text that opens something, such as See changes on a row of the Update skills dialog.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
-- **Toast action** – the app's small ghost (Undo, Retry, Cancel), in place of Sonner's. A toast's Dismiss stays Sonner's corner close button: app buttons are for actions.
+- **Toast action** – small, no fill, `button.toast-action-text`; hover `text.primary` (Undo, Retry, Cancel), in place of Sonner's. It is never the toast's tint, so it does not read as a CTA. A toast's Dismiss stays Sonner's corner close button: app buttons are for actions.
 
 Every button but the plain inline one has a resting fill with the button radius, so it reads as a button on every surface. The fills keep three levels: primary (accent), secondary (solid grey), ghost (the quietest). Ghost and danger fills are light tints rather than solid greys, so they hold on the page, cards, toned banners, dialogs, sheets, popovers and toasts alike.
 
@@ -1047,7 +1048,7 @@ Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint,
 | Plain | none | plain | A report with no outcome, such as Stopped, or an action that did nothing |
 
 - Lines under the message, such as an error's details, are Sonner's description in `toast.description`; a warning among them in `tone.attention.fg`.
-- An action, such as Undo or a progress toast's Cancel, is a small ghost button at the end of the row; clicking it also takes the toast away.
+- An action, such as Undo or a progress toast's Cancel, is a small button with no fill in `button.toast-action-text` (§6 "Buttons", "Toast action") at the end of the row; clicking it also takes the toast away.
 - One toast at a time: a new one replaces the one showing.
 - It goes after 2.6s, or 5s with an action.
 - A toast for a command that runs, with its cancel, stays until the command ends and the toast of its outcome replaces it. Progress changes its text in place, the count in `tabular-nums`: Check updates says "Checking for updates…", then "Checking for updates… 1/10".

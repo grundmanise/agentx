@@ -43,6 +43,10 @@ const buttonVariants = cva(
           "bg-button-primary-bg text-button-primary-text hover:bg-button-primary-hover font-semibold",
         secondary:
           "bg-button-secondary-bg text-button-secondary-text hover:bg-button-secondary-hover font-medium",
+        // No fill, in a light gray: a toast's action, such as Undo, which must not read as a CTA in
+        // the toast's tint.
+        toast:
+          "text-button-toast-action-text hover:text-text-primary font-medium",
       },
     },
   }
