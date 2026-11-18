@@ -201,6 +201,36 @@ test("after a relaunch, a skill's files show from the kept read, without reading
     .toEqual([["skill", "files", "gone", "--json"]]);
 });
 
+test("after a relaunch, a kept history shows at once, and the history is read again to replace it", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page, "/#/skills/pdf-letters");
+  const article = pane(page, "pdf-letters");
+  await expect(article.getByText("Tighten the examples")).toBeVisible();
+  await expect
+    .poll(async () => await keptReads(page))
+    .toContain("history:pdf-letters");
+
+  // Another subject for the same version, such as an amended message.
+  const [latest, ...rest] = history;
+  const read = cli.register(["skill", "history", "pdf-letters"], {
+    events: [{ ...latest, subject: "Tighten the examples, again" }, ...rest],
+    holdAfter: 0,
+  });
+  cli.restart();
+  await page.reload();
+  // The kept history shows while the read runs.
+  await read.started;
+  await expect(
+    pane(page, "pdf-letters").getByText("Tighten the examples")
+  ).toBeVisible();
+  read.release();
+  await expect(
+    pane(page, "pdf-letters").getByText("Tighten the examples, again")
+  ).toBeVisible();
+});
+
 test("the name, the description and a file's text can be selected and copied", async ({
   cli,
   page,

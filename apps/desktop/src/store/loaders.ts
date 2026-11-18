@@ -173,7 +173,8 @@ export const loadHistory = async (name: string, version: string) => {
       ? s
       : { histories: rest };
   });
-  // A history kept from an earlier launch for this version is this version's.
+  // A history kept from an earlier launch for this version shows while `skill history` runs again:
+  // the version names the skill's content and state, not each commit, such as an amended message.
   const kept = hashed(version)
     ? await cachedRead<HistoryEvent[]>("history", name, version)
     : undefined;
@@ -184,7 +185,6 @@ export const loadHistory = async (name: string, version: string) => {
     useAppStore.setState((s) => ({
       histories: { ...s.histories, [name]: { entries: kept, version } },
     }));
-    return;
   }
   const outcome = await runCommand(["skill", "history", name], {
     label: `history ${name}`,
@@ -201,10 +201,13 @@ export const loadHistory = async (name: string, version: string) => {
       void keepRead("history", name, version, entries);
     }
   } else {
-    // A failed read is kept as such, and tried again the next time the skill is selected.
-    useAppStore.setState((s) => ({
-      histories: { ...s.histories, [name]: { failed: true, version } },
-    }));
+    // A failed read is kept as such, unless a kept history shows, and tried again the next time
+    // the skill is selected.
+    if (kept === undefined) {
+      useAppStore.setState((s) => ({
+        histories: { ...s.histories, [name]: { failed: true, version } },
+      }));
+    }
     historyVersions.delete(name);
   }
 };
