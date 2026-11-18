@@ -316,6 +316,9 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   cli.register(["skill", "list", "--remote"], { events: installable });
   await page.goto("/#/sources");
   await expect(row(page, "skill-00")).toBeVisible();
+  // The later skill of each name is not on this machine, so none counts as added.
+  await expect(page.getByText("Select all 90")).toBeVisible();
+  await expect(page.getByText(/already added/u)).toHaveCount(0);
 
   // Scrolled through, each row is drawn once and none over another.
   const scroller = page

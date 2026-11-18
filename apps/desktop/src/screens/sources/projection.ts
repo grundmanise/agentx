@@ -251,6 +251,11 @@ export interface SkillCard {
   skillMd?: SkillMdRef;
   /** The skill's directory on its source's web page, when agentx knows the host's pages. */
   page?: string;
+  /**
+   * The subpath of the skill at an earlier subpath of the same source that has this card's name,
+   * which `skill add` installs instead: the card is in use by name, not added.
+   */
+  sharedWith?: string;
 }
 
 export const cardKey = (source: string, name: string, subpath?: string) =>
@@ -347,6 +352,7 @@ const withSharedNames = (cards: SkillCard[]): SkillCard[] => {
     }
     return {
       ...c,
+      sharedWith: earlier,
       status: "name-in-use",
       title: `The skill at ${placeOf(earlier)} in this source is named ${c.name} too, and only the first of a name can be added`,
     };

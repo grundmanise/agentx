@@ -508,7 +508,12 @@ export const SourcesScreen = () => {
           <SelectAllRow
             selected={selectedCount}
             total={selectable.length}
-            added={allCards.length - selectable.length}
+            added={
+              // A skill whose name an earlier skill of its source has is not on this machine.
+              allCards.filter(
+                (c) => c.status !== undefined && c.sharedWith === undefined
+              ).length
+            }
             onSelectAll={selectAll}
             onClear={clear}
           />
