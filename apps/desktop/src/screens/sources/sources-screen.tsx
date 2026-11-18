@@ -376,13 +376,15 @@ export const SourcesScreen = () => {
 
   /**
    * Runs the plans one after another, `addedBefore` skills having landed so far and `before` of
-   * `of` plans having ended. True when every plan ran to the end with exit code 0.
+   * `of` plans having ended. True when every plan ran to the end with exit code 0. Retry after
+   * the lock runs `retry` with the plan.
    */
   const runPlans = async (
     plans: AddPlan[],
     addedBefore: number,
     before: number,
-    of: number
+    of: number,
+    retry: (plan: AddPlan) => void
   ): Promise<boolean> => {
     const [plan, ...rest] = plans;
     if (plan === undefined) {
@@ -397,6 +399,9 @@ export const SourcesScreen = () => {
             ? 0
             : event.current / event.total;
         setRim({ fraction: (before + steps) / of, state: "running" });
+      },
+      retry: () => {
+        retry(plan);
       },
       success: () => `Added ${count(plan.names.length, "skill")}`,
     });
@@ -445,9 +450,21 @@ export const SourcesScreen = () => {
       rest,
       addedBefore + installed.length,
       before + 1,
-      of
+      of,
+      retry
     );
     return outcome.exitCode === 0 && restOk;
+  };
+
+  /** Runs the plans as one install, its progress on the bar's rim. */
+  const install = async (plans: AddPlan[]) => {
+    setRim({ fraction: 0, state: "running" });
+    // Retry after the lock runs the plan as an install of its own, so its rim ends too.
+    const ok = await runPlans(plans, 0, 0, plans.length, (plan) => {
+      void install([plan]);
+    });
+    // The rim fills and fades, or drains, before the bar may close (DESIGN.md §8 "Progress rim").
+    setRim({ fraction: ok ? 1 : 0, state: ok ? "done" : "stopped" });
   };
 
   const add = async () => {
@@ -460,10 +477,7 @@ export const SourcesScreen = () => {
       selected: [...selection.values()],
       targets: chosen,
     });
-    setRim({ fraction: 0, state: "running" });
-    const ok = await runPlans(plans, 0, 0, plans.length);
-    // The rim fills and fades, or drains, before the bar may close (DESIGN.md §8 "Progress rim").
-    setRim({ fraction: ok ? 1 : 0, state: ok ? "done" : "stopped" });
+    await install(plans);
   };
 
   /** A source just added opens with every selectable card selected, once its listing arrives. */
