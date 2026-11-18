@@ -16,7 +16,7 @@ export interface SkillsView {
 export const useSkillsView = create<SkillsView>()(() => ({
   expanded: new Set<string>(),
   filters: noFilters,
-  order: "default",
+  order: "asc",
 }));
 
 export const setFilters = (filters: Filters) => {
