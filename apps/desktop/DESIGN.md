@@ -222,6 +222,11 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `segmented.theirs-selected` | `accent.theirs` | Base version or update side chosen |
 | `segmented.both-selected` | `gray-50` | Both sides kept |
 | `segmented.neutral-selected` | `gray-850` | Filter State segments (label `text.primary`) |
+| `tabs.list-bg` | `gray-910` | Track behind the tabs |
+| `tabs.text` | `gray-300` | A tab that is not active; `text.primary` on hover |
+| `tabs.active-bg` | `gray-850` | The active tab |
+| `tabs.active-border` | `gray-800` | 1px edge of the active tab |
+| `tabs.active-text` | `gray-50` | The active tab's label |
 
 #### Filter row (Skills toolbar)
 
@@ -306,7 +311,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `card.bg` | `gray-950` | Inbox card, agent client card, plugin card, file-tree card, expanded review file card, a skill's card on the Sources list |
+| `card.bg` | `gray-950` | Inbox card, agent client card, file-tree card, expanded review file card, a skill's card on the Sources list |
 | `card.border` | `gray-870` |  |
 | `card.title` | `gray-50` |  |
 | `card.text` | `gray-300` |  |
@@ -332,11 +337,6 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `banner.title` | `gray-50` | Banner title (bg/border/tile from `tone.*`) |
 | `banner.text` | `gray-300` |  |
 | `card.chip-ring` | `card.bg` | 2px ring behind overlapping agent client logos on a card (the Universal card) |
-| `plugin.skills-dot` | `accent.yours` | SKILLS group (tint `violet-400/10`) |
-| `plugin.servers-dot` | `accent.theirs` | SERVERS group (tint `blue-400/10`) |
-| `plugin.hooks-dot` | `accent.attention` | HOOKS group (tint `amber-400/10`) |
-| `plugin.connector` | `gray-870` | Nested-content connector lines |
-| `plugin.row-hover` | `gray-930` | Hover on a plugin card's skill and server rows |
 
 #### Overlays (dialog, popover, palette, sheet, toast, floating bar)
 
@@ -489,7 +489,9 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.server-name` | sans | 14.5 | 500 |  |  |  | Server name in a server row (`text.primary`) |
 | `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
 | `type.settings-label` | sans | 14 | 500 |  |  |  | Settings section label (`text.primary`); the line under it is `type.secondary` in `text.muted` |
-| `type.plugin-name` | sans | 17 | 600 |  | -0.01em |  | Plugin name on a plugin card |
+| `type.plugin-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane plugin name, selectable |
+| `type.plugin-tile` | sans | 17 | 600 |  | -0.01em |  | The letter of a plugin's monogram tile |
+| `type.tab` | sans | 14 | 500 |  |  |  | Tab labels |
 | `type.version-pill` | mono | 12 | 500 |  |  |  | A plugin's version pill |
 
 Text wrapping: `text-wrap:pretty` on multi-line text. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
@@ -557,7 +559,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `row.inline-gap` | 8 | `gap-row-inline` | Name → pills → chips |
 | `row.spacing` | 2 | `gap-rows`, `pt-rows` | Between rows; `pt-rows` on a row of the Skills list, which places each row itself |
 | `row.glyph-col` | 18 | `w-row-glyph` | Glyph column |
-| `row.off` | 50% | `opacity-row-off` | Opacity of a row in no agent client: washed out |
+| `row.off` | 50% | `opacity-row-off` | Opacity of a row in no agent client, and of a disabled plugin's row on Plugins: washed out |
 | `group.padding` | 4 14 8 | `pt-group-top px-group pb-group-bottom` | Group header |
 | `group.spacing` | 16 | `pt-group-spacing` | Above each group but the first, outside its pinned header |
 | `group.header-height` | 30 | `min-h-group-header`, `top-group-header` | Least height of a group header; a plugin's header pins this far down, under its group's |
@@ -596,6 +598,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `segmented.height` | 24–28 |  | Segment |
 | `segmented.padding-x` | 10–12 |  |  |
 | `filter.height` | 30 | `h-filter` | Filter button and agent client chip |
+| `tabs.list-height` | 36 | `h-tabs-list` | Track of the tabs |
+| `tabs.list-padding` | 3 | `p-tabs-list` | Track around the tabs |
+| `tabs.gap` | 12 | `gap-tabs` | Tabs → the active tab's content |
 | `filter.badge` | 16 | `size-filter-badge` | Count badge |
 | `agent-picker.badge` | 16 | `size-agent-picker-badge` | Count badge on the Add skills bar's "+n" button |
 | `agent-chip.height` | 44 | `h-agent-chip` | Agent client toggle chip |
@@ -638,10 +643,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-card.gap` | 12 | `gap-agent-card` | Grid gap |
 | `agent-card.logo` | 44 | `size-agent-card-logo` |  |
 | `universal-card.lead-width` | 260 | `w-universal-lead` | Lead column of the Universal card |
-| `plugin-card.padding` | 22 | `p-plugin-card` |  |
-| `plugin-card.row-height` | 36 | `h-plugin-card-row` | Tree rows |
-| `plugin-card.gap` | 12 | `gap-plugin-card` | Between the masonry columns; each card's wrapper adds 12 below |
-| `plugin-card.tile` | 40 | `size-plugin-card-tile` | Plugin icon or monogram tile |
+| `plugin.tile` | 40 | `size-plugin-tile` | Plugin icon or monogram tile in the detail pane |
+| `plugin.row-tile` | 28 | `size-plugin-row-tile` | Plugin icon or monogram tile in a Plugins list row |
+| `plugin-details.gap` | 12 40 | `gap-y-plugin-details-y gap-x-plugin-details` | Between the details under a plugin's name (row, column) |
 | `add-card.spacing` | 6 | `pt-add-card` | Between the skills' cards of the Sources list: on each card after the first of its source, which the list places itself |
 
 ### Overlays
@@ -729,6 +733,8 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `switch.radius` | 9999 | Track and knob |
 | `checkbox.radius` | 50% | Popover checkbox |
 | `segmented.radius` | 9999 | Track and segments |
+| `tabs.list-radius` | 10 | Track of the tabs |
+| `tabs.trigger-radius` | 8 | A tab |
 | `agent-chip.radius` | 9999 | Agent client toggle chip |
 | `logo.radius` | 50% | Agent client logo |
 | `agent-picker.row-radius` | 10 | Row of the agent picker |
@@ -752,7 +758,6 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `file-card.radius` | 16 | File tree card |
 | `banner.radius` | 18 |  |
 | `agent-card.radius` | 20 | Agents page cards |
-| `plugin-card.radius` | 20 |  |
 | `add-card.radius` | 16 | A skill's card on the Sources list, and its row's focus outline |
 | `add-card.check-radius` | 50% | Hit area and focus outline of a skill's round check |
 | `source-card.radius` | 18 | Card of the open source on Sources |
@@ -1011,13 +1016,19 @@ One card per agent configuration whose client does not read the library, in a 4-
 
 One full-width card below the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. No switch and no placement: a universal client sees every library skill whatever its setting, through the library itself.
 
-### Plugin card (Plugins)
+### Tabs
 
-`card.bg`, `plugin-card.radius`, 1px `card.border`, in 3 CSS columns with `plugin-card.gap`; a card never breaks across columns.
+shadcn's Tabs (`src/components/ui/tabs.tsx`) with its default look on our tokens: a `tabs.list-bg` track, `tabs.list-radius`, `tabs.list-height`, `tabs.list-padding`, as wide as its tabs; each tab `type.tab` in `tabs.text`, `tabs.trigger-radius`; the active one on `tabs.active-bg` with a 1px `tabs.active-border` edge and `tabs.active-text`. The active tab's content follows `tabs.gap` below. A tab can end with a count in `type.technical-sm` `text.caption`.
 
-- Top, `plugin-card.padding`: a `plugin-card.tile` tile with the plugin's own icon from the inventory, or the name's first letter on `button.secondary-bg`. The tile is never dimmed; a disabled plugin says so with its pill. On the right the Disabled pill, when the client turned the plugin off, then the version pill.
-- Then the name in `type.plugin-name` and the agent and marketplace in `text.muted`.
-- Contents under a `card.border` hairline: the groups for skills, servers and hooks, each a caption and `plugin-card.row-height` tree rows with a `plugin.connector` line (the last row's stops at the middle), the group's dot, the name and mono meta (`type.technical-sm`, `text.caption`). A skill or server row has a chevron, opens the skill in Skills or the server in MCP servers, and hovers `plugin.row-hover`; a hook row opens nothing.
+### Plugins screen
+
+The Plugins screen (`src/screens/plugins`) is a split, as Skills is: the list column on the left, the open plugin on the right. It is read-only: nothing on it installs, removes, enables or disables a plugin.
+
+- The list column: the serif title and the plugin count, the search field (§6 "Inputs"), then the filter row: the Filter button, whose popover holds AGENTS, the agent configurations that hold a plugin, each its own choice with no Universal (§6 "Popover (Filter)"), the agents chip while any is checked, and the sort toggle (§6 "Skills list"): at rest enabled plugins come first, each part A to Z; then A to Z, and Z to A, by name.
+- The plugins, one row per plugin in one agent configuration in one version, are grouped by agent configuration, A to Z by its name. A group header (§6 "Group header (lists)") starts with the configuration's 16px logo, then its name and count, and pins to the top while its group shows. A row (`src/components/list-row.tsx`) holds the `plugin.row-tile` tile, the name, the Disabled pill when the client turned the plugin off, and the version at the right end in `type.technical-sm` `text.caption`; under them, how many skills, servers and hooks it brings, in `type.row-desc`. A disabled plugin's name and counts are at `row.off`; its tile is not.
+- The detail pane: the `plugin.tile` tile, the name in `type.plugin-name`, the version pill and the Disabled pill. Under them, one row of details that wraps, `plugin-details.gap` apart, each a `type.secondary` `text.hint` label over its value in `type.technical-sm` `text.secondary`: the agent, always with its logo; the marketplace; the path, after a `xs` folder icon in `text.caption`, a link that shows the plugin's directory in Finder; and, when other agents hold the same plugin from the same marketplace, each of them with its logo and version, a link that opens it.
+- Then the tabs (§6 "Tabs"): Skills, MCP servers and Hooks, each with its count, and only those the plugin has; a plugin with none has no tabs. Each tab is a table (`src/components/ui/table.tsx`): a skill and its description, a server and its transport, a hook and its event. A skill's name opens it in Skills, a server's in MCP servers; a hook opens nothing.
+- The tile is the plugin's own icon from the inventory, or the name's first letter in `type.plugin-tile` on `button.secondary-bg`.
 
 ### Toast
 
