@@ -132,24 +132,19 @@ test("the list groups the plugins by agent, and the first one opens with its det
 
 test("Search, the agent filter and the sort toggle", async ({ cli, page }) => {
   await openPlugins(cli, page, moreInventory);
-  // Enabled first, then A to Z: the plugin turned off sinks in its group.
-  expect(await rowNames(page)).toEqual([
-    "acme-tools",
+  // A to Z by name at first: the plugin turned off sorts with the rest.
+  const az = [
     "aaa-off",
+    "acme-tools",
     "codex-review",
     "acme-tools",
     "notes-local",
-  ]);
+  ];
+  expect(await rowNames(page)).toEqual(az);
   const sort = list(page).getByRole("button", { name: /^Sort/u });
+  await expect(sort).toHaveText("A-Z");
   await sort.click();
-  expect(await rowNames(page)).toEqual([
-    "aaa-off",
-    "acme-tools",
-    "codex-review",
-    "acme-tools",
-    "notes-local",
-  ]);
-  await sort.click();
+  await expect(sort).toHaveText("Z-A");
   expect(await rowNames(page)).toEqual([
     "acme-tools",
     "aaa-off",
@@ -157,6 +152,8 @@ test("Search, the agent filter and the sort toggle", async ({ cli, page }) => {
     "notes-local",
     "acme-tools",
   ]);
+  await sort.click();
+  expect(await rowNames(page)).toEqual(az);
 
   await list(page)
     .getByRole("searchbox", { name: "Filter plugins by name" })
@@ -180,6 +177,10 @@ test("the same plugin in another agent opens from Also installed in", async ({
   page,
 }) => {
   await openPlugins(cli, page, moreInventory);
+  await list(page)
+    .getByRole("region", { name: "Claude Code" })
+    .getByRole("button", { name: "acme-tools" })
+    .click();
   await detail(page).getByRole("button", { name: "Cursor 1.3.0" }).click();
   await expect(
     list(page)

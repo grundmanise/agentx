@@ -38,7 +38,7 @@ export const PluginsScreen = () => {
     [all, rows]
   );
   const [filters, setFilters] = useState<PluginFilters>(noPluginFilters);
-  const [order, setOrder] = useState<PluginOrder>("default");
+  const [order, setOrder] = useState<PluginOrder>("asc");
   const [selectedKey, setSelectedKey] = useState<string | undefined>();
   const groups = useMemo(
     () => groupPlugins(rows, configurations, filters, order),

@@ -147,8 +147,8 @@ export interface PluginFilters {
 
 export const noPluginFilters: PluginFilters = { agents: [], name: "" };
 
-/** The order of the sort toggle: enabled first then A to Z, A to Z, or Z to A. */
-export type PluginOrder = "default" | "asc" | "desc";
+/** The order of the sort toggle: A to Z, or Z to A, by name. */
+export type PluginOrder = "asc" | "desc";
 
 /** One group of the list: an agent configuration and its plugins. */
 export interface PluginGroup {
@@ -161,16 +161,8 @@ const byName = (a: PluginRow, b: PluginRow) =>
   a.version.localeCompare(b.version) ||
   a.key.localeCompare(b.key);
 
-const comparer = (order: PluginOrder) => {
-  if (order === "asc") {
-    return byName;
-  }
-  if (order === "desc") {
-    return (a: PluginRow, b: PluginRow) => byName(b, a);
-  }
-  return (a: PluginRow, b: PluginRow) =>
-    Number(a.disabled) - Number(b.disabled) || byName(a, b);
-};
+const comparer = (order: PluginOrder) =>
+  order === "asc" ? byName : (a: PluginRow, b: PluginRow) => byName(b, a);
 
 /**
  * The rows that pass the filters, one group per agent configuration that holds any, the groups A

@@ -25,13 +25,9 @@ export const contentsOf = (row: PluginRow) =>
     .filter((part) => part !== false)
     .join(" · ");
 
-/** The order the sort toggle steps through: default, then A to Z, then Z to A. */
-const nextOrder = (order: PluginOrder): PluginOrder => {
-  if (order === "default") {
-    return "asc";
-  }
-  return order === "asc" ? "desc" : "default";
-};
+/** Each click of the sort toggle flips between A to Z and Z to A. */
+const nextOrder = (order: PluginOrder): PluginOrder =>
+  order === "asc" ? "desc" : "asc";
 
 /** One plugin's row: its tile, name, Disabled pill and version, then what it brings. */
 const PluginRowView = ({
