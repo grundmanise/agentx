@@ -7,25 +7,28 @@ date: 2026-11-18
 
 Today the desktop app reaches the machine two ways ([ADR 0001](0001-go-cli-owns-machine-and-account-tauri-renders.md)): one `agentx` process per action, whose NDJSON and exit code the Rust shell reads, and one long-lived `agentx serve` child for the inventory stream and the `refresh` and `search` requests. Only the Rust shell can start those processes, so the frontend works only inside the Tauri window. It cannot run in a browser against the CLI on this machine, so a change to the frontend can be checked against a real machine only by building the whole app.
 
-`agentx serve` becomes the backend of this machine for every graphical client. It takes requests and answers with events, as it does today for `refresh` and `search`, and the desktop app and the same frontend in a browser send it the same requests. The terminal CLI is unchanged: every command runs in its own process, as today.
+`agentx serve` becomes the backend of this machine for every graphical client. It speaks JSON-RPC 2.0, and the desktop app and the same frontend in a browser send it the same requests. The terminal CLI is unchanged: every command runs in its own process, as today.
 
 ## The protocol
 
-The protocol is the one serve has, with two more requests. A request is one JSON object with a `type` and a `request_id` the client chose, and serve answers with events that carry that `request_id`. Events keep the `type`, fields and `schema_version` they have today, so the app's generated event types and the code that reads them stay as they are.
+JSON-RPC 2.0, the standard for a request, its response and one-way notifications. On standard input and output each message is one line, which is JSON-RPC over newline-delimited JSON, as the stdio transport of MCP is. On the WebSocket each message is one text frame. Serve invents no envelope of its own.
 
-| Request | What it does |
-| --- | --- |
-| `run` | Runs one agentx command line, `agentx <args> --json`. Each line the command writes comes back as a `run_line` event that holds it, and a `run_end` event closes the request with the exit code. An optional deadline stops the run. |
-| `cancel` | Stops the run of the `request_id` it names. |
-| `refresh`, `search` | As today. |
+| Method | Kind | What it does |
+| --- | --- | --- |
+| `run` | request | Runs one agentx command line, `agentx <args> --json`. An optional deadline stops it. The result carries the exit code. |
+| `event` | notification from serve | One event of a run, with the id of its request, or one event serve emits on its own (inventory, drift, reconcile, update), with none. The event is the object the CLI writes today, with the same `type`, fields and `schema_version`. |
+| `$/cancelRequest` | notification to serve | Stops the request whose id it names, by the name the Language Server Protocol gives it. |
+| `refresh`, `search` | request | Today's stdin requests. Their results carry what the `refresh_complete` and `search` events carry today. |
 
-The inventory, drift, reconcile and update events serve emits on its own carry no `request_id`, as today.
+A command that ends with an exit code other than 0 is a result, since the command ran: the error of JSON-RPC is kept for a request serve could not carry out, such as an unknown method or a command that could not start, with the standard codes.
+
+The events are unchanged inside the notification, so the app's generated event types and the code that reads them stay as they are.
 
 ## How serve runs a command
 
-Serve runs each `run` as a child process of its own: the same `agentx` executable, in a process group of its own, with serve's environment and working directory. It forwards the child's lines as `run_line` events, and on `cancel` or a passed deadline sends the group SIGTERM, then SIGKILL 2 seconds later. This is what the Rust shell does today, moved into Go where every client can use it.
+Serve runs each `run` as a child process of its own: the same `agentx` executable, in a process group of its own, with serve's environment and working directory. It forwards the child's lines as `event` notifications, and on `$/cancelRequest` or a passed deadline sends the group SIGTERM, then SIGKILL 2 seconds later. This is what the Rust shell does today, moved into Go where every client can use it.
 
-So a command behaves exactly as it does now. A crash in a command ends that command alone, a cancel ends every git the command started, and no state is shared between two commands. When a command that may have changed something ends, serve scans, and `run_end` names the inventory that holds the change, so a client no longer sends `refresh` after its own commands.
+So a command behaves exactly as it does now. A crash in a command ends that command alone, a cancel ends every git the command started, and no state is shared between two commands. When a command that may have changed something ends, serve scans, and the result names the inventory that holds the change, so a client no longer sends `refresh` after its own commands.
 
 Running a command inside the serve process, with no process start, is a later step and is decided per command by measurement. It is not free: the commands that finish a merge change the process's working directory, git calls read it, a panic in a goroutine a command started would end serve, and a command that ignores its context could not be stopped. A command moves inside serve only when a measured start-up cost justifies it and those four are handled for it. No client changes when one does: the request and its events stay the same.
 
@@ -33,8 +36,8 @@ Running a command inside the serve process, with no process start, is a later st
 
 | Door | Who uses it | Who may connect |
 | --- | --- | --- |
-| Standard input and output, one JSON object per line | The desktop app, which starts serve as its child, as today | Only the parent process |
-| A WebSocket on `127.0.0.1`, opened only with `agentx serve --listen`, one JSON object per message | The frontend in a browser on this machine | A client that presents the token serve made for this run, and whose `Origin` is one serve was started with |
+| Standard input and output, one message per line | The desktop app, which starts serve as its child, as today | Only the parent process |
+| A WebSocket on `127.0.0.1`, opened only with `agentx serve --listen`, one message per frame | The frontend in a browser on this machine | A client that presents the token serve made for this run, and whose `Origin` is one serve was started with |
 
 `--listen` takes an address on the loopback interface, port `0` by default, and refuses any other address. Serve reports the address and the token in a `listening` event. The token is random for each serve process and is never written to a log. `--origin` names each web origin that may connect, such as the frontend's development server; with none, no browser may. Serve also refuses a request whose `Host` is not the address it listens on, so that a web page cannot reach it through a name that resolves to this machine.
 
@@ -74,12 +77,14 @@ Running every command inside serve from the first step: faster for each click, b
 
 The terminal CLI as a client of a running serve: the CLI on `PATH` and the serve the app started can be of different releases, so a command would run other code than the binary the user typed. Serve has no terminal, so the confirmation of `import`, a passphrase prompt of git or ssh, colours and the terminal's width would each need relaying. The environment a command needs is the terminal's, with its agent and credential helpers. The lock and the mutation counter already let a terminal and the app work at once.
 
-JSON-RPC 2.0, or gRPC: a second message format beside the events every command already writes. Serve's own requests already pair a request with its events by `request_id`, which is all a run needs, and the generated types cover them. A standard envelope would matter for clients other people write, and can be added as one more door if that day comes.
+Request lines of our own, as `refresh` and `search` are today, with a run and a cancel request added: fewer changes, but a protocol only agentx documents. Newline-delimited JSON says how messages are framed and nothing about requests, ids, errors or cancelling, so each of those would be ours to define and to explain to whoever writes a client.
+
+gRPC, or a schema compiler beside Go: a second toolchain for the same events, and nothing a browser speaks without a proxy.
 
 ## Consequences
 
-The [CLI contract](../spec/cli-contract.md) gains the `run` and `cancel` requests, the `run_line`, `run_end` and `listening` events, `--listen` and `--origin`. The `refresh` and `search` requests stay as they are. The [inventory-ordering contract](../spec/inventory-ordering.md) gains that serve scans after a command it ran.
+The [CLI contract](../spec/cli-contract.md) gains the protocol, the methods, `--listen`, `--origin` and the `listening` event. Its section on serve's stdin requests becomes the `refresh` and `search` methods, and serve's own events become `event` notifications; the request lines of today stay accepted until the desktop app has moved. The [inventory-ordering contract](../spec/inventory-ordering.md) gains that serve scans after a command it ran.
 
 The end-to-end tests keep the mocked CLI. A small set of tests runs the frontend in a browser against a real `agentx serve --listen`, one happy path per screen.
 
-The work lands in order, each step usable on its own: the `run` and `cancel` requests and the WebSocket door in serve; the browser's way to send and `pnpm dev:browser`; the desktop app on serve's standard input and output; then commands inside serve, one at a time, where measured.
+The work lands in order, each step usable on its own: the protocol, `run` and the WebSocket door in serve; the browser's way to send and `pnpm dev:browser`; the desktop app on serve's standard input and output; then commands inside serve, one at a time, where measured.
