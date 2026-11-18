@@ -19,7 +19,7 @@ You need:
 
 For the desktop app, you also need:
 
-- Node `24` or later – [`.node-version`](.node-version) names it for version managers
+- Node `24.14` or later (on Node 25, `25.4` or later), the first with `#/` subpath imports – [`.node-version`](.node-version) names it for version managers
 - pnpm `12` – the exact version is `packageManager` in the root [`package.json`](package.json)
 - Rust, and on Linux the WebKitGTK development packages; see the desktop app's
   [README](apps/desktop/README.md)

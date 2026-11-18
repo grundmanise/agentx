@@ -48,7 +48,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 
 You need:
 
-- Node 24 or later. `.node-version` at the repository root names it for version managers.
+- Node 24.14 or later (on Node 25, 25.4 or later): earlier versions reject the `#/` imports. `.node-version` at the repository root names it for version managers.
 - pnpm 12. The root `package.json` pins the exact version in `packageManager`.
 - Rust, and on Linux the WebKitGTK development packages ([Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)).
 
