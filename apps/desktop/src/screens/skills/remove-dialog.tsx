@@ -3,7 +3,7 @@
 // Universal chip, it says why the skill leaves every agent: those agents read the library. Remove runs
 // `skill remove <name>`, with --remote when that is checked, and never offers an Undo: unpublished
 // edits of your own are gone.
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
@@ -20,6 +20,7 @@ import {
 } from "#/components/ui/dialog.tsx";
 import { seenBy } from "#/screens/skills/placements.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import type { CommandOptions } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -44,6 +45,7 @@ export const RemoveDialog = ({
   open,
   fromUniversal,
   onClose,
+  onCloseAutoFocus,
 }: {
   row: SkillRow;
   configurations: Configuration[];
@@ -51,6 +53,8 @@ export const RemoveDialog = ({
   /** Whether the Universal chip opened it: the dialog then says why every agent loses the skill. */
   fromUniversal: boolean;
   onClose: () => void;
+  /** Moves focus when the dialog closes, when it has no trigger to return to; `removed` is true after Remove. */
+  onCloseAutoFocus?: (event: Event, removed: boolean) => void;
 }) => {
   const [remote, setRemote] = useState(false);
   const checkboxId = useId();
@@ -58,6 +62,8 @@ export const RemoveDialog = ({
     s.sources.some((source) => source.account === true)
   );
   const agents = seenBy(row, configurations);
+  // Whether this close is the confirmation, for `onCloseAutoFocus`.
+  const removed = useRef(false);
   // Your own published skill, when an account remote is set, can leave that too.
   const offersRemote =
     row.kind === "yours" && row.published && hasAccountRemote;
@@ -68,14 +74,19 @@ export const RemoveDialog = ({
     onClose();
   };
   const remove = () => {
-    const args = ["skill", "remove", row.name];
-    void runUntilSettled(
-      offersRemote && remote ? [...args, "--remote"] : args,
-      {
-        label: removeLabel(row),
-        success: `Removed ${row.name} skill`,
-      }
-    );
+    const base = ["skill", "remove", row.name];
+    const args = offersRemote && remote ? [...base, "--remote"] : base;
+    // Retry, after another command held the lock, also keeps Remove pending until the inventory
+    // after it arrives.
+    const options: CommandOptions = {
+      label: removeLabel(row),
+      retry: () => {
+        void runUntilSettled(args, options);
+      },
+      success: `Removed ${row.name} skill`,
+    };
+    void runUntilSettled(args, options);
+    removed.current = true;
     close();
   };
   return (
@@ -87,7 +98,12 @@ export const RemoveDialog = ({
         }
       }}
     >
-      <DialogContent>
+      <DialogContent
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event, removed.current);
+          removed.current = false;
+        }}
+      >
         <DialogHeader showCloseButton={false}>
           <DialogTitle>{`Remove ${row.name}?`}</DialogTitle>
           <DialogDescription>

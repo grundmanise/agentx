@@ -30,7 +30,7 @@ import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
-import { currentRows } from "#/screens/skills/rows.ts";
+import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
 import { addedName, statusLabels } from "#/screens/sources/projection.ts";
 import type {
   CardGroup,
@@ -56,6 +56,38 @@ const versionOf = ({ subpath, tree }: SkillMdRef) => `${subpath}\u0000${tree}`;
 const isReady = (card: SkillCard, read: SkillMdRead | undefined) =>
   card.skillMd === undefined ||
   (read !== undefined && read.version === versionOf(card.skillMd));
+
+/**
+ * The Remove dialog of an Added card. While open it shows the skill as the inventory has it now,
+ * so an agent that gets the skill meanwhile is listed; as it closes it keeps `snapshot`, so its
+ * text stays while it goes.
+ */
+const SourcesRemoveDialog = ({
+  snapshot,
+  open,
+  onClose,
+  onCloseAutoFocus,
+}: {
+  snapshot: SkillRow;
+  open: boolean;
+  onClose: () => void;
+  onCloseAutoFocus: (event: Event, removed: boolean) => void;
+}) => {
+  const rows = useSkillRows();
+  const configurations =
+    useAppStore((s) => s.inventory?.configurations) ?? noConfigurations;
+  const live = open ? rows.find((r) => r.key === snapshot.key) : undefined;
+  return (
+    <RemoveDialog
+      row={live ?? snapshot}
+      configurations={configurations}
+      open={open}
+      fromUniversal={false}
+      onClose={onClose}
+      onCloseAutoFocus={onCloseAutoFocus}
+    />
+  );
+};
 
 /** The round check at the end of a selectable skill's row: a ring, filled with the check when selected. */
 const CheckMark = ({ checked }: { checked: boolean }) => (
@@ -542,8 +574,6 @@ export const SkillList = ({
   // its text as it goes.
   const [removing, setRemoving] = useState<SkillRow>();
   const [removeOpen, setRemoveOpen] = useState(false);
-  const configurations =
-    useAppStore((s) => s.inventory?.configurations) ?? noConfigurations;
   const remove = useCallback((name: string) => {
     const row = currentRows().find((r) => r.key === name);
     if (row !== undefined) {
@@ -634,13 +664,23 @@ export const SkillList = ({
         </div>
       </Accordion>
       {removing !== undefined && (
-        <RemoveDialog
-          row={removing}
-          configurations={configurations}
+        <SourcesRemoveDialog
+          snapshot={removing}
           open={removeOpen}
-          fromUniversal={false}
           onClose={() => {
             setRemoveOpen(false);
+          }}
+          onCloseAutoFocus={(event, removed) => {
+            // The dialog has no trigger: after Cancel the focus goes back to the card's Remove, if
+            // it is still drawn. After a removal that Remove is disabled, so the default applies.
+            const label = `Remove ${removing.name}`;
+            const opener = [
+              ...(list.current?.querySelectorAll("button") ?? []),
+            ].find((b) => b.getAttribute("aria-label") === label);
+            if (!removed && opener !== undefined) {
+              event.preventDefault();
+              opener.focus();
+            }
           }}
         />
       )}

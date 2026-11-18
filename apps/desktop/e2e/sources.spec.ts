@@ -399,8 +399,13 @@ test("Remove on an Added skill confirms, then runs skill remove for every agent"
   const run = cli.register(["skill", "remove", "pdf"], {
     events: [{ ok: true, summary: "removed pdf", type: "result" }],
   });
-  await remove.click();
   const confirm = page.getByRole("dialog", { name: "Remove pdf?" });
+  // Cancel puts the focus back on the card's Remove: the dialog has no trigger.
+  await remove.click();
+  await confirm.getByRole("button", { exact: true, name: "Cancel" }).click();
+  await expect(confirm).toBeHidden();
+  await expect(remove).toBeFocused();
+  await remove.click();
   await expect(confirm).toContainText(
     "It will be removed from every agent that has it:"
   );
