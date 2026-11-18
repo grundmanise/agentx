@@ -205,6 +205,8 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
     "Starting the app…"
   );
   await expect(screen(page)).toHaveAttribute("inert", "");
+  // The screen's own layers, such as the list's pinned group headers, stay under the pane.
+  await expect(screen(page)).toHaveCSS("isolation", "isolate");
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
   await expect(progress(page)).toHaveCount(0);
   expect(commands()).toEqual(launchLines);
