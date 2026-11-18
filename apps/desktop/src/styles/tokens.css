@@ -229,7 +229,6 @@
   --color-filter-chip-text: var(--gray-150);
   --color-filter-chip-hover: var(--gray-880);
   --color-filter-sort-text: var(--gray-200);
-  --color-filter-sort-off-text: var(--color-text-caption);
 
   /* Lists and rows */
   --color-row-hover: var(--gray-920);
