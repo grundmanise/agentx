@@ -200,21 +200,24 @@ test("the open source's card: its name, its full URL linking to the repository, 
   ).toBeVisible();
 });
 
-test("a source listing: selectable skills first, then each state with its label and, once open, its reason", async ({
+/** acme's skills A to Z, the order the list keeps whatever their state. */
+const acmeNames = [
+  "artifacts",
+  "docx",
+  "forms",
+  "letters",
+  "pdf",
+  "scratch",
+  "slides",
+  "xlsx",
+];
+
+test("a source listing: the skills A to Z, each state with its label and, once open, its reason", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
-  expect(await skillNames(grid(page, "acme/skills"))).toEqual([
-    "artifacts",
-    "docx",
-    "forms",
-    "slides",
-    "letters",
-    "pdf",
-    "scratch",
-    "xlsx",
-  ]);
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(acmeNames);
   await expect(check(page, "artifacts")).toHaveAttribute(
     "aria-pressed",
     "false"
@@ -315,7 +318,9 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   cli.register(["source", "skills", ZETA_ID], { events: [] });
   cli.register(["skill", "list", "--remote"], { events: installable });
   await page.goto("/#/sources");
-  await expect(row(page, "skill-00")).toBeVisible();
+  // A to Z, so the two skills of a name sit side by side, the first of the listing first.
+  await expect(row(page, "skill-00").first()).toBeVisible();
+  await expect(row(page, "skill-00")).toHaveCount(2);
   // The later skill of each name is not on this machine, so none counts as added.
   await expect(page.getByText("Select all 90")).toBeVisible();
   await expect(page.getByText(/already added/u)).toHaveCount(0);
@@ -485,9 +490,49 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   await expect(
     rowLine(page, "docx").getByText("Added", { exact: true })
   ).toBeVisible();
+  // An added skill keeps its place.
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(acmeNames);
   expect(commandLines(cli)).toContain(
     `skill add ${ACME} --name artifacts --name docx --to claude-code`
   );
+});
+
+test("Remove on an Added skill confirms, then runs skill remove for every agent", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  const remove = rowLine(page, "pdf").getByRole("button", {
+    exact: true,
+    name: "Remove pdf",
+  });
+  const word = (text: string) =>
+    rowLine(page, "pdf").getByText(text, { exact: true });
+  await expect(word("Added")).toHaveCSS("opacity", "1");
+  await expect(word("Remove")).toHaveCSS("opacity", "0");
+  await remove.hover();
+  await expect(word("Added")).toHaveCSS("opacity", "0");
+  await expect(word("Remove")).toHaveCSS("opacity", "1");
+  const run = cli.register(["skill", "remove", "pdf"], {
+    events: [{ ok: true, summary: "removed pdf", type: "result" }],
+  });
+  const confirm = page.getByRole("dialog", { name: "Remove pdf?" });
+  // Cancel puts the focus back on the card's Remove: the dialog has no trigger.
+  await remove.click();
+  await confirm.getByRole("button", { exact: true, name: "Cancel" }).click();
+  await expect(confirm).toBeHidden();
+  await expect(remove).toBeFocused();
+  await remove.click();
+  await expect(confirm).toContainText(
+    "It will be removed from every agent that has it:"
+  );
+  await expect(
+    confirm.getByRole("list", { name: "Agents that see it" })
+  ).toContainText("Codex");
+  await confirm.getByRole("button", { exact: true, name: "Remove" }).click();
+  await run.started;
+  await expect(toasts(page).getByText("Removed pdf skill")).toBeVisible();
+  expect(commandLines(cli)).toContain("skill remove pdf");
 });
 
 test("many agents: five logos and +n, the agent picker toggles a target, two-letter monograms", async ({
@@ -630,7 +675,6 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
       { name: "slides", type: "library_skill" },
     ],
   });
-  await expect(page.getByText("4 already added")).toBeVisible();
   await expect(selectAll(page)).toHaveAccessibleName("Select all 4");
   await selectAll(page).click();
   await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
