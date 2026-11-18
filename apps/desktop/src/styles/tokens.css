@@ -221,6 +221,13 @@
   --color-segmented-both-selected: var(--gray-50);
   --color-segmented-neutral-selected: var(--gray-850);
 
+  /* Tabs */
+  --color-tabs-list-bg: var(--gray-910);
+  --color-tabs-text: var(--gray-300);
+  --color-tabs-active-bg: var(--gray-850);
+  --color-tabs-active-border: var(--gray-800);
+  --color-tabs-active-text: var(--gray-50);
+
   /* Filter row */
   --color-filter-bg: var(--gray-880);
   --color-filter-text: var(--gray-200);
@@ -319,11 +326,6 @@
   --color-banner-title: var(--gray-50);
   --color-banner-text: var(--gray-300);
   --color-card-chip-ring: var(--color-card-bg);
-  --color-plugin-skills-dot: var(--color-accent-yours);
-  --color-plugin-servers-dot: var(--color-accent-theirs);
-  --color-plugin-hooks-dot: var(--color-accent-attention);
-  --color-plugin-connector: var(--gray-870);
-  --color-plugin-row-hover: var(--gray-930);
 
   /* Overlays */
   --color-overlay-bg: var(--gray-940);
@@ -468,7 +470,8 @@
   --radius-file-card: 16px;
   --radius-banner: 18px;
   --radius-agent-card: 20px;
-  --radius-plugin-card: 20px;
+  --radius-tabs-list: 10px;
+  --radius-tabs-trigger: 8px;
   --radius-add-card: 16px;
   --radius-add-card-check: 50%;
   --radius-source-card: 18px;
@@ -627,6 +630,9 @@
   --size-switch-compact-knob: 14px;
   --size-checkbox: 16px;
   --gap-segmented: 2px;
+  --height-tabs-list: 36px;
+  --padding-tabs-list: 3px;
+  --gap-tabs: 12px;
   --height-filter: 30px;
   --size-filter-badge: 16px;
   --size-agent-picker-badge: 16px;
@@ -663,10 +669,10 @@
   --gap-agent-card: 12px;
   --size-agent-card-logo: 44px;
   --width-universal-lead: 260px;
-  --padding-plugin-card: 22px;
-  --height-plugin-card-row: 36px;
-  --gap-plugin-card: 12px;
-  --size-plugin-card-tile: 40px;
+  --size-plugin-tile: 40px;
+  --size-plugin-row-tile: 28px;
+  --gap-plugin-details: 40px;
+  --gap-plugin-details-y: 12px;
   --padding-add-card: 6px;
 
   /* Overlays */
@@ -971,9 +977,20 @@
 }
 @utility type-plugin-name {
   font-family: var(--font-sans);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+@utility type-plugin-tile {
+  font-family: var(--font-sans);
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+@utility type-tab {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
 }
 @utility type-version-pill {
   font-family: var(--font-mono);

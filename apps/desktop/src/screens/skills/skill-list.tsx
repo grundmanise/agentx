@@ -26,6 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { useOnNewKey } from "#/lib/new-key.ts";
 import { AddSkillDialog } from "#/screens/skills/add-skill-dialog.tsx";
 import { AdoptDialog } from "#/screens/skills/adopt-dialog.tsx";
 import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
@@ -70,7 +71,7 @@ const agentChipLabel = (agents: string[], chosen: Configuration[]): string => {
 };
 
 /** The chip in the filter row that echoes the agent filter: one agent, or how many. */
-const AgentFilterChip = ({
+export const AgentFilterChip = ({
   agents,
   configurations,
   onClear,
@@ -307,6 +308,19 @@ const headersOf = (items: Item[]): number[][] => {
     return item.subgroup === undefined ? [header] : [header, subheader];
   });
 };
+
+/** The height of the headers pinned above the item at `index`, in px, not counting the item. */
+const pinnedAbove = (
+  headers: number[][],
+  virtualizer: { measurementsCache: { size: number }[] },
+  index: number
+) =>
+  (headers[index] ?? [])
+    .filter((header) => header !== index)
+    .reduce(
+      (sum, header) => sum + (virtualizer.measurementsCache[header]?.size ?? 0),
+      0
+    );
 
 /** Each header's section, by the header's index: the index of the last item under it. */
 const sectionsOf = (headers: number[][]) => {
@@ -572,14 +586,7 @@ const SkillGroups = ({
     sizeRails(virtualizer, sections);
   });
   useLayoutEffect(() => {
-    const pinned = (headers[selectedIndex] ?? [])
-      .filter((header) => header !== selectedIndex)
-      .reduce(
-        (sum, header) =>
-          sum + (virtualizer.measurementsCache[header]?.size ?? 0),
-        0
-      );
-    setPinnedHeight(pinned);
+    setPinnedHeight(pinnedAbove(headers, virtualizer, selectedIndex));
   }, [headers, selectedIndex, virtualizer]);
 
   // A header that is pinned stays at the top when a click collapses or expands its section: the
@@ -588,13 +595,7 @@ const SkillGroups = ({
     const header = virtualizer.measurementsCache[index];
     const offset = virtualizer.scrollOffset ?? 0;
     if (header !== undefined) {
-      const above = (headers[index] ?? [])
-        .filter((at) => at !== index)
-        .reduce(
-          (sum, at) => sum + (virtualizer.measurementsCache[at]?.size ?? 0),
-          0
-        );
-      const place = header.start - above;
+      const place = header.start - pinnedAbove(headers, virtualizer, index);
       if (offset > place) {
         virtualizer.scrollToOffset(place);
       }
@@ -604,22 +605,16 @@ const SkillGroups = ({
 
   // The selected row comes into view when the selection changes (a key press, a click, or a route
   // another screen opened) and when the filters list it again. A list that changes around the
-  // same selected row stays where it is. The first time, such as a skill a plugin card opens, the
-  // row comes to the top, under its pinned headers; after that the list scrolls as little as it can.
-  const latestIndex = useRef(selectedIndex);
-  useEffect(() => {
-    latestIndex.current = selectedIndex;
-  }, [selectedIndex]);
+  // same selected row stays where it is, and so does a list shown again after another screen. The
+  // first time, such as a skill the Plugins screen opens, the row comes to the top, under its pinned
+  // headers; after that the list scrolls as little as it can.
   const scrolled = useRef(false);
-  const listed = selectedIndex !== -1;
-  useEffect(() => {
-    if (listed) {
-      virtualizer.scrollToIndex(latestIndex.current, {
-        align: scrolled.current ? "auto" : "start",
-      });
-      scrolled.current = true;
-    }
-  }, [selectedKey, listed, virtualizer]);
+  useOnNewKey(selectedIndex === -1 ? undefined : selectedKey, () => {
+    virtualizer.scrollToIndex(selectedIndex, {
+      align: scrolled.current ? "auto" : "start",
+    });
+    scrolled.current = true;
+  });
 
   const drawn = drawnGroups(
     items,

@@ -72,6 +72,16 @@ const rowNames = async (where: Locator) =>
         .map((b) => b.getAttribute("aria-label"))
     );
 
+/** The keys of the reads the kept reads' index in IndexedDB names. */
+const keptReads = async (page: Page) => {
+  await page.addScriptTag({
+    type: "module",
+    url: "/e2e/harness/kept-reads.ts",
+  });
+  await page.waitForFunction(() => "keptReads" in window);
+  return await page.evaluate(async () => await window.keptReads());
+};
+
 /** Opens the Skills screen on the fixture machine at `path`, with every read registered. */
 const openSkills = async (
   cli: MockCli,
@@ -105,7 +115,9 @@ test("an unmodified skill: every file, SKILL.md first and open, the rest by path
     "aria-expanded",
     "true"
   );
-  expect(later(cli)).toEqual([["skill", "files", "pdf", "--json"]]);
+  await expect
+    .poll(() => later(cli))
+    .toEqual([["skill", "files", "pdf", "--json"]]);
   // The meta comes with the files: the SKILL.md row is there while they are read.
   await expect(fileRow(section, "SKILL.md")).toContainText("6 lines");
   expect(await rowNames(section)).toEqual([
@@ -152,10 +164,71 @@ test("an unmodified skill: every file, SKILL.md first and open, the rest by path
   await expect(files(page, "gone")).toBeVisible();
   await row(page, "pdf").click();
   await expect(fileRow(files(page, "pdf"), "SKILL.md")).toBeVisible();
-  expect(later(cli)).toEqual([
-    ["skill", "files", "pdf", "--json"],
-    ["skill", "files", "gone", "--json"],
-  ]);
+  await expect
+    .poll(() => later(cli))
+    .toEqual([
+      ["skill", "files", "pdf", "--json"],
+      ["skill", "files", "gone", "--json"],
+    ]);
+});
+
+test("after a relaunch, a skill's files show from the kept read, without reading them again", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page, "/#/skills/pdf");
+  await expect(fileRow(files(page, "pdf"), "SKILL.md")).toContainText(
+    "6 lines"
+  );
+  // The read is kept once the index in IndexedDB names it.
+  await expect.poll(async () => await keptReads(page)).toContain("files:pdf");
+
+  const before = cli.commands.length;
+  cli.restart();
+  await page.reload();
+  await expect(content(files(page, "pdf"), "SKILL.md")).toContainText(
+    "Use this skill to pdf."
+  );
+  await row(page, "gone").click();
+  await expect(files(page, "gone")).toBeVisible();
+  // Only the skill not read before is read: pdf's files come from the kept read.
+  await expect
+    .poll(() =>
+      cli.commands
+        .slice(before)
+        .filter((l) => l[0] === "skill" && l[1] === "files")
+    )
+    .toEqual([["skill", "files", "gone", "--json"]]);
+});
+
+test("after a relaunch, a kept history shows at once, and the history is read again to replace it", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page, "/#/skills/pdf-letters");
+  const article = pane(page, "pdf-letters");
+  await expect(article.getByText("Tighten the examples")).toBeVisible();
+  await expect
+    .poll(async () => await keptReads(page))
+    .toContain("history:pdf-letters");
+
+  // Another subject for the same version, such as an amended message.
+  const [latest, ...rest] = history;
+  const read = cli.register(["skill", "history", "pdf-letters"], {
+    events: [{ ...latest, subject: "Tighten the examples, again" }, ...rest],
+    holdAfter: 0,
+  });
+  cli.restart();
+  await page.reload();
+  // The kept history shows while the read runs.
+  await read.started;
+  await expect(
+    pane(page, "pdf-letters").getByText("Tighten the examples")
+  ).toBeVisible();
+  read.release();
+  await expect(
+    pane(page, "pdf-letters").getByText("Tighten the examples, again")
+  ).toBeVisible();
 });
 
 test("the name, the description and a file's text can be selected and copied", async ({
@@ -195,10 +268,9 @@ test("a modified skill of a source: its edits labelled and tinted, against the v
   await expect(section).toContainText(
     "Compared with the version you installed"
   );
-  expect(sortedLater(cli)).toEqual([
-    "skill diff review --json",
-    "skill files review --json",
-  ]);
+  await expect
+    .poll(() => sortedLater(cli))
+    .toEqual(["skill diff review --json", "skill files review --json"]);
   // The deleted file is listed with the others, in path order.
   expect(await rowNames(section)).toEqual([
     "SKILL.md",
@@ -246,10 +318,12 @@ test("a modified skill of your own compares with what was last published", async
   await expect(content(section, "SKILL.md").getByRole("insertion")).toHaveText([
     "Use this skill to write release notes from merged changes.",
   ]);
-  expect(sortedLater(cli)).toEqual([
-    "skill diff release-notes --json",
-    "skill files release-notes --json",
-  ]);
+  await expect
+    .poll(() => sortedLater(cli))
+    .toEqual([
+      "skill diff release-notes --json",
+      "skill files release-notes --json",
+    ]);
 });
 
 test("a plugin's skill is read as <plugin>:<name>, a client's own as --configuration", async ({
@@ -259,16 +333,18 @@ test("a plugin's skill is read as <plugin>:<name>, a client's own as --configura
   await openSkills(cli, page, "/#/skills/skill%3Ah-commit");
   const section = files(page, "commit-helper");
   await expect(fileRow(section, "SKILL.md")).toBeVisible();
-  expect(later(cli)).toEqual([
-    ["skill", "files", "acme-tools:commit-helper", "--json"],
-  ]);
+  await expect
+    .poll(() => later(cli))
+    .toEqual([["skill", "files", "acme-tools:commit-helper", "--json"]]);
 
   await row(page, "notes").click();
   await expect(fileRow(files(page, "notes"), "SKILL.md")).toBeVisible();
-  expect(later(cli)).toEqual([
-    ["skill", "files", "acme-tools:commit-helper", "--json"],
-    ["skill", "files", "notes", "--configuration", "cursor", "--json"],
-  ]);
+  await expect
+    .poll(() => later(cli))
+    .toEqual([
+      ["skill", "files", "acme-tools:commit-helper", "--json"],
+      ["skill", "files", "notes", "--configuration", "cursor", "--json"],
+    ]);
 });
 
 test("files that cannot be read say so, and are read again on the next selection", async ({
@@ -573,16 +649,18 @@ test("a skill two clients hold is read and shown from the same copy, by its dire
   const section = files(page, "Meeting Notes");
   await expect(fileRow(section, "SKILL.md")).toBeVisible();
   // The copy that comes first by configuration, named by its directory, not its frontmatter name.
-  expect(later(cli)).toEqual([
-    [
-      "skill",
-      "files",
-      "meeting-notes",
-      "--configuration",
-      "claude-code",
-      "--json",
-    ],
-  ]);
+  await expect
+    .poll(() => later(cli))
+    .toEqual([
+      [
+        "skill",
+        "files",
+        "meeting-notes",
+        "--configuration",
+        "claude-code",
+        "--json",
+      ],
+    ]);
   await reveal(section, "SKILL.md").click();
   expect(cli.reveals).toEqual([
     ["/home/me/.claude-code/skills/meeting-notes/SKILL.md"],

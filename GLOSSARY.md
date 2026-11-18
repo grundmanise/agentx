@@ -56,6 +56,10 @@ _Avoid_: scan result, state
 The last inventory the desktop app applied, kept in the app's own storage with the settings, machine, sources and adoption preview it loaded. A launch shows it under a frosted pane with a spinner until the startup checks pass; no command runs against it, and the serve child's first inventory replaces it.
 _Avoid_: cached snapshot, last session, offline inventory
 
+**Kept read**:
+What one of the desktop app's reads returned, kept in the app's own storage for the next launch: a skill's files, history or update diff, a source's skill list, a SKILL.md, or your skills on the account remote. A read of a skill's files or update diff, or of a SKILL.md, at the version a kept read names shows it and runs no command, since that version names their content; a skill's history, a source's skill list and your skills show while their command runs again. At most about 25 MB, the least recently used dropped first; another build of the app drops them all.
+_Avoid_: cache entry, offline data
+
 **Snapshot**:
 An inventory saved with the machine settings, in a file or on the account remote, where each machine has at most one. Leaves out what only describes the machine it was taken on: absolute paths, state and drift, scan counters and physical ids. Import applies it: it installs and places the skills it lists, each at its version or, for an entry with no version, which follows, at the latest; it skips a skill it cannot install, such as an unmanaged skill, and ignores MCP servers and plugins for now. A computer takes its own as a backup, with every entry exact; the cloud machine's is written by `skill place` and `skill remove` naming it, from the desktop app or the CLI, or by the web app, and may be partial. A scan's inventory is always complete.
 _Avoid_: machine snapshot, machine document, export file, profile, manifest, pinned (for an entry's version)
