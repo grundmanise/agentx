@@ -88,17 +88,19 @@ export const forkLabel = (row: SkillRow) => `fork ${row.key}`;
 interface ForkState {
   /** The skill the Fork dialog is open for. */
   forking?: SkillRow;
+  /** False while the dialog closes: it keeps its skill until its close animation ends. */
+  open: boolean;
 }
 
-const useForkStore = create<ForkState>()(() => ({}));
+const useForkStore = create<ForkState>()(() => ({ open: false }));
 
 /** Opens the Fork dialog for `row`. */
 const openFork = (row: SkillRow) => {
-  useForkStore.setState({ forking: row });
+  useForkStore.setState({ forking: row, open: true });
 };
 
 const closeFork = () => {
-  useForkStore.setState({ forking: undefined });
+  useForkStore.setState({ open: false });
 };
 
 /** Fork, a secondary button in the detail pane's action row: opens the dialog. */
@@ -256,11 +258,11 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
 };
 
 /** "Fork {skill}?": what the fork does for this kind of skill, Use a different name, Cancel · Fork. */
-const ForkDialog = ({ row }: { row: SkillRow }) => {
+const ForkDialog = ({ row, open }: { row: SkillRow; open: boolean }) => {
   const pending = usePending(forkLabel(row));
   return (
     <Dialog
-      open
+      open={open}
       onOpenChange={(next) => {
         // The dialog stays while its command runs: a refusal comes back to it.
         if (!next && !pending) {
@@ -279,10 +281,11 @@ const ForkDialog = ({ row }: { row: SkillRow }) => {
   );
 };
 
-/** The Fork dialog while one is open. */
+/** The Fork dialog while one is open, and while it closes. */
 export const ForkDialogs = () => {
   const forking = useForkStore((s) => s.forking);
+  const open = useForkStore((s) => s.open);
   return forking === undefined ? null : (
-    <ForkDialog key={forking.key} row={forking} />
+    <ForkDialog key={forking.key} row={forking} open={open} />
   );
 };

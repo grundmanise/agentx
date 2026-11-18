@@ -13,8 +13,9 @@ import { useAppStore } from "#/store/store.ts";
 export const AdoptSkillsSection = () => {
   const adoption = useAppStore((s) => s.adoption);
   const busy = useAdoptRun((s) => s.run !== undefined);
-  // The tool whose skills the dialog adopts, while it is open.
-  const [open, setOpen] = useState<ToolArg | undefined>();
+  // The tool whose skills the dialog adopts. It stays while the dialog closes.
+  const [adopting, setAdopting] = useState<ToolArg>();
+  const [open, setOpen] = useState(false);
   const tools = toolsToAdopt(adoption);
   return (
     <SettingsSection
@@ -33,7 +34,8 @@ export const AdoptSkillsSection = () => {
               variant="secondary"
               disabled={busy}
               onClick={() => {
-                setOpen(tool.arg);
+                setAdopting(tool.arg);
+                setOpen(true);
               }}
             >
               {`Adopt ${tool.name} skills`}
@@ -42,11 +44,11 @@ export const AdoptSkillsSection = () => {
         </div>
       )}
       <AdoptDialog
-        tools={open === undefined ? [] : [open]}
-        open={open !== undefined}
+        tools={adopting === undefined ? [] : [adopting]}
+        open={open}
         onOpenChange={(next) => {
           if (!next) {
-            setOpen(undefined);
+            setOpen(false);
           }
         }}
       />

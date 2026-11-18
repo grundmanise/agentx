@@ -159,7 +159,9 @@ export const SkillDetail = ({
   configurations: Configuration[];
 }) => {
   // Which control opened the Remove dialog: the Universal chip says why the skill leaves every agent.
-  const [removing, setRemoving] = useState<"button" | "universal">();
+  // What opened the Remove dialog. It stays while the dialog closes, so its text does not change.
+  const [removing, setRemoving] = useState<"button" | "universal">("button");
+  const [removeOpen, setRemoveOpen] = useState(false);
   const sources = useAppStore((s) => s.sources);
   // How many files `skill diff` found changed, from the FILES read of this version of the skill.
   const changedFiles = useAppStore((s) => {
@@ -235,6 +237,7 @@ export const SkillDetail = ({
                 row={row}
                 onClick={() => {
                   setRemoving("button");
+                  setRemoveOpen(true);
                 }}
               />
             )}
@@ -254,6 +257,7 @@ export const SkillDetail = ({
           configurations={configurations}
           onRemove={() => {
             setRemoving("universal");
+            setRemoveOpen(true);
           }}
         />
         <SightsNotice sights={sights} />
@@ -262,10 +266,10 @@ export const SkillDetail = ({
         <RemoveDialog
           row={row}
           configurations={configurations}
-          open={removing !== undefined}
+          open={removeOpen}
           fromUniversal={removing === "universal"}
           onClose={() => {
-            setRemoving(undefined);
+            setRemoveOpen(false);
           }}
         />
       )}

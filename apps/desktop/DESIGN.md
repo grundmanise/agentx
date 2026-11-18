@@ -1235,6 +1235,7 @@ Nothing loops forever, and nothing waits on purpose. Two things loop, each only 
 - File list chevron: `rotate(90deg)` in `.15s`. The History sheet's chevron turns with no transition.
 - File row: the meta and the Show in Finder button swap by opacity in `.15s`.
 - Files read (`animate-code-reveal`, `animate-code-loading-out`): when a skill's files come in, the blurred stand-in SKILL.md and its spinner fade out while the real SKILL.md fades in, its blur going from `code.loading-blur` to none, both `.3s ease-out`. A skill whose files are already read shows them at once.
+- Dialogs and the palette: shadcn's own open and close classes (tw-animate-css). The content fades and zooms from 95% in `.2s`, and back the same way when it closes; its `shell.scrim-strong` fades in and out in `.15s`. Sheets open and close with no transition.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0` and opacity 0 → 1, `.22s ease`, when it appears.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, until the check settles.
 - Pending controls (`Spinner`, `animate-check-spin`): the same ring, once a second, linear, for the whole command; a control with a leading icon, such as Check updates or Check tools, shows it in the icon's place, so a long check reads as busy past its first second.

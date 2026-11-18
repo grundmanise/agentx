@@ -130,7 +130,9 @@ const Result = ({ result }: { result: ImportResult }) => {
 /** Import…: the open dialog, the confirm, `import <file> --yes`, the sources, and the result. */
 const ImportFile = () => {
   const library = useAppStore((s) => s.machine?.library);
+  // The file picked last. It stays while its confirm closes, so the confirm's text does not change.
   const [picked, setPicked] = useState<string>();
+  const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<ImportResult>();
   const [adding, setAdding] = useState(false);
   const pending = useSettling(IMPORT_LABEL) || adding;
@@ -139,6 +141,7 @@ const ImportFile = () => {
     const path = await pickSnapshot(library);
     if (path !== null) {
       setPicked(path);
+      setConfirming(true);
     }
   };
 
@@ -162,7 +165,7 @@ const ImportFile = () => {
   };
 
   const importFile = async (path: string) => {
-    setPicked(undefined);
+    setConfirming(false);
     setResult(undefined);
     setAdding(true);
     const done = await runImport(path);
@@ -186,10 +189,10 @@ const ImportFile = () => {
         </Button>
       </span>
       <Confirm
-        open={picked !== undefined}
+        open={confirming}
         onOpenChange={(open) => {
           if (!open) {
-            setPicked(undefined);
+            setConfirming(false);
           }
         }}
         title={`Replace settings with ${fileName(picked ?? "")}?`}
