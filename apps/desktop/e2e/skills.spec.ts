@@ -156,6 +156,63 @@ test.describe("the list", () => {
     ]);
   });
 
+  test("every group collapses from its header, the keys skip it, and a skill opened in it opens it", async ({
+    cli,
+    page,
+  }) => {
+    await openSkills(cli, page);
+    const header = (name: string) =>
+      list(page).getByRole("button", { exact: true, name });
+    for (const name of [
+      "PERSONAL 3",
+      "ACME/SKILLS 2",
+      "ZETA/TOOLS 1",
+      "PLUGINS 1",
+      "UNMANAGED 2",
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop
+      await expect(header(name)).toHaveAttribute("aria-expanded", "true");
+    }
+    // A collapsed source keeps its header and count; the keys skip its rows.
+    await header("ACME/SKILLS 2").click();
+    await expect(header("ACME/SKILLS 2")).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    await expect(
+      group(page, "ACME/SKILLS (2)").getByRole("listitem")
+    ).toHaveCount(0);
+    await row(page, "release-notes").click();
+    await page.keyboard.press("j");
+    await expect(row(page, "gone")).toHaveAttribute("aria-current", "true");
+    // A skill opened in a collapsed group, as from another screen, opens its group.
+    await page.evaluate(() => {
+      window.location.hash = "#/skills/review";
+    });
+    await expect(header("ACME/SKILLS 2")).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    await expect(row(page, "review")).toHaveAttribute("aria-current", "true");
+    // A collapsed PLUGINS group drops its Expand all; open again, it shows it.
+    await header("PLUGINS 1").click();
+    await expect(
+      list(page).getByRole("button", { name: "Expand all" })
+    ).toHaveCount(0);
+    await header("PLUGINS 1").click();
+    await expect(
+      list(page).getByRole("button", { name: "Expand all" })
+    ).toBeVisible();
+    // The Unmanaged group collapses too, and keeps its Adopt all.
+    await header("UNMANAGED 2").click();
+    await expect(
+      group(page, "UNMANAGED (2)").getByRole("listitem")
+    ).toHaveCount(0);
+    await expect(
+      list(page).getByRole("button", { name: "Adopt all" })
+    ).toBeVisible();
+  });
+
   test("each row shows its glyph, its one pill, an alert triangle when its banner warns, agent clients and description", async ({
     cli,
     page,
