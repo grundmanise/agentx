@@ -189,10 +189,14 @@ const LogoImage = ({
  * A round agent client logo (DESIGN.md §6 "Agent client logo chip"): the bundled image, or a
  * monogram of the client's name when none is bundled. Every logo is an image named after the
  * client, with the name in a Tooltip on hover, unless `tooltip={false}`.
+ *
+ * The Tooltip is not hoverable: a hoverable one stays open while the pointer crosses towards it,
+ * over the next logo of a stack, and holds back that logo's Tooltip until the pointer is well
+ * inside it. The name needs no hovering to be read.
  */
 export const AgentLogo = ({ tooltip = true, ...props }: AgentLogoProps) =>
   tooltip ? (
-    <Tooltip>
+    <Tooltip disableHoverableContent>
       <TooltipTrigger asChild>
         <LogoImage {...props} />
       </TooltipTrigger>
@@ -216,19 +220,20 @@ const stackVariants = cva("flex items-center", {
 
 /**
  * Logos stacked with `logo.overlap`, each ringed in the parent's background, the first on top of
- * the next. `extra` adds a "+n" count after the last logo (`text.hint`).
+ * the next. `hidden` adds a "+n" count of the clients not drawn after the last logo
+ * (`text.hint`), which names them in a Tooltip.
  */
 export const LogoStack = ({
   clients,
   size,
-  extra = 0,
+  hidden,
   surface,
   decorative = false,
   tooltip,
 }: {
   clients: Pick<Configuration, "client" | "name">[];
   size: LogoSize;
-  extra?: number;
+  hidden?: Pick<Configuration, "client" | "name">[];
   surface?: LogoSurface;
   decorative?: boolean;
   tooltip?: boolean;
@@ -245,8 +250,15 @@ export const LogoStack = ({
         tooltip={tooltip}
       />
     ))}
-    {extra > 0 && (
-      <span className="type-technical-sm text-text-hint pl-2">{`+${extra}`}</span>
+    {hidden !== undefined && hidden.length > 0 && (
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <span className="type-technical-sm text-text-hint pl-2">{`+${hidden.length}`}</span>
+        </TooltipTrigger>
+        <TooltipContent size="text">
+          {hidden.map((c) => c.name).join(", ")}
+        </TooltipContent>
+      </Tooltip>
     )}
   </span>
 );
