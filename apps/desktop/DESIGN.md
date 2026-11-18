@@ -1041,9 +1041,9 @@ Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint,
 
 - Lines under the message, such as an error's details, are Sonner's description in `toast.description`; a warning among them in `tone.attention.fg`.
 - An action, such as Undo or a progress toast's Cancel, is a small ghost button at the end of the row; clicking it also takes the toast away.
-- One toast at a time: a new one replaces the one showing.
+- Toasts stack: a new one shows in front of the ones showing, up to 3, and pointing at the stack spreads it out (Sonner's own stack). Each goes on its own timer, so a quick second report does not take away an Undo.
 - It goes after 2.6s, or 5s with an action.
-- A toast for a command that runs, with its cancel, stays until the command ends and the toast of its outcome replaces it. Progress changes its text in place, the count in `tabular-nums`: Check updates says "Checking for updates…", then "Checking for updates… 1/10".
+- A toast for a command that runs, with its cancel, stays until the command ends, and the toast of its outcome takes its place. Progress changes its text in place, the count in `tabular-nums`: Check updates says "Checking for updates…", then "Checking for updates… 1/10".
 
 ### Attention toast
 

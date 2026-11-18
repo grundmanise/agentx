@@ -5,8 +5,11 @@ import type { ExternalToast } from "sonner";
 import { Button } from "#/components/ui/button.tsx";
 import { problemSentence } from "#/lib/problem-text.ts";
 
-// The toast last shown, which the next one replaces.
-let shown: string | number | undefined;
+// The toast last shown, which `dismissToast` takes away.
+let last: string | number | undefined;
+
+// The toast of a command that runs, with its Cancel: the next toast takes its place.
+let running: string | number | undefined;
 
 // The id the next toast takes, so its action can dismiss it.
 let count = 0;
@@ -15,19 +18,15 @@ const nextId = () => {
   return `toast-${count}`;
 };
 
-/** Shows a toast in place of the one showing. */
-const replace = (show: () => string | number) => {
-  const previous = shown;
-  shown = show();
-  if (previous !== undefined) {
-    // Sonner adds a toast on a timer but dismisses one on the next animation frame, which can
-    // come first: a toast dismissed before it is added would then stay. A timer set after the
-    // one that adds it runs after it.
-    setTimeout(() => {
-      toast.dismiss(previous);
-    }, 0);
-  }
-  return shown;
+/**
+ * The id a new toast takes: a running command's toast, which it then replaces in place, or a new
+ * one, which stacks over the toasts showing.
+ */
+const idFor = (lasting: boolean) => {
+  const id = running ?? nextId();
+  running = lasting ? id : undefined;
+  last = id;
+  return id;
 };
 
 /** How long a toast stays, in ms: 5s with an action, 2.6s without, and for good when it lasts. */
@@ -38,13 +37,24 @@ const durationOf = (withAction: boolean, lasting: boolean) => {
   return withAction ? 5000 : 2600;
 };
 
-/** Takes the toast showing away, for a control that answers a command's outcome itself. */
+/** Forgets a toast that goes, so that no new toast takes its id. */
+const forget = (id: string | number) => {
+  if (last === id) {
+    last = undefined;
+  }
+  if (running === id) {
+    running = undefined;
+  }
+};
+
+/** Takes the toast last shown away, for a control that answers a command's outcome itself. */
 export const dismissToast = () => {
-  if (shown !== undefined) {
-    const id = shown;
-    shown = undefined;
-    // As in replace(): Sonner adds a toast on a timer, so a dismiss sent at once could come first
-    // and leave the toast showing.
+  if (last !== undefined) {
+    const id = last;
+    forget(id);
+    // Sonner adds a toast on a timer but dismisses one on the next animation frame, which can
+    // come first: a toast dismissed before it is added would then stay. A timer set after the
+    // one that adds it runs after it.
     setTimeout(() => {
       toast.dismiss(id);
     }, 0);
@@ -60,7 +70,8 @@ export interface ToastAction {
 /**
  * A toast's action, such as Undo, Retry or Cancel, as the app's small ghost button (DESIGN.md §6
  * "Buttons") in place of Sonner's: Sonner shows an element given as its action as it is, at the end
- * of the toast's row. A click runs the action and takes the toast away.
+ * of the toast's row. A click takes the toast away and runs the action, whose own toast, such as
+ * Stopped, then stacks as a new one.
  */
 const actionButton = (id: string | number, action: ToastAction | undefined) =>
   action === undefined ? undefined : (
@@ -69,6 +80,7 @@ const actionButton = (id: string | number, action: ToastAction | undefined) =>
         variant="ghost"
         size="sm"
         onClick={() => {
+          forget(id);
           toast.dismiss(id);
           action.onClick();
         }}
@@ -97,10 +109,9 @@ const show = {
 >;
 
 /**
- * One toast at a time (DESIGN.md §6 "Toast"). A toast with an action stays 5s, one without 2.6s,
- * and a `lasting` one, for a command that runs with its Cancel, until the next toast replaces it.
- * A new toast replaces the one showing; with `inPlace`, it changes the text of the one showing
- * instead, as a running command's toast does when its progress moves.
+ * Shows a toast (DESIGN.md §6 "Toast"): it stacks over the toasts showing, up to 3. A toast with an
+ * action stays 5s, one without 2.6s, and a `lasting` one, for a command that runs with its Cancel,
+ * until the next toast takes its place, as the command's progress and then its outcome do.
  */
 export const notify = (
   message: ReactNode,
@@ -108,19 +119,14 @@ export const notify = (
   {
     kind = "plain",
     lasting = false,
-    inPlace = false,
-  }: { kind?: ToastKind; lasting?: boolean; inPlace?: boolean } = {}
+  }: { kind?: ToastKind; lasting?: boolean } = {}
 ) => {
-  const id = inPlace && shown !== undefined ? shown : nextId();
-  const options: ExternalToast = {
+  const id = idFor(lasting);
+  return show[kind](message, {
     action: actionButton(id, action),
     duration: durationOf(action !== undefined, lasting),
     id,
-  };
-  if (id === shown) {
-    return show[kind](message, options);
-  }
-  return replace(() => show[kind](message, options));
+  });
 };
 
 /** Reports that a command succeeded: `notify` with the success icon and tint. */
@@ -167,16 +173,14 @@ const notifyDetail = ({
         ))}
       </span>
     );
-  const id = nextId();
-  return replace(() =>
-    show[kind](message, {
-      action: actionButton(id, action),
-      closeButton: true,
-      description: lines,
-      duration,
-      id,
-    })
-  );
+  const id = idFor(false);
+  return show[kind](message, {
+    action: actionButton(id, action),
+    closeButton: true,
+    description: lines,
+    duration,
+    id,
+  });
 };
 
 export interface AttentionToast {
