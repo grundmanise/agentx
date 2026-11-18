@@ -296,14 +296,17 @@ const revealVariants = cva("", {
 /**
  * The SKILL.md pane while the files are read: a stand-in file blurred like frosted glass with a
  * spinner on top, at the Code pane's full height. `leaving`, it lies over the real SKILL.md as
- * that comes in and fades out, hidden from assistive technology, then calls `onLeft`.
+ * that comes in and fades out, hidden from assistive technology, then calls `onLeft`. `label` is
+ * what it says to assistive technology.
  */
-const LoadingPane = ({
+export const LoadingPane = ({
   leaving = false,
   onLeft,
+  label = "Reading the files…",
 }: {
   leaving?: boolean;
   onLeft?: () => void;
+  label?: string;
 }) => (
   <div
     aria-busy={leaving ? undefined : true}
@@ -326,7 +329,7 @@ const LoadingPane = ({
     </div>
     <output className="text-text-muted absolute inset-0 flex items-center justify-center">
       <Spinner size="md" />
-      <span className="sr-only">Reading the files…</span>
+      <span className="sr-only">{label}</span>
     </output>
   </div>
 );
