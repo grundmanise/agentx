@@ -163,8 +163,8 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
   }
 
   useEffect(() => {
-    void loadUpdateDiff(update.name, update.candidate);
-  }, [update.name, update.candidate]);
+    void loadUpdateDiff(update.name, update.candidate, update.base_hash);
+  }, [update.name, update.candidate, update.base_hash]);
 
   if (read === undefined) {
     return (

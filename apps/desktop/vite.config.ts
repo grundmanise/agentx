@@ -16,8 +16,11 @@ export default defineConfig(({ command }) => ({
   envPrefix: ["VITE_", "TAURI_ENV_"],
   // The Tauri API is first imported by the CLI transport, which the app does not load at start.
   // Bundled up front, so that the dev server does not find it mid-session and reload every page,
-  // which would interrupt the end-to-end tests that load the transport.
-  optimizeDeps: { include: ["@tauri-apps/api/core", "@tauri-apps/api/event"] },
+  // which would interrupt the end-to-end tests that load the transport. idb-keyval likewise: an
+  // end-to-end test reads the kept reads' index with it.
+  optimizeDeps: {
+    include: ["@tauri-apps/api/core", "@tauri-apps/api/event", "idb-keyval"],
+  },
   plugins: [react(), tailwindcss()],
   server: { port: 1420, strictPort: true },
 }));
