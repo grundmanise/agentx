@@ -1,5 +1,6 @@
-import { NavLink } from "react-router";
+import { Link, useLocation } from "react-router";
 
+import { screenOf, useLastRoute } from "#/app/kept-screens.tsx";
 import { screens } from "#/app/screens.ts";
 import type { Screen } from "#/app/screens.ts";
 import { AgentxMark } from "#/components/agentx-mark.tsx";
@@ -26,6 +27,7 @@ const MachineLabel = () => {
 /**
  * One nav item, active on its own routes. A nested screen has a path of its own, outside its
  * parent's, so Skills is active on a skill and on Update review, and Sources alone on its page.
+ * It goes back to the route its screen last showed, such as the skill selected there.
  */
 const NavItem = ({
   screen: { icon: ScreenIcon, label, path },
@@ -33,24 +35,26 @@ const NavItem = ({
 }: {
   screen: Screen;
   nested?: boolean;
-}) => (
-  <NavLink
-    to={path}
-    className={({ isActive }) =>
-      cn(
+}) => {
+  const active = screenOf(useLocation().pathname)?.path === path;
+  return (
+    <Link
+      to={useLastRoute(path)}
+      aria-current={active ? "page" : undefined}
+      className={cn(
         "rounded-shell-nav type-nav gap-nav-icon flex items-center px-2.5",
         nested ? "h-8" : "h-nav",
-        isActive
+        active
           ? "bg-shell-nav-active-bg text-shell-nav-active-text"
           : "text-shell-nav-text hover:text-text-primary"
-      )
-    }
-  >
-    {/* The icon takes the link's text colour, so it brightens with the label. */}
-    <ScreenIcon />
-    <span className="flex-1">{label}</span>
-  </NavLink>
-);
+      )}
+    >
+      {/* The icon takes the link's text colour, so it brightens with the label. */}
+      <ScreenIcon />
+      <span className="flex-1">{label}</span>
+    </Link>
+  );
+};
 
 /**
  * The update pill at the right of the Skills nav item, while the last update check found an

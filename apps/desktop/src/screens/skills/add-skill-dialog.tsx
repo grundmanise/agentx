@@ -314,7 +314,6 @@ const AddSkillForm = ({
                 <SelectAllRow
                   selected={selected.length}
                   total={selectable.length}
-                  added={cards.length - selectable.length}
                   onSelectAll={() => {
                     setSelection(new Set(selectable.map((c) => c.key)));
                   }}

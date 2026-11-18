@@ -205,6 +205,8 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
     "Starting the app…"
   );
   await expect(screen(page)).toHaveAttribute("inert", "");
+  // The screen's own layers, such as the list's pinned group headers, stay under the pane.
+  await expect(screen(page)).toHaveCSS("isolation", "isolate");
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
   await expect(progress(page)).toHaveCount(0);
   expect(commands()).toEqual(launchLines);
@@ -232,12 +234,16 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
     .poll(() => commands())
     .toEqual(
       expect.arrayContaining([
-        ["skill", "files", "notes", "--json"],
         ["skill", "place", "notes", "--json"],
         ...loadLines,
       ])
     );
   expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
+  // The skill's files show from the read the first launch kept.
+  await expect(page.getByRole("region", { name: "Files" })).toContainText(
+    "Use this skill to notes."
+  );
+  expect(commands()).not.toContainEqual(["skill", "files", "notes", "--json"]);
   expect(cli.serveStarts).toBe(2);
 });
 
@@ -445,7 +451,9 @@ test("Copy report copies doctor's output in the CLI's layout", async ({
   await page.goto("/");
   await expect(title(page)).toHaveText("Update git to continue");
   await page.getByRole("button", { name: "Copy report" }).click();
-  await expect(page.getByText("Report copied")).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Copied" })
+  ).toHaveCount(1);
   const text = await page.evaluate(
     async () => await navigator.clipboard.readText()
   );

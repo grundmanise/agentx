@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
+import { lastRoute } from "#/app/kept-screens.tsx";
 import { useSyncState } from "#/app/publish-status.tsx";
 import { allScreens } from "#/app/screens.ts";
 import { AddIcon } from "#/components/icons/add.tsx";
@@ -11,7 +12,7 @@ import { ListIcon } from "#/components/icons/list.tsx";
 import { PencilIcon } from "#/components/icons/pencil.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SkillsIcon } from "#/components/icons/skills.tsx";
-import { notify, notifyError } from "#/components/toast.tsx";
+import { notifyError, notifySuccess } from "#/components/toast.tsx";
 import {
   CommandDialog,
   CommandEmpty,
@@ -64,7 +65,7 @@ const rescanMachine = async () => {
     return;
   }
   if (done.ok) {
-    notify("Rescanned");
+    notifySuccess("Rescanned");
   } else {
     notifyError({ message: done.error ?? "the scan failed" });
   }
@@ -178,7 +179,8 @@ export const CommandPalette = ({
     id: `go:${s.path}`,
     label: s.label,
     run: () => {
-      void navigate(s.path);
+      // The screen as the user left it, as from the sidebar.
+      void navigate(lastRoute(s.path));
     },
   }));
   const skills = skillItems(rows);

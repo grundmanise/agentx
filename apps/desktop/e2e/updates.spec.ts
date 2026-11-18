@@ -81,7 +81,7 @@ const expectOffered = async (page: Page, name: string) => {
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
 const updateDialog = (page: Page) =>
-  page.getByRole("dialog", { name: "Update skills" });
+  page.getByRole("dialog", { name: "Updates available" });
 /** The row of `name` in the Update skills dialog, before its run. */
 const dialogRow = (page: Page, name: string) =>
   updateDialog(page)
@@ -394,10 +394,7 @@ test.describe("Check updates", () => {
     expect(later(cli)).toEqual([["skill", "check-updates", "--json"]]);
   });
 
-  test("keeps room for a two-digit count from the start, so the toast keeps its width", async ({
-    cli,
-    page,
-  }) => {
+  test("keeps the toast's width as the count comes", async ({ cli, page }) => {
     await open(cli, page, "pdf", []);
     // Each text the toast shows, with its width, as the page draws them.
     await page.evaluate(() => {

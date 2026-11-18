@@ -1,6 +1,12 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { skillPage, webUrl } from "#/screens/sources/projection.ts";
+import type { SourceSkillEvent } from "#/cli/events.gen.ts";
+import {
+  listingCards,
+  planAdds,
+  skillPage,
+  webUrl,
+} from "#/screens/sources/projection.ts";
 
 import {
   ACME,
@@ -187,26 +193,31 @@ test("the open source's card: its name, its full URL linking to the repository, 
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
 
-  // A search answers across every source: the card hides.
+  // A search answers across every source: the card stays.
   await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
-  await expect(details(page)).toHaveCount(0);
+  await expect(
+    details(page).getByRole("heading", { name: "me/account" })
+  ).toBeVisible();
 });
 
-test("a source listing: selectable skills first, then each state with its label and, once open, its reason", async ({
+/** acme's skills A to Z, the order the list keeps whatever their state. */
+const acmeNames = [
+  "artifacts",
+  "docx",
+  "forms",
+  "letters",
+  "pdf",
+  "scratch",
+  "slides",
+  "xlsx",
+];
+
+test("a source listing: the skills A to Z, each state with its label and, once open, its reason", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
-  expect(await skillNames(grid(page, "acme/skills"))).toEqual([
-    "artifacts",
-    "docx",
-    "forms",
-    "slides",
-    "letters",
-    "pdf",
-    "scratch",
-    "xlsx",
-  ]);
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(acmeNames);
   await expect(check(page, "artifacts")).toHaveAttribute(
     "aria-pressed",
     "false"
@@ -254,6 +265,117 @@ test("a source listing: selectable skills first, then each state with its label 
     `source read ${ACME_ID} skills/xlsx`,
     `source read ${ACME_ID} skills/scratch`,
     `source skills ${ZETA_ID}`,
+  ]);
+});
+
+/**
+ * The drawn rows of the list, in its order: the name of each and where it shows, in px. One read
+ * in the page, so that no row the list takes out meanwhile is among them.
+ */
+const drawnRows = async (page: Page) =>
+  await page.evaluate(() => {
+    const items = document.querySelectorAll<HTMLElement>("[data-index]");
+    const rows = [...items].map((item) => {
+      const box = item.getBoundingClientRect();
+      return {
+        bottom: box.bottom,
+        index: Number(item.dataset.index),
+        name:
+          item
+            .querySelector("button[aria-label]")
+            ?.getAttribute("aria-label") ?? "",
+        top: box.top,
+      };
+    });
+    rows.sort((a, b) => a.index - b.index);
+    return rows;
+  });
+
+test("a source of plugins whose skills share names: a row each, drawn once, the later of a name in use", async ({
+  cli,
+  page,
+}) => {
+  // As cursor/plugins has: each of 90 names in two plugins, in a window as large as a full screen.
+  const height = 1440;
+  await page.setViewportSize({ height, width: 2560 });
+  const shared = Array.from(
+    { length: 90 },
+    (_, i) => `skill-${String(i).padStart(2, "0")}`
+  );
+  const listing = ["alpha", "beta"].flatMap((plugin) =>
+    shared.map((name): InlineEvent => ({
+      description: `${name} of ${plugin}`,
+      name,
+      source: ACME_ID,
+      subpath: `${plugin}/skills/${name}`,
+      tree: `t-${plugin}-${name}`,
+      type: "source_skill",
+    }))
+  );
+  cli.onServeStart({ events: [inventory] });
+  cli.register(["source", "list"], { events: sources });
+  cli.register(["source", "skills", ACME_ID], { events: listing });
+  cli.register(["source", "skills", ZETA_ID], { events: [] });
+  cli.register(["skill", "list", "--remote"], { events: installable });
+  await page.goto("/#/sources");
+  // A to Z, so the two skills of a name sit side by side, the first of the listing first.
+  await expect(row(page, "skill-00").first()).toBeVisible();
+  await expect(row(page, "skill-00")).toHaveCount(2);
+  // The later skill of each name is not on this machine, so none counts as added.
+  await expect(page.getByText("Select all 90")).toBeVisible();
+  await expect(page.getByText(/already added/u)).toHaveCount(0);
+
+  // Scrolled through, each row is drawn once and none over another.
+  const scroller = page
+    .locator(".overflow-auto")
+    .filter({ has: page.getByRole("heading", { level: 1, name: "Sources" }) });
+  const middle = height / 2;
+  /** Whether the list has drawn the rows at the new offset: one of them covers the middle. */
+  const drawnAtMiddle = async () => {
+    const rows = await drawnRows(page);
+    return rows.some((r) => r.top <= middle && r.bottom >= middle);
+  };
+  const seen = new Map<number, string>();
+  // Half a window at a time, until the list's end shows.
+  let last = false;
+  while (!last) {
+    // oxlint-disable-next-line no-await-in-loop
+    last = await scroller.evaluate((element, by) => {
+      const end = element.scrollHeight - element.clientHeight;
+      const at = element.scrollTop >= end - 1;
+      element.scrollTop += by;
+      return at;
+    }, middle);
+    // oxlint-disable-next-line no-await-in-loop
+    await expect.poll(drawnAtMiddle).toBe(true);
+    // oxlint-disable-next-line no-await-in-loop
+    const rows = await drawnRows(page);
+    expect(new Set(rows.map((r) => r.index)).size).toBe(rows.length);
+    for (const [i, r] of rows.entries()) {
+      expect(r.top).toBeGreaterThanOrEqual(rows[i - 1]?.bottom ?? r.top);
+      seen.set(r.index, r.name);
+    }
+  }
+  const drawnNames = [...seen.values()];
+  drawnNames.sort((a, b) => a.localeCompare(b));
+  expect(drawnNames).toEqual(shared.flatMap((name) => [name, name]));
+
+  // The later skill of a name cannot be selected, and says why once open.
+  const second = rowLine(page, "skill-89").last();
+  await expect(second.getByText("Name in use", { exact: true })).toBeVisible();
+  await expect(
+    second.getByRole("button", { name: "Select skill-89" })
+  ).toHaveCount(0);
+  cli.register(["source", "read", ACME_ID, "beta/skills/skill-89"], {
+    events: [skillMd("skill-89", "# skill-89\n")],
+  });
+  await row(page, "skill-89").last().click();
+  await expect(opened(page, "skill-89")).toContainText(
+    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added"
+  );
+  expect(commandLines(cli)).toEqual([
+    `source skills ${ACME_ID}`,
+    `source read ${ACME_ID} beta/skills/skill-89`,
   ]);
 });
 
@@ -368,9 +490,49 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   await expect(
     rowLine(page, "docx").getByText("Added", { exact: true })
   ).toBeVisible();
+  // An added skill keeps its place.
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(acmeNames);
   expect(commandLines(cli)).toContain(
     `skill add ${ACME} --name artifacts --name docx --to claude-code`
   );
+});
+
+test("Remove on an Added skill confirms, then runs skill remove for every agent", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  const remove = rowLine(page, "pdf").getByRole("button", {
+    exact: true,
+    name: "Remove pdf",
+  });
+  const word = (text: string) =>
+    rowLine(page, "pdf").getByText(text, { exact: true });
+  await expect(word("Added")).toHaveCSS("opacity", "1");
+  await expect(word("Remove")).toHaveCSS("opacity", "0");
+  await remove.hover();
+  await expect(word("Added")).toHaveCSS("opacity", "0");
+  await expect(word("Remove")).toHaveCSS("opacity", "1");
+  const run = cli.register(["skill", "remove", "pdf"], {
+    events: [{ ok: true, summary: "removed pdf", type: "result" }],
+  });
+  const confirm = page.getByRole("dialog", { name: "Remove pdf?" });
+  // Cancel puts the focus back on the card's Remove: the dialog has no trigger.
+  await remove.click();
+  await confirm.getByRole("button", { exact: true, name: "Cancel" }).click();
+  await expect(confirm).toBeHidden();
+  await expect(remove).toBeFocused();
+  await remove.click();
+  await expect(confirm).toContainText(
+    "It will be removed from every agent that has it:"
+  );
+  await expect(
+    confirm.getByRole("list", { name: "Agents that see it" })
+  ).toContainText("Codex");
+  await confirm.getByRole("button", { exact: true, name: "Remove" }).click();
+  await run.started;
+  await expect(toasts(page).getByText("Removed pdf skill")).toBeVisible();
+  expect(commandLines(cli)).toContain("skill remove pdf");
 });
 
 test("many agents: five logos and +n, the agent picker toggles a target, two-letter monograms", async ({
@@ -513,7 +675,6 @@ test("Select all, two deselected, agents as enabled: --all with --except and no 
       { name: "slides", type: "library_skill" },
     ],
   });
-  await expect(page.getByText("4 already added")).toBeVisible();
   await expect(selectAll(page)).toHaveAccessibleName("Select all 4");
   await selectAll(page).click();
   await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
@@ -660,9 +821,28 @@ test("search asks serve once per settled query and shows only the latest answer"
   expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
   expect(await skillNames(grid(page, "zeta/tools"))).toEqual(["docgen"]);
 
-  // Clearing the query shows the listing again.
+  // While the next query waits, the last answer stays: the listing does not come back between.
+  await field.fill("pdfz");
+  await expect.poll(() => cli.serveRequests.length).toBe(3);
+  await expect(row(page, "artifacts")).toHaveCount(0);
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
+  await cli.serveEmit([
+    {
+      query: "pdfz",
+      request_id: lastSearch(cli).request_id,
+      results: [],
+      type: "search",
+    },
+  ]);
+  await expect(page.getByText("No skills match")).toBeVisible();
+
+  // Clearing the query shows the listing again, and the next query starts from it.
   await field.fill("");
   await expect(row(page, "artifacts")).toBeVisible();
+  await field.fill("x");
+  await expect.poll(() => cli.serveRequests.length).toBe(4);
+  await expect(row(page, "artifacts")).toBeVisible();
+  await expect(page.getByText("No skills match")).toHaveCount(0);
 });
 
 test("Add source runs source add, then opens the new source fully preselected", async ({
@@ -844,6 +1024,49 @@ test("Refresh fetches the source, then reads the listing of the new fetch", asyn
     ]);
 });
 
+test("Refresh all fetches every source in one run, then reads your skills, pending until it ends", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  const fetch = cli.register(["source", "fetch", "--all"], {
+    events: [{ id: ACME_ID, type: "source", url: ACME }],
+    holdAfter: 0,
+  });
+  const now = new Date().toISOString();
+  cli.register(["source", "list"], {
+    events: sources.map((s) =>
+      s.id === ACME_ID ? { ...s, last_fetched: now } : s
+    ),
+  });
+  const read = cli.register(["skill", "list", "--remote"], {
+    events: installable,
+    holdAfter: 0,
+  });
+  const refreshAll = page.getByRole("button", { name: "Refresh all" });
+  await refreshAll.click();
+  await fetch.started;
+  await expect(refreshAll).toHaveAttribute("aria-busy", "true");
+  await expect(refreshAll).toBeDisabled();
+  fetch.release();
+  // Pending until your skills are read again too.
+  await read.started;
+  await expect(refreshAll).toBeDisabled();
+  read.release();
+  await expect(refreshAll).toBeEnabled();
+  await expect(fact(page, "Fetched")).toHaveText("just now");
+  // After the fetch, the listing and your skills are read in either order.
+  await expect.poll(() => commandLines(cli).length).toBe(4);
+  const lines = commandLines(cli);
+  expect(lines.slice(0, 2)).toEqual([
+    `source skills ${ACME_ID}`,
+    "source fetch --all",
+  ]);
+  expect(lines.slice(2)).toEqual(
+    expect.arrayContaining([`source skills ${ACME_ID}`, "skill list --remote"])
+  );
+});
+
 test("Remove with its installed skills removes each skill, then the source", async ({
   cli,
   page,
@@ -955,6 +1178,39 @@ test("Remove alone removes the source and keeps its skills", async ({
     `source skills ${ACME_ID}`,
     `source skills ${ZETA_ID}`,
     `source remove ${ZETA}`,
+  ]);
+});
+
+test("Select all in a source whose skills share a name: --all keeps the selected one of the name", () => {
+  const listing: SourceSkillEvent[] = [
+    ["alpha/pdf", "pdf"],
+    ["beta/pdf", "pdf"],
+    ["format", "format"],
+  ].map(([subpath = "", name = ""]) => ({
+    description: name,
+    name,
+    schema_version: 4,
+    source: ACME_ID,
+    subpath,
+    tree: `t-${subpath}`,
+    type: "source_skill",
+  }));
+  const cards = listingCards(listing, ACME, []);
+  const selectable = cards.filter((c) => c.status === undefined);
+  expect(selectable.map((c) => c.skillMd?.subpath)).toEqual([
+    "alpha/pdf",
+    "format",
+  ]);
+  const plan = (selected: typeof cards) =>
+    planAdds({
+      allOf: { cards, source: ACME },
+      enabled: [],
+      selected,
+      targets: [],
+    }).map((p) => p.args);
+  expect(plan(selectable)).toEqual([["skill", "add", ACME, "--all"]]);
+  expect(plan(selectable.filter((c) => c.name !== "pdf"))).toEqual([
+    ["skill", "add", ACME, "--all", "--except", "pdf", "--except", "pdf"],
   ]);
 });
 

@@ -7,7 +7,9 @@
  * no default colours, spacing, radii, shadows, font sizes, weights, line heights, tracking,
  * breakpoints, containers, blurs, easings or animations. A class works only when it names a
  * token declared in this file. Do not add a token to make one class work; add it when the
- * design (DESIGN.md) calls for a new value.
+ * design (DESIGN.md) calls for a new value. The one exception is shadcn's animation classes
+ * (`animate-in`, `fade-in-0`, `zoom-in-95`, ...): tw-animate-css provides them, imported after
+ * this file in index.css so that the reset above leaves its theme in place.
  *
  * Sections:
  *   1. Primitives          raw palette, outside the theme (never used by components)
@@ -175,7 +177,6 @@
   --color-source-pill-active-text: var(--color-on-accent);
   --color-source-pill-count: var(--gray-400);
   --color-source-pill-active-count: var(--gray-600);
-  --color-button-toast-action-text: var(--color-accent-primary);
   --color-button-split-divider: var(--gray-800);
 
   /* Status pills */
@@ -219,6 +220,13 @@
   --color-segmented-both-selected: var(--gray-50);
   --color-segmented-neutral-selected: var(--gray-850);
 
+  /* Tabs */
+  --color-tabs-list-bg: var(--gray-910);
+  --color-tabs-text: var(--gray-300);
+  --color-tabs-active-bg: var(--gray-850);
+  --color-tabs-active-border: var(--gray-800);
+  --color-tabs-active-text: var(--gray-50);
+
   /* Filter row */
   --color-filter-bg: var(--gray-880);
   --color-filter-text: var(--gray-200);
@@ -229,7 +237,6 @@
   --color-filter-chip-text: var(--gray-150);
   --color-filter-chip-hover: var(--gray-880);
   --color-filter-sort-text: var(--gray-200);
-  --color-filter-sort-off-text: var(--color-text-caption);
 
   /* Lists and rows */
   --color-row-hover: var(--gray-920);
@@ -245,6 +252,8 @@
   --color-subgroup-count: var(--gray-500);
   --color-subgroup-source: var(--gray-600);
   --color-subgroup-hover: var(--gray-920);
+  /* The line under a group's or a plugin's chevron, down the rows nested under it. */
+  --color-list-guide: var(--gray-700);
   --color-table-row-hover: var(--gray-930);
   --color-table-header-text: var(--gray-500);
   --color-add-skill-row-hover: var(--gray-880);
@@ -303,6 +312,7 @@
   --color-add-card-status-forked: var(--color-accent-yours);
   --color-add-card-status-disk: var(--color-accent-attention);
   --color-add-card-status-in-use: var(--gray-400);
+  --color-add-card-status-remove: var(--color-accent-danger);
   --color-add-card-check-ring: var(--gray-700);
   --color-source-card-bg: var(--gray-950);
   --color-source-card-border: var(--gray-870);
@@ -315,11 +325,6 @@
   --color-banner-title: var(--gray-50);
   --color-banner-text: var(--gray-300);
   --color-card-chip-ring: var(--color-card-bg);
-  --color-plugin-skills-dot: var(--color-accent-yours);
-  --color-plugin-servers-dot: var(--color-accent-theirs);
-  --color-plugin-hooks-dot: var(--color-accent-attention);
-  --color-plugin-connector: var(--gray-870);
-  --color-plugin-row-hover: var(--gray-930);
 
   /* Overlays */
   --color-overlay-bg: var(--gray-940);
@@ -337,6 +342,18 @@
   --color-sheet-border: var(--gray-850);
   --color-sheet-handle: var(--gray-700);
   --color-toast-text: var(--gray-50);
+  --color-toast-description: var(--gray-300);
+  /* A tinted toast: its tone's colour mixed into `overlay.bg`, 9% for the fill and 28% for the
+     border, solid so the page does not show through. */
+  --color-toast-success-bg: rgb(38 42 28);
+  --color-toast-success-border: rgb(75 87 39);
+  --color-toast-success-text: var(--color-tone-primary-fg);
+  --color-toast-error-bg: rgb(42 30 31);
+  --color-toast-error-border: rgb(87 50 48);
+  --color-toast-error-text: var(--color-tone-danger-fg);
+  --color-toast-warning-bg: rgb(42 36 29);
+  --color-toast-warning-border: rgb(87 69 43);
+  --color-toast-warning-text: var(--color-tone-attention-fg);
 
   /* Code, file tree and diffs */
   --color-code-bg: var(--gray-980);
@@ -464,7 +481,8 @@
   --radius-file-card: 16px;
   --radius-banner: 18px;
   --radius-agent-card: 20px;
-  --radius-plugin-card: 20px;
+  --radius-tabs-list: 10px;
+  --radius-tabs-trigger: 8px;
   --radius-add-card: 16px;
   --radius-add-card-check: 50%;
   --radius-source-card: 18px;
@@ -482,8 +500,7 @@
   --radius-menu: 12px;
   --radius-menu-row: 8px;
   --radius-key-hint: 9999px;
-  --radius-toast: 9999px;
-  --radius-toast-detail: 18px;
+  --radius-toast: 12px;
   --radius-floating-bar: 9999px;
   --radius-check-mark: 50%;
   --radius-check-hint: 8px;
@@ -603,6 +620,9 @@
   --padding-subgroup-y: 6px;
   --padding-subgroup-top: 8px;
   --padding-subgroup-indent: 22px;
+  --padding-subgroup-nested: 44px;
+  --inset-list-guide: 20px;
+  --inset-list-guide-nested: 42px;
   --height-table-header: 40px;
   --padding-table-row: 16px;
   --gap-table-col: 24px;
@@ -620,6 +640,9 @@
   --size-switch-compact-knob: 14px;
   --size-checkbox: 16px;
   --gap-segmented: 2px;
+  --height-tabs-list: 36px;
+  --padding-tabs-list: 3px;
+  --gap-tabs: 12px;
   --height-filter: 30px;
   --size-filter-badge: 16px;
   --size-agent-picker-badge: 16px;
@@ -656,16 +679,18 @@
   --gap-agent-card: 12px;
   --size-agent-card-logo: 44px;
   --width-universal-lead: 260px;
-  --padding-plugin-card: 22px;
-  --height-plugin-card-row: 36px;
-  --gap-plugin-card: 12px;
-  --size-plugin-card-tile: 40px;
+  --size-plugin-tile: 40px;
+  --size-plugin-row-tile: 28px;
+  --gap-plugin-details: 40px;
+  --gap-plugin-details-y: 12px;
   --padding-add-card: 6px;
 
   /* Overlays */
   --width-dialog: 480px;
   --padding-dialog: 32px;
   --gap-dialog: 22px;
+  /* The window's height less dialog.window-inset, 32, above and below. */
+  --max-height-dialog: calc(100vh - 64px);
   --gap-popover: 16px;
   --width-popover: 360px;
   --min-width-menu: 240px;
@@ -688,14 +713,7 @@
   --max-height-update-skills-list: 280px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
-  --min-height-toast: 44px;
-  --max-width-toast: 640px;
   --max-width-tooltip-text: 280px;
-  --padding-toast: 18px;
-  --padding-toast-y: 10px;
-  --width-toast-detail: 440px;
-  --padding-toast-detail: 12px;
-  --min-width-toast-count: 5ch;
   --height-stale-bar: 36px;
   --padding-stale-bar: 16px;
   --inset-floating-bar: 24px;
@@ -877,21 +895,11 @@
   font-size: 12px;
   font-weight: 400;
 }
-@utility type-toast {
-  font-family: var(--font-sans);
-  font-size: 13.5px;
-  font-weight: 400;
-}
 @utility type-notice {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 400;
   line-height: 1.5;
-}
-@utility type-toast-action {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
 }
 @utility type-technical {
   font-family: var(--font-mono);
@@ -962,9 +970,20 @@
 }
 @utility type-plugin-name {
   font-family: var(--font-sans);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+@utility type-plugin-tile {
+  font-family: var(--font-sans);
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+@utility type-tab {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
 }
 @utility type-version-pill {
   font-family: var(--font-mono);

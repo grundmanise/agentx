@@ -213,3 +213,38 @@ export const emptyInventory = {
   scan_counter: 1,
   type: "inventory",
 } satisfies InlineEvent;
+
+/** More plugins: acme-tools in Cursor too, at an older version, and one Claude Code turned off. */
+const more: Plugin[] = [
+  {
+    configuration: "cursor",
+    hooks: [],
+    logical_id: "plugin:acme-tools",
+    marketplace: "acme-marketplace",
+    name: "acme-tools",
+    path: "/home/me/.cursor/plugins/acme-tools",
+    physical_id: "plugin:acme-tools:cursor:1.3.0",
+    version: "1.3.0",
+  },
+  {
+    configuration: "claude-code",
+    enabled: false,
+    hooks: [],
+    logical_id: "plugin:aaa-off",
+    marketplace: "acme-marketplace",
+    name: "aaa-off",
+    path: "/home/me/.claude/plugins/aaa-off",
+    physical_id: "plugin:aaa-off:claude-code:0.1.0",
+    version: "0.1.0",
+  },
+];
+
+/** The machine with `more` installed beside the three plugins. */
+export const moreInventory = {
+  ...inventory,
+  edges: [
+    ...edges,
+    ...more.map((p) => ({ from: p.configuration, to: p.physical_id })),
+  ],
+  plugins: [...plugins, ...more],
+} satisfies InlineEvent;

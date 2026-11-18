@@ -30,26 +30,32 @@ const DialogClose = ({ ...props }: OwnProps<typeof DialogPrimitive.Close>) => (
   <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 );
 
-/** `shell.scrim-strong` behind a dialog and the palette. */
+/**
+ * `shell.scrim-strong` behind a dialog and the palette. It fades in and out with shadcn's classes
+ * (DESIGN.md §8), and while it fades out, clicks go through it to what is under it.
+ */
 const DialogOverlay = ({
   ...props
 }: OwnProps<typeof DialogPrimitive.Overlay>) => (
   <DialogPrimitive.Overlay
     data-slot="dialog-overlay"
-    className="bg-shell-scrim-strong fixed inset-0 z-50"
+    className="bg-shell-scrim-strong data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 data-[state=closed]:pointer-events-none!"
     {...props}
   />
 );
 
+// It fades and zooms in and out with shadcn's classes (DESIGN.md §8); while it closes, clicks go
+// through it.
 const dialogContentVariants = cva(
-  "border-overlay-border bg-overlay-bg shadow-overlay fixed left-1/2 z-50 flex -translate-x-1/2 flex-col border outline-none",
+  "border-overlay-border bg-overlay-bg shadow-overlay data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-1/2 z-50 flex -translate-x-1/2 flex-col border duration-200 outline-none data-[state=closed]:pointer-events-none!",
   {
     defaultVariants: { kind: "dialog" },
     variants: {
       kind: {
-        // Centred, `dialog.width`, `dialog.padding` and `dialog.gap` between its blocks.
+        // Centred, `dialog.width`, `dialog.padding` and `dialog.gap` between its blocks, at most
+        // `dialog.max-height` high: a block with `min-h-0` and its own scroll gives up the room.
         dialog:
-          "rounded-dialog w-dialog p-dialog gap-dialog top-1/2 -translate-y-1/2",
+          "rounded-dialog w-dialog p-dialog gap-dialog max-h-dialog top-1/2 -translate-y-1/2",
         // The palette: `palette.top` from the window top, `palette.width`, no padding of its own.
         palette: "rounded-palette top-palette w-palette overflow-hidden",
       },

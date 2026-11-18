@@ -7,12 +7,19 @@
 @import "@fontsource/instrument-serif/400.css";
 @import "@fontsource/instrument-serif/400-italic.css";
 @import "./tokens.css";
+/* After tokens.css, so its reset leaves the plugin's theme in place: shadcn's animation classes. */
+@import "tw-animate-css";
 
 @layer base {
   html,
   body,
   #root {
     height: 100%;
+  }
+  /* The app is dark only. A dark colour scheme makes WebKit draw its native controls, such as
+     scrollbars, for a dark background (DESIGN.md §1). */
+  html {
+    color-scheme: dark;
   }
   body {
     @apply type-body;
@@ -27,8 +34,10 @@
   button {
     cursor: pointer;
   }
+  /* The value of a label/value pair is selectable, so it can be copied (DESIGN.md §6 "Values"). */
   input,
-  textarea {
+  textarea,
+  dd {
     user-select: text;
   }
   input::placeholder,
@@ -42,4 +51,28 @@
   ::selection {
     background: var(--color-shell-selection-bg);
   }
+}
+
+/* Toasts (DESIGN.md §6 "Toast"): shadcn's Sonner keeps its own styles and reads its colours from
+   these variables, which shadcn sets with `style` and the app sets here, from the tokens. Sonner
+   adds its stylesheet after this one, so these rules name the toaster with `:root` to win. */
+:root [data-sonner-toaster][data-sonner-theme] {
+  --normal-bg: var(--color-overlay-bg);
+  --normal-border: var(--color-overlay-border);
+  --normal-text: var(--color-toast-text);
+  --success-bg: var(--color-toast-success-bg);
+  --success-border: var(--color-toast-success-border);
+  --success-text: var(--color-toast-success-text);
+  --error-bg: var(--color-toast-error-bg);
+  --error-border: var(--color-toast-error-border);
+  --error-text: var(--color-toast-error-text);
+  --warning-bg: var(--color-toast-warning-bg);
+  --warning-border: var(--color-toast-warning-border);
+  --warning-text: var(--color-toast-warning-text);
+  --border-radius: var(--radius-toast);
+  font-family: var(--font-sans);
+}
+/* The lines under a tinted toast's message stay quiet, so its tone shows in the title and icon. */
+:root [data-sonner-toaster] [data-sonner-toast] [data-description] {
+  color: var(--color-toast-description);
 }

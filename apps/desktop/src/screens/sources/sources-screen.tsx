@@ -7,7 +7,9 @@ import type {
   SourceEvent,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
+import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
+import { Spinner } from "#/components/spinner.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
@@ -22,7 +24,7 @@ import {
   installableCards,
   listingCards,
   pageRef,
-  orderCards,
+  nameOrder,
   planAdds,
   resultCards,
   sourcePills,
@@ -50,6 +52,8 @@ import { useAppStore } from "#/store/store.ts";
 
 /** The pending label of the install the action bar runs. */
 export const ADD_LABEL = "add skills";
+/** The pending label of Refresh all, `source fetch --all`. */
+const REFRESH_ALL_LABEL = "refresh all sources";
 /** How long the search field waits after a change before it asks serve. */
 const SEARCH_DEBOUNCE_MS = 150;
 
@@ -58,12 +62,6 @@ const noCards: SkillCard[] = [];
 
 type Selection = ReadonlyMap<string, SkillCard>;
 const noSelection: Selection = new Map();
-
-/** A search answer, kept with the query it answers. */
-interface Found {
-  query: string;
-  results: SearchResult[];
-}
 
 /** Loads what a pill shows: a source's listing, or your skills on the account remote. */
 const loadPill = async (key: string) => {
@@ -120,6 +118,21 @@ const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
   }, [key, opened, fetched]);
 };
 
+/**
+ * Refresh all: one `source fetch --all`, after which the screen reads again the listing of each
+ * source `source list` reports a new fetch for. Personal lists your skills from
+ * `skill list --remote`, so they are read again too, whenever there is an account remote.
+ */
+const refreshAll = async () => {
+  const outcome = await runCommand(["source", "fetch", "--all"], {
+    label: REFRESH_ALL_LABEL,
+  });
+  const { sources } = useAppStore.getState();
+  if (outcome.exitCode !== null && sources.some((s) => s.account === true)) {
+    await loadInstallable();
+  }
+};
+
 /** The pills, with the source Add source just added until the Sources slice lists it. */
 const usePills = (
   sources: SourceEvent[],
@@ -153,7 +166,7 @@ const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
 };
 
 /**
- * The Sources screen, under Skills: the sources as pills, the card of the open one with its facts,
+ * The Sources screen, under Skills: Refresh all and Add source, the sources as pills, the card of the open one with its facts,
  * Refresh and Remove, its skills as a list to open and select, search across every source through serve,
  * and the floating bar that installs the selection with `skill add`. Every list comes from the
  * CLI: the app never filters a listing itself.
@@ -164,11 +177,13 @@ export const SourcesScreen = () => {
   const installable = useAppStore((s) => s.installable);
   const library = useAppStore((s) => s.inventory?.library) ?? noEntries;
   const adding = usePending(ADD_LABEL);
+  // Pending from the fetch until your skills are read again.
+  const [refreshing, setRefreshing] = useState(false);
 
   // The pill the user opened; before any, the first pill is open.
   const [active, setActive] = useState<string | undefined>();
   const [query, setQuery] = useState("");
-  const [found, setFound] = useState<Found | undefined>();
+  const [found, setFound] = useState<SearchResult[] | undefined>();
   const [selection, setSelection] = useState<Selection>(noSelection);
   // The user started from Select all or the preselection: the listing's source takes `--all`.
   const [allMode, setAllMode] = useState(false);
@@ -208,13 +223,21 @@ export const SourcesScreen = () => {
 
   useLoadUnopened(activePill, active);
 
+  /** Sets the query; an empty one shows the listing, and the next search starts from it. */
+  const changeQuery = (text: string) => {
+    setQuery(text);
+    if (text.trim() === "") {
+      setFound(undefined);
+    }
+  };
+
   /** Makes `key` the open pill, with nothing selected and no search. */
   const select = (key: string) => {
     opened.current = key;
     setActive(key);
     setSelection(noSelection);
     setAllMode(false);
-    setQuery("");
+    changeQuery("");
     setNow(Date.now());
   };
   const open = (key: string) => {
@@ -233,11 +256,11 @@ export const SourcesScreen = () => {
     if (activePill.key === YOUR_SKILLS) {
       return installable === undefined
         ? noCards
-        : orderCards(installableCards(installable, library));
+        : nameOrder(installableCards(installable, library));
     }
     return listing === undefined || activePill.url === undefined
       ? noCards
-      : orderCards(
+      : nameOrder(
           listingCards(
             listing,
             activePill.url,
@@ -246,19 +269,20 @@ export const SourcesScreen = () => {
           )
         );
   }, [activePill, installable, listing, library, sources]);
-  // A search answer replaces the listing while it answers the query as it stands.
-  const results =
-    found !== undefined && found.query === query.trim()
-      ? found.results
-      : undefined;
+  // A search answer replaces the listing. While the latest query waits for its answer, the last
+  // answer stays, so the list and its Select all count change once, not back to the listing between.
+  const results = query.trim() === "" ? undefined : found;
   const resultGroups = useMemo(
     () =>
       results === undefined
         ? undefined
         : groupCards(
-            orderCards(
-              resultCards(results, library, (url) =>
-                pageRef(sources.find((s) => s.url === url))
+            nameOrder(
+              resultCards(
+                // A source removed while the answer is shown takes its results with it.
+                results.filter((r) => sources.some((s) => s.url === r.source)),
+                library,
+                (url) => pageRef(sources.find((s) => s.url === url))
               )
             )
           ),
@@ -293,7 +317,7 @@ export const SourcesScreen = () => {
             void (async () => {
               const answer = await search(text);
               if (!stale && answer !== undefined) {
-                setFound({ query: text, results: answer });
+                setFound(answer);
               }
             })();
           }, SEARCH_DEBOUNCE_MS);
@@ -304,6 +328,13 @@ export const SourcesScreen = () => {
       }
     };
   }, [query]);
+
+  const onRefreshAll = async () => {
+    setRefreshing(true);
+    // The command and the read never reject: a failure is an outcome.
+    await refreshAll();
+    setRefreshing(false);
+  };
 
   const toggleCard = (card: SkillCard) => {
     setSelection((prev) => {
@@ -464,14 +495,27 @@ export const SourcesScreen = () => {
       >
         <div className="flex items-start justify-between gap-4">
           <h1 className="type-page-title text-text-primary m-0">Sources</h1>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setDialogOpen(true);
-            }}
-          >
-            Add source
-          </Button>
+          <div className="gap-button flex items-center">
+            <Button
+              variant="secondary"
+              aria-busy={refreshing}
+              disabled={refreshing || pills.length === 0}
+              onClick={() => {
+                void onRefreshAll();
+              }}
+            >
+              {refreshing ? <Spinner /> : <RefreshIcon />}
+              Refresh all
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDialogOpen(true);
+              }}
+            >
+              Add source
+            </Button>
+          </div>
         </div>
         <div className="text-input-placeholder relative flex items-center">
           <span className="pointer-events-none absolute left-3.5 flex">
@@ -485,13 +529,13 @@ export const SourcesScreen = () => {
             placeholder="Search all sources"
             value={query}
             onChange={(e) => {
-              setQuery(e.target.value);
+              changeQuery(e.target.value);
             }}
           />
         </div>
         <SourceRow pills={pills} active={activeKey} now={now} onOpen={open} />
-        {/* The card of the open source; a search looks across every source, so it hides. */}
-        {activePill !== undefined && query.trim() === "" && (
+        {/* The card of the open source; it stays while a search looks across every source. */}
+        {activePill !== undefined && (
           <OpenSource
             // A new source gets a new card, so a Remove dialog open on the old one closes.
             key={activePill.key}
@@ -503,9 +547,9 @@ export const SourcesScreen = () => {
         )}
         {allCards.length > 0 && (
           <SelectAllRow
+            align="end"
             selected={selectedCount}
             total={selectable.length}
-            added={allCards.length - selectable.length}
             onSelectAll={selectAll}
             onClear={clear}
           />

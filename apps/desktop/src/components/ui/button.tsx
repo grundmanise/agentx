@@ -30,6 +30,10 @@ const buttonVariants = cva(
           "type-button-sm min-h-8.5 items-start justify-start px-3.5 py-1.5 text-left whitespace-normal",
       },
       variant: {
+        // The plain inline shape in the accent: the call to action at the end of a list's group
+        // header, such as Adopt all, beside plain text buttons such as Collapse all.
+        accent:
+          "text-accent-primary hover:text-accent-primary-hover font-medium",
         danger:
           "text-button-danger-text bg-button-danger-bg hover:bg-button-danger-hover font-medium",
         ghost:
@@ -37,7 +41,8 @@ const buttonVariants = cva(
         // A link inside a line of text that opens something, such as See changes on a row of the
         // Update skills dialog: underlined on hover.
         link: "text-text-secondary hover:text-text-primary font-medium hover:underline",
-        // No fill: a line of text that expands, such as an entry of the History sheet.
+        // No fill: a line of text that expands, such as an entry of the History sheet, or, small, a
+        // toast's action, such as Undo.
         plain: "text-button-ghost-text hover:text-text-primary",
         primary:
           "bg-button-primary-bg text-button-primary-text hover:bg-button-primary-hover font-semibold",
