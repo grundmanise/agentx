@@ -35,8 +35,9 @@ const built: Record<string, ReactElement> = {
   [SOURCES_PATH]: <SourcesScreen />,
 };
 
+// `isolate` keeps a screen's own layers, such as the list's pinned headers, under the frosted pane.
 const screenVariants = cva(
-  "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+  "isolate flex min-h-0 flex-1 flex-col transition-opacity duration-200",
   {
     variants: {
       // The kept inventory is there with the first render: it does not fade in.

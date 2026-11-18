@@ -276,8 +276,11 @@ export const SourcesScreen = () => {
         ? undefined
         : groupCards(
             orderCards(
-              resultCards(results, library, (url) =>
-                pageRef(sources.find((s) => s.url === url))
+              resultCards(
+                // A source removed while the answer is shown takes its results with it.
+                results.filter((r) => sources.some((s) => s.url === r.source)),
+                library,
+                (url) => pageRef(sources.find((s) => s.url === url))
               )
             )
           ),
@@ -522,8 +525,8 @@ export const SourcesScreen = () => {
           />
         </div>
         <SourceRow pills={pills} active={activeKey} now={now} onOpen={open} />
-        {/* The card of the open source; a search looks across every source, so it hides. */}
-        {activePill !== undefined && query.trim() === "" && (
+        {/* The card of the open source; it stays while a search looks across every source. */}
+        {activePill !== undefined && (
           <OpenSource
             // A new source gets a new card, so a Remove dialog open on the old one closes.
             key={activePill.key}

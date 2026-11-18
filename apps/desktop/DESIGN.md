@@ -15,7 +15,7 @@ The Tailwind theme holds only these tokens. `tokens.css` resets Tailwind's whole
 
 ## 1. Character
 
-A dark, quiet desktop tool. One accent (lime) carries the accent and action signals; everything else is near-black and grey. Serif for page titles only; a mono face for anything technical (paths, ids, dates, captions). Surfaces are flat: elevation comes from one shade step and, on floating layers, a soft black shadow. No gradients, no emoji, no icon-per-row decoration.
+A dark, quiet desktop tool. One accent (lime) carries the accent and action signals; everything else is near-black and grey. Serif for page titles only; a mono face for anything technical (paths, ids, dates, captions). Surfaces are flat: elevation comes from one shade step and, on floating layers, a soft black shadow. No gradients, no emoji, no icon-per-row decoration. The page declares `color-scheme: dark`, so the system draws native controls such as scrollbars for a dark background; the app never styles a scrollbar.
 
 ## 2. Color
 
@@ -782,6 +782,10 @@ Each entry gives a component's structure, tokens and states, and the reason for 
 A control that runs a command is pending from the command until the inventory that follows it arrives: `aria-busy`, a `Spinner` in or beside it, and no input. It keeps the state the last inventory reported, so the screen never shows the outcome ahead of the CLI.
 
 Finder in this file means the platform's file manager. `src/lib/reveal.ts` names it for the platform `src/lib/platform.ts` reads; a screen never checks the platform itself.
+
+### Values
+
+The value of a label/value pair (a `<dd>`: the skill's Details, a source's facts, Settings › Storage) is selectable, so it can be copied; its label is not. A value that is a link (`src/components/selectable-link.tsx`) opens on a click, while a drag across it selects its text and opens nothing.
 
 ### Buttons (height / padding / colours)
 
