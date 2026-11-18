@@ -329,6 +329,9 @@
   /* Overlays */
   --color-overlay-bg: var(--gray-940);
   --color-overlay-border: var(--gray-800);
+  /* The light on the floating bar's rim while an install runs (DESIGN.md §8 "Add progress"); read by its shader. */
+  --color-floating-bar-rim: var(--color-accent-primary);
+  --color-floating-bar-rim-flow: var(--teal-200);
   --color-popover-row-hover: var(--gray-880);
   --color-popover-caption: var(--gray-500);
   --color-menu-row-hover: var(--gray-880);
