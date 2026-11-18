@@ -46,8 +46,8 @@ const CheckTools = ({ rows }: { rows: ServerRow[] }) => {
  * many declare it, with its transport, how many tools it exposed the last time agentx checked, and
  * the agents that declare it. Read-only: Check tools runs a scan with a handshake, and is there
  * only while a server is declared; nothing here edits, starts or stops a server. No environment
- * or header value is ever shown. The route may name a server (`/servers/<logical id>`), as a
- * plugin card does when its server row is clicked: that row scrolls into view.
+ * or header value is ever shown. The route may name a server (`/servers/<logical id>`), as
+ * the Plugins screen does when a server is clicked: that row scrolls into view.
  */
 export const ServersScreen = () => {
   const routeKey = useRouteKey();
