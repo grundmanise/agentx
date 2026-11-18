@@ -235,7 +235,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
-| `filter.sort-text` | `gray-200` | Sort toggle (None, A-Z, Z-A) |
+| `filter.sort-text` | `gray-200` | Sort toggle (A-Z, Z-A) |
 
 #### Lists and rows
 
@@ -881,10 +881,8 @@ The dot and fork glyphs say one thing: whether there is an action to take. `glyp
 - pencil – edited locally; `glyph.edited`.
 - fork – one of your own skills.
 
-Sort toggle, at the right end of the filter row, always shows its state in `filter.sort-text` on `button.ghost-bg`, so it never reads as unselected. It steps through three states on each click:
+Sort toggle, at the right end of the filter row: the list always sorts by name within each group, whatever the state, and the toggle always shows it in `filter.sort-text` on `button.ghost-bg`, so it never reads as unselected. A-Z with the arrow at first; each click flips between A-Z and Z-A (the arrow turned). Disabled skills sort with the rest and read as washed out.
 
-- None – no arrow. The list keeps its own order: within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
-- A-Z, Z-A – by name alone, whatever the state, with the arrow (turned for Z-A).
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)
