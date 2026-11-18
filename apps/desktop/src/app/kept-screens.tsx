@@ -3,11 +3,12 @@
 // browser keeps a hidden pane's scroll, WebKit as Chromium. A
 // hidden screen keeps the route it last showed, so its selection stays, and the sidebar and the
 // palette go back to that route.
-import { Activity, useLayoutEffect, useState } from "react";
+import { Activity, useLayoutEffect } from "react";
 import type { ReactNode } from "react";
 import { Route, Routes, useLocation } from "react-router";
 import type { Location } from "react-router";
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 
 import { allScreens } from "#/app/screens.ts";
 
@@ -17,16 +18,20 @@ export const screenOf = (pathname: string) =>
     (s) => pathname === s.path || pathname.startsWith(`${s.path}/`)
   );
 
-/** The route each screen last showed, by the screen's path: what going back to it opens. */
-const useLastRoutes = create<Record<string, string>>()(() => ({}));
+/** The location each screen last showed, by the screen's path: what a hidden screen keeps
+ * showing, and what going back to it opens. */
+const useLastLocations = create<Record<string, Location>>()(() => ({}));
+
+const routeOf = (path: string, at: Location | undefined) =>
+  at === undefined ? path : `${at.pathname}${at.search}`;
 
 /** The route that opens the screen at `path` as the user left it: its own path until it shows. */
 export const useLastRoute = (path: string) =>
-  useLastRoutes((routes) => routes[path] ?? path);
+  useLastLocations((locations) => routeOf(path, locations[path]));
 
 /** The same, read outside React, as the palette does when an item runs. */
 export const lastRoute = (path: string) =>
-  useLastRoutes.getState()[path] ?? path;
+  routeOf(path, useLastLocations.getState()[path]);
 
 /** The state of a navigation to a screen's last route: it goes back to the screen as the user left it. */
 export const backState = { back: true };
@@ -46,24 +51,26 @@ export const KeptScreens = ({
 }) => {
   const location = useLocation();
   const current = screenOf(location.pathname);
-  // The route each screen visited last showed, set while rendering so the screen shows with it.
-  const [kept, setKept] = useState<Record<string, Location>>({});
-  if (current !== undefined && kept[current.path] !== location) {
-    setKept({ ...kept, [current.path]: location });
-  }
+  // The current screen shows the current location; the others, the one each last showed. Noting
+  // the current screen's location changes none of these, so it renders nothing again.
+  const kept = useLastLocations(
+    useShallow((locations) =>
+      allScreens.map((s) =>
+        s.path === current?.path ? location : locations[s.path]
+      )
+    )
+  );
   useLayoutEffect(() => {
     if (current !== undefined) {
-      useLastRoutes.setState({
-        [current.path]: `${location.pathname}${location.search}`,
-      });
+      useLastLocations.setState({ [current.path]: location });
     }
   }, [current, location]);
 
   if (current === undefined) {
     return null;
   }
-  return allScreens.map((s) => {
-    const at = s.path === current.path ? location : kept[s.path];
+  return allScreens.map((s, i) => {
+    const at = kept[i];
     return at === undefined ? null : (
       <Activity key={s.path} mode={s === current ? "visible" : "hidden"}>
         <Routes location={at}>
