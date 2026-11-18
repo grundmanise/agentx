@@ -627,21 +627,39 @@ const SkillGroups = ({
 
   // The selected row comes into view when the selection changes (a key press, a click, or a route
   // another screen opened) and when the filters list it again. A list that changes around the
-  // same selected row stays where it is. The first time, such as a skill a plugin card opens, the
-  // row comes to the top, under its pinned headers; after that the list scrolls as little as it can.
+  // same selected row stays where it is, and so does a list shown again after another screen. The
+  // first time, such as a skill a plugin card opens, the row comes to the top, under its pinned
+  // headers; after that the list scrolls as little as it can.
   const latestIndex = useRef(selectedIndex);
   useEffect(() => {
     latestIndex.current = selectedIndex;
   }, [selectedIndex]);
   const scrolled = useRef(false);
   const listed = selectedIndex !== -1;
+  // The row last brought into view while it was listed: the effect runs again when the screen
+  // shows again, and the row is in view as the user left it. A scroll cut short within its first
+  // frame, as when StrictMode runs the effect twice, is made again.
+  const shownRow = useRef<string | null>(null);
   useEffect(() => {
-    if (listed) {
+    const key = listed ? selectedKey : undefined;
+    const scroll = key !== undefined && key !== shownRow.current;
+    shownRow.current = key ?? null;
+    if (scroll) {
       virtualizer.scrollToIndex(latestIndex.current, {
         align: scrolled.current ? "auto" : "start",
       });
       scrolled.current = true;
     }
+    let started = !scroll;
+    const frame = requestAnimationFrame(() => {
+      started = true;
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (!started) {
+        shownRow.current = null;
+      }
+    };
   }, [selectedKey, listed, virtualizer]);
 
   const drawn = drawnGroups(
