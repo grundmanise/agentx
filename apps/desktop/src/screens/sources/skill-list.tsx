@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cva } from "class-variance-authority";
 import {
+  memo,
   useCallback,
   useEffect,
   useId,
@@ -222,7 +223,7 @@ const Loading = () => (
  * open reads its SKILL.md first, with a spinner in the description's place, and opens once the
  * read ends.
  */
-const SkillItem = ({
+const SkillItemView = ({
   card,
   open,
   loading,
@@ -319,6 +320,12 @@ const SkillItem = ({
     </AccordionItem>
   );
 };
+
+/**
+ * A row draws again only when its own props change, not each time the list draws as it scrolls.
+ * Its card and `onToggle` keep their identity between the list's draws.
+ */
+const SkillItem = memo(SkillItemView);
 
 /** One thing the list places at its own offset: a source's caption, or one of its skills. */
 type Item =
