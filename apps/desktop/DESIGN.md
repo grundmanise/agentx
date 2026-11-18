@@ -15,7 +15,7 @@ The Tailwind theme holds only these tokens. `tokens.css` resets Tailwind's whole
 
 ## 1. Character
 
-A dark, quiet desktop tool. One accent (lime) carries the accent and action signals; everything else is near-black and grey. Serif for page titles only; a mono face for anything technical (paths, ids, dates, captions). Surfaces are flat: elevation comes from one shade step and, on floating layers, a soft black shadow. No gradients, no emoji, no icon-per-row decoration.
+A dark, quiet desktop tool. One accent (lime) carries the accent and action signals; everything else is near-black and grey. Serif for page titles only; a mono face for anything technical (paths, ids, dates, captions). Surfaces are flat: elevation comes from one shade step and, on floating layers, a soft black shadow. No gradients, no emoji, no icon-per-row decoration. The page declares `color-scheme: dark`, so the system draws native controls such as scrollbars for a dark background; the app never styles a scrollbar.
 
 ## 2. Color
 
@@ -905,6 +905,7 @@ A callout (§6 "Callout").
 
 - The detail pane shows one banner, the first that applies in the ordered table in `src/screens/skills/banners.ts`. The header shows no status pills: the banner is the status.
 - A banner that says where the skill came from sets `coversOrigin`, and the header then leaves out the origin text beside the name. Today only the banner of a skill another tool added does.
+- The origin text beside the name of a source's skill, or of a fork of one, is a link when its source has an https page, the page Source or Forked from in Details opens: `text.caption`, `text.secondary` and underlined on hover, the URL as its tooltip.
 
 | Banner, by what it reports | Tone |
 | --- | --- |

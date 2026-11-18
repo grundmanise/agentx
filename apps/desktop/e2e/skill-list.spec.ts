@@ -156,9 +156,12 @@ test("while the list scrolls, the header of its group and of its plugin stay pin
   expect(await below(group)).toBeLessThan(20);
   expect(await below(header(start.plugin))).toBeGreaterThan(20);
   expect(await below(header(start.plugin))).toBeLessThan(40);
-  // The selected row comes into view below them.
+  // The selected row comes into view at the top, right below them.
   const opened = await row(page, start.name).boundingBox();
-  expect((opened?.y ?? 0) - top).toBeGreaterThanOrEqual(50);
+  const pinned = await header(start.plugin).boundingBox();
+  const under = (pinned?.y ?? 0) + (pinned?.height ?? 0);
+  expect(opened?.y ?? 0).toBeGreaterThanOrEqual(under - 1);
+  expect(opened?.y ?? 0).toBeLessThan(under + 8);
 
   // Moved to the last skill of its plugin, then into the next plugin, opened from its header,
   // and scrolled into it, the next plugin's header takes the pinned place.
