@@ -70,7 +70,7 @@ const agentChipLabel = (agents: string[], chosen: Configuration[]): string => {
 };
 
 /** The chip in the filter row that echoes the agent filter: one agent, or how many. */
-const AgentFilterChip = ({
+export const AgentFilterChip = ({
   agents,
   configurations,
   onClear,
@@ -605,7 +605,7 @@ const SkillGroups = ({
   // The selected row comes into view when the selection changes (a key press, a click, or a route
   // another screen opened) and when the filters list it again. A list that changes around the
   // same selected row stays where it is, and so does a list shown again after another screen. The
-  // first time, such as a skill a plugin card opens, the row comes to the top, under its pinned
+  // first time, such as a skill the Plugins screen opens, the row comes to the top, under its pinned
   // headers; after that the list scrolls as little as it can.
   const latestIndex = useRef(selectedIndex);
   useEffect(() => {

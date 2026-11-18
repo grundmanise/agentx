@@ -1,4 +1,4 @@
-// Opening a server from another screen: a plugin card comes here. The MCP servers screen scrolls
+// Opening a server from another screen: the Plugins screen comes here. The MCP servers screen scrolls
 // the row of the server its route names into view.
 import { navigateTo } from "#/lib/navigate.ts";
 
