@@ -2,9 +2,14 @@ import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 
 const toggleVariants = cva(
-  "rounded-row px-subgroup-x py-subgroup-y gap-group focus-visible:outline-shell-focus-ring flex min-w-0 items-center text-left focus-visible:outline-2",
+  "rounded-row gap-group focus-visible:outline-shell-focus-ring flex min-w-0 items-center text-left focus-visible:outline-2",
   {
     variants: {
       // With an action, the row that holds the toggle and the action tints instead.
@@ -12,9 +17,37 @@ const toggleVariants = cva(
         false: "hover:bg-subgroup-hover w-full",
         true: "flex-1",
       },
+      level: {
+        group: "pt-group-top px-group pb-group-bottom min-h-group-header",
+        subgroup: "px-subgroup-x py-subgroup-y",
+      },
     },
   }
 );
+
+const rowVariants = cva(
+  "rounded-row hover:bg-subgroup-hover flex w-full items-center",
+  {
+    variants: {
+      level: {
+        group: "pr-group",
+        subgroup: "pr-subgroup-x",
+      },
+    },
+  }
+);
+
+const labelVariants = cva("type-caption min-w-0 truncate", {
+  variants: {
+    level: { group: "text-group-label", subgroup: "text-subgroup-label" },
+  },
+});
+
+const countVariants = cva("type-technical-sm", {
+  variants: {
+    level: { group: "text-group-count", subgroup: "text-subgroup-count" },
+  },
+});
 
 /**
  * The header of a section that collapses, within a list (DESIGN.md §6 "Group header (lists)"):
@@ -23,7 +56,8 @@ const toggleVariants = cva(
  * marketplace. It tints on hover. A click collapses or expands the section, which
  * `aria-expanded` reports. It is named by its caption, count and detail. An action, such as a
  * text button, sits at the row's right end, beside the toggle, so that a click on it toggles
- * nothing.
+ * nothing. A `group` header heads a top-level group of a list, with the group's padding and
+ * colours; a `subgroup` header heads a section inside one, such as a plugin's skills.
  */
 export const SectionToggle = ({
   label,
@@ -33,6 +67,7 @@ export const SectionToggle = ({
   open,
   onToggle,
   action,
+  level = "subgroup",
 }: {
   /** The section's caption, uppercase like every caption. */
   label: string;
@@ -50,13 +85,20 @@ export const SectionToggle = ({
   onToggle: () => void;
   /** A control at the row's right end, outside the toggle. */
   action?: ReactNode;
+  /** A top-level group's header, or a section's inside one. */
+  level?: "group" | "subgroup";
 }) => {
+  const hasAction = action !== undefined && action !== null;
+  const caption = <span className={labelVariants({ level })}>{label}</span>;
   const toggle = (
     <button
       type="button"
       aria-expanded={open}
       onClick={onToggle}
-      className={toggleVariants({ action: action !== undefined })}
+      className={toggleVariants({
+        action: hasAction,
+        level,
+      })}
     >
       <span
         className={
@@ -65,14 +107,18 @@ export const SectionToggle = ({
       >
         <ChevronIcon size="xs" />
       </span>
-      <span
-        title={title}
-        className="type-caption text-subgroup-label min-w-0 truncate"
-      >
-        {label}
-      </span>
+      {title === undefined ? (
+        caption
+      ) : (
+        <Tooltip>
+          <TooltipTrigger asChild>{caption}</TooltipTrigger>
+          <TooltipContent side="top" align="start">
+            {title}
+          </TooltipContent>
+        </Tooltip>
+      )}
       {count !== undefined && (
-        <span className="type-technical-sm text-subgroup-count">{count}</span>
+        <span className={countVariants({ level })}>{count}</span>
       )}
       {detail !== undefined && (
         <span
@@ -84,13 +130,13 @@ export const SectionToggle = ({
       )}
     </button>
   );
-  if (action === undefined) {
+  if (!hasAction) {
     return toggle;
   }
   return (
-    <div className="rounded-row hover:bg-subgroup-hover flex w-full items-center">
+    <div className={rowVariants({ level })}>
       {toggle}
-      <span className="pr-subgroup-x flex">{action}</span>
+      <span className="flex">{action}</span>
     </div>
   );
 };

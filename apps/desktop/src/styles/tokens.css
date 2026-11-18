@@ -246,6 +246,8 @@
   --color-subgroup-count: var(--gray-500);
   --color-subgroup-source: var(--gray-600);
   --color-subgroup-hover: var(--gray-920);
+  /* The line under a group's or a plugin's chevron, down the rows nested under it. */
+  --color-list-guide: var(--gray-700);
   --color-table-row-hover: var(--gray-930);
   --color-table-header-text: var(--gray-500);
   --color-add-skill-row-hover: var(--gray-880);
@@ -605,6 +607,9 @@
   --padding-subgroup-y: 6px;
   --padding-subgroup-top: 8px;
   --padding-subgroup-indent: 22px;
+  --padding-subgroup-nested: 44px;
+  --inset-list-guide: 20px;
+  --inset-list-guide-nested: 42px;
   --height-table-header: 40px;
   --padding-table-row: 16px;
   --gap-table-col: 24px;

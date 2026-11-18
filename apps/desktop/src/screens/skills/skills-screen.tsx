@@ -13,14 +13,16 @@ import {
   projectRows,
   subgroupKey,
 } from "#/screens/skills/projection.ts";
-import type { SkillRow } from "#/screens/skills/projection.ts";
+import type { Sections, SkillRow } from "#/screens/skills/projection.ts";
 import { RenameDialogs } from "#/screens/skills/rename-dialog.tsx";
 import { SkillDetail } from "#/screens/skills/skill-detail.tsx";
 import { SkillList } from "#/screens/skills/skill-list.tsx";
 import {
+  openSections,
   setFilters,
   setOrder,
   setExpanded,
+  toggleCollapsed,
   toggleExpanded,
   useSkillsView,
 } from "#/screens/skills/view.ts";
@@ -40,13 +42,13 @@ const steps: Record<string, number> = {
 /**
  * The row a key press moves the selection to: the nearest shown row after the one at `at` for a
  * step down, before it for a step up, and the first shown row when no row is selected. A row of a
- * collapsed subgroup is not shown.
+ * collapsed group or subgroup is not shown.
  */
 const nextShown = (
   flat: SkillRow[],
   at: number,
   step: number,
-  expanded: ReadonlySet<string>
+  sections: Sections
 ) => {
   const by = at === -1 ? 1 : step;
   const from = at === -1 ? 0 : at + step;
@@ -54,7 +56,7 @@ const nextShown = (
   return Array.from(
     { length: Math.max(0, count) },
     (_, n) => flat[from + n * by]
-  ).find((row) => row !== undefined && !inCollapsed(row, expanded));
+  ).find((row) => row !== undefined && !inCollapsed(row, sections));
 };
 
 /** Whether a key press belongs to a field or an overlay, which the list then leaves alone. */
@@ -76,10 +78,15 @@ export const SkillsScreen = () => {
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
-  // The search, filters, sort order and open subgroups stay while another screen shows.
+  // The search, filters, sort order and collapsed sections stay while another screen shows.
   const filters = useSkillsView((s) => s.filters);
   const order = useSkillsView((s) => s.order);
+  const collapsed = useSkillsView((s) => s.collapsed);
   const expanded = useSkillsView((s) => s.expanded);
+  const sections = useMemo(
+    () => ({ collapsed, expanded }),
+    [collapsed, expanded]
+  );
 
   const rows = useMemo(
     () =>
@@ -106,17 +113,20 @@ export const SkillsScreen = () => {
       ? undefined
       : (rows.find((r) => r.key === routeKey) ??
         rows.find((r) => r.name === routeKey))) ??
-    // The first row whatever is collapsed, so collapsing a subgroup never changes the selection.
+    // The first row whatever is collapsed, so collapsing a section never changes the selection.
     flat[0];
-  // A newly selected row in a collapsed subgroup, such as a plugin's skill another screen opens,
-  // opens its subgroup so the list shows it. Collapsing that subgroup later keeps it collapsed.
+  // A newly selected row in a collapsed group or subgroup, such as a plugin's skill another screen
+  // opens, opens its sections so the list shows it. Collapsing one later keeps it collapsed.
   const reveal = useEffectEvent((key: string | undefined) => {
     if (
       selected !== undefined &&
       selected.key === key &&
-      inCollapsed(selected, expanded)
+      inCollapsed(selected, sections)
     ) {
-      setExpanded([...expanded, subgroupKey(selected)]);
+      openSections(
+        selected.group,
+        selected.group === GROUP_PLUGINS ? subgroupKey(selected) : undefined
+      );
     }
   });
   const shownKey = selected?.key;
@@ -150,7 +160,7 @@ export const SkillsScreen = () => {
   };
 
   // j/k and the arrows move the selection through the visible rows, in group order, past the
-  // rows of a collapsed subgroup. Not under the launch pane: the list waits for the startup checks.
+  // rows of a collapsed group or subgroup. Not under the launch pane: the list waits for the startup checks.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (
@@ -168,7 +178,7 @@ export const SkillsScreen = () => {
       }
       e.preventDefault();
       const at = flat.findIndex((r) => r.key === current.current);
-      const next = nextShown(flat, at, step, expanded);
+      const next = nextShown(flat, at, step, sections);
       if (next !== undefined && next.key !== current.current) {
         select(next);
       }
@@ -191,7 +201,8 @@ export const SkillsScreen = () => {
         onOrder={setOrder}
         selectedKey={selected?.key}
         onSelect={select}
-        expanded={expanded}
+        collapse={sections}
+        onToggleGroup={toggleCollapsed}
         onToggle={toggleExpanded}
         onToggleAll={toggleAll}
       />
