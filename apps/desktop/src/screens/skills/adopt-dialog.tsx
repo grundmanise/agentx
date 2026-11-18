@@ -242,7 +242,7 @@ export const AdoptDialog = ({
           ))}
         <DialogFooter>
           {run !== undefined && (
-            <output className="type-secondary text-text-secondary flex min-w-0 flex-1 items-center">
+            <output className="type-secondary text-text-hint flex min-w-0 flex-1 items-center">
               {run.phase === "running" ? progressText(run) : summaryText(run)}
             </output>
           )}

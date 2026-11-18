@@ -1,8 +1,8 @@
 import type { Configuration } from "#/cli/events.gen.ts";
 import { RunButton } from "#/components/run-button.tsx";
-import { AddRim } from "#/screens/sources/add-rim.tsx";
+import { ProgressRim } from "#/components/progress-rim/progress-rim.tsx";
 import { AgentTargets } from "#/screens/sources/agent-targets.tsx";
-import type { RimRun } from "#/screens/sources/rim-progress.ts";
+import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
 
 const Divider = () => (
   <span aria-hidden className="bg-shell-divider h-6 w-px flex-none" />
@@ -12,7 +12,7 @@ const Divider = () => (
  * The floating action bar (DESIGN.md §2.2 "Overlays", §4 "Overlays", §8): the install targets
  * (`AgentTargets`, DESIGN.md §6 "Agent picker") and Add, which counts the selected cards. While
  * the install runs, Add keeps its size and turns into its Stop (DESIGN.md §6 "Run button"), and
- * the install's progress runs on the bar's rim (DESIGN.md §8 "Add progress").
+ * the install's progress runs on the bar's rim (DESIGN.md §8 "Progress rim").
  */
 export const ActionBar = ({
   count,
@@ -50,7 +50,7 @@ export const ActionBar = ({
     aria-label="Selected skills"
     className="bottom-floating-bar animate-floating-bar rounded-floating-bar border-overlay-border bg-overlay-bg shadow-popover h-floating-bar absolute left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 border pr-2 pl-4"
   >
-    <AddRim run={rim} onSettled={onRimSettled} />
+    <ProgressRim run={rim} onSettled={onRimSettled} />
     <AgentTargets
       skills={count}
       direct={direct}

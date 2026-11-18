@@ -1,8 +1,8 @@
 /**
- * The WebGL program of the floating bar's rim (DESIGN.md §8 "Add progress"): two arcs of
- * drifting light that grow from the bottom centre of the pill, up each side, and meet at the top.
- * Every length is in CSS pixels; the canvas is `uPad` larger than the bar on each side, for the
- * glow.
+ * The WebGL program of a progress rim (DESIGN.md §8 "Progress rim"): two arcs of drifting light
+ * that grow from the bottom centre of a pill, up each side, and meet at the top. Every length is
+ * in CSS pixels; the canvas is `uPad` larger than the pill on each side, for the glow. `uScale`
+ * sizes the glow and the head, `uStrength` how bright the glow is.
  */
 
 export const RIM_VERTEX = `
@@ -13,7 +13,7 @@ void main() { gl_Position = vec4(a, 0.0, 1.0); }
 export const RIM_FRAGMENT = `
 precision highp float;
 uniform vec2 uRes;
-uniform float uDpr, uTime, uProg, uAlpha, uPad, uSettle;
+uniform float uDpr, uTime, uProg, uAlpha, uPad, uSettle, uScale, uStrength;
 uniform vec2 uBar;
 uniform vec3 uLight, uFlow;
 
@@ -55,7 +55,7 @@ void main() {
   float full = uSettle;
   float headS = uProg * P * 0.5;
   // A long soft leading edge, and light that builds toward the head, evening out near the end.
-  float lead = mix(1.0 - smoothstep(headS - 42.0, headS + 2.0, S), 1.0, full);
+  float lead = mix(1.0 - smoothstep(headS - 42.0 * uScale, headS + 2.0, S), 1.0, full);
   float along = clamp(S / max(headS, 1.0), 0.0, 1.0);
   float rampMin = mix(0.4, 1.0, smoothstep(0.8, 1.0, uProg));
   float ramp = mix(mix(rampMin, 1.0, pow(along, 1.5)), 1.0, full);
@@ -63,19 +63,19 @@ void main() {
   // Noise from the 2D position, drifting slowly.
   float n = fbm(vec2(p.x * 0.011 - uTime * 0.32, p.y * 0.045 + uTime * 0.1));
   float core = exp(-d * d / 0.65);
-  float glow = d > 0.0 ? exp(-d / (7.0 + 3.0 * n)) : exp(d / 1.5);
+  float glow = d > 0.0 ? exp(-d / ((7.0 + 3.0 * n) * uScale)) : exp(d / 1.5);
   float dh = headS - S;
-  float hw = dh >= 0.0 ? 30.0 : 5.0;
-  float gw = dh >= 0.0 ? 30.0 : 14.0;
+  float hw = dh >= 0.0 ? 30.0 * uScale : 5.0;
+  float gw = (dh >= 0.0 ? 30.0 : 14.0) * uScale;
   float head = (1.0 - full) * exp(-dh * dh / (2.0 * hw * hw));
   float headGlow = (1.0 - full) * exp(-dh * dh / (2.0 * gw * gw));
   vec3 pale = mix(uLight, vec3(1.0), 0.6);
   vec3 col = mix(uLight, uFlow, smoothstep(0.3, 0.85, n) * 0.55);
   col = mix(col, pale, head * 0.45);
   float breathe = 0.9 + 0.1 * sin(uTime * 1.5);
-  float a = mask * (core + glow * 0.4 * breathe * (0.75 + 0.5 * n)) + head * core * 0.35 + headGlow * glow * 0.3;
+  float a = mask * (core + glow * 0.4 * uStrength * breathe * (0.75 + 0.5 * n)) + head * core * 0.35 + headGlow * glow * 0.3 * uStrength;
   // Fades out before the canvas's edge, so the glow has no hard border.
-  a *= 1.0 - smoothstep(uPad - 14.0, uPad - 1.0, d);
+  a *= 1.0 - smoothstep(uPad * 0.45, uPad - 1.0, d);
   a += core * 0.045;
   a = clamp(a, 0.0, 1.0) * uAlpha;
   gl_FragColor = vec4(col * a, a);

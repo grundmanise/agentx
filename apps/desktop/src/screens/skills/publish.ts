@@ -8,6 +8,7 @@ import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { PublishEvent } from "#/cli/events.gen.ts";
+import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
 import { notify, notifySuccess } from "#/components/toast.tsx";
 import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
@@ -190,10 +191,20 @@ interface Progress {
   total?: number;
 }
 
-const useProgressStore = create<{ progress?: Progress }>()(() => ({}));
+const useProgressStore = create<{ progress?: Progress; rim?: RimRun }>()(
+  () => ({})
+);
 
 /** How far the running Publish all got; undefined before its first skill and once it ends. */
 export const usePublishProgress = () => useProgressStore((s) => s.progress);
+
+/** The Publish all the title bar's rim shows: while it runs, then until the rim has faded. */
+export const usePublishRim = () => useProgressStore((s) => s.rim);
+
+/** The rim has faded: it shows no run until the next Publish all. */
+export const settlePublishRim = () => {
+  useProgressStore.setState({ rim: undefined });
+};
 
 /** Update, for a skill another machine published to first: `skill update <name>`. */
 const updateAction = (name: string): ToastAction | undefined => {
@@ -263,7 +274,10 @@ export const publishAll = async (names: readonly string[]) => {
   ) {
     return;
   }
-  useProgressStore.setState({ progress: undefined });
+  useProgressStore.setState({
+    progress: undefined,
+    rim: { fraction: 0, state: "running" },
+  });
   const outcome = await runUntilSettled(["skill", "publish", ...names], {
     failure: (ended) => publishFailure(ended),
     label: PUBLISH_ALL,
@@ -271,11 +285,23 @@ export const publishAll = async (names: readonly string[]) => {
       if (event.phase === "publish") {
         useProgressStore.setState({
           progress: { current: event.current, total: event.total },
+          // The event names the skill under way, so the ones before it ended.
+          rim: {
+            fraction:
+              event.total === undefined || event.total === 0
+                ? 0
+                : Math.max(0, event.current - 1) / event.total,
+            state: "running",
+          },
         });
       }
     },
   });
-  useProgressStore.setState({ progress: undefined });
+  const done = outcome.exitCode === EXIT_CODES.ok && !outcome.cancelled;
+  useProgressStore.setState({
+    progress: undefined,
+    rim: { fraction: done ? 1 : 0, state: done ? "done" : "stopped" },
+  });
   const accountRemoteSet =
     accountRemoteOf(useAppStore.getState().sources) !== undefined;
   if (refusedForAccountRemote(outcome, accountRemoteSet)) {

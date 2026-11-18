@@ -41,7 +41,9 @@ import {
   PUBLISH_ALL,
   publishAll,
   toPublish,
+  settlePublishRim,
   usePublishProgress,
+  usePublishRim,
 } from "#/screens/skills/publish.ts";
 import type { ToPublish } from "#/screens/skills/publish.ts";
 import { useSkillRows } from "#/screens/skills/rows.ts";
@@ -149,6 +151,7 @@ export const PublishStatus = () => {
   const state = useSyncState();
   const publishing = useSettling(PUBLISH_ALL);
   const progress = usePublishProgress();
+  const rim = usePublishRim();
   const lastChecked = useAppStore((s) => s.lastChecked);
   const now = useNow();
   const [open, setOpen] = useState(false);
@@ -184,6 +187,8 @@ export const PublishStatus = () => {
             // The tooltip would cover the popover, and says nothing while the publish runs.
             tooltip={publishing || open ? [] : shown.tooltip}
             busy={publishing}
+            rim={rim}
+            onRimSettled={settlePublishRim}
           />
         </PopoverTrigger>
         <PopoverContent aria-label="Sync" align="end">

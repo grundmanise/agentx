@@ -1,11 +1,14 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
 
-import { RIM_START, stepRim } from "#/screens/sources/rim-progress.ts";
-import type { RimFrame, RimRun } from "#/screens/sources/rim-progress.ts";
-import { RIM_FRAGMENT, RIM_VERTEX } from "#/screens/sources/rim-shader.ts";
+import { RIM_START, stepRim } from "#/components/progress-rim/rim-progress.ts";
+import type { RimFrame, RimRun } from "#/components/progress-rim/rim-progress.ts";
+import { RIM_FRAGMENT, RIM_VERTEX } from "#/components/progress-rim/rim-shader.ts";
 
-/** Room around the bar for the glow, in px. */
-const PAD = 26;
+/** Each size: the room around the pill for the glow, in px; how wide the glow and head are; how bright the glow is. */
+const SIZES = {
+  md: { pad: 26, scale: 1, strength: 1 },
+  sm: { pad: 14, scale: 0.45, strength: 0.55 },
+} as const;
 
 /** A colour token's value as the shader's RGB, 0 to 1; `fallback` when it is no hex colour. */
 const tokenRgb = (
@@ -69,20 +72,24 @@ const compile = (canvas: HTMLCanvasElement): Program | undefined => {
 };
 
 /**
- * The install's progress on the rim of the floating bar (DESIGN.md §8 "Add progress"): two arcs of
- * drifting light grow from the bottom centre, up each side, as far as `stepRim` says, and meet at
- * the top when the run ends; then the rim fades and `onSettled` is called. A run that stops drains
- * back instead. It draws on a WebGL canvas outside React's renders, once a frame, only while a run
- * is shown; without WebGL it draws nothing but still keeps the run's time. Place it in the bar,
- * which it measures. The canvas carries the drawn share in `data-progress`.
+ * A command's progress on the rim of a pill (DESIGN.md §8 "Progress rim"): two arcs of drifting
+ * light grow from the bottom centre, up each side, as far as `stepRim` says, and meet at the top
+ * when the run ends; then the rim fades and `onSettled` is called. A run that stops drains back
+ * instead. It draws on a WebGL canvas outside React's renders, once a frame, only while a run is
+ * shown; without WebGL it draws nothing but still keeps the run's time. Place it in the pill, a
+ * positioned element it measures. `md` suits the floating bar; `sm`, a quieter glow, a small
+ * control. The canvas carries the drawn share in `data-progress`.
  */
-export const AddRim = ({
+export const ProgressRim = ({
   run,
   onSettled,
+  size = "md",
 }: {
   run: RimRun | undefined;
   onSettled: () => void;
+  size?: keyof typeof SIZES;
 }) => {
+  const { pad, scale, strength } = SIZES[size];
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const programRef = useRef<Program | null>(null);
   const sizeRef = useRef({ dpr: 1, h: 0, w: 0 });
@@ -92,7 +99,7 @@ export const AddRim = ({
     onSettled();
   });
 
-  // The bar's size, border included; the canvas sits PAD outside it.
+  // The pill's size, border included; the canvas sits `pad` outside it.
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     const bar = canvas?.parentElement ?? null;
@@ -101,12 +108,12 @@ export const AddRim = ({
       const h = b.offsetHeight;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const border = b.clientLeft;
-      c.style.left = `${-PAD - border}px`;
-      c.style.top = `${-PAD - border}px`;
-      c.style.width = `${w + 2 * PAD}px`;
-      c.style.height = `${h + 2 * PAD}px`;
-      c.width = Math.round((w + 2 * PAD) * dpr);
-      c.height = Math.round((h + 2 * PAD) * dpr);
+      c.style.left = `${-pad - border}px`;
+      c.style.top = `${-pad - border}px`;
+      c.style.width = `${w + 2 * pad}px`;
+      c.style.height = `${h + 2 * pad}px`;
+      c.width = Math.round((w + 2 * pad) * dpr);
+      c.height = Math.round((h + 2 * pad) * dpr);
       sizeRef.current = { dpr, h, w };
     };
     const observer = new ResizeObserver(() => {
@@ -121,7 +128,7 @@ export const AddRim = ({
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [pad]);
 
   const shown = run !== undefined;
   useEffect(() => {
@@ -165,8 +172,10 @@ export const AddRim = ({
           gl.uniform1f(uniform("uTime"), still ? 0 : frame.elapsed);
           gl.uniform1f(uniform("uProg"), frame.progress);
           gl.uniform1f(uniform("uAlpha"), frame.alpha);
-          gl.uniform1f(uniform("uPad"), PAD);
+          gl.uniform1f(uniform("uPad"), pad);
           gl.uniform1f(uniform("uSettle"), frame.settle);
+          gl.uniform1f(uniform("uScale"), scale);
+          gl.uniform1f(uniform("uStrength"), strength);
           gl.uniform2f(uniform("uBar"), w, h);
           gl.uniform3f(uniform("uLight"), ...light);
           gl.uniform3f(uniform("uFlow"), ...flow);
@@ -188,7 +197,7 @@ export const AddRim = ({
       const gl = programRef.current?.gl;
       gl?.clear(gl.COLOR_BUFFER_BIT);
     };
-  }, [shown]);
+  }, [shown, pad, scale, strength]);
 
   return (
     <canvas

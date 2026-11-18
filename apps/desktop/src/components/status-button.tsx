@@ -1,5 +1,8 @@
 import { cva } from "class-variance-authority";
 
+import { ProgressRim } from "#/components/progress-rim/progress-rim.tsx";
+import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
+
 import {
   Tooltip,
   TooltipContent,
@@ -17,6 +20,9 @@ const dot = cva("rounded-shell-status-dot size-2 flex-none", {
 });
 
 const noLines: readonly string[] = [];
+const noop = () => {
+  // Nothing to do once the rim has faded.
+};
 
 /** The dot's colour: no account remote, something to publish or take in, or synced. */
 export type StatusTone = "none" | "pending" | "synced";
@@ -24,7 +30,8 @@ export type StatusTone = "none" | "pending" | "synced";
 /**
  * The sync status at the right of the title bar (DESIGN.md §6 "Publish status (title bar)"): a
  * dot in the state's colour and the label, on a pill. `tooltip` holds the lines its tooltip
- * shows, one each; none shows no tooltip. `busy` marks it `aria-busy` while its command runs. As
+ * shows, one each; none shows no tooltip. `busy` marks it `aria-busy` while its command runs, and
+ * `rim` draws that run's progress on its edge (§8 "Progress rim"), until the rim has faded. As
  * the trigger of the popover it opens, it takes what the popover gives it (its state attributes,
  * the click and the ref) and passes them to the button; its accessible name stays the label.
  */
@@ -33,12 +40,16 @@ export const StatusButton = ({
   label,
   tooltip = noLines,
   busy = false,
+  rim,
+  onRimSettled = noop,
   ...props
 }: {
   tone: StatusTone;
   label: string;
   tooltip?: readonly string[];
   busy?: boolean;
+  rim?: RimRun;
+  onRimSettled?: () => void;
   onClick?: () => void;
 }) => (
   <Tooltip>
@@ -46,13 +57,14 @@ export const StatusButton = ({
       <button
         type="button"
         aria-busy={busy ? true : undefined}
-        className="rounded-shell-status type-status text-shell-topbar-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-secondary h-status flex flex-none items-center gap-2 px-3"
+        className="rounded-shell-status type-status relative text-shell-topbar-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-secondary h-status flex flex-none items-center gap-2 px-3"
         {...props}
       >
         <span className="text-shell-topbar-text flex size-4 items-center justify-center">
           <span className={dot({ tone })} />
         </span>
         {label}
+        <ProgressRim run={rim} onSettled={onRimSettled} size="sm" />
       </button>
     </TooltipTrigger>
     {tooltip.length > 0 && (

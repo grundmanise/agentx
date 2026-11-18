@@ -35,7 +35,7 @@ import type {
   SkillCard,
   SourcePill,
 } from "#/screens/sources/projection.ts";
-import type { RimRun } from "#/screens/sources/rim-progress.ts";
+import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillList } from "#/screens/sources/skill-list.tsx";
 import { SourceRow } from "#/screens/sources/source-row.tsx";
@@ -462,7 +462,7 @@ export const SourcesScreen = () => {
     });
     setRim({ fraction: 0, state: "running" });
     const ok = await runPlans(plans, 0, 0, plans.length);
-    // The rim fills and fades, or drains, before the bar may close (DESIGN.md §8 "Add progress").
+    // The rim fills and fades, or drains, before the bar may close (DESIGN.md §8 "Progress rim").
     setRim({ fraction: ok ? 1 : 0, state: ok ? "done" : "stopped" });
   };
 

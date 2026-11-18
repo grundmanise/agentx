@@ -265,6 +265,8 @@ test.describe("publish", () => {
     await run.started;
     await expect(status(page)).toHaveText("Publishing 1 of 3");
     await expect(status(page)).toHaveAttribute("aria-busy", "true");
+    // Its progress runs on the pill's rim.
+    await expect(status(page).locator("canvas[data-progress]")).toBeAttached();
     run.release();
 
     const toast = toasts(page);
