@@ -30,19 +30,23 @@ const DialogClose = ({ ...props }: OwnProps<typeof DialogPrimitive.Close>) => (
   <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 );
 
-/** `shell.scrim-strong` behind a dialog and the palette. */
+/**
+ * `shell.scrim-strong` behind a dialog and the palette. It fades in and out (DESIGN.md §8), and
+ * while it fades out, clicks go through it to what is under it.
+ */
 const DialogOverlay = ({
   ...props
 }: OwnProps<typeof DialogPrimitive.Overlay>) => (
   <DialogPrimitive.Overlay
     data-slot="dialog-overlay"
-    className="bg-shell-scrim-strong fixed inset-0 z-50"
+    className="bg-shell-scrim-strong data-[state=closed]:animate-scrim-out data-[state=open]:animate-scrim-in fixed inset-0 z-50 data-[state=closed]:pointer-events-none!"
     {...props}
   />
 );
 
+// It fades and zooms in and out (DESIGN.md §8); while it closes, clicks go through it.
 const dialogContentVariants = cva(
-  "border-overlay-border bg-overlay-bg shadow-overlay fixed left-1/2 z-50 flex -translate-x-1/2 flex-col border outline-none",
+  "border-overlay-border bg-overlay-bg shadow-overlay data-[state=closed]:animate-dialog-out data-[state=open]:animate-dialog-in fixed left-1/2 z-50 flex -translate-x-1/2 flex-col border outline-none data-[state=closed]:pointer-events-none!",
   {
     defaultVariants: { kind: "dialog" },
     variants: {

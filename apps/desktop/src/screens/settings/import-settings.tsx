@@ -15,6 +15,7 @@ import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { pickSnapshot } from "#/lib/file-dialog.ts";
+import { useKept } from "#/lib/kept-value.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import {
@@ -131,6 +132,7 @@ const Result = ({ result }: { result: ImportResult }) => {
 const ImportFile = () => {
   const library = useAppStore((s) => s.machine?.library);
   const [picked, setPicked] = useState<string>();
+  const shown = useKept(picked);
   const [result, setResult] = useState<ImportResult>();
   const [adding, setAdding] = useState(false);
   const pending = useSettling(IMPORT_LABEL) || adding;
@@ -192,9 +194,9 @@ const ImportFile = () => {
             setPicked(undefined);
           }
         }}
-        title={`Replace settings with ${fileName(picked ?? "")}?`}
+        title={`Replace settings with ${fileName(shown ?? "")}?`}
         description="Missing skills will be installed during import, and existing might get updated."
-        detail={picked}
+        detail={shown}
         action="Import"
         onConfirm={() => {
           if (picked !== undefined) {

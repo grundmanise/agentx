@@ -4,6 +4,7 @@
 import { useState } from "react";
 
 import { Button } from "#/components/ui/button.tsx";
+import { useKept } from "#/lib/kept-value.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { AdoptDialog } from "#/screens/skills/adopt-dialog.tsx";
 import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
@@ -15,6 +16,7 @@ export const AdoptSkillsSection = () => {
   const busy = useAdoptRun((s) => s.run !== undefined);
   // The tool whose skills the dialog adopts, while it is open.
   const [open, setOpen] = useState<ToolArg | undefined>();
+  const shown = useKept(open);
   const tools = toolsToAdopt(adoption);
   return (
     <SettingsSection
@@ -42,7 +44,7 @@ export const AdoptSkillsSection = () => {
         </div>
       )}
       <AdoptDialog
-        tools={open === undefined ? [] : [open]}
+        tools={shown === undefined ? [] : [shown]}
         open={open !== undefined}
         onOpenChange={(next) => {
           if (!next) {

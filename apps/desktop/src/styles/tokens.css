@@ -425,6 +425,33 @@
       transform: translateY(24px);
     }
   }
+  /* Dialogs: shadcn's open and close. The content fades and zooms from 95%, its scrim fades. */
+  --animate-dialog-in: dialog-in 0.2s ease;
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      scale: 0.95;
+    }
+  }
+  --animate-dialog-out: dialog-out 0.2s ease forwards;
+  @keyframes dialog-out {
+    to {
+      opacity: 0;
+      scale: 0.95;
+    }
+  }
+  --animate-scrim-in: scrim-in 0.15s ease;
+  @keyframes scrim-in {
+    from {
+      opacity: 0;
+    }
+  }
+  --animate-scrim-out: scrim-out 0.15s ease forwards;
+  @keyframes scrim-out {
+    to {
+      opacity: 0;
+    }
+  }
 
   /* Blurs (DESIGN.md §4, code): `blur-code-loading`. */
   --blur-code-loading: 8px;

@@ -40,17 +40,19 @@ export const renameLabel = (row: SkillRow) => `rename ${row.key}`;
 interface RenameState {
   /** The skill the Rename dialog is open for. */
   renaming?: SkillRow;
+  /** False while the dialog closes: it keeps its skill until its close animation ends. */
+  open: boolean;
 }
 
-const useRenameStore = create<RenameState>()(() => ({}));
+const useRenameStore = create<RenameState>()(() => ({ open: false }));
 
 /** Opens the Rename dialog for `row`, one of your own skills. */
 export const openRename = (row: SkillRow) => {
-  useRenameStore.setState({ renaming: row });
+  useRenameStore.setState({ open: true, renaming: row });
 };
 
 const closeRename = () => {
-  useRenameStore.setState({ renaming: undefined });
+  useRenameStore.setState({ open: false });
 };
 
 /** What the CLI said when it refused a rename: its message, and its hint in the dialog's words. */
@@ -188,11 +190,11 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
 };
 
 /** "Rename {skill}?": the Name field, Cancel · Rename. */
-const RenameDialog = ({ row }: { row: SkillRow }) => {
+const RenameDialog = ({ row, open }: { row: SkillRow; open: boolean }) => {
   const pending = useSettling(renameLabel(row));
   return (
     <Dialog
-      open
+      open={open}
       onOpenChange={(next) => {
         // The dialog stays while its command runs: a refusal comes back to it.
         if (!next && !pending) {
@@ -213,10 +215,11 @@ const RenameDialog = ({ row }: { row: SkillRow }) => {
   );
 };
 
-/** The Rename dialog while one is open. */
+/** The Rename dialog while one is open, and while it closes. */
 export const RenameDialogs = () => {
   const renaming = useRenameStore((s) => s.renaming);
+  const open = useRenameStore((s) => s.open);
   return renaming === undefined ? null : (
-    <RenameDialog key={renaming.key} row={renaming} />
+    <RenameDialog key={renaming.key} row={renaming} open={open} />
   );
 };

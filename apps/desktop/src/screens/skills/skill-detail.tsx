@@ -6,6 +6,7 @@ import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { openInEditor } from "#/lib/editor.ts";
+import { useKept } from "#/lib/kept-value.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import { AgentsSection } from "#/screens/skills/agents-section.tsx";
@@ -139,6 +140,7 @@ export const SkillDetail = ({
 }) => {
   // Which control opened the Remove dialog: the Universal chip says why the skill leaves every agent.
   const [removing, setRemoving] = useState<"button" | "universal">();
+  const removed = useKept(removing);
   const sources = useAppStore((s) => s.sources);
   // How many files `skill diff` found changed, from the FILES read of this version of the skill.
   const changedFiles = useAppStore((s) => {
@@ -242,7 +244,7 @@ export const SkillDetail = ({
           row={row}
           configurations={configurations}
           open={removing !== undefined}
-          fromUniversal={removing === "universal"}
+          fromUniversal={removed === "universal"}
           onClose={() => {
             setRemoving(undefined);
           }}
