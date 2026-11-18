@@ -105,8 +105,9 @@ const serversOf = (
 
 /** The plugin's hooks, as the CLI lists them: sorted by event, then name. */
 const hooksOf = (plugin: Plugin): PluginItem[] =>
-  plugin.hooks.map((h) => ({
-    key: `${h.event} ${h.name}`,
+  plugin.hooks.map((h, at) => ({
+    // Two handlers can share an event and a name; their place tells them apart.
+    key: `${at} ${h.event} ${h.name}`,
     meta: h.event,
     name: h.name,
   }));
@@ -196,7 +197,7 @@ export const twinsOf = (row: PluginRow, rows: PluginRow[]): PluginRow[] =>
   sorted(
     rows.filter(
       (r) =>
-        r.key !== row.key &&
+        r.configuration !== row.configuration &&
         r.name === row.name &&
         r.marketplace === row.marketplace
     ),

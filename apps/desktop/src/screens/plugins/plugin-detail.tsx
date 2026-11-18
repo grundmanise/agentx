@@ -134,6 +134,11 @@ export const PluginDetail = ({
     ] as const
   ).filter((t) => t.count > 0);
   const [tab, setTab] = useState<string>(tabs[0]?.value ?? "skills");
+  // A refresh that empties the open tab moves to the first one left, and stays there.
+  const first = tabs[0]?.value;
+  if (first !== undefined && !tabs.some((t) => t.value === tab)) {
+    setTab(first);
+  }
   return (
     <article
       aria-label={row.name}
@@ -210,7 +215,7 @@ export const PluginDetail = ({
       {tabs.length > 0 && (
         <Tabs
           fill
-          value={tabs.some((t) => t.value === tab) ? tab : tabs[0]?.value}
+          value={tab}
           onValueChange={(value) => {
             setTab(value);
           }}

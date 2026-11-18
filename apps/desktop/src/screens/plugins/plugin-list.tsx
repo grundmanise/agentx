@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
 import { SortToggle } from "#/components/filter-controls.tsx";
@@ -81,8 +83,45 @@ const PluginRowView = ({
 
 /** A plugin's row, inset under its group's caption, beside the group's guide line. */
 const ROW = `pl-subgroup-indent relative flex ${LIST_GUIDE}`;
+/** The height of a group's pinned header, which covers the top of the list. */
+const GROUP_HEADER = 30;
 /** A row after the first of its group, `row.spacing` below the row before it. */
 const ROW_AFTER = `pt-rows ${ROW}`;
+
+/**
+ * A plugin's place in its group. Once selected, such as from Also installed in, it comes into
+ * view when the list has scrolled it out of sight, below its group's pinned header.
+ */
+const PluginItem = ({
+  row,
+  first,
+  selected,
+  onSelect,
+}: {
+  row: PluginRow;
+  first: boolean;
+  selected: boolean;
+  onSelect: () => void;
+}) => {
+  const ref = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    const item = ref.current;
+    const list = item?.closest("[data-plugin-scroll]");
+    if (!selected || item === null || list === null || list === undefined) {
+      return;
+    }
+    const at = item.getBoundingClientRect();
+    const view = list.getBoundingClientRect();
+    if (at.top < view.top + GROUP_HEADER || at.bottom > view.bottom) {
+      item.scrollIntoView({ block: "center" });
+    }
+  }, [selected]);
+  return (
+    <li ref={ref} className={first ? ROW : ROW_AFTER}>
+      <PluginRowView row={row} selected={selected} onSelect={onSelect} />
+    </li>
+  );
+};
 
 /**
  * The Plugins list column: the title and count, Search, the Filter button with its agents chip and
@@ -165,7 +204,10 @@ export const PluginList = ({
         />
       </div>
     </div>
-    <div className="pr-split-list-right pb-split-list-bottom pl-split-list-left min-h-0 flex-1 overflow-auto pt-0">
+    <div
+      data-plugin-scroll=""
+      className="pr-split-list-right pb-split-list-bottom pl-split-list-left min-h-0 flex-1 overflow-auto pt-0"
+    >
       {groups.length === 0 ? (
         <p className="type-secondary text-text-hint m-0 py-10 text-center">
           {rows.length === 0
@@ -202,15 +244,15 @@ export const PluginList = ({
             {!collapsed.has(group.configuration.id) && (
               <ul className="m-0 flex list-none flex-col p-0">
                 {group.rows.map((row, at) => (
-                  <li key={row.key} className={at === 0 ? ROW : ROW_AFTER}>
-                    <PluginRowView
-                      row={row}
-                      selected={row.key === selectedKey}
-                      onSelect={() => {
-                        onSelect(row);
-                      }}
-                    />
-                  </li>
+                  <PluginItem
+                    key={row.key}
+                    row={row}
+                    first={at === 0}
+                    selected={row.key === selectedKey}
+                    onSelect={() => {
+                      onSelect(row);
+                    }}
+                  />
                 ))}
               </ul>
             )}

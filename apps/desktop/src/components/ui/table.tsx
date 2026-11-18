@@ -16,6 +16,8 @@ const tableContainerVariants = cva("relative w-full", {
   },
 });
 
+// A scrolling table's container takes focus, so the keyboard can scroll it in WebKit, where a
+// scroller with no focusable content is otherwise out of reach. It is a region named as its table.
 const Table = ({
   scroll,
   ...props
@@ -23,6 +25,11 @@ const Table = ({
   <div
     data-slot="table-container"
     className={tableContainerVariants({ scroll })}
+    {...(scroll === true && {
+      "aria-label": props["aria-label"],
+      role: "region",
+      tabIndex: 0,
+    })}
   >
     <table
       data-slot="table"

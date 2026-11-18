@@ -1025,7 +1025,7 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 ### Tabs
 
-shadcn's Tabs (`src/components/ui/tabs.tsx`) with its default look on our tokens: a `tabs.list-bg` track, `tabs.list-radius`, `tabs.list-height`, `tabs.list-padding`, as wide as its tabs; each tab `type.tab` in `tabs.text`, `tabs.trigger-radius`; the active one on `tabs.active-bg` with a 1px `tabs.active-border` edge and `tabs.active-text`. The active tab's content follows `tabs.gap` below. A tab can end with a count in `type.technical-sm` `text.caption`. With `fill`, the tabs take the rest of the column's height and only their content scrolls.
+shadcn's Tabs (`src/components/ui/tabs.tsx`) with its default look on our tokens: a `tabs.list-bg` track, `tabs.list-radius`, `tabs.list-height`, `tabs.list-padding`, as wide as its tabs; each tab `type.tab` in `tabs.text`, `tabs.trigger-radius`; the active one on `tabs.active-bg` with a 1px `tabs.active-border` edge and `tabs.active-text`. The active tab's content follows `tabs.gap` below. A tab can end with a count in `type.technical-sm` `text.caption`. With `fill` on `Tabs` and on each `TabsContent`, the tabs take the rest of the column's height and pass it to the content; what scrolls is the content's own child, such as a `Table` with `scroll`. A tall panel with no such child is clipped, not scrolled.
 
 ### Plugins screen
 

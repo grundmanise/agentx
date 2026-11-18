@@ -96,12 +96,13 @@ test("the list groups the plugins by agent, and the first one opens with its det
         - tab "MCP servers 1"
         - tab "Hooks 2"
       - tabpanel "Skills 2":
-        - table "Skills":
-          - rowgroup:
-            - row "Skill Description"
-          - rowgroup:
-            - row "commit-helper Write commit messages the way the team does"
-            - row "release-check Check a release before it ships"
+        - region "Skills":
+          - table "Skills":
+            - rowgroup:
+              - row "Skill Description"
+            - rowgroup:
+              - row "commit-helper Write commit messages the way the team does"
+              - row "release-check Check a release before it ships"
   `);
   await pane.getByRole("tab", { name: "Hooks 2" }).click();
   await expect(pane.getByRole("table", { name: "Hooks" })).toMatchAriaSnapshot(`
