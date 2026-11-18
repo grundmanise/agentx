@@ -127,13 +127,14 @@ const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
 /**
  * Refresh all: one `source fetch --all`, after which the screen reads again the listing of each
  * source `source list` reports a new fetch for. Personal lists your skills from
- * `skill list --remote`, so an open Personal reads them again.
+ * `skill list --remote`, so they are read again too, whenever there is an account remote.
  */
-const refreshAll = async (openKey: string | undefined) => {
+const refreshAll = async () => {
   const outcome = await runCommand(["source", "fetch", "--all"], {
     label: REFRESH_ALL_LABEL,
   });
-  if (openKey === YOUR_SKILLS && outcome.exitCode !== null) {
+  const { sources } = useAppStore.getState();
+  if (outcome.exitCode !== null && sources.some((s) => s.account === true)) {
     await loadInstallable();
   }
 };
@@ -182,7 +183,8 @@ export const SourcesScreen = () => {
   const installable = useAppStore((s) => s.installable);
   const library = useAppStore((s) => s.inventory?.library) ?? noEntries;
   const adding = usePending(ADD_LABEL);
-  const refreshing = usePending(REFRESH_ALL_LABEL);
+  // Pending from the fetch until your skills are read again.
+  const [refreshing, setRefreshing] = useState(false);
 
   // The pill the user opened; before any, the first pill is open.
   const [active, setActive] = useState<string | undefined>();
@@ -326,6 +328,13 @@ export const SourcesScreen = () => {
       }
     };
   }, [query]);
+
+  const onRefreshAll = async () => {
+    setRefreshing(true);
+    // The command and the read never reject: a failure is an outcome.
+    await refreshAll();
+    setRefreshing(false);
+  };
 
   const toggleCard = (card: SkillCard) => {
     setSelection((prev) => {
@@ -492,7 +501,7 @@ export const SourcesScreen = () => {
               aria-busy={refreshing}
               disabled={refreshing || pills.length === 0}
               onClick={() => {
-                void refreshAll(activeKey);
+                void onRefreshAll();
               }}
             >
               {refreshing ? <Spinner /> : <RefreshIcon />}
