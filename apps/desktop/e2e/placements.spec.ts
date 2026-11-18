@@ -7,6 +7,7 @@ import {
   inventory,
   LIBRARY,
   manyAgentsInventory,
+  manyConfigurations,
   sources,
 } from "./fixtures/agents.ts";
 import {
@@ -419,6 +420,36 @@ test.describe("many agents", () => {
     expect(again.rows).toBe(2);
     expect(again.names.at(-1)).toBe("Zenflow");
   });
+
+  test("the Remove dialog stays in the window: only its list of agents scrolls", async ({
+    cli,
+    page,
+  }) => {
+    await page.setViewportSize({ height: 600, width: 1440 });
+    await openSkill(
+      cli,
+      page,
+      "pdf",
+      "pdf",
+      manyAgentsInventory(manyConfigurations.map((c) => c.id))
+    );
+    await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
+    const dialog = page.getByRole("dialog", { name: "Remove pdf?" });
+    const list = dialog.getByRole("list", { name: "Agents that see it" });
+    await expect(list.getByRole("listitem")).toHaveCount(28);
+    const box = await dialog.boundingBox();
+    expect(box?.y).toBeGreaterThanOrEqual(0);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(600);
+    await expect(
+      dialog.getByRole("heading", { name: "Remove pdf?" })
+    ).toBeInViewport();
+    await expect(
+      dialog.getByRole("button", { name: "Remove" })
+    ).toBeInViewport();
+    expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(
+      true
+    );
+  });
 });
 
 test.describe("banners", () => {
@@ -555,7 +586,7 @@ test.describe("Remove", () => {
     // only with the library.
     await chip(article, "Universal").click();
     await expect(dialog).toContainText(
-      "Universal agents read your library, where agentx keeps this skill. Removing it there deletes it from every agent on this machine:"
+      "Universal agents read your library, where agentx keeps this skill. Removing it there removes it from every agent that has it:"
     );
     await expect(
       dialog
@@ -578,7 +609,7 @@ test.describe("Remove", () => {
     await article.getByRole("button", { name: "Remove" }).click();
     // The Remove button has no reason to give: the dialog says only what goes.
     await expect(
-      dialog.getByText("It will be deleted from every agent on this machine:", {
+      dialog.getByText("It will be removed from every agent that has it:", {
         exact: true,
       })
     ).toBeVisible();
@@ -640,16 +671,13 @@ test.describe("Remove", () => {
     expect(later(cli)).toEqual([["skill", "remove", "draft", "--json"]]);
   });
 
-  test("a skill of a source: the dialog says where to get it back", async ({
+  test("a skill of a source: the dialog lists the agents that see it", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "pdf");
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
     const dialog = page.getByRole("dialog", { name: "Remove pdf?" });
-    await expect(dialog).toContainText(
-      "Add it again from acme/skills to get it back."
-    );
     await expect(
       dialog
         .getByRole("list", { name: "Agents that see it" })

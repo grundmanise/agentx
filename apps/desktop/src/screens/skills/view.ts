@@ -19,7 +19,7 @@ export const useSkillsView = create<SkillsView>()(() => ({
   collapsed: new Set<string>(),
   expanded: new Set<string>(),
   filters: noFilters,
-  order: "default",
+  order: "asc",
 }));
 
 export const setFilters = (filters: Filters) => {

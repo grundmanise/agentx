@@ -89,19 +89,12 @@ export interface Group {
   subgroups?: Subgroup[];
 }
 
-/**
- * How rows sort within a group: `default` lists the skills in an agent client first, then the
- * disabled ones, each part A to Z; `asc` and `desc` sort by name alone, whatever the state.
- */
-export type SortOrder = "default" | "asc" | "desc";
+/** How rows sort within a group: by name alone, A to Z or Z to A, whatever the state. */
+export type SortOrder = "asc" | "desc";
 
-/** The order the sort toggle steps through: default, then A to Z, then Z to A. */
-export const nextOrder = (order: SortOrder): SortOrder => {
-  if (order === "default") {
-    return "asc";
-  }
-  return order === "asc" ? "desc" : "default";
-};
+/** The order the sort toggle steps to: A to Z and Z to A, in turn. */
+export const nextOrder = (order: SortOrder): SortOrder =>
+  order === "asc" ? "desc" : "asc";
 
 const GITHUB_OR_GITLAB = /github|gitlab/u;
 const SCP_URL = /^(?:[\w.-]+@)?(?<host>[\w.-]+):(?<path>.+)$/u;
@@ -420,18 +413,10 @@ const sorted = <T>(items: T[], compare: (a: T, b: T) => number): T[] => {
   return copy;
 };
 
-/** Enabled rows before disabled ones, each part A to Z. */
-const compareEnabledFirst = (a: SkillRow, b: SkillRow) =>
-  Number(b.enabled) - Number(a.enabled) || compareNames(a, b);
-
-const comparer = (order: SortOrder) => {
-  if (order === "default") {
-    return compareEnabledFirst;
-  }
-  return order === "asc"
+const comparer = (order: SortOrder) =>
+  order === "asc"
     ? compareNames
     : (a: SkillRow, b: SkillRow) => compareNames(b, a);
-};
 
 /** The name of the plugin that provides a plugin's skill. */
 const pluginNameOf = (row: SkillRow) =>

@@ -12,7 +12,7 @@ import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import { AgentsSection } from "#/screens/skills/agents-section.tsx";
 import { BannerView } from "#/screens/skills/banner-view.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
-import { detailsOf } from "#/screens/skills/details.ts";
+import { detailsOf, originPage } from "#/screens/skills/details.ts";
 import type { Detail } from "#/screens/skills/details.ts";
 import { canEdit, skillFile } from "#/screens/skills/edit.ts";
 import { FilesSection } from "#/screens/skills/files.tsx";
@@ -63,6 +63,27 @@ const DetailValue = ({ detail }: { detail: Detail }) => {
       }}
     >
       {value}
+    </SelectableLink>
+  );
+};
+
+/** Where the skill came from, beside its name: a link to its source's page when it has one. */
+const Origin = ({ row }: { row: SkillRow }) => {
+  const text = originOf(row);
+  const page = originPage(row);
+  if (page === undefined) {
+    return text;
+  }
+  return (
+    <SelectableLink
+      href={page}
+      title={page}
+      tone="caption"
+      onOpen={() => {
+        void openInBrowser(page);
+      }}
+    >
+      {text}
     </SelectableLink>
   );
 };
@@ -174,7 +195,7 @@ export const SkillDetail = ({
           {/* Left out when the banner says where the skill came from. */}
           {banner?.coversOrigin !== true && (
             <span className="type-technical text-text-caption">
-              {originOf(row)}
+              <Origin row={row} />
             </span>
           )}
           {forks.map((fork) => (

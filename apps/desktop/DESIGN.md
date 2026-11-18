@@ -235,7 +235,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
-| `filter.sort-text` | `gray-200` | Sort toggle (None, A-Z, Z-A) |
+| `filter.sort-text` | `gray-200` | Sort toggle (A-Z, Z-A) |
 
 #### Lists and rows
 
@@ -321,6 +321,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `add-card.status-forked` | `accent.yours` | Skill status: forked |
 | `add-card.status-disk` | `accent.attention` | Skill status: already in the library |
 | `add-card.status-in-use` | `gray-400` | Skill status: name in use |
+| `add-card.status-remove` | `accent.danger` | Remove, in place of Added while hovered |
 | `add-card.check-ring` | `gray-700` | Ring of the round check of a skill that is not selected |
 | `source-card.bg` | `gray-950` | Card of the open source on Sources |
 | `source-card.border` | `gray-870` |  |
@@ -655,6 +656,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `dialog.width` | 480 | `w-dialog` |  |
 | `dialog.padding` | 32 | `p-dialog` |  |
 | `dialog.gap` | 22 | `gap-dialog` | Between dialog blocks |
+| `dialog.window-inset` | 32 | none: part of `dialog.max-height` | The least gap between a dialog and the window's top and bottom |
+| `dialog.max-height` | the window's height, less `dialog.window-inset` above and below | `max-h-dialog` | A block of the dialog that scrolls, such as the Remove dialog's agents, gives up the room; the rest stays |
 | `popover.width` | 360 | `w-popover` | Filter popover: room for three choice pills in a row |
 | `popover.padding` | 8–14 |  | 8 for row lists, 14 for grouped content |
 | `popover.gap` | 16 | `gap-popover` | Between groups |
@@ -885,10 +888,8 @@ The dot and fork glyphs say one thing: whether there is an action to take. `glyp
 - pencil – edited locally; `glyph.edited`.
 - fork – one of your own skills.
 
-Sort toggle, at the right end of the filter row, always shows its state in `filter.sort-text` on `button.ghost-bg`, so it never reads as unselected. It steps through three states on each click:
+Sort toggle, at the right end of the filter row: the list always sorts by name within each group, whatever the state, and the toggle always shows it in `filter.sort-text` on `button.ghost-bg`, so it never reads as unselected. A-Z with the arrow at first; each click flips between A-Z and Z-A (the arrow turned). Disabled skills sort with the rest and read as washed out.
 
-- None – no arrow. The list keeps its own order: within each group, skills in an agent client first, then the disabled ones, each part A to Z. No caption marks where the disabled ones start; they read as washed out.
-- A-Z, Z-A – by name alone, whatever the state, with the arrow (turned for Z-A).
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)
@@ -911,6 +912,7 @@ A callout (§6 "Callout").
 
 - The detail pane shows one banner, the first that applies in the ordered table in `src/screens/skills/banners.ts`. The header shows no status pills: the banner is the status.
 - A banner that says where the skill came from sets `coversOrigin`, and the header then leaves out the origin text beside the name. Today only the banner of a skill another tool added does.
+- The origin text beside the name of a source's skill, or of a fork of one, is a link when its source has an https page, the page Source or Forked from in Details opens: `text.caption`, `text.secondary` and underlined on hover, the URL as its tooltip.
 
 | Banner, by what it reports | Tone |
 | --- | --- |
@@ -931,11 +933,11 @@ A callout (§6 "Callout").
 - The banner of a skill of a source edited locally only informs, with a publish action when this machine can write to the source. It has no fork action: Fork is in the action row.
 - The banner of a skill gone from its source only informs. It has no fork action either: Fork is in the action row.
 - A command refused because the target folder holds another version opens a confirm dialog, with the path in `type.technical` `text.caption` and a danger confirm.
-- The action row sits on the title row, pushed to its right end (`margin-left:auto`), centred on the row and wrapping when it is full, with `button.gap` 6 between its buttons. Remove, last, is a danger ghost button; its dialog lists the agents the skill leaves in `type.body` `text.secondary`, with a danger confirm.
+- The action row sits on the title row, pushed to its right end (`margin-left:auto`), centred on the row and wrapping when it is full, with `button.gap` 6 between its buttons. Remove, last, is a danger ghost button; its dialog lists the agents the skill leaves in `type.body` `text.secondary`, with a danger confirm. Past `dialog.max-height`, only that list scrolls; the title, the consequence and the buttons stay.
 
 ### Dialog
 
-`dialog.width`, `dialog.padding`, `dialog.radius`, `overlay.bg` with 1px `overlay.border` and `overlay.shadow`, over `shell.scrim-strong`; blocks `dialog.gap` apart. Title `type.dialog-title` `dialog.title`, subtitle `type.secondary` `dialog.subtitle`. The footer ends with a ghost cancel and the confirm button (primary, or danger for what cannot be undone); Enter confirms. While its command runs, the confirm shows a `Spinner` and the dialog stays open. A field label is `type.secondary`, `input.label-gap` above the field; a hint under it is `type.secondary` `text.hint`. A refusal of what a field holds shows under the field (§6 "Refusal under a field"), and a change to the form clears it.
+`dialog.width`, `dialog.padding`, `dialog.radius`, `overlay.bg` with 1px `overlay.border` and `overlay.shadow`, over `shell.scrim-strong`; blocks `dialog.gap` apart, at most `dialog.max-height` high. Title `type.dialog-title` `dialog.title`, subtitle `type.secondary` `dialog.subtitle`. The footer ends with a ghost cancel and the confirm button (primary, or danger for what cannot be undone); Enter confirms. While its command runs, the confirm shows a `Spinner` and the dialog stays open. A field label is `type.secondary`, `input.label-gap` above the field; a hint under it is `type.secondary` `text.hint`. A refusal of what a field holds shows under the field (§6 "Refusal under a field"), and a change to the form clears it.
 
 ### Fork dialog (detail pane)
 
@@ -1185,9 +1187,10 @@ The Sources screen (`src/screens/sources`), under Skills: the serif page title w
 
 - A source pill (`source-pill.*`, `pill.radius`) holds the attention dot of a stale source, the source's short name, and its skill count in `type.technical-sm` (`source-pill.count`, `source-pill.active-count` on the active pill) once it is known.
 - The card of the open source: `source-card.bg`, a 1px `source-card.border`, `source-card.radius`. Its top row is a 36px owner tile (`source-card.tile-*`, `source-card.tile-radius`, the owner's initial in `type.source-name`), the name in `type.source-name`, then a neutral Read-only pill when access is limited, and under them the full URL with its `#pin` in `type.technical-sm` `text.muted`, a link that opens the repository in the browser, underlined on hover; at its right, Refresh (secondary) and Remove (danger), `button.gap` apart. Under it, after a 1px `source-card.divider` rule, a strip of four facts, each a `type.secondary` `source-card.fact-label` label over a `type.technical-sm` value in `source-card.fact-value`, a never-fetched source's Fetched in `tone.attention.fg`. The name, the URL and the facts' values are selectable, so they can be copied; a drag across the URL selects it and opens nothing. The card shows tags only for limits: a source you can write to has none. It hides while a search runs, since a search looks across every source; Personal's card has no Remove, since Settings manages the account remote.
-- The select-all row: one checkbox (§6 "Checkbox (popover)"), checked, mixed or not as the selection is, its label in `type.secondary` `text.secondary` counting the selection; at the right, how many skills this machine already has in `type.secondary` `text.hint`.
-- The skill list: one column, a card per skill, `add-card.spacing` apart, selectable skills first, then by name. A search answer groups them by source, each group under its source's `type.caption` `group.label` caption. Each card is an accordion item (`src/components/ui/accordion.tsx`, variant `list`): `card.bg`, a 1px `card.border`, `add-card.radius`, `add-card.hover-border` on hover; a selected skill's card `add-card.selected-bg` and `add-card.selected-border`.
+- The select-all row: one checkbox (§6 "Checkbox (popover)"), checked, mixed or not as the selection is, its label in `type.secondary` `text.secondary` counting the selection. In Sources it sits at the right: the label, then the checkbox, centred over the round checks of the cards. The Add skill and Update skills dialogs keep the checkbox first, at the left, over their column of checkboxes.
+- The skill list: one column, a card per skill, `add-card.spacing` apart, A to Z by name whatever their state, so a card keeps its place when its skill is added or removed. A search answer groups them by source, each group under its source's `type.caption` `group.label` caption. Each card is an accordion item (`src/components/ui/accordion.tsx`, variant `list`): `card.bg`, a 1px `card.border`, `add-card.radius`, `add-card.hover-border` on hover; a selected skill's card `add-card.selected-bg` and `add-card.selected-border`.
 - A closed card is one row of `file-row.height`, `file-row.padding-x`: a chevron in `file-row.meta` (turns 90° when open, as in the File list), the name in `type.row-name` `text.primary`, then one line of the description in `type.row-desc` `text.muted`, both truncated, the description filling the rest of the row. At the end, the round check: a 20px ring in `add-card.check-ring`, filled with `add-card.check-bg` and an `on-accent` check when selected, in a 32px hit area (`add-card.check-radius`). A skill this machine holds already has its status there instead, in `type.secondary` 500: Added (`add-card.status-added`), Forked (`add-card.status-forked`), Already in library (`add-card.status-disk`), Name in use (`add-card.status-in-use`).
+- Added is a button (`src/components/remove-swap.tsx`) in a 32px high hit area that ends where the check's ring would. While it is hovered or focused, Added hides at once and Remove fades in over 150ms in its place, in `type.secondary` 500 `add-card.status-remove`, with no fill; both words share one cell, so nothing moves. Remove opens the Remove dialog of Skills (§6 "Banner actions and dialogs"), which lists every agent that sees the skill; its Remove runs `skill remove <name>`, which takes the skill out of the library and every placement agentx made, so universal and the other agents lose it at once. A copy of the same name that agentx did not place stays. Remove stays shown, disabled, until the inventory after the command arrives.
 - The row opens and closes on a click anywhere but the check, and several can be open at once; only the check selects. The row and the check each draw the focus outline inside the card. A row whose SKILL.md is not read yet stays closed while it is read: a `sm` `Spinner` in `text.muted` takes the description's place, with no text, as the read is often too quick to read it; its tooltip (§6 "Tooltip") and its status say Loading skill…, and the row is `aria-busy`; it opens when the read ends, so the card grows once, to its full content. A click while it waits cancels the open. While open, the row's description line hides, since the frontmatter of SKILL.md holds it, and View skill sits beside the name in the same row, on the name's baseline, a link in `type.secondary` `text.primary`, medium, underlined, which opens the skill's directory on its source's web page at the commit the source was fetched at (GitHub's `/tree/` page, GitLab's `/-/tree/`; no link for another host). The trigger lies under the whole row, so the link takes its own clicks and every other click opens or closes the row. Under the row come, for a skill that cannot be selected, why in `type.secondary` `text.hint`, wrapped, `file-row.padding-x` in, then the skill's SKILL.md in the Code pane, edge to edge. When it cannot be read, one `type.secondary` `text.hint` line on `code.bg` takes its place. Your skills on the account remote have no SKILL.md to read here: they open at once to their description alone.
 - Only the cards near what shows are in the document, so a source of thousands of skills stays quick; the list scrolls with the screen, and an open card takes its measured height.
 - Remove opens a dialog (§6 "Dialog") with no line under its title. When this machine has skills from the source, a checkbox offers to remove them too, unticked, their names listed under it in `type.technical` `text.muted`; the confirm is a danger button.

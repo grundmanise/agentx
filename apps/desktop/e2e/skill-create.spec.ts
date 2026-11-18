@@ -255,7 +255,6 @@ test("Add skill finds the skills under a link, and installs the two picked in th
       .getByRole("checkbox")
       .evaluateAll((boxes) => boxes.map((b) => b.getAttribute("aria-label")))
   ).toEqual(["docx", "frontend-design", "xlsx"]);
-  await expect(addDialog(page).getByText("1 already added")).toBeVisible();
   await expect(installButton(page)).toBeDisabled();
 
   await found(page).getByText("docx", { exact: true }).click();
