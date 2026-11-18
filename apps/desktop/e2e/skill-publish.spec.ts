@@ -129,7 +129,7 @@ test.describe("banners", () => {
     const note = banner(pane(page, "draft"));
     await expect(note).toHaveAccessibleName("Not published");
     await expect(note).toContainText(
-      "Only on this machine. Publish it to your account remote."
+      "The skill is only available on this machine. Publish it to distribute it to other machines or clients."
     );
     await expect(note.getByRole("button")).toHaveText(["Publish"]);
   });

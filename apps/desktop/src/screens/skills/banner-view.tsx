@@ -6,10 +6,8 @@
 // Publish to on an edited skill of a source this machine can write to. The banner of a skill gone
 // from its source has no button: Fork is in the action row. The buttons are in
 // src/screens/skills/actions.tsx, but Publish and Settings (src/screens/skills/publish-dialog.tsx).
-import { cva } from "class-variance-authority";
-
-import { AlertIcon } from "#/components/icons/alert.tsx";
-import { RefreshIcon } from "#/components/icons/refresh.tsx";
+// The box itself is a Callout (src/components/callout.tsx).
+import { Callout } from "#/components/callout.tsx";
 import {
   AbortMerge,
   AddSource,
@@ -26,36 +24,6 @@ import {
   OpenSettingsButton,
   PublishButton,
 } from "#/screens/skills/publish-dialog.tsx";
-
-const bannerVariants = cva(
-  "rounded-banner py-banner pr-banner-right pl-banner gap-banner flex items-center border",
-  {
-    variants: {
-      tone: {
-        attention: "border-tone-attention-border bg-tone-attention-bg",
-        danger: "border-tone-danger-border bg-tone-danger-bg",
-        neutral: "border-tone-neutral-border bg-tone-neutral-bg",
-        primary: "border-tone-primary-border bg-tone-primary-bg",
-        yours: "border-tone-yours-border bg-tone-yours-bg",
-      },
-    },
-  }
-);
-
-const tileVariants = cva(
-  "rounded-card-tile flex size-8 flex-none items-center justify-center",
-  {
-    variants: {
-      tone: {
-        attention: "text-tone-attention-fg",
-        danger: "text-tone-danger-fg",
-        neutral: "text-tone-neutral-fg",
-        primary: "text-tone-primary-fg",
-        yours: "text-tone-yours-fg",
-      },
-    },
-  }
-);
 
 const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
   switch (banner.action?.kind) {
@@ -124,30 +92,11 @@ export const BannerView = ({
   row: SkillRow;
   banner: Banner;
 }) => (
-  <div
-    role="note"
-    aria-label={banner.title}
-    className={bannerVariants({ tone: banner.tone })}
-  >
-    <span className={tileVariants({ tone: banner.tone })}>
-      {banner.icon === "update" ? (
-        <RefreshIcon size="lg" />
-      ) : (
-        <AlertIcon size="lg" />
-      )}
-    </span>
-    <div className="gap-banner-text flex min-w-0 flex-1 flex-col">
-      <span className="type-banner-title text-banner-title">
-        {banner.title}
-      </span>
-      {banner.text !== undefined && (
-        <span className="type-secondary text-banner-text text-pretty">
-          {banner.text}
-        </span>
-      )}
-    </div>
-    <div className="flex items-center gap-1.5">
-      <BannerActions row={row} banner={banner} />
-    </div>
-  </div>
+  <Callout
+    tone={banner.tone}
+    icon={banner.icon === "update" ? "update" : "alert"}
+    title={banner.title}
+    text={banner.text}
+    actions={<BannerActions row={row} banner={banner} />}
+  />
 );

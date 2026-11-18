@@ -773,7 +773,6 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `floating-bar.radius` | 9999 |  |
 | `check.mark-radius` | 50% | Startup status circle |
 | `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
-| `sights-notice.radius` | 12 | The notice under AGENTS when an agent sees more than one skill of one name |
 | `startup.logo-radius` | 12 | Product mark on the startup layer |
 | `tooltip.radius` | 8 | Tooltip |
 
@@ -893,9 +892,13 @@ The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a 
 
 The section toggle also heads a source in the Update skills dialog (§6 "Update skills dialog"), with no count. There it can end with one control at its right end, `subgroup.padding` from the edge, beside the toggle and outside it, so a click on the control toggles nothing; the whole row then takes `subgroup.hover`.
 
+### Callout
+
+`src/components/callout.tsx`: `banner.radius`, `banner.padding`, `tone.*.bg` with a 1px `tone.*.border`; a `banner.tile` icon tile in `tone.*.fg` (the `RefreshIcon` for an update, the `AlertIcon` otherwise); title `type.banner-title` `banner.title`, text `type.secondary` `banner.text`; its buttons on the right, vertically centred. The detail pane's banner and the notice under AGENTS when an agent sees more than one skill of a name are callouts; nothing else draws a box like it.
+
 ### Banner (detail pane)
 
-`banner.radius`, `banner.padding`, `tone.*.bg` with a 1px `tone.*.border`; a `banner.tile` icon tile in `tone.*.fg` (the `RefreshIcon` for an update, the `AlertIcon` otherwise); title `type.banner-title` `banner.title`, text `type.secondary` `banner.text`; actions on the right.
+A callout (§6 "Callout").
 
 - The detail pane shows one banner, the first that applies in the ordered table in `src/screens/skills/banners.ts`. The header shows no status pills: the banner is the status.
 - A banner that says where the skill came from sets `coversOrigin`, and the header then leaves out the origin text beside the name. Today only the banner of a skill another tool added does.
@@ -929,11 +932,15 @@ The section toggle also heads a source in the Update skills dialog (§6 "Update 
 
 Fork is a secondary small button in the action row, before Remove, for a skill of a source and a plugin's skill. No banner carries it. An unmanaged skill is adopted from its banner. The title is a question. The dialog holds a switch row (§6 "Switch") to fork under a new name; with it on, a mono Name field appears and takes the focus, its naming rule under it in `text.hint` while the name breaks it, and the confirm is disabled while the field holds no valid name. For a plugin's skill the switch starts on, with `my-<name>` in the field, selected, so Fork works at once: a fork under the plugin's own name leaves two skills of that name for the agents with the plugin. Turned off, one `type.secondary` `text.muted` line under the switch says so. A fork that succeeds closes the dialog and selects the fork; no dialog follows it.
 
+### Rename dialog (detail pane)
+
+Rename is a secondary small button in the action row, before Remove, for one of your own skills. The title is a question. A mono Name field holds the skill's name, selected, so typing replaces it; its naming rule shows under it in `text.hint` while the name breaks it, and the confirm is disabled until the field holds another valid name. A rename that succeeds closes the dialog and selects the skill under its new name.
+
 ### What each agent sees (detail pane AGENTS)
 
 Where the agents find a skill of the selected skill's name, from the inventory alone: which places hold one, and which agents see each. It never says which of two skills an agent uses, since that is the agent's own rule.
 
-- When some agent sees more than one skill of the name, a notice under the chips: `tone.attention` bg and 1px border, `sights-notice.radius`, an `AlertTriangleIcon` (`xs`) in `tone.attention.fg`, then a `type.secondary` `text.secondary` paragraph that names those agents and the other skill by where it is, and ends with Details: the paragraph's type and colour with a dashed underline, plain text that opens a hover card (§6 "Hover card") on hover. Rename yours, a small primary button under the paragraph, is ready for when the app can rename a skill; until then it does not show. With no agent seeing more than one, AGENTS shows nothing of this.
+- When some agent sees more than one skill of the name, a callout (§6 "Callout") under the chips in `attention`: its title says how many skills of the name there are, and its line that agents seeing more than one may pick the wrong skill, ending with Details: the line's type and colour with a dashed underline, plain text that opens a hover card (§6 "Hover card") on hover. The callout has no button, and the hover card only explains: Rename is in the action row. With no agent seeing more than one, AGENTS shows nothing of this.
 - The hover card: its title in `type.secondary` `text.primary` 500, then a table (`src/components/ui/table.tsx`). A column for each place, the library first, then each plugin, then each agent's own folder, its caption in `table.header-text`; a check in `tone.primary.fg` where the row's agents see the skill, an en dash in `text.hint` where they do not. The agents that see more than one skill come first, a row each on `tone.attention.bg`; then the agents that see one, a row for those that see the same one, their names joined. Rows are `type.secondary` `text.secondary`, a 1px `shell.divider` rule above each. While some row is highlighted, a `text.muted` line under the table says what the highlight means.
 
 ### Edit (detail pane)

@@ -213,67 +213,46 @@ const clashingPlaces = (sights: NameSights): Place[] => {
   return sights.places.filter((p) => seen.has(p.key));
 };
 
+/** The notice's words: a title and the line under it. */
+export interface ClashText {
+  title: string;
+  text: string;
+}
+
 /**
  * The notice under AGENTS while some agent sees more than one skill of the name: how many skills
- * of the name such agents see, and that they may use the wrong one. Undefined when no agent sees
+ * of the name such agents see, and that they may pick the wrong skill. Undefined when no agent sees
  * two.
  */
-export const clashText = (sights: NameSights): string | undefined => {
+export const clashText = (sights: NameSights): ClashText | undefined => {
   const places = clashingPlaces(sights);
   if (places.length === 0) {
     return undefined;
   }
-  return `Found ${places.length} skills named ${sights.name}. Agents that see more than one may use the wrong one.`;
+  return {
+    text: "Agents that see more than one may pick the wrong skill.",
+    title: `Found ${places.length} skills named ${sights.name}`,
+  };
 };
-
-/** What keeps a place's skill from clashing: rename it, uninstall its plugin or remove the copy. */
-const fixOf = (place: Place) => {
-  switch (place.kind) {
-    case "library": {
-      return "rename your skill";
-    }
-    case "plugin": {
-      return `uninstall the ${place.label} plugin`;
-    }
-    case "folder": {
-      return `remove the copy in ${place.label}'s folder`;
-    }
-    case "project": {
-      return "remove the copy in the project's folder";
-    }
-    default: {
-      return place.label;
-    }
-  }
-};
-
-/** `a`, `a or b`, `a, b or c`. */
-const choiceOf = (items: string[]) =>
-  items.length < 2
-    ? items.join("")
-    : `${items.slice(0, -1).join(", ")} or ${items.at(-1) ?? ""}`;
 
 /**
- * How to end the clash. With two skills, any one fix ends it, so each is named. With more, one fix
- * is not enough, so the kinds of fix are offered as ways to bring each agent down to one skill.
+ * How to end the clash: the goal, with one fix as its example, the first place's, the places
+ * being in the order of `rank`. Turning a skill off for an agent, uninstalling and removing a copy also reach the
+ * goal, so they are not listed.
  */
 const fixesOf = (places: Place[]) => {
-  if (places.length <= 2) {
-    return `To avoid clashes, ${choiceOf(places.map(fixOf))}.`;
-  }
-  const count = (kind: PlaceKind) =>
-    places.filter((p) => p.kind === kind).length;
-  const plugins = count("plugin");
-  const folders = count("folder");
-  const fixes = [
-    count("library") > 0 ? "rename your skill" : "",
-    plugins > 1 ? "uninstall one of the plugins" : "",
-    plugins === 1 ? "uninstall the plugin" : "",
-    folders > 1 ? "remove a copy from an agent's folder" : "",
-    folders === 1 ? "remove the copy from the agent's folder" : "",
-    count("project") > 0 ? "remove the copy from the project's folder" : "",
-  ].filter((f) => f !== "");
-  return `To avoid clashes, make sure each agent sees only one. You can ${choiceOf(fixes)}.`;
+  const [first] = places;
+  const plugins = places.filter((p) => p.kind === "plugin").length;
+  const examples: Record<PlaceKind, string> = {
+    folder: `removing the copy in ${first?.label}'s folder`,
+    library: "renaming your skill",
+    plugin:
+      plugins > 1
+        ? "uninstalling one of the plugins"
+        : `uninstalling the ${first?.label} plugin`,
+    project: "removing the copy in the project's folder",
+  };
+  return `To avoid clashes, make sure each agent sees only one, for example by ${examples[first?.kind ?? "library"]}.`;
 };
 
 /** A column of the table: a place, under a short heading. */
@@ -299,8 +278,6 @@ export interface SightsTable {
   rows: SightsRow[];
   /** What the highlighted rows mean, while there are some. */
   footer?: string;
-  /** Some agent sees your library's skill and another one, which renaming yours keeps apart. */
-  renamable: boolean;
 }
 
 const headingOf = (place: Place) => {
@@ -350,14 +327,10 @@ export const sightsTable = (sights: NameSights): SightsTable => {
       sees: seesOf(group),
     });
   }
-  const renamable = clashing.some((a) =>
-    placesOf(a).some((p) => p.kind === "library")
-  );
   const table: SightsTable = {
     columns: sights.places.map((p) => ({ heading: headingOf(p), key: p.key })),
-    renamable,
     rows,
-    title: `Skills named ${sights.name}`,
+    title: `Multiple skills named ${sights.name}`,
   };
   if (clashing.length > 0) {
     const lines = [

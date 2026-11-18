@@ -27,6 +27,8 @@ import {
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
+import { RenameButton } from "#/screens/skills/rename-dialog.tsx";
+import { canRename } from "#/screens/skills/rename.ts";
 import { SightsNotice } from "#/screens/skills/sights-view.tsx";
 import { sightsOf } from "#/screens/skills/sights.ts";
 import { useSettling } from "#/store/settle.ts";
@@ -112,15 +114,15 @@ const EditButton = ({ row }: { row: SkillRow }) => {
 };
 
 /**
- * The right pane: what the CLI reports about one skill. Header: the title row with the name,
- * origin (unless the banner says where the skill came from), a pill per fork made from it under a
- * new name, which opens that fork, and at its right end the action row (Edit for a skill the user
- * may write to, Fork for a skill of a source or a plugin's, Remove for a library skill; the other
- * actions come with the changes that add them); then the description. No status pill: the banner
- * is the status. One banner, with its button; AGENTS, whose chips add and remove placements, and,
- * when some agent sees more than one skill of this name, a notice under the chips whose Details
- * shows what each agent sees; FILES; then DETAILS and HISTORY side by side. Every control runs
- * one command and redraws from the inventory that follows.
+ * The right pane: what the CLI reports about one skill. Header: the title row with the name, origin
+ * (unless the banner says where the skill came from), a pill per fork made from it under a new
+ * name, which opens that fork, and at its right end the action row (Edit for a skill the user may
+ * write to, Fork for a skill of a source or a plugin's, Rename for one of your own, Remove for a
+ * library skill; the other actions come with the changes that add them); then the description. No
+ * status pill: the banner is the status. One banner, with its button; AGENTS, whose chips add and
+ * remove placements, and, when some agent sees more than one skill of this name, a notice under the
+ * chips whose Details shows what each agent sees; FILES; then DETAILS and HISTORY side by side. Every control runs one
+ * command and redraws from the inventory that follows.
  */
 export const SkillDetail = ({
   row,
@@ -206,6 +208,7 @@ export const SkillDetail = ({
           >
             {canEdit(row) && <EditButton row={row} />}
             {canFork(row) && <ForkButton row={row} />}
+            {canRename(row) && <RenameButton row={row} />}
             {row.entry !== undefined && (
               <RemoveButton
                 row={row}

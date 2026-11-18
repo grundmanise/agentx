@@ -2,13 +2,12 @@
 // the name, a notice under the chips that ends with Details, a word with a dashed underline. Hover
 // on it opens a hover card: a table with a column for each place that holds a skill of the name
 // and a row for each agent that sees more than one, highlighted, then a row for the agents that
-// see the same one (`sightsTable`). `onRename`, once the app can rename a skill, adds Rename yours
-// to the notice and the hover card.
+// see the same one (`sightsTable`). The notice is a Callout, as the detail pane's banner is, with
+// no button; the hover card only explains.
 import { useId } from "react";
 
-import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
+import { Callout } from "#/components/callout.tsx";
 import { CheckIcon } from "#/components/icons/check.tsx";
-import { Button } from "#/components/ui/button.tsx";
 import {
   HoverCard,
   HoverCardContent,
@@ -25,22 +24,6 @@ import {
 import { clashText, sightsTable } from "#/screens/skills/sights.ts";
 import type { NameSights, SightsTable } from "#/screens/skills/sights.ts";
 
-/** Renames your library's skill of the name; Rename yours shows only with it. */
-type OnRename = (() => void) | undefined;
-
-const RenameYours = ({
-  table,
-  onRename,
-}: {
-  table: SightsTable;
-  onRename: OnRename;
-}) =>
-  onRename !== undefined && table.renamable ? (
-    <Button variant="primary" size="sm" onClick={onRename}>
-      Rename yours
-    </Button>
-  ) : null;
-
 /** ✓ or –, with the words a screen reader says for each. */
 const Sees = ({ sees }: { sees: boolean }) =>
   sees ? (
@@ -56,13 +39,7 @@ const Sees = ({ sees }: { sees: boolean }) =>
   );
 
 /** The hover card's body: its title, the table, then what the highlighted rows mean. */
-const SightsBody = ({
-  table,
-  onRename,
-}: {
-  table: SightsTable;
-  onRename: OnRename;
-}) => {
+const SightsBody = ({ table }: { table: SightsTable }) => {
   const titleId = useId();
   return (
     <>
@@ -99,43 +76,30 @@ const SightsBody = ({
         </TableBody>
       </Table>
       {table.footer !== undefined && (
-        <div className="flex flex-col items-start gap-2.5">
-          <p className="type-secondary text-text-muted m-0">{table.footer}</p>
-          <RenameYours table={table} onRename={onRename} />
-        </div>
+        <p className="type-secondary text-text-muted m-0">{table.footer}</p>
       )}
     </>
   );
 };
 
 /**
- * The notice under the chips while some agent sees more than one skill of the name: how many skills
- * of the name there are, then Details, which opens the table on hover.
+ * The notice under the chips while some agent sees more than one skill of the name, a callout: how
+ * many skills of the name there are, then Details, which opens the table on hover.
  */
-export const SightsNotice = ({
-  sights,
-  onRename,
-}: {
-  sights: NameSights;
-  onRename?: () => void;
-}) => {
-  const text = clashText(sights);
-  if (text === undefined) {
+export const SightsNotice = ({ sights }: { sights: NameSights }) => {
+  const clash = clashText(sights);
+  if (clash === undefined) {
     return null;
   }
   const table = sightsTable(sights);
   return (
-    <div
-      role="note"
-      aria-label="Skills of the same name"
-      className="rounded-sights-notice border-tone-attention-border bg-tone-attention-bg flex items-start gap-2.5 border px-3 py-2.5"
-    >
-      <span className="text-tone-attention-fg flex h-5 flex-none items-center">
-        <AlertTriangleIcon size="xs" />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-2.5">
-        <p className="type-secondary text-text-secondary m-0 text-pretty">
-          {text}{" "}
+    <Callout
+      tone="attention"
+      label="Skills of the same name"
+      title={clash.title}
+      text={
+        <>
+          {clash.text}{" "}
           <HoverCard>
             <HoverCardTrigger asChild>
               <span className="underline decoration-dashed underline-offset-2">
@@ -143,12 +107,11 @@ export const SightsNotice = ({
               </span>
             </HoverCardTrigger>
             <HoverCardContent>
-              <SightsBody table={table} onRename={onRename} />
+              <SightsBody table={table} />
             </HoverCardContent>
           </HoverCard>
-        </p>
-        <RenameYours table={table} onRename={onRename} />
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 };
