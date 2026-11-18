@@ -22,7 +22,7 @@ import {
   installableCards,
   listingCards,
   pageRef,
-  orderCards,
+  nameOrder,
   planAdds,
   resultCards,
   sourcePills,
@@ -235,11 +235,11 @@ export const SourcesScreen = () => {
     if (activePill.key === YOUR_SKILLS) {
       return installable === undefined
         ? noCards
-        : orderCards(installableCards(installable, library));
+        : nameOrder(installableCards(installable, library));
     }
     return listing === undefined || activePill.url === undefined
       ? noCards
-      : orderCards(
+      : nameOrder(
           listingCards(
             listing,
             activePill.url,
@@ -256,7 +256,7 @@ export const SourcesScreen = () => {
       results === undefined
         ? undefined
         : groupCards(
-            orderCards(
+            nameOrder(
               resultCards(
                 // A source removed while the answer is shown takes its results with it.
                 results.filter((r) => sources.some((s) => s.url === r.source)),
@@ -506,14 +506,9 @@ export const SourcesScreen = () => {
         )}
         {allCards.length > 0 && (
           <SelectAllRow
+            align="end"
             selected={selectedCount}
             total={selectable.length}
-            added={
-              // A skill whose name an earlier skill of its source has is not on this machine.
-              allCards.filter(
-                (c) => c.status !== undefined && c.sharedWith === undefined
-              ).length
-            }
             onSelectAll={selectAll}
             onClear={clear}
           />
