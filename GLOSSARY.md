@@ -57,7 +57,7 @@ The last inventory the desktop app applied, kept in the app's own storage with t
 _Avoid_: cached snapshot, last session, offline inventory
 
 **Kept read**:
-What one of the desktop app's reads returned, kept in the app's own storage for the next launch: a skill's files, history or update diff, a source's skill list, a SKILL.md, or your skills on the account remote. A read of a skill's files, history or diff, or of a SKILL.md, at the version a kept read names shows it and runs no command; a source's skill list and your skills show while their command runs again. At most about 25 MB, the least recently used dropped first; another build of the app drops them all.
+What one of the desktop app's reads returned, kept in the app's own storage for the next launch: a skill's files, history or update diff, a source's skill list, a SKILL.md, or your skills on the account remote. A read of a skill's files or update diff, or of a SKILL.md, at the version a kept read names shows it and runs no command, since that version names their content; a skill's history, a source's skill list and your skills show while their command runs again. At most about 25 MB, the least recently used dropped first; another build of the app drops them all.
 _Avoid_: cache entry, offline data
 
 **Snapshot**:
