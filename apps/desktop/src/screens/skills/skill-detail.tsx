@@ -9,7 +9,6 @@ import { Button } from "#/components/ui/button.tsx";
 import { openInEditor } from "#/lib/editor.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
-import { ReplaceLeftFolder } from "#/screens/skills/actions.tsx";
 import { AgentsSection } from "#/screens/skills/agents-section.tsx";
 import { BannerView } from "#/screens/skills/banner-view.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
@@ -263,7 +262,6 @@ export const SkillDetail = ({
         />
         <SightsNotice sights={sights} />
       </section>
-      <ReplaceLeftFolder configurations={configurations} />
       {row.entry !== undefined && (
         <RemoveDialog
           row={row}

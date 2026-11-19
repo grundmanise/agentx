@@ -313,54 +313,6 @@ test.describe("chips", () => {
     expect(later(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
   });
 
-  test("an adoption that left an agent's folder with other files: says so, and Replace asks before --force", async ({
-    cli,
-    page,
-  }) => {
-    await openSkill(cli, page, "scratch", "scratch", inventory, []);
-    await chip(pane(page, "scratch"), "Claude Code").click();
-    cli.register(["adopt", "--skill", "scratch"], {
-      events: [{ name: "scratch", type: "library_skill" }],
-      logs: [
-        {
-          level: "warn",
-          message:
-            "/home/me/.claude/skills/scratch has other files than scratch and was left as it is; to replace it with the adopted skill, run 'agentx skill place scratch --to claude-code --force'",
-        },
-      ],
-    });
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
-    const toast = toasts(page)
-      .getByRole("listitem")
-      .filter({ hasText: "Adopted scratch skill" });
-    await expect(toast).toContainText(
-      "/home/me/.claude/skills/scratch has other files. It was left as is."
-    );
-    await expect(toast).not.toContainText("agentx skill place");
-    cli.register([
-      "skill",
-      "place",
-      "scratch",
-      "--to",
-      "claude-code",
-      "--force",
-    ]);
-    await toast.getByRole("button", { name: "Replace" }).click();
-    const dialog = page.getByRole("alertdialog");
-    await expect(
-      dialog.getByRole("heading", { name: "Replace Claude Code's copy?" })
-    ).toBeVisible();
-    await expect(dialog).toContainText("/home/me/.claude/skills/scratch");
-    await dialog.getByRole("button", { name: "Replace" }).click();
-    await expect(
-      toasts(page).getByText("Replaced Claude Code's copy of scratch")
-    ).toBeVisible();
-    expect(later(cli)).toEqual([
-      ["adopt", "--skill", "scratch", "--json"],
-      ["skill", "place", "scratch", "--to", "claude-code", "--force", "--json"],
-    ]);
-  });
-
   test("a displaced chip runs nothing, and its tooltip says to reconnect it", async ({
     cli,
     page,
