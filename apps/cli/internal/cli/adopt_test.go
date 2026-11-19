@@ -522,6 +522,39 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	equal(t, "adopted already: the adoption", h.one(again.stdout, "adoption")["state"], adoptManaged)
 }
 
+// TestAdoptReplacesAClientsCopyOfALibrarySkill adopts a skill the library
+// holds, which an agent client's own skills directory holds too, as a
+// tool that installs into both leaves it. The client's directory that holds
+// the same files, a system file such as Finder's .DS_Store aside, is a
+// copy: it is removed and gets the library's symlink,
+// as a placement, so the client no longer sees a directory agentx did not
+// place. One that holds other files is left as it is, and said to be.
+func TestAdoptReplacesAClientsCopyOfALibrarySkill(t *testing.T) {
+	t.Parallel()
+	h, _ := installHarness(t)
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "rex"), "SKILL.md"), skill("rex", "Run things"))
+	claude := filepath.Join(h.home, ".claude", "skills", "rex")
+	writeFile(t, mkdirs(t, claude, "SKILL.md"), skill("rex", "Run things"))
+	writeFile(t, filepath.Join(claude, ".DS_Store"), "finder\n")
+	cortex := filepath.Join(h.home, ".snowflake", "cortex", "skills", "rex")
+	writeFile(t, mkdirs(t, cortex, "SKILL.md"), skill("rex", "Run other things"))
+
+	out := h.run("--json", "adopt", "--skill", "rex")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "kind", h.librarySkill(out.stdout, "rex")["kind"], lineage.KindManaged)
+	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "adopted rex in 1 configuration")
+	if link, _ := os.Readlink(filepath.Join(h.library, "rex")); link != "../../../agentx/worktrees/rex/rex" {
+		t.Errorf("the library symlink is %q", link)
+	}
+	if target, _ := os.Readlink(claude); target != filepath.Join(h.library, "rex") {
+		t.Errorf("claude-code's placement points at %q", target)
+	}
+	equal(t, "what is left in .claude", strings.Join(hiddenEntries(t, filepath.Dir(claude)), " "), "")
+	equal(t, "the other files", fileBody(t, filepath.Join(cortex, "SKILL.md")), skill("rex", "Run other things"))
+	contains(t, "the warning", out.stderr, quotedPath(cortex)+" was left as it is: agentx could not tell it is a copy of rex; "+
+		"to replace it with the adopted skill, run 'agentx skill place rex --to cortex --force'")
+}
+
 // TestChooseAdoptions sorts the names of a run into the skills a record
 // holds, whatever the record says of them, and the ones none holds, which
 // are looked for as unmanaged skills, once each and in name order. With a

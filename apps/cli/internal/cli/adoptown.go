@@ -34,6 +34,9 @@ type adoptPlace struct {
 	state   string        // what it held when it was compared, in the words a journal records
 	tree    string        // its tree id, as git would record it
 	whole   bool          // git can record everything it holds
+	// bare is its tree id without the system files, see home.SystemFiles,
+	// and "" when a .gitignore of its own decides what git records.
+	bare string
 }
 
 // ids are the configurations whose own skills directory holds the place.
@@ -81,6 +84,9 @@ func (inv *invocation) planAdoption(ctx context.Context, name string, missing er
 		return nil, err
 	}
 	if err := inv.readAdoptPlaces(fk); err != nil {
+		return nil, err
+	}
+	if err := inv.readAdoptCopies(fk); err != nil {
 		return nil, err
 	}
 	return fk, nil
@@ -389,6 +395,9 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 	if lib, held := librarySkill(inv.dirs.Library, name); held {
 		rec, known := records[name]
 		if !known {
+			if err := inv.findAdoptCopies(fk, name); err != nil {
+				return forkSource{}, err
+			}
 			return forkSource{kind: lineage.KindUnmanaged, name: name, lib: lib, held: true, dir: lib.ResolvedPath}, nil
 		}
 		what, own := "a skill of a shared source", rec.Kind == lineage.KindFork
@@ -568,17 +577,12 @@ func (inv *invocation) adoptRoom(fk *forking) error {
 // removed, so one that holds anything else refuses the adoption, naming
 // them all.
 func (inv *invocation) readAdoptPlaces(fk *forking) error {
-	for i := range fk.places {
-		p := &fk.places[i]
-		state, err := home.State(p.path)
+	for i, p := range fk.places {
+		read, err := readAdoptPlace(p)
 		if err != nil {
 			return libraryFailure(filepath.Dir(p.path), err)
 		}
-		tree, err := treeid.Read(p.path)
-		if err != nil {
-			return libraryFailure(filepath.Dir(p.path), err)
-		}
-		p.state, p.tree, p.whole = state, tree.ID, len(tree.Unrecordable) == 0
+		fk.places[i] = read
 	}
 	if len(fk.places) == 0 || !adoptPlacesDiffer(fk.places) {
 		return nil
@@ -634,6 +638,114 @@ func stageAdoptPlaces(m *home.Mutation, fk *forking, libPath string, done *place
 	}
 }
 
+// findAdoptCopies finds, for the adoption of the library entry called
+// name, the real directories the detected configurations' own skills
+// directories hold under that name, see adoptSites: what a client copied
+// there, or a tool that installed the skill into the library and into
+// that client's directory. One is a candidate copy, see readAdoptCopies,
+// where every configuration it belongs to places symlinks and agentx can
+// write its skills directory; any other is kept as it is.
+func (inv *invocation) findAdoptCopies(fk *forking, name string) error {
+	dirs, _ := inv.adoptSites(name)
+	if len(dirs) == 0 {
+		return nil
+	}
+	s, err := inv.loadSettings()
+	if err != nil {
+		return err
+	}
+	for _, p := range dirs {
+		p.targets = withCopies(p.targets, s.CopyConfigurations)
+		copies := slices.ContainsFunc(p.targets, func(t placeTarget) bool { return t.copies })
+		if copies || unix.Access(filepath.Dir(p.path), unix.W_OK|unix.X_OK) != nil {
+			fk.kept = append(fk.kept, p)
+			continue
+		}
+		fk.copies = append(fk.copies, p)
+	}
+	return nil
+}
+
+// readAdoptCopies reads what the library entry an adoption takes holds,
+// and what each of its candidate copies holds, see findAdoptCopies, as
+// readAdoptPlaces reads a directory: a copy that holds the same files
+// stays one, to be replaced by the library's symlink, see copyOf, and any
+// other is kept as it is. A copy that cannot be read is kept too: the adoption of
+// the library entry never needed it.
+func (inv *invocation) readAdoptCopies(fk *forking) error {
+	if len(fk.copies) == 0 {
+		return nil
+	}
+	lib, err := readAdoptPlace(adoptPlace{path: fk.from})
+	if err != nil {
+		return libraryFailure(filepath.Dir(fk.from), err)
+	}
+	fk.copiesOf = lib.state
+	ignoreSystem := inv.systemFilesIgnored()
+	same := fk.copies[:0]
+	for _, p := range fk.copies {
+		if p, err := readAdoptPlace(p); err == nil && p.copyOf(lib, ignoreSystem) {
+			same = append(same, p)
+			continue
+		}
+		fk.kept = append(fk.kept, p)
+	}
+	fk.copies = same
+	return nil
+}
+
+// copyOf reports whether p holds what lib holds, as same does, or, while
+// git ignores system files, all but the system files either holds, such as
+// the .DS_Store Finder leaves in a folder it showed. Pure.
+func (p adoptPlace) copyOf(lib adoptPlace, ignoreSystem bool) bool {
+	return p.same(lib) || ignoreSystem && p.whole && lib.whole && p.bare != "" && p.bare == lib.bare
+}
+
+// readAdoptPlace is p with what its directory holds read: its state, its
+// tree id and whether git can record all of it.
+func readAdoptPlace(p adoptPlace) (adoptPlace, error) {
+	state, err := home.State(p.path)
+	if err != nil {
+		return p, err
+	}
+	tree, err := treeid.Read(p.path)
+	if err != nil {
+		return p, err
+	}
+	p.state, p.tree, p.whole = state, tree.ID, len(tree.Unrecordable) == 0
+	if !tree.Has(".gitignore") {
+		p.bare = tree.Without(home.IsSystemFile)
+	}
+	return p, nil
+}
+
+// adoptCopiesHold reports, under the lock, whether every copy of an
+// adoption still holds what it held when it was compared with the library
+// entry.
+func adoptCopiesHold(fk *forking) bool {
+	for _, p := range fk.copies {
+		if state, err := home.State(p.path); err != nil || state != p.state {
+			return false
+		}
+	}
+	return true
+}
+
+// stageAdoptCopies plans, into m, what becomes of the copies of an
+// adoption of a library entry, see readAdoptCopies: each is removed,
+// retained until the mutation is verified, and gets the library's symlink
+// where a placement belongs, see adoptPlace.linked. done records the
+// configurations that see the skill there.
+func stageAdoptCopies(m *home.Mutation, fk *forking, libPath string, done *placements) {
+	for _, p := range fk.copies {
+		m.Remove(p.path, p.state)
+		if p.linked() {
+			m.Link(p.path, libPath)
+		}
+		done.placed = append(done.placed, p.targets...)
+	}
+}
+
 // reportAdoptedOwn reads the machine again and reports the adoption: the
 // library_skill event of the skill, which is one of the user's own now,
 // and a confirmation, with one row per configuration whose own skills
@@ -656,7 +768,11 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	out, name := inv.out, sanitised(fk.target)
 	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, nil)
 	out.emit(ev)
-	if len(fk.places) == 0 {
+	for _, p := range fk.kept {
+		out.warnWith(quotedPath(p.path)+" was left as it is: agentx could not tell it is a copy of "+name,
+			"to replace it with the adopted skill, run '"+skillCommand("place", fk.target, "--to", p.targets[0].id, "--force")+"'")
+	}
+	if len(fk.places) == 0 && len(fk.copies) == 0 {
 		inv.summary = "adopted " + name
 		out.done("adopted " + out.paint(heading, name))
 		inv.noAccountRemoteHint(ev)
@@ -668,11 +784,15 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 			out.warn(quotedPath(link) + " is a link of your own and was left as it is")
 		}
 	}
+	from := ""
+	if len(fk.places) > 0 {
+		from = " from " + quotedPath(fk.from)
+	}
 	rows := inv.ownPlacements(fk.target, done.placed, filterPlacements(ev.Placements, targetIDs(done.placed)))
-	out.done("adopted " + out.paint(heading, name) + " from " + quotedPath(fk.from) + ": " + out.paint(noteStyle, plural(len(rows), "placement")))
+	out.done("adopted " + out.paint(heading, name) + from + ": " + out.paint(noteStyle, plural(len(rows), "placement")))
 	inv.printPlacementRows(fk.target, rows)
 	inv.printUniversal(ev.Universal)
 	inv.noAccountRemoteHint(ev)
-	inv.summary = "adopted " + name + " from " + quotedPath(fk.from) + " in " + plural(len(done.placed), "configuration") + universalClause(ev.Universal)
+	inv.summary = "adopted " + name + from + " in " + plural(len(done.placed), "configuration") + universalClause(ev.Universal)
 	return nil
 }
