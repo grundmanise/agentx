@@ -34,15 +34,13 @@ import (
 // skipRefresh. The refreshed configurations go into done.copies, the kept
 // and skipped paths into done.skipped.
 //
-// A path two configurations share, as Zencoder and Zenflow share one
-// skills directory, is judged and planned once: a second remove of it
-// would find the first one's publish there, which is neither what it was
-// to remove nor what it was to become, and would stop the mutation part
-// way through, and a second warning would count one copy twice. So is a
-// path two configurations spell differently, one of their skills
-// directories a symlink to the other's, the link's own spelling in another
-// case included: paths are told apart as placeKey tells them, as drift
-// tells places apart. Each configuration whose copy is refreshed is still
+// A path two configurations share, one of their skills directories a
+// symlink to the other's, is judged and planned once: a second remove of
+// it would find the first one's publish there, which is neither what it
+// was to remove nor what it was to become, and would stop the mutation
+// part way through, and a second warning would count one copy twice. The
+// link's own spelling in another case is included: paths are told apart
+// as placeKey tells them, as drift tells places apart. Each configuration whose copy is refreshed is still
 // named, as a placement names each configuration it placed into.
 //
 // Every copy removed carries the fingerprint it held when it was judged,

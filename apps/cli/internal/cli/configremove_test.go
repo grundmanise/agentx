@@ -78,12 +78,11 @@ func TestConfigRemoveDeletesTheNamedDirectories(t *testing.T) {
 		t.Errorf("retained content left behind: %v", left)
 	}
 
-	// Zencoder and Zenflow keep one directory, and Antigravity's lies
-	// inside Gemini CLI's.
-	out = h.run("--json", "config", "remove", "zencoder", "gemini-cli", "zenflow", "--yes")
+	// Antigravity's directory lies inside Gemini CLI's.
+	out = h.run("--json", "config", "remove", "zencoder", "gemini-cli", "--yes")
 	equal(t, "exit", out.exit, 0)
 	events = h.events(out.stdout)
-	deep(t, "removed", removedIDs(events), []string{"antigravity", "gemini-cli", "zencoder", "zenflow"})
+	deep(t, "removed", removedIDs(events), []string{"antigravity", "gemini-cli", "zencoder"})
 	equal(t, "the path of antigravity", events[0]["path"], filepath.Join(h.home, ".gemini", "antigravity"))
 	for _, dir := range []string{".zencoder", ".gemini"} {
 		if _, err := os.Lstat(filepath.Join(h.home, dir)); !os.IsNotExist(err) {

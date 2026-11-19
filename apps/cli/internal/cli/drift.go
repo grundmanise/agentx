@@ -226,8 +226,8 @@ func (p placeSite) asked() bool { return len(p.enabled) > 0 }
 // for. Drift reads them, and skill place puts back what drift finds there.
 //
 // Only an enabled configuration is asked about: a disabled one is one the
-// user chose not to place into. A path two configurations share, as
-// Zencoder and Zenflow share one skills directory, is one place and is
+// user chose not to place into. A path two configurations share, one of
+// their skills directories a symlink to the other's, is one place and is
 // judged once, as refreshCopies plans it once: it is asked about when
 // either configuration is enabled, and it is to hold a copy when copy_mode
 // records one for either of them, since a copy placed for one is the copy
@@ -235,10 +235,9 @@ func (p placeSite) asked() bool { return len(p.enabled) > 0 }
 // agentx placed for one would read as a directory displacing the other's
 // link, and skill place would plan the one path twice, the second step
 // finding the first one's work there and stopping the mutation part way.
-// So is a path two configurations spell differently, one of their skills
-// directories a symlink to the other's, the link's own spelling in another
-// case included: places are told apart as placeKey tells them, and each
-// configuration keeps its own spelling in paths.
+// The link's own spelling in another case is included: places are told
+// apart as placeKey tells them, and each configuration keeps its own
+// spelling in paths.
 func ownPlaces(targets []placeTarget, library, name string, disabled, copies []string) []placeSite {
 	var places []placeSite
 	var keys []placeKey // the key of each of places, in the same order

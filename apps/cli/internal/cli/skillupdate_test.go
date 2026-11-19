@@ -674,8 +674,8 @@ func TestSkillUpdateSkipsACopyItCannotRead(t *testing.T) {
 }
 
 // TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce updates a skill
-// one of whose copies two configurations reach. Zencoder and Zenflow both
-// read ~/.zencoder/skills, and copy_mode records a copy for each; Cortex Code's
+// one of whose copies two configurations reach. Augment's skills directory
+// is a symlink to AdaL's, and copy_mode records a copy for each; Cortex Code's
 // skills directory made a symlink to Claude Code's makes their two copies
 // one directory spelled two ways. The one copy is judged and planned once:
 // planned twice, the second removal would find the first one's copy there
@@ -688,7 +688,7 @@ func TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce(t *testing.T) {
 		name, refreshed string
 		linked, edited  bool
 	}{
-		{"shared by zencoder and zenflow", ", 4 copy placements refreshed", false, false},
+		{"shared by adal and augment", ", 4 copy placements refreshed", false, false},
 		{"shared and edited where it is", ", 2 copy placements refreshed, 1 placement skipped", false, true},
 		{"reached through a linked skills directory", ", 2 copy placements refreshed", true, false},
 	} {
@@ -696,17 +696,21 @@ func TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce(t *testing.T) {
 			t.Parallel()
 			h, s, _ := updateHarness(t)
 			claude := filepath.Join(h.home, ".claude", "skills")
-			shared := filepath.Join(h.home, ".zencoder", "skills")
+			shared := filepath.Join(h.home, ".adal", "skills")
 			if c.linked {
 				shared = claude
 				cortex := filepath.Join(h.home, ".snowflake/cortex", "skills")
 				remove(t, cortex)
 				link(t, claude, cortex)
 			} else {
-				if err := os.MkdirAll(filepath.Join(h.home, ".zencoder"), 0o755); err != nil {
+				if err := os.MkdirAll(shared, 0o755); err != nil {
 					t.Fatal(err)
 				}
-				h.mustRun("skill", "place", "alpha", "--to", "zencoder", "--to", "zenflow", "--copy")
+				if err := os.MkdirAll(filepath.Join(h.home, ".augment"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				link(t, shared, filepath.Join(h.home, ".augment", "skills"))
+				h.mustRun("skill", "place", "alpha", "--to", "adal", "--to", "augment", "--copy")
 			}
 			place := filepath.Join(shared, "alpha")
 			if c.edited {
@@ -729,7 +733,7 @@ func TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce(t *testing.T) {
 			if c.edited {
 				sameTree(t, "the shared copy", libraryTree(t, place), before)
 				equal(t, "warnings", len(warned), 1)
-				contains(t, "the warning", strings.Join(warned, "\n"), "zencoder's copy of alpha is different from the library")
+				contains(t, "the warning", strings.Join(warned, "\n"), "adal's copy of alpha is different from the library")
 			} else {
 				sameTree(t, "the shared copy", libraryTree(t, place), want)
 				equal(t, "warnings", strings.Join(warned, "\n"), "")

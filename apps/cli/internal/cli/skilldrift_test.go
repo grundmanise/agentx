@@ -209,8 +209,8 @@ func TestACopyIsDisplacedByALinkAndNeverMissing(t *testing.T) {
 	equal(t, "the library's link where a copy is recorded", drift(h.listed("alpha")), "displaced")
 }
 
-// TestASharedPlaceIsJudgedOnce: Zencoder and Zenflow read one skills
-// directory, so a copy placed for either of them is the copy both read.
+// TestASharedPlaceIsJudgedOnce: AdaL and Augment read one skills
+// directory, Augment's a symlink to AdaL's, so a copy placed for either of them is the copy both read.
 // It is not displaced for the one copy_mode does not name, whichever of
 // the two that is and whether the copy was placed at install or later, and
 // the skill is not missing from either. The library's own link there is
@@ -221,11 +221,11 @@ func TestASharedPlaceIsJudgedOnce(t *testing.T) {
 	setup := func(t *testing.T, add ...string) (*harness, string) {
 		t.Helper()
 		h := newHarness(t)
-		h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
+		h.build(t, fixture{dirs: []string{".claude", ".adal/skills"}, links: map[string]string{".augment/skills": ".adal/skills"}})
 		s, _, _ := h.standardSource(true)
 		h.mustRun("source", "add", s.url)
 		h.mustRun(append([]string{"skill", "add", s.url, "--name", "alpha"}, add...)...)
-		return h, filepath.Join(h.home, ".zencoder", "skills", "alpha")
+		return h, filepath.Join(h.home, ".adal", "skills", "alpha")
 	}
 	expect := func(t *testing.T, h *harness, what, want, text string) {
 		t.Helper()
@@ -237,29 +237,29 @@ func TestASharedPlaceIsJudgedOnce(t *testing.T) {
 	t.Run("a copy placed for one of them", func(t *testing.T) {
 		t.Parallel()
 		h, place := setup(t, "--to", "claude-code")
-		h.mustRun("skill", "place", "alpha", "--to", "zencoder", "--copy")
-		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "zencoder")
-		expect(t, h, "a copy for zencoder alone", "", "current")
+		h.mustRun("skill", "place", "alpha", "--to", "adal", "--copy")
+		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "adal")
+		expect(t, h, "a copy for adal alone", "", "current")
 
 		remove(t, place)
 		link(t, filepath.Join(h.library, "alpha"), place)
-		expect(t, h, "the library's link where zencoder records a copy", "displaced", "current, displaced")
+		expect(t, h, "the library's link where adal records a copy", "displaced", "current, displaced")
 	})
 
 	t.Run("a copy installed for one of them", func(t *testing.T) {
 		t.Parallel()
-		h, place := setup(t, "--to", "zenflow", "--copy")
-		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "zenflow")
-		expect(t, h, "a copy for zenflow alone", "missing", "current, missing")
+		h, place := setup(t, "--to", "augment", "--copy")
+		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "augment")
+		expect(t, h, "a copy for augment alone", "missing", "current, missing")
 
 		remove(t, place)
 		link(t, filepath.Join(h.library, "alpha"), place)
-		expect(t, h, "the library's link where zenflow records a copy", "displaced,missing", "current, displaced, missing")
+		expect(t, h, "the library's link where augment records a copy", "displaced,missing", "current, displaced, missing")
 	})
 
 	t.Run("a directory where neither records a copy", func(t *testing.T) {
 		t.Parallel()
-		h, place := setup(t, "--to", "zencoder")
+		h, place := setup(t, "--to", "adal")
 		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
 		expect(t, h, "the library's link", "missing", "current, missing")
 

@@ -937,12 +937,12 @@ After a removal, agentx checks each client again. If a client still sees the ski
 warning: codex still sees pdf at /home/me/.codex/skills/pdf, which agentx did not place there
 ```
 
-Two clients that share one skills directory, as Zencoder and Zenflow share `~/.zencoder/skills`, share each placement in it. Removing the skill from one takes it from both, and agentx warns:
+Two clients that share one skills directory share each placement in it. That happens when you make one client's skills directory a symlink to another's, for example `~/.augment/skills` to `~/.adal/skills`. Removing the skill from one takes it from both, and agentx warns:
 
 ```text
-warning: zencoder shares /home/me/.zencoder/skills with zenflow, so removing pdf from zenflow took it from zencoder too
-✓ removed pdf from zenflow: 1 placement
-  zenflow  symlink  /home/me/.zencoder/skills/pdf
+warning: adal shares /home/me/.augment/skills with augment, so removing pdf from augment took it from adal too
+✓ removed pdf from augment: 1 placement
+  augment  symlink  /home/me/.augment/skills/pdf
 ```
 
 ### Your own skills

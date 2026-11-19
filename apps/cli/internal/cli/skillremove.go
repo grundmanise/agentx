@@ -38,7 +38,7 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"A client that reads another client's skills directory keeps seeing the skill\n" +
 			"through that client's placement after --from removes its own, and the removal\n" +
 			"warns: remove the skill from that client too to take it from both. Two clients\n" +
-			"that share one skills directory, as Zencoder and Zenflow do, share each\n" +
+			"that share one skills directory, one a symlink to the other, share each\n" +
 			"placement in it: --from naming one takes the skill from both, and the removal\n" +
 			"warns.\n\n" +
 			"A managed skill whose library directory was deleted outside agentx can still be\n" +
@@ -851,8 +851,8 @@ func placementOwner(targets []placeTarget, id, path, name string) string {
 
 // warnSharedPlaces names every configuration that lost the skill along
 // with a placement a removal with --from deleted, because its own
-// placement path is that same path: Zencoder and Zenflow share
-// ~/.zencoder/skills, so a removal from one takes the skill from both. The
+// placement path is that same path: one client's skills directory a
+// symlink to another's, a removal from one takes the skill from both. The
 // confirmation names only the configurations --from named, so without this
 // line the other one would lose the skill unannounced. A configuration
 // --from named too is covered already, and a whole removal names every

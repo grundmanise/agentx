@@ -493,7 +493,7 @@ test.describe("many agents", () => {
       "GitHub Copilot",
       "Windsurf",
     ]);
-    await expect(more).toHaveText(`Show ${27 - collapsed.names.length} more`);
+    await expect(more).toHaveText(`Show ${26 - collapsed.names.length} more`);
 
     // A narrower pane fits fewer chips, still in two rows.
     await page.setViewportSize({ height: 800, width: 1150 });
@@ -509,27 +509,27 @@ test.describe("many agents", () => {
     );
 
     await more.click();
-    await expect(agents.getByRole("switch")).toHaveCount(27);
+    await expect(agents.getByRole("switch")).toHaveCount(26);
     const expanded = await chipsInView(article);
     // The clients with no rank follow by name.
     expect(expanded.names.slice(-3)).toEqual([
+      "Cortex Code",
       "IBM Bob",
       "Zencoder",
-      "Zenflow",
     ]);
 
     // A chip turned on stays where it is, and stays in view once the rest is hidden again.
     await cli.serveEmit([
-      { ...manyAgentsInventory(["zenflow"]), scan_counter: 2 },
+      { ...manyAgentsInventory(["zencoder"]), scan_counter: 2 },
     ]);
-    await expect(chip(article, "Zenflow")).toBeChecked();
+    await expect(chip(article, "Zencoder")).toBeChecked();
     const afterToggle = await chipsInView(article);
     expect(afterToggle.names).toEqual(expanded.names);
     await agents.getByRole("button", { name: "Show fewer" }).click();
     await expect(more).toBeVisible();
     const again = await chipsInView(article);
     expect(again.rows).toBe(2);
-    expect(again.names.at(-1)).toBe("Zenflow");
+    expect(again.names.at(-1)).toBe("Zencoder");
   });
 
   test("the Remove dialog stays in the window: only its list of agents scrolls", async ({
@@ -547,7 +547,7 @@ test.describe("many agents", () => {
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
     const dialog = page.getByRole("alertdialog", { name: "Remove pdf?" });
     const list = dialog.getByRole("list", { name: "Agents that see it" });
-    await expect(list.getByRole("listitem")).toHaveCount(28);
+    await expect(list.getByRole("listitem")).toHaveCount(27);
     const box = await dialog.boundingBox();
     expect(box?.y).toBeGreaterThanOrEqual(0);
     expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(600);
