@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,6 +28,11 @@ func open(t *testing.T, methods map[string]Method) *door {
 	var s *Server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.ServeHTTP(w, r) }))
 	host := strings.TrimPrefix(ts.URL, "http://")
+	methods = maps.Clone(methods)
+	if methods == nil {
+		methods = map[string]Method{}
+	}
+	methods["ping"] = func(context.Context, Call) (any, *Error) { return nil, nil }
 	s = New(Options{Token: token, Hosts: []string{host}, Origins: []string{"http://localhost:1420"}, Methods: methods})
 	t.Cleanup(func() {
 		s.Close()
@@ -37,10 +43,16 @@ func open(t *testing.T, methods map[string]Method) *door {
 
 // client is one connection of a test.
 type client struct {
-	t  *testing.T
-	ws *websocket.Conn
+	t    *testing.T
+	ws   *websocket.Conn
+	kept []string // read by dial, not yet returned by next
 }
 
+// dial connects and waits for the answer to one request, so that the
+// server has taken the connection in: it does that once the handshake is
+// over, and a notification sent before that is not for this client. What
+// the server sent before the answer, the retained notification, is kept
+// for next.
 func (d *door) dial(t *testing.T) *client {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -51,7 +63,15 @@ func (d *door) dial(t *testing.T) *client {
 	}
 	ws.SetReadLimit(-1)
 	t.Cleanup(func() { _ = ws.CloseNow() })
-	return &client{t: t, ws: ws}
+	c := &client{t: t, ws: ws}
+	c.send(`{"jsonrpc":"2.0","id":"dial","method":"ping"}`)
+	for {
+		m := c.read()
+		if m == `{"jsonrpc":"2.0","id":"dial","result":null}` {
+			return c
+		}
+		c.kept = append(c.kept, m)
+	}
 }
 
 func (c *client) send(text string) {
@@ -65,6 +85,16 @@ func (c *client) send(text string) {
 
 // next is the next message the server sent, as it sent it.
 func (c *client) next() string {
+	c.t.Helper()
+	if len(c.kept) > 0 {
+		m := c.kept[0]
+		c.kept = c.kept[1:]
+		return m
+	}
+	return c.read()
+}
+
+func (c *client) read() string {
 	c.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -164,8 +194,8 @@ func waiting(started chan<- struct{}) Method {
 	}
 }
 
-// $/cancelRequest stops the request whose id it names, however the id is
-// spelled, and no other; a second request may not take an id in progress.
+// $/cancelRequest stops the request whose id it names and no other; a
+// second request may not take an id in progress.
 func TestCancelStopsTheRequestItNames(t *testing.T) {
 	t.Parallel()
 	started := make(chan struct{}, 2)
@@ -182,7 +212,7 @@ func TestCancelStopsTheRequestItNames(t *testing.T) {
 	c.send(`{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":"missing"}}`)
 	c.send(`{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":"a"}}`)
 	c.want(`{"jsonrpc":"2.0","id":"a","error":{"code":-32800,"message":"cancelled"}}`)
-	c.send(`{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":7.0}}`)
+	c.send(`{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":7}}`)
 	c.want(`{"jsonrpc":"2.0","id":7,"error":{"code":-32800,"message":"cancelled"}}`)
 }
 
@@ -284,7 +314,6 @@ func TestWhoMayConnect(t *testing.T) {
 		{"the null origin", "/?token=" + token, host, http.Header{"Origin": {"null"}}, http.StatusForbidden},
 		{"no token", "/", host, nil, http.StatusUnauthorized},
 		{"a wrong token", "/?token=wrong", host, nil, http.StatusUnauthorized},
-		{"a wrong bearer token", "/?token=" + token, host, http.Header{"Authorization": {"Bearer wrong"}}, http.StatusUnauthorized},
 	} {
 		req, err := http.NewRequest(http.MethodGet, d.http+tc.path, nil)
 		if err != nil {
@@ -304,14 +333,10 @@ func TestWhoMayConnect(t *testing.T) {
 		}
 	}
 	for name, header := range map[string]http.Header{
-		"an allowed origin, token in the address": {"Origin": {"http://localhost:1420"}},
-		"no origin, bearer token":                 {"Authorization": {"Bearer " + token}},
+		"an allowed origin": {"Origin": {"http://localhost:1420"}},
+		"no origin":         nil,
 	} {
-		url := d.url
-		if header.Get("Authorization") == "" {
-			url += "?token=" + token
-		}
-		ws, _, err := websocket.Dial(context.Background(), url, &websocket.DialOptions{HTTPHeader: header})
+		ws, _, err := websocket.Dial(context.Background(), d.url+"?token="+token, &websocket.DialOptions{HTTPHeader: header})
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue

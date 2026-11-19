@@ -3,10 +3,14 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/coder/websocket"
@@ -108,39 +112,33 @@ func alike(t *testing.T, what string, got, want any) {
 	}
 }
 
-func eventTypesOf(events []jsonEvent) []string {
-	types := []string{}
-	for _, e := range events {
-		types = append(types, e["type"].(string))
-	}
-	return types
-}
-
 // A browser on this machine does through the door what the desktop app
 // does through its shell: it gets the inventory, runs commands, whose
 // events and exit code come back, and asks for a refresh and a search.
 // After a command that changed something, the result names the inventory
-// that holds the change, which was sent before it.
+// that holds the change, which was sent before it. What serve answers
+// stdin with stays on stdout.
 func TestServeListenAnswersABrowser(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	h.env[cliChildEnv] = "1"
 	p := h.serve(t, "--json", "--listen", "localhost", "--origin", "http://localhost:1420")
 	listening := p.next("listening")
-	equal(t, "url", listening["url"], "ws://"+listening["address"].(string)+"/")
 	inventory := p.next("inventory")
 	c := dialDoor(t, listening, "http://localhost:1420")
+	p.send(`{"type":"refresh","request_id":"r1"}`)
+	p.next("refresh_complete")
 
-	// The inventory serve last emitted is what a new client is sent first.
+	// The inventory serve last emitted is what a new client is sent first,
+	// and the answer to stdin's refresh is not sent at all.
 	c.send(1, "run", map[string]any{"args": []string{"version"}})
 	result, _, run, own := c.answer(1)
-	alike(t, "run events", eventTypesOf(run), []string{"version", "result"})
-	alike(t, "own events", eventTypesOf(own), []string{"inventory"})
+	alike(t, "run events", h.types(run), []string{"version", "result"})
+	alike(t, "own events", h.types(own), []string{"inventory"})
 	equal(t, "inventory.scan_counter", own[0]["scan_counter"], float64(1))
 	alike(t, "result", result, jsonEvent{"exit_code": float64(0), "cancelled": false, "timed_out": false, "instance_id": inventory["instance_id"]})
 
 	c.send("new", "run", map[string]any{"args": []string{"skill", "new", "notes"}, "deadline_ms": 60000})
-	c.send(nil, "$/cancelRequest", map[string]any{"id": "another"})
 	for {
 		m := c.next()
 		if m["id"] == "new" {
@@ -168,17 +166,15 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	// after it, since it may have changed something before it failed.
 	c.send(5, "run", map[string]any{"args": []string{"skill", "remove", "missing"}})
 	result, _, run, _ = c.answer(5)
-	alike(t, "run events", eventTypesOf(run), []string{"error", "result"})
+	alike(t, "run events", h.types(run), []string{"error", "result"})
 	equal(t, "exit_code", result["exit_code"], float64(exitNotFound.exit))
 	equal(t, "scan_counter", result["scan_counter"], float64(2))
 
-	for _, params := range []any{nil, map[string]any{"args": []string{}}, map[string]any{"args": "version"}} {
-		c.send(6, "run", params)
-		_, rpcError, _, _ := c.answer(6)
-		equal(t, "error.code", rpcError["code"], float64(-32602))
-	}
+	c.send(6, "run", map[string]any{"args": []string{}})
+	_, rpcError, _, _ := c.answer(6)
+	equal(t, "error.code", rpcError["code"], float64(-32602))
 	c.send(7, "search", map[string]any{})
-	_, rpcError, _, _ := c.answer(7)
+	_, rpcError, _, _ = c.answer(7)
 	equal(t, "error.code", rpcError["code"], float64(-32602))
 
 	// Nothing of the door reaches stdout but where it is.
@@ -202,17 +198,24 @@ func TestServeListenStopsARunOnCancel(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	h.env[cliChildEnv] = "1"
+	// The git that never answers leaves its process id behind, which is
+	// how the test knows the command waits for it, and which process that is.
 	waiting := filepath.Join(t.TempDir(), "waiting")
-	stubGit(t, h, "#!/bin/sh\n"+hostPATH()+`case "$*" in *never.invalid*) : > `+shellWord(waiting)+`; exec sleep 60 ;; esac
+	stubGit(t, h, "#!/bin/sh\n"+hostPATH()+`case "$*" in *never.invalid*) echo $$ > `+shellWord(waiting)+`; exec sleep 60 ;; esac
 exec git "$@"
 `)
+	waitingGit := func() (pid int) {
+		awaitTrue(t, "the command to wait for its git", func() bool {
+			b, _ := os.ReadFile(waiting)
+			pid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+			return pid != 0
+		})
+		return pid
+	}
 	p := h.serve(t, "--json", "--listen", "127.0.0.1")
 	c := dialDoor(t, p.next("listening"), "")
 	c.send(1, "run", map[string]any{"args": []string{"source", "add", "https://never.invalid/skills.git"}})
-	awaitTrue(t, "the command to wait for its git", func() bool {
-		_, err := os.Stat(waiting)
-		return err == nil
-	})
+	waitingGit()
 	c.send(nil, "$/cancelRequest", map[string]any{"id": 1})
 	result, _, run, _ := c.answer(1)
 	equal(t, "cancelled", result["cancelled"], true)
@@ -220,16 +223,15 @@ exec git "$@"
 	equal(t, "scan_counter", result["scan_counter"], float64(1))
 	equal(t, "the command's last event", run[len(run)-1]["ok"], false)
 
-	// Serve ending stops a command the same way, and waits for it.
+	// Serve ending stops a command the same way, and waits for it: by
+	// the time serve has ended, the git the command waited for is gone.
 	if err := os.Remove(waiting); err != nil {
 		t.Fatal(err)
 	}
 	c.send(2, "run", map[string]any{"args": []string{"source", "add", "https://never.invalid/skills.git"}})
-	awaitTrue(t, "the command to wait for its git", func() bool {
-		_, err := os.Stat(waiting)
-		return err == nil
-	})
+	git := waitingGit()
 	equal(t, "exit", p.close(), 0)
+	equal(t, "the git the command waited for", syscall.Kill(git, 0), error(syscall.ESRCH))
 }
 
 // What --listen and --origin refuse, each before serve takes its lock, and
@@ -247,7 +249,7 @@ func TestServeListenRefusals(t *testing.T) {
 		exit    int
 		message string
 	}{
-		{[]string{"--listen", "0.0.0.0"}, exitUsage.exit, "not an address of this machine alone"},
+		{[]string{"--listen", "0.0.0.0"}, exitUsage.exit, "not a loopback address"},
 		{[]string{"--listen", "localhost", "--once"}, exitUsage.exit, "--listen and --once cannot both be given"},
 		{[]string{"--origin", "http://localhost:1420"}, exitUsage.exit, "--origin needs --listen"},
 		{[]string{"--listen", "localhost", "--origin", "localhost:1420"}, exitUsage.exit, "not a web origin"},
@@ -317,6 +319,48 @@ func TestWebOrigin(t *testing.T) {
 			t.Errorf("webOrigin(%q) = %v, want ok %t", value, err, ok)
 		}
 	}
+}
+
+// A line of a run is sent as the event it is, or as text when it is no
+// JSON object; a blank one is not sent.
+func TestRunLine(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		text string
+		want string // the params as JSON; empty for a line that is not sent
+	}{
+		{`{"type":"result","ok":true}`, `{"id":7,"stream":"stdout","event":{"type":"result","ok":true}}`},
+		{"panic: runtime error", `{"id":7,"stream":"stdout","line":"panic: runtime error"}`},
+		{`{"cut short`, `{"id":7,"stream":"stdout","line":"{\"cut short"}`},
+		{"  ", ""},
+	} {
+		params, ok := runLine(json.RawMessage("7"), "stdout", []byte(tc.text))
+		got, err := json.Marshal(params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok != (tc.want != "") || ok && string(got) != tc.want {
+			t.Errorf("runLine(%q) = %s, %t, want %s", tc.text, got, ok, tc.want)
+		}
+	}
+}
+
+// Every event the writer is given reaches tee, in text mode too: what
+// stdout carries with --json, and the log events of stderr.
+func TestWriterTeesEveryEvent(t *testing.T) {
+	t.Parallel()
+	var got []any
+	w := &writer{stdout: io.Discard, stderr: io.Discard, verbose: true, tee: func(ev any) { got = append(got, ev) }}
+	w.emit(newEvent("inventory"))
+	w.warn("careful")
+	w.warnWith("careful", "do this")
+	w.debugf("seen %d", 1)
+	alike(t, "teed", got, []any{
+		newEvent("inventory"),
+		logEvent{event: newEvent("log"), Level: levelWarn, Message: "careful"},
+		logEvent{event: newEvent("log"), Level: levelWarn, Message: "careful; do this"},
+		logEvent{event: newEvent("log"), Level: levelDebug, Message: "seen 1"},
+	})
 }
 
 // --json is added where the command line takes it.

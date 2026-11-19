@@ -4,20 +4,18 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/proc"
 	"github.com/grundmanise/agentx/apps/cli/internal/rpc"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
@@ -29,20 +27,19 @@ import (
 // stdout alone: the token is never sent through the door and never logged.
 type listeningEvent struct {
 	event
-	Address string `json:"address"` // host:port, the port being the one that was free when none was asked for
-	URL     string `json:"url"`     // what a client connects to: ws://<address>/
-	Token   string `json:"token"`   // random for each serve process
+	URL   string `json:"url"`   // what a client connects to: ws://<host>:<port>/, the port being the one that was free when none was asked for
+	Token string `json:"token"` // random for each serve process
 }
 
 const (
-	listenHint = "pass an address of this machine alone, such as 127.0.0.1, localhost:4319 or [::1]"
-	originHint = "pass a web origin, such as http://localhost:1420: a scheme, a host and a port, with nothing after them"
+	listenHint = "pass a loopback address, such as 127.0.0.1, localhost:4319 or [::1]"
+	originHint = "pass a web origin as a browser sends it, such as http://localhost:1420, with nothing after the host and the port"
 )
 
-// listenAddress is the address --listen names, as net.Listen takes it:
-// 127.0.0.1, which localhost stands for, or ::1, in brackets or not, with
-// the port after it, 0 when none is given, which is any free port. Any
-// other address is refused: the door is for this machine alone.
+// listenAddress is the address --listen names, as net.Listen takes it: a
+// loopback address, 127.0.0.1 for localhost, with the port after it, 0
+// when none is given, which is any free port. Any other address is
+// refused: the door is for this machine alone.
 func listenAddress(value string) (string, error) {
 	host, port, err := net.SplitHostPort(value)
 	if err != nil {
@@ -53,7 +50,7 @@ func listenAddress(value string) (string, error) {
 	}
 	ip := net.ParseIP(host)
 	if ip == nil || !ip.IsLoopback() {
-		return "", fmt.Errorf("--listen %s is not an address of this machine alone", value)
+		return "", fmt.Errorf("--listen %s is not a loopback address", value)
 	}
 	if _, err := strconv.ParseUint(port, 10, 16); err != nil {
 		return "", fmt.Errorf("--listen %s has no valid port", value)
@@ -76,13 +73,12 @@ func webOrigin(value string) error {
 // serveDoor is the WebSocket door of one serve process: the JSON-RPC
 // server, the listener it answers on, and what its methods need.
 type serveDoor struct {
-	inv    *invocation
-	rpc    *rpc.Server
-	http   *http.Server
-	loop   *serve.Door
-	self   string   // the agentx executable a run starts
-	env    []string // the environment a run gets: serve's own
-	closed chan struct{}
+	inv      *invocation
+	rpc      *rpc.Server
+	http     *http.Server
+	requests *serve.Requests // what the methods ask of the serve loop
+	self     string          // the agentx executable a run starts
+	env      []string        // the environment a run gets: serve's own
 
 	// ctx is done once close is called. The scan after a run waits on it
 	// rather than on the run's request, see run.
@@ -91,9 +87,10 @@ type serveDoor struct {
 }
 
 // openDoor listens on address, an address listenAddress returned, reports
-// where with a listening event, and from then on sends every event serve
-// emits on its own through the door as well. The inventory is retained:
-// it is the first thing a client that connects later is sent.
+// where with a listening event, and only then starts to send every event
+// serve emits on its own through the door as well, so the token goes to
+// stdout alone. The inventory is retained: it is the first thing a client
+// that connects later is sent.
 func (inv *invocation) openDoor(address string, origins []string) (*serveDoor, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -103,15 +100,10 @@ func (inv *invocation) openDoor(address string, origins []string) (*serveDoor, e
 	if err != nil {
 		return nil, fail(exitRefused, "cannot listen on "+address+": "+err.Error(), "pass another port, or none for one that is free")
 	}
-	var secret [32]byte
-	if _, err := rand.Read(secret[:]); err != nil {
-		_ = l.Close()
-		return nil, err
-	}
-	token := hex.EncodeToString(secret[:])
+	token := rand.Text()
 	at := l.Addr().(*net.TCPAddr)
 	bound := at.String()
-	d := &serveDoor{inv: inv, loop: serve.NewDoor(), self: self, closed: make(chan struct{})}
+	d := &serveDoor{inv: inv, requests: serve.NewRequests(), self: self}
 	d.ctx, d.stop = context.WithCancel(context.Background())
 	for k, v := range inv.env {
 		d.env = append(d.env, k+"="+v)
@@ -123,12 +115,9 @@ func (inv *invocation) openDoor(address string, origins []string) (*serveDoor, e
 		Methods: map[string]rpc.Method{"run": d.run, "refresh": d.refresh, "search": d.search},
 	})
 	d.http = &http.Server{Handler: d.rpc, ReadHeaderTimeout: 10 * time.Second}
-	go func() {
-		defer close(d.closed)
-		_ = d.http.Serve(l) // ends when close closes the listener
-	}()
+	go func() { _ = d.http.Serve(l) }() // ends when close closes the listener
 
-	ev := listeningEvent{event: newEvent("listening"), Address: bound, URL: "ws://" + bound + "/", Token: token}
+	ev := listeningEvent{event: newEvent("listening"), URL: "ws://" + bound + "/", Token: token}
 	inv.out.emit(ev)
 	inv.out.print(inv.out.paint(heading, "listening"), ": ", ev.URL)
 	inv.out.print(inv.out.paint(heading, "token"), ": ", ev.Token)
@@ -142,7 +131,6 @@ func (inv *invocation) openDoor(address string, origins []string) (*serveDoor, e
 func (d *serveDoor) close() {
 	d.stop()
 	_ = d.http.Close()
-	<-d.closed
 	d.rpc.Close()
 }
 
@@ -156,16 +144,35 @@ type eventParams struct {
 	Line   *string         `json:"line,omitempty"`
 }
 
-// own sends one event serve emitted on its own to every client. The
-// answers to stdin's requests are for whoever wrote to stdin, and
-// listening and result are about the process, so none of those is sent.
-func (d *serveDoor) own(stream string, ev any) {
+// own sends one event serve emitted on its own to every client, a log
+// event as one of stderr. The answers to stdin's requests are for whoever
+// wrote to stdin, so those are not sent.
+func (d *serveDoor) own(ev any) {
+	stream := proc.Stdout
 	switch ev.(type) {
-	case listeningEvent, refreshCompleteEvent, searchEvent, errorEvent, resultEvent:
+	case refreshCompleteEvent, searchEvent, errorEvent:
 		return
+	case logEvent:
+		stream = proc.Stderr
 	}
 	_, inventory := ev.(inventoryEvent)
 	d.rpc.Notify("event", eventParams{Stream: stream, Event: ev}, inventory)
+}
+
+// runLine is the event notification for one line a run wrote on stream:
+// the line as the event it is when it is a JSON object, and as text
+// otherwise. A blank line is not sent, which ok reports.
+func runLine(id json.RawMessage, stream string, text []byte) (params eventParams, ok bool) {
+	params = eventParams{ID: id, Stream: stream}
+	switch line := bytes.TrimSpace(text); {
+	case len(line) == 0:
+		return params, false
+	case line[0] == '{' && json.Valid(line):
+		params.Event = json.RawMessage(line)
+	default:
+		params.Line = ptr(string(text))
+	}
+	return params, true
 }
 
 // runResult is the result of run. The command ran, whatever its exit
@@ -204,16 +211,9 @@ func (d *serveDoor) run(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
 		Path: d.self, Args: jsonArgs(p.Args), Env: d.env,
 		Deadline: time.Duration(p.DeadlineMS) * time.Millisecond,
 	}, func(stream string, text []byte) {
-		params := eventParams{ID: c.ID, Stream: stream}
-		switch line := bytes.TrimSpace(text); {
-		case len(line) == 0:
-			return
-		case line[0] == '{' && json.Valid(line):
-			params.Event = json.RawMessage(line)
-		default:
-			params.Line = ptr(string(text))
+		if params, ok := runLine(c.ID, stream, text); ok {
+			c.Notify("event", params)
 		}
-		c.Notify("event", params)
 	})
 	if err != nil {
 		return nil, &rpc.Error{Code: rpc.CodeFailed, Message: "the command could not start: " + err.Error()}
@@ -223,27 +223,19 @@ func (d *serveDoor) run(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
 		// The scan is not the request's to cancel: what the command
 		// changed is on disk whether or not anyone still asks about it.
 		// Only serve stopping ends the wait for it.
-		counter, err := d.loop.Refresh(d.ctx)
+		counter, err := d.requests.Refresh(d.ctx)
 		if err != nil {
-			result.ScanError = scanFailure(err)
+			result.ScanError = err.Error()
 		}
 		result.ScanCounter = counter
 	}
 	return result, nil
 }
 
-// scanFailure says why a scan a client waited for did not happen.
-func scanFailure(err error) string {
-	if errors.Is(err, serve.ErrStopped) || errors.Is(err, context.Canceled) {
-		return "serve is stopping"
-	}
-	return "the scan failed: " + err.Error()
-}
-
 // version is what the version file of agentx home holds, nil when it
 // cannot be read.
 func (d *serveDoor) version() []byte {
-	b, _ := os.ReadFile(filepath.Join(d.inv.dirs.Home, "version"))
+	b, _ := os.ReadFile(home.VersionPath(d.inv.dirs.Home))
 	return b
 }
 
@@ -270,12 +262,12 @@ type refreshResult struct {
 // refresh is the method refresh: stdin's refresh request, answered with
 // its result once a scan that began after the request has ended.
 func (d *serveDoor) refresh(ctx context.Context, _ rpc.Call) (any, *rpc.Error) {
-	counter, err := d.loop.Refresh(ctx)
+	counter, err := d.requests.Refresh(ctx)
 	switch {
 	case ctx.Err() != nil:
 		return nil, &rpc.Error{Code: rpc.CodeCancelled, Message: "the request was cancelled"}
 	case err != nil:
-		return nil, &rpc.Error{Code: rpc.CodeFailed, Message: scanFailure(err)}
+		return nil, &rpc.Error{Code: rpc.CodeFailed, Message: "the scan failed: " + err.Error()}
 	}
 	return refreshResult{InstanceID: d.inv.instanceID(), ScanCounter: counter}, nil
 }
@@ -296,5 +288,5 @@ func (d *serveDoor) search(_ context.Context, c rpc.Call) (any, *rpc.Error) {
 	if err := json.Unmarshal(c.Params, &p); err != nil || p.Query == "" {
 		return nil, &rpc.Error{Code: rpc.CodeInvalidParams, Message: `search takes {"query": "<text>"}`}
 	}
-	return searchResult{InstanceID: d.inv.instanceID(), Query: p.Query, Results: d.loop.Search(p.Query)}, nil
+	return searchResult{InstanceID: d.inv.instanceID(), Query: p.Query, Results: d.requests.Search(p.Query)}, nil
 }

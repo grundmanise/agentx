@@ -177,14 +177,14 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			// The door opens before reconciliation and the first scan, so
 			// that whoever started serve learns at once where it is; a
 			// client that connects meanwhile is answered once serve scans.
-			var door *serveDoor
-			var requests *serve.Door
+			var requests *serve.Requests
 			if address != "" {
-				if door, err = inv.openDoor(address, origins); err != nil {
+				door, err := inv.openDoor(address, origins)
+				if err != nil {
 					return err
 				}
 				defer door.close()
-				requests = door.loop
+				requests = door.requests
 			}
 			if !once {
 				// Reconciliation reports and repairs before the first scan,
@@ -210,7 +210,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Trees:        trees,
 				Once:         once,
 				Stdin:        cmd.InOrStdin(),
-				Door:         requests,
+				Requests:     requests,
 				Check:        checks.startup,
 				Recheck:      checks.account,
 				RecheckEvery: accountCheckEvery,

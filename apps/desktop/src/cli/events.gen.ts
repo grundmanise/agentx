@@ -642,7 +642,6 @@ export interface UpdateCheckEvent {
 export interface ListeningEvent {
   type: "listening";
   schema_version: number;
-  address: string;
   url: string;
   token: string;
 }

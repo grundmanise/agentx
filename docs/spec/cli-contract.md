@@ -1231,21 +1231,20 @@ A search takes no lock, runs no git process and makes no network call. It is ans
 
 `agentx serve --listen <address>` also answers clients on a WebSocket, so that the desktop app's frontend can run in a browser on this machine ([ADR 0016](../adr/0016-serve-is-the-backend-of-the-app-and-of-the-frontend-in-a-browser.md)). Everything above stays as it is: stdin still carries the request lines, stdout the events, and serve still ends when its stdin closes, so whoever starts it keeps its stdin open.
 
-`<address>` is an address of this machine alone: `127.0.0.1`, `localhost`, which stands for `127.0.0.1`, or `[::1]`, each with an optional `:<port>`. With no port, or port `0`, serve takes a free one. Any other address is a usage error, and so is `--origin` without `--listen`. A port that is taken ends serve with exit code 6. `--origin <origin>`, repeatable, names a web origin that may connect, written as a browser sends it: `http://localhost:1420`, a scheme, a host and a port, in lower case, with nothing after them; anything else is a usage error.
+`<address>` is a loopback address, so that the door is open to this machine alone: an address in `127.0.0.0/8`, `localhost`, which stands for `127.0.0.1`, or `::1`, in brackets when a port follows, each with an optional `:<port>`. With no port, or port `0`, serve takes a free one. Any other address is a usage error, and so is `--origin` without `--listen`. A port that is taken ends serve with exit code 6. `--origin <origin>`, repeatable, names a web origin that may connect, written as a browser sends it, such as `http://localhost:1420`: a scheme, `http` or `https`, a host, and the port when it is not the scheme's own, in lower case, with nothing after them; anything else is a usage error.
 
 Serve opens the door once it holds `serve.lock`, before reconciliation and the initial scan, and emits one `listening` event, on stdout alone:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `address` | string | `<host>:<port>` the door listens on, the port being the one serve took when none was given |
-| `url` | string | what a client connects to: `ws://<address>/` |
-| `token` | string | what a client presents; random for each serve process, 64 hexadecimal digits |
+| `url` | string | what a client connects to: `ws://<host>:<port>/`, the address the door listens on, the port being the one serve took when none was given |
+| `token` | string | what a client presents; random for each serve process |
 
 The token appears in this event, in the `token:` line without `--json`, and nowhere else: serve writes it to no log and sends it to no client.
 
-Who may connect: serve answers a WebSocket handshake at the path `/` and refuses every other request, in this order: `404` for another path; `403` for a `Host` header that is neither `address` nor `localhost:<port>`, so that a web page cannot reach the door through a name that resolves to this machine; `403` for an `Origin` header that is not one of `--origin`, compared whole, so with no `--origin` no browser may connect, while a client that sends no `Origin`, which is no browser, is not held to the list; `401` for a missing or wrong token. A client presents the token as the query parameter `token`, `ws://<address>/?token=<token>`, which is what a browser can send, or as `Authorization: Bearer <token>`.
+Who may connect: serve answers a WebSocket handshake at the path `/` and refuses every other request, in this order: `404` for another path; `403` for a `Host` header that is neither the `<host>:<port>` of `url` nor `localhost:<port>`, so that a web page cannot reach the door through a name that resolves to this machine; `403` for an `Origin` header that is not one of `--origin`, compared whole, so with no `--origin` no browser may connect, while a client that sends no `Origin`, which is no browser, is not held to the list; `401` for a missing or wrong token. A client presents the token as the query parameter `token`, `<url>?token=<token>`: a browser can set no header on a WebSocket handshake.
 
-The protocol is JSON-RPC 2.0, one message per text frame. A message over 1 MiB, or a binary frame, ends the connection. Serve answers a batch, an array of messages, with error `-32600`: a client sends one message per frame. Serve sends no request of its own, and ignores a response and a notification it does not know.
+The protocol is JSON-RPC 2.0, one message per frame. A message over 1 MiB ends the connection. Serve answers a batch, an array of messages, with error `-32600`: a client sends one message per frame. Serve sends no request of its own, and ignores a response and a notification it does not know.
 
 | Method | Kind | Params | Result |
 |---|---|---|---|
@@ -1260,10 +1259,10 @@ The id of a request is a string or a number, and no two requests in progress on 
 | Code | Meaning |
 |---|---|
 | `-32700` | the message is not JSON |
-| `-32600` | the message is not a request: a batch, no `"jsonrpc": "2.0"`, no method, an id that is no string or number, or an id in progress |
+| `-32600` | the message is not a request: JSON that is no object, a batch among it, no `"jsonrpc": "2.0"`, no method, an id that is no string or number, or an id in progress |
 | `-32601` | an unknown method |
 | `-32602` | params the method does not take |
-| `-32000` | serve could not carry the request out: the command could not start, the scan of a `refresh` failed, or serve is stopping; `message` says which |
+| `-32000` | serve could not carry the request out: the command could not start, or the scan of a `refresh` failed; `message` says which |
 | `-32800` | a `refresh` that `$/cancelRequest` cancelled, by the code of the Language Server Protocol |
 
 `run` runs one command as the desktop app's shell does: the same `agentx` executable as serve, as a child process in a process group of its own, with `--json` added unless `args` hold it, before a `--` when there is one, with serve's environment and working directory and no stdin. A request names no environment and no directory: the environment decides which programs git starts. Every line the child writes is sent, as it is written, in an `event` notification to the client that made the request:

@@ -4,10 +4,10 @@
 package rpc
 
 import (
-	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -65,7 +65,7 @@ type Method func(ctx context.Context, c Call) (result any, err *Error)
 
 // Options says who may connect and what they may ask.
 type Options struct {
-	Token   string            // what a client presents, as ?token= or as a bearer token
+	Token   string            // what a client presents, as ?token=
 	Hosts   []string          // the values of Host the server answers to, in lower case
 	Origins []string          // the web origins that may connect; a client that sends no Origin is no browser
 	Methods map[string]Method // by name
@@ -141,12 +141,10 @@ func (s *Server) stopped() bool {
 	return s.closed
 }
 
+// authorised reports whether r carries the token, in the address: a
+// browser cannot set a header on a WebSocket handshake.
 func (s *Server) authorised(r *http.Request) bool {
-	token := r.URL.Query().Get("token")
-	if bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-		token = bearer
-	}
-	return s.o.Token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.o.Token)) == 1
+	return subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("token")), []byte(s.o.Token)) == 1
 }
 
 // add takes a new connection in and queues the retained notification for
@@ -214,12 +212,8 @@ func (c *conn) serve() {
 		c.write()
 	}()
 	for {
-		typ, data, err := c.ws.Read(c.ctx)
+		_, data, err := c.ws.Read(c.ctx)
 		if err != nil {
-			break
-		}
-		if typ != websocket.MessageText {
-			_ = c.ws.Close(websocket.StatusUnsupportedData, "send text frames")
 			break
 		}
 		c.handle(data)
@@ -287,17 +281,14 @@ func (c *conn) fail(id json.RawMessage, code int, text string) {
 // own, so that a cancel for it can be read meanwhile; a cancel stops the
 // request it names; any other notification, and a response, is ignored.
 func (c *conn) handle(data []byte) {
-	if b := bytes.TrimSpace(data); len(b) > 0 && b[0] == '[' {
-		c.fail(null, CodeInvalidRequest, "batches are not supported: send one message per frame")
-		return
-	}
 	var m message
-	if !json.Valid(data) {
-		c.fail(null, CodeParse, "the message is not JSON")
-		return
-	}
 	if err := json.Unmarshal(data, &m); err != nil {
-		c.fail(null, CodeInvalidRequest, "the message is not a request: "+err.Error())
+		code := CodeInvalidRequest // JSON that is no object, a batch among them
+		var syntax *json.SyntaxError
+		if errors.As(err, &syntax) {
+			code = CodeParse
+		}
+		c.fail(null, code, "the message is not one JSON-RPC object: "+err.Error())
 		return
 	}
 	key, hasID := idKey(m.ID)
@@ -369,22 +360,12 @@ func (c *conn) stop(key string) {
 	}
 }
 
-// idKey is what two spellings of one id share, so that a cancel finds its
-// request however the client wrote the id. It reports false for anything
-// but a string or a number.
+// idKey is the id of a request as the key it is kept under, which is the
+// id as the client wrote it. It reports false for anything but a string
+// or a number.
 func idKey(id json.RawMessage) (string, bool) {
-	var v any
-	if len(id) == 0 || json.Unmarshal(id, &v) != nil {
-		return "", false
-	}
-	switch v := v.(type) {
-	case string:
-		return "s" + v, true
-	case float64:
-		b, _ := json.Marshal(v)
-		return "n" + string(b), true
-	}
-	return "", false
+	// A JSON string starts with a quote, a number with a digit or a minus.
+	return string(id), len(id) > 0 && strings.IndexByte(`"-0123456789`, id[0]) >= 0
 }
 
 // raw is v as JSON, null for nil.

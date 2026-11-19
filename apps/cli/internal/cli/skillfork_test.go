@@ -426,13 +426,7 @@ func TestForkChildProcess(t *testing.T) {
 	if line == "" {
 		t.Skip("not the skill fork child process")
 	}
-	env := map[string]string{}
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			env[k] = v
-		}
-	}
-	os.Exit(Run(context.Background(), strings.Fields(line), env, strings.NewReader(""), os.Stdout, os.Stderr))
+	os.Exit(Run(context.Background(), strings.Fields(line), processEnv(), strings.NewReader(""), os.Stdout, os.Stderr))
 }
 
 // TestSkillForkRecoversWhereItWasKilled kills a fork of a managed skill in

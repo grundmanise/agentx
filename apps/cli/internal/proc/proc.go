@@ -6,7 +6,6 @@ package proc
 import (
 	"bytes"
 	"context"
-	"errors"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -28,7 +27,6 @@ type Command struct {
 	Path string   // the executable
 	Args []string // its arguments, the program's name left out
 	Env  []string // its environment, as os/exec takes it
-	Dir  string   // its working directory; empty for this process's own
 
 	Deadline time.Duration // stops the run once it passes; 0 for none
 	Grace    time.Duration // between SIGTERM and SIGKILL; 0 for Grace
@@ -64,7 +62,6 @@ func Run(ctx context.Context, c Command, line func(stream string, text []byte)) 
 
 	cmd := exec.Command(c.Path, c.Args...)
 	cmd.Env = c.Env
-	cmd.Dir = c.Dir
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -103,20 +100,16 @@ func Run(ctx context.Context, c Command, line func(stream string, text []byte)) 
 		}
 	}()
 
-	err := cmd.Wait()
+	// Wait's error says again what the state says: how the command ended.
+	_ = cmd.Wait()
 	close(ended)
 	<-stopped
 	stdout.flush()
 	stderr.flush()
 
-	// The exit code is the command's own; one a signal ended has none. An
-	// output still held open after the grace period is no failure of the
-	// command, which exited as its state says.
-	var exit *exec.ExitError
-	if err == nil || errors.As(err, &exit) || errors.Is(err, exec.ErrWaitDelay) {
-		if code := cmd.ProcessState.ExitCode(); code >= 0 {
-			res.ExitCode = &code
-		}
+	// A command a signal ended has no exit code.
+	if code := cmd.ProcessState.ExitCode(); code >= 0 {
+		res.ExitCode = &code
 	}
 	return res, nil
 }
@@ -138,7 +131,7 @@ func (l *lines) Write(p []byte) (int, error) {
 		if i < 0 {
 			break
 		}
-		l.line(l.stream, bytes.TrimSuffix(l.rest[:i], []byte("\r")))
+		l.line(l.stream, l.rest[:i])
 		l.rest = l.rest[i+1:]
 	}
 	if len(l.rest) == 0 {
