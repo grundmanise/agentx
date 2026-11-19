@@ -53,24 +53,17 @@ const adoptedName = (events: CliEvent[]) =>
 /** A folder of the skill in an agent's skills folder that stopped an adoption, and why. */
 interface LeftFolder {
   path: string;
-  why: "other files" | "mixed" | "unwritable" | "unreadable";
+  /** The CLI's words after the path, such as "folder is not readable by agentx". */
+  why: string;
 }
 
 /** The CLI's words for each folder that stops an adoption (docs/spec/cli-contract.md, Unmanaged skills). */
 const LEFT_FOLDER =
-  /^(?<path>.+?) (?<why>has other files than .+|is read by configurations that place copies and ones that place symlinks|is in a folder agentx cannot write to|cannot be read)$/u;
+  /^"(?<path>.+?)" (?<why>contains files that differ from the skill version|is also read by .+ set to copy files, while .+ symlinks|folder is not writable by agentx|folder is not readable by agentx)$/u;
 
-const whyOf = (why: string): LeftFolder["why"] => {
-  if (why.startsWith("has other files")) {
-    return "other files";
-  }
-  if (why.startsWith("is read by")) {
-    return "mixed";
-  }
-  return why.startsWith("is in a folder") ? "unwritable" : "unreadable";
-};
+const DIFFERS = "contains files that differ from the skill version";
 
-/** The folders `<name> cannot be adopted: <path> <why>, and …` names, or none for another refusal. */
+/** The folders `<name> cannot be adopted: "<path>" <why>, and …` names, or none for another refusal. */
 const leftFolders = (name: string, message: string): LeftFolder[] => {
   const prefix = `${name} cannot be adopted: `;
   if (!message.startsWith(prefix)) {
@@ -81,50 +74,19 @@ const leftFolders = (name: string, message: string): LeftFolder[] => {
     .split(", and ")
     .map((part) => LEFT_FOLDER.exec(part)?.groups);
   return folders.every((g) => g?.path !== undefined && g.why !== undefined)
-    ? folders.map((g) => ({ path: g?.path ?? "", why: whyOf(g?.why ?? "") }))
+    ? folders.map((g) => ({ path: g?.path ?? "", why: g?.why ?? "" }))
     : [];
 };
 
-const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
-
-/** The agents the CLI's hint names for a folder they share, by name. */
-const sharedBy = (hint: string) => {
-  const ids = /^give (?<ids>.+?) the same placement/u
-    .exec(hint.split("; ").find((fix) => fix.startsWith("give ")) ?? "")
-    ?.groups?.ids?.split(" and ");
-  const configurations = useAppStore.getState().inventory?.configurations ?? [];
-  return (ids ?? [])
-    .map((id) => configurations.find((c) => c.id === id)?.name ?? id)
-    .join(" and ");
-};
-
-/** What each folder is, in the app's words, under the toast's message. */
-const leftDetail = ({ path, why }: LeftFolder) =>
-  ({
-    mixed: `${path} is shared by agents that get copies and agents that get symlinks.`,
-    "other files": `${path} has other files.`,
-    unreadable: `${path} can't be read.`,
-    unwritable: `${path} is in a folder agentx can't write to.`,
-  })[why];
-
-/** What to do about each folder, in the app's words: the CLI's hint names commands. */
-const leftFix = ({ path, why }: LeftFolder, hint: string) =>
-  ({
-    mixed: `give ${sharedBy(hint)} the same placement in Agents`,
-    "other files": "remove or rename it, or replace it",
-    unreadable: "make it readable, or remove it",
-    unwritable: `let agentx write to ${parentOf(path)}`,
-  })[why];
-
-/** The Replace confirm an adoption's toast opens for the folders with other files. */
+/** The Replace confirm an adoption's toast opens for the folders whose files differ. */
 export const useAdoptReplace = create<{
   request?: { row: SkillRow; paths: string[] };
 }>(() => ({}));
 
 /**
- * The error toast of an adoption a folder of the skill in an agent's skills folder stopped: what
- * each folder is and what to do, and Replace, which asks, then adopts with --force, for folders
- * with other files. undefined for any other failure.
+ * The error toast of an adoption a folder of the skill in an agent's skills folder stopped: each
+ * folder and why, as the CLI says it, and Replace, which asks, then adopts with --force, for
+ * folders whose files differ. undefined for any other failure.
  */
 const adoptRefusal = (
   row: SkillRow,
@@ -138,11 +100,7 @@ const adoptRefusal = (
   if (folders.length === 0) {
     return undefined;
   }
-  const hint = error.hint ?? "";
-  const fixes = [...new Set(folders.map((f) => leftFix(f, hint)))];
-  const replace = folders
-    .filter((f) => f.why === "other files")
-    .map((f) => f.path);
+  const replace = folders.filter((f) => f.why === DIFFERS).map((f) => f.path);
   return {
     action:
       replace.length === 0
@@ -153,9 +111,9 @@ const adoptRefusal = (
               useAdoptReplace.setState({ request: { paths: replace, row } });
             },
           },
-    details: folders.map(leftDetail),
-    hint: fixes.join("; "),
+    details: folders.map(({ path, why }) => `${path} ${why}.`),
     keep: [row.name],
+    lasting: true,
     message: `${row.name} skill wasn't adopted`,
   };
 };
@@ -164,7 +122,7 @@ const adoptRefusal = (
  * Adopt: the `adopt` command line of `adoptArgs` for an unmanaged skill, which agentx manages
  * from then on. A skill taken out of a client's own skills directory becomes a library skill
  * under its directory's name, so it is selected by the name the CLI reports. With `force`, an
- * agent's folder of the skill with other files gives way to it.
+ * agent's folder of the skill whose files differ gives way to it.
  */
 export const adopt = async (row: SkillRow, force = false) => {
   const args = adoptArgs(row);
@@ -338,7 +296,7 @@ export const AdoptReplaceConfirm = () => {
             {one ? "Replace this folder?" : "Replace these folders?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {`${one ? "It has" : "They have"} other files than ${request?.row.name ?? ""} in your library. Adopting the skill replaces ${one ? "it" : "them"}, and deletes those files.`}
+            {`${one ? "It contains" : "They contain"} files that differ from ${request?.row.name ?? ""} in your library. Adopting the skill replaces ${one ? "it" : "them"}, and deletes those files.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {request?.paths.map((path) => (

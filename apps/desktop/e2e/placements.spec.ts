@@ -269,7 +269,7 @@ test.describe("chips", () => {
     expect(later(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
   });
 
-  test("an adoption a folder with other files stops: says so in the app's words, and Replace asks before --force", async ({
+  test("an adoption a folder whose files differ stops: says so, and Replace asks before --force", async ({
     cli,
     page,
   }) => {
@@ -279,9 +279,8 @@ test.describe("chips", () => {
       events: [
         {
           code: "refused",
-          hint: "remove or rename it, or run 'agentx adopt --skill scratch --force' to replace it",
           message:
-            "scratch cannot be adopted: /home/me/.claude/skills/scratch has other files than /home/me/.agents/skills/scratch",
+            'scratch cannot be adopted: "/home/me/.claude/skills/scratch" contains files that differ from the skill version',
           type: "error",
         },
       ],
@@ -292,10 +291,7 @@ test.describe("chips", () => {
       .getByRole("listitem")
       .filter({ hasText: "scratch skill wasn't adopted" });
     await expect(toast).toContainText(
-      "scratch skill wasn't adopted. Remove or rename it, or replace it."
-    );
-    await expect(toast).toContainText(
-      "/home/me/.claude/skills/scratch has other files."
+      "/home/me/.claude/skills/scratch contains files that differ from the skill version."
     );
     cli.register(["adopt", "--skill", "scratch", "--force"], {
       events: [{ name: "scratch", type: "library_skill" }],
@@ -313,7 +309,7 @@ test.describe("chips", () => {
     ]);
   });
 
-  test("an adoption agents with different placements stop: names them, with no Replace", async ({
+  test("an adoption agents with different placements stop: says so, with no Replace", async ({
     cli,
     page,
   }) => {
@@ -323,9 +319,8 @@ test.describe("chips", () => {
       events: [
         {
           code: "refused",
-          hint: "give claude-code and cursor the same placement with 'agentx config placement'",
           message:
-            "scratch cannot be adopted: /home/me/.claude/skills/scratch is read by configurations that place copies and ones that place symlinks",
+            'scratch cannot be adopted: "/home/me/.claude/skills/scratch" is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks',
           type: "error",
         },
       ],
@@ -336,10 +331,7 @@ test.describe("chips", () => {
       .getByRole("listitem")
       .filter({ hasText: "scratch skill wasn't adopted" });
     await expect(toast).toContainText(
-      "Give Claude Code and Cursor the same placement in Agents."
-    );
-    await expect(toast).toContainText(
-      "/home/me/.claude/skills/scratch is shared by agents that get copies and agents that get symlinks."
+      "/home/me/.claude/skills/scratch is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks."
     );
     await expect(toast.getByRole("button", { name: "Replace" })).toHaveCount(0);
   });

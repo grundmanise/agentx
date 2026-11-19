@@ -543,8 +543,7 @@ func TestAdoptReplacesAClientsCopyOfALibrarySkill(t *testing.T) {
 
 	out := h.run("adopt", "--skill", "rex")
 	equal(t, "other files: exit", out.exit, 6)
-	equal(t, "other files: stderr", out.stderr, "error: rex cannot be adopted: "+quotedPath(cortex)+" has other files than "+quotedPath(library)+"\n"+
-		"hint: remove or rename it, or run 'agentx adopt --skill rex --force' to replace it\n")
+	equal(t, "other files: stderr", out.stderr, "error: rex cannot be adopted: \""+cortex+"\" contains files that differ from the skill version\n")
 	for _, dir := range []string{library, claude, cortex} {
 		if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
 			t.Errorf("the refused adoption changed %s: %v", dir, err)
@@ -823,4 +822,17 @@ func TestAdoptFlagsThatAskForTwoThings(t *testing.T) {
 	out = h.run("--json", "adopt", "zoom;out")
 	equal(t, "exit", out.exit, exitUsage.exit)
 	contains(t, "the hint", lastError(t, h.events(out.stdout))["hint"].(string), "agentx adopt --skill "+shellWord("zoom;out"))
+}
+
+// TestMixedPlacements names the configurations that read one directory
+// and place skills differently, by name, the ones that place copies first.
+func TestMixedPlacements(t *testing.T) {
+	t.Parallel()
+	zencoder := placeTarget{id: "zencoder", name: "Zencoder"}
+	zenflow := placeTarget{id: "zenflow", name: "Zenflow", copies: true}
+	other := placeTarget{id: "other", name: "Other", copies: true}
+	equal(t, "one each", mixedPlacements([]placeTarget{zencoder, zenflow}),
+		"is also read by Zenflow agent which is set to copy files, while Zencoder uses symlinks")
+	equal(t, "two that copy", mixedPlacements([]placeTarget{zenflow, zencoder, other}),
+		"is also read by Zenflow and Other agents which are set to copy files, while Zencoder uses symlinks")
 }

@@ -45,8 +45,8 @@ type adoptPlace struct {
 	// readAdoptCopies.
 	replace bool
 	// left is why an adoption cannot replace it, in the words of its
-	// refusal, see adoptLeftRefusal, and fix what the user does about it.
-	left, fix string
+	// refusal after its path, see adoptLeftRefusal.
+	left string
 }
 
 // ids are the configurations whose own skills directory holds the place.
@@ -675,11 +675,9 @@ func (inv *invocation) findAdoptCopies(fk *forking, name string) error {
 		p.asCopy = !slices.ContainsFunc(p.targets, func(t placeTarget) bool { return !copies(t) })
 		switch {
 		case !p.asCopy && slices.ContainsFunc(p.targets, copies):
-			p.left = "is read by configurations that place copies and ones that place symlinks"
-			p.fix = "give " + strings.Join(p.ids(), " and ") + " the same placement with 'agentx config placement'"
+			p.left = mixedPlacements(p.targets)
 		case !p.asCopy && unix.Access(filepath.Dir(p.path), unix.W_OK|unix.X_OK) != nil:
-			p.left = "is in a folder agentx cannot write to"
-			p.fix = "let agentx write to " + quotedPath(filepath.Dir(p.path))
+			p.left = "folder is not writable by agentx"
 		}
 		if p.left != "" {
 			fk.left = append(fk.left, p)
@@ -712,7 +710,7 @@ func (inv *invocation) readAdoptCopies(fk *forking) error {
 		read, err := readAdoptPlace(p)
 		switch {
 		case err != nil:
-			p.left, p.fix = "cannot be read", "make it readable, or remove it"
+			p.left = "folder is not readable by agentx"
 		case read.copyOf(lib, ignoreSystem):
 			same = append(same, read)
 			continue
@@ -721,8 +719,7 @@ func (inv *invocation) readAdoptCopies(fk *forking) error {
 			same = append(same, read)
 			continue
 		default:
-			p.left = "has other files than " + quotedPath(fk.from)
-			p.fix = "remove or rename it, or run '" + adoptCommand(fk.target) + " --force' to replace it"
+			p.left = "contains files that differ from the skill version"
 		}
 		fk.left = append(fk.left, p)
 	}
@@ -741,17 +738,44 @@ func adoptLeftRefusal(fk *forking) error {
 		return nil
 	}
 	found := make([]string, len(fk.left))
-	var fixes []string
 	for i, p := range fk.left {
-		found[i] = quotedPath(p.path) + " " + p.left
-		if !slices.Contains(fixes, p.fix) {
-			fixes = append(fixes, p.fix)
-		}
+		found[i] = inQuotes(p.path) + " " + p.left
 	}
 	listedFound := strings.Join(found, ", and ")
-	return refuse(exitRefused, sanitised(fk.target)+" cannot be adopted: "+listedFound,
-		strings.Join(fixes, "; ")).
-		listed("cannot be adopted: " + listedFound + ". To adopt it, " + strings.Join(fixes, "; "))
+	return refuse(exitRefused, sanitised(fk.target)+" cannot be adopted: "+listedFound, "").
+		listed("cannot be adopted: " + listedFound)
+}
+
+// inQuotes is path in double quotes, as quotedPath writes one that needs
+// them. Pure.
+func inQuotes(path string) string {
+	if q := quotedPath(path); strings.HasPrefix(q, `"`) {
+		return q
+	}
+	return `"` + path + `"`
+}
+
+// mixedPlacements is why a directory read by configurations that place
+// copies and ones that place symlinks cannot be replaced: it names them
+// by name, the ones that place copies first. Pure.
+func mixedPlacements(targets []placeTarget) string {
+	var copies, links []string
+	for _, t := range targets {
+		if t.copies {
+			copies = append(copies, t.name)
+		} else {
+			links = append(links, t.name)
+		}
+	}
+	agents, use := "agent which is", "uses"
+	if len(copies) > 1 {
+		agents = "agents which are"
+	}
+	if len(links) > 1 {
+		use = "use"
+	}
+	return "is also read by " + strings.Join(copies, " and ") + " " + agents +
+		" set to copy files, while " + strings.Join(links, " and ") + " " + use + " symlinks"
 }
 
 // copyOf reports whether p holds what lib holds, as same does, or, while
