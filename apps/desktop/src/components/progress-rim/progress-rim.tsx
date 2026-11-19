@@ -10,10 +10,29 @@ import {
   RIM_VERTEX,
 } from "#/components/progress-rim/rim-shader.ts";
 
-/** Each size: the room around the pill for the glow, in px; how wide the glow and head are; how bright the glow is. */
+/**
+ * Each size: the room around the pill for the glow, in px; how wide the glow and head are; how
+ * bright the glow is; and how the joined, full ring draws beside the growing arcs: its glow, its
+ * line's light and its line's width, each as a share. On the small pill the full ring is faint, so
+ * the sweep's band stands out from it.
+ */
 const SIZES = {
-  md: { pad: 26, scale: 1, strength: 1 },
-  sm: { pad: 14, scale: 0.45, strength: 0.55 },
+  md: {
+    fullGlow: 1,
+    fullLine: 1,
+    fullWidth: 1,
+    pad: 26,
+    scale: 1,
+    strength: 1,
+  },
+  sm: {
+    fullGlow: 0.15,
+    fullLine: 0.45,
+    fullWidth: 0.8,
+    pad: 14,
+    scale: 0.45,
+    strength: 0.55,
+  },
 } as const;
 
 /** A colour token's value as the shader's RGB, 0 to 1; `fallback` when it is no hex colour. */
@@ -95,7 +114,7 @@ export const ProgressRim = ({
   onSettled: () => void;
   size?: keyof typeof SIZES;
 }) => {
-  const { pad, scale, strength } = SIZES[size];
+  const { fullGlow, fullLine, fullWidth, pad, scale, strength } = SIZES[size];
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const programRef = useRef<Program | null>(null);
   const sizeRef = useRef({ dpr: 1, h: 0, w: 0 });
@@ -172,6 +191,7 @@ export const ProgressRim = ({
         frame = stepRim(frame, current, Math.min(0.05, (now - last) / 1000));
         last = now;
         canvas.dataset.progress = frame.progress.toFixed(3);
+        canvas.dataset.sweep = frame.sweep.toFixed(3);
         if (program !== null) {
           const { gl, uniform } = program;
           const { dpr, h, w } = sizeRef.current;
@@ -188,6 +208,13 @@ export const ProgressRim = ({
           gl.uniform1f(uniform("uSettle"), frame.settle);
           gl.uniform1f(uniform("uScale"), scale);
           gl.uniform1f(uniform("uStrength"), strength);
+          gl.uniform1f(uniform("uSweep"), frame.sweep);
+          gl.uniform1f(uniform("uSweepAt"), frame.sweepAt);
+          // Reduced motion: the sweep brightens the whole rim instead of running.
+          gl.uniform1f(uniform("uStill"), still ? 1 : 0);
+          gl.uniform1f(uniform("uFullGlow"), fullGlow);
+          gl.uniform1f(uniform("uFullLine"), fullLine);
+          gl.uniform1f(uniform("uFullWidth"), fullWidth);
           gl.uniform2f(uniform("uBar"), w, h);
           gl.uniform3f(uniform("uLight"), ...light);
           gl.uniform3f(uniform("uFlow"), ...flow);
@@ -205,11 +232,12 @@ export const ProgressRim = ({
       cancelAnimationFrame(handle);
       if (canvas !== null) {
         delete canvas.dataset.progress;
+        delete canvas.dataset.sweep;
       }
       const gl = programRef.current?.gl;
       gl?.clear(gl.COLOR_BUFFER_BIT);
     };
-  }, [shown, pad, scale, strength]);
+  }, [shown, pad, scale, strength, fullGlow, fullLine, fullWidth]);
 
   return (
     <canvas
