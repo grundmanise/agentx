@@ -61,17 +61,21 @@ const CREEP = 5.5;
 const MAX_SPEED = 0.16;
 /** How long the rim takes to fade in, in seconds. */
 const FADE_IN = 0.5;
-/** The end, in seconds after the run ended: the arcs reach 100%, join, hold and fade. */
-const FILL = 1.2;
-const JOIN_FROM = 0.6;
-const JOIN = 0.9;
-/** The sweep: a bright band runs from the top centre back down both sides as the arcs join. */
-const SWEEP_FROM = 1.2;
-const SWEEP = 0.42;
+/** How long the end of a finished run takes, in seconds: from the run's end until the rim is gone. */
+const END = 1.79;
+/**
+ * The end's phases, each from and to a share of `END`, so the whole end gets longer or shorter
+ * at once: the arcs reach 100% and join, a bright band sweeps from the top centre back down both
+ * sides, and the rim fades.
+ */
+const PHASES = {
+  fade: [0.922, 1],
+  fill: [0, 0.67],
+  join: [0.335, 0.838],
+  sweep: [0.67, 0.905],
+} as const;
 /** Where in the sweep its light peaks: it rises fast and falls away. */
 const SWEEP_PEAK = 0.22;
-const FADE_FROM = 1.65;
-const FADE = 0.14;
 /** How long a stopped run's rim takes to go: it holds its light, then goes fast at the end. */
 const STOP_FADE = 0.45;
 
@@ -85,9 +89,13 @@ const smoother = (x: number) => {
   return k * k * k * (k * (k * 6 - 15) + 10);
 };
 
+/** How far into `phase` the end is, `since` seconds after the run ended: 0 at its start, 1 at its end. */
+const within = (phase: readonly [number, number], since: number) =>
+  (since / END - phase[0]) / (phase[1] - phase[0]);
+
 /** The sweep's band, `since` seconds after the run ended. */
 const sweepOf = (since: number) => {
-  const x = (since - SWEEP_FROM) / SWEEP;
+  const x = within(PHASES.sweep, since);
   if (x <= 0 || x >= 1) {
     return { sweep: 0, sweepAt: x >= 1 ? 1 : 0 };
   }
@@ -124,8 +132,9 @@ export const stepRim = (prev: RimFrame, run: RimRun, dt: number): RimFrame => {
     const doneAt = prev.doneAt ?? elapsed;
     const doneFrom = prev.doneFrom ?? prev.progress;
     const since = elapsed - doneAt;
-    const fade = (since - FADE_FROM) / FADE;
-    const progress = doneFrom + (1 - doneFrom) * easeOut(since / FILL);
+    const fade = within(PHASES.fade, since);
+    const progress =
+      doneFrom + (1 - doneFrom) * easeOut(within(PHASES.fill, since));
     return {
       alpha:
         fade > 0 ? 1 - smoother(fade) : Math.min(1, prev.alpha + dt / FADE_IN),
@@ -135,7 +144,7 @@ export const stepRim = (prev: RimFrame, run: RimRun, dt: number): RimFrame => {
       finished: fade >= 1,
       progress,
       raw: progress,
-      settle: smoother((since - JOIN_FROM) / JOIN),
+      settle: smoother(within(PHASES.join, since)),
       ...sweepOf(since),
     };
   }
