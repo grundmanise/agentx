@@ -729,6 +729,8 @@
   --height-stale-bar: 36px;
   --padding-stale-bar: 16px;
   --inset-floating-bar: 24px;
+  /* A toast's gap from the title bar above it and from the window's right edge. */
+  --inset-toast: 24px;
   --height-floating-bar: 56px;
 
   /* Code, diff, timeline, startup */
