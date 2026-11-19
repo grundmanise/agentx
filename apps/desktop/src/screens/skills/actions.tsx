@@ -3,11 +3,13 @@
 // dialog, whose Replace runs the same command with --force. Abort, on a pending merge, asks first
 // too. Show folder runs no command: it shows the merge folder in Finder.
 import { useRef, useState } from "react";
+import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LibraryPlacement } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { dismissToast } from "#/components/toast.tsx";
+import type { ErrorToast } from "#/components/toast.tsx";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -30,6 +32,7 @@ import { shortSource, updateVersions } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
 import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
+import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -47,17 +50,129 @@ const abortLabel = (name: string) => `abort update ${name}`;
 const adoptedName = (events: CliEvent[]) =>
   events.find((e) => e.type === "library_skill")?.name;
 
+/** A folder of the skill in an agent's skills folder that stopped an adoption, and why. */
+interface LeftFolder {
+  path: string;
+  why: "other files" | "mixed" | "unwritable" | "unreadable";
+}
+
+/** The CLI's words for each folder that stops an adoption (docs/spec/cli-contract.md, Unmanaged skills). */
+const LEFT_FOLDER =
+  /^(?<path>.+?) (?<why>has other files than .+|is read by configurations that place copies and ones that place symlinks|is in a folder agentx cannot write to|cannot be read)$/u;
+
+const whyOf = (why: string): LeftFolder["why"] => {
+  if (why.startsWith("has other files")) {
+    return "other files";
+  }
+  if (why.startsWith("is read by")) {
+    return "mixed";
+  }
+  return why.startsWith("is in a folder") ? "unwritable" : "unreadable";
+};
+
+/** The folders `<name> cannot be adopted: <path> <why>, and …` names, or none for another refusal. */
+const leftFolders = (name: string, message: string): LeftFolder[] => {
+  const prefix = `${name} cannot be adopted: `;
+  if (!message.startsWith(prefix)) {
+    return [];
+  }
+  const folders = message
+    .slice(prefix.length)
+    .split(", and ")
+    .map((part) => LEFT_FOLDER.exec(part)?.groups);
+  return folders.every((g) => g?.path !== undefined && g.why !== undefined)
+    ? folders.map((g) => ({ path: g?.path ?? "", why: whyOf(g?.why ?? "") }))
+    : [];
+};
+
+const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
+
+/** The agents the CLI's hint names for a folder they share, by name. */
+const sharedBy = (hint: string) => {
+  const ids = /^give (?<ids>.+?) the same placement/u
+    .exec(hint.split("; ").find((fix) => fix.startsWith("give ")) ?? "")
+    ?.groups?.ids?.split(" and ");
+  const configurations = useAppStore.getState().inventory?.configurations ?? [];
+  return (ids ?? [])
+    .map((id) => configurations.find((c) => c.id === id)?.name ?? id)
+    .join(" and ");
+};
+
+/** What each folder is, in the app's words, under the toast's message. */
+const leftDetail = ({ path, why }: LeftFolder) =>
+  ({
+    mixed: `${path} is shared by agents that get copies and agents that get symlinks.`,
+    "other files": `${path} has other files.`,
+    unreadable: `${path} can't be read.`,
+    unwritable: `${path} is in a folder agentx can't write to.`,
+  })[why];
+
+/** What to do about each folder, in the app's words: the CLI's hint names commands. */
+const leftFix = ({ path, why }: LeftFolder, hint: string) =>
+  ({
+    mixed: `give ${sharedBy(hint)} the same placement in Agents`,
+    "other files": "remove or rename it, or replace it",
+    unreadable: "make it readable, or remove it",
+    unwritable: `let agentx write to ${parentOf(path)}`,
+  })[why];
+
+/** The Replace confirm an adoption's toast opens for the folders with other files. */
+export const useAdoptReplace = create<{
+  request?: { row: SkillRow; paths: string[] };
+}>(() => ({}));
+
+/**
+ * The error toast of an adoption a folder of the skill in an agent's skills folder stopped: what
+ * each folder is and what to do, and Replace, which asks, then adopts with --force, for folders
+ * with other files. undefined for any other failure.
+ */
+const adoptRefusal = (
+  row: SkillRow,
+  outcome: Outcome
+): ErrorToast | undefined => {
+  const error = outcome.events.find((e) => e.type === "error");
+  if (error?.type !== "error") {
+    return undefined;
+  }
+  const folders = leftFolders(row.name, error.message);
+  if (folders.length === 0) {
+    return undefined;
+  }
+  const hint = error.hint ?? "";
+  const fixes = [...new Set(folders.map((f) => leftFix(f, hint)))];
+  const replace = folders
+    .filter((f) => f.why === "other files")
+    .map((f) => f.path);
+  return {
+    action:
+      replace.length === 0
+        ? undefined
+        : {
+            label: "Replace",
+            onClick: () => {
+              useAdoptReplace.setState({ request: { paths: replace, row } });
+            },
+          },
+    details: folders.map(leftDetail),
+    hint: fixes.join("; "),
+    keep: [row.name],
+    message: `${row.name} skill wasn't adopted`,
+  };
+};
+
 /**
  * Adopt: the `adopt` command line of `adoptArgs` for an unmanaged skill, which agentx manages
  * from then on. A skill taken out of a client's own skills directory becomes a library skill
- * under its directory's name, so it is selected by the name the CLI reports.
+ * under its directory's name, so it is selected by the name the CLI reports. With `force`, an
+ * agent's folder of the skill with other files gives way to it.
  */
-export const adopt = async (row: SkillRow) => {
+export const adopt = async (row: SkillRow, force = false) => {
   const args = adoptArgs(row);
   if (args === undefined) {
     return;
   }
-  const outcome = await runUntilSettled(args, {
+  const outcome = await runUntilSettled(force ? [...args, "--force"] : args, {
+    failure: (failed) => adoptRefusal(row, failed),
     label: adoptLabel(row),
     success: (events) => `Adopted ${adoptedName(events) ?? row.name} skill`,
   });
@@ -195,6 +310,63 @@ export const Reconnect = ({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+};
+
+/**
+ * The confirm that Replace on an adoption's toast opens: adopting with --force deletes the files
+ * of the folders listed.
+ */
+export const AdoptReplaceConfirm = () => {
+  const request = useAdoptReplace((s) => s.request);
+  const close = () => {
+    useAdoptReplace.setState({ request: undefined });
+  };
+  const one = request?.paths.length === 1;
+  return (
+    <AlertDialog
+      open={request !== undefined}
+      onOpenChange={(open) => {
+        if (!open) {
+          close();
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {one ? "Replace this folder?" : "Replace these folders?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {`${one ? "It has" : "They have"} other files than ${request?.row.name ?? ""} in your library. Adopting the skill replaces ${one ? "it" : "them"}, and deletes those files.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {request?.paths.map((path) => (
+          <p
+            key={path}
+            className="type-technical text-text-caption m-0 break-all"
+          >
+            {path}
+          </p>
+        ))}
+        <AlertDialogFooter>
+          <AlertDialogCancel asChild>
+            <Button variant="ghost">Cancel</Button>
+          </AlertDialogCancel>
+          <Button
+            variant="danger"
+            onClick={() => {
+              close();
+              if (request !== undefined) {
+                void adopt(request.row, true);
+              }
+            }}
+          >
+            Replace
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 };
 
