@@ -5,16 +5,16 @@
 import { useId, useRef, useState } from "react";
 
 import type { LibraryEntry, SourceEvent } from "#/cli/events.gen.ts";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/components/ui/alert-dialog.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "#/components/ui/dialog.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import {
   count,
@@ -84,7 +84,7 @@ export const RemoveSourceDialog = ({
     close();
   };
   return (
-    <Dialog
+    <AlertDialog
       open={open}
       onOpenChange={(next) => {
         if (next) {
@@ -94,16 +94,16 @@ export const RemoveSourceDialog = ({
         }
       }}
     >
-      <DialogContent
+      <AlertDialogContent
         aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus(event, confirmed.current);
           confirmed.current = false;
         }}
       >
-        <DialogHeader showCloseButton={false}>
-          <DialogTitle>{`Remove ${shortSource(source.url)}?`}</DialogTitle>
-        </DialogHeader>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{`Remove ${shortSource(source.url)}?`}</AlertDialogTitle>
+        </AlertDialogHeader>
         {installed.length > 0 && (
           <label htmlFor={checkboxId} className="flex items-start gap-2.5">
             <Checkbox
@@ -123,15 +123,15 @@ export const RemoveSourceDialog = ({
             </span>
           </label>
         )}
-        <DialogFooter>
-          <DialogClose asChild>
+        <AlertDialogFooter>
+          <AlertDialogCancel asChild>
             <Button variant="ghost">Cancel</Button>
-          </DialogClose>
+          </AlertDialogCancel>
           <Button variant="danger" onClick={remove}>
             Remove
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 };

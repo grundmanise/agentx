@@ -7,17 +7,17 @@ import { useId, useRef, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/components/ui/alert-dialog.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "#/components/ui/dialog.tsx";
 import { seenBy } from "#/screens/skills/placements.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import type { CommandOptions } from "#/store/runner.ts";
@@ -90,7 +90,7 @@ export const RemoveDialog = ({
     close();
   };
   return (
-    <Dialog
+    <AlertDialog
       open={open}
       onOpenChange={(next) => {
         if (!next) {
@@ -98,20 +98,20 @@ export const RemoveDialog = ({
         }
       }}
     >
-      <DialogContent
+      <AlertDialogContent
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event, removed.current);
           removed.current = false;
         }}
       >
-        <DialogHeader showCloseButton={false}>
-          <DialogTitle>{`Remove ${row.name}?`}</DialogTitle>
-          <DialogDescription>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{`Remove ${row.name}?`}</AlertDialogTitle>
+          <AlertDialogDescription>
             {fromUniversal
               ? "Universal agents read your library, where agentx keeps this skill. Removing it there removes it from every agent that has it:"
               : "It will be removed from every agent that has it:"}
-          </DialogDescription>
-        </DialogHeader>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
         {/* The one block that scrolls: past the dialog's height, the header, the consequence and
             the buttons stay, and the agents scroll between them. */}
         <ul
@@ -145,15 +145,15 @@ export const RemoveDialog = ({
             </span>
           </label>
         )}
-        <DialogFooter>
-          <DialogClose asChild>
+        <AlertDialogFooter>
+          <AlertDialogCancel asChild>
             <Button variant="ghost">Cancel</Button>
-          </DialogClose>
+          </AlertDialogCancel>
           <Button variant="danger" onClick={remove}>
             Remove
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 };
