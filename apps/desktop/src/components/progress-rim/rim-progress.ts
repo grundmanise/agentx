@@ -4,7 +4,7 @@
  * them as they come: it creeps toward 90% on its own, as a browser's loading bar does, and the steps only raise
  * the floor it eases toward, at a capped speed, so it never jumps. When the run ends, the rim
  * eases into 100% in a fixed time, its two arcs join, a bright band sweeps back down both sides,
- * and it fades. A stopped run drains back and fades.
+ * and it fades. A stopped run drains back at full light and vanishes only in its last moment.
  */
 
 /** The run the rim shows: the share of the CLI's steps that ended, and how the run stands. */
@@ -76,8 +76,12 @@ const PHASES = {
 } as const;
 /** Where in the sweep its light peaks: it rises fast and falls away. */
 const SWEEP_PEAK = 0.22;
-/** How long a stopped run's rim takes to go: it holds its light, then goes fast at the end. */
-const STOP_FADE = 0.45;
+/** How long a stopped run's rim takes to go, in seconds. */
+const STOP = 0.6;
+/** Where in `STOP` the rim starts to fade: it drains at full light, then vanishes fast. */
+const STOP_FADE_FROM = 0.85;
+/** How fast a stopped run's arcs drain back, per second. */
+const STOP_DRAIN = 4.5;
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const ease = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
@@ -110,14 +114,15 @@ const sweepOf = (since: number) => {
 export const stepRim = (prev: RimFrame, run: RimRun, dt: number): RimFrame => {
   const elapsed = prev.elapsed + dt;
   if (run.state === "stopped") {
-    // Drains back and fades, holding its light at first and going fast at the end.
+    // Drains back at full light, and vanishes only in its last moment.
     const stopAt = prev.stopAt ?? elapsed;
     const stopFrom = prev.stopFrom ?? prev.alpha;
-    const gone = (elapsed - stopAt) / STOP_FADE;
-    const progress = prev.progress * (1 - ease(3, dt));
+    const gone = (elapsed - stopAt) / STOP;
+    const progress = prev.progress * (1 - ease(STOP_DRAIN, dt));
     return {
       ...prev,
-      alpha: stopFrom * (1 - clamp01(gone) ** 2),
+      alpha:
+        stopFrom * (1 - smoother((gone - STOP_FADE_FROM) / (1 - STOP_FADE_FROM))),
       elapsed,
       finished: gone >= 1,
       progress,
