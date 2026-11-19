@@ -36,7 +36,11 @@ import {
   unplacedCount,
 } from "#/screens/agents/counts.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
-import { convertedText, placedAllText } from "#/screens/skills/placements.ts";
+import {
+  convertedText,
+  placedAllText,
+  sharingIds,
+} from "#/screens/skills/placements.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -115,10 +119,22 @@ const PlacementControl = ({
             }
           : undefined,
       label: placementLabel(c),
-      success:
-        mode === "copy"
-          ? `${c.name} now gets copies of new skills`
-          : `${c.name} now gets symlinks to new skills`,
+      success: (events) => {
+        // Agents that read the same skills folder get the same mode, so the toast names them.
+        const names = [
+          c.name,
+          ...sharingIds(events).map(
+            (other) =>
+              inventory.configurations.find((x) => x.id === other)?.name ??
+              other
+          ),
+        ];
+        const who = names.join(" and ");
+        const get = names.length > 1 ? "get" : "gets";
+        return mode === "copy"
+          ? `${who} now ${get} copies of new skills`
+          : `${who} now ${get} symlinks to new skills`;
+      },
     });
   };
   return (

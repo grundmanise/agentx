@@ -214,7 +214,9 @@ func newPlacementCommand(inv *invocation) *cobra.Command {
 			"or every copy agentx placed there that holds the library's version becomes\n" +
 			"a symlink. A copy that is different from the library is kept as it is. No\n" +
 			"skill is placed that was not placed there already. A client that reads the\n" +
-			"library has no choice to make: the library entry is its placement.",
+			"library has no choice to make: the library entry is its placement. Clients\n" +
+			"that read the same skills folder, such as Zencoder and Zenflow, get the same\n" +
+			"choice.",
 		Args: cobra.ExactArgs(2),
 		Example: examples(
 			"agentx config placement cursor copy", "skills placed in Cursor from now on are copies",
@@ -236,20 +238,25 @@ func newPlacementCommand(inv *invocation) *cobra.Command {
 			if convert {
 				return inv.setPlacementAndConvert(cmd.Context(), id, mode == scan.PlacementCopy)
 			}
+			ids := inv.sharingSkillsDir(id)
 			var s home.Settings
 			err := home.Mutate(inv.dirs.Home, inv.refs(cmd.Context()), func() error {
 				var err error
 				if s, err = inv.loadSettings(); err != nil {
 					return err
 				}
-				setCopyConfiguration(&s, id, mode == scan.PlacementCopy)
+				for _, id := range ids {
+					setCopyConfiguration(&s, id, mode == scan.PlacementCopy)
+				}
 				return home.SaveSettings(inv.dirs.Home, s)
 			})
 			if err != nil {
 				return err
 			}
 			inv.emitSettings(s)
-			inv.out.done(inv.out.paint(label, id) + " now places " + inv.out.paint(heading, placedWord(mode == scan.PlacementCopy)))
+			copies, others := mode == scan.PlacementCopy, sharedToo(ids)
+			inv.out.done(inv.out.paint(label, id) + " now places " + inv.out.paint(heading, placedWord(copies)) + others)
+			inv.summary = id + " now places " + placedWord(copies) + others
 			return nil
 		},
 	}
@@ -266,6 +273,40 @@ func setCopyConfiguration(s *home.Settings, id string, copies bool) {
 		s.CopyConfigurations = append(s.CopyConfigurations, id)
 		slices.Sort(s.CopyConfigurations)
 	}
+}
+
+// sharingSkillsDir is id and every other detected configuration whose
+// client has the same own skills directory, such as Zencoder and Zenflow,
+// in detection order after id: they place skills the same way, or the one
+// directory would have to hold a copy and a symlink at once. A client that
+// reads the library has no placement mode to share.
+func (inv *invocation) sharingSkillsDir(id string) []string {
+	ids := []string{id}
+	targets := inv.detectedTargets()
+	i := slices.IndexFunc(targets, func(t placeTarget) bool { return t.id == id })
+	if i < 0 || targets[i].dir == "" {
+		return ids
+	}
+	dir := keyOf(targets[i].dir)
+	for _, t := range targets {
+		if t.id != id && !t.readsLibrary && t.dir != "" && keyOf(t.dir).is(dir) {
+			ids = append(ids, t.id)
+		}
+	}
+	return ids
+}
+
+// sharedToo is what config placement adds to the line that confirms the
+// mode of ids[0]: the others of ids, which share its skills directory,
+// place skills that way too. "" when there are none. Pure.
+func sharedToo(ids []string) string {
+	switch len(ids) {
+	case 1:
+		return ""
+	case 2:
+		return ", and so does " + ids[1] + ", which reads the same skills folder"
+	}
+	return ", and so do " + strings.Join(ids[1:], " and ") + ", which read the same skills folder"
 }
 
 // placedWord is what a configuration that places copies, or symlinks,

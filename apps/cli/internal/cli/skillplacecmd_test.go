@@ -606,3 +606,22 @@ func TestConfigPlacementPlacesCopies(t *testing.T) {
 	}
 	deep(t, "copy_configurations after the refusals", readSettingsFile(t, h)["copy_configurations"], any([]any{"github-copilot"}))
 }
+
+// TestConfigPlacementSharedSkillsFolder: configurations whose clients
+// read one skills folder, as Zencoder and Zenflow read ~/.zencoder/skills,
+// place skills the same way, so choosing the mode of one chooses it for
+// the others too, and the line says so.
+func TestConfigPlacementSharedSkillsFolder(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".zencoder/skills"}})
+
+	out := h.run("config", "placement", "zenflow", "copy")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "stdout", out.stdout, "✓ zenflow now places copies, and so does zencoder, which reads the same skills folder\n")
+	deep(t, "copy_configurations", readSettingsFile(t, h)["copy_configurations"], any([]any{"zencoder", "zenflow"}))
+
+	out = h.run("config", "placement", "zencoder", "symlink")
+	equal(t, "exit", out.exit, 0)
+	deep(t, "copy_configurations", readSettingsFile(t, h)["copy_configurations"], any([]any{}))
+}

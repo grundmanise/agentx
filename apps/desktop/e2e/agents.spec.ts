@@ -164,6 +164,31 @@ test("turning an agent off runs config disable", async ({ cli, page }) => {
   expect(later(cli)).toEqual([["config", "disable", "cursor", "--json"]]);
 });
 
+test("choosing Copy for an agent that shares its skills folder: the toast names the agents that share it", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  cli.register(["config", "placement", "windsurf", "copy"], {
+    events: [
+      { type: "settings" },
+      {
+        ok: true,
+        summary:
+          "windsurf now places copies, and so does cursor, which reads the same skills folder",
+        type: "result",
+      },
+    ],
+  });
+  await card(page, "Windsurf")
+    .getByRole("radiogroup", { name: "Placement" })
+    .getByRole("radio", { name: "Copy" })
+    .click();
+  await expect(
+    toasts(page).getByText("Windsurf and Cursor now get copies of new skills")
+  ).toBeVisible();
+});
+
 test("choosing Copy on a card runs config placement, the control follows the next inventory, and Convert converts the skills already there", async ({
   cli,
   page,

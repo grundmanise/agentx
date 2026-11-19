@@ -176,6 +176,8 @@ type converted struct {
 // --convert`: the mode and the placements already made in the
 // configuration are changed by one journaled mutation, for the reason
 // enableAndPlaceAll gives. It places no skill that was not placed there.
+// The configurations that share id's skills directory take the mode too,
+// see sharingSkillsDir, and copy_mode records a converted copy for them.
 //
 //   - To copies, every placement that is a symlink to the library entry
 //     becomes a copy recorded in copy_mode, staged as skill place stages
@@ -195,6 +197,7 @@ func (inv *invocation) setPlacementAndConvert(ctx context.Context, id string, co
 	if err != nil {
 		return err
 	}
+	ids := inv.sharingSkillsDir(id)
 	var s home.Settings
 	var done converted
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
@@ -209,13 +212,22 @@ func (inv *invocation) setPlacementAndConvert(ctx context.Context, id string, co
 		if err != nil {
 			return err
 		}
-		edit.setPlacement(id, copies)
+		for _, id := range ids {
+			edit.setPlacement(id, copies)
+		}
 		m := home.NewMutation(inv.dirs.Home)
 		done = converted{}
 		for _, lib := range skills {
 			for _, t := range edit.placing(targets) {
-				if inv.stageConversion(m, edit, lib, t, copies, &done) {
-					done.names = append(done.names, lib.Name)
+				if !inv.stageConversion(m, edit, lib, t, copies, &done) {
+					continue
+				}
+				done.names = append(done.names, lib.Name)
+				// The others read the converted placement too.
+				if copies {
+					edit.addCopies(lib.Name, ids[1:])
+				} else {
+					edit.dropCopies(lib.Name, ids[1:])
 				}
 			}
 		}
@@ -233,7 +245,7 @@ func (inv *invocation) setPlacementAndConvert(ctx context.Context, id string, co
 		return mutationFailure(err)
 	}
 	inv.emitSettings(s)
-	return inv.reportConverted(ctx, id, copies, targets, done)
+	return inv.reportConverted(ctx, ids, copies, targets, done)
 }
 
 // stageConversion plans the conversion of one skill's placement in the
@@ -292,8 +304,9 @@ func (inv *invocation) stageConversion(m *home.Mutation, edit *settingsEdit, lib
 // skill as it now sees it, one library_skill event and one row each, in
 // the order the library lists them, under the line that says what the run
 // did. A run that converted nothing has nothing to read again.
-func (inv *invocation) reportConverted(ctx context.Context, id string, copies bool, targets []placeTarget, done converted) error {
-	tail := ", " + plural(len(done.names), "skill") + " converted"
+func (inv *invocation) reportConverted(ctx context.Context, ids []string, copies bool, targets []placeTarget, done converted) error {
+	id := ids[0]
+	tail := sharedToo(ids) + ", " + plural(len(done.names), "skill") + " converted"
 	if n := len(done.skipped); n > 0 {
 		tail += fmt.Sprintf(", %d skipped", n)
 	}
