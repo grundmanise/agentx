@@ -495,13 +495,13 @@ test.describe("filters", () => {
         - checkbox "GitHub Copilot"
         - checkbox "Windsurf"
         - checkbox "OpenCode"
-        - button "Show 21 more"
+        - button "Show 20 more"
     `);
 
-    await agents.getByRole("button", { name: "Show 21 more" }).click();
-    await expect(agents.getByRole("checkbox")).toHaveCount(27);
+    await agents.getByRole("button", { name: "Show 20 more" }).click();
+    await expect(agents.getByRole("checkbox")).toHaveCount(26);
     // The popover scrolls inside the window: its last agent and Reset filters can be reached.
-    await agents.getByRole("checkbox", { name: "Zenflow" }).check();
+    await agents.getByRole("checkbox", { name: "Zencoder" }).check();
     const reset = filters(page).getByRole("button", { name: "Reset filters" });
     await reset.scrollIntoViewIfNeeded();
     await expect(reset).toBeInViewport({ ratio: 1 });
@@ -511,12 +511,12 @@ test.describe("filters", () => {
     await agents.getByRole("button", { name: "Show fewer" }).click();
     await expect(agents.getByRole("checkbox")).toHaveCount(7);
     await expect(
-      agents.getByRole("checkbox", { name: "Zenflow" })
+      agents.getByRole("checkbox", { name: "Zencoder" })
     ).toBeChecked();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Filter" }).click();
     expect(await names(agents.getByRole("checkbox").first())).toEqual([
-      "Zenflow",
+      "Zencoder",
     ]);
   });
 

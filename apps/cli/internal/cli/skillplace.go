@@ -71,6 +71,7 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 // placeTarget is one configuration a placement is made in.
 type placeTarget struct {
 	id           string
+	name         string // the configuration's name, such as Claude Code
 	dir          string // the client's own skills directory
 	readsLibrary bool   // the library entry is the placement; a symlink would list the skill twice
 	copies       bool   // copy_configurations lists it, so a placement made there is a copy, see withCopies
@@ -119,7 +120,7 @@ type placeable struct {
 func (inv *invocation) detectedTargets() []placeTarget {
 	var targets []placeTarget
 	for _, c := range scan.Detect(inv.dirs) {
-		t := placeTarget{id: c.Slug(), dir: scan.PlacementDir(c, inv.dirs), readsLibrary: scan.ReadsLibrary(c, inv.dirs)}
+		t := placeTarget{id: c.Slug(), name: c.Name(), dir: scan.PlacementDir(c, inv.dirs), readsLibrary: scan.ReadsLibrary(c, inv.dirs)}
 		if t.dir == "" && !t.readsLibrary {
 			continue // a client the registry gives no skills directory has nowhere to place into
 		}

@@ -1069,28 +1069,28 @@ func TestSkillPlaceRefusesAnOverlapSpelledInAnotherCase(t *testing.T) {
 	}
 }
 
-// TestSkillPlaceJudgesASharedPlaceOnce: Zencoder and Zenflow read one
-// skills directory, and copy_mode records a copy for Zenflow alone. The
-// place both read is put back once, as a copy, since a copy placed for
-// Zenflow is the one Zencoder reads, and counted for both configurations,
+// TestSkillPlaceJudgesASharedPlaceOnce: AdaL and Augment read one skills
+// directory, Augment's a symlink to AdaL's, and copy_mode records a copy
+// for Augment alone. The place both read is put back once, as a copy,
+// since a copy placed for Augment is the one AdaL reads, and counted for both configurations,
 // whether skill place names the two or covers every enabled configuration;
 // copy_mode is left as it is.
 func TestSkillPlaceJudgesASharedPlaceOnce(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
+	h.build(t, fixture{dirs: []string{".claude", ".adal/skills"}, links: map[string]string{".augment/skills": ".adal/skills"}})
 	s, _, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "zenflow", "--copy")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "augment", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	shared := filepath.Join(h.home, ".zencoder", "skills", "alpha")
+	shared := filepath.Join(h.home, ".adal", "skills", "alpha")
 	for _, c := range []struct {
 		to      []string
 		summary string
 		drift   string // afterwards: a skill placed with --to is missing from the rest
 	}{
-		{[]string{"--to", "zencoder", "--to", "zenflow"}, "placed alpha in 2 configurations, 1 placement as copy", "missing"},
+		{[]string{"--to", "adal", "--to", "augment"}, "placed alpha in 2 configurations, 1 placement as copy", "missing"},
 		{nil, "placed alpha in 3 configurations, 1 placement as copy", ""},
 	} {
 		remove(t, shared)
@@ -1104,7 +1104,7 @@ func TestSkillPlaceJudgesASharedPlaceOnce(t *testing.T) {
 			nothingAt(t, "claude's place", claude)
 		}
 		sameTree(t, "the shared copy", libraryTree(t, shared), libraryTree(t, lib))
-		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "zenflow")
+		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "augment")
 		equal(t, "drift after skill place", drift(h.listed("alpha")), c.drift)
 		cleanAfterPlace(t, h, dirs...)
 	}

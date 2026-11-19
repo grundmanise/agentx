@@ -15,8 +15,8 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 
 /**
  * The configurations whose own directory is the most specific one that holds `path`: usually one,
- * two when they share a directory, as Zencoder and Zenflow do, and none when it is in no agent's
- * own directory. The most specific wins, since one agent's directory can sit inside another's, as
+ * two when they share a directory, one agent's a symlink to the other's, and none when it is in
+ * no agent's own directory. The most specific wins, since one agent's directory can sit inside another's, as
  * Antigravity's `~/.gemini/antigravity` sits inside Gemini CLI's `~/.gemini`. A client that reads
  * the library places nothing in its own directory, so it owns no path, as the CLI judges it.
  */
@@ -87,8 +87,8 @@ export const chipStateOf = (
 
 /**
  * The configurations that lose the skill with `c`'s placement: those that see it only through
- * `c`'s directory, as Cursor sees a skill placed in Claude Code alone, or Zenflow one in the
- * directory it shares with Zencoder.
+ * `c`'s directory, as Cursor sees a skill placed in Claude Code alone, or an agent whose skills
+ * directory is a symlink to `c`'s sees one placed there.
  */
 export const dependantsOf = (
   row: SkillRow,
@@ -289,6 +289,16 @@ export const placedCount = (events: CliEvent[]): number =>
   (events.find((e) => e.type === "library_skill")?.placements ?? []).filter(
     (p) => p.mode !== "library"
   ).length;
+
+/**
+ * Whether `skill place <name> --to <id>` placed the skill nowhere, as its result says: `placed
+ * <name> in 0 configurations`, with every placement skipped and a warning for each.
+ */
+export const placedNowhere = (events: CliEvent[]): boolean =>
+  firstNumber(
+    summaryOf(events),
+    /^placed \S+ in (?<n>\d+) configurations?/u
+  ) === 0;
 
 /**
  * The toast after `config enable <id> --place-all`, from its result: `<id> is now enabled, <k>

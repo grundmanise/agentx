@@ -56,6 +56,8 @@ func (r readsMore) SkillsDirs(d home.Dirs) []string {
 // minus the six clients with their own file and minus the agents that are
 // only detected from a project directory, which have no user-scope
 // configuration: eve, promptscript, replit and the universal pseudo-agent.
+// Zenflow is left out as well: it is Zencoder's desktop app, reads the same
+// skills directory as Zencoder's IDE agents, and is one agent to agentx.
 var pathClients = []Client{
 	pathClient{"adal", "AdaL", ".adal", ".adal/skills", ".adal/skills"},
 	pathClient{"aider-desk", "AiderDesk", ".aider-desk", ".aider-desk/skills", ".aider-desk/skills"},
@@ -125,5 +127,4 @@ var pathClients = []Client{
 	pathClient{"zcode", "ZCode", ".zcode", ".zcode/skills", ".zcode/skills"},
 	pathClient{"zed", "Zed", "xdg/zed", "library", ".agents/skills"},
 	pathClient{"zencoder", "Zencoder", ".zencoder", ".zencoder/skills", ".zencoder/skills"},
-	pathClient{"zenflow", "Zenflow", ".zencoder", ".zencoder/skills", ".zencoder/skills"},
 }

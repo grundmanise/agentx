@@ -148,11 +148,10 @@ const many: [id: string, name: string, readsLibrary?: boolean][] = [
   ["windsurf", "Windsurf"],
   ["zed", "Zed", true],
   ["zencoder", "Zencoder"],
-  ["zenflow", "Zenflow"],
 ];
 
 /**
- * A machine where other tools left skills in many agent clients: 26 configurations that place
+ * A machine where other tools left skills in many agent clients: 25 configurations that place
  * skills in their own directories and five that read the library, sorted by id.
  */
 export const manyConfigurations: Configuration[] = many.map(

@@ -68,8 +68,8 @@ func TestStagedContentIsCheckedAgainstTheVersion(t *testing.T) {
 }
 
 // TestACopyPlacementLeavesNoStagedDirectory covers two configurations that
-// share one skills directory: Zencoder and Zenflow both use
-// ~/.zencoder/skills. A --copy run plans a publish for each of them, so it
+// share one skills directory: Augment's is a symlink to AdaL's. A --copy
+// run plans a publish for each of them, so it
 // plans two publishes of the same path: the first lands and the second
 // finds the path already holding what it was to write, and does nothing.
 //
@@ -81,13 +81,13 @@ func TestStagedContentIsCheckedAgainstTheVersion(t *testing.T) {
 func TestACopyPlacementLeavesNoStagedDirectory(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
+	h.build(t, fixture{dirs: []string{".claude", ".adal/skills"}, links: map[string]string{".augment/skills": ".adal/skills"}})
 	s, _, _ := h.standardSource(true)
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code").exit, 0)
 
-	shared := filepath.Join(h.home, ".zencoder", "skills")
-	out := h.run("skill", "place", "alpha", "--to", "zencoder", "--to", "zenflow", "--copy")
+	shared := filepath.Join(h.home, ".adal", "skills")
+	out := h.run("skill", "place", "alpha", "--to", "adal", "--to", "augment", "--copy")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "staged directories after the placement", strings.Join(stagingIn(t, shared), ", "), "")
 
@@ -95,6 +95,6 @@ func TestACopyPlacementLeavesNoStagedDirectory(t *testing.T) {
 	contains(t, "the copy", fileBody(t, filepath.Join(shared, "alpha", "notes.md")), "alpha notes")
 	contains(t, "the result", out.stdout, "placed alpha in 2 configurations")
 
-	equal(t, "remove", h.run("skill", "remove", "alpha", "--from", "zencoder", "--from", "zenflow").exit, 0)
+	equal(t, "remove", h.run("skill", "remove", "alpha", "--from", "adal", "--from", "augment").exit, 0)
 	equal(t, "staged directories after the removal", strings.Join(stagingIn(t, shared), ", "), "")
 }

@@ -164,14 +164,53 @@ test.describe("chips", () => {
     ]);
   });
 
-  test("a skipped placement: an attention toast with the warning, logged as attention", async ({
+  test("a removal that left a directory agentx did not place: says so, with the warning and no Undo", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "pdf");
     await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
     const warning =
-      "windsurf: /home/me/.windsurf/skills/pdf is a directory of yours and was left as it is";
+      "/home/me/.claude/skills/pdf is a directory agentx did not place there and was left as it is; claude-code still sees it";
+    cli.register(["skill", "remove", "pdf", "--from", "claude-code"], {
+      events: [
+        {
+          ok: true,
+          summary:
+            "removed pdf from claude-code: 0 placements, 1 placement left in place",
+          type: "result",
+        },
+      ],
+      logs: [{ level: "warn", message: warning }],
+    });
+
+    await chip(pane(page, "pdf"), "Claude Code").click();
+    const toast = toasts(page)
+      .getByRole("listitem")
+      .filter({ hasText: "pdf skill wasn't removed from Claude Code" });
+    await expect(toast).toContainText(
+      "/home/me/.claude/skills/pdf is a directory agentx didn't place. It was left as is."
+    );
+    await expect(toast).not.toContainText("still sees it");
+    await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
+    await expect(toast.getByRole("button", { name: "Dismiss" })).toBeVisible();
+    await expect(activity(page)).toHaveText([
+      "pdf skill wasn't removed from Claude Code",
+    ]);
+    await expect(activity(page)).toHaveAttribute("data-tone", "attention");
+    expect(later(cli)).toEqual([
+      ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
+    ]);
+  });
+
+  test("a skipped placement: says it wasn't added, with the warning and no Undo, logged as attention", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "pdf");
+    await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
+    const warning =
+      "/home/me/.windsurf/skills/pdf is not this skill and was left as it is; no placement was made for windsurf";
     cli.register(["skill", "place", "pdf", "--to", "windsurf"], {
       events: [
         {
@@ -186,10 +225,15 @@ test.describe("chips", () => {
     await chip(pane(page, "pdf"), "Windsurf").click();
     const toast = toasts(page)
       .getByRole("listitem")
-      .filter({ hasText: "Added pdf to Windsurf" });
-    await expect(toast).toContainText(warning);
-    await expect(toast.getByRole("button", { name: "Undo" })).toBeVisible();
-    await expect(activity(page)).toHaveText(["Added pdf to Windsurf"]);
+      .filter({ hasText: "pdf skill wasn't added to Windsurf" });
+    await expect(toast).toContainText(
+      "/home/me/.windsurf/skills/pdf has other files. It was left as is."
+    );
+    await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
+    await expect(toast.getByRole("button", { name: "Dismiss" })).toBeVisible();
+    await expect(activity(page)).toHaveText([
+      "pdf skill wasn't added to Windsurf",
+    ]);
     await expect(activity(page)).toHaveAttribute("data-tone", "attention");
     expect(later(cli)).toEqual([
       ["skill", "place", "pdf", "--to", "windsurf", "--json"],
@@ -267,6 +311,73 @@ test.describe("chips", () => {
     await toasts(page).getByRole("button", { name: "Adopt" }).click();
     await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
     expect(later(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
+  });
+
+  test("an adoption a folder whose files differ stops: says so, and Replace asks before --force", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "scratch", "scratch", inventory, []);
+    await chip(pane(page, "scratch"), "Claude Code").click();
+    cli.register(["adopt", "--skill", "scratch"], {
+      events: [
+        {
+          code: "refused",
+          message:
+            'scratch cannot be adopted: "/home/me/.claude/skills/scratch" contains files that differ from the skill version',
+          type: "error",
+        },
+      ],
+      exitCode: 6,
+    });
+    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    const toast = toasts(page)
+      .getByRole("listitem")
+      .filter({ hasText: "scratch skill wasn't adopted" });
+    await expect(toast).toContainText(
+      "/home/me/.claude/skills/scratch contains files that differ from the skill version"
+    );
+    cli.register(["adopt", "--skill", "scratch", "--force"], {
+      events: [{ name: "scratch", type: "library_skill" }],
+    });
+    await toast.getByRole("button", { name: "Replace" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Replace this folder?",
+    });
+    await expect(dialog).toContainText("/home/me/.claude/skills/scratch");
+    await dialog.getByRole("button", { name: "Replace" }).click();
+    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    expect(later(cli)).toEqual([
+      ["adopt", "--skill", "scratch", "--json"],
+      ["adopt", "--skill", "scratch", "--force", "--json"],
+    ]);
+  });
+
+  test("an adoption agents with different placements stop: says so, with no Replace", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "scratch", "scratch", inventory, []);
+    await chip(pane(page, "scratch"), "Claude Code").click();
+    cli.register(["adopt", "--skill", "scratch"], {
+      events: [
+        {
+          code: "refused",
+          message:
+            'scratch cannot be adopted: "/home/me/.claude/skills/scratch" is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks',
+          type: "error",
+        },
+      ],
+      exitCode: 6,
+    });
+    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    const toast = toasts(page)
+      .getByRole("listitem")
+      .filter({ hasText: "scratch skill wasn't adopted" });
+    await expect(toast).toContainText(
+      "/home/me/.claude/skills/scratch is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks"
+    );
+    await expect(toast.getByRole("button", { name: "Replace" })).toHaveCount(0);
   });
 
   test("a displaced chip runs nothing, and its tooltip says to reconnect it", async ({
@@ -382,7 +493,7 @@ test.describe("many agents", () => {
       "GitHub Copilot",
       "Windsurf",
     ]);
-    await expect(more).toHaveText(`Show ${27 - collapsed.names.length} more`);
+    await expect(more).toHaveText(`Show ${26 - collapsed.names.length} more`);
 
     // A narrower pane fits fewer chips, still in two rows.
     await page.setViewportSize({ height: 800, width: 1150 });
@@ -398,27 +509,27 @@ test.describe("many agents", () => {
     );
 
     await more.click();
-    await expect(agents.getByRole("switch")).toHaveCount(27);
+    await expect(agents.getByRole("switch")).toHaveCount(26);
     const expanded = await chipsInView(article);
     // The clients with no rank follow by name.
     expect(expanded.names.slice(-3)).toEqual([
+      "Cortex Code",
       "IBM Bob",
       "Zencoder",
-      "Zenflow",
     ]);
 
     // A chip turned on stays where it is, and stays in view once the rest is hidden again.
     await cli.serveEmit([
-      { ...manyAgentsInventory(["zenflow"]), scan_counter: 2 },
+      { ...manyAgentsInventory(["zencoder"]), scan_counter: 2 },
     ]);
-    await expect(chip(article, "Zenflow")).toBeChecked();
+    await expect(chip(article, "Zencoder")).toBeChecked();
     const afterToggle = await chipsInView(article);
     expect(afterToggle.names).toEqual(expanded.names);
     await agents.getByRole("button", { name: "Show fewer" }).click();
     await expect(more).toBeVisible();
     const again = await chipsInView(article);
     expect(again.rows).toBe(2);
-    expect(again.names.at(-1)).toBe("Zenflow");
+    expect(again.names.at(-1)).toBe("Zencoder");
   });
 
   test("the Remove dialog stays in the window: only its list of agents scrolls", async ({
@@ -436,7 +547,7 @@ test.describe("many agents", () => {
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
     const dialog = page.getByRole("alertdialog", { name: "Remove pdf?" });
     const list = dialog.getByRole("list", { name: "Agents that see it" });
-    await expect(list.getByRole("listitem")).toHaveCount(28);
+    await expect(list.getByRole("listitem")).toHaveCount(27);
     const box = await dialog.boundingBox();
     expect(box?.y).toBeGreaterThanOrEqual(0);
     expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(600);
