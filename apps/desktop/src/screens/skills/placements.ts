@@ -291,6 +291,16 @@ export const placedCount = (events: CliEvent[]): number =>
   ).length;
 
 /**
+ * Whether `skill place <name> --to <id>` placed the skill nowhere, as its result says: `placed
+ * <name> in 0 configurations`, with every placement skipped and a warning for each.
+ */
+export const placedNowhere = (events: CliEvent[]): boolean =>
+  firstNumber(
+    summaryOf(events),
+    /^placed \S+ in (?<n>\d+) configurations?/u
+  ) === 0;
+
+/**
  * The toast after `config enable <id> --place-all`, from its result: `<id> is now enabled, <k>
  * skills placed[, <s> placements skipped]`; failing that, k counts the library_skill events with
  * a placement.

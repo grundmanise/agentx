@@ -164,14 +164,53 @@ test.describe("chips", () => {
     ]);
   });
 
-  test("a skipped placement: an attention toast with the warning, logged as attention", async ({
+  test("a removal that left a directory agentx did not place: says so, with the warning and no Undo", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "pdf");
     await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
     const warning =
-      "windsurf: /home/me/.windsurf/skills/pdf is a directory of yours and was left as it is";
+      "/home/me/.claude/skills/pdf is a directory agentx did not place there and was left as it is; claude-code still sees it";
+    cli.register(["skill", "remove", "pdf", "--from", "claude-code"], {
+      events: [
+        {
+          ok: true,
+          summary:
+            "removed pdf from claude-code: 0 placements, 1 placement left in place",
+          type: "result",
+        },
+      ],
+      logs: [{ level: "warn", message: warning }],
+    });
+
+    await chip(pane(page, "pdf"), "Claude Code").click();
+    const toast = toasts(page)
+      .getByRole("listitem")
+      .filter({ hasText: "pdf skill wasn't removed from Claude Code" });
+    await expect(toast).toContainText(
+      "/home/me/.claude/skills/pdf is a directory agentx didn't place. It was left as is."
+    );
+    await expect(toast).not.toContainText("still sees it");
+    await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
+    await expect(toast.getByRole("button", { name: "Dismiss" })).toBeVisible();
+    await expect(activity(page)).toHaveText([
+      "pdf skill wasn't removed from Claude Code",
+    ]);
+    await expect(activity(page)).toHaveAttribute("data-tone", "attention");
+    expect(later(cli)).toEqual([
+      ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
+    ]);
+  });
+
+  test("a skipped placement: says it wasn't added, with the warning and no Undo, logged as attention", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "pdf");
+    await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
+    const warning =
+      "/home/me/.windsurf/skills/pdf is not this skill and was left as it is; no placement was made for windsurf";
     cli.register(["skill", "place", "pdf", "--to", "windsurf"], {
       events: [
         {
@@ -186,10 +225,15 @@ test.describe("chips", () => {
     await chip(pane(page, "pdf"), "Windsurf").click();
     const toast = toasts(page)
       .getByRole("listitem")
-      .filter({ hasText: "Added pdf to Windsurf" });
-    await expect(toast).toContainText(warning);
-    await expect(toast.getByRole("button", { name: "Undo" })).toBeVisible();
-    await expect(activity(page)).toHaveText(["Added pdf to Windsurf"]);
+      .filter({ hasText: "pdf skill wasn't added to Windsurf" });
+    await expect(toast).toContainText(
+      "/home/me/.windsurf/skills/pdf has other files. It was left as is."
+    );
+    await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
+    await expect(toast.getByRole("button", { name: "Dismiss" })).toBeVisible();
+    await expect(activity(page)).toHaveText([
+      "pdf skill wasn't added to Windsurf",
+    ]);
     await expect(activity(page)).toHaveAttribute("data-tone", "attention");
     expect(later(cli)).toEqual([
       ["skill", "place", "pdf", "--to", "windsurf", "--json"],
