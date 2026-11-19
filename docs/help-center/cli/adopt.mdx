@@ -190,7 +190,11 @@ agentx adopts a skill in your library in its place:
 
 - The folder moves to `~/.agentx/worktrees/<name>`, and your library holds a symlink to it. See [Where your skills live](/cli/fork#where-your-skills-live).
 - Every client that saw the skill still sees it.
-- A client's own skills folder that holds a copy of the skill, such as `~/.claude/skills/<name>`, follows the adopted skill. For a client that gets symlinks, a symlink to your library takes the copy's place. For a client that gets copies (see [`agentx config placement`](/cli/config)), the copy stays and becomes agentx's copy, which updates refresh. A copy counts when it holds the same files, a system file such as `.DS_Store` aside. A folder that holds other files stops the adoption, and nothing changes: make it hold the same files, or remove or rename it, then adopt again.
+- A client's own skills folder that holds a copy of the skill, such as `~/.claude/skills/<name>`, follows the adopted skill. For a client that gets symlinks, a symlink to your library takes the copy's place. For a client that gets copies (see [`agentx config placement`](/cli/config)), the copy stays and becomes agentx's copy, which updates refresh. A copy counts when it holds the same files, a system file such as `.DS_Store` aside. A folder that agentx cannot replace stops the adoption, and nothing changes. Fix it, then adopt again:
+  - it holds other files: make it hold the same files, or remove or rename it;
+  - clients that get copies and clients that get symlinks share it: set them to place skills the same way with [`agentx config placement`](/cli/config);
+  - agentx cannot write to the folder it is in, to put the symlink there: let agentx write to that folder;
+  - agentx cannot read it: make it readable, or remove it.
 - To place the skill in your other clients, run [`agentx skill place <name>`](/cli/skill#place-a-skill-you-already-have).
 
 ### From a client's folder
