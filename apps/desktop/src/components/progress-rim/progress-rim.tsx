@@ -12,14 +12,23 @@ import {
 
 /**
  * Each size: the room around the pill for the glow, in px; how wide the glow and head are; how
- * bright the glow is; and how bright the blink at the end is and how far it widens the glow. The
- * blink is softer on the large bar, where the same light covers far more of the screen.
+ * bright the glow is; and how the joined, full ring draws beside the growing arcs: its glow, its
+ * line's light and its line's width, each as a share. On the small pill the full ring is faint, so
+ * the sweep's band stands out from it.
  */
 const SIZES = {
-  md: { blinkGain: 0.45, blinkSpread: 0.3, pad: 26, scale: 1, strength: 1 },
+  md: {
+    fullGlow: 1,
+    fullLine: 1,
+    fullWidth: 1,
+    pad: 26,
+    scale: 1,
+    strength: 1,
+  },
   sm: {
-    blinkGain: 0.8,
-    blinkSpread: 0.6,
+    fullGlow: 0.15,
+    fullLine: 0.45,
+    fullWidth: 0.8,
     pad: 14,
     scale: 0.45,
     strength: 0.55,
@@ -90,11 +99,11 @@ const compile = (canvas: HTMLCanvasElement): Program | undefined => {
 /**
  * A command's progress on the rim of a pill (DESIGN.md §8 "Progress rim"): two arcs of drifting
  * light grow from the bottom centre, up each side, as far as `stepRim` says, and meet at the top
- * when the run ends; there the whole rim blinks and is gone, and `onSettled` is called. A run that
- * stops drains back instead. It draws on a WebGL canvas outside React's renders, once a frame, only while a run is
+ * when the run ends; then the rim fades and `onSettled` is called. A run that stops drains back
+ * instead. It draws on a WebGL canvas outside React's renders, once a frame, only while a run is
  * shown; without WebGL it draws nothing but still keeps the run's time. Place it in the pill, a
  * positioned element it measures. `md` suits the floating bar; `sm`, a quieter glow, a small
- * control. The canvas carries the drawn share in `data-progress` and the blink in `data-blink`.
+ * control. The canvas carries the drawn share in `data-progress`.
  */
 export const ProgressRim = ({
   run,
@@ -105,7 +114,7 @@ export const ProgressRim = ({
   onSettled: () => void;
   size?: keyof typeof SIZES;
 }) => {
-  const { blinkGain, blinkSpread, pad, scale, strength } = SIZES[size];
+  const { fullGlow, fullLine, fullWidth, pad, scale, strength } = SIZES[size];
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const programRef = useRef<Program | null>(null);
   const sizeRef = useRef({ dpr: 1, h: 0, w: 0 });
@@ -182,7 +191,7 @@ export const ProgressRim = ({
         frame = stepRim(frame, current, Math.min(0.05, (now - last) / 1000));
         last = now;
         canvas.dataset.progress = frame.progress.toFixed(3);
-        canvas.dataset.blink = frame.blink.toFixed(3);
+        canvas.dataset.sweep = frame.sweep.toFixed(3);
         if (program !== null) {
           const { gl, uniform } = program;
           const { dpr, h, w } = sizeRef.current;
@@ -199,10 +208,13 @@ export const ProgressRim = ({
           gl.uniform1f(uniform("uSettle"), frame.settle);
           gl.uniform1f(uniform("uScale"), scale);
           gl.uniform1f(uniform("uStrength"), strength);
-          gl.uniform1f(uniform("uBlink"), frame.blink);
-          gl.uniform1f(uniform("uBlinkGain"), blinkGain);
-          // Reduced motion: the blink brightens the rim but does not widen it.
-          gl.uniform1f(uniform("uBlinkSpread"), still ? 0 : blinkSpread);
+          gl.uniform1f(uniform("uSweep"), frame.sweep);
+          gl.uniform1f(uniform("uSweepAt"), frame.sweepAt);
+          // Reduced motion: the sweep brightens the whole rim instead of running.
+          gl.uniform1f(uniform("uStill"), still ? 1 : 0);
+          gl.uniform1f(uniform("uFullGlow"), fullGlow);
+          gl.uniform1f(uniform("uFullLine"), fullLine);
+          gl.uniform1f(uniform("uFullWidth"), fullWidth);
           gl.uniform2f(uniform("uBar"), w, h);
           gl.uniform3f(uniform("uLight"), ...light);
           gl.uniform3f(uniform("uFlow"), ...flow);
@@ -220,12 +232,12 @@ export const ProgressRim = ({
       cancelAnimationFrame(handle);
       if (canvas !== null) {
         delete canvas.dataset.progress;
-        delete canvas.dataset.blink;
+        delete canvas.dataset.sweep;
       }
       const gl = programRef.current?.gl;
       gl?.clear(gl.COLOR_BUFFER_BIT);
     };
-  }, [shown, pad, scale, strength, blinkGain, blinkSpread]);
+  }, [shown, pad, scale, strength, fullGlow, fullLine, fullWidth]);
 
   return (
     <canvas
