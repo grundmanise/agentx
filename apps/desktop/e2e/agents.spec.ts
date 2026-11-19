@@ -289,8 +289,8 @@ test("Remove on a card confirms with the directory and runs config remove", asyn
     removed("github-copilot")
   );
   await selectRemove(page, card(page, "GitHub Copilot"), "GitHub Copilot");
-  await expect(page.getByRole("dialog")).toMatchAriaSnapshot(`
-    - dialog "Remove GitHub Copilot?":
+  await expect(page.getByRole("alertdialog")).toMatchAriaSnapshot(`
+    - alertdialog "Remove GitHub Copilot?":
       - heading "Remove GitHub Copilot?" [level=2]
       - paragraph: Its configuration directory is deleted from this machine, with everything in it.
       - paragraph: /home/me/.github-copilot
@@ -299,7 +299,7 @@ test("Remove on a card confirms with the directory and runs config remove", asyn
   `);
 
   await page
-    .getByRole("dialog")
+    .getByRole("alertdialog")
     .getByRole("button", { name: "Remove" })
     .click();
   await expect(toasts(page).getByText("Removed GitHub Copilot")).toBeVisible();
@@ -319,7 +319,7 @@ test("Remove on a column of the Universal card removes that agent", async ({
   cli.register(["config", "remove", "codex", "--yes"], removed("codex"));
   const column = card(page, "Universal").getByRole("region", { name: "Codex" });
   await selectRemove(page, column, "Codex");
-  const dialog = page.getByRole("dialog", { name: "Remove Codex?" });
+  const dialog = page.getByRole("alertdialog", { name: "Remove Codex?" });
   await expect(dialog).toContainText("/home/me/.codex");
   await dialog.getByRole("button", { name: "Remove" }).click();
   await expect(toasts(page).getByText("Removed Codex")).toBeVisible();
@@ -331,7 +331,7 @@ test("Remove on a column of the Universal card removes that agent", async ({
 test("Cancel in the Remove dialog runs nothing", async ({ cli, page }) => {
   await openAgents(cli, page);
   await selectRemove(page, card(page, "Windsurf"), "Windsurf");
-  const dialog = page.getByRole("dialog", { name: "Remove Windsurf?" });
+  const dialog = page.getByRole("alertdialog", { name: "Remove Windsurf?" });
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
   expect(later(cli)).toEqual([]);
@@ -356,7 +356,7 @@ test("a removal that fails shows the CLI's error, with a hint in the app's words
   });
   await selectRemove(page, card(page, "GitHub Copilot"), "GitHub Copilot");
   await page
-    .getByRole("dialog", { name: "Remove GitHub Copilot?" })
+    .getByRole("alertdialog", { name: "Remove GitHub Copilot?" })
     .getByRole("button", { name: "Remove" })
     .click();
   await expect(toasts(page).getByRole("listitem")).toContainText(

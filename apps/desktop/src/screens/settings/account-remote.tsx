@@ -11,16 +11,16 @@ import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { Pill } from "#/components/pill.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
-import { Button } from "#/components/ui/button.tsx";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "#/components/ui/dialog.tsx";
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/components/ui/alert-dialog.tsx";
+import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
@@ -58,21 +58,21 @@ const Confirm = ({
   danger?: boolean;
   onConfirm: () => void;
 }) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent>
-      <DialogHeader showCloseButton={false}>
-        <DialogTitle>{title}</DialogTitle>
+  <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
         {detail !== undefined && (
           <p className="type-technical text-text-caption m-0 break-all">
             {detail}
           </p>
         )}
-        <DialogDescription>{warning}</DialogDescription>
-      </DialogHeader>
-      <DialogFooter>
-        <DialogClose asChild>
+        <AlertDialogDescription>{warning}</AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel asChild>
           <Button variant="ghost">Cancel</Button>
-        </DialogClose>
+        </AlertDialogCancel>
         <Button
           variant={danger ? "danger" : "primary"}
           onClick={() => {
@@ -82,9 +82,9 @@ const Confirm = ({
         >
           {action}
         </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 );
 
 /** The hints of `source add --account` that name a command, in the app's words. */

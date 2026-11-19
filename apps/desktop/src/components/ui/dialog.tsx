@@ -34,12 +34,15 @@ const DialogClose = ({ ...props }: OwnProps<typeof DialogPrimitive.Close>) => (
  * `shell.scrim-strong` behind a dialog and the palette. It fades in and out with shadcn's classes
  * (DESIGN.md §8), and while it fades out, clicks go through it to what is under it.
  */
+const DIALOG_OVERLAY =
+  "bg-shell-scrim-strong data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 data-[state=closed]:pointer-events-none!";
+
 const DialogOverlay = ({
   ...props
 }: OwnProps<typeof DialogPrimitive.Overlay>) => (
   <DialogPrimitive.Overlay
     data-slot="dialog-overlay"
-    className="bg-shell-scrim-strong data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 data-[state=closed]:pointer-events-none!"
+    className={DIALOG_OVERLAY}
     {...props}
   />
 );
@@ -140,6 +143,7 @@ const DialogDescription = ({
 );
 
 export {
+  DIALOG_OVERLAY,
   Dialog,
   DialogClose,
   DialogContent,
@@ -151,4 +155,5 @@ export {
   DialogStatus,
   DialogTitle,
   DialogTrigger,
+  dialogContentVariants,
 };

@@ -543,7 +543,7 @@ test("Remove on an Added skill confirms, then runs skill remove for every agent"
   const run = cli.register(["skill", "remove", "pdf"], {
     events: [{ ok: true, summary: "removed pdf", type: "result" }],
   });
-  const confirm = page.getByRole("dialog", { name: "Remove pdf?" });
+  const confirm = page.getByRole("alertdialog", { name: "Remove pdf?" });
   // Cancel puts the focus back on the card's Remove: the dialog has no trigger.
   await remove.click();
   await confirm.getByRole("button", { exact: true, name: "Cancel" }).click();
@@ -1216,7 +1216,9 @@ test("Remove with its installed skills removes each skill, then the source", asy
   await check(page, "artifacts").click();
   const remove = details(page).getByRole("button", { name: "Remove" });
   await remove.click();
-  const confirm = page.getByRole("dialog", { name: "Remove acme/skills?" });
+  const confirm = page.getByRole("alertdialog", {
+    name: "Remove acme/skills?",
+  });
   // Cancel returns focus to Remove.
   await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(remove).toBeFocused();
@@ -1265,7 +1267,9 @@ test("Retry after the lock resumes the removal: the skill, then the source", asy
 }) => {
   await openSources(cli, page);
   await details(page).getByRole("button", { name: "Remove" }).click();
-  const confirm = page.getByRole("dialog", { name: "Remove acme/skills?" });
+  const confirm = page.getByRole("alertdialog", {
+    name: "Remove acme/skills?",
+  });
   await confirm
     .getByRole("checkbox", { name: "Also remove its 1 installed skill pdf" })
     .click();
@@ -1308,7 +1312,7 @@ test("Remove alone removes the source and keeps its skills", async ({
   await openSources(cli, page);
   await pill(page, "zeta/tools").click();
   await details(page).getByRole("button", { name: "Remove" }).click();
-  const confirm = page.getByRole("dialog", { name: "Remove zeta/tools?" });
+  const confirm = page.getByRole("alertdialog", { name: "Remove zeta/tools?" });
   cli.register(["source", "remove", ZETA], {
     events: [{ id: ZETA_ID, type: "source", url: ZETA }],
   });

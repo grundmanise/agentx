@@ -8,16 +8,16 @@ import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LibraryPlacement } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { dismissToast } from "#/components/toast.tsx";
-import { Button } from "#/components/ui/button.tsx";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "#/components/ui/dialog.tsx";
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/components/ui/alert-dialog.tsx";
+import { Button } from "#/components/ui/button.tsx";
 import { revealInFinder } from "#/lib/reveal.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
@@ -167,21 +167,21 @@ export const Reconnect = ({
           void putBack(false);
         }}
       />
-      <Dialog open={confirm} onOpenChange={setConfirm}>
-        <DialogContent>
-          <DialogHeader showCloseButton={false}>
-            <DialogTitle>{`Replace ${agent}'s copy?`}</DialogTitle>
-            <DialogDescription>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{`Replace ${agent}'s copy?`}</AlertDialogTitle>
+            <AlertDialogDescription>
               {`${agent}'s copy of ${row.name} is different from the one in your library. Replacing it deletes ${agent}'s changes.`}
-            </DialogDescription>
-          </DialogHeader>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
           <p className="type-technical text-text-caption m-0 break-all">
             {placement.path}
           </p>
-          <DialogFooter>
-            <DialogClose asChild>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
               <Button variant="ghost">Cancel</Button>
-            </DialogClose>
+            </AlertDialogCancel>
             <Button
               variant="danger"
               onClick={() => {
@@ -191,9 +191,9 @@ export const Reconnect = ({
             >
               Replace
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
@@ -318,19 +318,19 @@ export const AbortMerge = ({ name }: { name: string }) => {
         {pending && <Spinner />}
         Abort
       </Button>
-      <Dialog open={confirm} onOpenChange={setConfirm}>
-        <DialogContent>
-          <DialogHeader showCloseButton={false}>
-            <DialogTitle>{`Abort the update of ${name}?`}</DialogTitle>
-            <DialogDescription>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{`Abort the update of ${name}?`}</AlertDialogTitle>
+            <AlertDialogDescription>
               Your resolved files in the merge folder are discarded. The skill
               and the update stay as they were.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <DialogClose asChild>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
               <Button variant="ghost">Cancel</Button>
-            </DialogClose>
+            </AlertDialogCancel>
             <Button
               variant="danger"
               onClick={() => {
@@ -343,9 +343,9 @@ export const AbortMerge = ({ name }: { name: string }) => {
             >
               Abort
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };

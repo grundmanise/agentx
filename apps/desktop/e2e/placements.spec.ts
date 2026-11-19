@@ -434,7 +434,7 @@ test.describe("many agents", () => {
       manyAgentsInventory(manyConfigurations.map((c) => c.id))
     );
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
-    const dialog = page.getByRole("dialog", { name: "Remove pdf?" });
+    const dialog = page.getByRole("alertdialog", { name: "Remove pdf?" });
     const list = dialog.getByRole("list", { name: "Agents that see it" });
     await expect(list.getByRole("listitem")).toHaveCount(28);
     const box = await dialog.boundingBox();
@@ -519,7 +519,7 @@ test.describe("banners", () => {
     });
 
     await banner.getByRole("button", { name: "Reconnect" }).click();
-    const dialog = page.getByRole("dialog", {
+    const dialog = page.getByRole("alertdialog", {
       name: "Replace Cursor's copy?",
     });
     await expect(dialog).toContainText(
@@ -580,7 +580,9 @@ test.describe("Remove", () => {
   }) => {
     await openSkill(cli, page, "pdf-letters");
     const article = pane(page, "pdf-letters");
-    const dialog = page.getByRole("dialog", { name: "Remove pdf-letters?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove pdf-letters?",
+    });
 
     // The Universal chip, on, is the removal: a client that reads the library loses a skill
     // only with the library.
@@ -632,7 +634,9 @@ test.describe("Remove", () => {
   }) => {
     await openSkill(cli, page, "pdf-letters");
     const article = pane(page, "pdf-letters");
-    const dialog = page.getByRole("dialog", { name: "Remove pdf-letters?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove pdf-letters?",
+    });
     const remote = dialog.getByRole("checkbox", {
       name: /^Also delete it from your account remote/u,
     });
@@ -645,7 +649,7 @@ test.describe("Remove", () => {
     await expect(dialog).toBeHidden();
     await article.getByRole("button", { name: "Remove" }).click();
     await expect(remote).not.toBeChecked();
-    // Escape and a click outside dismiss it the same way.
+    // Escape dismisses it the same way.
     await remote.click();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -665,7 +669,7 @@ test.describe("Remove", () => {
     await openSkill(cli, page, "draft");
     cli.register(["skill", "remove", "draft"]);
     await pane(page, "draft").getByRole("button", { name: "Remove" }).click();
-    const dialog = page.getByRole("dialog", { name: "Remove draft?" });
+    const dialog = page.getByRole("alertdialog", { name: "Remove draft?" });
     await dialog.getByRole("button", { name: "Remove" }).click();
     await expect(toasts(page).getByText("Removed draft skill")).toBeVisible();
     expect(later(cli)).toEqual([["skill", "remove", "draft", "--json"]]);
@@ -677,7 +681,7 @@ test.describe("Remove", () => {
   }) => {
     await openSkill(cli, page, "pdf");
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
-    const dialog = page.getByRole("dialog", { name: "Remove pdf?" });
+    const dialog = page.getByRole("alertdialog", { name: "Remove pdf?" });
     await expect(
       dialog
         .getByRole("list", { name: "Agents that see it" })
