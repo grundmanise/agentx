@@ -487,12 +487,8 @@ test("names and targets: two cards and one enabled agent turned off", async ({
   await target(page, "Cursor").click();
   await expect(target(page, "Cursor")).toHaveAttribute("aria-pressed", "false");
 
-  await bar(page).getByRole("button", { name: "Add 2" }).click();
-  await add.started;
-  await expect(toasts(page).getByText("Added 2 skills")).toBeVisible();
-  // The selection clears, but the bar stays while its rim fills, joins, sweeps and fades.
-  await expect(bar(page).locator("canvas[data-progress]")).toBeAttached();
-  await page.waitForFunction(
+  // Watched in the page from before the run, so the short sweep cannot slip by unseen.
+  const swept = page.waitForFunction(
     () =>
       Number(
         document.querySelector<HTMLCanvasElement>(
@@ -502,6 +498,12 @@ test("names and targets: two cards and one enabled agent turned off", async ({
     undefined,
     { polling: "raf" }
   );
+  await bar(page).getByRole("button", { name: "Add 2" }).click();
+  await add.started;
+  await expect(toasts(page).getByText("Added 2 skills")).toBeVisible();
+  // The selection clears, but the bar stays while its rim fills, joins, sweeps and fades.
+  await expect(bar(page).locator("canvas[data-progress]")).toBeAttached();
+  await swept;
   await expect(bar(page)).toHaveCount(0);
   // The cards turn Added only with the next inventory.
   await expect(check(page, "docx")).toBeVisible();
