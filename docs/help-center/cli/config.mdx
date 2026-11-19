@@ -51,7 +51,7 @@ An empty `disabled_configurations` or `copy_configurations` shows as `(none)`. `
 | `disabled_configurations` | The configurations agentx skips when you install or place a skill without `--to`. See [Enable or disable a configuration](#enable-or-disable-a-configuration). |
 | `copy_configurations` | The configurations that get a copy of each new skill instead of a symlink. See [Choose symlink or copy](#choose-symlink-or-copy). |
 | `sources` | The sources skills are installed from, managed with [`agentx source`](/cli/source). |
-| `copy_mode` | For each skill placed as a copy, the configurations that hold the copy. Written by `agentx skill add --copy`, `agentx skill place --copy`, `agentx config placement <id> copy --convert` and every placement in a configuration listed in `copy_configurations`, and cleared by `agentx skill remove` and `agentx config placement <id> symlink --convert`. |
+| `copy_mode` | For each skill placed as a copy, the configurations that hold the copy. Written by `agentx skill add --copy`, `agentx skill place --copy`, `agentx adopt` for a client copy it keeps, `agentx config placement <id> copy --convert` and every placement in a configuration listed in `copy_configurations`, and cleared by `agentx skill remove` and `agentx config placement <id> symlink --convert`. |
 
 ## Get one setting
 
