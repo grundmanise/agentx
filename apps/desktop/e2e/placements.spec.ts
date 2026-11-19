@@ -291,7 +291,7 @@ test.describe("chips", () => {
       .getByRole("listitem")
       .filter({ hasText: "scratch skill wasn't adopted" });
     await expect(toast).toContainText(
-      "/home/me/.claude/skills/scratch contains files that differ from the skill version."
+      "/home/me/.claude/skills/scratch contains files that differ from the skill version"
     );
     cli.register(["adopt", "--skill", "scratch", "--force"], {
       events: [{ name: "scratch", type: "library_skill" }],
@@ -331,7 +331,7 @@ test.describe("chips", () => {
       .getByRole("listitem")
       .filter({ hasText: "scratch skill wasn't adopted" });
     await expect(toast).toContainText(
-      "/home/me/.claude/skills/scratch is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks."
+      "/home/me/.claude/skills/scratch is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks"
     );
     await expect(toast.getByRole("button", { name: "Replace" })).toHaveCount(0);
   });

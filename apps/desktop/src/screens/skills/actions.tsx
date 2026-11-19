@@ -111,7 +111,7 @@ const adoptRefusal = (
               useAdoptReplace.setState({ request: { paths: replace, row } });
             },
           },
-    details: folders.map(({ path, why }) => `${path} ${why}.`),
+    details: folders.map(({ path, why }) => `${path} ${why}`),
     keep: [row.name],
     lasting: true,
     message: `${row.name} skill wasn't adopted`,
