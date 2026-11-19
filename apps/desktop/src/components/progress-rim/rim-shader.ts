@@ -2,9 +2,9 @@
  * The WebGL program of a progress rim (DESIGN.md §8 "Progress rim"): two arcs of drifting light
  * that grow from the bottom centre of a pill, up each side, and meet at the top. Every length is
  * in CSS pixels; the canvas is `uPad` larger than the pill on each side, for the glow. `uScale`
- * sizes the glow and the head, `uStrength` how bright the glow is. At the end of a finished run a
- * bright band (`uSweep`, at `uSweepAt`) runs from the top centre back down both sides; with
- * `uStill` (reduced motion) it brightens the whole rim instead.
+ * sizes the glow and the head, `uStrength` how bright the glow is. At the end of a finished run the
+ * whole rim blinks (`uBlink`): it lights up by `uBlinkGain`, its glow and line widen by
+ * `uBlinkSpread`, and it collapses.
  */
 
 export const RIM_VERTEX = `
@@ -15,7 +15,7 @@ void main() { gl_Position = vec4(a, 0.0, 1.0); }
 export const RIM_FRAGMENT = `
 precision highp float;
 uniform vec2 uRes;
-uniform float uDpr, uTime, uProg, uAlpha, uPad, uSettle, uScale, uStrength, uSweep, uSweepAt, uStill;
+uniform float uDpr, uTime, uProg, uAlpha, uPad, uSettle, uScale, uStrength, uBlink, uBlinkGain, uBlinkSpread;
 uniform vec2 uBar;
 uniform vec3 uLight, uFlow;
 
@@ -64,8 +64,9 @@ void main() {
   float mask = lead * ramp;
   // Noise from the 2D position, drifting slowly.
   float n = fbm(vec2(p.x * 0.011 - uTime * 0.32, p.y * 0.045 + uTime * 0.1));
-  float core = exp(-d * d / 0.65);
-  float glow = d > 0.0 ? exp(-d / ((7.0 + 3.0 * n) * uScale)) : exp(d / 1.5);
+  // The blink widens the line and the glow.
+  float core = exp(-d * d / (0.65 * (1.0 + 1.5 * uBlink * min(uBlinkSpread, 1.0))));
+  float glow = d > 0.0 ? exp(-d / ((7.0 + 3.0 * n) * uScale * (1.0 + uBlinkSpread * uBlink))) : exp(d / 1.5);
   float dh = headS - S;
   float hw = dh >= 0.0 ? 30.0 * uScale : 5.0;
   float gw = (dh >= 0.0 ? 30.0 : 14.0) * uScale;
@@ -76,12 +77,9 @@ void main() {
   col = mix(col, pale, head * 0.45);
   float breathe = 0.9 + 0.1 * sin(uTime * 1.5);
   float a = mask * (core + glow * 0.4 * uStrength * breathe * (0.75 + 0.5 * n)) + head * core * 0.35 + headGlow * glow * 0.3 * uStrength;
-  // The sweep: a bright band from the top centre back down both sides.
-  float Sb = (1.0 - uSweepAt) * P * 0.5;
-  float bw = 26.0 * uScale + 6.0;
-  float band = uSweep * (uStill > 0.5 ? 1.0 : exp(-(S - Sb) * (S - Sb) / (2.0 * bw * bw)));
-  a += band * (core * 0.9 + glow * 0.75 * uStrength);
-  col = mix(col, pale, band * 0.75);
+  // The blink: the whole rim lights up at once.
+  a += uBlink * uBlinkGain * (core * 0.8 + glow * 0.6 * uStrength);
+  col = mix(col, pale, clamp(uBlink * uBlinkGain, 0.0, 1.0) * 0.7);
   // Fades out before the canvas's edge, so the glow has no hard border.
   a *= 1.0 - smoothstep(uPad * 0.45, uPad - 1.0, d);
   a += core * 0.045;
