@@ -190,7 +190,7 @@ agentx adopts a skill in your library in its place:
 
 - The folder moves to `~/.agentx/worktrees/<name>`, and your library holds a symlink to it. See [Where your skills live](/cli/fork#where-your-skills-live).
 - Every client that saw the skill still sees it.
-- A client's own skills folder that holds a copy of the skill, such as `~/.claude/skills/<name>`, gets a symlink to your library in place of the copy, so the client follows the adopted skill. A copy counts when it holds the same files, a system file such as `.DS_Store` aside. A folder that holds other files stays as it is, and agentx warns and names the command that replaces it.
+- A client's own skills folder that holds a copy of the skill, such as `~/.claude/skills/<name>`, follows the adopted skill. For a client that gets symlinks, a symlink to your library takes the copy's place. For a client that gets copies (see [`agentx config placement`](/cli/config)), the copy stays and becomes agentx's copy, which updates refresh. A copy counts when it holds the same files, a system file such as `.DS_Store` aside. A folder that holds other files stays as it is, and agentx warns and names the command that replaces it.
 - To place the skill in your other clients, run [`agentx skill place <name>`](/cli/skill#place-a-skill-you-already-have).
 
 ### From a client's folder

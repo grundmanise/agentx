@@ -551,8 +551,43 @@ func TestAdoptReplacesAClientsCopyOfALibrarySkill(t *testing.T) {
 	}
 	equal(t, "what is left in .claude", strings.Join(hiddenEntries(t, filepath.Dir(claude)), " "), "")
 	equal(t, "the other files", fileBody(t, filepath.Join(cortex, "SKILL.md")), skill("rex", "Run other things"))
-	contains(t, "the warning", out.stderr, quotedPath(cortex)+" was left as it is: agentx could not tell it is a copy of rex; "+
+	contains(t, "the warning", out.stderr, quotedPath(cortex)+" has other files than rex and was left as it is; "+
 		"to replace it with the adopted skill, run 'agentx skill place rex --to cortex --force'")
+}
+
+// TestAdoptKeepsAClientsCopyWhereItPlacesCopies adopts a library skill
+// that a client holds a copy of, where that client's configuration places
+// copies: the copy stays where it is, and copy_mode records it as agentx's
+// copy, a placement of the adopted skill.
+func TestAdoptKeepsAClientsCopyWhereItPlacesCopies(t *testing.T) {
+	t.Parallel()
+	h, _ := installHarness(t)
+	h.mustRun("config", "placement", "claude-code", "copy")
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "rex"), "SKILL.md"), skill("rex", "Run things"))
+	claude := filepath.Join(h.home, ".claude", "skills", "rex")
+	writeFile(t, mkdirs(t, claude, "SKILL.md"), skill("rex", "Run things"))
+
+	out := h.run("--json", "adopt", "--skill", "rex")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "warnings", out.stderr, "")
+	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "adopted rex in 1 configuration")
+	if info, err := os.Lstat(claude); err != nil || !info.IsDir() {
+		t.Fatalf("claude-code's copy is gone or no directory: %v", err)
+	}
+	equal(t, "the copy", fileBody(t, filepath.Join(claude, "SKILL.md")), skill("rex", "Run things"))
+	s, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modes, _ := s.CopyModes()
+	deep(t, "copy_mode", modes, map[string][]string{"rex": {"claude-code"}})
+	mode := ""
+	for _, p := range h.librarySkill(out.stdout, "rex")["placements"].([]any) {
+		if p := p.(map[string]any); p["configuration"] == "claude-code" {
+			mode, _ = p["mode"].(string)
+		}
+	}
+	equal(t, "claude-code's placement", mode, "copy")
 }
 
 // TestChooseAdoptions sorts the names of a run into the skills a record

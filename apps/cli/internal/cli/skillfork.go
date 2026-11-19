@@ -792,7 +792,10 @@ func (inv *invocation) forkInPlace(ctx context.Context, fk *forking, rec lineage
 	m.Move(fk.from, skillDir, fp)
 	m.Link(libPath, link)
 	stageAdoptPlaces(m, fk, libPath, done)
-	stageAdoptCopies(m, fk, libPath, done)
+	if err := inv.stageAdoptCopies(m, fk, libPath, done); err != nil {
+		m.Discard()
+		return err
+	}
 	return m.Apply(inv.refs(ctx))
 }
 
