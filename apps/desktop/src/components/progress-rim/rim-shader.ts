@@ -2,7 +2,11 @@
  * The WebGL program of a progress rim (DESIGN.md §8 "Progress rim"): two arcs of drifting light
  * that grow from the bottom centre of a pill, up each side, and meet at the top. Every length is
  * in CSS pixels; the canvas is `uPad` larger than the pill on each side, for the glow. `uScale`
- * sizes the glow and the head, `uStrength` how bright the glow is.
+ * sizes the glow and the head, `uStrength` how bright the glow is. At the end of a finished run a
+ * bright band (`uSweep`, at `uSweepAt`) runs from the top centre back down both sides; with
+ * `uStill` (reduced motion) it brightens the whole rim instead. `uFullLine`, `uFullGlow` and
+ * `uFullWidth` say how bright and how wide the joined, full ring is beside the growing arcs, so
+ * that on a small pill the band stands out from the ring under it.
  */
 
 export const RIM_VERTEX = `
@@ -13,7 +17,7 @@ void main() { gl_Position = vec4(a, 0.0, 1.0); }
 export const RIM_FRAGMENT = `
 precision highp float;
 uniform vec2 uRes;
-uniform float uDpr, uTime, uProg, uAlpha, uPad, uSettle, uScale, uStrength;
+uniform float uDpr, uTime, uProg, uAlpha, uPad, uSettle, uScale, uStrength, uSweep, uSweepAt, uStill, uFullLine, uFullGlow, uFullWidth;
 uniform vec2 uBar;
 uniform vec3 uLight, uFlow;
 
@@ -64,6 +68,10 @@ void main() {
   float n = fbm(vec2(p.x * 0.011 - uTime * 0.32, p.y * 0.045 + uTime * 0.1));
   float core = exp(-d * d / 0.65);
   float glow = d > 0.0 ? exp(-d / ((7.0 + 3.0 * n) * uScale)) : exp(d / 1.5);
+  // The joined ring: calmer than the growing arcs where the size asks for it. The band keeps its own light.
+  float width = mix(1.0, uFullWidth, full);
+  float ringCore = exp(-d * d / (0.65 * width * width)) * mix(1.0, uFullLine, full);
+  float ringGlow = (d > 0.0 ? exp(-d / ((7.0 + 3.0 * n) * uScale * width)) : exp(d / (1.5 * width))) * mix(1.0, uFullGlow, full);
   float dh = headS - S;
   float hw = dh >= 0.0 ? 30.0 * uScale : 5.0;
   float gw = (dh >= 0.0 ? 30.0 : 14.0) * uScale;
@@ -73,7 +81,13 @@ void main() {
   vec3 col = mix(uLight, uFlow, smoothstep(0.3, 0.85, n) * 0.55);
   col = mix(col, pale, head * 0.45);
   float breathe = 0.9 + 0.1 * sin(uTime * 1.5);
-  float a = mask * (core + glow * 0.4 * uStrength * breathe * (0.75 + 0.5 * n)) + head * core * 0.35 + headGlow * glow * 0.3 * uStrength;
+  float a = mask * (ringCore + ringGlow * 0.4 * uStrength * breathe * (0.75 + 0.5 * n)) + head * core * 0.35 + headGlow * glow * 0.3 * uStrength;
+  // The sweep: a bright band from the top centre back down both sides.
+  float Sb = (1.0 - uSweepAt) * P * 0.5;
+  float bw = 26.0 * uScale + 6.0;
+  float band = uSweep * (uStill > 0.5 ? 1.0 : exp(-(S - Sb) * (S - Sb) / (2.0 * bw * bw)));
+  a += band * (core * 0.9 + glow * 0.75 * uStrength);
+  col = mix(col, pale, band * 0.75);
   // Fades out before the canvas's edge, so the glow has no hard border.
   a *= 1.0 - smoothstep(uPad * 0.45, uPad - 1.0, d);
   a += core * 0.045;
