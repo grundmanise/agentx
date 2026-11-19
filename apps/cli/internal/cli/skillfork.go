@@ -72,6 +72,15 @@ type forking struct {
 	// skills directories, the one that moves first, see adoptPlace; nil for
 	// every other fork.
 	places []adoptPlace
+	// copies are the directories in agent clients' own skills directories
+	// that hold what the library entry an adoption takes holds, see
+	// readAdoptCopies: each is removed and gets the library's symlink, as a
+	// placement; nil for every other fork. kept are the ones under the
+	// skill's name that hold other files, or are not agentx's to replace,
+	// left as they are and said to be.
+	copies   []adoptPlace
+	copiesOf string // what the library entry held when its copies were compared with it
+	kept     []adoptPlace
 	// renamed reports a rename once its source is removed, in one line
 	// that names both names; reportForked sets it for a rename, in place
 	// of its own line.
@@ -520,8 +529,8 @@ func (inv *invocation) forkContent(ctx context.Context, fk *forking) (string, []
 			return "", nil, libraryFailure(filepath.Dir(fk.from), err)
 		}
 		// The directories an adoption removes were compared with what this
-		// one held then, see readAdoptPlaces.
-		if len(fk.places) > 0 && state != fk.places[0].state {
+		// one held then, see readAdoptPlaces and readAdoptCopies.
+		if len(fk.places) > 0 && state != fk.places[0].state || len(fk.copies) > 0 && state != fk.copiesOf {
 			return "", nil, fk.changed()
 		}
 		fk.captured = state
@@ -758,7 +767,7 @@ func (inv *invocation) forkInPlace(ctx context.Context, fk *forking, rec lineage
 	if lexists(root) {
 		return fk.rootTaken(root)
 	}
-	if len(fk.places) > 0 && !inv.adoptPlacesHold(fk) {
+	if len(fk.places) > 0 && !inv.adoptPlacesHold(fk) || !adoptCopiesHold(fk) {
 		return changed
 	}
 	for _, parent := range []string{filepath.Dir(libPath), inv.worktreesDir()} {
@@ -783,6 +792,10 @@ func (inv *invocation) forkInPlace(ctx context.Context, fk *forking, rec lineage
 	m.Move(fk.from, skillDir, fp)
 	m.Link(libPath, link)
 	stageAdoptPlaces(m, fk, libPath, done)
+	if err := inv.stageAdoptCopies(m, fk, libPath, done); err != nil {
+		m.Discard()
+		return err
+	}
 	return m.Apply(inv.refs(ctx))
 }
 
