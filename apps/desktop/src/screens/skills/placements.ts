@@ -325,16 +325,6 @@ export const convertedText = (
     : text;
 };
 
-/**
- * The configurations `config placement` set the same way as the one named, which read the same
- * skills folder, from its result: `…, and so does <id>, which reads the same skills folder` or
- * `so do <id> and <id>, which read`. None when it names none.
- */
-export const sharingIds = (events: CliEvent[]): string[] =>
-  /and so do(?:es)? (?<ids>.+?), which reads? the same skills folder/u
-    .exec(summaryOf(events) ?? "")
-    ?.groups?.ids?.split(" and ") ?? [];
-
 /** The error that refuses a Reconnect because the directory holds another version (exit code 6). */
 export const holdsOtherContent = (events: CliEvent[]) =>
   events.some(
