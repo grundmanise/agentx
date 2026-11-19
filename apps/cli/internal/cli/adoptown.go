@@ -41,8 +41,9 @@ type adoptPlace struct {
 	// places copies: a copy of an adoption stays where it is, as agentx's
 	// copy, see stageAdoptCopies.
 	asCopy bool
-	// left is why an adoption left it as it is, in the words of its warning.
-	left string
+	// left is why an adoption cannot replace it, in the words of its
+	// refusal, see adoptLeftRefusal, and fix what the user does about it.
+	left, fix string
 }
 
 // ids are the configurations whose own skills directory holds the place.
@@ -93,6 +94,9 @@ func (inv *invocation) planAdoption(ctx context.Context, name string, missing er
 		return nil, err
 	}
 	if err := inv.readAdoptCopies(fk); err != nil {
+		return nil, err
+	}
+	if err := adoptLeftRefusal(fk); err != nil {
 		return nil, err
 	}
 	return fk, nil
@@ -651,7 +655,8 @@ func stageAdoptPlaces(m *home.Mutation, fk *forking, libPath string, done *place
 // that client's directory. One is a candidate copy, see readAdoptCopies,
 // where every configuration it belongs to places the same way: copies,
 // and it stays as agentx's copy, or symlinks, and agentx can write its
-// skills directory to replace it. Any other is kept as it is.
+// skills directory to replace it. Any other refuses the adoption, see
+// adoptLeftRefusal.
 func (inv *invocation) findAdoptCopies(fk *forking, name string) error {
 	dirs, _ := inv.adoptSites(name)
 	if len(dirs) == 0 {
@@ -668,11 +673,13 @@ func (inv *invocation) findAdoptCopies(fk *forking, name string) error {
 		switch {
 		case !p.asCopy && slices.ContainsFunc(p.targets, copies):
 			p.left = "is read by configurations that place copies and ones that place symlinks"
+			p.fix = "set " + strings.Join(p.ids(), " and ") + " to place skills the same way with 'agentx config placement'"
 		case !p.asCopy && unix.Access(filepath.Dir(p.path), unix.W_OK|unix.X_OK) != nil:
 			p.left = "is in a folder agentx cannot write to"
+			p.fix = "let agentx write to " + quotedPath(filepath.Dir(p.path))
 		}
 		if p.left != "" {
-			fk.kept = append(fk.kept, p)
+			fk.left = append(fk.left, p)
 			continue
 		}
 		fk.copies = append(fk.copies, p)
@@ -684,8 +691,8 @@ func (inv *invocation) findAdoptCopies(fk *forking, name string) error {
 // and what each of its candidate copies holds, see findAdoptCopies, as
 // readAdoptPlaces reads a directory: a copy that holds the same files
 // stays one, to be replaced by the library's symlink, see copyOf, and any
-// other is kept as it is. A copy that cannot be read is kept too: the adoption of
-// the library entry never needed it.
+// other, or one that cannot be read, refuses the adoption, see
+// adoptLeftRefusal.
 func (inv *invocation) readAdoptCopies(fk *forking) error {
 	if len(fk.copies) == 0 {
 		return nil
@@ -701,17 +708,42 @@ func (inv *invocation) readAdoptCopies(fk *forking) error {
 		read, err := readAdoptPlace(p)
 		switch {
 		case err != nil:
-			p.left = "cannot be read"
+			p.left, p.fix = "cannot be read", "make it readable, or remove it"
 		case read.copyOf(lib, ignoreSystem):
 			same = append(same, read)
 			continue
 		default:
-			p.left = "has other files than " + fk.target
+			p.left = "has other files than " + quotedPath(fk.from)
+			p.fix = "make it hold the same files, or remove or rename it"
 		}
-		fk.kept = append(fk.kept, p)
+		fk.left = append(fk.left, p)
 	}
 	fk.copies = same
 	return nil
+}
+
+// adoptLeftRefusal refuses the adoption of a library entry while an agent
+// client's own skills directory holds a directory of the skill that the
+// adoption cannot replace, see findAdoptCopies and readAdoptCopies: an
+// adoption is the whole skill or nothing, so a client never goes on
+// reading a folder agentx did not place beside the skill it manages. nil
+// when there is none.
+func adoptLeftRefusal(fk *forking) error {
+	if len(fk.left) == 0 {
+		return nil
+	}
+	found := make([]string, len(fk.left))
+	var fixes []string
+	for i, p := range fk.left {
+		found[i] = quotedPath(p.path) + " " + p.left
+		if !slices.Contains(fixes, p.fix) {
+			fixes = append(fixes, p.fix)
+		}
+	}
+	listedFound := strings.Join(found, ", and ")
+	return refuse(exitRefused, sanitised(fk.target)+" cannot be adopted: "+listedFound,
+		strings.Join(fixes, "; ")+", then "+fk.again()).
+		listed("cannot be adopted: " + listedFound + ". To adopt it, " + strings.Join(fixes, "; "))
 }
 
 // copyOf reports whether p holds what lib holds, as same does, or, while
@@ -803,10 +835,6 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	out, name := inv.out, sanitised(fk.target)
 	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, nil)
 	out.emit(ev)
-	for _, p := range fk.kept {
-		out.warnWith(quotedPath(p.path)+" "+p.left+" and was left as it is",
-			"to replace it with the adopted skill, run '"+skillCommand("place", fk.target, "--to", p.targets[0].id, "--force")+"'")
-	}
 	if len(fk.places) == 0 && len(fk.copies) == 0 {
 		inv.summary = "adopted " + name
 		out.done("adopted " + out.paint(heading, name))
