@@ -137,25 +137,25 @@ func TestSkillRemoveFromOneConfiguration(t *testing.T) {
 	contains(t, "the result", out.stdout, "removed alpha from cortex: 1 placement")
 }
 
-// TestSkillRemoveFromASharedPlace: Zencoder and Zenflow share one skills
-// directory, so removing the skill from one takes it from the other, and
+// TestSkillRemoveFromASharedPlace: AdaL and Augment share one skills
+// directory, Augment's a symlink to AdaL's, so removing the skill from one takes it from the other, and
 // the run warns.
 func TestSkillRemoveFromASharedPlace(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
+	h.build(t, fixture{dirs: []string{".claude", ".adal/skills"}, links: map[string]string{".augment/skills": ".adal/skills"}})
 	s, _, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
-	place := filepath.Join(h.home, ".zencoder", "skills", "alpha")
+	place := filepath.Join(h.home, ".adal", "skills", "alpha")
 
-	out := h.run("--json", "skill", "remove", "alpha", "--from", "zenflow")
+	out := h.run("--json", "skill", "remove", "alpha", "--from", "augment")
 	equal(t, "exit", out.exit, 0)
 	nothingAt(t, "the shared placement", place)
 	warning := h.one(out.stderr, "log")
 	equal(t, "the warning level", warning["level"], "warn")
-	contains(t, "the warning", warning["message"].(string), "zencoder shares "+filepath.Dir(place)+
-		" with zenflow, so removing alpha from zenflow took it from zencoder too")
+	contains(t, "the warning", warning["message"].(string), "adal shares "+filepath.Join(h.home, ".augment", "skills")+
+		" with augment, so removing alpha from augment took it from adal too")
 }
 
 // TestSkillRemoveTakesTheSkillOffTheMachine removes every placement, the
