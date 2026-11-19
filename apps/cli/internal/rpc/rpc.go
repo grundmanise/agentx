@@ -1,5 +1,5 @@
 // Package rpc is the WebSocket door of the serve child: a JSON-RPC 2.0
-// server that takes one message per text frame from the clients that may
+// server that takes one message per frame from the clients that may
 // connect, and answers each request from the method it names.
 package rpc
 

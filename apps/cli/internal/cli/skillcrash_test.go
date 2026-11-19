@@ -21,12 +21,7 @@ func TestInstallChildProcess(t *testing.T) {
 	if words == "" {
 		t.Skip("not the install child process")
 	}
-	env := map[string]string{}
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			env[k] = v
-		}
-	}
+	env := processEnv()
 	args := append([]string{"skill", "add"}, strings.Split(words, "\n")...)
 	os.Exit(Run(context.Background(), args, env, strings.NewReader(""), os.Stdout, os.Stderr))
 }

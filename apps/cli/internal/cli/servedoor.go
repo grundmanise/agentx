@@ -193,11 +193,11 @@ type runResult struct {
 // everything it started. The request names no environment and no
 // directory: whoever could set those could have git run any program.
 //
-// Serve scans once the command has ended, as the desktop app asks for a
-// refresh after every command: serve cannot tell which commands change
-// nothing, and a scan that finds nothing new emits nothing. The scan is
-// not the request's to cancel: what the command changed is on disk whether
-// or not anyone still asks about it. Only serve stopping ends the wait.
+// Serve scans once the command has ended, whatever the command: serve
+// cannot tell which commands change nothing, and a scan that finds nothing
+// new emits nothing. The scan is not the request's to cancel: what the
+// command changed is on disk whether or not anyone still asks about it.
+// Only serve stopping ends the wait.
 func (d *serveDoor) run(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
 	var p struct {
 		Args       []string `json:"args"`
