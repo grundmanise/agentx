@@ -3,7 +3,8 @@
  * steps in bursts, such as three per skill and one rescan for `skill add`, so the rim never shows
  * them as they come: it creeps toward 90% on its own, as a browser's loading bar does, and the steps only raise
  * the floor it eases toward, at a capped speed, so it never jumps. When the run ends, the rim
- * eases into 100% in a fixed time, its two arcs join, it holds, and it fades.
+ * eases into 100% in a fixed time, its two arcs join, a bright band sweeps back down both sides,
+ * and it fades. A stopped run drains back and fades.
  */
 
 /** The run the rim shows: the share of the CLI's steps that ended, and how the run stands. */
@@ -28,6 +29,13 @@ export interface RimFrame {
   /** When the run ended, in `elapsed` seconds, and how far the rim was then. */
   doneAt?: number;
   doneFrom?: number;
+  /** When the run stopped, in `elapsed` seconds, and how strongly the rim drew then. */
+  stopAt?: number;
+  stopFrom?: number;
+  /** The sweep at the end of a finished run: how bright its band is, 0 to 1. */
+  sweep: number;
+  /** Where the band is, 0 at the top centre to 1 at the bottom centre. */
+  sweepAt: number;
   /** The run ended and the rim has faded. */
   finished: boolean;
 }
@@ -39,6 +47,8 @@ export const RIM_START: RimFrame = {
   progress: 0,
   raw: 0,
   settle: 0,
+  sweep: 0,
+  sweepAt: 0,
 };
 
 /** Where the creep starts, so the rim shows at once. */
@@ -55,8 +65,15 @@ const FADE_IN = 0.5;
 const FILL = 1.2;
 const JOIN_FROM = 0.6;
 const JOIN = 0.9;
-const FADE_FROM = 1.85;
-const FADE = 1.1;
+/** The sweep: a bright band runs from the top centre back down both sides as the arcs join. */
+const SWEEP_FROM = 1.2;
+const SWEEP = 0.42;
+/** Where in the sweep its light peaks: it rises fast and falls away. */
+const SWEEP_PEAK = 0.22;
+const FADE_FROM = 1.65;
+const FADE = 0.14;
+/** How long a stopped run's rim takes to go: it holds its light, then goes fast at the end. */
+const STOP_FADE = 0.45;
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const ease = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
@@ -68,21 +85,39 @@ const smoother = (x: number) => {
   return k * k * k * (k * (k * 6 - 15) + 10);
 };
 
+/** The sweep's band, `since` seconds after the run ended. */
+const sweepOf = (since: number) => {
+  const x = (since - SWEEP_FROM) / SWEEP;
+  if (x <= 0 || x >= 1) {
+    return { sweep: 0, sweepAt: x >= 1 ? 1 : 0 };
+  }
+  const sweep =
+    x < SWEEP_PEAK
+      ? smoother(x / SWEEP_PEAK)
+      : 1 - smoother((x - SWEEP_PEAK) / (1 - SWEEP_PEAK));
+  return { sweep, sweepAt: smoother(x) };
+};
+
 /** The next frame, `dt` seconds after `prev`. */
 export const stepRim = (prev: RimFrame, run: RimRun, dt: number): RimFrame => {
   const elapsed = prev.elapsed + dt;
   if (run.state === "stopped") {
-    // Drains back and fades.
-    const alpha = Math.max(0, prev.alpha - 1.6 * dt);
+    // Drains back and fades, holding its light at first and going fast at the end.
+    const stopAt = prev.stopAt ?? elapsed;
+    const stopFrom = prev.stopFrom ?? prev.alpha;
+    const gone = (elapsed - stopAt) / STOP_FADE;
     const progress = prev.progress * (1 - ease(3, dt));
     return {
       ...prev,
-      alpha,
+      alpha: stopFrom * (1 - clamp01(gone) ** 2),
       elapsed,
-      finished: alpha <= 0,
+      finished: gone >= 1,
       progress,
       raw: progress,
       settle: 0,
+      stopAt,
+      stopFrom,
+      sweep: 0,
     };
   }
   if (run.state === "done") {
@@ -101,6 +136,7 @@ export const stepRim = (prev: RimFrame, run: RimRun, dt: number): RimFrame => {
       progress,
       raw: progress,
       settle: smoother((since - JOIN_FROM) / JOIN),
+      ...sweepOf(since),
     };
   }
   const creep = SLIVER + (0.9 - SLIVER) * (1 - Math.exp(-elapsed / CREEP));
@@ -118,5 +154,7 @@ export const stepRim = (prev: RimFrame, run: RimRun, dt: number): RimFrame => {
     progress: prev.progress + (raw - prev.progress) * ease(4, dt),
     raw,
     settle: 0,
+    sweep: 0,
+    sweepAt: 0,
   };
 };

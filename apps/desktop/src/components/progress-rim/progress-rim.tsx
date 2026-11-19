@@ -172,6 +172,7 @@ export const ProgressRim = ({
         frame = stepRim(frame, current, Math.min(0.05, (now - last) / 1000));
         last = now;
         canvas.dataset.progress = frame.progress.toFixed(3);
+        canvas.dataset.sweep = frame.sweep.toFixed(3);
         if (program !== null) {
           const { gl, uniform } = program;
           const { dpr, h, w } = sizeRef.current;
@@ -188,6 +189,10 @@ export const ProgressRim = ({
           gl.uniform1f(uniform("uSettle"), frame.settle);
           gl.uniform1f(uniform("uScale"), scale);
           gl.uniform1f(uniform("uStrength"), strength);
+          gl.uniform1f(uniform("uSweep"), frame.sweep);
+          gl.uniform1f(uniform("uSweepAt"), frame.sweepAt);
+          // Reduced motion: the sweep brightens the whole rim instead of running.
+          gl.uniform1f(uniform("uStill"), still ? 1 : 0);
           gl.uniform2f(uniform("uBar"), w, h);
           gl.uniform3f(uniform("uLight"), ...light);
           gl.uniform3f(uniform("uFlow"), ...flow);
@@ -205,6 +210,7 @@ export const ProgressRim = ({
       cancelAnimationFrame(handle);
       if (canvas !== null) {
         delete canvas.dataset.progress;
+        delete canvas.dataset.sweep;
       }
       const gl = programRef.current?.gl;
       gl?.clear(gl.COLOR_BUFFER_BIT);
