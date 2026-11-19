@@ -60,7 +60,11 @@ const shortWarning = (message: string, id: string): string => {
   if (!what.endsWith(left)) {
     return message;
   }
-  return `${what.slice(0, -left.length).replace(" did not place there", " didn't place")}. It was left as is.`;
+  const short = what
+    .slice(0, -left.length)
+    .replace(" did not place there", " didn't place")
+    .replace(/ is not this skill$/u, " has other files");
+  return `${short}. It was left as is.`;
 };
 
 /**

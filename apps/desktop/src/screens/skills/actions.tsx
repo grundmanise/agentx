@@ -3,11 +3,18 @@
 // dialog, whose Replace runs the same command with --force. Abort, on a pending merge, asks first
 // too. Show folder runs no command: it shows the merge folder in Finder.
 import { useRef, useState } from "react";
+import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { CliEvent, LibraryPlacement } from "#/cli/events.gen.ts";
+import type {
+  CliEvent,
+  Configuration,
+  LibraryPlacement,
+  LogEvent,
+} from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { dismissToast } from "#/components/toast.tsx";
+import type { ToastAction } from "#/components/toast.tsx";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -47,6 +54,62 @@ const abortLabel = (name: string) => `abort update ${name}`;
 const adoptedName = (events: CliEvent[]) =>
   events.find((e) => e.type === "library_skill")?.name;
 
+/** An agent's folder an adoption left as it is, as its warning names it, and why. */
+interface LeftFolder {
+  path: string;
+  why: string;
+  name: string;
+  id: string;
+}
+
+/**
+ * The folder an adoption's warning says it left as it is: `<path> <why> and was left as it is; to
+ * replace it with the adopted skill, run 'agentx skill place <name> --to <id> --force'`.
+ */
+const leftFolder = (message: string): LeftFolder | undefined => {
+  const groups =
+    /^(?<path>.+?) (?<why>has other files than \S+|is read by .+|is in a folder agentx cannot write to|cannot be read) and was left as it is; to replace it with the adopted skill, run 'agentx skill place (?<name>\S+) --to (?<id>\S+) --force'$/u.exec(
+      message
+    )?.groups;
+  if (groups === undefined) {
+    return undefined;
+  }
+  const { path = "", why = "", name = "", id = "" } = groups;
+  return {
+    id,
+    name,
+    path,
+    why: why.replace(/^has other files than \S+$/u, "has other files"),
+  };
+};
+
+/** The lines under the adoption's toast: a folder it left, as "<path> <why>. It was left as is." */
+const adoptWarnings = (logs: LogEvent[]) =>
+  logs.map((log) => {
+    const left = leftFolder(log.message);
+    return left === undefined
+      ? log.message
+      : `${left.path} ${left.why}. It was left as is.`;
+  });
+
+/** The folder whose Replace the dialog below asks about, while it is open. */
+const useReplaceRequest = create<{ request?: LeftFolder }>()(() => ({}));
+
+/** Replace, on the adoption's toast, for the first folder it left that has other files. */
+const replaceAction = (logs: LogEvent[]): ToastAction | undefined => {
+  const left = logs
+    .map((log) => leftFolder(log.message))
+    .find((l) => l?.why === "has other files");
+  return left === undefined
+    ? undefined
+    : {
+        label: "Replace",
+        onClick: () => {
+          useReplaceRequest.setState({ request: left });
+        },
+      };
+};
+
 /**
  * Adopt: the `adopt` command line of `adoptArgs` for an unmanaged skill, which agentx manages
  * from then on. A skill taken out of a client's own skills directory becomes a library skill
@@ -58,8 +121,10 @@ export const adopt = async (row: SkillRow) => {
     return;
   }
   const outcome = await runUntilSettled(args, {
+    action: (_events, logs) => replaceAction(logs),
     label: adoptLabel(row),
     success: (events) => `Adopted ${adoptedName(events) ?? row.name} skill`,
+    warnings: adoptWarnings,
   });
   const adopted = adoptedName(outcome.events);
   if (
@@ -126,6 +191,43 @@ export const Adopt = ({ row }: { row: SkillRow }) => {
   );
 };
 
+/** Asks before `--force` replaces an agent's copy of a skill that differs from the library's. */
+const ReplaceCopyConfirm = ({
+  open,
+  onOpenChange,
+  agent,
+  name,
+  path,
+  onReplace,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  agent: string;
+  name: string;
+  path: string;
+  onReplace: () => void;
+}) => (
+  <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{`Replace ${agent}'s copy?`}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {`${agent}'s copy of ${name} is different from the one in your library. Replacing it deletes ${agent}'s changes.`}
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <p className="type-technical text-text-caption m-0 break-all">{path}</p>
+      <AlertDialogFooter>
+        <AlertDialogCancel asChild>
+          <Button variant="ghost">Cancel</Button>
+        </AlertDialogCancel>
+        <Button variant="danger" onClick={onReplace}>
+          Replace
+        </Button>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
+);
+
 /**
  * Reconnect: `skill place <name> --to <configuration>`. When the CLI refuses because the folder
  * holds another version, the dialog asks before running it again with --force.
@@ -167,34 +269,61 @@ export const Reconnect = ({
           void putBack(false);
         }}
       />
-      <AlertDialog open={confirm} onOpenChange={setConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{`Replace ${agent}'s copy?`}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {`${agent}'s copy of ${row.name} is different from the one in your library. Replacing it deletes ${agent}'s changes.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <p className="type-technical text-text-caption m-0 break-all">
-            {placement.path}
-          </p>
-          <AlertDialogFooter>
-            <AlertDialogCancel asChild>
-              <Button variant="ghost">Cancel</Button>
-            </AlertDialogCancel>
-            <Button
-              variant="danger"
-              onClick={() => {
-                setConfirm(false);
-                void putBack(true);
-              }}
-            >
-              Replace
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ReplaceCopyConfirm
+        open={confirm}
+        onOpenChange={setConfirm}
+        agent={agent}
+        name={row.name}
+        path={placement.path}
+        onReplace={() => {
+          setConfirm(false);
+          void putBack(true);
+        }}
+      />
     </>
+  );
+};
+
+/**
+ * The confirm dialog of the adoption toast's Replace: `skill place <name> --to <id> --force`
+ * replaces the folder the adoption left, once the user agrees.
+ */
+export const ReplaceLeftFolder = ({
+  configurations,
+}: {
+  configurations: Configuration[];
+}) => {
+  const request = useReplaceRequest((s) => s.request);
+  const close = () => {
+    useReplaceRequest.setState({ request: undefined });
+  };
+  if (request === undefined) {
+    return null;
+  }
+  const agent =
+    configurations.find((c) => c.id === request.id)?.name ?? request.id;
+  return (
+    <ReplaceCopyConfirm
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          close();
+        }
+      }}
+      agent={agent}
+      name={request.name}
+      path={request.path}
+      onReplace={() => {
+        close();
+        void runUntilSettled(
+          ["skill", "place", request.name, "--to", request.id, "--force"],
+          {
+            label: `replace ${request.name} ${request.id}`,
+            success: `Replaced ${agent}'s copy of ${request.name}`,
+          }
+        );
+      }}
+    />
   );
 };
 
