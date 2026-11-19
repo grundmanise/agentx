@@ -68,6 +68,11 @@ export interface CommandOptions {
   action?:
     | ToastAction
     | ((events: CliEvent[], logs: LogEvent[]) => ToastAction | undefined);
+  /**
+   * The lines under the success toast, from the command's warnings; by default each warning as
+   * the CLI wrote it.
+   */
+  warnings?: (logs: LogEvent[]) => string[];
   onProgress?: (event: ProgressEvent) => void;
   /** Called with each event on stdout as it arrives, before the command ends. */
   onEvent?: (event: CliEvent) => void;
@@ -288,6 +293,40 @@ const logFailure = (
   }
 };
 
+/**
+ * Shows a command that exited 0: its success text, as a success toast, or, with warnings, as an
+ * attention toast with them under it. The activity entry asks for attention rather than reporting
+ * plain success when there are warnings: a placement skipped, a copy that differed.
+ */
+const reportSuccess = (
+  options: CommandOptions,
+  outcome: Outcome,
+  log: boolean
+) => {
+  const { events, logs } = outcome;
+  const text =
+    typeof options.success === "function"
+      ? options.success(events, logs)
+      : options.success;
+  if (text === undefined) {
+    return;
+  }
+  const action =
+    typeof options.action === "function"
+      ? options.action(events, logs)
+      : options.action;
+  const warned = logs.filter((l) => l.level === "warn");
+  const warnings = options.warnings?.(warned) ?? warned.map((l) => l.message);
+  if (warnings.length > 0) {
+    notifyAttention({ action, message: text, warnings });
+  } else {
+    notifySuccess(text, action);
+  }
+  if (log) {
+    addActivity(warnings.length > 0 ? "attention" : "success", text);
+  }
+};
+
 /** Shows the outcome, by exit code (docs/spec/cli-contract.md, Exit codes). */
 const report = (
   args: readonly string[],
@@ -298,30 +337,7 @@ const report = (
   const log = !isRead(args);
   const { exitCode, events } = outcome;
   if (exitCode === EXIT_CODES.ok) {
-    const text =
-      typeof options.success === "function"
-        ? options.success(events, outcome.logs)
-        : options.success;
-    const action =
-      typeof options.action === "function"
-        ? options.action(events, outcome.logs)
-        : options.action;
-    if (text !== undefined) {
-      // A placement skipped, a copy that differed: the command succeeded, with something the
-      // user should see. The toast carries the success text and the warnings, and the activity
-      // entry asks for attention rather than reporting plain success.
-      const warnings = outcome.logs
-        .filter((l) => l.level === "warn")
-        .map((l) => l.message);
-      if (warnings.length > 0) {
-        notifyAttention({ action, message: text, warnings });
-      } else {
-        notifySuccess(text, action);
-      }
-      if (log) {
-        addActivity(warnings.length > 0 ? "attention" : "success", text);
-      }
-    }
+    reportSuccess(options, outcome, log);
     return;
   }
   if (exitCode === EXIT_CODES.locked) {

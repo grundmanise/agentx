@@ -25,6 +25,7 @@ import {
   chipTitle,
   inertReason,
   lockOf,
+  placedNowhere,
   removedFrom,
   universalTitle,
 } from "#/screens/skills/placements.ts";
@@ -45,11 +46,29 @@ const stillSees = (logs: LogEvent[], id: string) =>
   );
 
 /**
+ * A warning of a placement or a removal that `id` was left out of, in the toast's shorter words:
+ * the path and what it is, then "It was left as is." The CLI's own line goes on to say whether `id`
+ * still sees the skill, which the toast's title already says.
+ */
+const shortWarning = (message: string, id: string): string => {
+  const ending = [
+    `; ${id} still sees it`,
+    `; no placement was made for ${id}`,
+  ].find((e) => message.endsWith(e));
+  const left = " and was left as it is";
+  const what = ending === undefined ? "" : message.slice(0, -ending.length);
+  if (!what.endsWith(left)) {
+    return message;
+  }
+  return `${what.slice(0, -left.length).replace(" did not place there", " didn't place")}. It was left as is.`;
+};
+
+/**
  * Adds or removes the skill's placement in `c`, with an Undo that does the opposite. Off: `skill
  * place <name> --to <id>`; on: `skill remove <name> --from <id>`. `removed` names every agent the
- * removal takes the skill from: `c` and those that see it only through `c`'s directory. A removal
- * that left `c` seeing the skill says so, with the CLI's warning under it, and has no Undo: there
- * is nothing to undo.
+ * removal takes the skill from: `c` and those that see it only through `c`'s directory. A placement
+ * that was skipped, or a removal that left `c` seeing the skill, says so, with the CLI's warning
+ * under it, and has no Undo: there is nothing to undo.
  */
 const toggle = (
   row: SkillRow,
@@ -68,16 +87,22 @@ const toggle = (
       ? ["skill", "place", row.name, "--to", c.id]
       : ["skill", "remove", row.name, "--from", c.id],
     {
-      action: add
-        ? undo
-        : (_events, logs) => (stillSees(logs, c.id) ? undefined : undo),
+      action: (events, logs) =>
+        (add ? placedNowhere(events) : stillSees(logs, c.id))
+          ? undefined
+          : undo,
       label: chipLabel(row, c),
-      success: add
-        ? `Added ${row.name} to ${c.name}`
-        : (_events, logs) =>
-            stillSees(logs, c.id)
-              ? `${row.name} wasn't removed from ${c.name}`
-              : `Removed ${row.name} from ${removed}`,
+      success: (events, logs) => {
+        if (add) {
+          return placedNowhere(events)
+            ? `${row.name} skill wasn't added to ${c.name}`
+            : `Added ${row.name} to ${c.name}`;
+        }
+        return stillSees(logs, c.id)
+          ? `${row.name} skill wasn't removed from ${c.name}`
+          : `Removed ${row.name} from ${removed}`;
+      },
+      warnings: (logs) => logs.map((log) => shortWarning(log.message, c.id)),
     }
   );
 };
