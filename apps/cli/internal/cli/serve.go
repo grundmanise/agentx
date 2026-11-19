@@ -129,7 +129,11 @@ func nonNil(words []string) []string {
 }
 
 func newServeCommand(inv *invocation) *cobra.Command {
-	var once bool
+	var (
+		once    bool
+		listen  string
+		origins []string
+	)
 	cmd := &cobra.Command{
 		Use:         "serve",
 		Short:       "Stream an inventory on every change, for the desktop app",
@@ -138,8 +142,26 @@ func newServeCommand(inv *invocation) *cobra.Command {
 		Example: examples(
 			"agentx serve --json", "the desktop app's mode: inventories until stdin closes",
 			"agentx serve --once", "scan once, emit the inventory and exit",
+			"agentx serve --json --listen localhost --origin http://localhost:1420", "answer the frontend in a browser on this machine too",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var address string
+			switch {
+			case listen != "" && once:
+				return fail(exitUsage, "--listen and --once cannot both be given", "--once scans once and exits, so it has no door to open")
+			case listen == "" && len(origins) > 0:
+				return fail(exitUsage, "--origin needs --listen", "--origin names who may connect to the door --listen opens")
+			case listen != "":
+				var err error
+				if address, err = listenAddress(listen); err != nil {
+					return fail(exitUsage, err.Error(), listenHint)
+				}
+				for _, origin := range origins {
+					if err := webOrigin(origin); err != nil {
+						return fail(exitUsage, err.Error(), originHint)
+					}
+				}
+			}
 			lock, err := home.TakeServeLock(inv.dirs.Home)
 			if errors.Is(err, home.ErrServing) {
 				return fail(exitRefused, err.Error(), "stop the agentx serve holding "+home.ServeLockPath(inv.dirs.Home)+" first")
@@ -152,6 +174,18 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			inv.verdicts = map[string]keptVerdict{}
 			inv.forkWalks = lineage.NewWalkCache()
 			inv.forksWarned = true // reconciliation and every inventory name them
+			// The door opens before reconciliation and the first scan, so
+			// that whoever started serve learns at once where it is; a
+			// client that connects meanwhile is answered once serve scans.
+			var door *serveDoor
+			var requests *serve.Door
+			if address != "" {
+				if door, err = inv.openDoor(address, origins); err != nil {
+					return err
+				}
+				defer door.close()
+				requests = door.loop
+			}
 			if !once {
 				// Reconciliation reports and repairs before the first scan,
 				// so the inventory shows what it put back. One that cannot
@@ -176,6 +210,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Trees:        trees,
 				Once:         once,
 				Stdin:        cmd.InOrStdin(),
+				Door:         requests,
 				Check:        checks.startup,
 				Recheck:      checks.account,
 				RecheckEvery: accountCheckEvery,
@@ -215,6 +250,8 @@ func newServeCommand(inv *invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&once, "once", false, "scan once, emit the inventory and exit")
+	cmd.Flags().StringVar(&listen, "listen", "", "also answer JSON-RPC on a WebSocket at this address of this machine, such as localhost or 127.0.0.1:4319")
+	cmd.Flags().StringArrayVar(&origins, "origin", nil, "a web origin that may connect to --listen, such as http://localhost:1420 (repeatable)")
 	return cmd
 }
 
