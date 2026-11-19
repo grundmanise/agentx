@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 
 import { useRouteKey } from "#/lib/route-key.ts";
+import { AdoptReplaceConfirm } from "#/screens/skills/actions.tsx";
 import { ForkDialogs } from "#/screens/skills/fork-dialog.tsx";
 import { skillPath } from "#/screens/skills/open.ts";
 import {
@@ -233,6 +234,7 @@ export const SkillsScreen = () => {
       </section>
       <ForkDialogs />
       <RenameDialogs />
+      <AdoptReplaceConfirm />
     </div>
   );
 };

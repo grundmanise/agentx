@@ -75,12 +75,12 @@ type forking struct {
 	// copies are the directories in agent clients' own skills directories
 	// that hold what the library entry an adoption takes holds, see
 	// readAdoptCopies: each is removed and gets the library's symlink, as a
-	// placement; nil for every other fork. kept are the ones under the
+	// placement; nil for every other fork. left are the ones under the
 	// skill's name that hold other files, or are not agentx's to replace,
-	// left as they are and said to be.
+	// which refuse the adoption, see adoptLeftRefusal.
 	copies   []adoptPlace
 	copiesOf string // what the library entry held when its copies were compared with it
-	kept     []adoptPlace
+	left     []adoptPlace
 	// renamed reports a rename once its source is removed, in one line
 	// that names both names; reportForked sets it for a rename, in place
 	// of its own line.

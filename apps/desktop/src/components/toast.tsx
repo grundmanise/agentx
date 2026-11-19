@@ -209,12 +209,14 @@ export interface ErrorToast {
   action?: ToastAction;
   /** Names that keep their case when one starts the message or the hint, such as the skills the app holds. */
   keep?: readonly string[];
+  /** It stays until dismissed with no hint too, for an action the reader needs time for. */
+  lasting?: boolean;
 }
 
 /**
  * A command's error (DESIGN.md §6 "Error toast"): the CLI's message and its hint as one
  * sentence-cased paragraph, its details, then the command's warnings, and its action when it has one. It stays until dismissed
- * when it has a hint, and 5s when it has none.
+ * when it has a hint or is `lasting`, and 5s otherwise.
  */
 export const notifyError = ({
   message,
@@ -223,11 +225,12 @@ export const notifyError = ({
   warnings = [],
   action,
   keep,
+  lasting = false,
 }: ErrorToast) =>
   notifyDetail({
     action,
     details,
-    duration: hint === undefined ? 5000 : Number.POSITIVE_INFINITY,
+    duration: hint === undefined && !lasting ? 5000 : Number.POSITIVE_INFINITY,
     kind: "error",
     message: problemSentence(
       hint === undefined ? { message } : { hint, message },

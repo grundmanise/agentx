@@ -41,7 +41,11 @@ type adoptPlace struct {
 	// places copies: a copy of an adoption stays where it is, as agentx's
 	// copy, see stageAdoptCopies.
 	asCopy bool
-	// left is why an adoption left it as it is, in the words of its warning.
+	// replace says it holds other files and --force replaces it, see
+	// readAdoptCopies.
+	replace bool
+	// left is why an adoption cannot replace it, in the words of its
+	// refusal after its path, see adoptLeftRefusal.
 	left string
 }
 
@@ -93,6 +97,9 @@ func (inv *invocation) planAdoption(ctx context.Context, name string, missing er
 		return nil, err
 	}
 	if err := inv.readAdoptCopies(fk); err != nil {
+		return nil, err
+	}
+	if err := adoptLeftRefusal(fk); err != nil {
 		return nil, err
 	}
 	return fk, nil
@@ -651,7 +658,8 @@ func stageAdoptPlaces(m *home.Mutation, fk *forking, libPath string, done *place
 // that client's directory. One is a candidate copy, see readAdoptCopies,
 // where every configuration it belongs to places the same way: copies,
 // and it stays as agentx's copy, or symlinks, and agentx can write its
-// skills directory to replace it. Any other is kept as it is.
+// skills directory to replace it. Any other refuses the adoption, see
+// adoptLeftRefusal.
 func (inv *invocation) findAdoptCopies(fk *forking, name string) error {
 	dirs, _ := inv.adoptSites(name)
 	if len(dirs) == 0 {
@@ -667,12 +675,12 @@ func (inv *invocation) findAdoptCopies(fk *forking, name string) error {
 		p.asCopy = !slices.ContainsFunc(p.targets, func(t placeTarget) bool { return !copies(t) })
 		switch {
 		case !p.asCopy && slices.ContainsFunc(p.targets, copies):
-			p.left = "is read by configurations that place copies and ones that place symlinks"
+			p.left = mixedPlacements(p.targets)
 		case !p.asCopy && unix.Access(filepath.Dir(p.path), unix.W_OK|unix.X_OK) != nil:
-			p.left = "is in a folder agentx cannot write to"
+			p.left = "folder is not writable by agentx"
 		}
 		if p.left != "" {
-			fk.kept = append(fk.kept, p)
+			fk.left = append(fk.left, p)
 			continue
 		}
 		fk.copies = append(fk.copies, p)
@@ -683,9 +691,10 @@ func (inv *invocation) findAdoptCopies(fk *forking, name string) error {
 // readAdoptCopies reads what the library entry an adoption takes holds,
 // and what each of its candidate copies holds, see findAdoptCopies, as
 // readAdoptPlaces reads a directory: a copy that holds the same files
-// stays one, to be replaced by the library's symlink, see copyOf, and any
-// other is kept as it is. A copy that cannot be read is kept too: the adoption of
-// the library entry never needed it.
+// stays one, to be replaced by the library's symlink, see copyOf. One that
+// holds other files is replaced too under --force, its files lost, and
+// refuses the adoption otherwise, as one that cannot be read does, see
+// adoptLeftRefusal.
 func (inv *invocation) readAdoptCopies(fk *forking) error {
 	if len(fk.copies) == 0 {
 		return nil
@@ -701,17 +710,72 @@ func (inv *invocation) readAdoptCopies(fk *forking) error {
 		read, err := readAdoptPlace(p)
 		switch {
 		case err != nil:
-			p.left = "cannot be read"
+			p.left = "folder is not readable by agentx"
 		case read.copyOf(lib, ignoreSystem):
 			same = append(same, read)
 			continue
+		case inv.adoptForce:
+			read.replace = true
+			same = append(same, read)
+			continue
 		default:
-			p.left = "has other files than " + fk.target
+			p.left = "contains files that differ from the skill version"
 		}
-		fk.kept = append(fk.kept, p)
+		fk.left = append(fk.left, p)
 	}
 	fk.copies = same
 	return nil
+}
+
+// adoptLeftRefusal refuses the adoption of a library entry while an agent
+// client's own skills directory holds a directory of the skill that the
+// adoption cannot replace, see findAdoptCopies and readAdoptCopies: an
+// adoption is the whole skill or nothing, so a client never goes on
+// reading a folder agentx did not place beside the skill it manages. nil
+// when there is none.
+func adoptLeftRefusal(fk *forking) error {
+	if len(fk.left) == 0 {
+		return nil
+	}
+	found := make([]string, len(fk.left))
+	for i, p := range fk.left {
+		found[i] = inQuotes(p.path) + " " + p.left
+	}
+	listedFound := strings.Join(found, ", and ")
+	return refuse(exitRefused, sanitised(fk.target)+" cannot be adopted: "+listedFound, "").
+		listed("cannot be adopted: " + listedFound)
+}
+
+// inQuotes is path in double quotes, as quotedPath writes one that needs
+// them. Pure.
+func inQuotes(path string) string {
+	if q := quotedPath(path); strings.HasPrefix(q, `"`) {
+		return q
+	}
+	return `"` + path + `"`
+}
+
+// mixedPlacements is why a directory read by configurations that place
+// copies and ones that place symlinks cannot be replaced: it names them
+// by name, the ones that place copies first. Pure.
+func mixedPlacements(targets []placeTarget) string {
+	var copies, links []string
+	for _, t := range targets {
+		if t.copies {
+			copies = append(copies, t.name)
+		} else {
+			links = append(links, t.name)
+		}
+	}
+	agents, use := "agent which is", "uses"
+	if len(copies) > 1 {
+		agents = "agents which are"
+	}
+	if len(links) > 1 {
+		use = "use"
+	}
+	return "is also read by " + strings.Join(copies, " and ") + " " + agents +
+		" set to copy files, while " + strings.Join(links, " and ") + " " + use + " symlinks"
 }
 
 // copyOf reports whether p holds what lib holds, as same does, or, while
@@ -754,7 +818,8 @@ func adoptCopiesHold(fk *forking) bool {
 // stageAdoptCopies plans, into m, what becomes of the copies of an
 // adoption of a library entry, see readAdoptCopies. One in configurations
 // that place copies stays where it is, and copy_mode records it as
-// agentx's copy, so a removal deletes it and an update refreshes it. Any
+// agentx's copy, so a removal deletes it and an update refreshes it; one
+// --force replaces gets a copy of the library entry in its place first. Any
 // other is removed, retained until the mutation is verified, and gets the
 // library's symlink where a placement belongs, see adoptPlace.linked. done
 // records the configurations that see the skill there.
@@ -762,6 +827,11 @@ func (inv *invocation) stageAdoptCopies(m *home.Mutation, fk *forking, libPath s
 	for _, p := range fk.copies {
 		done.placed = append(done.placed, p.targets...)
 		if p.asCopy {
+			if p.replace {
+				if err := inv.stageAdoptReplacement(m, fk, p); err != nil {
+					return err
+				}
+			}
 			done.copies = append(done.copies, p.ids()...)
 			continue
 		}
@@ -779,6 +849,26 @@ func (inv *invocation) stageAdoptCopies(m *home.Mutation, fk *forking, libPath s
 	}
 	edit.addCopies(fk.target, done.copies)
 	return edit.stage(m, inv.dirs.Home)
+}
+
+// stageAdoptReplacement plans, into m, a copy of the library entry an
+// adoption takes in place of p, a copy with other files that --force
+// replaces: the copy is laid out beside p now, while the library entry is
+// still where it is, and published once p is removed.
+func (inv *invocation) stageAdoptReplacement(m *home.Mutation, fk *forking, p adoptPlace) error {
+	staged := m.Sibling(p.path, "staged")
+	err := inv.stageCopy(staged, dirPlaceable(fk.target, fk.from))
+	var fingerprint string
+	if err == nil {
+		fingerprint, err = home.Fingerprint(staged)
+	}
+	if err != nil {
+		os.RemoveAll(staged)
+		return libraryFailure(filepath.Dir(p.path), err)
+	}
+	m.Remove(p.path, p.state)
+	m.Publish(p.path, staged, fingerprint)
+	return nil
 }
 
 // reportAdoptedOwn reads the machine again and reports the adoption: the
@@ -803,10 +893,6 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	out, name := inv.out, sanitised(fk.target)
 	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, nil)
 	out.emit(ev)
-	for _, p := range fk.kept {
-		out.warnWith(quotedPath(p.path)+" "+p.left+" and was left as it is",
-			"to replace it with the adopted skill, run '"+skillCommand("place", fk.target, "--to", p.targets[0].id, "--force")+"'")
-	}
 	if len(fk.places) == 0 && len(fk.copies) == 0 {
 		inv.summary = "adopted " + name
 		out.done("adopted " + out.paint(heading, name))

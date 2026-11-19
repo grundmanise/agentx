@@ -313,6 +313,73 @@ test.describe("chips", () => {
     expect(later(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
   });
 
+  test("an adoption a folder whose files differ stops: says so, and Replace asks before --force", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "scratch", "scratch", inventory, []);
+    await chip(pane(page, "scratch"), "Claude Code").click();
+    cli.register(["adopt", "--skill", "scratch"], {
+      events: [
+        {
+          code: "refused",
+          message:
+            'scratch cannot be adopted: "/home/me/.claude/skills/scratch" contains files that differ from the skill version',
+          type: "error",
+        },
+      ],
+      exitCode: 6,
+    });
+    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    const toast = toasts(page)
+      .getByRole("listitem")
+      .filter({ hasText: "scratch skill wasn't adopted" });
+    await expect(toast).toContainText(
+      "/home/me/.claude/skills/scratch contains files that differ from the skill version"
+    );
+    cli.register(["adopt", "--skill", "scratch", "--force"], {
+      events: [{ name: "scratch", type: "library_skill" }],
+    });
+    await toast.getByRole("button", { name: "Replace" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Replace this folder?",
+    });
+    await expect(dialog).toContainText("/home/me/.claude/skills/scratch");
+    await dialog.getByRole("button", { name: "Replace" }).click();
+    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    expect(later(cli)).toEqual([
+      ["adopt", "--skill", "scratch", "--json"],
+      ["adopt", "--skill", "scratch", "--force", "--json"],
+    ]);
+  });
+
+  test("an adoption agents with different placements stop: says so, with no Replace", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "scratch", "scratch", inventory, []);
+    await chip(pane(page, "scratch"), "Claude Code").click();
+    cli.register(["adopt", "--skill", "scratch"], {
+      events: [
+        {
+          code: "refused",
+          message:
+            'scratch cannot be adopted: "/home/me/.claude/skills/scratch" is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks',
+          type: "error",
+        },
+      ],
+      exitCode: 6,
+    });
+    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    const toast = toasts(page)
+      .getByRole("listitem")
+      .filter({ hasText: "scratch skill wasn't adopted" });
+    await expect(toast).toContainText(
+      "/home/me/.claude/skills/scratch is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks"
+    );
+    await expect(toast.getByRole("button", { name: "Replace" })).toHaveCount(0);
+  });
+
   test("a displaced chip runs nothing, and its tooltip says to reconnect it", async ({
     cli,
     page,

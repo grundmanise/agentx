@@ -526,39 +526,52 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 // holds, which an agent client's own skills directory holds too, as a
 // tool that installs into both leaves it. The client's directory that holds
 // the same files, a system file such as Finder's .DS_Store aside, is a
-// copy: it is removed and gets the library's symlink,
-// as a placement, so the client no longer sees a directory agentx did not
-// place. One that holds other files is left as it is, and said to be.
+// copy: it is removed and gets the library's symlink, as a placement, so
+// the client no longer sees a directory agentx did not place. One that
+// holds other files refuses the adoption, and nothing changes, but under
+// --force, which replaces it as well.
 func TestAdoptReplacesAClientsCopyOfALibrarySkill(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
-	writeFile(t, mkdirs(t, filepath.Join(h.library, "rex"), "SKILL.md"), skill("rex", "Run things"))
+	library := filepath.Join(h.library, "rex")
+	writeFile(t, mkdirs(t, library, "SKILL.md"), skill("rex", "Run things"))
 	claude := filepath.Join(h.home, ".claude", "skills", "rex")
 	writeFile(t, mkdirs(t, claude, "SKILL.md"), skill("rex", "Run things"))
 	writeFile(t, filepath.Join(claude, ".DS_Store"), "finder\n")
 	cortex := filepath.Join(h.home, ".snowflake", "cortex", "skills", "rex")
 	writeFile(t, mkdirs(t, cortex, "SKILL.md"), skill("rex", "Run other things"))
 
-	out := h.run("--json", "adopt", "--skill", "rex")
+	out := h.run("adopt", "--skill", "rex")
+	equal(t, "other files: exit", out.exit, 6)
+	equal(t, "other files: stderr", out.stderr, "error: rex cannot be adopted: \""+cortex+"\" contains files that differ from the skill version\n")
+	for _, dir := range []string{library, claude, cortex} {
+		if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
+			t.Errorf("the refused adoption changed %s: %v", dir, err)
+		}
+	}
+	equal(t, "the other files", fileBody(t, filepath.Join(cortex, "SKILL.md")), skill("rex", "Run other things"))
+
+	out = h.run("--json", "adopt", "--skill", "rex", "--force")
 	equal(t, "exit", out.exit, 0)
+	equal(t, "warnings", out.stderr, "")
 	equal(t, "kind", h.librarySkill(out.stdout, "rex")["kind"], lineage.KindManaged)
-	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "adopted rex in 1 configuration")
-	if link, _ := os.Readlink(filepath.Join(h.library, "rex")); link != "../../../agentx/worktrees/rex/rex" {
+	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "adopted rex in 2 configurations")
+	if link, _ := os.Readlink(library); link != "../../../agentx/worktrees/rex/rex" {
 		t.Errorf("the library symlink is %q", link)
 	}
-	if target, _ := os.Readlink(claude); target != filepath.Join(h.library, "rex") {
-		t.Errorf("claude-code's placement points at %q", target)
+	for _, place := range []string{claude, cortex} {
+		if target, _ := os.Readlink(place); target != library {
+			t.Errorf("%s points at %q", place, target)
+		}
 	}
 	equal(t, "what is left in .claude", strings.Join(hiddenEntries(t, filepath.Dir(claude)), " "), "")
-	equal(t, "the other files", fileBody(t, filepath.Join(cortex, "SKILL.md")), skill("rex", "Run other things"))
-	contains(t, "the warning", out.stderr, quotedPath(cortex)+" has other files than rex and was left as it is; "+
-		"to replace it with the adopted skill, run 'agentx skill place rex --to cortex --force'")
 }
 
 // TestAdoptKeepsAClientsCopyWhereItPlacesCopies adopts a library skill
 // that a client holds a copy of, where that client's configuration places
 // copies: the copy stays where it is, and copy_mode records it as agentx's
-// copy, a placement of the adopted skill.
+// copy, a placement of the adopted skill. A copy that holds other files
+// gets the library's files under --force, and is agentx's copy too.
 func TestAdoptKeepsAClientsCopyWhereItPlacesCopies(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
@@ -566,8 +579,19 @@ func TestAdoptKeepsAClientsCopyWhereItPlacesCopies(t *testing.T) {
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "rex"), "SKILL.md"), skill("rex", "Run things"))
 	claude := filepath.Join(h.home, ".claude", "skills", "rex")
 	writeFile(t, mkdirs(t, claude, "SKILL.md"), skill("rex", "Run things"))
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "max"), "SKILL.md"), skill("max", "Run more"))
+	edited := filepath.Join(h.home, ".claude", "skills", "max")
+	writeFile(t, mkdirs(t, edited, "SKILL.md"), skill("max", "Run more, edited"))
+	writeFile(t, filepath.Join(edited, "notes.md"), "mine\n")
 
-	out := h.run("--json", "adopt", "--skill", "rex")
+	out := h.run("--json", "adopt", "--skill", "max", "--force")
+	equal(t, "--force: exit", out.exit, 0)
+	equal(t, "--force: the copy", fileBody(t, filepath.Join(edited, "SKILL.md")), skill("max", "Run more"))
+	if _, err := os.Lstat(filepath.Join(edited, "notes.md")); !os.IsNotExist(err) {
+		t.Errorf("--force kept the copy's own file: %v", err)
+	}
+
+	out = h.run("--json", "adopt", "--skill", "rex")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "warnings", out.stderr, "")
 	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "adopted rex in 1 configuration")
@@ -580,7 +604,7 @@ func TestAdoptKeepsAClientsCopyWhereItPlacesCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	modes, _ := s.CopyModes()
-	deep(t, "copy_mode", modes, map[string][]string{"rex": {"claude-code"}})
+	deep(t, "copy_mode", modes, map[string][]string{"max": {"claude-code"}, "rex": {"claude-code"}})
 	mode := ""
 	for _, p := range h.librarySkill(out.stdout, "rex")["placements"].([]any) {
 		if p := p.(map[string]any); p["configuration"] == "claude-code" {
@@ -766,6 +790,8 @@ func TestAdoptSelectionCheck(t *testing.T) {
 		{"every skill", adoptSelection{all: true}, ""},
 		{"two skills", adoptSelection{names: []string{"alpha", "beta"}}, ""},
 		{"every skill and one", adoptSelection{all: true, names: []string{"alpha"}}, "--all and --skill"},
+		{"one skill, forced", adoptSelection{names: []string{"alpha"}, force: true}, ""},
+		{"every skill, forced", adoptSelection{all: true, force: true}, "--force needs --skill"},
 	} {
 		err := tc.sel.check()
 		if tc.says == "" {
@@ -796,4 +822,17 @@ func TestAdoptFlagsThatAskForTwoThings(t *testing.T) {
 	out = h.run("--json", "adopt", "zoom;out")
 	equal(t, "exit", out.exit, exitUsage.exit)
 	contains(t, "the hint", lastError(t, h.events(out.stdout))["hint"].(string), "agentx adopt --skill "+shellWord("zoom;out"))
+}
+
+// TestMixedPlacements names the configurations that read one directory
+// and place skills differently, by name, the ones that place copies first.
+func TestMixedPlacements(t *testing.T) {
+	t.Parallel()
+	zencoder := placeTarget{id: "zencoder", name: "Zencoder"}
+	zenflow := placeTarget{id: "zenflow", name: "Zenflow", copies: true}
+	other := placeTarget{id: "other", name: "Other", copies: true}
+	equal(t, "one each", mixedPlacements([]placeTarget{zencoder, zenflow}),
+		"is also read by Zenflow agent which is set to copy files, while Zencoder uses symlinks")
+	equal(t, "two that copy", mixedPlacements([]placeTarget{zenflow, zencoder, other}),
+		"is also read by Zenflow and Other agents which are set to copy files, while Zencoder uses symlinks")
 }
