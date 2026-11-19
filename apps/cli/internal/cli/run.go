@@ -31,6 +31,9 @@ type invocation struct {
 	// done, that the skills it made the user's own are not published, see
 	// noAccountRemoteHint; publishHintDue says one of them needs it said.
 	publishHintOnce, publishHintDue bool
+	// adoptForce is agentx adopt --force: an adoption replaces an agent
+	// client's folder of the skill that holds other files, see readAdoptCopies.
+	adoptForce bool
 
 	excludes     sync.Once // reads excludesPath, the user's core.excludesFile; see excludesFile
 	excludesPath string

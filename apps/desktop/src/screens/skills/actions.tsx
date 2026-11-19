@@ -3,11 +3,13 @@
 // dialog, whose Replace runs the same command with --force. Abort, on a pending merge, asks first
 // too. Show folder runs no command: it shows the merge folder in Finder.
 import { useRef, useState } from "react";
+import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LibraryPlacement } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { dismissToast } from "#/components/toast.tsx";
+import type { ErrorToast } from "#/components/toast.tsx";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -30,6 +32,7 @@ import { shortSource, updateVersions } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
 import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
+import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -47,17 +50,87 @@ const abortLabel = (name: string) => `abort update ${name}`;
 const adoptedName = (events: CliEvent[]) =>
   events.find((e) => e.type === "library_skill")?.name;
 
+/** A folder of the skill in an agent's skills folder that stopped an adoption, and why. */
+interface LeftFolder {
+  path: string;
+  /** The CLI's words after the path, such as "folder is not readable by agentx". */
+  why: string;
+}
+
+/** The CLI's words for each folder that stops an adoption (docs/spec/cli-contract.md, Unmanaged skills). */
+const LEFT_FOLDER =
+  /^"(?<path>.+?)" (?<why>contains files that differ from the skill version|is also read by .+ set to copy files, while .+ symlinks|folder is not writable by agentx|folder is not readable by agentx)$/u;
+
+const DIFFERS = "contains files that differ from the skill version";
+
+/** The folders `<name> cannot be adopted: "<path>" <why>, and …` names, or none for another refusal. */
+const leftFolders = (name: string, message: string): LeftFolder[] => {
+  const prefix = `${name} cannot be adopted: `;
+  if (!message.startsWith(prefix)) {
+    return [];
+  }
+  const folders = message
+    .slice(prefix.length)
+    .split(", and ")
+    .map((part) => LEFT_FOLDER.exec(part)?.groups);
+  return folders.every((g) => g?.path !== undefined && g.why !== undefined)
+    ? folders.map((g) => ({ path: g?.path ?? "", why: g?.why ?? "" }))
+    : [];
+};
+
+/** The Replace confirm an adoption's toast opens for the folders whose files differ. */
+export const useAdoptReplace = create<{
+  request?: { row: SkillRow; paths: string[] };
+}>(() => ({}));
+
+/**
+ * The error toast of an adoption a folder of the skill in an agent's skills folder stopped: each
+ * folder and why, as the CLI says it, and Replace, which asks, then adopts with --force, for
+ * folders whose files differ. undefined for any other failure.
+ */
+const adoptRefusal = (
+  row: SkillRow,
+  outcome: Outcome
+): ErrorToast | undefined => {
+  const error = outcome.events.find((e) => e.type === "error");
+  if (error?.type !== "error") {
+    return undefined;
+  }
+  const folders = leftFolders(row.name, error.message);
+  if (folders.length === 0) {
+    return undefined;
+  }
+  const replace = folders.filter((f) => f.why === DIFFERS).map((f) => f.path);
+  return {
+    action:
+      replace.length === 0
+        ? undefined
+        : {
+            label: "Replace",
+            onClick: () => {
+              useAdoptReplace.setState({ request: { paths: replace, row } });
+            },
+          },
+    details: folders.map(({ path, why }) => `${path} ${why}`),
+    keep: [row.name],
+    lasting: true,
+    message: `${row.name} skill wasn't adopted`,
+  };
+};
+
 /**
  * Adopt: the `adopt` command line of `adoptArgs` for an unmanaged skill, which agentx manages
  * from then on. A skill taken out of a client's own skills directory becomes a library skill
- * under its directory's name, so it is selected by the name the CLI reports.
+ * under its directory's name, so it is selected by the name the CLI reports. With `force`, an
+ * agent's folder of the skill whose files differ gives way to it.
  */
-export const adopt = async (row: SkillRow) => {
+export const adopt = async (row: SkillRow, force = false) => {
   const args = adoptArgs(row);
   if (args === undefined) {
     return;
   }
-  const outcome = await runUntilSettled(args, {
+  const outcome = await runUntilSettled(force ? [...args, "--force"] : args, {
+    failure: (failed) => adoptRefusal(row, failed),
     label: adoptLabel(row),
     success: (events) => `Adopted ${adoptedName(events) ?? row.name} skill`,
   });
@@ -195,6 +268,63 @@ export const Reconnect = ({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+};
+
+/**
+ * The confirm that Replace on an adoption's toast opens: adopting with --force deletes the files
+ * of the folders listed.
+ */
+export const AdoptReplaceConfirm = () => {
+  const request = useAdoptReplace((s) => s.request);
+  const close = () => {
+    useAdoptReplace.setState({ request: undefined });
+  };
+  const one = request?.paths.length === 1;
+  return (
+    <AlertDialog
+      open={request !== undefined}
+      onOpenChange={(open) => {
+        if (!open) {
+          close();
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {one ? "Replace this folder?" : "Replace these folders?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {`${one ? "It contains" : "They contain"} files that differ from ${request?.row.name ?? ""} in your library. Adopting the skill replaces ${one ? "it" : "them"}, and deletes those files.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {request?.paths.map((path) => (
+          <p
+            key={path}
+            className="type-technical text-text-caption m-0 break-all"
+          >
+            {path}
+          </p>
+        ))}
+        <AlertDialogFooter>
+          <AlertDialogCancel asChild>
+            <Button variant="ghost">Cancel</Button>
+          </AlertDialogCancel>
+          <Button
+            variant="danger"
+            onClick={() => {
+              close();
+              if (request !== undefined) {
+                void adopt(request.row, true);
+              }
+            }}
+          >
+            Replace
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 };
 

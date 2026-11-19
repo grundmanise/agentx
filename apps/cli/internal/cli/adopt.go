@@ -62,6 +62,7 @@ type adoptSelection struct {
 	tool  string // the tool whose records are read: vercel, skillshare, or "" for both
 	names []string
 	all   bool
+	force bool // replace a client's folder of a named skill that holds other files
 }
 
 // adoptTools maps the argument that names a tool to that tool.
@@ -119,6 +120,8 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 			"worktree in agentx home, and a symlink to it in the library. A folder in a\n" +
 			"client's skills directory moves there and a symlink to the library takes its\n" +
 			"place, so every client that reads the library sees the skill too.\n\n" +
+			"A skill in the library whose folder in an agent client's skills directory holds\n" +
+			"other files is not adopted; --force replaces that folder with the adopted skill.\n\n" +
 			"--all adopts every skill that can be adopted, and lists the ones that cannot,\n" +
 			"each with what to do about it.",
 		Args: cobra.MaximumNArgs(1),
@@ -135,6 +138,7 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 	}
 	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to adopt, by its name in the library or in an agent client's skills directory; give it again for each")
 	cmd.Flags().BoolVar(&sel.all, "all", false, "adopt every unmanaged skill that can be adopted; with a tool named, every skill that tool installed")
+	cmd.Flags().BoolVar(&sel.force, "force", false, "with --skill, replace an agent's folder of the skill that holds other files with the adopted skill; its files are lost")
 	return cmd
 }
 
@@ -146,6 +150,10 @@ func (s adoptSelection) check() error {
 	if s.all && len(s.names) > 0 {
 		return fail(exitUsage, "--all and --skill cannot both be given",
 			"--all adopts every skill that can be adopted; drop it to adopt the ones you name")
+	}
+	if s.force && len(s.names) == 0 {
+		return fail(exitUsage, "--force needs --skill",
+			"name the skills whose agents' folders --force may replace")
 	}
 	return nil
 }
@@ -169,6 +177,7 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 	if err := sel.check(); err != nil {
 		return err
 	}
+	inv.adoptForce = sel.force
 	records, err := inv.readRecords(sel.tool)
 	if err != nil {
 		return err
