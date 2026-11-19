@@ -122,7 +122,8 @@ export const stepRim = (prev: RimFrame, run: RimRun, dt: number): RimFrame => {
     return {
       ...prev,
       alpha:
-        stopFrom * (1 - smoother((gone - STOP_FADE_FROM) / (1 - STOP_FADE_FROM))),
+        stopFrom *
+        (1 - smoother((gone - STOP_FADE_FROM) / (1 - STOP_FADE_FROM))),
       elapsed,
       finished: gone >= 1,
       progress,
