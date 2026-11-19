@@ -59,11 +59,15 @@ export interface CommandOptions {
   label: string;
   /**
    * The toast and activity entry when the command exits 0; none when the events say the control
-   * shows the outcome itself.
+   * shows the outcome itself. The logs are the command's log events, its warnings among them.
    */
-  success?: string | ((events: CliEvent[]) => string | undefined);
-  /** An action on the success toast, such as Undo, or what the events say it is, if any. */
-  action?: ToastAction | ((events: CliEvent[]) => ToastAction | undefined);
+  success?:
+    | string
+    | ((events: CliEvent[], logs: LogEvent[]) => string | undefined);
+  /** An action on the success toast, such as Undo, or what the events and logs say it is, if any. */
+  action?:
+    | ToastAction
+    | ((events: CliEvent[], logs: LogEvent[]) => ToastAction | undefined);
   onProgress?: (event: ProgressEvent) => void;
   /** Called with each event on stdout as it arrives, before the command ends. */
   onEvent?: (event: CliEvent) => void;
@@ -296,11 +300,11 @@ const report = (
   if (exitCode === EXIT_CODES.ok) {
     const text =
       typeof options.success === "function"
-        ? options.success(events)
+        ? options.success(events, outcome.logs)
         : options.success;
     const action =
       typeof options.action === "function"
-        ? options.action(events)
+        ? options.action(events, outcome.logs)
         : options.action;
     if (text !== undefined) {
       // A placement skipped, a copy that differed: the command succeeded, with something the

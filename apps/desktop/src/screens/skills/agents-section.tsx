@@ -11,7 +11,7 @@
 import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { Configuration } from "#/cli/events.gen.ts";
+import type { Configuration, LogEvent } from "#/cli/events.gen.ts";
 import { AgentChip } from "#/components/agent-chip.tsx";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { notify } from "#/components/toast.tsx";
@@ -34,9 +34,22 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 
 /**
+ * Whether a `skill remove --from <id>` left the skill where `id` still sees it: a directory or a
+ * link agentx did not place there, which the CLI leaves as it is with a warning that ends
+ * `<id> still sees it` (docs/spec/cli-contract.md, "What a removal may delete").
+ */
+const stillSees = (logs: LogEvent[], id: string) =>
+  logs.some(
+    (log) =>
+      log.level === "warn" && log.message.endsWith(`; ${id} still sees it`)
+  );
+
+/**
  * Adds or removes the skill's placement in `c`, with an Undo that does the opposite. Off: `skill
  * place <name> --to <id>`; on: `skill remove <name> --from <id>`. `removed` names every agent the
- * removal takes the skill from: `c` and those that see it only through `c`'s directory.
+ * removal takes the skill from: `c` and those that see it only through `c`'s directory. A removal
+ * that left `c` seeing the skill says so, with the CLI's warning under it, and has no Undo: there
+ * is nothing to undo.
  */
 const toggle = (
   row: SkillRow,
@@ -44,21 +57,27 @@ const toggle = (
   add: boolean,
   removed: string
 ) => {
+  const undo: ToastAction = {
+    label: "Undo",
+    onClick: () => {
+      toggle(row, c, !add, removed);
+    },
+  };
   void runUntilSettled(
     add
       ? ["skill", "place", row.name, "--to", c.id]
       : ["skill", "remove", row.name, "--from", c.id],
     {
-      action: {
-        label: "Undo",
-        onClick: () => {
-          toggle(row, c, !add, removed);
-        },
-      },
+      action: add
+        ? undo
+        : (_events, logs) => (stillSees(logs, c.id) ? undefined : undo),
       label: chipLabel(row, c),
       success: add
         ? `Added ${row.name} to ${c.name}`
-        : `Removed ${row.name} from ${removed}`,
+        : (_events, logs) =>
+            stillSees(logs, c.id)
+              ? `${row.name} wasn't removed from ${c.name}`
+              : `Removed ${row.name} from ${removed}`,
     }
   );
 };

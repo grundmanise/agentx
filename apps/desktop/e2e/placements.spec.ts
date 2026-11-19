@@ -164,6 +164,42 @@ test.describe("chips", () => {
     ]);
   });
 
+  test("a removal that left a directory agentx did not place: says so, with the warning and no Undo", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "pdf");
+    await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
+    const warning =
+      "/home/me/.claude/skills/pdf is a directory agentx did not place there and was left as it is; claude-code still sees it";
+    cli.register(["skill", "remove", "pdf", "--from", "claude-code"], {
+      events: [
+        {
+          ok: true,
+          summary:
+            "removed pdf from claude-code: 0 placements, 1 placement left in place",
+          type: "result",
+        },
+      ],
+      logs: [{ level: "warn", message: warning }],
+    });
+
+    await chip(pane(page, "pdf"), "Claude Code").click();
+    const toast = toasts(page)
+      .getByRole("listitem")
+      .filter({ hasText: "pdf wasn't removed from Claude Code" });
+    await expect(toast).toContainText(warning);
+    await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
+    await expect(toast.getByRole("button", { name: "Dismiss" })).toBeVisible();
+    await expect(activity(page)).toHaveText([
+      "pdf wasn't removed from Claude Code",
+    ]);
+    await expect(activity(page)).toHaveAttribute("data-tone", "attention");
+    expect(later(cli)).toEqual([
+      ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
+    ]);
+  });
+
   test("a skipped placement: an attention toast with the warning, logged as attention", async ({
     cli,
     page,
