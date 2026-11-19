@@ -136,7 +136,7 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	alike(t, "run events", h.types(run), []string{"version", "result"})
 	alike(t, "own events", h.types(own), []string{"inventory"})
 	equal(t, "inventory.scan_counter", own[0]["scan_counter"], float64(1))
-	alike(t, "result", result, jsonEvent{"exit_code": float64(0), "cancelled": false, "timed_out": false, "instance_id": inventory["instance_id"]})
+	alike(t, "result", result, jsonEvent{"exit_code": float64(0), "cancelled": false, "timed_out": false, "instance_id": inventory["instance_id"], "scan_counter": float64(1)})
 
 	c.send("new", "run", map[string]any{"args": []string{"skill", "new", "notes"}, "deadline_ms": 60000})
 	for {
@@ -162,8 +162,7 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	result, _, _, _ = c.answer(4)
 	alike(t, "search", result, jsonEvent{"instance_id": inventory["instance_id"], "query": "notes", "results": []any{}})
 
-	// A command that fails ran: its exit code is a result, and serve scans
-	// after it, since it may have changed something before it failed.
+	// A command that fails ran: its exit code is a result, not an error.
 	c.send(5, "run", map[string]any{"args": []string{"skill", "remove", "missing"}})
 	result, _, run, _ = c.answer(5)
 	alike(t, "run events", h.types(run), []string{"error", "result"})

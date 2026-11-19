@@ -1282,10 +1282,10 @@ The id of a request is a string or a number, and no two requests in progress on 
 | `cancelled` | boolean | whether the request was cancelled before the command ended |
 | `timed_out` | boolean | whether the deadline passed before the command ended |
 | `instance_id` | string | this serve process's instance id |
-| `scan_counter` | integer | the counter of the current inventory once serve has scanned after the command; absent when serve did not scan, and when that scan failed |
+| `scan_counter` | integer | the counter of the current inventory once serve has scanned after the command; absent when that scan failed |
 | `scan_error` | string | why that scan failed; absent otherwise |
 
-Serve scans after a command that may have changed something: one that rewrote `version`, as every mutation does last, and one that did not end with exit code 0, since a command that failed or was stopped may have changed something before it was. The scan is a refresh as `refresh` asks for one, so it begins after the command ended, and a changed inventory reaches the client before the response that names it. A client therefore sends no `refresh` after its own commands. A command that ended with exit code 0 and left `version` as it was changed nothing, and serve does not scan after it.
+Serve scans after every command it ran, whatever its exit code: serve cannot tell which commands change nothing, and a command that failed or was stopped may have changed something before it was. The scan is a refresh as `refresh` asks for one, so it begins after the command ended, and a changed inventory reaches the client before the response that names it. A client therefore sends no `refresh` after its own commands. A scan that finds nothing new emits no inventory, and the result names the counter of the one that is still current.
 
 `refresh` is the stdin request, with the same rule for the scan that satisfies it; its result carries what `refresh_complete` carries for a scan that succeeded. `search` is the stdin request, answered the same way from the same index; its result carries what the `search` event carries.
 

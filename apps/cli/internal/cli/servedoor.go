@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/proc"
 	"github.com/grundmanise/agentx/apps/cli/internal/rpc"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
@@ -176,14 +175,14 @@ func runLine(id json.RawMessage, stream string, text []byte) (params eventParams
 }
 
 // runResult is the result of run. The command ran, whatever its exit
-// code; when serve scanned after it, the result names the inventory that
-// scan left current, which holds what the command changed.
+// code, and the result names the inventory the scan after it left current,
+// which holds what the command changed.
 type runResult struct {
 	ExitCode    *int   `json:"exit_code"` // null when a signal ended the command
 	Cancelled   bool   `json:"cancelled"`
 	TimedOut    bool   `json:"timed_out"`
 	InstanceID  string `json:"instance_id"`
-	ScanCounter int    `json:"scan_counter,omitempty"` // absent when serve did not scan, the command having changed nothing, and when the scan failed
+	ScanCounter int    `json:"scan_counter,omitempty"` // absent when the scan failed
 	ScanError   string `json:"scan_error,omitempty"`   // why the scan failed
 }
 
@@ -194,10 +193,11 @@ type runResult struct {
 // everything it started. The request names no environment and no
 // directory: whoever could set those could have git run any program.
 //
-// Serve scans once the command has ended when it may have changed
-// something: when it rewrote the version file, as every mutation does
-// last, and when it did not end with exit code 0, since a command that
-// failed or was stopped may have changed something before it was.
+// Serve scans once the command has ended, as the desktop app asks for a
+// refresh after every command: serve cannot tell which commands change
+// nothing, and a scan that finds nothing new emits nothing. The scan is
+// not the request's to cancel: what the command changed is on disk whether
+// or not anyone still asks about it. Only serve stopping ends the wait.
 func (d *serveDoor) run(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
 	var p struct {
 		Args       []string `json:"args"`
@@ -206,7 +206,6 @@ func (d *serveDoor) run(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
 	if err := json.Unmarshal(c.Params, &p); err != nil || len(p.Args) == 0 || p.DeadlineMS < 0 {
 		return nil, &rpc.Error{Code: rpc.CodeInvalidParams, Message: `run takes {"args": ["<word>", ...]}, with "deadline_ms" for a deadline`}
 	}
-	before := d.version()
 	res, err := proc.Run(ctx, proc.Command{
 		Path: d.self, Args: jsonArgs(p.Args), Env: d.env,
 		Deadline: time.Duration(p.DeadlineMS) * time.Millisecond,
@@ -219,24 +218,12 @@ func (d *serveDoor) run(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
 		return nil, &rpc.Error{Code: rpc.CodeFailed, Message: "the command could not start: " + err.Error()}
 	}
 	result := runResult{ExitCode: res.ExitCode, Cancelled: res.Cancelled, TimedOut: res.TimedOut, InstanceID: d.inv.instanceID()}
-	if res.ExitCode == nil || *res.ExitCode != 0 || !bytes.Equal(before, d.version()) {
-		// The scan is not the request's to cancel: what the command
-		// changed is on disk whether or not anyone still asks about it.
-		// Only serve stopping ends the wait for it.
-		counter, err := d.requests.Refresh(d.ctx)
-		if err != nil {
-			result.ScanError = err.Error()
-		}
-		result.ScanCounter = counter
+	counter, err := d.requests.Refresh(d.ctx)
+	if err != nil {
+		result.ScanError = err.Error()
 	}
+	result.ScanCounter = counter
 	return result, nil
-}
-
-// version is what the version file of agentx home holds, nil when it
-// cannot be read.
-func (d *serveDoor) version() []byte {
-	b, _ := os.ReadFile(home.VersionPath(d.inv.dirs.Home))
-	return b
 }
 
 // jsonArgs is args with --json added, before a -- when there is one,

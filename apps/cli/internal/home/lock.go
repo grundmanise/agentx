@@ -22,10 +22,6 @@ var ErrServing = errors.New("another agentx serve is running for this agentx hom
 func LockPath(dir string) string      { return filepath.Join(dir, "lock") }
 func ServeLockPath(dir string) string { return filepath.Join(dir, "serve.lock") }
 
-// VersionPath is the version file of agentx home dir, which every mutation
-// rewrites last.
-func VersionPath(dir string) string { return filepath.Join(dir, "version") }
-
 // Mutate runs fn while holding the lock of agentx home dir, then rewrites the
 // version file as the change signal and releases the lock. A failing fn
 // leaves the version file alone. u finishes the ref steps of an unfinished
@@ -269,7 +265,7 @@ func BumpVersion(dir string) error { return bumpVersion(dir) }
 // bumpVersion increments the counter in the version file; a missing or
 // unreadable file counts as 0.
 func bumpVersion(dir string) error {
-	path := VersionPath(dir)
+	path := filepath.Join(dir, "version")
 	n := 0
 	if b, err := os.ReadFile(path); err == nil {
 		n, _ = strconv.Atoi(strings.TrimSpace(string(b)))
