@@ -732,6 +732,8 @@
   --height-stale-bar: 36px;
   --padding-stale-bar: 16px;
   --inset-floating-bar: 24px;
+  /* A toast's gap from the title bar above it and from the window's right edge. */
+  --inset-toast: 24px;
   --height-floating-bar: 56px;
 
   /* Code, diff, timeline, startup */
@@ -741,6 +743,10 @@
   --inset-file-row: 16px;
   --height-file-row: 44px;
   --max-height-code: 340px;
+  --min-height-code: 200px;
+  --min-height-file-open: calc(
+    var(--height-file-row) + var(--min-height-code) + 2px
+  );
   --height-code: 340px;
   --gap-code: 12px;
   --gap-hunk: 12px;
@@ -1020,6 +1026,14 @@
 /* hover-card.max-height: the room between the hover card's trigger and the window's edge. */
 @utility max-h-hover-card {
   max-height: var(--radix-hover-card-content-available-height);
+}
+/* menu.max-height: the room between the menu's trigger and the window's edge. */
+@utility max-h-menu {
+  max-height: var(--radix-dropdown-menu-content-available-height);
+}
+/* menu.max-width: the room the window has for the menu across. */
+@utility max-w-menu {
+  max-width: var(--radix-dropdown-menu-content-available-width);
 }
 /* sheet.width: the width the user dragged a sheet to, else its default. */
 @utility w-sheet-dragged {

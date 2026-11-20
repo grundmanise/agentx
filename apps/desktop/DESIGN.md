@@ -676,9 +676,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `popover.gap` | 16 | `gap-popover` | Between groups |
 | `popover.row-height` | 32–34 |  |  |
 | `popover.offset` | 8 | none: a number passed to the popover's `sideOffset` | Gap from its anchor |
-| `popover.window-inset` | 10 | none: a number passed to the popover's `collisionPadding` | The least gap between the popover and the window's edges |
+| `popover.window-inset` | 10 | none: a number passed to the popover's, hover card's and menu's `collisionPadding` | The least gap between the popover, hover card or menu and the window's edges |
 | `popover.max-height` | the room from its anchor to the window's edge, less `popover.window-inset` | `max-h-popover` | Radix measures it, so it is a utility in `tokens.css` with no theme value; the popover scrolls past it |
 | `menu.min-width` | 240 | `min-w-menu` | Menu |
+| `menu.max-height` | the room from its trigger to the window's edge, less `popover.window-inset` | `max-h-menu` | Radix measures it, so it is a utility in `tokens.css` with no theme value; the menu scrolls past it |
+| `menu.max-width` | the window's width, less `popover.window-inset` on each side | `max-w-menu` | Radix measures it, so it is a utility in `tokens.css` with no theme value; a long path wraps |
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
@@ -702,7 +704,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `filter-tags.max-height` | 112 | `max-h-filter-tags` | The tags in that panel: three rows and half of a fourth, cut through its names at the panel's bottom edge; they scroll past it |
 | `agent-list.max-height` | 240 | `max-h-agent-list` | The list of agents in an agent list card, running to the card's top and bottom edges; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
-| `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | From the top and right edges |
+| `toast.offset` | 24 | none: `--inset-toast`, passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | Below the title bar (`shell.titlebar-height` + `toast.offset` from the top edge) and from the right edge |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
 
@@ -714,6 +716,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
 | `code.gap` | 12 | `gap-x-code` | Between gutter and text |
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `code.min-height` | 200 | none: part of `file.open-min-height` | The least height a long patch's pane in What's new gives up to |
+| `file.open-min-height` | `file-row.height` + `code.min-height` + 2 | `min-h-file-open` | An open file's block in What's new: its row, its pane and its borders |
 | `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
 | `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
 | `shell.panel-loading-blur` | 12 | `backdrop-blur-panel-loading` | The frosted pane over the kept inventory while the startup checks run (§8) |
@@ -1064,7 +1068,7 @@ The Plugins screen (`src/screens/plugins`) is a split, as Skills is: the list co
 
 A toast reports what happened; it asks for nothing. A control the user is expected to use, such as the Add skills bar (§6 "Agent picker"), is a floating bar at the bottom instead, so the two never cover each other.
 
-shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, its corner close button, the app's button for its action (§6 "Buttons", "Toast action") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` from the top and right edges of the window; `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
+shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, its corner close button, the app's button for its action (§6 "Buttons", "Toast action") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` below the title bar and from the right edge of the window, so a toast never covers the title bar or its sync status (§6 "Publish status (title bar)"); `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
 
 Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint, Sonner's rich colours: the fill, the border, the message and the icon take the kind's toast tokens.
 
@@ -1104,7 +1108,7 @@ A list of entries, no dots or connector. Subject `type.timeline-entry` `text.pri
 
 ### Menu
 
-A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape, its trigger or a click outside closes it. The menu is not modal: the page under it stays live, so a click outside also acts on what it hits, as with a popover. A modal menu makes the whole page inert while it is open, which costs a style recalculation of every element when it opens and again when it closes, so it lags on a long list. No animation.
+A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end, `popover.window-inset` from the window's edges. It flips above its trigger when there is more room there, is at most `menu.max-height` high and scrolls past it, and is at most `menu.max-width` wide. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape, its trigger or a click outside closes it. The menu is not modal: the page under it stays live, so a click outside also acts on what it hits, as with a popover. A modal menu makes the whole page inert while it is open, which costs a style recalculation of every element when it opens and again when it closes, so it lags on a long list. No animation.
 
 ### Button group
 
@@ -1152,7 +1156,9 @@ The sheet frame (§6 "Sheet"). Content scrolls down only: a long line wraps, nev
 
 The sheet frame (§6 "Sheet"), for what an update changes before the user takes it. Opened from the Update skills dialog, it and its scrim take the dialog's layer, later in the document, so they sit above the dialog.
 
-- A patch with no lines to show, a read in progress and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
+- An open file's pane is as high as its lines, with no `code.max-height`: no empty pane under them. When the blocks overflow the sheet, a patch with more lines than fit in `code.min-height` gives up height, in proportion to its own, down to `file.open-min-height`, and scrolls inside; a shorter one keeps all its lines. Past that, the sheet's content scrolls. The card's items lay out in the sheet's column, each drawing its part of the card's border.
+- While the changes are read, every file the update check lists has its row, open unless the user closed it, over the loading pane of the File list (§6 "File list"), as high as its stand-in, with the spinner in the first one only. When the patches come in, the stand-ins fade out over them, so the blocks keep their place.
+- A patch with no lines to show and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
 - An update from another machine cannot be diffed before it is taken: the sheet lists its files in the same card, status and path, with no chevron.
 
 ### Sheet (Activity log)
