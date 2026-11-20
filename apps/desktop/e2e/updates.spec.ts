@@ -699,7 +699,7 @@ test.describe("the Update skills dialog", () => {
 const conflictBanner = (page: Page) =>
   pane(page, "draft").getByRole("note", { name: "Update has conflicts" });
 const discardDialog = (page: Page) =>
-  page.getByRole("alertdialog", { name: "Discard your edits to draft?" });
+  page.getByRole("alertdialog", { name: "Update discarding local edits?" });
 
 /** What `skill update draft --continue` or `--theirs` emits once it applied the merge. */
 const applied = (state: "current" | "modified"): { events: InlineEvent[] } => ({
@@ -815,7 +815,7 @@ test.describe("a pending merge", () => {
     await expect(discardDialog(page)).toBeVisible();
     await expect(
       discardDialog(page).getByText(
-        "The skill takes the update as published. Your edits and what you merged in the merge folder are lost.",
+        "Your local changes to the skill will be overwritten by the update.",
         { exact: true }
       )
     ).toBeVisible();

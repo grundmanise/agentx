@@ -483,10 +483,9 @@ export const DiscardEdits = ({ row }: { row: SkillRow }) => {
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{`Discard your edits to ${row.name}?`}</AlertDialogTitle>
+            <AlertDialogTitle>Update discarding local edits?</AlertDialogTitle>
             <AlertDialogDescription>
-              The skill takes the update as published. Your edits and what you
-              merged in the merge folder are lost.
+              Your local changes to the skill will be overwritten by the update.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
