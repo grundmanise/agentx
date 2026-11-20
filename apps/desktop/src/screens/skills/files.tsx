@@ -7,6 +7,7 @@ import type {
   DiffEvent,
   SkillFileEvent,
 } from "#/cli/events.gen.ts";
+import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { CodePane, codeLines } from "#/components/code-pane.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
 import { Spinner } from "#/components/spinner.tsx";
@@ -168,11 +169,47 @@ const Pane = ({ row }: { row: FileRow }) => {
   );
 };
 
+/** How many agents' logos a place of the menu stacks; "+n" stands for the rest. */
+const MAX_PLACE_LOGOS = 4;
+
+/**
+ * Who uses a place of Show in Finder's menu: the library by name; one agent by its logo and name;
+ * several, whose symlinks lead there, by their logos stacked, each name in a Tooltip.
+ */
+const PlaceAgents = ({
+  clients,
+  label,
+}: {
+  clients: SkillLocation["clients"];
+  label: string;
+}) => {
+  const [only] = clients;
+  if (clients.length > 1) {
+    return (
+      <LogoStack
+        clients={clients.slice(0, MAX_PLACE_LOGOS)}
+        hidden={clients.slice(MAX_PLACE_LOGOS)}
+        size={20}
+        surface="overlay"
+      />
+    );
+  }
+  return (
+    <span className="flex items-center gap-2">
+      {only === undefined ? undefined : (
+        <AgentLogo client={only} size={20} decorative tooltip={false} />
+      )}
+      <span className="type-body text-text-primary">{label}</span>
+    </span>
+  );
+};
+
 /**
  * Show in Finder for one file: the button opens the file at the skill's first place, the library
  * for a skill the library holds; when the skill is elsewhere too, a three-dots button beside it opens a
  * menu of those places, each named by its agent client with its path, which opens the file there. A
- * symlink is marked as one and shows the path it leads to, the one it opens.
+ * symlink is marked as one and shows the path it leads to, the one it opens; symlinks of several
+ * agent clients that lead to one place are one row.
  */
 const Reveal = ({
   path,
@@ -217,14 +254,17 @@ const Reveal = ({
       menu={others.map((location) => (
         <DropdownMenuItem
           key={location.key}
+          aria-label={
+            location.clients.length > 1
+              ? `${location.label}, symlink, ${location.directory}`
+              : undefined
+          }
           onSelect={() => {
             void revealInFinder(`${location.directory}/${path}`);
           }}
         >
-          <span className="flex items-baseline gap-2">
-            <span className="type-body text-text-primary">
-              {location.label}
-            </span>
+          <span className="flex items-center gap-2">
+            <PlaceAgents clients={location.clients} label={location.label} />
             {location.symlink ? (
               <span className="type-caption text-text-caption">Symlink</span>
             ) : undefined}

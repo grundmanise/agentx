@@ -347,6 +347,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `floating-bar.rim` | `accent.primary` | The light on the floating bar's rim while an install runs (§8 "Progress rim"), read by its shader |
 | `floating-bar.rim-flow` | `teal-200` | The colour that drifts through that light |
 | `overlay.border` | `gray-800` |  |
+| `overlay.chip-ring` | `overlay.bg` | 2px ring behind overlapping agent client logos in a menu |
 | `overlay.shadow` | `0 40px 100px -20px black/80` | Dialog, palette, sheet |
 | `popover.shadow` | `0 24px 60px -12px black/70` |  |
 | `popover.row-hover` | `gray-880` |  |
@@ -1093,7 +1094,7 @@ A list of entries, no dots or connector. Subject `type.timeline-entry` `text.pri
 
 ### Menu
 
-A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape, its trigger or a click outside closes it. The menu is not modal: the page under it stays live, so a click outside also acts on what it hits, as with a popover. A modal menu makes the whole page inert while it is open, which costs a style recalculation of every element when it opens and again when it closes, so it lags on a long list. No animation.
+A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. In Show in Finder's menu, a place's first line starts with its agent's 20px logo; symlinks of several agents that lead to one place are one row, its line the agents' logos stacked (ringed in `overlay.chip-ring`), at most four, then "+n" for the rest, every name in a Tooltip. Escape, its trigger or a click outside closes it. The menu is not modal: the page under it stays live, so a click outside also acts on what it hits, as with a popover. A modal menu makes the whole page inert while it is open, which costs a style recalculation of every element when it opens and again when it closes, so it lags on a long list. No animation.
 
 ### Button group
 

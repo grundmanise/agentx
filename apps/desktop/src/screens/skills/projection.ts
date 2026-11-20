@@ -681,8 +681,13 @@ export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
 /** One place a skill is on disk, which Finder can open. */
 export interface SkillLocation {
   key: string;
-  /** "Library", or the agent client's name, with the plugin for a plugin's copy. */
+  /**
+   * "Library", or the agent client's name, with the plugin for a plugin's copy; for symlinks of
+   * several agent clients that lead to one place, their names joined with commas.
+   */
   label: string;
+  /** The agent clients at this place, in the row's order: none for the library. */
+  clients: Pick<Configuration, "client" | "name">[];
   /** The path as the inventory carries it: for a symlink, the link itself. */
   path: string;
   /** The directory Finder opens: where the place resolves. */
@@ -695,37 +700,50 @@ export interface SkillLocation {
  * Every place a skill is on disk, the one Show in Finder opens first: for a skill the library
  * holds, the library entry, `<library>/<name>`, then each placement in a client's own skills
  * directory; for a skill a client holds on its own, or a plugin's, each occurrence. Placements
- * and occurrences come in the order the row lists its agents, then by path. A symlink that leads
- * where an earlier symlink of the same agent client leads is left out, as the menu would show the
- * same row twice. `library` is where agentx keeps the library, from `machine`; without it a library
- * skill's placements are all.
+ * and occurrences come in the order the row lists its agents, then by path. Symlinks that lead
+ * to one place are one place, at the first one's position, with each agent client once: the
+ * menu shows that place once, with the agents that use it. `library` is where agentx keeps the
+ * library, from `machine`; without it a library skill's placements are all.
  */
 export const locationsOf = (
   row: SkillRow,
   configurations: Configuration[],
   library: string | undefined
 ): SkillLocation[] => {
-  const name = (id: string) =>
-    configurations.find((c) => c.id === id)?.name ?? id;
+  const client = (id: string) => {
+    const c = configurations.find((x) => x.id === id);
+    return { client: c?.client ?? id, name: c?.name ?? id };
+  };
+  const name = (id: string) => client(id).name;
   const rank = (id: string) => {
     const at = row.agents.indexOf(id);
     return at === -1 ? row.agents.length : at;
   };
   const locations: SkillLocation[] = [];
   const add = (location: SkillLocation) => {
-    const shown = locations.some(
-      (l) =>
-        location.symlink &&
-        l.symlink &&
-        l.label === location.label &&
-        l.directory === location.directory
+    const at = locations.findIndex(
+      (l) => location.symlink && l.symlink && l.directory === location.directory
     );
-    if (!shown) {
+    const same = locations[at];
+    if (same === undefined) {
       locations.push(location);
+      return;
     }
+    const clients = [
+      ...same.clients,
+      ...location.clients.filter(
+        (c) => !same.clients.some((s) => s.name === c.name)
+      ),
+    ];
+    locations[at] = {
+      ...same,
+      clients,
+      label: clients.map((c) => c.name).join(", "),
+    };
   };
   if (row.entry !== undefined && library !== undefined) {
     add({
+      clients: [],
       directory: `${library}/${row.name}`,
       key: "library",
       label: "Library",
@@ -742,6 +760,7 @@ export const locationsOf = (
     );
     for (const o of occurrences) {
       add({
+        clients: [client(o.configuration)],
         directory: o.resolved_path,
         key: o.id,
         label:
@@ -765,6 +784,7 @@ export const locationsOf = (
       (o) => o.configuration === p.configuration && o.path === p.path
     );
     add({
+      clients: [client(p.configuration)],
       directory: through?.resolved_path ?? p.path,
       key: `${p.configuration}:${p.path}`,
       label: name(p.configuration),

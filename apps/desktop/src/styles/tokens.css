@@ -329,6 +329,7 @@
   /* Overlays */
   --color-overlay-bg: var(--gray-940);
   --color-overlay-border: var(--gray-800);
+  --color-overlay-chip-ring: var(--color-overlay-bg);
   /* The light on the floating bar's rim while an install runs (DESIGN.md §8 "Progress rim"); read by its shader. */
   --color-floating-bar-rim: var(--color-accent-primary);
   --color-floating-bar-rim-flow: var(--teal-200);

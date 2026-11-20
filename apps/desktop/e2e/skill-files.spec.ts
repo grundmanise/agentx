@@ -3,6 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { InventoryEvent } from "#/cli/events.gen.ts";
 import { locationsOf, projectRows } from "#/screens/skills/projection.ts";
 
+import { manyAgentsInventory, manyConfigurations } from "./fixtures/agents.ts";
 import {
   adoption,
   deletedWithFrontMatter,
@@ -510,7 +511,7 @@ test("the places of a skill come from the inventory, the library first", () => {
       true,
     ],
   ]);
-  // Two symlinks of one client that lead to the same place are one place.
+  // Symlinks that lead to one place are one place, each agent once.
   const pdf = rows.find((r) => r.name === "pdf") ?? rows[0];
   const cursorLinks = [
     "/home/me/.claude-code/skills/pdf",
@@ -552,8 +553,7 @@ test("the places of a skill come from the inventory, the library first", () => {
     ])
   ).toEqual([
     ["Library", `${libraryPath}/pdf`],
-    ["Claude Code", "/home/me/.claude-code/skills/pdf"],
-    ["Cursor", "/home/me/.claude-code/skills/pdf"],
+    ["Claude Code, Cursor", "/home/me/.claude-code/skills/pdf"],
   ]);
   // A plugin's skill and a skill a client holds on its own: each occurrence, named by its agent.
   expect(places("commit-helper", libraryPath)).toEqual([
@@ -721,4 +721,75 @@ test("the menu beside Show in file manager lists a skill's other places", async 
   // A skill in one place has the button too.
   await row(page, "notes").click();
   await expect(reveal(files(page, "notes"), "SKILL.md")).toBeAttached();
+});
+
+test("symlinks of many agents that lead to one place are one row of the menu", async ({
+  cli,
+  page,
+}) => {
+  // Every agent that keeps its own skills links pdf to the library, but Junie, which has a copy.
+  const linked = manyConfigurations
+    .filter((c) => !c.reads_library && c.id !== "junie")
+    .map((c) => c.id);
+  const machine = manyAgentsInventory(linked);
+  const junie = "/home/me/.junie/skills/pdf";
+  await openSkills(cli, page, "/#/skills/pdf", {
+    ...machine,
+    library: machine.library.map((entry) =>
+      entry.name === "pdf"
+        ? {
+            ...entry,
+            placements: [
+              ...entry.placements,
+              {
+                configuration: "junie",
+                kind: "copy" as const,
+                mode: "copy" as const,
+                path: junie,
+              },
+            ],
+          }
+        : entry
+    ),
+    skills: machine.skills.map((node) =>
+      node.name === "pdf"
+        ? {
+            ...node,
+            occurrences: [
+              ...node.occurrences,
+              ...linked.map((id) => ({
+                configuration: id,
+                id: `${id}:/home/me/.${id}/skills/pdf`,
+                kind: "symlink" as const,
+                path: `/home/me/.${id}/skills/pdf`,
+                resolved_path: `${libraryPath}/pdf`,
+                scope: "user" as const,
+              })),
+            ],
+          }
+        : node
+    ),
+  });
+  await files(page, "pdf")
+    .getByRole("button", { name: "Show SKILL.md in file manager elsewhere" })
+    .click();
+  const menu = page.getByRole("menu", {
+    name: "Show SKILL.md in file manager elsewhere",
+  });
+  const items = menu.getByRole("menuitem");
+  // The 24 symlinks are one row: four logos, a count of the rest, and where they lead.
+  await expect(items).toHaveCount(2);
+  const links = items.first();
+  await expect(links).toHaveText(`+20Symlink${libraryPath}/pdf`);
+  await expect(links.getByRole("img")).toHaveCount(4);
+  await expect(links).toHaveAccessibleName(
+    new RegExp(
+      `^AdaL, Augment, .+, Zencoder, symlink, ${libraryPath}/pdf$`,
+      "u"
+    )
+  );
+  // The copy keeps its own row, with its agent's name and path.
+  await expect(items.last()).toHaveText(`Junie${junie}`);
+  await links.click();
+  expect(cli.reveals).toEqual([[`${libraryPath}/pdf/SKILL.md`]]);
 });
