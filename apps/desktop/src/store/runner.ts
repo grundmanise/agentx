@@ -1,8 +1,9 @@
 // The one way a control runs a command. The control shows its command as pending, the command
-// runs, and the outcome is a toast and an activity entry. After any command that may have changed
-// something, whatever its exit code, the serve child is asked to scan again: the screens redraw
-// from the inventory that follows, never from a result the app predicts. The command's outcome
-// and the inventory's freshness are separate states.
+// runs, and the outcome is a toast and an activity entry. The caller says which of two kinds the
+// command is: `runCommand` for one that may change something, `readCommand` for one that only
+// reads. After a command that may have changed something, whatever its exit code, the serve child
+// is asked to scan again: the screens redraw from the inventory that follows, never from a result
+// the app predicts. The command's outcome and the inventory's freshness are separate states.
 import { CLI_COMMANDS } from "#/cli/commands.gen.ts";
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LogEvent, ProgressEvent } from "#/cli/events.gen.ts";
@@ -22,22 +23,6 @@ import { refresh } from "#/store/feed.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 import type { Problem, Tone } from "#/store/store.ts";
 
-/** The commands that change nothing: no refresh follows them, and they add no activity entry. */
-const READS = new Set([
-  "version",
-  "doctor",
-  "machine",
-  "config list",
-  "config get",
-  "source list",
-  "source read",
-  "source skills",
-  "skill list",
-  "skill diff",
-  "skill files",
-  "skill history",
-]);
-
 /** The command that `args` name: the longest run of leading words that is one. */
 export const commandOf = (args: readonly string[]): string => {
   const end = args.findIndex((arg) => arg.startsWith("-"));
@@ -46,12 +31,6 @@ export const commandOf = (args: readonly string[]): string => {
     .map((_, i) => words.slice(0, words.length - i).join(" "))
     .find((candidate) => Object.hasOwn(CLI_COMMANDS, candidate));
   return name ?? words[0] ?? "";
-};
-
-/** Whether `args` change nothing. `adopt` with no flag is a preview, which writes nothing. */
-export const isRead = (args: readonly string[]) => {
-  const command = commandOf(args);
-  return READS.has(command) || (command === "adopt" && args.length === 1);
 };
 
 export interface CommandOptions {
@@ -138,6 +117,7 @@ export interface Outcome {
 export interface Finished extends Outcome {
   args: readonly string[];
   command: string;
+  /** The caller ran it with `readCommand`: it changed nothing. */
   read: boolean;
 }
 
@@ -332,9 +312,9 @@ const report = (
   args: readonly string[],
   options: CommandOptions,
   outcome: Outcome,
+  log: boolean,
   again: () => void
 ) => {
-  const log = !isRead(args);
   const { exitCode, events } = outcome;
   if (exitCode === EXIT_CODES.ok) {
     reportSuccess(options, outcome, log);
@@ -394,13 +374,13 @@ const report = (
  * not one the user stopped while it waited.
  */
 const afterChecks = async (
-  args: readonly string[],
+  changes: boolean,
   label: string
 ): Promise<boolean> => {
   const waitId = `checks ${crypto.randomUUID()}`;
   waits.add(waitId);
   setPending(label, waitId);
-  const may = await checksPass(!isRead(args));
+  const may = await checksPass(changes);
   // Cancel took the wait away, and the control's mark with it.
   if (!waits.delete(waitId)) {
     return false;
@@ -416,13 +396,15 @@ const afterChecks = async (
  * so that the caller can follow up. It never rejects: a CLI that could not start is an outcome.
  * A command started while the screens show the kept inventory waits for the startup checks. One
  * that may not run then (src/startup/startup.ts, `checksPass`), or that the user stopped while it
- * waited, ends as a command the user stopped does, unreported.
+ * waited, ends as a command the user stopped does, unreported. A command that only reads asks for
+ * no scan after it and adds no activity entry.
  */
-export const runCommand = async (
+const start = async (
   args: readonly string[],
-  options: CommandOptions
+  options: CommandOptions,
+  read: boolean
 ): Promise<Outcome> => {
-  if (!(await afterChecks(args, options.label))) {
+  if (!(await afterChecks(!read, options.label))) {
     return {
       cancelled: true,
       events: [],
@@ -464,7 +446,6 @@ export const runCommand = async (
     }
   }
   keepConflicts(outcome.events);
-  const read = isRead(args);
   if (!read) {
     void refresh();
   }
@@ -472,9 +453,10 @@ export const runCommand = async (
     args,
     options,
     outcome,
+    !read,
     options.retry ??
       (() => {
-        void runCommand(args, options);
+        void start(args, options, read);
       })
   );
   for (const handle of finishedListeners) {
@@ -482,3 +464,21 @@ export const runCommand = async (
   }
   return outcome;
 };
+
+/**
+ * Runs a command that may change something, as `start` describes: a scan follows it, and its
+ * outcome is an activity entry. A command of unknown kind is run with this.
+ */
+export const runCommand = async (
+  args: readonly string[],
+  options: CommandOptions
+): Promise<Outcome> => await start(args, options, false);
+
+/**
+ * Runs a command that only reads, as `start` describes, such as `skill diff` or the preview that
+ * `adopt` with no flag is: no scan follows it, and it adds no activity entry.
+ */
+export const readCommand = async (
+  args: readonly string[],
+  options: CommandOptions
+): Promise<Outcome> => await start(args, options, true);
