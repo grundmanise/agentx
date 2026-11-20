@@ -5,7 +5,7 @@ import {
   inventory as statesInventory,
   OLD,
 } from "./fixtures/adoption.ts";
-import { manyConfigurations } from "./fixtures/agents.ts";
+import { manyAgentsInventory, manyConfigurations } from "./fixtures/agents.ts";
 import {
   adoption,
   configurations,
@@ -97,9 +97,13 @@ const openSkills = async (
   await expect(row(page, "pdf")).toBeVisible();
 };
 
-/** Opens every plugin's subgroup, which start collapsed. */
+/**
+ * Opens every plugin's subgroup, which start collapsed: the toggle beside the sort toggle reads
+ * Collapse all while any group is open, then Expand all.
+ */
 const expandPlugins = async (page: Page) => {
-  await list(page).getByRole("button", { name: "Expand all" }).click();
+  await page.getByRole("button", { name: "Collapse all" }).click();
+  await page.getByRole("button", { name: "Expand all" }).click();
 };
 
 /** The command lines the screen itself ran, but the reads of a skill's files and edits. */
@@ -194,15 +198,15 @@ test.describe("the list", () => {
       "true"
     );
     await expect(row(page, "review")).toHaveAttribute("aria-current", "true");
-    // A collapsed PLUGINS group drops its Expand all; open again, it shows it.
-    await header("PLUGINS 1").click();
+    // The PLUGINS group's header holds no control of its own, open or collapsed.
     await expect(
-      list(page).getByRole("button", { name: "Expand all" })
+      list(page).getByRole("button", { name: /^(?:Collapse|Expand) all$/u })
     ).toHaveCount(0);
     await header("PLUGINS 1").click();
     await expect(
-      list(page).getByRole("button", { name: "Expand all" })
-    ).toBeVisible();
+      list(page).getByRole("button", { name: /^(?:Collapse|Expand) all$/u })
+    ).toHaveCount(0);
+    await header("PLUGINS 1").click();
     // The Unmanaged group collapses too, and keeps its Adopt all.
     await header("UNMANAGED 2").click();
     await expect(
@@ -322,6 +326,22 @@ test.describe("the list", () => {
       await names(page.getByRole("region", { name: "Agents" }).getByRole("img"))
     ).toEqual(["Zed", "Claude Code"]);
   });
+});
+
+test("a row with more agents than it draws lists them all, a logo beside each name, on hover", async ({
+  cli,
+  page,
+}) => {
+  const ids = manyConfigurations.slice(0, 12).map((c) => c.id);
+  await openSkills(cli, page, "/#/skills", manyAgentsInventory(ids));
+  const stack = row(page, "pdf").getByText(/^\+\d+$/u);
+  await expect(stack).toBeVisible();
+  await stack.hover();
+  const listed = page.getByRole("list", { name: "Agents" });
+  await expect(listed).toBeVisible();
+  const shown = await listed.getByRole("listitem").allTextContents();
+  expect(shown).toEqual(expect.arrayContaining(["Claude Code", "Cursor"]));
+  expect(shown.length).toBeGreaterThan(4);
 });
 
 test.describe("filters", () => {
@@ -452,7 +472,7 @@ test.describe("filters", () => {
     expect(await names(chip.getByRole("img"))).toEqual(["Cursor"]);
 
     await agents.getByRole("checkbox", { name: "Claude Code" }).check();
-    await expect(chip).toContainText("2 agents");
+    await expect(page.getByRole("group", { name: "2 agents" })).toBeAttached();
     expect(await rowNames(list(page))).toEqual([
       "pdf-letters",
       "release-notes",
@@ -464,10 +484,28 @@ test.describe("filters", () => {
     ]);
 
     await agents.getByRole("checkbox", { name: /^Universal/u }).check();
-    await expect(chip).toContainText("3 agents");
     expect(await rowNames(list(page))).toHaveLength(9);
 
+    // Several agents: a tag for each, shown on hover or focus; a tag takes its agent off.
     await page.keyboard.press("Escape");
+    const tags = page.getByRole("group", { name: "3 agents" });
+    await expect(tags).toMatchAriaSnapshot(`
+      - group "3 agents":
+        - button "Remove Cursor"
+        - button "Remove Claude Code"
+        - button "Remove Universal"
+    `);
+    const cursor = tags.getByRole("button", { name: "Remove Cursor" });
+    await cursor.focus();
+    await expect(tags).toHaveCSS("opacity", "1");
+    await cursor.click();
+    const two = page.getByRole("group", { name: "2 agents" });
+    await two.getByRole("button", { name: "Remove Claude Code" }).focus();
+    await two.getByRole("button", { name: "Remove Claude Code" }).click();
+    await expect(two).toHaveCount(0);
+
+    // One agent left: the chip names it, with a cross that clears it.
+    await expect(chip).toContainText("Universal");
     await page.getByRole("button", { name: "Clear agents" }).click();
     await expect(chip).toHaveCount(0);
     await expect(

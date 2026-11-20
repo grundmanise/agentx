@@ -11,7 +11,7 @@ import type {
   FileStatus,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
-import { CodePane, parsePatch } from "#/components/code-pane.tsx";
+import { CodePane, codeLines, parsePatch } from "#/components/code-pane.tsx";
 import {
   Accordion,
   AccordionContent,
@@ -64,6 +64,16 @@ const READING = "Reading the changes…";
 
 const BINARY = /^Binary files /mu;
 
+/**
+ * The most lines a patch has that keeps its block as high as all of them in a short window: they
+ * fit in `code.min-height`, so the block never gives up height for the others.
+ */
+const SHORT_PATCH_LINES = 7;
+
+/** Whether the block of `patch` gives up height, down to its minimum, when the blocks overflow. */
+const fillOf = (patch: string) =>
+  codeLines({ patch }).length > SHORT_PATCH_LINES ? "scroll" : "content";
+
 /** One file's patch: its hunks in the Code pane, or what the patch says when it has none. */
 const Patch = ({ path, patch }: { path: string; patch: string }) => {
   if (parsePatch(patch).length === 0) {
@@ -73,7 +83,14 @@ const Patch = ({ path, patch }: { path: string; patch: string }) => {
       </p>
     );
   }
-  return <CodePane path={path} label={`Changes to ${path}`} patch={patch} />;
+  return (
+    <CodePane
+      path={path}
+      label={`Changes to ${path}`}
+      patch={patch}
+      height="fill"
+    />
+  );
 };
 
 /** The files of an update from another machine, as the update check lists them, with the note. */
@@ -97,7 +114,7 @@ const FilesOnly = ({ update }: { update: UpdateAvailableEvent }) => (
   </div>
 );
 
-const revealVariants = cva("", {
+const revealVariants = cva("flex min-h-0 flex-col", {
   variants: {
     revealing: {
       false: "",
@@ -107,51 +124,60 @@ const revealVariants = cva("", {
 });
 
 /**
- * The changes while they are read: the first changed file's block, open, over the loading pane of
- * the skill's Files, so the block keeps its place when its patch comes in.
+ * The changes while they are read: the block of every file the update check lists, open unless
+ * the user closed it, over the loading pane, so the blocks keep their place when the patches come
+ * in. The first block's pane has the spinner.
  */
 const Reading = ({
-  file,
+  files,
   closed,
   onClosedChange,
 }: {
-  file: ChangedFile | undefined;
+  files: ChangedFile[];
   closed: string[];
   onClosedChange: (closed: string[]) => void;
 }) => {
-  if (file === undefined) {
+  if (files.length === 0) {
     return <LoadingPane label={READING} />;
   }
-  const isOpen = !closed.includes(file.path);
+  const paths = files.map((f) => f.path);
+  const open = paths.filter((p) => !closed.includes(p));
   return (
     <Accordion
       label="Changes"
-      value={isOpen ? [file.path] : []}
+      fill
+      value={open}
       onValueChange={(value) => {
-        onClosedChange(value.includes(file.path) ? [] : [file.path]);
+        onClosedChange(paths.filter((p) => !value.includes(p)));
       }}
     >
-      <AccordionItem value={file.path}>
-        <AccordionTrigger label={file.path} open={isOpen}>
-          <Status status={file.status} />
-          <Path path={file.path} />
-        </AccordionTrigger>
-        <AccordionContent>
-          <LoadingPane label={READING} />
-        </AccordionContent>
-      </AccordionItem>
+      {files.map((file, i) => (
+        <AccordionItem key={file.path} value={file.path} fill="scroll">
+          <AccordionTrigger label={file.path} open={open.includes(file.path)}>
+            <Status status={file.status} />
+            <Path path={file.path} />
+          </AccordionTrigger>
+          <AccordionContent fill>
+            <LoadingPane label={READING} height="fill" spinner={i === 0} />
+          </AccordionContent>
+        </AccordionItem>
+      ))}
     </Accordion>
   );
 };
 
-/** What the update changes, from `skill diff <name> --update`, one block per file, all open. */
+/**
+ * What the update changes, from `skill diff <name> --update`, one block per file, all open. A
+ * block is as high as its lines. When the blocks overflow the sheet, a long patch's block gives up
+ * height, down to `file.open-min-height`, and the sheet scrolls past that.
+ */
 const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
   const stored = useAppStore((s) => s.updateDiffs[update.name]);
   // A read of another candidate is not what this update changes.
   const read = stored?.candidate === update.candidate ? stored : undefined;
   // Every block starts open; these are the ones the user closed.
   const [closed, setClosed] = useState<string[]>([]);
-  // A patch that comes in while the loading pane shows cross-fades into it, as in the skill's
+  // Patches that come in while the loading panes show cross-fade into them, as in the skill's
   // Files; one read before the sheet opened shows at once.
   const [shown, setShown] = useState(read);
   const [revealing, setRevealing] = useState(false);
@@ -169,7 +195,7 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
   if (read === undefined) {
     return (
       <Reading
-        file={update.files[0]}
+        files={update.files}
         closed={closed}
         onClosedChange={setClosed}
       />
@@ -194,28 +220,33 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
   return (
     <Accordion
       label="Changes"
+      fill
       value={open}
       onValueChange={(value) => {
         setClosed(paths.filter((p) => !value.includes(p)));
       }}
     >
       {diffs.map((diff, i) => (
-        <AccordionItem key={diff.path} value={diff.path}>
+        <AccordionItem
+          key={diff.path}
+          value={diff.path}
+          fill={fillOf(diff.patch)}
+        >
           <AccordionTrigger label={diff.path} open={open.includes(diff.path)}>
             <Status status={diff.status} />
             <Path path={diff.path} />
           </AccordionTrigger>
-          <AccordionContent>
+          <AccordionContent fill>
             {/* One tree, faded in or not, so that the pane is not remounted when the fade ends. */}
-            <div className="relative">
-              <div
-                className={revealVariants({ revealing: revealing && i === 0 })}
-              >
+            <div className="relative flex min-h-0 flex-col">
+              <div className={revealVariants({ revealing })}>
                 <Patch path={diff.path} patch={diff.patch} />
               </div>
-              {revealing && i === 0 && (
+              {revealing && (
                 <LoadingPane
                   leaving
+                  height="fill"
+                  spinner={i === 0}
                   onLeft={() => {
                     setRevealing(false);
                   }}
@@ -262,7 +293,7 @@ export const UpdateSheet = ({
         <span className="type-technical-sm text-text-caption">{versions}</span>
       </SheetHeader>
       {/* The blocks scroll down only; the Code pane wraps a long line. */}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto">
         {fromAnotherMachine(update) ? (
           <FilesOnly update={update} />
         ) : (

@@ -347,6 +347,7 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `floating-bar.rim` | `accent.primary` | The light on the floating bar's rim while an install runs (§8 "Progress rim"), read by its shader |
 | `floating-bar.rim-flow` | `teal-200` | The colour that drifts through that light |
 | `overlay.border` | `gray-800` |  |
+| `overlay.chip-ring` | `overlay.bg` | 2px ring behind overlapping agent client logos in a menu |
 | `overlay.shadow` | `0 40px 100px -20px black/80` | Dialog, palette, sheet |
 | `popover.shadow` | `0 24px 60px -12px black/70` |  |
 | `popover.row-hover` | `gray-880` |  |
@@ -676,9 +677,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `popover.gap` | 16 | `gap-popover` | Between groups |
 | `popover.row-height` | 32–34 |  |  |
 | `popover.offset` | 8 | none: a number passed to the popover's `sideOffset` | Gap from its anchor |
-| `popover.window-inset` | 10 | none: a number passed to the popover's `collisionPadding` | The least gap between the popover and the window's edges |
+| `popover.window-inset` | 10 | none: a number passed to the popover's, hover card's and menu's `collisionPadding` | The least gap between the popover, hover card or menu and the window's edges |
 | `popover.max-height` | the room from its anchor to the window's edge, less `popover.window-inset` | `max-h-popover` | Radix measures it, so it is a utility in `tokens.css` with no theme value; the popover scrolls past it |
 | `menu.min-width` | 240 | `min-w-menu` | Menu |
+| `menu.max-height` | the room from its trigger to the window's edge, less `popover.window-inset` | `max-h-menu` | Radix measures it, so it is a utility in `tokens.css` with no theme value; the menu scrolls past it |
+| `menu.max-width` | the window's width, less `popover.window-inset` on each side | `max-w-menu` | Radix measures it, so it is a utility in `tokens.css` with no theme value; a long path wraps |
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
@@ -698,8 +701,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The agent picker's list; it scrolls past it |
 | `add-skill.list-max-height` | 264 | `max-h-add-skill-list` | The Add skill dialog's list of skills found; it scrolls past it |
 | `update-skills.list-max-height` | 400 | `max-h-update-skills-list` | The Update skills dialog's list of skills; it scrolls past it |
+| `filter-tags.width` | 264 | `w-filter-tags` | The agent filter chip's panel of tags: from the chip to the sort toggle's right edge |
+| `filter-tags.max-height` | 112 | `max-h-filter-tags` | The tags in that panel: three rows and half of a fourth, cut through its names at the panel's bottom edge; they scroll past it |
+| `agent-list.max-height` | 240 | `max-h-agent-list` | The list of agents in an agent list card, running to the card's top and bottom edges; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
-| `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | From the top and right edges |
+| `toast.offset` | 24 | none: `--inset-toast`, passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | Below the title bar (`shell.titlebar-height` + `toast.offset` from the top edge) and from the right edge |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
 
@@ -711,6 +717,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
 | `code.gap` | 12 | `gap-x-code` | Between gutter and text |
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `code.min-height` | 200 | none: part of `file.open-min-height` | The least height a long patch's pane in What's new gives up to |
+| `file.open-min-height` | `file-row.height` + `code.min-height` + 2 | `min-h-file-open` | An open file's block in What's new: its row, its pane and its borders |
 | `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
 | `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
 | `shell.panel-loading-blur` | 12 | `backdrop-blur-panel-loading` | The frosted pane over the kept inventory while the startup checks run (§8) |
@@ -808,7 +816,7 @@ The value of a label/value pair (a `<dd>`: the skill's Details, a source's facts
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / `button.ghost-bg`, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
 - **Small, wrapping** – for a label that may wrap, such as Show all under HISTORY: at least 34 high, 6 `button.ghost-padding-x`, left-aligned; the label wraps in `timeline.line` lines and the button grows with them, never clipped or scrolled.
 - **Plain, inline** – no fill, no padding, no radius, as tall as its text; `button.ghost-text`, hover `text.primary`. For a line of text that expands, such as an entry of the History sheet; small (`sm`) with its padding, a toast's action (§6 "Toast action").
-- **Accent, inline** – the plain inline shape in `accent.primary`, 500, hover `accent.primary-hover`. Only for the call to action at the end of a list's group header, such as Adopt all, so it sits beside plain inline buttons such as Collapse all.
+- **Accent, inline** – the plain inline shape in `accent.primary`, 500, hover `accent.primary-hover`. Only for the call to action at the end of a list's group header, such as Adopt all, so it sits apart from the plain inline buttons.
 - **Link, inline** – the plain inline shape in `text.secondary`, 500, hover `text.primary` and underlined. Only for a link-like action inside a line of text that opens something, such as See changes on a row of the Update skills dialog.
 - **Danger** – ghost in `button.danger-text` on `button.danger-bg`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, `button.ghost-bg`; hover `button.ghost-hover`.
@@ -888,6 +896,12 @@ Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
 
+- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. The list runs to the card's top and bottom edges: its 14px padding sits inside the scroll, at its start and end, so a scrolled row is cut at the card's edge, and a row cut at the bottom says the list scrolls. Its logos then name no client in a Tooltip of their own. It opens below the stack, ending at its right edge; for a stack inside a menu, it opens beside the menu instead, so it covers none of the menu's rows. Like a tooltip, a hover card stacks over a menu.
+
+### Agent filter chip
+
+The chip after the Filter button echoes the agent filter (`FilterTagsChip`). One agent: its logo and name, with a cross that clears it. Several: at most three 16px logos and how many, such as "12 agents", with no cross. Pointing at the chip, or tabbing into it, opens a panel from the chip's own place, over the list and pushing nothing: the search field's surface (`input.bg`, 1px `input.border`) with `popover.radius` and `popover.shadow`, `filter-tags.width` wide. The same logos and count head it, and one tag per chosen agent follows: a 24px pill in `filter.chip-bg`, the agent's 16px logo and name in `type.secondary` `text.secondary`, hover `filter.chip-hover` and `text.primary`. The tags start where the summary's logos do, 8 from the panel's edge. They wrap and scroll past `filter-tags.max-height`, and run to the panel's bottom edge with no padding below them, so a tag cut there says the list scrolls; their bottom padding comes only at the end of the scroll. A tag is a button that takes its agent off the filter; pointing at it or focusing it shows a cross over the end of its name, on a fade of the hover fill. The panel has no close control: it goes when the pointer or the focus leaves it.
+
 ### Agent client logo chip, monogram
 
 A client with no bundled logo shows two letters of its name, drawn as an image like every other logo: the initials of its first two words when the name has more than one (words split at spaces, hyphens and underscores), or its first letter and the next for one word. They are semibold, on a round tint that fills the logo's box with no padding: `monogram.N.bg` behind, `monogram.N.text` for the letters, read from the tokens as the page has them, where N comes from a hash of the name, so a client keeps its hue everywhere and on every launch. Ten hues tell more clients apart than one white tile with a letter did, and the dark tint sits with the app's surfaces where a white tile would glare.
@@ -902,11 +916,13 @@ The dot and fork glyphs say one thing: whether there is an action to take. `glyp
 
 Sort toggle, at the right end of the filter row: the list always sorts by name within each group, whatever the state, and the toggle always shows it in `filter.sort-text` on `button.ghost-bg`, so it never reads as unselected. A-Z with the arrow at first; each click flips between A-Z and Z-A (the arrow turned). Disabled skills sort with the rest and read as washed out.
 
+Expand toggle, just before the sort toggle: a 28px icon button in `filter.sort-text` on `button.ghost-bg`, like the sort toggle, with its name in a tooltip. It opens or closes every section of the list at once, groups and plugins' subgroups alike. Collapse all (two chevrons pointing together) while any group is open: it collapses every group to its header, and the detail pane keeps the selected skill. Expand all (two chevrons pointing apart) while all are collapsed: it opens every group and every plugin's subgroup the filters list. Disabled while the filters list no skill.
+
 - fork marker (12px, after the pill and the alert triangle) – the original of a fork made under a new name, in `text.caption`, one per fork. A marker, not a control: the fork is listed once, under your own skills.
 
 ### Group header (lists)
 
-Every group's header is a section toggle (`src/components/section-toggle.tsx`, `level="group"`), like a plugin's below but with `group.padding` and the group's colours: a `xs` chevron in `text.caption`, `type.caption` in `group.label`, then the count in `group.count`. A click collapses or expands the group's rows (`aria-expanded`); a collapsed group keeps its header and count, and j/k skip its rows. Every group is open when the app starts, and the list keeps which are collapsed while another screen shows. A skill selected in a collapsed group, such as one another screen opens, opens its group. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding`, with `group.spacing` above each group but the first, and at least `group.header-height` tall. A header can end with one control at its right edge: the Unmanaged group's Adopt all, an accent inline button (§6 "Buttons") in `type.button-sm`, as tall as its text, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool. While open, the PLUGINS group's header ends with a plain button in `type.button-sm`, as tall as its text, so the header stays `group.header-height` tall and the plugin's header pinned under it shows whole: Collapse all while a plugin's subgroup is open, which collapses every one, and Expand all while all are collapsed, which opens every one the filters list.
+Every group's header is a section toggle (`src/components/section-toggle.tsx`, `level="group"`), like a plugin's below but with `group.padding` and the group's colours: a `xs` chevron in `text.caption`, `type.caption` in `group.label`, then the count in `group.count`. A click collapses or expands the group's rows (`aria-expanded`); a collapsed group keeps its header and count, and j/k skip its rows. Every group is open when the app starts, and the list keeps which are collapsed while another screen shows. A skill selected in a collapsed group, such as one another screen opens, opens its group. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding`, with `group.spacing` above each group but the first, and at least `group.header-height` tall. A header can end with one control at its right edge: the Unmanaged group's Adopt all, an accent inline button (§6 "Buttons") in `type.button-sm`, as tall as its text, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool. No header holds a control to open or close every section: the expand toggle in the filter row does that for the whole list.
 
 Nesting: what a group holds is inset by `subgroup.indent`, so a row's glyph and a plugin's chevron sit under the group's caption, and a 1px `list.guide` line runs down the left of it, under the group's chevron (`list.guide-inset`). A plugin's rows sit one level further in (`subgroup.nested`), with a second line under the plugin's chevron (`list.guide-nested-inset`). Each placed item draws its own piece of the line (`src/components/list-guide.ts`), so the line runs on through the rows and the spaces between them. Any other grouped list with section toggles uses the same pattern: the tokens and `LIST_GUIDE` / `LIST_GUIDE_NESTED`.
 
@@ -1053,7 +1069,7 @@ The Plugins screen (`src/screens/plugins`) is a split, as Skills is: the list co
 
 A toast reports what happened; it asks for nothing. A control the user is expected to use, such as the Add skills bar (§6 "Agent picker"), is a floating bar at the bottom instead, so the two never cover each other.
 
-shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, its corner close button, the app's button for its action (§6 "Buttons", "Toast action") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` from the top and right edges of the window; `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
+shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, its corner close button, the app's button for its action (§6 "Buttons", "Toast action") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` below the title bar and from the right edge of the window, so a toast never covers the title bar or its sync status (§6 "Publish status (title bar)"); `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
 
 Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint, Sonner's rich colours: the fill, the border, the message and the icon take the kind's toast tokens.
 
@@ -1093,7 +1109,7 @@ A list of entries, no dots or connector. Subject `type.timeline-entry` `text.pri
 
 ### Menu
 
-A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape, its trigger or a click outside closes it. The menu is not modal: the page under it stays live, so a click outside also acts on what it hits, as with a popover. A modal menu makes the whole page inert while it is open, which costs a style recalculation of every element when it opens and again when it closes, so it lags on a long list. No animation.
+A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end, `popover.window-inset` from the window's edges. It flips above its trigger when there is more room there, is at most `menu.max-height` high and scrolls past it, and is at most `menu.max-width` wide. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. In Show in Finder's menu, a place's first line starts with its agent's 20px logo; symlinks of several agents that lead to one place are one row, its line the agents' logos stacked (ringed in `overlay.chip-ring`), at most four, then "+n" for the rest, which opens an agent list card (`AgentListCard`) to the menu's left. A symlink's caption is a neutral pill (§6 "Pills (status)") at the right of its first line, centred on it: Symlink, or Library when it leads into the library. Escape, its trigger or a click outside closes it. The menu is not modal: the page under it stays live, so a click outside also acts on what it hits, as with a popover. A modal menu makes the whole page inert while it is open, which costs a style recalculation of every element when it opens and again when it closes, so it lags on a long list. No animation.
 
 ### Button group
 
@@ -1117,7 +1133,7 @@ A help term (`src/components/help-term.tsx`) is a word in running text that expl
 
 ### Hover card
 
-shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
+shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding (none at the top and bottom for a list that scrolls to the card's edges, `padding="list"`), `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
 
 ### Popover (Filter)
 
@@ -1141,7 +1157,9 @@ The sheet frame (§6 "Sheet"). Content scrolls down only: a long line wraps, nev
 
 The sheet frame (§6 "Sheet"), for what an update changes before the user takes it. Opened from the Update skills dialog, it and its scrim take the dialog's layer, later in the document, so they sit above the dialog.
 
-- A patch with no lines to show, a read in progress and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
+- An open file's pane is as high as its lines, with no `code.max-height`: no empty pane under them. When the blocks overflow the sheet, a patch with more lines than fit in `code.min-height` gives up height, in proportion to its own, down to `file.open-min-height`, and scrolls inside; a shorter one keeps all its lines. Past that, the sheet's content scrolls. The card's items lay out in the sheet's column, each drawing its part of the card's border.
+- While the changes are read, every file the update check lists has its row, open unless the user closed it, over the loading pane of the File list (§6 "File list"), as high as its stand-in, with the spinner in the first one only. When the patches come in, the stand-ins fade out over them, so the blocks keep their place.
+- A patch with no lines to show and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
 - An update from another machine cannot be diffed before it is taken: the sheet lists its files in the same card, status and path, with no chevron.
 
 ### Sheet (Activity log)

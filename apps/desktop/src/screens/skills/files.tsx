@@ -7,8 +7,10 @@ import type {
   DiffEvent,
   SkillFileEvent,
 } from "#/cli/events.gen.ts";
+import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { CodePane, codeLines } from "#/components/code-pane.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
+import { Pill } from "#/components/pill.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import {
@@ -168,11 +170,73 @@ const Pane = ({ row }: { row: FileRow }) => {
   );
 };
 
+/** How many agents' logos a place of the menu stacks; "+n" stands for the rest. */
+const MAX_PLACE_LOGOS = 4;
+
+/**
+ * What a place's first line says after it: Library for a symlink into the library, Symlink for
+ * another, nothing for a copy.
+ */
+const SYMLINK_CAPTIONS = { library: "Library", other: "Symlink" } as const;
+const captionOf = (location: SkillLocation) =>
+  location.symlink
+    ? SYMLINK_CAPTIONS[location.intoLibrary ? "library" : "other"]
+    : undefined;
+
+/** A place's caption: a neutral pill (§6 "Pills (status)") at the right of its first line. */
+const Caption = ({ children }: { children: string }) => (
+  <span className="ml-auto flex">
+    <Pill tone="neutral">{children}</Pill>
+  </span>
+);
+
+/**
+ * The first line of a place in Show in Finder's menu, then its caption, if any: the library by
+ * name; one agent by its logo and name; several, whose symlinks lead there, by their logos
+ * stacked, whose "+n" lists every name beside the menu.
+ */
+const PlaceLine = ({
+  clients,
+  label,
+  caption,
+}: {
+  clients: SkillLocation["clients"];
+  label: string;
+  caption: string | undefined;
+}) => {
+  const [only] = clients;
+  if (clients.length > 1) {
+    return (
+      <span className="flex items-center gap-2 self-stretch">
+        <LogoStack
+          clients={clients.slice(0, MAX_PLACE_LOGOS)}
+          hidden={clients.slice(MAX_PLACE_LOGOS)}
+          size={20}
+          surface="overlay"
+          listSide="left"
+        />
+        {caption === undefined ? undefined : <Caption>{caption}</Caption>}
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-2 self-stretch">
+      {only === undefined ? undefined : (
+        <AgentLogo client={only} size={20} decorative tooltip={false} />
+      )}
+      <span className="type-body text-text-primary">{label}</span>
+      {caption === undefined ? undefined : <Caption>{caption}</Caption>}
+    </span>
+  );
+};
+
 /**
  * Show in Finder for one file: the button opens the file at the skill's first place, the library
  * for a skill the library holds; when the skill is elsewhere too, a three-dots button beside it opens a
  * menu of those places, each named by its agent client with its path, which opens the file there. A
- * symlink is marked as one and shows the path it leads to, the one it opens.
+ * symlink is marked as one, or as Library when it leads into the library, and shows the path it
+ * leads to, the one it opens; symlinks of several
+ * agent clients that lead to one place are one row.
  */
 const Reveal = ({
   path,
@@ -217,18 +281,20 @@ const Reveal = ({
       menu={others.map((location) => (
         <DropdownMenuItem
           key={location.key}
+          aria-label={
+            location.clients.length > 1
+              ? `${location.label}, ${location.intoLibrary ? "library" : "symlink"}, ${location.directory}`
+              : undefined
+          }
           onSelect={() => {
             void revealInFinder(`${location.directory}/${path}`);
           }}
         >
-          <span className="flex items-baseline gap-2">
-            <span className="type-body text-text-primary">
-              {location.label}
-            </span>
-            {location.symlink ? (
-              <span className="type-caption text-text-caption">Symlink</span>
-            ) : undefined}
-          </span>
+          <PlaceLine
+            clients={location.clients}
+            label={location.label}
+            caption={captionOf(location)}
+          />
           <span className="type-technical-sm text-text-caption break-all">
             {location.symlink ? location.directory : location.path}
           </span>
@@ -275,10 +341,23 @@ Anything else the agent should keep in mind while it works.
 `;
 
 const loadingVariants = cva("bg-code-bg overflow-hidden", {
+  compoundVariants: [
+    { className: "h-code", height: "capped", leaving: false },
+    {
+      className: "flex min-h-0 flex-col",
+      height: "fill",
+      leaving: false,
+    },
+  ],
+  defaultVariants: { height: "capped" },
   variants: {
+    height: {
+      capped: "",
+      fill: "",
+    },
     leaving: {
-      false: "h-code relative",
-      true: "animate-code-loading-out pointer-events-none absolute inset-0",
+      false: "relative",
+      true: "animate-code-loading-out pointer-events-none absolute inset-0 flex flex-col",
     },
   },
 });
@@ -297,22 +376,28 @@ const revealVariants = cva("", {
  * The SKILL.md pane while the files are read: a stand-in file blurred like frosted glass with a
  * spinner on top, at the Code pane's full height. `leaving`, it lies over the real SKILL.md as
  * that comes in and fades out, hidden from assistive technology, then calls `onLeft`. `label` is
- * what it says to assistive technology.
+ * what it says to assistive technology. `height` is the Code pane's: `capped` at `code.height`, or
+ * `fill`, as high as the stand-in while its flex column has the room. `spinner` false leaves the spinner and its
+ * status to another loading pane beside this one.
  */
 export const LoadingPane = ({
   leaving = false,
   onLeft,
   label = "Reading the files…",
+  height = "capped",
+  spinner = true,
 }: {
   leaving?: boolean;
   onLeft?: () => void;
   label?: string;
+  height?: "capped" | "fill";
+  spinner?: boolean;
 }) => (
   <div
     aria-busy={leaving ? undefined : true}
     aria-hidden={leaving ? true : undefined}
     inert={leaving}
-    className={loadingVariants({ leaving })}
+    className={loadingVariants({ height, leaving })}
     onAnimationEnd={(event) => {
       // The spinner turns inside; only the pane's own fade ends it.
       if (event.target === event.currentTarget) {
@@ -323,14 +408,21 @@ export const LoadingPane = ({
     <div
       aria-hidden
       inert
-      className="blur-code-loading pointer-events-none select-none"
+      className="blur-code-loading pointer-events-none flex min-h-0 flex-col select-none"
     >
-      <CodePane path={SKILL_MD} label={SKILL_MD} content={STAND_IN} />
+      <CodePane
+        path={SKILL_MD}
+        label={SKILL_MD}
+        content={STAND_IN}
+        height={height}
+      />
     </div>
-    <output className="text-text-muted absolute inset-0 flex items-center justify-center">
-      <Spinner size="md" />
-      <span className="sr-only">{label}</span>
-    </output>
+    {spinner && (
+      <output className="text-text-muted absolute inset-0 flex items-center justify-center">
+        <Spinner size="md" />
+        <span className="sr-only">{label}</span>
+      </output>
+    )}
   </div>
 );
 
