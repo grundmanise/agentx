@@ -208,6 +208,7 @@ func TestScanHandshake(t *testing.T) {
 		t.Errorf("the two variants share a signature: %v", fixVersions)
 	}
 	var variantA, variantB map[string]any
+	var occurrenceA, occurrenceB string
 	for _, d := range serverDeclarations(inventory)["fix"] {
 		equal(t, "fix handshake", d.occurrence["handshake"], true)
 		v := d.version()
@@ -222,9 +223,9 @@ func TestScanHandshake(t *testing.T) {
 			t.Errorf("fix tools = %v, want %v", rows, want)
 		}
 		if d.occurrence["configuration"] == "cursor" {
-			variantB = v
+			variantB, occurrenceB = v, d.occurrence["id"].(string)
 		} else {
-			variantA = v
+			variantA, occurrenceA = v, d.occurrence["id"].(string)
 		}
 	}
 	if variantA == nil || variantB == nil || variantA["signature"] == variantB["signature"] {
@@ -302,7 +303,7 @@ func TestScanHandshake(t *testing.T) {
 	equal(t, "warnings", len(inventory["warnings"].([]any)), 6)
 
 	// The handshakes file, corrupt before, now keeps the last signature per
-	// logical server and nothing for a server that failed; it is derived
+	// declaration and nothing for a server that failed; it is derived
 	// state, so no version bump.
 	stored := map[string]map[string]any{}
 	b, err := os.ReadFile(filepath.Join(h.agentx, "handshakes.json"))
@@ -312,37 +313,42 @@ func TestScanHandshake(t *testing.T) {
 	if err := json.Unmarshal(b, &stored); err != nil {
 		t.Fatal(err)
 	}
-	equal(t, "stored servers", len(stored), 2)
-	entry := stored[fix[0]["logical_id"].(string)]
-	equal(t, "stored signature", entry["signature"], variantB["signature"])
+	equal(t, "stored declarations", len(stored), 3)
+	equal(t, "stored signature a", stored[occurrenceA]["signature"], variantA["signature"])
+	entry := stored[occurrenceB]
+	equal(t, "stored signature b", entry["signature"], variantB["signature"])
 	equal(t, "stored tools", len(entry["tools"].([]any)), 4)
 	if _, err := time.Parse(time.RFC3339, entry["at"].(string)); err != nil {
 		t.Errorf("stored at = %v: %v", entry["at"], err)
 	}
-	equal(t, "web stored", stored[web["logical_id"].(string)]["signature"], webVersion["signature"])
+	equal(t, "web stored", stored[web["occurrences"].([]any)[0].(map[string]any)["id"].(string)]["signature"], webVersion["signature"])
 	if _, err := os.Stat(filepath.Join(h.agentx, "version")); !os.IsNotExist(err) {
 		t.Errorf("the handshake bumped the version file: %v", err)
 	}
 
-	// A plain scan reuses the stored signature: both declarations now name
-	// one version, the node keeps its id, and no occurrence claims a
-	// handshake.
+	// A plain scan reuses the stored signatures: each declaration keeps the
+	// version it answered with, the node keeps its id, and no occurrence
+	// claims a handshake.
 	after := h.inventory(t)
 	equal(t, "warnings after", len(after["warnings"].([]any)), 0)
 	plain := serverNodes(after)
 	equal(t, "fix nodes after", len(plain["fix"]), 1)
 	equal(t, "fix physical_id after", plain["fix"][0]["physical_id"], fix[0]["physical_id"])
 	plainFix := versions(plain["fix"][0])
-	equal(t, "fix versions after", len(plainFix), 1)
-	equal(t, "fix signature after", plainFix[0]["signature"], variantB["signature"])
-	equal(t, "fix signature_at after", plainFix[0]["signature_at"], variantB["signature_at"])
+	equal(t, "fix versions after", len(plainFix), 2)
 	equal(t, "fix occurrences after", len(plain["fix"][0]["occurrences"].([]any)), 2)
-	for _, o := range plain["fix"][0]["occurrences"].([]any) {
-		equal(t, "fix handshake after", o.(map[string]any)["handshake"], false)
-		equal(t, "fix occurrence signature after", o.(map[string]any)["signature"], variantB["signature"])
-	}
-	if rows, _ := tools(plainFix[0]); len(rows) != 4 {
-		t.Errorf("fix tools after = %v", rows)
+	for _, d := range serverDeclarations(after)["fix"] {
+		equal(t, "fix handshake after", d.occurrence["handshake"], false)
+		want := variantA
+		if d.occurrence["configuration"] == "cursor" {
+			want = variantB
+		}
+		v := d.version()
+		equal(t, "fix signature after", v["signature"], want["signature"])
+		equal(t, "fix signature_at after", v["signature_at"], want["signature_at"])
+		if rows, _ := tools(v); len(rows) != 4 {
+			t.Errorf("fix tools after = %v", rows)
+		}
 	}
 	equal(t, "web signature after", versions(plain["web"][0])[0]["signature"], webVersion["signature"])
 	equal(t, "hang versions after", len(versions(plain["hang"][0])), 0)
@@ -359,13 +365,38 @@ func TestScanHandshake(t *testing.T) {
 	}
 	equal(t, "snapshot logical_id", snapFix["logical_id"], plain["fix"][0]["logical_id"])
 	snapVersions := versions(snapFix)
-	equal(t, "snapshot versions", len(snapVersions), 1)
-	equal(t, "snapshot signature", snapVersions[0]["signature"], variantB["signature"])
-	equal(t, "snapshot occurrence signature", snapFix["occurrences"].([]any)[0].(map[string]any)["signature"], variantB["signature"])
-	echo := toolNamed(snapVersions[0], "echo")
+	equal(t, "snapshot versions", len(snapVersions), 2)
+	var snapB map[string]any
+	for _, v := range snapVersions {
+		if v["signature"] == variantB["signature"] {
+			snapB = v
+		}
+	}
+	if snapB == nil {
+		t.Fatalf("the snapshot has no version %v: %v", variantB["signature"], snapVersions)
+	}
+	signatures := map[any]bool{}
+	for _, o := range snapFix["occurrences"].([]any) {
+		signatures[o.(map[string]any)["signature"]] = true
+	}
+	equal(t, "snapshot occurrence signatures", len(signatures), 2)
+	echo := toolNamed(snapB, "echo")
 	equal(t, "snapshot echo id", echo["id"], idsB["echo"])
-	equal(t, "snapshot echo hash", echo["hash"], toolNamed(plainFix[0], "echo")["hash"])
+	equal(t, "snapshot echo hash", echo["hash"], echoB["hash"])
 	equal(t, "snapshot echo schema_hash", echo["schema_hash"], echoA["schema_hash"])
+
+	// A file an earlier agentx wrote keeps one entry per logical server:
+	// every declaration of it with no entry of its own takes that one.
+	legacy, err := json.Marshal(map[string]any{fix[0]["logical_id"].(string): entry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h.agentx, "handshakes.json"), legacy, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range serverDeclarations(h.inventory(t))["fix"] {
+		equal(t, "fix signature from an earlier file", d.occurrence["signature"], variantB["signature"])
+	}
 
 	// The text output of a handshake, which prints no secret either.
 	args = []string{"scan", "--handshake"}

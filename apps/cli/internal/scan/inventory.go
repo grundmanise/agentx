@@ -295,7 +295,7 @@ type Scan struct {
 	plugins   map[string]bool    // physical ids already recorded
 	seen      map[string]bool    // occurrence and edge ids already recorded
 	declared  []*declaration
-	stored    map[string]home.Handshake // from the handshakes file, by logical id
+	stored    map[string]home.Handshake // from the handshakes file, by occurrence id (by logical id from an earlier agentx)
 	library   []LibrarySkill            // the library's own directories, read only when Options.Library asks
 	inventory Inventory
 }
@@ -315,7 +315,7 @@ func (s *Scan) Library() []LibrarySkill { return s.library }
 func (s *Scan) Warn(message string) { s.warn(message) }
 
 // Inventory composes the inventory, once per Scan, and returns it with the
-// handshakes this scan took, by server logical id, for the handshakes file.
+// handshakes this scan took, by occurrence id, for the handshakes file.
 func (s *Scan) Inventory() (Inventory, map[string]home.Handshake) {
 	fresh := s.composeServers()
 	return s.finish(), fresh

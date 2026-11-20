@@ -85,19 +85,21 @@ func (s *Scan) serverLogicalID(server mcp.Server) string {
 
 // composeServers builds the server nodes from the declarations, one per
 // logical server: each declaration's version is this scan's handshake, else
-// the stored one, else none. The fresh handshakes are returned by logical
-// id for the handshakes file.
+// the one stored for it, else none. The fresh handshakes are returned by
+// occurrence id for the handshakes file, so two declarations of one server
+// keep their own answers.
 func (s *Scan) composeServers() map[string]home.Handshake {
 	fresh := map[string]home.Handshake{}
 	for _, d := range s.declared {
+		physical := id("server", d.logical, s.MachineID)
+		occurrence := id("occurrence", d.conf.PhysicalID, physical, s.portable(d.file), d.server.Name)
 		signature, tools, at := NoSignature, []home.Tool(nil), ""
 		if d.fresh != nil {
 			signature, tools, at = d.fresh.Signature, s.tools(d.logical, d.fresh.Items), d.at
-			fresh[d.logical] = home.Handshake{Signature: signature, Tools: tools, At: at}
-		} else if h, ok := s.stored[d.logical]; ok {
+			fresh[occurrence] = home.Handshake{Signature: signature, Tools: tools, At: at}
+		} else if h, ok := s.storedFor(occurrence, d.logical); ok {
 			signature, tools, at = h.Signature, keyed(d.logical, h.Tools), h.At
 		}
-		physical := id("server", d.logical, s.MachineID)
 		node, ok := s.servers[physical]
 		if !ok {
 			node = &Server{PhysicalID: physical, LogicalID: d.logical, Name: d.server.Name, Versions: []ServerVersion{}}
@@ -124,7 +126,7 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 		if d.disabled {
 			occ.Enabled = new(bool)
 		}
-		occ.ID = id("occurrence", d.conf.PhysicalID, physical, s.portable(d.file), d.server.Name)
+		occ.ID = occurrence
 		if !s.seen[occ.ID] {
 			s.seen[occ.ID] = true
 			node.Occurrences = append(node.Occurrences, occ)
@@ -135,6 +137,17 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 		}
 	}
 	return fresh
+}
+
+// storedFor is the handshake stored for the declaration with this
+// occurrence id, else the one an earlier agentx stored for its logical
+// server, which kept one entry per server.
+func (s *Scan) storedFor(occurrence, logical string) (home.Handshake, bool) {
+	if h, ok := s.stored[occurrence]; ok {
+		return h, true
+	}
+	h, ok := s.stored[logical]
+	return h, ok
 }
 
 // addVersion records v on the server, once per signature, keeping the
