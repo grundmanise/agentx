@@ -213,7 +213,7 @@ const pdfMerging = {
   ),
 };
 
-test("a merge pending: Fork looks disabled, opens nothing and says to finish the update first", async ({
+test("a merge pending: Fork looks disabled, opens nothing and says it cannot fork while the update is in progress", async ({
   cli,
   page,
 }) => {
@@ -221,7 +221,9 @@ test("a merge pending: Fork looks disabled, opens nothing and says to finish the
   const fork = actions(page, "pdf").getByRole("button", { name: "Fork" });
   await expect(fork).toHaveAttribute("aria-disabled", "true");
   await fork.hover();
-  await expect(page.getByRole("tooltip")).toHaveText("Finish the update first");
+  await expect(page.getByRole("tooltip")).toHaveText(
+    "Can't fork while update in progress"
+  );
   // It reads as disabled, so Playwright would wait for it: the click is forced, as a user's is.
   await fork.click({ force: true });
   await expect(forkDialog(page, "pdf")).toHaveCount(0);

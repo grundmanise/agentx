@@ -109,7 +109,7 @@ const closeFork = () => {
 };
 
 /** Why Fork does nothing while the skill has a merge pending, which `skill fork` refuses. */
-export const FORK_WHILE_MERGING = "Finish the update first";
+export const FORK_WHILE_MERGING = "Can't fork while update in progress";
 
 /**
  * Fork, a secondary button in the detail pane's action row: opens the dialog. While the skill has
