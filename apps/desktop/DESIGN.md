@@ -676,9 +676,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `popover.gap` | 16 | `gap-popover` | Between groups |
 | `popover.row-height` | 32–34 |  |  |
 | `popover.offset` | 8 | none: a number passed to the popover's `sideOffset` | Gap from its anchor |
-| `popover.window-inset` | 10 | none: a number passed to the popover's `collisionPadding` | The least gap between the popover and the window's edges |
+| `popover.window-inset` | 10 | none: a number passed to the popover's, hover card's and menu's `collisionPadding` | The least gap between the popover, hover card or menu and the window's edges |
 | `popover.max-height` | the room from its anchor to the window's edge, less `popover.window-inset` | `max-h-popover` | Radix measures it, so it is a utility in `tokens.css` with no theme value; the popover scrolls past it |
 | `menu.min-width` | 240 | `min-w-menu` | Menu |
+| `menu.max-height` | the room from its trigger to the window's edge, less `popover.window-inset` | `max-h-menu` | Radix measures it, so it is a utility in `tokens.css` with no theme value; the menu scrolls past it |
+| `menu.max-width` | the window's width, less `popover.window-inset` on each side | `max-w-menu` | Radix measures it, so it is a utility in `tokens.css` with no theme value; a long path wraps |
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
@@ -1093,7 +1095,7 @@ A list of entries, no dots or connector. Subject `type.timeline-entry` `text.pri
 
 ### Menu
 
-A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape, its trigger or a click outside closes it. The menu is not modal: the page under it stays live, so a click outside also acts on what it hits, as with a popover. A modal menu makes the whole page inert while it is open, which costs a style recalculation of every element when it opens and again when it closes, so it lags on a long list. No animation.
+A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding`, `menu.offset` below its trigger and aligned to its end, `popover.window-inset` from the window's edges. It flips above its trigger when there is more room there, is at most `menu.max-height` high and scrolls past it, and is at most `menu.max-width` wide. A row is `menu.row-radius`, `menu.row-hover` when pointed at or focused, with a `type.body` `text.primary` line over a `type.technical-sm` `text.caption` line such as a path. Escape, its trigger or a click outside closes it. The menu is not modal: the page under it stays live, so a click outside also acts on what it hits, as with a popover. A modal menu makes the whole page inert while it is open, which costs a style recalculation of every element when it opens and again when it closes, so it lags on a long list. No animation.
 
 ### Button group
 

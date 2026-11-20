@@ -1018,6 +1018,14 @@
 @utility max-h-hover-card {
   max-height: var(--radix-hover-card-content-available-height);
 }
+/* menu.max-height: the room between the menu's trigger and the window's edge. */
+@utility max-h-menu {
+  max-height: var(--radix-dropdown-menu-content-available-height);
+}
+/* menu.max-width: the room the window has for the menu across. */
+@utility max-w-menu {
+  max-width: var(--radix-dropdown-menu-content-available-width);
+}
 /* sheet.width: the width the user dragged a sheet to, else its default. */
 @utility w-sheet-dragged {
   width: var(--sheet-dragged-width, var(--width-sheet));
