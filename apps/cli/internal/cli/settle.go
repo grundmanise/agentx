@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -94,9 +93,9 @@ func (inv *invocation) takeResolved(ctx context.Context, gitDir, name, path stri
 		if err != nil {
 			return err
 		}
-		if line := markerLine(string(body), size); line > 0 {
+		if holdsMarker(string(body), size) {
 			file := filepath.Join(path, filepath.FromSlash(p))
-			return refuse(exitPendingMerge, fmt.Sprintf("%s still holds a conflict marker at line %d, so the merge of %s is not finished", quotedPath(file), line, sanitised(name)),
+			return refuse(exitPendingMerge, quotedPath(file)+" still holds a conflict marker, so the merge of "+sanitised(name)+" is not finished",
 				"edit the file until no conflict marker is left, then run '"+skillCommand("update", name, "--continue")+"' again")
 		}
 	}
@@ -120,21 +119,20 @@ func unmergedPaths(stages []string) []string {
 	return paths
 }
 
-// markerLine is the number, from 1, of the first line of body that opens
-// or closes a conflict git wrote with markers size long: a run of exactly
-// size '<' or '>', alone or followed by a space and the side's label; or 0
-// when there is none. The middle markers, '|' and '=', are left out, since
+// holdsMarker reports whether a line of body opens or closes a conflict
+// git wrote with markers size long: a run of exactly size '<' or '>', alone
+// or followed by a space and the side's label. The middle markers, '|' and '=', are left out, since
 // a line of '=' of that length is also a Markdown heading's underline. The
 // markers are sized so that no line of the versions merged reads as one,
 // see markerSize. Pure.
-func markerLine(body string, size int) int {
-	for i, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
+func holdsMarker(body string, size int) bool {
+	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
 		for _, c := range []string{"<", ">"} {
 			marker := strings.Repeat(c, size)
 			if line == marker || strings.HasPrefix(line, marker+" ") {
-				return i + 1
+				return true
 			}
 		}
 	}
-	return 0
+	return false
 }

@@ -33,7 +33,7 @@ func TestSkillUpdateContinueAppliesTheFilesAsLeft(t *testing.T) {
 
 // TestSkillUpdateContinueRefusesAConflictMarker: --continue refuses a
 // merge whose file still holds a conflict marker git wrote, exit 4, naming
-// the file and the line, and changes nothing: the file stays unmerged and
+// the file, and changes nothing: the file stays unmerged and
 // the library as it was. A line of '=' as long as a marker is no marker.
 func TestSkillUpdateContinueRefusesAConflictMarker(t *testing.T) {
 	t.Parallel()
@@ -47,7 +47,7 @@ func TestSkillUpdateContinueRefusesAConflictMarker(t *testing.T) {
 	out := h.run("--json", "skill", "update", "alpha", "--continue")
 	equal(t, "exit", out.exit, 4)
 	e := h.one(out.stdout, "error")
-	equal(t, "message", e["message"], quotedPath(notes)+" still holds a conflict marker at line 3, so the merge of alpha is not finished")
+	equal(t, "message", e["message"], quotedPath(notes)+" still holds a conflict marker, so the merge of alpha is not finished")
 	equal(t, "hint", e["hint"], "edit the file until no conflict marker is left, then run 'agentx skill update alpha --continue' again")
 	equal(t, "the unmerged paths", unmerged(t, h, "alpha"), "1 alpha-dir/notes.md\n2 alpha-dir/notes.md\n3 alpha-dir/notes.md")
 	equal(t, "the library", onDisk(t, h.library), was.library)
@@ -114,24 +114,24 @@ func TestSkillUpdateContinueOfAFork(t *testing.T) {
 	noCheckout(t, h, "alpha")
 }
 
-// TestMarkerLine: the line of the first marker that opens or closes a
-// conflict, at the size given, and none for a run of another length, a
-// middle marker or a marker inside a line.
-func TestMarkerLine(t *testing.T) {
+// TestHoldsMarker: a marker that opens or closes a conflict, at the size
+// given, and none for a run of another length, a middle marker or a marker
+// inside a line.
+func TestHoldsMarker(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
 		body string
 		size int
-		want int
+		want bool
 	}{
-		{"a\n<<<<<<< ours\nb\n", 7, 2},
-		{"a\r\n>>>>>>>\r\n", 7, 2},
-		{"a\n<<<<<<< ours\n", 8, 0},
-		{"<<<<<<<< ours\n", 8, 1},
-		{"Title\n=======\n|||||||\n", 7, 0},
-		{"x <<<<<<< y\n", 7, 0},
-		{"<<<<<<<<\n", 7, 0},
+		{"a\n<<<<<<< ours\nb\n", 7, true},
+		{"a\r\n>>>>>>>\r\n", 7, true},
+		{"a\n<<<<<<< ours\n", 8, false},
+		{"<<<<<<<< ours\n", 8, true},
+		{"Title\n=======\n|||||||\n", 7, false},
+		{"x <<<<<<< y\n", 7, false},
+		{"<<<<<<<<\n", 7, false},
 	} {
-		equal(t, c.body, markerLine(c.body, c.size), c.want)
+		equal(t, c.body, holdsMarker(c.body, c.size), c.want)
 	}
 }

@@ -809,7 +809,7 @@ test.describe("a pending merge", () => {
   }) => {
     await open(cli, page, "draft");
     const message =
-      '"/home/me/.agentx/merges/draft/draft/SKILL.md" still holds a conflict marker at line 12, so the merge of draft is not finished';
+      '"/home/me/.agentx/merges/draft/draft/SKILL.md" still holds a conflict marker, so the merge of draft is not finished';
     cli.register(["skill", "update", "draft", "--continue"], {
       events: [{ code: "pending_merge", message, type: "error" }],
       exitCode: 4,
