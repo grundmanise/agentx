@@ -47,7 +47,7 @@ func TestSkillUpdateContinueRefusesAConflictMarker(t *testing.T) {
 	out := h.run("--json", "skill", "update", "alpha", "--continue")
 	equal(t, "exit", out.exit, 4)
 	e := h.one(out.stdout, "error")
-	equal(t, "message", e["message"], quotedPath(notes)+" still holds a conflict marker, so the merge of alpha is not finished")
+	equal(t, "message", e["message"], "failed to update the skill: "+quotedPath(notes)+" still holds a conflict marker")
 	equal(t, "hint", e["hint"], "edit the file until no conflict marker is left, then run 'agentx skill update alpha --continue' again")
 	equal(t, "the unmerged paths", unmerged(t, h, "alpha"), "1 alpha-dir/notes.md\n2 alpha-dir/notes.md\n3 alpha-dir/notes.md")
 	equal(t, "the library", onDisk(t, h.library), was.library)

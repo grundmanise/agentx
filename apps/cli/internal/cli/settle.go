@@ -95,7 +95,7 @@ func (inv *invocation) takeResolved(ctx context.Context, gitDir, name, path stri
 		}
 		if holdsMarker(string(body), size) {
 			file := filepath.Join(path, filepath.FromSlash(p))
-			return refuse(exitPendingMerge, quotedPath(file)+" still holds a conflict marker, so the merge of "+sanitised(name)+" is not finished",
+			return refuse(exitPendingMerge, "failed to update the skill: "+quotedPath(file)+" still holds a conflict marker",
 				"edit the file until no conflict marker is left, then run '"+skillCommand("update", name, "--continue")+"' again")
 		}
 	}
