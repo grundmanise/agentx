@@ -149,12 +149,15 @@ func (s *Scan) tools(logical string, items []mcp.Item) []home.Tool {
 // keyed gives every tool its identity and keeps the first of those sharing
 // one, in the order the handshake sorted them. The identity is computed
 // afresh, so a stored entry an earlier agentx keyed by its hash takes this
-// one too.
+// one too, except a resource stored with no URI, whose name may not be
+// unique: it keeps its stored id until a handshake gives its URI.
 func keyed(logical string, tools []home.Tool) []home.Tool {
 	out := []home.Tool{}
 	seen := map[string]bool{}
 	for _, t := range tools {
-		t.ID = toolID(logical, t)
+		if !legacyResource(t) {
+			t.ID = toolID(logical, t)
+		}
 		if seen[t.ID] {
 			continue
 		}
@@ -174,6 +177,12 @@ func toolID(logical string, t home.Tool) string {
 		key = t.URI
 	}
 	return id("tool", logical, t.Kind, key)
+}
+
+// legacyResource is a resource or resource template an earlier agentx
+// stored, with an id and no URI.
+func legacyResource(t home.Tool) bool {
+	return t.ID != "" && t.URI == "" && (t.Kind == mcp.KindResource || t.Kind == mcp.KindResourceTemplate)
 }
 
 // raw is canonical JSON as a value to write, nil when absent.

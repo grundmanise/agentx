@@ -9,7 +9,7 @@ import (
 
 // A tool's identity is its server, kind and key, whatever its definition,
 // and is computed afresh for a stored entry an earlier agentx keyed by its
-// hash.
+// hash, except a resource stored with no URI, which keeps its own.
 func TestKeyedToolIdentity(t *testing.T) {
 	t.Parallel()
 	logical := id("server", "url", "https://mcp.example.com/mcp")
@@ -19,14 +19,16 @@ func TestKeyedToolIdentity(t *testing.T) {
 		{Kind: mcp.KindPrompt, Name: "search"},
 		{Kind: mcp.KindResource, Name: "notes", URI: "file:///a.md"},
 		{Kind: mcp.KindResource, Name: "notes", URI: "file:///b.md"},
-		{Kind: mcp.KindResource, Name: "legacy"},
+		{ID: "tool:legacy-a", Kind: mcp.KindResource, Name: "legacy", Description: "a"},
+		{ID: "tool:legacy-b", Kind: mcp.KindResource, Name: "legacy", Description: "b"},
 	})
 	want := []struct{ id, hash string }{
 		{id("tool", logical, mcp.KindTool, "search"), "1"},
 		{id("tool", logical, mcp.KindPrompt, "search"), ""},
 		{id("tool", logical, mcp.KindResource, "file:///a.md"), ""},
 		{id("tool", logical, mcp.KindResource, "file:///b.md"), ""},
-		{id("tool", logical, mcp.KindResource, "legacy"), ""},
+		{"tool:legacy-a", ""},
+		{"tool:legacy-b", ""},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("keyed = %d tools, want %d: %+v", len(got), len(want), got)

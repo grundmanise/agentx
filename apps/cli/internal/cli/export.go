@@ -46,7 +46,7 @@ const settingsSchemaVersion = home.SettingsSchemaVersion
 // counters and warnings, and every id of the inventory's graph that names
 // this machine: the physical ids, the logical ids of configurations and
 // skills, the occurrence ids and the edges. It keeps a server's logical id
-// and its tools' ids, which are the same on every machine the server is, so
+// and its tools' ids and hashes, the same on every machine the server is, so
 // that the tools of one server can be compared across machines. Nothing it
 // holds is the content of a skill.
 //
@@ -127,18 +127,17 @@ type snapshotServer struct {
 }
 
 // snapshotTool is one tool, prompt, resource or resource template a server
-// exposed, as the inventory has it. A version 2 snapshot holds its kind,
-// name and description alone.
+// exposed, as the inventory has it, without its schemas: they can be large,
+// and schema_hash is what compares them across machines. A version 2
+// snapshot holds its kind, name and description alone.
 type snapshotTool struct {
-	ID           string          `json:"id,omitempty"`
-	Kind         string          `json:"kind"`
-	Name         string          `json:"name"`
-	URI          string          `json:"uri,omitempty"`
-	Description  string          `json:"description"`
-	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
-	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
-	Hash         string          `json:"hash,omitempty"`
-	SchemaHash   string          `json:"schema_hash,omitempty"`
+	ID          string `json:"id,omitempty"`
+	Kind        string `json:"kind"`
+	Name        string `json:"name"`
+	URI         string `json:"uri,omitempty"`
+	Description string `json:"description"`
+	Hash        string `json:"hash,omitempty"`
+	SchemaHash  string `json:"schema_hash,omitempty"`
 }
 
 // snapshotServerOccurrence is one declaration of a server, without its id,
@@ -455,7 +454,7 @@ func snapshotServers(inventory scan.Inventory) []snapshotServer {
 	for _, node := range inventory.MCPServers {
 		srv := snapshotServer{LogicalID: node.LogicalID, Name: node.Name, Signature: node.Signature, Occurrences: []snapshotServerOccurrence{}}
 		for _, tool := range node.Tools {
-			srv.Tools = append(srv.Tools, snapshotTool(tool))
+			srv.Tools = append(srv.Tools, snapshotTool{ID: tool.ID, Kind: tool.Kind, Name: tool.Name, URI: tool.URI, Description: tool.Description, Hash: tool.Hash, SchemaHash: tool.SchemaHash})
 		}
 		for _, o := range node.Occurrences {
 			srv.Occurrences = append(srv.Occurrences, snapshotServerOccurrence{
