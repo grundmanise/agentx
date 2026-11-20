@@ -1,8 +1,8 @@
 // The Update skills dialog, which the sidebar's update pill and a check by hand that found an
 // update open: every skill the last update check found an update for, but those with a pending
-// merge, all selected, grouped by source in sections that collapse. A row toggles its skill, a
-// group's Select all or Deselect all every skill of its source, and See changes opens the What's
-// new sheet of its update above the dialog. A row is two lines at most: the name, then one note.
+// merge, all selected, grouped by source in sections that collapse. A row toggles its skill, the
+// select-all row above the list every skill, and See changes opens the What's new sheet of its
+// update above the dialog. A row is two lines at most: the name, then one note.
 // Update runs in the dialog (`updates.ts`): the selected rows alone stay, the state of each in
 // place of its checkbox before its name, and once the run ended only the rows with something to say are left: a conflict, an error or a
 // warning. The footer counts the run, then sums it up. The dialog cannot be dismissed while the
@@ -408,52 +408,6 @@ const Row = ({
   );
 };
 
-/**
- * The header of a source's skills, which collapses or expands them: a chevron and the source's
- * short form as a caption, its full URL as the tooltip. Before the run, a text button at its
- * right end: Select all while any of them is left out, which selects them all, else Deselect all,
- * which clears them.
- */
-const GroupHeader = ({
-  group,
-  idle,
-  open,
-  onToggle,
-  onSelect,
-}: {
-  group: SourceGroup;
-  idle: boolean;
-  open: boolean;
-  onToggle: () => void;
-  /** Selects every skill of the group, or with `false` leaves them all out. */
-  onSelect: (selected: boolean) => void;
-}) => {
-  const all = group.rows.every((r) => r.status !== "skipped");
-  return (
-    <SectionToggle
-      label={group.label}
-      title={group.url}
-      open={open}
-      onToggle={onToggle}
-      action={
-        idle ? (
-          <Button
-            variant="link"
-            size="inline"
-            onClick={() => {
-              onSelect(!all);
-            }}
-          >
-            <span className="type-secondary whitespace-nowrap">
-              {all ? "Deselect all" : "Select all"}
-            </span>
-          </Button>
-        ) : undefined
-      }
-    />
-  );
-};
-
 /** The confirm's label for `selected` of `total` skills. */
 const confirmLabel = (selected: number, total: number) => {
   if (selected === 0) {
@@ -536,19 +490,6 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
       return next;
     });
   };
-  const selectGroup = (group: SourceGroup, select: boolean) => {
-    setExcluded((before) => {
-      const next = new Set(before);
-      for (const row of group.rows) {
-        if (select) {
-          next.delete(row.update.name);
-        } else {
-          next.add(row.update.name);
-        }
-      }
-      return next;
-    });
-  };
 
   const start = () => {
     if (idle && selected > 0) {
@@ -618,7 +559,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
             Update the selected skills to their latest version.
           </DialogDescription>
         </DialogHeader>
-        {idle && groups.length > 1 && (
+        {idle && total > 1 && (
           <SelectAllRow
             selected={selected}
             total={total}
@@ -646,15 +587,12 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
                   aria-label={group.label}
                   className="flex flex-col gap-0.5"
                 >
-                  <GroupHeader
-                    group={group}
-                    idle={idle}
+                  <SectionToggle
+                    label={group.label}
+                    title={group.url}
                     open={open}
                     onToggle={() => {
                       toggleSection(group.key);
-                    }}
-                    onSelect={(select) => {
-                      selectGroup(group, select);
                     }}
                   />
                   {open && (
