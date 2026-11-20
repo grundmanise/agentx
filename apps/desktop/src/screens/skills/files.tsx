@@ -10,6 +10,7 @@ import type {
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { CodePane, codeLines } from "#/components/code-pane.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
+import { Pill } from "#/components/pill.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import {
@@ -182,16 +183,17 @@ const captionOf = (location: SkillLocation) =>
     ? SYMLINK_CAPTIONS[location.intoLibrary ? "library" : "other"]
     : undefined;
 
-/** A place's caption, `type.caption` in `text.caption`. */
+/** A place's caption: a neutral pill (§6 "Pills (status)") at the right of its first line. */
 const Caption = ({ children }: { children: string }) => (
-  <span className="type-caption text-text-caption">{children}</span>
+  <span className="ml-auto flex">
+    <Pill tone="neutral">{children}</Pill>
+  </span>
 );
 
 /**
  * The first line of a place in Show in Finder's menu, then its caption, if any: the library by
- * name; one agent by its logo and name, the caption on the name's baseline; several, whose
- * symlinks lead there, by their logos stacked, whose "+n" lists every name beside the menu, the
- * caption `menu.caption-drop` down, on the baseline of "+n".
+ * name; one agent by its logo and name; several, whose symlinks lead there, by their logos
+ * stacked, whose "+n" lists every name beside the menu.
  */
 const PlaceLine = ({
   clients,
@@ -205,7 +207,7 @@ const PlaceLine = ({
   const [only] = clients;
   if (clients.length > 1) {
     return (
-      <span className="flex items-center gap-2">
+      <span className="flex items-center gap-2 self-stretch">
         <LogoStack
           clients={clients.slice(0, MAX_PLACE_LOGOS)}
           hidden={clients.slice(MAX_PLACE_LOGOS)}
@@ -213,23 +215,17 @@ const PlaceLine = ({
           surface="overlay"
           listSide="left"
         />
-        {caption === undefined ? undefined : (
-          <span className="pt-menu-caption-drop flex">
-            <Caption>{caption}</Caption>
-          </span>
-        )}
+        {caption === undefined ? undefined : <Caption>{caption}</Caption>}
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center gap-2 self-stretch">
       {only === undefined ? undefined : (
         <AgentLogo client={only} size={20} decorative tooltip={false} />
       )}
-      <span className="flex items-baseline gap-2">
-        <span className="type-body text-text-primary">{label}</span>
-        {caption === undefined ? undefined : <Caption>{caption}</Caption>}
-      </span>
+      <span className="type-body text-text-primary">{label}</span>
+      {caption === undefined ? undefined : <Caption>{caption}</Caption>}
     </span>
   );
 };
