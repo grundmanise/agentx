@@ -78,9 +78,9 @@ export const SkillsScreen = () => {
     filters,
     openSections,
     order,
-    setExpanded,
     setFilters,
     setOrder,
+    setSections,
     toggleCollapsed,
     toggleExpanded,
   } = useSkillsView();
@@ -101,13 +101,20 @@ export const SkillsScreen = () => {
     [rows, filters, order]
   );
   const flat = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
-  // Collapse all closes every plugin's subgroup; Expand all opens each one the filters list.
+  // Collapse all closes every group and every plugin's subgroup; Expand all opens every group and
+  // each plugin's subgroup the filters list.
   const toggleAll = (open: boolean) => {
-    const keys =
-      groups
-        .find((g) => g.key === GROUP_PLUGINS)
-        ?.subgroups?.map((s) => s.key) ?? [];
-    setExpanded(open ? keys : []);
+    if (open) {
+      setSections(
+        [],
+        groups.flatMap((g) => g.subgroups?.map((s) => s.key) ?? [])
+      );
+    } else {
+      setSections(
+        groups.map((g) => g.key),
+        []
+      );
+    }
   };
   const selected =
     (routeKey === undefined

@@ -318,10 +318,23 @@ Anything else the agent should keep in mind while it works.
 `;
 
 const loadingVariants = cva("bg-code-bg overflow-hidden", {
+  compoundVariants: [
+    { className: "h-code", height: "capped", leaving: false },
+    {
+      className: "flex min-h-0 flex-col",
+      height: "fill",
+      leaving: false,
+    },
+  ],
+  defaultVariants: { height: "capped" },
   variants: {
+    height: {
+      capped: "",
+      fill: "",
+    },
     leaving: {
-      false: "h-code relative",
-      true: "animate-code-loading-out pointer-events-none absolute inset-0",
+      false: "relative",
+      true: "animate-code-loading-out pointer-events-none absolute inset-0 flex flex-col",
     },
   },
 });
@@ -340,22 +353,28 @@ const revealVariants = cva("", {
  * The SKILL.md pane while the files are read: a stand-in file blurred like frosted glass with a
  * spinner on top, at the Code pane's full height. `leaving`, it lies over the real SKILL.md as
  * that comes in and fades out, hidden from assistive technology, then calls `onLeft`. `label` is
- * what it says to assistive technology.
+ * what it says to assistive technology. `height` is the Code pane's: `capped` at `code.height`, or
+ * `fill`, as high as the stand-in while its flex column has the room. `spinner` false leaves the spinner and its
+ * status to another loading pane beside this one.
  */
 export const LoadingPane = ({
   leaving = false,
   onLeft,
   label = "Reading the files…",
+  height = "capped",
+  spinner = true,
 }: {
   leaving?: boolean;
   onLeft?: () => void;
   label?: string;
+  height?: "capped" | "fill";
+  spinner?: boolean;
 }) => (
   <div
     aria-busy={leaving ? undefined : true}
     aria-hidden={leaving ? true : undefined}
     inert={leaving}
-    className={loadingVariants({ leaving })}
+    className={loadingVariants({ height, leaving })}
     onAnimationEnd={(event) => {
       // The spinner turns inside; only the pane's own fade ends it.
       if (event.target === event.currentTarget) {
@@ -366,14 +385,21 @@ export const LoadingPane = ({
     <div
       aria-hidden
       inert
-      className="blur-code-loading pointer-events-none select-none"
+      className="blur-code-loading pointer-events-none flex min-h-0 flex-col select-none"
     >
-      <CodePane path={SKILL_MD} label={SKILL_MD} content={STAND_IN} />
+      <CodePane
+        path={SKILL_MD}
+        label={SKILL_MD}
+        content={STAND_IN}
+        height={height}
+      />
     </div>
-    <output className="text-text-muted absolute inset-0 flex items-center justify-center">
-      <Spinner size="md" />
-      <span className="sr-only">{label}</span>
-    </output>
+    {spinner && (
+      <output className="text-text-muted absolute inset-0 flex items-center justify-center">
+        <Spinner size="md" />
+        <span className="sr-only">{label}</span>
+      </output>
+    )}
   </div>
 );
 

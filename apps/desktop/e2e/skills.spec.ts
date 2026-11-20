@@ -97,9 +97,13 @@ const openSkills = async (
   await expect(row(page, "pdf")).toBeVisible();
 };
 
-/** Opens every plugin's subgroup, which start collapsed. */
+/**
+ * Opens every plugin's subgroup, which start collapsed: the toggle beside the sort toggle reads
+ * Collapse all while any group is open, then Expand all.
+ */
 const expandPlugins = async (page: Page) => {
-  await list(page).getByRole("button", { name: "Expand all" }).click();
+  await page.getByRole("button", { name: "Collapse all" }).click();
+  await page.getByRole("button", { name: "Expand all" }).click();
 };
 
 /** The command lines the screen itself ran, but the reads of a skill's files and edits. */
@@ -194,15 +198,15 @@ test.describe("the list", () => {
       "true"
     );
     await expect(row(page, "review")).toHaveAttribute("aria-current", "true");
-    // A collapsed PLUGINS group drops its Expand all; open again, it shows it.
-    await header("PLUGINS 1").click();
+    // The PLUGINS group's header holds no control of its own, open or collapsed.
     await expect(
-      list(page).getByRole("button", { name: "Expand all" })
+      list(page).getByRole("button", { name: /^(?:Collapse|Expand) all$/u })
     ).toHaveCount(0);
     await header("PLUGINS 1").click();
     await expect(
-      list(page).getByRole("button", { name: "Expand all" })
-    ).toBeVisible();
+      list(page).getByRole("button", { name: /^(?:Collapse|Expand) all$/u })
+    ).toHaveCount(0);
+    await header("PLUGINS 1").click();
     // The Unmanaged group collapses too, and keeps its Adopt all.
     await header("UNMANAGED 2").click();
     await expect(

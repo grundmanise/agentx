@@ -454,7 +454,8 @@ test("each file on disk can be shown in the file manager from its row", async ({
   );
 
   // A plugin's skill is shown where its occurrence resolves.
-  await list(page).getByRole("button", { name: "Expand all" }).click();
+  await page.getByRole("button", { name: "Collapse all" }).click();
+  await page.getByRole("button", { name: "Expand all" }).click();
   await row(page, "commit-helper").click();
   await reveal(files(page, "commit-helper"), "reference/forms.md").click();
   expect(cli.reveals.at(-1)).toEqual([
@@ -731,6 +732,33 @@ test("the menu beside Show in file manager lists a skill's other places", async 
   // A skill in one place has the button too.
   await row(page, "notes").click();
   await expect(reveal(files(page, "notes"), "SKILL.md")).toBeAttached();
+});
+
+test("the menu of a skill in many places stays in the window and scrolls", async ({
+  cli,
+  page,
+}) => {
+  await page.setViewportSize({ height: 700, width: 1100 });
+  await openSkills(
+    cli,
+    page,
+    "/#/skills/pdf",
+    manyAgentsInventory(manyConfigurations.map((c) => c.id))
+  );
+  await files(page, "pdf")
+    .getByRole("button", { name: "Show SKILL.md in file manager elsewhere" })
+    .click();
+  const menu = page.getByRole("menu", {
+    name: "Show SKILL.md in file manager elsewhere",
+  });
+  const box = await menu.boundingBox();
+  expect(box?.y).toBeGreaterThanOrEqual(10);
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(690);
+  expect(await menu.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(
+    true
+  );
+  await menu.getByRole("menuitem").last().focus();
+  await expect(menu.getByRole("menuitem").last()).toBeInViewport();
 });
 
 test("symlinks of many agents that lead to one place are one row of the menu", async ({
