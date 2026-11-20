@@ -9,6 +9,8 @@ import type { ReactNode } from "react";
 import { CheckMark } from "#/components/check-mark.tsx";
 import { ArrowDownIcon } from "#/components/icons/arrow-down.tsx";
 import { CloseIcon } from "#/components/icons/close.tsx";
+import { CollapseIcon } from "#/components/icons/collapse.tsx";
+import { ExpandIcon } from "#/components/icons/expand.tsx";
 import { FilterIcon } from "#/components/icons/filter.tsx";
 
 const filterButtonVariants = cva(
@@ -363,3 +365,33 @@ export const CheckOption = ({
     {children}
   </label>
 );
+
+/**
+ * The expand toggle, beside the sort toggle: one icon button on the ghost fill, like the sort
+ * toggle, that opens or closes every section of the list at once. It reads Collapse all while any
+ * section is open, and Expand all while all are collapsed; its name shows in a tooltip.
+ */
+export const ExpandToggle = ({
+  open,
+  disabled = false,
+  onToggle,
+}: {
+  /** Whether any section is open. */
+  open: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) => {
+  const name = open ? "Collapse all" : "Expand all";
+  return (
+    <button
+      type="button"
+      aria-label={name}
+      title={name}
+      disabled={disabled}
+      onClick={onToggle}
+      className="rounded-button text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary inline-flex size-7 items-center justify-center disabled:pointer-events-none disabled:opacity-50"
+    >
+      {open ? <CollapseIcon size="xs" /> : <ExpandIcon size="xs" />}
+    </button>
+  );
+};

@@ -13,6 +13,7 @@ import {
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import {
+  ExpandToggle,
   FilterChip,
   FilterTagsChip,
   SortToggle,
@@ -40,7 +41,6 @@ import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
 import {
   forksOf,
   GROUP_DISK,
-  GROUP_PLUGINS,
   nextOrder,
   UNIVERSAL,
 } from "#/screens/skills/projection.ts";
@@ -205,51 +205,9 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
   );
 };
 
-/**
- * Collapse all, at the right end of the open PLUGINS group's header while a plugin's subgroup is open:
- * it collapses every one. While all are collapsed it reads Expand all and opens every one. A
- * plain button as tall as its text, so the header keeps `group.header-height` and the plugin's
- * header pinned under it shows whole.
- */
-const ToggleAll = ({
-  open,
-  onToggleAll,
-}: {
-  /** Whether a plugin's subgroup is open. */
-  open: boolean;
-  onToggleAll: (open: boolean) => void;
-}) => (
-  <Button
-    variant="plain"
-    size="inline"
-    onClick={() => {
-      onToggleAll(!open);
-    }}
-  >
-    <span className="type-button-sm">
-      {open ? "Collapse all" : "Expand all"}
-    </span>
-  </Button>
-);
-
 /** The control at the right end of a group's header, if the group has one. */
-const groupAction = (
-  group: Group,
-  collapse: Sections,
-  onAdoptAll: () => void,
-  onToggleAll: (open: boolean) => void
-) => {
-  if (group.key === GROUP_DISK) {
-    return <AdoptAll onOpen={onAdoptAll} />;
-  }
-  if (group.key === GROUP_PLUGINS && !collapse.collapsed.has(group.key)) {
-    const open = (group.subgroups ?? []).some((s) =>
-      collapse.expanded.has(s.key)
-    );
-    return <ToggleAll open={open} onToggleAll={onToggleAll} />;
-  }
-  return null;
-};
+const groupAction = (group: Group, onAdoptAll: () => void) =>
+  group.key === GROUP_DISK ? <AdoptAll onOpen={onAdoptAll} /> : null;
 
 /**
  * One thing the list places at its own offset: the space above a group or a plugin, a group's
@@ -548,7 +506,6 @@ const SkillGroups = ({
   collapse,
   onToggleGroup,
   onToggle,
-  onToggleAll,
 }: {
   /** Every row, before the filters. */
   rows: SkillRow[];
@@ -565,8 +522,6 @@ const SkillGroups = ({
   onToggleGroup: (key: string) => void;
   /** Collapses or expands a plugin's subgroup, by its key. */
   onToggle: (key: string) => void;
-  /** Expands every plugin's subgroup, or collapses every one. */
-  onToggleAll: (open: boolean) => void;
 }) => {
   // What the rows' banners read besides the row, for their alert triangles.
   const sources = useAppStore((s) => s.sources);
@@ -732,12 +687,7 @@ const SkillGroups = ({
                             onToggleGroup(group.key);
                           });
                         }}
-                        action={groupAction(
-                          group,
-                          collapse,
-                          onAdoptAll,
-                          onToggleAll
-                        )}
+                        action={groupAction(group, onAdoptAll)}
                       />
                     </div>
                   </div>
@@ -883,13 +833,15 @@ export const SkillList = ({
   onToggleGroup: (key: string) => void;
   /** Collapses or expands a plugin's subgroup, by its key. */
   onToggle: (key: string) => void;
-  /** Expands every plugin's subgroup, or collapses every one. */
+  /** Expands every group and plugin's subgroup, or collapses every one. */
   onToggleAll: (open: boolean) => void;
 }) => {
   const [adopting, setAdopting] = useState(false);
   // The tools the open adopt dialog covers: every tool with skills to adopt when it opened.
   const adoption = useAppStore((s) => s.adoption);
   const [adoptTools, setAdoptTools] = useState<ToolArg[]>([]);
+  // Whether any group is open; a plugin's subgroup shows only while its group is open.
+  const anyOpen = groups.some((g) => !collapse.collapsed.has(g.key));
   return (
     <section
       aria-label="Skills list"
@@ -942,6 +894,13 @@ export const SkillList = ({
             />
           )}
           <span className="flex-1" />
+          <ExpandToggle
+            open={anyOpen}
+            disabled={groups.length === 0}
+            onToggle={() => {
+              onToggleAll(!anyOpen);
+            }}
+          />
           <SortToggle
             order={order}
             onToggle={() => {
@@ -959,7 +918,6 @@ export const SkillList = ({
         collapse={collapse}
         onToggleGroup={onToggleGroup}
         onToggle={onToggle}
-        onToggleAll={onToggleAll}
         onAdoptAll={() => {
           setAdoptTools(toolsToAdopt(adoption).map((t) => t.arg));
           setAdopting(true);
