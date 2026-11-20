@@ -94,7 +94,7 @@ const monogram = (name: string) => {
 export type LogoSize = 16 | 20 | 24 | 28 | 44;
 
 /** The surface stacked logos sit on, which colours the ring between them (`logo.ring`). */
-export type LogoSurface = "content" | "card";
+export type LogoSurface = "content" | "card" | "overlay";
 
 // A round box of the logo's size. A bundled logo is a white tile, padded by size, the image
 // contained; a monogram fills the box, its tint drawn in its own image. The ring
@@ -104,6 +104,7 @@ const tileVariants = cva("rounded-logo block flex-none", {
   compoundVariants: [
     { className: "ring-row-chip-ring", ring: true, surface: "content" },
     { className: "ring-card-chip-ring", ring: true, surface: "card" },
+    { className: "ring-overlay-chip-ring", ring: true, surface: "overlay" },
     { className: "p-logo-sm", monogram: false, size: [16, 20] },
     { className: "p-1", monogram: false, size: 24 },
     { className: "p-logo-lg", monogram: false, size: 28 },
@@ -129,6 +130,7 @@ const tileVariants = cva("rounded-logo block flex-none", {
     surface: {
       card: "",
       content: "",
+      overlay: "",
     },
   },
 });
