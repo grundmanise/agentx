@@ -701,8 +701,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-picker.list-max-height` | 320 | `max-h-agent-picker-list` | The agent picker's list; it scrolls past it |
 | `add-skill.list-max-height` | 264 | `max-h-add-skill-list` | The Add skill dialog's list of skills found; it scrolls past it |
 | `update-skills.list-max-height` | 400 | `max-h-update-skills-list` | The Update skills dialog's list of skills; it scrolls past it |
+| `filter-tags.width` | 264 | `w-filter-tags` | The agent filter chip's panel of tags: from the chip to the sort toggle's right edge |
+| `filter-tags.max-height` | 112 | `max-h-filter-tags` | The tags in that panel: three rows and half of a fourth, cut through its names at the panel's bottom edge; they scroll past it |
+| `agent-list.max-height` | 240 | `max-h-agent-list` | The list of agents in an agent list card, running to the card's top and bottom edges; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
-| `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | From the top and right edges |
+| `toast.offset` | 24 | none: `--inset-toast`, passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | Below the title bar (`shell.titlebar-height` + `toast.offset` from the top edge) and from the right edge |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
 
@@ -893,6 +896,12 @@ Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
 
+- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. The list runs to the card's top and bottom edges: its 14px padding sits inside the scroll, at its start and end, so a scrolled row is cut at the card's edge, and a row cut at the bottom says the list scrolls. Its logos then name no client in a Tooltip of their own. It opens below the stack, ending at its right edge; for a stack inside a menu, it opens beside the menu instead, so it covers none of the menu's rows. Like a tooltip, a hover card stacks over a menu.
+
+### Agent filter chip
+
+The chip after the Filter button echoes the agent filter (`FilterTagsChip`). One agent: its logo and name, with a cross that clears it. Several: at most three 16px logos and how many, such as "12 agents", with no cross. Pointing at the chip, or tabbing into it, opens a panel from the chip's own place, over the list and pushing nothing: the search field's surface (`input.bg`, 1px `input.border`) with `popover.radius` and `popover.shadow`, `filter-tags.width` wide. The same logos and count head it, and one tag per chosen agent follows: a 24px pill in `filter.chip-bg`, the agent's 16px logo and name in `type.secondary` `text.secondary`, hover `filter.chip-hover` and `text.primary`. The tags start where the summary's logos do, 8 from the panel's edge. They wrap and scroll past `filter-tags.max-height`, and run to the panel's bottom edge with no padding below them, so a tag cut there says the list scrolls; their bottom padding comes only at the end of the scroll. A tag is a button that takes its agent off the filter; pointing at it or focusing it shows a cross over the end of its name, on a fade of the hover fill. The panel has no close control: it goes when the pointer or the focus leaves it.
+
 ### Agent client logo chip, monogram
 
 A client with no bundled logo shows two letters of its name, drawn as an image like every other logo: the initials of its first two words when the name has more than one (words split at spaces, hyphens and underscores), or its first letter and the next for one word. They are semibold, on a round tint that fills the logo's box with no padding: `monogram.N.bg` behind, `monogram.N.text` for the letters, read from the tokens as the page has them, where N comes from a hash of the name, so a client keeps its hue everywhere and on every launch. Ten hues tell more clients apart than one white tile with a letter did, and the dark tint sits with the app's surfaces where a white tile would glare.
@@ -1060,7 +1069,7 @@ The Plugins screen (`src/screens/plugins`) is a split, as Skills is: the list co
 
 A toast reports what happened; it asks for nothing. A control the user is expected to use, such as the Add skills bar (§6 "Agent picker"), is a floating bar at the bottom instead, so the two never cover each other.
 
-shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, its corner close button, the app's button for its action (§6 "Buttons", "Toast action") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` from the top and right edges of the window; `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
+shadcn's Sonner toast (`src/components/ui/sonner.tsx`), with its own size, padding, type and shadow, its corner close button, the app's button for its action (§6 "Buttons", "Toast action") and the app's colours: Sonner's colour variables are set from the toast tokens in `src/styles/index.css`, where shadcn sets them with `style`. `toast.offset` below the title bar and from the right edge of the window, so a toast never covers the title bar or its sync status (§6 "Publish status (title bar)"); `overlay.bg`, `overlay.border`, `toast.radius`; text `toast.text`.
 
 Its kind (`ToastKind` in `src/components/toast.tsx`) sets its icon and its tint, Sonner's rich colours: the fill, the border, the message and the icon take the kind's toast tokens.
 
@@ -1124,7 +1133,7 @@ A help term (`src/components/help-term.tsx`) is a word in running text that expl
 
 ### Hover card
 
-shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
+shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding (none at the top and bottom for a list that scrolls to the card's edges, `padding="list"`), `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
 
 ### Popover (Filter)
 

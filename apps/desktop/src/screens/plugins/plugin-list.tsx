@@ -195,6 +195,12 @@ export const PluginList = ({
             onClear={() => {
               onFilters({ ...filters, agents: [] });
             }}
+            onRemove={(agent) => {
+              onFilters({
+                ...filters,
+                agents: filters.agents.filter((a) => a !== agent),
+              });
+            }}
           />
         )}
         <span className="flex-1" />

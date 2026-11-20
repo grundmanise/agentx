@@ -724,12 +724,17 @@
   --max-height-agent-picker-list: 320px;
   --max-height-add-skill-list: 264px;
   --max-height-update-skills-list: 400px;
+  --width-filter-tags: 264px;
+  --max-height-filter-tags: 112px;
+  --max-height-agent-list: 240px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
   --max-width-tooltip-text: 280px;
   --height-stale-bar: 36px;
   --padding-stale-bar: 16px;
   --inset-floating-bar: 24px;
+  /* A toast's gap from the title bar above it and from the window's right edge. */
+  --inset-toast: 24px;
   --height-floating-bar: 56px;
 
   /* Code, diff, timeline, startup */
