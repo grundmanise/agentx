@@ -111,6 +111,33 @@ export const updateSkill = async (row: SkillRow) => {
 };
 
 /**
+ * Apply merge and Discard my edits, on the banner of a pending merge: `skill update <name>
+ * --continue` applies the merge with the merge folder's files as the user left them, and `--theirs`
+ * drops the edits and applies the update. Both share Update's label, so the banner shows one
+ * command pending. A file still holding a conflict marker is exit 4 with no conflict, which the
+ * runner's error toast says; a merge that conflicts again, as a fork's can, says so as Update does.
+ */
+export const settleMerge = async (
+  row: SkillRow,
+  how: "--continue" | "--theirs"
+) => {
+  const outcome = await runUntilSettled(["skill", "update", row.name, how], {
+    label: updateLabel(row.name),
+    success: (events) => updatedText(row, events),
+  });
+  if (
+    outcome.exitCode === EXIT_CODES.pending_merge &&
+    conflictsIn(outcome.events) > 0
+  ) {
+    notify(
+      `${row.name} skill has conflicts. Resolve them to finish the update`,
+      undefined,
+      { kind: "warning" }
+    );
+  }
+};
+
+/**
  * The updates the app offers, by name: every update candidate of the last check but those of a
  * skill with a pending merge, which the skill's banner finishes first.
  */

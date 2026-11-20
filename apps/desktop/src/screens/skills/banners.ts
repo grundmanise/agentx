@@ -29,8 +29,9 @@ export type BannerAction =
    */
   | { kind: "update" }
   /**
-   * A pending merge: Show folder reveals it, Abort runs `skill update <name> --abort` after a
-   * confirm dialog, and Update runs `skill update <name>` again to apply what was resolved.
+   * A pending merge: Show folder reveals it, Discard my edits runs `skill update <name> --theirs`
+   * after a confirm dialog, and Apply merge runs `skill update <name> --continue` to apply the
+   * merge folder's files as they were left.
    */
   | { kind: "conflict" }
   /** `skill place <name>`: every enabled agent, and puts back what is missing. */
@@ -133,10 +134,12 @@ const updateOrigin = (row: SkillRow) => {
 /** What a pending merge left to resolve, with the number of files when a `conflict` event said it. */
 const conflictText = (conflict: ConflictEvent | undefined) => {
   if (conflict === undefined || conflict.files.length === 0) {
-    return "Your edits and the update changed the same lines. Resolve them in the merge folder, then update again.";
+    return "Your edits and the update changed the same lines. Edit the files in the merge folder, then apply the merge.";
   }
   const n = conflict.files.length;
-  return `Your edits and the update changed the same lines in ${n === 1 ? "1 file" : `${n} files`}. Resolve them in the merge folder, then update again.`;
+  return n === 1
+    ? `Your edits and the update changed the same lines in ${conflict.files[0]?.path ?? "1 file"}. Edit it in the merge folder, then apply the merge.`
+    : `Your edits and the update changed the same lines in ${n} files. Edit them in the merge folder, then apply the merge.`;
 };
 
 const table: BannerRule[] = [

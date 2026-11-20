@@ -19,6 +19,16 @@ export const showInLabel = (what?: string) =>
     ? `Show in ${FILE_MANAGER}`
     : `Show ${what} in ${FILE_MANAGER}`;
 
+/** Shows the file or directory at `absolutePath` in Finder, or says nothing and false when it is not there. */
+export const revealIfThere = async (absolutePath: string) => {
+  try {
+    await revealItemInDir(absolutePath);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /** Shows the file or directory at `absolutePath` selected in Finder, or the file manager. */
 export const revealInFinder = async (absolutePath: string) => {
   try {

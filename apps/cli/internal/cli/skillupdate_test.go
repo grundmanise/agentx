@@ -769,7 +769,7 @@ func TestUpdateNames(t *testing.T) {
 		name    string
 		args    []string
 		all     bool
-		abort   bool
+		pending string
 		want    []string
 		refusal string
 	}{
@@ -777,28 +777,33 @@ func TestUpdateNames(t *testing.T) {
 		{name: "names in name order", args: []string{"pdf", "docx", "alpha"}, want: []string{"alpha", "docx", "pdf"}},
 		{name: "a name given twice counts once", args: []string{"pdf", "docx", "pdf"}, want: []string{"docx", "pdf"}},
 		{name: "--all", all: true},
-		{name: "one name to abort", args: []string{"pdf"}, abort: true, want: []string{"pdf"}},
-		{name: "the same name twice to abort", args: []string{"pdf", "pdf"}, abort: true, want: []string{"pdf"}},
+		{name: "one name to abort", args: []string{"pdf"}, pending: "--abort", want: []string{"pdf"}},
+		{name: "the same name twice to abort", args: []string{"pdf", "pdf"}, pending: "--abort", want: []string{"pdf"}},
 		{name: "neither", refusal: "no skill to update"},
-		{name: "--abort alone", abort: true, refusal: "no skill to update"},
+		{name: "--abort alone", pending: "--abort", refusal: "no skill to update"},
 		{name: "names and --all", args: []string{"pdf"}, all: true, refusal: "skill update takes skill names or --all, not both"},
-		{name: "names, --all and --abort", args: []string{"pdf"}, all: true, abort: true, refusal: "skill update takes skill names or --all, not both"},
-		{name: "--all and --abort", all: true, abort: true, refusal: "--abort gives up the merge of one skill, not of --all"},
-		{name: "several names to abort", args: []string{"pdf", "docx"}, abort: true, refusal: "--abort gives up the merge of one skill, not of several"},
+		{name: "names, --all and --abort", args: []string{"pdf"}, all: true, pending: "--abort", refusal: "skill update takes skill names or --all, not both"},
+		{name: "--all and --abort", all: true, pending: "--abort", refusal: "--abort gives up the merge of one skill, not of --all"},
+		{name: "several names to abort", args: []string{"pdf", "docx"}, pending: "--abort", refusal: "--abort gives up the merge of one skill, not of several"},
+		{name: "one name to continue", args: []string{"pdf"}, pending: "--continue", want: []string{"pdf"}},
+		{name: "--all and --continue", all: true, pending: "--continue", refusal: "--continue applies the merge of one skill, not of --all"},
+		{name: "several names to continue", args: []string{"pdf", "docx"}, pending: "--continue", refusal: "--continue applies the merge of one skill, not of several"},
+		{name: "one name to take theirs", args: []string{"pdf"}, pending: "--theirs", want: []string{"pdf"}},
+		{name: "several names to take theirs", args: []string{"pdf", "docx"}, pending: "--theirs", refusal: "--theirs replaces the merge of one skill, not of several"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			got, f := updateNames(c.args, c.all, c.abort)
+			got, f := updateNames(c.args, c.all, c.pending)
 			if c.refusal != "" {
 				if f == nil {
-					t.Fatalf("updateNames(%q, %v, %v) = %q, want the refusal %q", c.args, c.all, c.abort, got, c.refusal)
+					t.Fatalf("updateNames(%q, %v, %q) = %q, want the refusal %q", c.args, c.all, c.pending, got, c.refusal)
 				}
 				equal(t, "exit", f.status, exitUsage)
 				equal(t, "refusal", f.message, c.refusal)
 				return
 			}
 			if f != nil {
-				t.Fatalf("updateNames(%q, %v, %v) refused: %s", c.args, c.all, c.abort, f.message)
+				t.Fatalf("updateNames(%q, %v, %q) refused: %s", c.args, c.all, c.pending, f.message)
 			}
 			equal(t, "names", strings.Join(got, " "), strings.Join(c.want, " "))
 			equal(t, "--all", got == nil, c.all)

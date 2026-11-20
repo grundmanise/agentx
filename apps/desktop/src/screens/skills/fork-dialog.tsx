@@ -29,6 +29,11 @@ import {
 import { Input } from "#/components/ui/input.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
+import {
   breaksSkillNameRule,
   isSkillName,
   SKILL_NAME_RULE,
@@ -103,22 +108,44 @@ const closeFork = () => {
   useForkStore.setState({ open: false });
 };
 
-/** Fork, a secondary button in the detail pane's action row: opens the dialog. */
+/** Why Fork does nothing while the skill has a merge pending, which `skill fork` refuses. */
+export const FORK_WHILE_MERGING = "Can't fork while update in progress";
+
+/**
+ * Fork, a secondary button in the detail pane's action row: opens the dialog. While the skill has
+ * a merge pending, which `skill fork` refuses, it looks disabled and does nothing, and its Tooltip
+ * says why; it stays focusable, so the keyboard reaches the Tooltip too.
+ */
 export const ForkButton = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(forkLabel(row));
-  return (
+  const merging = row.entry?.pending_merge === true;
+  const button = (
     <Button
       variant="secondary"
       size="sm"
       disabled={pending}
       aria-busy={pending ? true : undefined}
-      onClick={() => {
-        openFork(row);
-      }}
+      aria-disabled={merging ? true : undefined}
+      onClick={
+        merging
+          ? undefined
+          : () => {
+              openFork(row);
+            }
+      }
     >
       {pending && <Spinner />}
       Fork
     </Button>
+  );
+  if (!merging) {
+    return button;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent>{FORK_WHILE_MERGING}</TooltipContent>
+    </Tooltip>
   );
 };
 
@@ -160,8 +187,12 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       openSkill(fork?.name ?? (renaming ? name : row.name));
       return;
     }
-    // Exit 4 opens the skill whose merge is pending (src/store/runner.ts).
-    if (outcome.exitCode === EXIT_CODES.pending_merge) {
+    // Exit 4 with a conflict opens the skill whose merge is pending (src/store/runner.ts). One with
+    // none, a fork refused for the merge pending, stays open with the refusal like any other.
+    if (
+      outcome.exitCode === EXIT_CODES.pending_merge &&
+      outcome.events.some((e) => e.type === "conflict")
+    ) {
       closeFork();
       return;
     }

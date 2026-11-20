@@ -1,5 +1,6 @@
 // DESIGN.md §6 "Callout": a toned box with an icon tile, a title, a line of text under it and its
-// buttons on the right. The detail pane's banner (src/screens/skills/banner-view.tsx) and the
+// buttons on the right, on a line of their own under the text when they would leave it narrower
+// than `--container-banner-text`. The detail pane's banner (src/screens/skills/banner-view.tsx) and the
 // notice under AGENTS when an agent sees more than one skill of a name
 // (src/screens/skills/sights-view.tsx) are both callouts.
 import { cva } from "class-variance-authority";
@@ -9,7 +10,7 @@ import { AlertIcon } from "#/components/icons/alert.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 
 const calloutVariants = cva(
-  "rounded-banner py-banner pr-banner-right pl-banner gap-banner flex items-center border",
+  "rounded-banner py-banner pr-banner-right pl-banner gap-banner flex flex-wrap items-center border",
   {
     variants: {
       tone: {
@@ -68,7 +69,7 @@ export const Callout = ({
     <span className={tileVariants({ tone })}>
       {icon === "update" ? <RefreshIcon size="lg" /> : <AlertIcon size="lg" />}
     </span>
-    <div className="gap-banner-text flex min-w-0 flex-1 flex-col">
+    <div className="gap-banner-text min-w-banner-text basis-banner-text flex flex-1 flex-col">
       <span className="type-banner-title text-banner-title">{title}</span>
       {text !== undefined && (
         <span className="type-secondary text-banner-text text-pretty">
@@ -77,7 +78,7 @@ export const Callout = ({
       )}
     </div>
     {actions !== undefined && (
-      <div className="flex items-center gap-1.5">{actions}</div>
+      <div className="ml-auto flex items-center gap-1.5">{actions}</div>
     )}
   </div>
 );
