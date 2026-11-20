@@ -37,9 +37,9 @@ const hoverCardContentVariants = cva(
       padding: {
         // 14 on every side.
         all: "p-3.5",
-        // No bottom padding: a list that scrolls runs to the card's bottom edge, its own bottom
-        // padding at the end of the scroll.
-        list: "px-3.5 pt-3.5",
+        // No top or bottom padding: a list that scrolls runs to the card's edges, its own
+        // padding at the start and the end of the scroll.
+        list: "px-3.5",
       },
     },
   }
@@ -50,7 +50,7 @@ const hoverCardContentVariants = cva(
  * padding with `popover.gap` between its blocks; below its trigger, aligned to its start,
  * `popover.offset` away and `popover.window-inset` from the window's edges. No taller than
  * `hover-card.max-height`, the room the window has for it: past that it scrolls. `padding="list"`
- * leaves the bottom open for a list that scrolls to the edge.
+ * leaves the top and bottom open for a list that scrolls to the edges.
  */
 const HoverCardContent = ({
   align = "start",

@@ -229,7 +229,7 @@ export type AgentListSide = "top" | "right" | "bottom" | "left";
 /**
  * The agents behind a trigger, such as a stack of logos: pointing at the trigger opens a hover
  * card (§6 "Hover card") that lists every client, a 16px logo beside each name, in two columns
- * that scroll past `agent-list.max-height` and run to the card's bottom edge. The trigger's own logos should then name no client
+ * that scroll past `agent-list.max-height` and run to the card's top and bottom edges. The trigger's own logos should then name no client
  * in a Tooltip of their own.
  */
 export const AgentListCard = ({
@@ -255,7 +255,7 @@ export const AgentListCard = ({
     >
       <ul
         aria-label="Agents"
-        className="max-h-agent-list m-0 grid list-none grid-cols-2 gap-x-3.5 overflow-y-auto overscroll-contain p-0 pb-3.5"
+        className="max-h-agent-list m-0 grid list-none grid-cols-2 gap-x-3.5 overflow-y-auto overscroll-contain px-0 py-3.5"
       >
         {clients.map((c) => (
           <li

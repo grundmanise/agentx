@@ -700,7 +700,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `update-skills.list-max-height` | 400 | `max-h-update-skills-list` | The Update skills dialog's list of skills; it scrolls past it |
 | `filter-tags.width` | 264 | `w-filter-tags` | The agent filter chip's panel of tags: from the chip to the sort toggle's right edge |
 | `filter-tags.max-height` | 112 | `max-h-filter-tags` | The tags in that panel: three rows and half of a fourth, cut through its names at the panel's bottom edge; they scroll past it |
-| `agent-list.max-height` | 226 | `max-h-agent-list` | The list of agents in an agent list card, running to the card's bottom edge; it scrolls past it |
+| `agent-list.max-height` | 240 | `max-h-agent-list` | The list of agents in an agent list card, running to the card's top and bottom edges; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
 | `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | From the top and right edges |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
@@ -891,7 +891,7 @@ Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
 
-- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. The list runs to the card's bottom edge, with no padding below it, so a row cut there says the list scrolls. Its logos then name no client in a Tooltip of their own. It opens below the stack, ending at its right edge; for a stack inside a menu, it opens beside the menu instead, so it covers none of the menu's rows. Like a tooltip, a hover card stacks over a menu.
+- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. The list runs to the card's top and bottom edges: its 14px padding sits inside the scroll, at its start and end, so a scrolled row is cut at the card's edge, and a row cut at the bottom says the list scrolls. Its logos then name no client in a Tooltip of their own. It opens below the stack, ending at its right edge; for a stack inside a menu, it opens beside the menu instead, so it covers none of the menu's rows. Like a tooltip, a hover card stacks over a menu.
 
 ### Agent filter chip
 
@@ -1128,7 +1128,7 @@ A help term (`src/components/help-term.tsx`) is a word in running text that expl
 
 ### Hover card
 
-shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding (none at the bottom for a list that scrolls to the card's edge, `padding="list"`), `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
+shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding (none at the top and bottom for a list that scrolls to the card's edges, `padding="list"`), `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
 
 ### Popover (Filter)
 
