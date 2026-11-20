@@ -61,6 +61,20 @@ test("shows a report at the top right, with its outcome's icon and tint", async 
   });
   await expect(success).toHaveAttribute("data-type", "success");
   await expect(success.locator("[data-icon] svg")).toBeVisible();
+  // Below the title bar, by the same gap as from the window's right edge, once it has slid in.
+  const width = page.viewportSize()?.width ?? 0;
+  await expect
+    .poll(async () => {
+      const bar = await page.getByRole("banner").boundingBox();
+      const toast = await success.boundingBox();
+      if (bar === null || toast === null) {
+        return Number.NaN;
+      }
+      const below = toast.y - (bar.y + bar.height);
+      const right = width - (toast.x + toast.width);
+      return below > 0 ? Math.abs(below - right) : Number.NaN;
+    })
+    .toBeLessThan(1);
 
   await page.evaluate(() => {
     window.showFailure?.();

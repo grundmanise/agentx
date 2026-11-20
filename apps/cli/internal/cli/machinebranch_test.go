@@ -417,7 +417,7 @@ func TestPlaceAndRemoveInASnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	equal(t, "the snapshot", string(b), `{"schema_version":2,`+
+	equal(t, "the snapshot", string(b), `{"schema_version":3,`+
 		`"settings":{"schema_version":1,"accept_operations":false,"ignore_system_files":true,"disabled_configurations":[],"copy_configurations":[],"sources":[],"copy_mode":{}},`+
 		`"configurations":[],"skills":[`+
 		`{"name":"alpha","kind":"managed","source":"https://github.com/example/skills","subpath":"skills/alpha","placements":["cursor"]},`+

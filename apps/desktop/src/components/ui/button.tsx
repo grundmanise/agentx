@@ -32,7 +32,7 @@ const buttonVariants = cva(
       },
       variant: {
         // The plain inline shape in the accent: the call to action at the end of a list's group
-        // header, such as Adopt all, beside plain text buttons such as Collapse all.
+        // header, such as Adopt all.
         accent:
           "text-accent-primary hover:text-accent-primary-hover font-medium",
         danger:

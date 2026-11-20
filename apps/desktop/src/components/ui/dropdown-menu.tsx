@@ -36,12 +36,16 @@ const DropdownMenuTrigger = ({
 
 /**
  * `menu.min-width`, `menu.radius`, `overlay.bg` with `overlay.border`, `menu.shadow` and
- * `menu.padding`, `menu.offset` from its trigger, aligned to its end by default.
+ * `menu.padding`, `menu.offset` from its trigger, aligned to its end by default,
+ * `popover.window-inset` from the window's edges. No taller or wider than `menu.max-height` and
+ * `menu.max-width`, the room the window has for it: past that it scrolls.
  */
 const DropdownMenuContent = ({
   align = "end",
   // menu.offset
   sideOffset = 4,
+  // popover.window-inset
+  collisionPadding = 10,
   ...props
 }: OwnProps<typeof DropdownMenuPrimitive.Content>) => (
   <DropdownMenuPrimitive.Portal>
@@ -49,7 +53,8 @@ const DropdownMenuContent = ({
       data-slot="dropdown-menu-content"
       align={align}
       sideOffset={sideOffset}
-      className="rounded-menu border-overlay-border bg-overlay-bg shadow-menu min-w-menu p-menu z-50 flex flex-col overflow-y-auto border outline-none"
+      collisionPadding={collisionPadding}
+      className="rounded-menu border-overlay-border bg-overlay-bg shadow-menu min-w-menu max-h-menu max-w-menu p-menu z-50 flex flex-col overflow-y-auto border outline-none"
       {...props}
     />
   </DropdownMenuPrimitive.Portal>

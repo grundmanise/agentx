@@ -292,7 +292,12 @@ export interface McpTool {
   id: string;
   kind: ToolKind;
   name: string;
+  uri?: string;
   description: string;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  hash?: string;
+  schema_hash?: string;
 }
 
 export interface ServerOccurrence {

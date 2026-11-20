@@ -38,12 +38,13 @@ export const useSkillsView = () => {
           setExpanded((keys) => new Set([...keys, subgroup]));
         }
       },
-      /** Opens exactly the plugin subgroups with these keys; every other one is collapsed. */
-      setExpanded: (keys: Iterable<string>) => {
-        setExpanded(new Set(keys));
-      },
       setFilters,
       setOrder,
+      /** Collapses exactly the groups with keys in `groups` and opens exactly the plugin subgroups with keys in `subgroups`. */
+      setSections: (groups: Iterable<string>, subgroups: Iterable<string>) => {
+        setCollapsed(new Set(groups));
+        setExpanded(new Set(subgroups));
+      },
       /** Collapses or expands a group, by its key. */
       toggleCollapsed: (key: string) => {
         setCollapsed((keys) => flipped(keys, key));

@@ -1,5 +1,5 @@
 import { cva } from "class-variance-authority";
-import type { HTMLAttributes, RefCallback } from "react";
+import type { HTMLAttributes, ReactElement, RefCallback } from "react";
 
 import claudeCode from "#/assets/logos/claude-code.svg";
 import codex from "#/assets/logos/codex.svg";
@@ -8,6 +8,11 @@ import geminiCli from "#/assets/logos/gemini-cli.svg";
 import githubCopilot from "#/assets/logos/github-copilot.svg";
 import windsurf from "#/assets/logos/windsurf.svg";
 import type { Configuration } from "#/cli/events.gen.ts";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "#/components/ui/hover-card.tsx";
 import {
   Tooltip,
   TooltipContent,
@@ -89,7 +94,7 @@ const monogram = (name: string) => {
 export type LogoSize = 16 | 20 | 24 | 28 | 44;
 
 /** The surface stacked logos sit on, which colours the ring between them (`logo.ring`). */
-export type LogoSurface = "content" | "card";
+export type LogoSurface = "content" | "card" | "overlay";
 
 // A round box of the logo's size. A bundled logo is a white tile, padded by size, the image
 // contained; a monogram fills the box, its tint drawn in its own image. The ring
@@ -99,6 +104,7 @@ const tileVariants = cva("rounded-logo block flex-none", {
   compoundVariants: [
     { className: "ring-row-chip-ring", ring: true, surface: "content" },
     { className: "ring-card-chip-ring", ring: true, surface: "card" },
+    { className: "ring-overlay-chip-ring", ring: true, surface: "overlay" },
     { className: "p-logo-sm", monogram: false, size: [16, 20] },
     { className: "p-1", monogram: false, size: 24 },
     { className: "p-logo-lg", monogram: false, size: 28 },
@@ -124,6 +130,7 @@ const tileVariants = cva("rounded-logo block flex-none", {
     surface: {
       card: "",
       content: "",
+      overlay: "",
     },
   },
 });
@@ -218,10 +225,59 @@ const stackVariants = cva("flex items-center", {
   },
 });
 
+/** The side of its trigger an agent list card opens on. */
+export type AgentListSide = "top" | "right" | "bottom" | "left";
+
+/**
+ * The agents behind a trigger, such as a stack of logos: pointing at the trigger opens a hover
+ * card (§6 "Hover card") that lists every client, a 16px logo beside each name, in two columns
+ * that scroll past `agent-list.max-height` and run to the card's top and bottom edges. The trigger's own logos should then name no client
+ * in a Tooltip of their own.
+ */
+export const AgentListCard = ({
+  clients,
+  children,
+  side = "bottom",
+}: {
+  clients: Pick<Configuration, "client" | "name">[];
+  /** The trigger: one element, which takes the hover card's handlers and ref. */
+  children: ReactElement;
+  /**
+   * Where the card opens: below the trigger, ending at its right edge, by default; beside it, from
+   * its top, for a trigger in a menu, so the card does not cover the menu's rows.
+   */
+  side?: AgentListSide;
+}) => (
+  <HoverCard>
+    <HoverCardTrigger asChild>{children}</HoverCardTrigger>
+    <HoverCardContent
+      side={side}
+      align={side === "left" || side === "right" ? "start" : "end"}
+      padding="list"
+    >
+      <ul
+        aria-label="Agents"
+        className="max-h-agent-list m-0 grid list-none grid-cols-2 gap-x-3.5 overflow-y-auto overscroll-contain px-0 py-3.5"
+      >
+        {clients.map((c) => (
+          <li
+            key={`${c.client} ${c.name}`}
+            className="type-secondary text-text-primary flex h-6.5 min-w-0 items-center gap-2"
+          >
+            <AgentLogo client={c} size={16} tooltip={false} decorative />
+            <span className="truncate">{c.name}</span>
+          </li>
+        ))}
+      </ul>
+    </HoverCardContent>
+  </HoverCard>
+);
+
 /**
  * Logos stacked with `logo.overlap`, each ringed in the parent's background, the first on top of
  * the next. `hidden` adds a "+n" count of the clients not drawn after the last logo
- * (`text.hint`), which names them in a Tooltip.
+ * (`text.hint`). Then the stack is an `AgentListCard` of every client, drawn and hidden, and its
+ * logos name no client in a Tooltip of their own.
  */
 export const LogoStack = ({
   clients,
@@ -230,6 +286,7 @@ export const LogoStack = ({
   surface,
   decorative = false,
   tooltip,
+  listSide,
 }: {
   clients: Pick<Configuration, "client" | "name">[];
   size: LogoSize;
@@ -237,28 +294,34 @@ export const LogoStack = ({
   surface?: LogoSurface;
   decorative?: boolean;
   tooltip?: boolean;
-}) => (
-  <span className={stackVariants({ size })}>
-    {clients.map((c) => (
-      <AgentLogo
-        key={`${c.client} ${c.name}`}
-        client={c}
-        size={size}
-        ring
-        surface={surface}
-        decorative={decorative}
-        tooltip={tooltip}
-      />
-    ))}
-    {hidden !== undefined && hidden.length > 0 && (
-      <Tooltip disableHoverableContent>
-        <TooltipTrigger asChild>
-          <span className="type-technical-sm text-text-hint pl-2">{`+${hidden.length}`}</span>
-        </TooltipTrigger>
-        <TooltipContent size="text">
-          {hidden.map((c) => c.name).join(", ")}
-        </TooltipContent>
-      </Tooltip>
-    )}
-  </span>
-);
+  /** Where the agent list card opens, when `hidden` adds one. */
+  listSide?: AgentListSide;
+}) => {
+  const listed = hidden !== undefined && hidden.length > 0;
+  const stack = (
+    <span className={stackVariants({ size })}>
+      {clients.map((c) => (
+        <AgentLogo
+          key={`${c.client} ${c.name}`}
+          client={c}
+          size={size}
+          ring
+          surface={surface}
+          decorative={decorative}
+          tooltip={listed ? false : tooltip}
+        />
+      ))}
+      {listed && (
+        <span className="type-technical-sm text-text-hint pl-2">{`+${hidden.length}`}</span>
+      )}
+    </span>
+  );
+  if (!listed) {
+    return stack;
+  }
+  return (
+    <AgentListCard clients={[...clients, ...hidden]} side={listSide}>
+      {stack}
+    </AgentListCard>
+  );
+};
