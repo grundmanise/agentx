@@ -148,6 +148,10 @@ const forkHintRules = (form: ForkFields): HintRule[] => [
     cli: /^choose another name with --name <new>$/u,
   },
   {
+    app: () => "finish the update first",
+    cli: /^run '.+ --abort' to give the merge up/u,
+  },
+  {
     app: () => "move it aside, then fork again",
     cli: /^move it aside, then run '.+' again$/u,
   },

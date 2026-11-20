@@ -97,6 +97,8 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   "skill update": {
     abort: false,
     all: false,
+    continue: false,
+    theirs: false,
   },
   "source add": {
     account: false,

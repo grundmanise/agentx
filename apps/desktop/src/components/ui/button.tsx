@@ -1,7 +1,8 @@
 // shadcn/ui Button (`pnpm dlx shadcn@latest add button`), on our tokens: DESIGN.md §6 "Buttons".
 // It keeps shadcn's shape (`asChild` renders the child element with the button's look, through
 // Slot; `data-slot="button"`) with our variants and sizes. Disabled is 30% opacity and inert,
-// never a grey fill. A button is one line, except `sm-wrap`: a small button whose label wraps, as
+// never a grey fill. `aria-disabled` looks the same but stays hoverable and focusable, for a
+// button whose Tooltip says why it does nothing. A button is one line, except `sm-wrap`: a small button whose label wraps, as
 // tall as its lines, for a label that is a sentence, and `inline`, a `plain` button as tall as its
 // text (a commit's subject in the History sheet).
 import { cva } from "class-variance-authority";
@@ -11,7 +12,7 @@ import { Slot } from "radix-ui";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const buttonVariants = cva(
-  "rounded-button inline-flex shrink-0 gap-2 transition-opacity duration-200 disabled:pointer-events-none disabled:opacity-30",
+  "rounded-button inline-flex shrink-0 gap-2 transition-opacity duration-200 disabled:pointer-events-none disabled:opacity-30 aria-disabled:opacity-30",
   {
     defaultVariants: { size: "default", variant: "secondary" },
     variants: {

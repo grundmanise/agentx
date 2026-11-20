@@ -1,6 +1,6 @@
 // Updates on the Skills screen: Check updates, which opens the Update skills dialog when it finds
 // an update, the banners of an update and their Update button, the banner of a pending merge with
-// Show folder, Abort and Update, and the Update skills dialog the sidebar's update pill opens.
+// Show folder, Discard my edits and Apply merge, and the Update skills dialog the sidebar's update pill opens.
 // Each button runs exactly one command line, which the mocked CLI records, and its outcome is the
 // toast of the results table; the dialog runs one for every skill selected and shows the outcome
 // itself.
@@ -49,9 +49,6 @@ const later = (cli: MockCli) =>
       ) && !detailReads.has(l.slice(0, 2).join(" "))
   );
 
-const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
-const row = (page: Page, name: string) =>
-  list(page).getByRole("button", { exact: true, name });
 const pane = (page: Page, name: string) =>
   page
     .getByRole("region", { name: "Skill details" })
@@ -61,23 +58,6 @@ const update = (page: Page, name: string) =>
   pane(page, name).getByRole("button", { exact: true, name: "Update" });
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
-/** The banner of an update, whichever of the two it is. */
-const updateBanner = (page: Page, name: string) =>
-  pane(page, name).getByRole("note", {
-    name: /^(?:New version from |Published from another machine$)/u,
-  });
-/** Selects `name` and expects the banner of an update, with its Update. */
-const expectOffered = async (page: Page, name: string) => {
-  await row(page, name).click();
-  await expect(pane(page, name)).toBeVisible();
-  await expect(updateBanner(page, name)).toHaveCount(1);
-  await expect(
-    updateBanner(page, name).getByRole("button", {
-      exact: true,
-      name: "Update",
-    })
-  ).toBeVisible();
-};
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
 const updateDialog = (page: Page) =>
@@ -731,15 +711,32 @@ test.describe("the Update skills dialog", () => {
 /** The banner of draft's pending merge. */
 const conflictBanner = (page: Page) =>
   pane(page, "draft").getByRole("note", { name: "Update has conflicts" });
-const abortDialog = (page: Page) =>
-  page.getByRole("alertdialog", { name: "Abort the update of draft?" });
+const discardDialog = (page: Page) =>
+  page.getByRole("alertdialog", { name: "Discard your edits to draft?" });
+
+/** What `skill update draft --continue` or `--theirs` emits once it applied the merge. */
+const applied = (state: "current" | "modified"): { events: InlineEvent[] } => ({
+  events: [
+    {
+      ...updatesLibrary.find((e) => e.name === "draft"),
+      pending_merge: false,
+      state,
+      type: "library_skill",
+    },
+    {
+      ok: true,
+      summary: "updated draft with the merge you resolved",
+      type: "result",
+    },
+  ],
+});
 
 test.describe("a pending merge", () => {
   const banner = conflictBanner;
   const button = (page: Page, name: string) =>
     banner(page).getByRole("button", { exact: true, name });
 
-  test("says so in attention, with Show folder, Abort and Update in that order", async ({
+  test("says so in attention, with Show folder, Discard my edits and Apply merge in that order", async ({
     cli,
     page,
   }) => {
@@ -748,7 +745,7 @@ test.describe("a pending merge", () => {
     // No conflict event this session: the sentence without the count.
     await expect(
       banner(page).getByText(
-        "Your edits and the update changed the same lines. Resolve them in the merge folder, then update again.",
+        "Your edits and the update changed the same lines. Edit the files in the merge folder, then apply the merge.",
         { exact: true }
       )
     ).toBeVisible();
@@ -756,10 +753,10 @@ test.describe("a pending merge", () => {
       await banner(page)
         .getByRole("button")
         .evaluateAll((buttons) => buttons.map((b) => b.textContent))
-    ).toEqual(["Show folder", "Abort", "Update"]);
+    ).toEqual(["Show folder", "Discard my edits", "Apply merge"]);
   });
 
-  test("Show folder reveals the merge folder in agentx home", async ({
+  test("Show folder reveals the skill's folder in the merge folder", async ({
     cli,
     page,
   }) => {
@@ -770,79 +767,99 @@ test.describe("a pending merge", () => {
       .toEqual([["/home/me/.agentx/merges/draft/draft"]]);
   });
 
-  test("Abort asks first: Cancel closes the dialog, Abort records skill update <name> --abort and keeps the update", async ({
+  test("Show folder reveals the merge folder when the skill's folder there is named otherwise", async ({
     cli,
     page,
   }) => {
     await open(cli, page, "draft");
-    await button(page, "Abort").click();
-    await expect(abortDialog(page)).toBeVisible();
-    await expect(
-      abortDialog(page).getByText(
-        "Your resolved files in the merge folder are discarded. The skill and the update stay as they were.",
-        { exact: true }
-      )
-    ).toBeVisible();
-    await abortDialog(page)
-      .getByRole("button", { exact: true, name: "Cancel" })
-      .click();
-    await expect(abortDialog(page)).toBeHidden();
+    cli.missing("/home/me/.agentx/merges/draft/draft");
+    await button(page, "Show folder").click();
+    await expect
+      .poll(() => cli.reveals)
+      .toEqual([
+        ["/home/me/.agentx/merges/draft/draft"],
+        ["/home/me/.agentx/merges/draft"],
+      ]);
+    await expect(toasts(page).getByText(/doesn't exist/u)).toHaveCount(0);
+  });
 
-    cli.register(["skill", "update", "draft", "--abort"], {
-      events: [
-        {
-          ...updatesLibrary.find((e) => e.name === "draft"),
-          pending_merge: false,
-          type: "library_skill",
-        },
-        {
-          ok: true,
-          summary:
-            "gave up the merge of draft; its worktree and branch are as they were",
-          type: "result",
-        },
-      ],
-    });
-    await button(page, "Abort").click();
-    await abortDialog(page)
-      .getByRole("button", { exact: true, name: "Abort" })
-      .click();
-    await expect(abortDialog(page)).toBeHidden();
+  test("Apply merge records skill update <name> --continue and says the skill was updated", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "draft");
+    cli.register(
+      ["skill", "update", "draft", "--continue"],
+      applied("modified")
+    );
+    await button(page, "Apply merge").click();
     await expect(
-      toasts(page).getByText("Aborted the update of draft skill", {
+      toasts(page).getByText("Updated draft skill. Publish when ready.", {
         exact: true,
       })
     ).toBeVisible();
     expect(later(cli)).toEqual([
-      ["skill", "update", "draft", "--abort", "--json"],
+      ["skill", "update", "draft", "--continue", "--json"],
     ]);
-
-    // The merge is given up, not the update: the inventory that follows offers it again.
-    await cli.serveEmit([
-      {
-        ...updatesInventory,
-        library: updatesLibrary.map((e) =>
-          e.name === "draft" ? { ...e, pending_merge: false } : e
-        ),
-        scan_counter: 2,
-      },
-    ]);
-    await expect(banner(page)).toHaveCount(0);
-    await expectOffered(page, "draft");
-    await page.getByRole("button", { name: "Filter" }).click();
-    await expect(
-      page
-        .getByRole("dialog", { name: "Filters" })
-        .getByRole("radio", { name: "Updates 5" })
-    ).toBeVisible();
   });
 
-  test("Update tries again: still conflicting, the banner counts the files", async ({
+  test("Apply merge with a conflict marker left shows the CLI's refusal", async ({
     cli,
     page,
   }) => {
     await open(cli, page, "draft");
-    cli.register(["skill", "update", "draft"], {
+    const message =
+      '"/home/me/.agentx/merges/draft/draft/SKILL.md" still holds a conflict marker at line 12, so the merge of draft is not finished';
+    cli.register(["skill", "update", "draft", "--continue"], {
+      events: [{ code: "pending_merge", message, type: "error" }],
+      exitCode: 4,
+    });
+    await button(page, "Apply merge").click();
+    await expect(toasts(page).getByText(message)).toBeVisible();
+    await expect(banner(page)).toBeVisible();
+  });
+
+  test("Discard my edits asks first: Cancel closes the dialog, Discard records skill update <name> --theirs", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "draft");
+    await button(page, "Discard my edits").click();
+    await expect(discardDialog(page)).toBeVisible();
+    await expect(
+      discardDialog(page).getByText(
+        "The skill takes the update as published. Your edits and what you merged in the merge folder are lost.",
+        { exact: true }
+      )
+    ).toBeVisible();
+    await discardDialog(page)
+      .getByRole("button", { exact: true, name: "Cancel" })
+      .click();
+    await expect(discardDialog(page)).toBeHidden();
+    expect(later(cli)).toEqual([]);
+
+    cli.register(["skill", "update", "draft", "--theirs"], applied("current"));
+    await button(page, "Discard my edits").click();
+    await discardDialog(page)
+      .getByRole("button", { exact: true, name: "Discard" })
+      .click();
+    await expect(discardDialog(page)).toBeHidden();
+    await expect(
+      toasts(page).getByText("Updated draft skill. Publish when ready.", {
+        exact: true,
+      })
+    ).toBeVisible();
+    expect(later(cli)).toEqual([
+      ["skill", "update", "draft", "--theirs", "--json"],
+    ]);
+  });
+
+  test("Apply merge that conflicts again: the banner counts the files", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "draft");
+    cli.register(["skill", "update", "draft", "--continue"], {
       events: [
         {
           files: [
@@ -861,7 +878,7 @@ test.describe("a pending merge", () => {
       ],
       exitCode: 4,
     });
-    await button(page, "Update").click();
+    await button(page, "Apply merge").click();
     await expect(
       toasts(page).getByText(
         "draft skill has conflicts. Resolve them to finish the update",
@@ -870,10 +887,12 @@ test.describe("a pending merge", () => {
     ).toBeVisible();
     await expect(
       banner(page).getByText(
-        "Your edits and the update changed the same lines in 2 files. Resolve them in the merge folder, then update again.",
+        "Your edits and the update changed the same lines in 2 files. Edit them in the merge folder, then apply the merge.",
         { exact: true }
       )
     ).toBeVisible();
-    expect(later(cli)).toEqual([["skill", "update", "draft", "--json"]]);
+    expect(later(cli)).toEqual([
+      ["skill", "update", "draft", "--continue", "--json"],
+    ]);
   });
 });

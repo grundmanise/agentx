@@ -651,6 +651,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `card.row-padding` | 10 0 | `py-card-row px-0` | Sub-rows inside the Updates card |
 | `banner.padding` | 14 16 14 14 | `py-banner pr-banner-right pl-banner` |  |
 | `banner.gap` | 14 | `gap-banner` | Tile → text → actions |
+| `banner.text-width` | 240 | `min-w-banner-text basis-banner-text` | The narrowest a callout's text gets; narrower, its buttons wrap under it |
 | `banner.tile` | 32–34 |  |  |
 | `banner.text-gap` | 3 | `gap-banner-text` | Title → text |
 | `agent-card.padding` | 22 | `p-agent-card` | Agents page cards |
@@ -916,7 +917,7 @@ The section toggle also heads a source in the Update skills dialog (§6 "Update 
 
 ### Callout
 
-`src/components/callout.tsx`: `banner.radius`, `banner.padding`, `tone.*.bg` with a 1px `tone.*.border`; a `banner.tile` icon tile in `tone.*.fg` (the `RefreshIcon` for an update, the `AlertIcon` otherwise); title `type.banner-title` `banner.title`, text `type.secondary` `banner.text`; its buttons on the right, vertically centred. The detail pane's banner and the notice under AGENTS when an agent sees more than one skill of a name are callouts; nothing else draws a box like it.
+`src/components/callout.tsx`: `banner.radius`, `banner.padding`, `tone.*.bg` with a 1px `tone.*.border`; a `banner.tile` icon tile in `tone.*.fg` (the `RefreshIcon` for an update, the `AlertIcon` otherwise); title `type.banner-title` `banner.title`, text `type.secondary` `banner.text`; its buttons on the right, vertically centred, wrapping to a line of their own under the text, still on the right, when they would leave the text narrower than `banner.text-width` (240px). The detail pane's banner and the notice under AGENTS when an agent sees more than one skill of a name are callouts; nothing else draws a box like it.
 
 ### Banner (detail pane)
 
@@ -949,7 +950,7 @@ A callout (§6 "Callout").
 
 ### Dialog
 
-`dialog.width`, `dialog.padding`, `dialog.radius`, `overlay.bg` with 1px `overlay.border` and `overlay.shadow`, over `shell.scrim-strong`; blocks `dialog.gap` apart, at most `dialog.max-height` high. Title `type.dialog-title` `dialog.title`, subtitle `type.secondary` `dialog.subtitle`. The footer ends with a ghost cancel and the confirm button (primary, or danger for what cannot be undone); Enter confirms. While its command runs, the confirm shows a `Spinner` and the dialog stays open. A dialog that says how its run stands does so at the footer's left side, in `DialogStatus` (`src/components/ui/dialog.tsx`): `type.secondary` `text.hint`, the same in every dialog. A confirm before a command that deletes or replaces work (Remove, Replace, Detach, Abort) is an alert dialog (`src/components/ui/alert-dialog.tsx`): it looks and moves the same, but a click outside does not close it, Cancel takes the focus on open, and assistive technology announces it as an alert. A field label is `type.secondary`, `input.label-gap` above the field; a hint under it is `type.secondary` `text.hint`. A refusal of what a field holds shows under the field (§6 "Refusal under a field"), and a change to the form clears it.
+`dialog.width`, `dialog.padding`, `dialog.radius`, `overlay.bg` with 1px `overlay.border` and `overlay.shadow`, over `shell.scrim-strong`; blocks `dialog.gap` apart, at most `dialog.max-height` high. Title `type.dialog-title` `dialog.title`, subtitle `type.secondary` `dialog.subtitle`. The footer ends with a ghost cancel and the confirm button (primary, or danger for what cannot be undone); Enter confirms. While its command runs, the confirm shows a `Spinner` and the dialog stays open. A dialog that says how its run stands does so at the footer's left side, in `DialogStatus` (`src/components/ui/dialog.tsx`): `type.secondary` `text.hint`, the same in every dialog. A confirm before a command that deletes or replaces work (Remove, Replace, Detach, Discard my edits) is an alert dialog (`src/components/ui/alert-dialog.tsx`): it looks and moves the same, but a click outside does not close it, Cancel takes the focus on open, and assistive technology announces it as an alert. A field label is `type.secondary`, `input.label-gap` above the field; a hint under it is `type.secondary` `text.hint`. A refusal of what a field holds shows under the field (§6 "Refusal under a field"), and a change to the form clears it.
 
 ### Fork dialog (detail pane)
 

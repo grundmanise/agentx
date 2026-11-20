@@ -719,6 +719,22 @@ agentx applies the merge as it applies a clean one: your library directory takes
 - `agentx skill update --all` applies it too, with the other updates.
 - Until every file is resolved, the update lists the files that are left and stops with exit code 4 again, changing nothing.
 
+To skip Git, edit the files in the folder, save them, and run:
+
+```sh
+agentx skill update docx --continue
+```
+
+This takes every file in the folder as you left it and applies the merge. If a file that conflicted still holds a conflict marker, it stops with exit code 4, names the file and the line, and changes nothing.
+
+### Take the update instead
+
+```sh
+agentx skill update docx --theirs
+```
+
+This drops your edits and applies the update as published. Files your ignore rules name are kept.
+
 If you changed the skill's library directory while the merge was pending, the update stops with exit code 6. Give the merge up and update again.
 
 ### Give the merge up

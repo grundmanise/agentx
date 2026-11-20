@@ -338,6 +338,7 @@ export class MockCli {
   private editors: { id: string; name: string }[] = [];
   private failingOpens = false;
   private failingReveals = false;
+  private readonly missingPaths = new Set<string>();
   // The app's preferences file, which outlives a page reload as the file outlives a restart.
   private preferences: unknown = { editor: { kind: "system" } };
 
@@ -391,6 +392,23 @@ export class MockCli {
     await this.page.addInitScript(() => {
       Object.defineProperty(navigator, "platform", { get: () => "MacIntel" });
     });
+  }
+
+  /** Makes a later reveal of each of `paths` fail, as for a path that does not exist. */
+  missing(...paths: string[]) {
+    for (const p of paths) {
+      this.missingPaths.add(p);
+    }
+  }
+
+  /** Whether a reveal of `paths` fails: every one does after `failReveals`, or one of a missing path. */
+  private revealFails(paths: unknown) {
+    return (
+      this.failingReveals ||
+      (Array.isArray(paths) ? paths : [paths]).some((p) =>
+        this.missingPaths.has(String(p))
+      )
+    );
   }
 
   /** Whether every later reveal fails, as when the path no longer exists. */
@@ -616,7 +634,7 @@ export class MockCli {
         this.reveals.push(
           Array.isArray(paths) ? paths.map(String) : [String(paths)]
         );
-        if (this.failingReveals) {
+        if (this.revealFails(paths)) {
           throw new Error("No such file or directory");
         }
         return null;
