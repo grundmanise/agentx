@@ -208,7 +208,8 @@ const PlaceAgents = ({
  * Show in Finder for one file: the button opens the file at the skill's first place, the library
  * for a skill the library holds; when the skill is elsewhere too, a three-dots button beside it opens a
  * menu of those places, each named by its agent client with its path, which opens the file there. A
- * symlink is marked as one and shows the path it leads to, the one it opens; symlinks of several
+ * symlink is marked as one, or as Library when it leads into the library, and shows the path it
+ * leads to, the one it opens; symlinks of several
  * agent clients that lead to one place are one row.
  */
 const Reveal = ({
@@ -256,7 +257,7 @@ const Reveal = ({
           key={location.key}
           aria-label={
             location.clients.length > 1
-              ? `${location.label}, symlink, ${location.directory}`
+              ? `${location.label}, ${location.intoLibrary ? "library" : "symlink"}, ${location.directory}`
               : undefined
           }
           onSelect={() => {
@@ -266,7 +267,9 @@ const Reveal = ({
           <span className="flex items-center gap-2">
             <PlaceAgents clients={location.clients} label={location.label} />
             {location.symlink ? (
-              <span className="type-caption text-text-caption">Symlink</span>
+              <span className="type-caption text-text-caption">
+                {location.intoLibrary ? "Library" : "Symlink"}
+              </span>
             ) : undefined}
           </span>
           <span className="type-technical-sm text-text-caption break-all">

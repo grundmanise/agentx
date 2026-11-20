@@ -694,6 +694,8 @@ export interface SkillLocation {
   directory: string;
   /** Whether the place is a symlink, which the menu shows by where it leads, `directory`. */
   symlink: boolean;
+  /** Whether the place is a symlink into the library, which the menu calls the library. */
+  intoLibrary: boolean;
 }
 
 /**
@@ -702,7 +704,8 @@ export interface SkillLocation {
  * directory; for a skill a client holds on its own, or a plugin's, each occurrence. Placements
  * and occurrences come in the order the row lists its agents, then by path. Symlinks that lead
  * to one place are one place, at the first one's position, with each agent client once: the
- * menu shows that place once, with the agents that use it. `library` is where agentx keeps the
+ * menu shows that place once, with the agents that use it, and calls a symlink into the library
+ * the library. `library` is where agentx keeps the
  * library, from `machine`; without it a library skill's placements are all.
  */
 export const locationsOf = (
@@ -720,7 +723,13 @@ export const locationsOf = (
     return at === -1 ? row.agents.length : at;
   };
   const locations: SkillLocation[] = [];
-  const add = (location: SkillLocation) => {
+  const libraryDirectory =
+    library === undefined ? undefined : `${library}/${row.name}`;
+  const add = (place: Omit<SkillLocation, "intoLibrary">) => {
+    const location = {
+      ...place,
+      intoLibrary: place.symlink && place.directory === libraryDirectory,
+    };
     const at = locations.findIndex(
       (l) => location.symlink && l.symlink && l.directory === location.directory
     );

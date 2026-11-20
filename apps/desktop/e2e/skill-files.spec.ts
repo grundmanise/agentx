@@ -511,6 +511,15 @@ test("the places of a skill come from the inventory, the library first", () => {
       true,
     ],
   ]);
+  // A symlink into the library is called the library; one into a worktree is not.
+  const intoLibrary = (name: string) =>
+    locationsOf(
+      rows.find((r) => r.name === name) ?? rows[0],
+      inventory.configurations,
+      libraryPath
+    ).map((l) => l.intoLibrary);
+  expect(intoLibrary("pdf")).toEqual([false, true]);
+  expect(intoLibrary("pdf-letters")).toEqual([false, false]);
   // Symlinks that lead to one place are one place, each agent once.
   const pdf = rows.find((r) => r.name === "pdf") ?? rows[0];
   const cursorLinks = [
@@ -707,9 +716,10 @@ test("the menu beside Show in file manager lists a skill's other places", async 
   const menu = page.getByRole("menu", {
     name: "Show SKILL.md in file manager elsewhere",
   });
-  // The placement is a symlink: marked as one, it shows where it leads, and opens the file there.
+  // The placement is a symlink into the library: marked as the library, it shows where it leads,
+  // and opens the file there.
   await expect(menu.getByRole("menuitem")).toHaveText([
-    `Claude CodeSymlink${libraryPath}/pdf`,
+    `Claude CodeLibrary${libraryPath}/pdf`,
   ]);
   await menu.getByRole("menuitem", { name: /^Claude Code/u }).click();
   await expect(menu).toBeHidden();
@@ -780,11 +790,11 @@ test("symlinks of many agents that lead to one place are one row of the menu", a
   // The 24 symlinks are one row: four logos, a count of the rest, and where they lead.
   await expect(items).toHaveCount(2);
   const links = items.first();
-  await expect(links).toHaveText(`+20Symlink${libraryPath}/pdf`);
+  await expect(links).toHaveText(`+20Library${libraryPath}/pdf`);
   await expect(links.getByRole("img")).toHaveCount(4);
   await expect(links).toHaveAccessibleName(
     new RegExp(
-      `^AdaL, Augment, .+, Zencoder, symlink, ${libraryPath}/pdf$`,
+      `^AdaL, Augment, .+, Zencoder, library, ${libraryPath}/pdf$`,
       "u"
     )
   );
