@@ -708,6 +708,7 @@
   --width-popover: 360px;
   --min-width-menu: 240px;
   --padding-menu: 6px;
+  --padding-menu-caption-drop: 1px;
   --width-sheet: 1120px;
   --min-width-sheet: 420px;
   --max-width-sheet: 90vw;

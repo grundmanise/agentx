@@ -683,6 +683,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `menu.max-height` | the room from its trigger to the window's edge, less `popover.window-inset` | `max-h-menu` | Radix measures it, so it is a utility in `tokens.css` with no theme value; the menu scrolls past it |
 | `menu.max-width` | the window's width, less `popover.window-inset` on each side | `max-w-menu` | Radix measures it, so it is a utility in `tokens.css` with no theme value; a long path wraps |
 | `menu.padding` | 6 | `p-menu` | Around the menu's rows |
+| `menu.caption-drop` | 1 | `pt-menu-caption-drop` | Above a caption beside stacked logos and "+n" in a menu row: the caption then sits on the baseline of "+n", centred on the logos |
 | `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `tooltip.offset` | 6 | none: a number passed to the tooltip's `sideOffset` | Gap from its trigger |
 | `hover-card.max-height` | the room from its trigger to the window's edge, less `popover.window-inset` | `max-h-hover-card` | Radix measures it, so it is a utility in `tokens.css` with no theme value; the hover card scrolls past it |

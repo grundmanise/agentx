@@ -173,27 +173,52 @@ const Pane = ({ row }: { row: FileRow }) => {
 const MAX_PLACE_LOGOS = 4;
 
 /**
- * Who uses a place of Show in Finder's menu: the library by name; one agent by its logo and name;
- * several, whose symlinks lead there, by their logos stacked, whose "+n" lists every name beside
- * the menu.
+ * What a place's first line says after it: Library for a symlink into the library, Symlink for
+ * another, nothing for a copy.
  */
-const PlaceAgents = ({
+const SYMLINK_CAPTIONS = { library: "Library", other: "Symlink" } as const;
+const captionOf = (location: SkillLocation) =>
+  location.symlink
+    ? SYMLINK_CAPTIONS[location.intoLibrary ? "library" : "other"]
+    : undefined;
+
+/** A place's caption, `type.caption` in `text.caption`. */
+const Caption = ({ children }: { children: string }) => (
+  <span className="type-caption text-text-caption">{children}</span>
+);
+
+/**
+ * The first line of a place in Show in Finder's menu, then its caption, if any: the library by
+ * name; one agent by its logo and name, the caption on the name's baseline; several, whose
+ * symlinks lead there, by their logos stacked, whose "+n" lists every name beside the menu, the
+ * caption `menu.caption-drop` down, on the baseline of "+n".
+ */
+const PlaceLine = ({
   clients,
   label,
+  caption,
 }: {
   clients: SkillLocation["clients"];
   label: string;
+  caption: string | undefined;
 }) => {
   const [only] = clients;
   if (clients.length > 1) {
     return (
-      <LogoStack
-        clients={clients.slice(0, MAX_PLACE_LOGOS)}
-        hidden={clients.slice(MAX_PLACE_LOGOS)}
-        size={20}
-        surface="overlay"
-        listSide="left"
-      />
+      <span className="flex items-center gap-2">
+        <LogoStack
+          clients={clients.slice(0, MAX_PLACE_LOGOS)}
+          hidden={clients.slice(MAX_PLACE_LOGOS)}
+          size={20}
+          surface="overlay"
+          listSide="left"
+        />
+        {caption === undefined ? undefined : (
+          <span className="pt-menu-caption-drop flex">
+            <Caption>{caption}</Caption>
+          </span>
+        )}
+      </span>
     );
   }
   return (
@@ -201,7 +226,10 @@ const PlaceAgents = ({
       {only === undefined ? undefined : (
         <AgentLogo client={only} size={20} decorative tooltip={false} />
       )}
-      <span className="type-body text-text-primary">{label}</span>
+      <span className="flex items-baseline gap-2">
+        <span className="type-body text-text-primary">{label}</span>
+        {caption === undefined ? undefined : <Caption>{caption}</Caption>}
+      </span>
     </span>
   );
 };
@@ -266,14 +294,11 @@ const Reveal = ({
             void revealInFinder(`${location.directory}/${path}`);
           }}
         >
-          <span className="flex items-center gap-2">
-            <PlaceAgents clients={location.clients} label={location.label} />
-            {location.symlink ? (
-              <span className="type-caption text-text-caption">
-                {location.intoLibrary ? "Library" : "Symlink"}
-              </span>
-            ) : undefined}
-          </span>
+          <PlaceLine
+            clients={location.clients}
+            label={location.label}
+            caption={captionOf(location)}
+          />
           <span className="type-technical-sm text-text-caption break-all">
             {location.symlink ? location.directory : location.path}
           </span>
