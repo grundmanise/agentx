@@ -3,7 +3,8 @@ import { cva } from "class-variance-authority";
 import { DefaultLinesDiffComputer } from "#/vendor/vscode-diff/index.ts";
 
 // The Code pane (DESIGN.md §6 "Code pane"): a file's lines in a grid of line number, marker and
-// text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it. The tints
+// text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it, or, set to
+// `fill`, as high as its column lets it, at least `code.min-height`. The tints
 // of a change: an added line with "+" in `accent.primary` on `diff.added-bg`, the palette's green,
 // a removed line with "−" in `accent.danger` on
 // `diff.removed-bg` and no number. Within a change, the characters that differ between its removed
@@ -432,7 +433,22 @@ export interface CodePaneProps {
    * old content comes from `patch`. Absent, a file with a patch shows the patch's tints.
    */
   tint?: "added" | "removed";
+  /**
+   * How high the pane is: `capped` at `code.max-height`, or `fill` to take the room its flex
+   * column gives it, scrolling past it.
+   */
+  height?: "capped" | "fill";
 }
+
+const paneVariants = cva("bg-code-bg py-code type-code overflow-auto", {
+  defaultVariants: { height: "capped" },
+  variants: {
+    height: {
+      capped: "max-h-code",
+      fill: "min-h-0 grow basis-0",
+    },
+  },
+});
 
 /** The lines the pane shows for `props`. */
 export const codeLines = ({
@@ -462,7 +478,7 @@ export const CodePane = (props: CodePaneProps) => {
   return (
     <section
       aria-label={props.label}
-      className="bg-code-bg max-h-code py-code type-code overflow-auto"
+      className={paneVariants({ height: props.height })}
     >
       {lines.length === 0 ? (
         <p className="px-file-row type-secondary text-text-hint m-0">

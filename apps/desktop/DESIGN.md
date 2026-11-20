@@ -711,6 +711,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
 | `code.gap` | 12 | `gap-x-code` | Between gutter and text |
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `code.min-height` | 200 | `min-h-code` | An open file's pane in What's new, which otherwise fills the sheet's height |
+| `file.open-min-height` | `file-row.height` + `code.min-height` + 1 | `min-h-file-open` | An open file's block in What's new: its row, its pane and the hairline under it |
 | `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
 | `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
 | `shell.panel-loading-blur` | 12 | `backdrop-blur-panel-loading` | The frosted pane over the kept inventory while the startup checks run (§8) |
@@ -1141,7 +1143,9 @@ The sheet frame (§6 "Sheet"). Content scrolls down only: a long line wraps, nev
 
 The sheet frame (§6 "Sheet"), for what an update changes before the user takes it. Opened from the Update skills dialog, it and its scrim take the dialog's layer, later in the document, so they sit above the dialog.
 
-- A patch with no lines to show, a read in progress and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
+- The open files fill the sheet's height: the closed rows keep `file-row.height` and the open ones share the rest equally, each pane at least `code.min-height`. Below that, the blocks keep those heights and the sheet's content scrolls. The pane scrolls past its own lines.
+- While the changes are read, every file the update check lists has its row, open unless the user closed it, over the loading pane of the File list (§6 "File list") at the same height, with the spinner in the first one only. When the patches come in, the stand-ins fade out over them, so the blocks keep their place.
+- A patch with no lines to show and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
 - An update from another machine cannot be diffed before it is taken: the sheet lists its files in the same card, status and path, with no chevron.
 
 ### Sheet (Activity log)

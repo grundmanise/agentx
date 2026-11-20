@@ -115,6 +115,25 @@ test.describe("the What's new sheet", () => {
       "and convert",
     ]);
 
+    // The open blocks share the sheet's height down to its bottom padding.
+    const card = sheet(page).locator('[data-slot="accordion"]');
+    const gap = await sheet(page).evaluate(
+      (el, cardEl) =>
+        el.getBoundingClientRect().bottom -
+        Number(getComputedStyle(el).borderBottomWidth.replace("px", "")) -
+        Number(getComputedStyle(el).paddingBottom.replace("px", "")) -
+        cardEl.getBoundingClientRect().bottom,
+      await card.elementHandle()
+    );
+    expect(Math.abs(gap)).toBeLessThan(1);
+    const heights = await Promise.all(
+      ["SKILL.md", "scripts/convert.py"].map(async (path) => {
+        const patchBox = await patch(page, path).boundingBox();
+        return patchBox?.height ?? 0;
+      })
+    );
+    expect(Math.abs((heights[0] ?? 0) - (heights[1] ?? 0))).toBeLessThan(2);
+
     // A block closes and opens again.
     await block(page, "SKILL.md").click();
     await expect(patch(page, "SKILL.md")).toHaveCount(0);
@@ -136,6 +155,23 @@ test.describe("the What's new sheet", () => {
       .getByRole("button", { exact: true, name: "Close" })
       .click();
     await expect(sheet(page)).toHaveCount(0);
+  });
+
+  test("keeps an open block at least code.min-height high in a short window, and scrolls", async ({
+    cli,
+    page,
+  }) => {
+    await page.setViewportSize({ height: 420, width: 1280 });
+    await open(cli, page, "pdf");
+    cli.register(["skill", "diff", "pdf", "--update"], {
+      events: pdfUpdateDiffs,
+    });
+    await seeChanges(page, "pdf").click();
+    await expect(patch(page, "scripts/convert.py")).toBeAttached();
+    const box = await patch(page, "SKILL.md").boundingBox();
+    expect(box?.height).toBe(200);
+    await patch(page, "scripts/convert.py").scrollIntoViewIfNeeded();
+    await expect(patch(page, "scripts/convert.py")).toBeInViewport();
   });
 
   test("shows a deleted file of an update from the original, by short ids", async ({

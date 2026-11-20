@@ -4,7 +4,9 @@
 // them. `list` is the Sources list (DESIGN.md §6 "Sources screen"): each item its own card, which
 // the parent places. Both have a chevron that turns down when a row is open. Several rows can be
 // open at once, so the root is always `type="multiple"`; its animation classes are dropped
-// (DESIGN.md §8).
+// (DESIGN.md §8). A `card` set to `fill` grows to the height its flex column gives it: the closed
+// rows keep their height and the open ones share the rest, each at least `code.min-height` under
+// its row. Below that, the card keeps those heights and its column scrolls.
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { Accordion as AccordionPrimitive } from "radix-ui";
@@ -14,8 +16,12 @@ import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const accordionVariants = cva("flex flex-col", {
-  defaultVariants: { variant: "card" },
+  defaultVariants: { fill: false, variant: "card" },
   variants: {
+    fill: {
+      false: "",
+      true: "shrink-0 grow",
+    },
     variant: {
       card: "rounded-file-card border-card-border bg-card-bg overflow-hidden border",
       list: "",
@@ -40,8 +46,12 @@ const itemVariants = cva("", {
       variant: "list",
     },
   ],
-  defaultVariants: { selected: false, variant: "card" },
+  defaultVariants: { fill: false, selected: false, variant: "card" },
   variants: {
+    fill: {
+      false: "",
+      true: "data-[state=open]:min-h-file-open flex shrink-0 flex-col data-[state=open]:shrink data-[state=open]:grow data-[state=open]:basis-0",
+    },
     selected: {
       false: "",
       true: "",
@@ -155,6 +165,7 @@ const Accordion = ({
   value,
   onValueChange,
   variant,
+  fill,
   children,
 }: VariantProps<typeof accordionVariants> & {
   /** The accessible name of the list. */
@@ -170,7 +181,7 @@ const Accordion = ({
     onValueChange={onValueChange}
     aria-label={label}
     data-slot="accordion"
-    className={accordionVariants({ variant })}
+    className={accordionVariants({ fill, variant })}
   >
     {children}
   </AccordionPrimitive.Root>
@@ -179,12 +190,13 @@ const Accordion = ({
 const AccordionItem = ({
   variant,
   selected,
+  fill,
   ...props
 }: OwnProps<typeof AccordionPrimitive.Item> &
   VariantProps<typeof itemVariants>) => (
   <AccordionPrimitive.Item
     data-slot="accordion-item"
-    className={itemVariants({ selected, variant })}
+    className={itemVariants({ fill, selected, variant })}
     {...props}
   />
 );
@@ -282,12 +294,24 @@ const AccordionTrigger = ({
   );
 };
 
+const contentVariants = cva("overflow-hidden", {
+  defaultVariants: { fill: false },
+  variants: {
+    fill: {
+      false: "",
+      true: "min-h-code flex grow basis-0 flex-col",
+    },
+  },
+});
+
 const AccordionContent = ({
+  fill,
   ...props
-}: OwnProps<typeof AccordionPrimitive.Content>) => (
+}: OwnProps<typeof AccordionPrimitive.Content> &
+  VariantProps<typeof contentVariants>) => (
   <AccordionPrimitive.Content
     data-slot="accordion-content"
-    className="overflow-hidden"
+    className={contentVariants({ fill })}
     {...props}
   />
 );
