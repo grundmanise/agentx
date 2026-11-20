@@ -12,7 +12,7 @@ import type {
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { cachedRead, keepRead } from "#/store/read-cache.ts";
-import { onFinished, runCommand } from "#/store/runner.ts";
+import { onFinished, readCommand } from "#/store/runner.ts";
 import type { Finished } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { AppState, FilesRead } from "#/store/store.ts";
@@ -34,7 +34,7 @@ const runLoad = async (
   mine: number
 ) => {
   const key = args.join(" ");
-  const outcome = await runCommand(args, { label: `load ${key}` });
+  const outcome = await readCommand(args, { label: `load ${key}` });
   if (latest.get(key) !== mine) {
     // A later run replaced this one: it ends with that run, so its caller finds the store filled.
     await running.get(key);
@@ -190,7 +190,7 @@ export const loadHistory = async (name: string, version: string) => {
       histories: { ...s.histories, [name]: { entries: kept, version } },
     }));
   }
-  const outcome = await runCommand(["skill", "history", name], {
+  const outcome = await readCommand(["skill", "history", name], {
     label: `history ${name}`,
   });
   if (historyVersions.get(name) !== version) {
@@ -259,10 +259,10 @@ export const loadFiles = async (
     return;
   }
   const [files, diff] = await Promise.all([
-    runCommand(["skill", "files", ...request.args], { label: `files ${key}` }),
+    readCommand(["skill", "files", ...request.args], { label: `files ${key}` }),
     request.diff === undefined
       ? undefined
-      : runCommand(["skill", "diff", request.diff], {
+      : readCommand(["skill", "diff", request.diff], {
           label: `diff ${request.diff}`,
         }),
   ]);
@@ -340,7 +340,7 @@ export const loadSkillMd = async (key: string, request: SkillMdRequest) => {
     return;
   }
   const subpath = request.subpath === "" ? "." : request.subpath;
-  const outcome = await runCommand(
+  const outcome = await readCommand(
     ["source", "read", request.source, subpath],
     {
       label: `read ${request.source} ${subpath}`,
@@ -409,7 +409,7 @@ export const loadUpdateDiff = async (
     }));
     return;
   }
-  const outcome = await runCommand(["skill", "diff", name, "--update"], {
+  const outcome = await readCommand(["skill", "diff", name, "--update"], {
     label: updateDiffLabel(name),
     ownFailure: true,
   });

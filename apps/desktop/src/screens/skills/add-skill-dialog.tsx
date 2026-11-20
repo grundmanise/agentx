@@ -49,7 +49,7 @@ import {
 import type { SkillCard } from "#/screens/sources/projection.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillRows } from "#/screens/sources/skill-rows.tsx";
-import { runCommand, usePending } from "#/store/runner.ts";
+import { readCommand, runCommand, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { afterSettled } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
@@ -176,7 +176,7 @@ const AddSkillForm = ({
     setProblem(undefined);
     setFound(undefined);
     setSelection(new Set());
-    const listed = await runCommand(["source", "skills", typed], {
+    const listed = await readCommand(["source", "skills", typed], {
       label: FIND_SKILLS_LABEL,
       ownFailure: true,
       retry: () => {
