@@ -13,12 +13,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/proc"
 	"github.com/grundmanise/agentx/apps/cli/internal/rpc"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
+	"github.com/spf13/cobra"
 )
 
 // listeningEvent says where the WebSocket door of a serve started with
@@ -79,6 +81,12 @@ type serveDoor struct {
 	self     string          // the agentx executable a run starts
 	env      []string        // the environment a run gets: serve's own
 
+	// commands is the command tree, to look up what a run names. Nothing
+	// in it runs. cobra fills a command's flag sets in when it is first
+	// looked up, so one lookup happens at a time.
+	commands *cobra.Command
+	looking  sync.Mutex
+
 	// ctx is done once close is called. The scan after a run waits on it
 	// rather than on the run's request, see run.
 	ctx  context.Context
@@ -102,7 +110,10 @@ func (inv *invocation) openDoor(address string, origins []string) (*serveDoor, e
 	token := rand.Text()
 	at := l.Addr().(*net.TCPAddr)
 	bound := at.String()
-	d := &serveDoor{inv: inv, requests: serve.NewRequests(), self: self}
+	d := &serveDoor{
+		inv: inv, requests: serve.NewRequests(), self: self,
+		commands: newRoot(&invocation{env: map[string]string{}, out: &writer{}}),
+	}
 	d.ctx, d.stop = context.WithCancel(context.Background())
 	for k, v := range inv.env {
 		d.env = append(d.env, k+"="+v)
@@ -182,7 +193,7 @@ type runResult struct {
 	Cancelled   bool   `json:"cancelled"`
 	TimedOut    bool   `json:"timed_out"`
 	InstanceID  string `json:"instance_id"`
-	ScanCounter int    `json:"scan_counter,omitempty"` // absent when the scan failed
+	ScanCounter int    `json:"scan_counter,omitempty"` // absent after a command that changes nothing, which serve does not scan after, and when the scan failed
 	ScanError   string `json:"scan_error,omitempty"`   // why the scan failed
 }
 
@@ -193,11 +204,11 @@ type runResult struct {
 // everything it started. The request names no environment and no
 // directory: whoever could set those could have git run any program.
 //
-// Serve scans once the command has ended, whatever the command: serve
-// cannot tell which commands change nothing, and a scan that finds nothing
-// new emits nothing. The scan is not the request's to cancel: what the
-// command changed is on disk whether or not anyone still asks about it.
-// Only serve stopping ends the wait.
+// Serve scans once the command has ended, whatever its exit code, unless
+// the command is marked as one that changes nothing, see reads. The scan
+// is not the request's to cancel: what the command changed is on disk
+// whether or not anyone still asks about it. Only serve stopping ends the
+// wait.
 func (d *serveDoor) run(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
 	var p struct {
 		Args       []string `json:"args"`
@@ -218,12 +229,26 @@ func (d *serveDoor) run(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
 		return nil, &rpc.Error{Code: rpc.CodeFailed, Message: "the command could not start: " + err.Error()}
 	}
 	result := runResult{ExitCode: res.ExitCode, Cancelled: res.Cancelled, TimedOut: res.TimedOut, InstanceID: d.inv.instanceID()}
+	if d.reads(p.Args) {
+		return result, nil
+	}
 	counter, err := d.requests.Refresh(d.ctx)
 	if err != nil {
 		result.ScanError = err.Error()
 	}
 	result.ScanCounter = counter
 	return result, nil
+}
+
+// reads reports whether args name a command marked as one that changes
+// nothing an inventory shows, as the CLI itself would read them. Anything
+// else may have changed something: a command that is not marked, and a
+// line that names no command.
+func (d *serveDoor) reads(args []string) bool {
+	d.looking.Lock()
+	defer d.looking.Unlock()
+	cmd, _, err := d.commands.Find(args)
+	return err == nil && cmd.Annotations[annotationRead] != ""
 }
 
 // jsonArgs is args with --json added, before a -- when there is one,

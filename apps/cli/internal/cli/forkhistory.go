@@ -16,7 +16,7 @@ func newSkillHistoryCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:         "history <name>",
 		Short:       "List the commits of one of your own skills",
-		Annotations: map[string]string{annotationSection: "skills"},
+		Annotations: map[string]string{annotationSection: "skills", annotationRead: "true"},
 		Long: "List every commit of <name>, one of your own skills, newest first: the commits\n" +
 			"agentx wrote, those made with git in its worktree, and the upstream imports it\n" +
 			"was forked from or merged.\n" +

@@ -37,7 +37,8 @@ func newSkillFilesCommand(inv *invocation) *cobra.Command {
 			"the files an operating system or an editor leaves, such as .DS_Store, are left\n" +
 			"out. With --configuration <id>, read instead the skill directory called <name>\n" +
 			"in that configuration's own skills directory, a plugin's left out.",
-		Args: cobra.ExactArgs(1),
+		Annotations: map[string]string{annotationRead: "true"},
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("configuration") && strings.TrimSpace(configuration) == "" {
 				return fail(exitUsage, "--configuration needs a configuration", "name one by its id, such as claude-code; 'agentx scan' lists them")

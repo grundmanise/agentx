@@ -19,7 +19,7 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "diff <name>",
 		Short:       "Show unpublished edits, or what an update changes",
-		Annotations: map[string]string{annotationSection: "skills"},
+		Annotations: map[string]string{annotationSection: "skills", annotationRead: "true"},
 		Long: "Show how the library directory of a managed skill differs from its base version,\n" +
 			"the version it was installed at or last published, as one unified diff per file:\n" +
 			"its edits not yet published, which 'agentx skill publish <name>' pushes to its\n" +

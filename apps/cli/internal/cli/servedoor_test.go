@@ -136,7 +136,8 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	alike(t, "run events", h.types(run), []string{"version", "result"})
 	alike(t, "own events", h.types(own), []string{"inventory"})
 	equal(t, "inventory.scan_counter", own[0]["scan_counter"], float64(1))
-	alike(t, "result", result, jsonEvent{"exit_code": float64(0), "cancelled": false, "timed_out": false, "instance_id": inventory["instance_id"], "scan_counter": float64(1)})
+	// version changes nothing, so serve does not scan after it.
+	alike(t, "result", result, jsonEvent{"exit_code": float64(0), "cancelled": false, "timed_out": false, "instance_id": inventory["instance_id"]})
 
 	c.send("new", "run", map[string]any{"args": []string{"skill", "new", "notes"}, "deadline_ms": 60000})
 	for {
@@ -162,7 +163,8 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	result, _, _, _ = c.answer(4)
 	alike(t, "search", result, jsonEvent{"instance_id": inventory["instance_id"], "query": "notes", "results": []any{}})
 
-	// A command that fails ran: its exit code is a result, not an error.
+	// A command that fails ran: its exit code is a result, not an error,
+	// and serve scans after it, since it is no command that changes nothing.
 	c.send(5, "run", map[string]any{"args": []string{"skill", "remove", "missing"}})
 	result, _, run, _ = c.answer(5)
 	alike(t, "run events", h.types(run), []string{"error", "result"})
@@ -360,6 +362,28 @@ func TestWriterTeesEveryEvent(t *testing.T) {
 		logEvent{event: newEvent("log"), Level: levelWarn, Message: "careful; do this"},
 		logEvent{event: newEvent("log"), Level: levelDebug, Message: "seen 1"},
 	})
+}
+
+// TestReads is which command lines serve does not scan after: those that
+// name a command marked as changing nothing, wherever their flags are.
+func TestReads(t *testing.T) {
+	t.Parallel()
+	d := &serveDoor{commands: newRoot(&invocation{env: map[string]string{}, out: &writer{}})}
+	for _, c := range []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"version"}, true},
+		{[]string{"skill", "diff", "notes", "--json"}, true},
+		{[]string{"--color", "off", "skill", "list", "--remote"}, true},
+		{[]string{"machine"}, true},
+		{[]string{"machine", "rename", "laptop"}, false},
+		{[]string{"skill", "new", "notes"}, false},
+		{[]string{"skill"}, false},
+		{[]string{"nope"}, false},
+	} {
+		equal(t, strings.Join(c.args, " "), d.reads(c.args), c.want)
+	}
 }
 
 // --json is added where the command line takes it.

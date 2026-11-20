@@ -65,7 +65,7 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:         "list",
 		Short:       "List the sources of this machine",
-		Annotations: map[string]string{annotationSection: "sources"},
+		Annotations: map[string]string{annotationSection: "sources", annotationRead: "true"},
 		Args:        cobra.NoArgs,
 		Example:     examples("agentx source list", "every source with its URL and id"),
 		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceList(cmd.Context()) },
@@ -73,7 +73,7 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:         "skills <url|id>",
 		Short:       "List the installable skills of a source",
-		Annotations: map[string]string{annotationSection: "sources"},
+		Annotations: map[string]string{annotationSection: "sources", annotationRead: "true"},
 		Args:        cobra.ExactArgs(1),
 		Example: examples(
 			"agentx source skills anthropics/skills", "the skills a source holds, as last fetched",
@@ -96,7 +96,7 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 			"from the repository root, as 'agentx source skills' prints it, '.' for a skill\n" +
 			"at the root. The command reads what the last add or fetch stored and makes no\n" +
 			"network calls.",
-		Annotations: map[string]string{annotationSection: "sources"},
+		Annotations: map[string]string{annotationSection: "sources", annotationRead: "true"},
 		Args:        cobra.ExactArgs(2),
 		Example:     examples("agentx source read anthropics/skills skills/pdf", "the SKILL.md of one skill, as last fetched"),
 		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceRead(cmd.Context(), args[0], args[1]) },
