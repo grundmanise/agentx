@@ -92,7 +92,7 @@ A handshake starts or connects to every MCP server and records the tools, prompt
 - A remote server receives its declared headers at its declared URL. For Codex, agentx reads the values of `env_http_headers` and `bearer_token_env_var` from your environment.
 - agentx skips a server you turned off in its client, and its row shows `(disabled)`. agentx reads this setting from Codex (`enabled = false`), Gemini CLI (`mcp.excluded`, `mcp.allowed` and `gemini mcp disable`) and GitHub Copilot (`/mcp disable`). Claude Code, Cursor and Windsurf store it where agentx cannot read it, so agentx handshakes those servers.
 
-agentx compares what each server offers. Two servers with the same command or URL but different tools count as two servers. The same server declared in two clients with the same tools stays one server.
+agentx compares what each server offers. The same server declared in two clients stays one server. When the two declarations offer different tools, the server has two versions, and each declaration shows the one it answered with.
 
 agentx keeps the results in `handshakes.json` in [agentx home](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md), `~/.agentx` by default. A later scan without `--handshake` shows them until the next handshake replaces them.
 

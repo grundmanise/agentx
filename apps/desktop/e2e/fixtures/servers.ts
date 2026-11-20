@@ -8,6 +8,7 @@ import type {
   McpServer,
   McpTool,
   ServerOccurrence,
+  ServerVersion,
 } from "#/cli/events.gen.ts";
 
 import { configuration } from "../harness/cli.ts";
@@ -27,7 +28,10 @@ const configFiles: Record<string, string> = {
   "gemini-cli": "/home/me/.gemini/settings.json",
 };
 
-/** A declaration of a server in one configuration, with `overrides` in place of the defaults. */
+/**
+ * A declaration of a server in one configuration, with `overrides` in place of the defaults: one
+ * never checked unless `overrides` names the signature it answered with.
+ */
 const declaration = (
   configurationId: string,
   name: string,
@@ -41,6 +45,8 @@ const declaration = (
   handshake: false,
   header_keys: [],
   id: `occurrence:${configurationId}:${name}`,
+  name,
+  signature: "none",
   transport: "stdio",
   url: "",
   ...overrides,
@@ -55,6 +61,17 @@ const tools = (prefix: string, n: number, extra: McpTool[] = []): McpTool[] => [
   })),
   ...extra,
 ];
+
+/** A version of a server: the signature its declarations answered with, when, and its tools. */
+const version = (
+  signature: string,
+  signatureAt: string,
+  versionTools: McpTool[]
+): ServerVersion => ({
+  signature,
+  signature_at: signatureAt,
+  tools: versionTools,
+});
 
 export const GITHUB_URL = "https://api.githubcopilot.com/mcp/";
 export const LINEAR_URL = "https://mcp.linear.app/sse";
@@ -74,64 +91,60 @@ const github: McpServer = {
   occurrences: [
     declaration("claude-code", "github", {
       header_keys: ["Authorization"],
+      signature: "sig-github",
       transport: "streamable-http",
       url: GITHUB_URL,
     }),
     declaration("cursor", "github", {
       env_keys: ["GITHUB_TOKEN"],
       header_keys: ["Authorization"],
+      signature: "sig-github",
       transport: "streamable-http",
       url: GITHUB_URL,
     }),
   ],
-  physical_id: "server:github:v1",
-  signature: "sig-github",
-  signature_at: "2026-10-20T09:00:00Z",
-  tools: tools("github", 12, [
-    {
-      description: "Summarise a pull request",
-      id: "tool:github-summary",
-      kind: "prompt",
-      name: "summarise_pr",
-    },
-  ]),
+  physical_id: "server:github",
+  versions: [
+    version(
+      "sig-github",
+      "2026-10-20T09:00:00Z",
+      tools("github", 12, [
+        {
+          description: "Summarise a pull request",
+          id: "tool:github-summary",
+          kind: "prompt",
+          name: "summarise_pr",
+        },
+      ])
+    ),
+  ],
 };
 
-/** A package server in two versions: Codex runs the latest release, Claude Code a pinned one. */
-const filesystemVersions: McpServer[] = [
-  {
-    logical_id: "server:pkg-filesystem",
-    name: "filesystem",
-    occurrences: [
-      declaration("codex", "filesystem", {
-        args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/me"],
-        command: "npx",
-      }),
-    ],
-    physical_id: "server:pkg-filesystem:v2",
-    signature: "sig-fs-2",
-    signature_at: LATEST_SIGNATURE_AT,
-    tools: tools("fs", 4),
-  },
-  {
-    logical_id: "server:pkg-filesystem",
-    name: "filesystem",
-    occurrences: [
-      declaration("claude-code", "filesystem", {
-        args: [
-          "-y",
-          "@modelcontextprotocol/server-filesystem@0.6.2",
-          "/home/me",
-        ],
-        command: "npx",
-      }),
-    ],
-    physical_id: "server:pkg-filesystem:v1",
-    signature: "sig-fs-1",
-    signature_at: "2026-10-18T08:00:00Z",
-    tools: tools("fs", 3),
-  },
-];
+/**
+ * A package server in two versions: Claude Code runs a pinned release, Codex the latest. Its row
+ * shows the latest version's command and tools.
+ */
+const filesystem: McpServer = {
+  logical_id: "server:pkg-filesystem",
+  name: "filesystem",
+  occurrences: [
+    declaration("claude-code", "filesystem", {
+      args: ["-y", "@modelcontextprotocol/server-filesystem@0.6.2", "/home/me"],
+      command: "npx",
+      signature: "sig-fs-1",
+    }),
+    declaration("codex", "filesystem", {
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/me"],
+      command: "npx",
+      signature: "sig-fs-2",
+    }),
+  ],
+  physical_id: "server:pkg-filesystem",
+  versions: [
+    version("sig-fs-1", "2026-10-18T08:00:00Z", tools("fs", 3)),
+    version("sig-fs-2", LATEST_SIGNATURE_AT, tools("fs", 4)),
+  ],
+};
 
 /** A plugin's server. */
 const acmeDb: McpServer = {
@@ -143,12 +156,11 @@ const acmeDb: McpServer = {
       command: "node",
       config_file: "/home/me/.claude/plugins/acme-tools/.mcp.json",
       plugin: "acme-tools",
+      signature: "sig-db",
     }),
   ],
-  physical_id: "server:acme-db:v1",
-  signature: "sig-db",
-  signature_at: "2026-10-19T12:00:00Z",
-  tools: tools("db", 2),
+  physical_id: "server:acme-db",
+  versions: [version("sig-db", "2026-10-19T12:00:00Z", tools("db", 2))],
 };
 
 /** A remote server on SSE, declared by two agents, one of which turned it off. */
@@ -159,18 +171,18 @@ const linear: McpServer = {
     declaration("codex", "linear", {
       enabled: false,
       env_keys: ["LINEAR_API_KEY"],
+      signature: "sig-linear",
       transport: "sse",
       url: LINEAR_URL,
     }),
     declaration("gemini-cli", "linear", {
+      signature: "sig-linear",
       transport: "sse",
       url: LINEAR_URL,
     }),
   ],
-  physical_id: "server:linear:v1",
-  signature: "sig-linear",
-  signature_at: "2026-10-17T15:00:00Z",
-  tools: tools("linear", 5),
+  physical_id: "server:linear",
+  versions: [version("sig-linear", "2026-10-17T15:00:00Z", tools("linear", 5))],
 };
 
 /** A local server never checked. */
@@ -183,8 +195,8 @@ const localNotes: McpServer = {
       command: "uvx",
     }),
   ],
-  physical_id: "server:local-notes:none",
-  signature: "none",
+  physical_id: "server:local-notes",
+  versions: [],
 };
 
 /** A remote server that every client that declares it turned off. */
@@ -194,24 +206,24 @@ const slack: McpServer = {
   occurrences: [
     declaration("codex", "slack", {
       enabled: false,
+      signature: "sig-slack",
       transport: "streamable-http",
       url: SLACK_URL,
     }),
     declaration("gemini-cli", "slack", {
       enabled: false,
+      signature: "sig-slack",
       transport: "streamable-http",
       url: SLACK_URL,
     }),
   ],
-  physical_id: "server:slack:v1",
-  signature: "sig-slack",
-  signature_at: "2026-10-16T09:00:00Z",
-  tools: tools("slack", 3),
+  physical_id: "server:slack",
+  versions: [version("sig-slack", "2026-10-16T09:00:00Z", tools("slack", 3))],
 };
 
 export const servers: McpServer[] = [
   acmeDb,
-  ...filesystemVersions,
+  filesystem,
   github,
   linear,
   localNotes,
@@ -256,11 +268,11 @@ export const handshakeInventory = {
             message: "the server answered HTTP 401",
             reason: "unauthorized",
           },
+          signature: "sig-github-2",
         })),
-        physical_id: "server:github:v2",
-        signature: "sig-github-2",
-        signature_at: "2026-10-22T09:00:00Z",
-        tools: tools("github", 20),
+        versions: [
+          version("sig-github-2", "2026-10-22T09:00:00Z", tools("github", 20)),
+        ],
       };
     }
     if (node.logical_id === "server:linear") {

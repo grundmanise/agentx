@@ -145,22 +145,32 @@ type LibraryPlacement struct {
 	Kind          string `json:"kind"` // symlink, copy, directory or library
 }
 
-// Server is one MCP server in one signature version; the same server
-// declared in several configurations is one node with several occurrences.
+// Server is one MCP server on this machine, whatever it exposed: the same
+// server declared in several configurations is one node with several
+// occurrences, and what each declaration answered with is one of its
+// versions. The node's identity does not depend on a version, so it stays
+// the same when the server changes; telling versions apart is for a view.
 type Server struct {
 	PhysicalID  string             `json:"physical_id"`
 	LogicalID   string             `json:"logical_id"`
 	Name        string             `json:"name"`
-	Signature   string             `json:"signature"`              // the handshake signature, or noSignature
-	SignatureAt string             `json:"signature_at,omitempty"` // when the signature was taken, RFC 3339
-	Tools       []home.Tool        `json:"tools,omitempty"`        // what the server exposed, sorted by kind then name
+	Versions    []ServerVersion    `json:"versions"` // one per signature a declaration answered with, sorted by signature
 	Occurrences []ServerOccurrence `json:"occurrences"`
+}
+
+// ServerVersion is one signature a server answered a handshake with, and
+// what it exposed then.
+type ServerVersion struct {
+	Signature   string      `json:"signature"`
+	SignatureAt string      `json:"signature_at"`    // when it was last taken, RFC 3339
+	Tools       []home.Tool `json:"tools,omitempty"` // what the server exposed, sorted by kind then name
 }
 
 // ServerOccurrence is one declaration of a server in one configuration file.
 // Environment and header values are never recorded, only their names.
 type ServerOccurrence struct {
 	ID            string          `json:"id"`
+	Name          string          `json:"name"` // the key it is declared under
 	Configuration string          `json:"configuration"`
 	ConfigFile    string          `json:"config_file"`
 	Command       string          `json:"command"`
@@ -169,6 +179,7 @@ type ServerOccurrence struct {
 	URL           string          `json:"url"`
 	HeaderKeys    []string        `json:"header_keys"`
 	Transport     string          `json:"transport"`
+	Signature     string          `json:"signature"` // the version this declaration answered with, or NoSignature
 	Handshake     bool            `json:"handshake"` // whether this scan handshook the server
 	HandshakeErr  *HandshakeError `json:"handshake_error,omitempty"`
 	Plugin        string          `json:"plugin,omitempty"`
@@ -379,6 +390,7 @@ func (s *Scan) finish() Inventory {
 	sort.Slice(s.inventory.Skills, func(i, j int) bool { return s.inventory.Skills[i].PhysicalID < s.inventory.Skills[j].PhysicalID })
 	for _, node := range s.servers {
 		sort.Slice(node.Occurrences, func(i, j int) bool { return node.Occurrences[i].ID < node.Occurrences[j].ID })
+		sort.Slice(node.Versions, func(i, j int) bool { return node.Versions[i].Signature < node.Versions[j].Signature })
 		s.inventory.MCPServers = append(s.inventory.MCPServers, *node)
 	}
 	sort.Slice(s.inventory.MCPServers, func(i, j int) bool {

@@ -37,6 +37,8 @@ const serverOccurrence = (
   handshake: false,
   header_keys: [],
   id: `${configurationId}:${name}`,
+  name,
+  signature: "none",
   transport: "stdio",
   url: "",
 });
@@ -46,7 +48,7 @@ const server = (name: string, inConfigurations: string[]): McpServer => ({
   name,
   occurrences: inConfigurations.map((id) => serverOccurrence(id, name)),
   physical_id: `server:${name}`,
-  signature: "none",
+  versions: [],
 });
 
 /** One server two direct clients share, one declared by a client that reads the library. */
