@@ -223,6 +223,9 @@ const stackVariants = cva("flex items-center", {
   },
 });
 
+/** The side of its trigger an agent list card opens on. */
+export type AgentListSide = "top" | "right" | "bottom" | "left";
+
 /**
  * The agents behind a trigger, such as a stack of logos: pointing at the trigger opens a hover
  * card (§6 "Hover card") that lists every client, a 16px logo beside each name, in two columns
@@ -232,14 +235,23 @@ const stackVariants = cva("flex items-center", {
 export const AgentListCard = ({
   clients,
   children,
+  side = "bottom",
 }: {
   clients: Pick<Configuration, "client" | "name">[];
   /** The trigger: one element, which takes the hover card's handlers and ref. */
   children: ReactElement;
+  /**
+   * Where the card opens: below the trigger, ending at its right edge, by default; beside it, from
+   * its top, for a trigger in a menu, so the card does not cover the menu's rows.
+   */
+  side?: AgentListSide;
 }) => (
   <HoverCard>
     <HoverCardTrigger asChild>{children}</HoverCardTrigger>
-    <HoverCardContent align="end">
+    <HoverCardContent
+      side={side}
+      align={side === "left" || side === "right" ? "start" : "end"}
+    >
       <ul
         aria-label="Agents"
         className="max-h-agent-list m-0 grid list-none grid-cols-2 gap-x-3.5 overflow-y-auto overscroll-contain p-0"
@@ -271,6 +283,7 @@ export const LogoStack = ({
   surface,
   decorative = false,
   tooltip,
+  listSide,
 }: {
   clients: Pick<Configuration, "client" | "name">[];
   size: LogoSize;
@@ -278,6 +291,8 @@ export const LogoStack = ({
   surface?: LogoSurface;
   decorative?: boolean;
   tooltip?: boolean;
+  /** Where the agent list card opens, when `hidden` adds one. */
+  listSide?: AgentListSide;
 }) => {
   const listed = hidden !== undefined && hidden.length > 0;
   const stack = (
@@ -302,6 +317,8 @@ export const LogoStack = ({
     return stack;
   }
   return (
-    <AgentListCard clients={[...clients, ...hidden]}>{stack}</AgentListCard>
+    <AgentListCard clients={[...clients, ...hidden]} side={listSide}>
+      {stack}
+    </AgentListCard>
   );
 };

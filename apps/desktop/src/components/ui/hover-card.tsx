@@ -47,7 +47,7 @@ const HoverCardContent = ({
       align={align}
       sideOffset={sideOffset}
       collisionPadding={collisionPadding}
-      className="rounded-popover border-overlay-border bg-overlay-bg shadow-popover w-popover max-h-hover-card gap-popover z-40 flex flex-col overflow-y-auto border p-3.5 outline-none"
+      className="rounded-popover border-overlay-border bg-overlay-bg shadow-popover w-popover max-h-hover-card gap-popover z-50 flex flex-col overflow-y-auto border p-3.5 outline-none"
       {...props}
     />
   </HoverCardPrimitive.Portal>

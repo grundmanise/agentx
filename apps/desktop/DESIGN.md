@@ -891,7 +891,7 @@ Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
 
-- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. Its logos then name no client in a Tooltip of their own.
+- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. Its logos then name no client in a Tooltip of their own. It opens below the stack, ending at its right edge; for a stack inside a menu, it opens beside the menu instead, so it covers none of the menu's rows. Like a tooltip, a hover card stacks over a menu.
 
 ### Agent filter chip
 
