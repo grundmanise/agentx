@@ -115,9 +115,9 @@ func alike(t *testing.T, what string, got, want any) {
 // A browser on this machine does through the door what the desktop app
 // does through its shell: it gets the inventory, runs commands, whose
 // events and exit code come back, and asks for a refresh and a search.
-// After a command that changed something, the result names the inventory
-// that holds the change, which was sent before it. What serve answers
-// stdin with stays on stdout.
+// After a command that changed something, the refresh it asks for names
+// the inventory that holds the change, which was sent before it. What
+// serve answers stdin with stays on stdout.
 func TestServeListenAnswersABrowser(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
@@ -136,40 +136,30 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	alike(t, "run events", h.types(run), []string{"version", "result"})
 	alike(t, "own events", h.types(own), []string{"inventory"})
 	equal(t, "inventory.scan_counter", own[0]["scan_counter"], float64(1))
-	// version changes nothing, so serve does not scan after it.
-	alike(t, "result", result, jsonEvent{"exit_code": float64(0), "cancelled": false, "timed_out": false, "instance_id": inventory["instance_id"]})
+	alike(t, "result", result, jsonEvent{"exit_code": float64(0), "cancelled": false, "timed_out": false})
 
-	c.send("new", "run", map[string]any{"args": []string{"skill", "new", "notes"}, "deadline_ms": 60000})
-	for {
-		m := c.next()
-		if m["id"] == "new" {
-			result = m["result"].(map[string]any)
-			break
-		}
-		if ev := m["params"].(map[string]any)["event"].(map[string]any); ev["type"] == "inventory" {
-			inventory = ev
-		}
-	}
+	// The inventory that holds the change comes before the answer to the
+	// refresh, during the run when serve saw the change first.
+	c.send(2, "run", map[string]any{"args": []string{"skill", "new", "notes"}, "deadline_ms": 60000})
+	result, _, _, own = c.answer(2)
 	equal(t, "exit_code", result["exit_code"], float64(0))
-	equal(t, "scan_counter", result["scan_counter"], float64(2))
-	equal(t, "the inventory sent before the result", inventory["scan_counter"], float64(2))
-	alike(t, "skills in it", libraryNames(inventory), []string{"notes"})
-
 	c.send(3, "refresh", nil)
-	result, _, _, _ = c.answer(3)
+	result, _, _, after := c.answer(3)
 	alike(t, "refresh", result, jsonEvent{"instance_id": inventory["instance_id"], "scan_counter": float64(2)})
+	own = append(own, after...)
+	alike(t, "own events", h.types(own), []string{"inventory"})
+	equal(t, "the inventory sent before the result", own[0]["scan_counter"], float64(2))
+	alike(t, "skills in it", libraryNames(own[0]), []string{"notes"})
 
 	c.send(4, "search", map[string]any{"query": "notes"})
 	result, _, _, _ = c.answer(4)
 	alike(t, "search", result, jsonEvent{"instance_id": inventory["instance_id"], "query": "notes", "results": []any{}})
 
-	// A command that fails ran: its exit code is a result, not an error,
-	// and serve scans after it, since it is no command that changes nothing.
+	// A command that fails ran: its exit code is a result, not an error.
 	c.send(5, "run", map[string]any{"args": []string{"skill", "remove", "missing"}})
 	result, _, run, _ = c.answer(5)
 	alike(t, "run events", h.types(run), []string{"error", "result"})
 	equal(t, "exit_code", result["exit_code"], float64(exitNotFound.exit))
-	equal(t, "scan_counter", result["scan_counter"], float64(2))
 
 	c.send(6, "run", map[string]any{"args": []string{}})
 	_, rpcError, _, _ := c.answer(6)
@@ -221,7 +211,6 @@ exec git "$@"
 	result, _, run, _ := c.answer(1)
 	equal(t, "cancelled", result["cancelled"], true)
 	equal(t, "exit_code", result["exit_code"], float64(exitInterrupted.exit))
-	equal(t, "scan_counter", result["scan_counter"], float64(1))
 	equal(t, "the command's last event", run[len(run)-1]["ok"], false)
 
 	// Serve ending stops a command the same way, and waits for it: by
@@ -362,28 +351,6 @@ func TestWriterTeesEveryEvent(t *testing.T) {
 		logEvent{event: newEvent("log"), Level: levelWarn, Message: "careful; do this"},
 		logEvent{event: newEvent("log"), Level: levelDebug, Message: "seen 1"},
 	})
-}
-
-// TestReads is which command lines serve does not scan after: those that
-// name a command marked as changing nothing, wherever their flags are.
-func TestReads(t *testing.T) {
-	t.Parallel()
-	d := &serveDoor{commands: newRoot(&invocation{env: map[string]string{}, out: &writer{}})}
-	for _, c := range []struct {
-		args []string
-		want bool
-	}{
-		{[]string{"version"}, true},
-		{[]string{"skill", "diff", "notes", "--json"}, true},
-		{[]string{"--color", "off", "skill", "list", "--remote"}, true},
-		{[]string{"machine"}, true},
-		{[]string{"machine", "rename", "laptop"}, false},
-		{[]string{"skill", "new", "notes"}, false},
-		{[]string{"skill"}, false},
-		{[]string{"nope"}, false},
-	} {
-		equal(t, strings.Join(c.args, " "), d.reads(c.args), c.want)
-	}
 }
 
 // --json is added where the command line takes it.

@@ -1281,13 +1281,8 @@ The id of a request is a string or a number, and no two requests in progress on 
 | `exit_code` | integer or null | the command's exit code; `null` when a signal ended it |
 | `cancelled` | boolean | whether the request was cancelled before the command ended |
 | `timed_out` | boolean | whether the deadline passed before the command ended |
-| `instance_id` | string | this serve process's instance id |
-| `scan_counter` | integer | the counter of the current inventory once serve has scanned after the command; absent after a command that changes nothing, and when that scan failed |
-| `scan_error` | string | why that scan failed; absent otherwise |
 
-Serve scans after a command it ran, whatever its exit code, since a command that failed or was stopped may have changed something before it was. The scan is a refresh as `refresh` asks for one, so it begins after the command ended, and a changed inventory reaches the client before the response that names it. A client therefore sends no `refresh` after its own commands. A scan that finds nothing new emits no inventory, and the result names the counter of the one that is still current.
-
-Serve does not scan after a command that changes nothing an inventory shows, and answers as soon as the command has ended: `version`, `doctor`, `machine`, `config list`, `config get`, `source list`, `source read`, `source skills`, `skill list`, `skill diff`, `skill files` and `skill history`. The CLI marks these commands itself, serve reads the command line as the CLI does to find the command it names, and the desktop app takes the same list from `commands.gen.ts`, where it asks for no refresh after them. A command line that names no command is scanned after.
+Serve does not scan for a command it ran. A client that needs the inventory to hold what the command changed sends `refresh` once the command has ended, as the desktop app does after a command of its shell ([inventory ordering](inventory-ordering.md)): the scan begins after the request, and a changed inventory reaches the client before the response that names it.
 
 `refresh` is the stdin request, with the same rule for the scan that satisfies it; its result carries what `refresh_complete` carries for a scan that succeeded. `search` is the stdin request, answered the same way from the same index; its result carries what the `search` event carries.
 

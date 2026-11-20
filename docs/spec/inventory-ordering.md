@@ -14,7 +14,7 @@ At launch, before any serve child runs, the desktop may display the kept invento
 
 After a one-shot command terminates, including a partial failure or cancellation that might have changed state, the desktop sends a `refresh` request with a unique `request_id` to its active serve child. Command outcome and inventory freshness are separate states in the UI.
 
-A client of serve's WebSocket door runs its commands through serve with `run`, and sends no `refresh` after them: serve scans after a command it ran, by the rule for a refresh, and the result of `run` names the `scan_counter` of the inventory that holds what the command changed, which serve sent before it. A result with a `scan_error` cannot mark the inventory fresh. After a command the CLI marks as changing nothing, such as `skill diff`, serve does not scan and the result has no `scan_counter`: the desktop sends no `refresh` after those either.
+A client of serve's WebSocket door runs its commands through serve with `run`, and follows the same rule: serve does not scan for a command it ran, so the client sends the `refresh` method after one that might have changed state.
 
 Serve serializes scans. A refresh requires a scan begun after the request was received. A scan already in progress cannot satisfy it. Multiple requests received before a subsequent scan begins may share that scan. The initial scan may satisfy a request only if it begins after that request.
 

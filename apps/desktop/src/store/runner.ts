@@ -3,7 +3,7 @@
 // something, whatever its exit code, the serve child is asked to scan again: the screens redraw
 // from the inventory that follows, never from a result the app predicts. The command's outcome
 // and the inventory's freshness are separate states.
-import { CLI_COMMANDS, CLI_READS } from "#/cli/commands.gen.ts";
+import { CLI_COMMANDS } from "#/cli/commands.gen.ts";
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LogEvent, ProgressEvent } from "#/cli/events.gen.ts";
 import { cancel, run } from "#/cli/transport.ts";
@@ -22,8 +22,21 @@ import { refresh } from "#/store/feed.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 import type { Problem, Tone } from "#/store/store.ts";
 
-/** The commands that change nothing, as the CLI marks them: no refresh follows them, and they add no activity entry. */
-const READS = new Set(CLI_READS);
+/** The commands that change nothing: no refresh follows them, and they add no activity entry. */
+const READS = new Set([
+  "version",
+  "doctor",
+  "machine",
+  "config list",
+  "config get",
+  "source list",
+  "source read",
+  "source skills",
+  "skill list",
+  "skill diff",
+  "skill files",
+  "skill history",
+]);
 
 /** The command that `args` name: the longest run of leading words that is one. */
 export const commandOf = (args: readonly string[]): string => {

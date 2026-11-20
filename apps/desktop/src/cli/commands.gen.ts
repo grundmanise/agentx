@@ -118,20 +118,3 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   },
   version: {},
 };
-
-// The commands that change nothing an inventory shows: serve does not scan
-// after one, and the app asks for no refresh after one.
-export const CLI_READS: readonly string[] = [
-  "config get",
-  "config list",
-  "doctor",
-  "machine",
-  "skill diff",
-  "skill files",
-  "skill history",
-  "skill list",
-  "source list",
-  "source read",
-  "source skills",
-  "version",
-];

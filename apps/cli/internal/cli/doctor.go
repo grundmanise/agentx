@@ -28,7 +28,7 @@ func newDoctorCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:         "doctor",
 		Short:       "Check that agentx can run: git, home and the account repo",
-		Annotations: map[string]string{annotationSection: "diagnostics", annotationRead: "true"},
+		Annotations: map[string]string{annotationSection: "diagnostics"},
 		Args:        cobra.NoArgs,
 		Example:     examples("agentx doctor", "check git, agentx home and the account repo"),
 		RunE: func(cmd *cobra.Command, args []string) error {

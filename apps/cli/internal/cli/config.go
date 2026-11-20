@@ -45,7 +45,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:         "list",
 		Short:       "Print every setting",
-		Annotations: map[string]string{annotationSection: "settings", annotationRead: "true"},
+		Annotations: map[string]string{annotationSection: "settings"},
 		Args:        cobra.NoArgs,
 		Example:     examples("agentx config list", "every setting and its value"),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -61,7 +61,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:         "get <key>",
 		Short:       "Print one setting",
-		Annotations: map[string]string{annotationSection: "settings", annotationRead: "true"},
+		Annotations: map[string]string{annotationSection: "settings"},
 		Args:        cobra.ExactArgs(1),
 		Example:     examples("agentx config get label", "one setting"),
 		RunE: func(cmd *cobra.Command, args []string) error {

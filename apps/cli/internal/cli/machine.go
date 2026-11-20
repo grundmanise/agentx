@@ -32,7 +32,7 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "machine",
 		Short:       "Print this machine's id, label and agentx's paths",
-		Annotations: map[string]string{annotationSection: "machines", annotationRead: "true"},
+		Annotations: map[string]string{annotationSection: "machines"},
 		Args:        cobra.NoArgs,
 		Example: examples(
 			"agentx machine", "this machine's id, label and paths",

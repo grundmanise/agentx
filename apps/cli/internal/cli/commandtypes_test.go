@@ -40,14 +40,13 @@ func flagValues(set *pflag.FlagSet, into map[string]bool) error {
 // commandTree is every command of root that runs something, by its words
 // after the root's name, and the flags every command takes. A command
 // marked as a group only groups its subcommands; one that has subcommands
-// and is no group, as agentx machine, runs something too. reads are the
-// commands marked as changing nothing an inventory shows, sorted.
-func commandTree(root *cobra.Command) (commands map[string]map[string]bool, reads []string, global map[string]bool, err error) {
-	global = map[string]bool{}
+// and is no group, as agentx machine, runs something too.
+func commandTree(root *cobra.Command) (map[string]map[string]bool, map[string]bool, error) {
+	global := map[string]bool{}
 	if err := flagValues(root.PersistentFlags(), global); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	commands = map[string]map[string]bool{}
+	commands := map[string]map[string]bool{}
 	var walk func(cmd *cobra.Command) error
 	walk = func(cmd *cobra.Command) error {
 		for _, sub := range cmd.Commands() {
@@ -71,15 +70,10 @@ func commandTree(root *cobra.Command) (commands map[string]map[string]bool, read
 			}
 			words := strings.TrimPrefix(sub.CommandPath(), root.Name()+" ")
 			commands[words] = flags
-			if sub.Annotations[annotationRead] != "" {
-				reads = append(reads, words)
-			}
 		}
 		return nil
 	}
-	err = walk(root)
-	slices.Sort(reads)
-	return commands, reads, global, err
+	return commands, global, walk(root)
 }
 
 var identifier = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
@@ -109,7 +103,7 @@ func tsFlags(flags map[string]bool, indent string) string {
 
 // renderCommandTypes is the content of commandTypesFile.
 func renderCommandTypes() (string, error) {
-	commands, reads, global, err := commandTree(newRoot(&invocation{env: map[string]string{}, out: &writer{}}))
+	commands, global, err := commandTree(newRoot(&invocation{env: map[string]string{}, out: &writer{}}))
 	if err != nil {
 		return "", err
 	}
@@ -129,13 +123,7 @@ export type CliFlags = Readonly<Record<string, boolean>>;
 	for _, words := range slices.Sorted(maps.Keys(commands)) {
 		fmt.Fprintf(&b, "  %s: %s,\n", tsKey(words), tsFlags(commands[words], "  "))
 	}
-	b.WriteString("};\n\n")
-	b.WriteString("// The commands that change nothing an inventory shows: serve does not scan\n// after one, and the app asks for no refresh after one.\n")
-	b.WriteString("export const CLI_READS: readonly string[] = [\n")
-	for _, words := range reads {
-		fmt.Fprintf(&b, "  %q,\n", words)
-	}
-	b.WriteString("];\n")
+	b.WriteString("};\n")
 	return b.String(), nil
 }
 

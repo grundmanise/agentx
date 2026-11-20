@@ -14,7 +14,7 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "list",
 		Short:       "List the library: sources, states and placements",
-		Annotations: map[string]string{annotationSection: "skills", annotationRead: "true"},
+		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "List the skills in the library: each one's kind, state, source (where it is\n" +
 			"published to, and for one of your own forked from a skill of a shared source,\n" +
 			"the upstream it came from) and placements. With --remote, fetch the account\n" +

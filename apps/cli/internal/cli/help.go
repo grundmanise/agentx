@@ -24,11 +24,6 @@ const annotationSection = "agentx.section"
 // "<source>" for skill add. The Use line stays on the command's own page.
 const annotationSynopsis = "agentx.synopsis"
 
-// annotationRead marks a command that changes nothing an inventory shows.
-// Serve does not scan after one a client ran, and the desktop app asks for
-// no refresh after one.
-const annotationRead = "agentx.read"
-
 // section is one heading of the command list, on the root page and on the
 // page of a group whose commands fall under it.
 type section struct{ id, title string }
