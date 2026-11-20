@@ -711,6 +711,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
 | `code.gap` | 12 | `gap-x-code` | Between gutter and text |
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `code.min-height` | 200 | none: part of `file.open-min-height` | The least height a long patch's pane in What's new gives up to |
+| `file.open-min-height` | `file-row.height` + `code.min-height` + 2 | `min-h-file-open` | An open file's block in What's new: its row, its pane and its borders |
 | `code.height` | 340 | `h-code` | The SKILL.md pane while the files are read, at the pane's full height |
 | `code.loading-blur` | 8 | `blur-code-loading` | The stand-in SKILL.md under the spinner while the files are read |
 | `shell.panel-loading-blur` | 12 | `backdrop-blur-panel-loading` | The frosted pane over the kept inventory while the startup checks run (§8) |
@@ -1143,7 +1145,9 @@ The sheet frame (§6 "Sheet"). Content scrolls down only: a long line wraps, nev
 
 The sheet frame (§6 "Sheet"), for what an update changes before the user takes it. Opened from the Update skills dialog, it and its scrim take the dialog's layer, later in the document, so they sit above the dialog.
 
-- A patch with no lines to show, a read in progress and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
+- An open file's pane is as high as its lines, with no `code.max-height`: no empty pane under them. When the blocks overflow the sheet, a patch with more lines than fit in `code.min-height` gives up height, in proportion to its own, down to `file.open-min-height`, and scrolls inside; a shorter one keeps all its lines. Past that, the sheet's content scrolls. The card's items lay out in the sheet's column, each drawing its part of the card's border.
+- While the changes are read, every file the update check lists has its row, open unless the user closed it, over the loading pane of the File list (§6 "File list"), as high as its stand-in, with the spinner in the first one only. When the patches come in, the stand-ins fade out over them, so the blocks keep their place.
+- A patch with no lines to show and a failed read each say so in `type.secondary` `text.hint`; a failed read adds the CLI's message in `type.technical-sm` `text.caption` and raises no error toast.
 - An update from another machine cannot be diffed before it is taken: the sheet lists its files in the same card, status and path, with no chevron.
 
 ### Sheet (Activity log)

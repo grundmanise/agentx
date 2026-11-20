@@ -738,6 +738,10 @@
   --inset-file-row: 16px;
   --height-file-row: 44px;
   --max-height-code: 340px;
+  --min-height-code: 200px;
+  --min-height-file-open: calc(
+    var(--height-file-row) + var(--min-height-code) + 2px
+  );
   --height-code: 340px;
   --gap-code: 12px;
   --gap-hunk: 12px;
