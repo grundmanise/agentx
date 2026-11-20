@@ -106,6 +106,17 @@ func tools(node map[string]any) (rows []string, ids map[string]string) {
 	return rows, ids
 }
 
+// toolNamed is the tool of a node with that name.
+func toolNamed(node map[string]any, name string) map[string]any {
+	list, _ := node["tools"].([]any)
+	for _, item := range list {
+		if tool := item.(map[string]any); tool["name"] == name {
+			return tool
+		}
+	}
+	return nil
+}
+
 func TestScanHandshake(t *testing.T) {
 	t.Parallel()
 	if mcpServerErr != nil {
@@ -175,11 +186,32 @@ func TestScanHandshake(t *testing.T) {
 			variantB = node
 		}
 	}
+	// A tool is one identity across its versions: the echo tool's
+	// description differs between the variants, so its hash does, while its
+	// id and its schemas' hash do not.
 	_, idsA := tools(fix[0])
 	_, idsB := tools(fix[1])
 	equal(t, "add tool id", idsA["add"], idsB["add"])
-	if idsA["echo"] == idsB["echo"] {
-		t.Errorf("the echo tool has one id in both variants: %s", idsA["echo"])
+	equal(t, "echo tool id", idsA["echo"], idsB["echo"])
+	echoA, echoB := toolNamed(fix[0], "echo"), toolNamed(fix[1], "echo")
+	if echoA["hash"] == echoB["hash"] {
+		t.Errorf("the echo tool has one hash in both variants: %v", echoA["hash"])
+	}
+	equal(t, "echo schema_hash", echoA["schema_hash"], echoB["schema_hash"])
+	for _, field := range []string{"hash", "schema_hash"} {
+		if !hex64.MatchString(fmt.Sprint(echoA[field])) {
+			t.Errorf("echo %s = %v, want 64 hex characters", field, echoA[field])
+		}
+	}
+	equal(t, "echo output_schema", fmt.Sprint(echoA["output_schema"]), "map[properties:map[text:map[type:string]] type:object]")
+	add := toolNamed(fix[0], "add")
+	if _, ok := add["output_schema"]; ok {
+		t.Errorf("add carries an output_schema it never declared: %v", add)
+	}
+	equal(t, "add required", fmt.Sprint(add["input_schema"].(map[string]any)["required"]), "[a b]")
+	equal(t, "resource uri", toolNamed(fix[0], "notes")["uri"], "file:///notes.md")
+	if _, ok := toolNamed(fix[0], "summarize")["uri"]; ok {
+		t.Errorf("a prompt carries a uri: %v", toolNamed(fix[0], "summarize"))
 	}
 
 	web := nodes["web"][0]
@@ -268,6 +300,22 @@ func TestScanHandshake(t *testing.T) {
 	}
 	equal(t, "web signature after", plain["web"][0]["signature"], web["signature"])
 	equal(t, "hang signature after", plain["hang"][0]["signature"], "none")
+
+	// A snapshot keeps what compares a server's tools across machines: the
+	// server's logical id and each tool's id and hashes, as the inventory
+	// has them.
+	equal(t, "export exit", h.run("--json", "export").exit, 0)
+	var snapFix map[string]any
+	for _, s := range h.readExportFile(h.snapshotPath(defaultSnapshot))["mcp_servers"].([]any) {
+		if srv := s.(map[string]any); srv["name"] == "fix" {
+			snapFix = srv
+		}
+	}
+	equal(t, "snapshot logical_id", snapFix["logical_id"], plain["fix"][0]["logical_id"])
+	echo := toolNamed(snapFix, "echo")
+	equal(t, "snapshot echo id", echo["id"], idsB["echo"])
+	equal(t, "snapshot echo hash", echo["hash"], toolNamed(plain["fix"][0], "echo")["hash"])
+	equal(t, "snapshot echo schema_hash", echo["schema_hash"], echoA["schema_hash"])
 
 	// The text output of a handshake, which prints no secret either.
 	args = []string{"scan", "--handshake"}

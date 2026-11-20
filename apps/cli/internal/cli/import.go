@@ -204,7 +204,7 @@ func decodeSnapshot(path string, b []byte) (snapshot, error) {
 	switch {
 	case envelope.SchemaVersion == nil:
 		return snapshot{}, notAnExport(path, "it carries no schema_version")
-	case *envelope.SchemaVersion != snapshotSchemaVersion:
+	case *envelope.SchemaVersion != snapshotSchemaVersion && *envelope.SchemaVersion != readableSnapshotVersion:
 		return snapshot{}, fail(exitRefused,
 			fmt.Sprintf("%s is a snapshot of schema version %d, and this agentx reads version %d", path, *envelope.SchemaVersion, snapshotSchemaVersion),
 			"export it again from that machine with this version of agentx, or upgrade agentx here")

@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"encoding/json"
 	"os"
 	"slices"
 
@@ -93,7 +94,7 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 			signature, tools, at = d.fresh.Signature, s.tools(d.logical, d.fresh.Items), d.at
 			fresh[d.logical] = home.Handshake{Signature: signature, Tools: tools, At: at}
 		} else if h, ok := s.stored[d.logical]; ok {
-			signature, tools, at = h.Signature, h.Tools, h.At
+			signature, tools, at = h.Signature, keyed(d.logical, h.Tools), h.At
 		}
 		physical := id("server", d.logical, s.MachineID, signature)
 		node, ok := s.servers[physical]
@@ -132,19 +133,55 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 	return fresh
 }
 
-// tools are the nodes of what a server exposed, one per distinct item.
+// tools are the nodes of what a server exposed, one per identity.
 func (s *Scan) tools(logical string, items []mcp.Item) []home.Tool {
-	tools := []home.Tool{}
-	seen := map[string]bool{}
+	tools := make([]home.Tool, 0, len(items))
 	for _, it := range items {
-		tid := id("tool", logical, it.Hash)
-		if seen[tid] {
+		tools = append(tools, home.Tool{
+			Kind: it.Kind, Name: it.Name, URI: it.URI, Description: it.Description,
+			InputSchema: raw(it.InputSchema), OutputSchema: raw(it.OutputSchema),
+			Hash: it.Hash, SchemaHash: it.SchemaHash,
+		})
+	}
+	return keyed(logical, tools)
+}
+
+// keyed gives every tool its identity and keeps the first of those sharing
+// one, in the order the handshake sorted them. The identity is computed
+// afresh, so a stored entry an earlier agentx keyed by its hash takes this
+// one too.
+func keyed(logical string, tools []home.Tool) []home.Tool {
+	out := []home.Tool{}
+	seen := map[string]bool{}
+	for _, t := range tools {
+		t.ID = toolID(logical, t)
+		if seen[t.ID] {
 			continue
 		}
-		seen[tid] = true
-		tools = append(tools, home.Tool{ID: tid, Kind: it.Kind, Name: it.Name, Description: it.Description})
+		seen[t.ID] = true
+		out = append(out, t)
 	}
-	return tools
+	return out
+}
+
+// toolID is what a tool is, whatever its definition: its server's logical
+// id, its kind and its key, the URI of a resource or a resource template and
+// the name of anything else, which the protocol makes unique within a
+// server. It is the same on every machine the server's logical id is.
+func toolID(logical string, t home.Tool) string {
+	key := t.Name
+	if t.URI != "" && (t.Kind == mcp.KindResource || t.Kind == mcp.KindResourceTemplate) {
+		key = t.URI
+	}
+	return id("tool", logical, t.Kind, key)
+}
+
+// raw is canonical JSON as a value to write, nil when absent.
+func raw(canonical string) json.RawMessage {
+	if canonical == "" {
+		return nil
+	}
+	return json.RawMessage(canonical)
 }
 
 // addPlugin records p inside conf with an edge from conf, then the skills

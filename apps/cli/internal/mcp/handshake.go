@@ -31,10 +31,14 @@ const protocolVersion = "2025-11-25"
 
 // Item is one tool, prompt, resource or resource template a server exposes.
 type Item struct {
-	Kind        string // tool, prompt, resource or resource_template
-	Name        string
-	Description string
-	Hash        string // hex SHA-256 over the item's serialisation, see signature
+	Kind         string // tool, prompt, resource or resource_template
+	Name         string
+	URI          string // a resource's URI, a resource template's URI template
+	Description  string
+	InputSchema  string // canonical JSON, empty when absent
+	OutputSchema string // canonical JSON, empty when absent
+	Hash         string // hex SHA-256 over the item's serialisation, see signature
+	SchemaHash   string // hex SHA-256 over the two schemas joined by NUL
 
 	serialised string
 }
@@ -268,6 +272,8 @@ type listing struct {
 
 type entry struct {
 	Name         string          `json:"name"`
+	URI          string          `json:"uri"`
+	URITemplate  string          `json:"uriTemplate"`
 	Description  string          `json:"description"`
 	InputSchema  json.RawMessage `json:"inputSchema"`
 	OutputSchema json.RawMessage `json:"outputSchema"`
@@ -285,7 +291,15 @@ func (l listing) item(e entry) (Item, error) {
 	}
 	serialised := strings.Join([]string{l.kind, e.Name, e.Description, input, output}, "\x00")
 	sum := sha256.Sum256([]byte(serialised))
-	return Item{Kind: l.kind, Name: e.Name, Description: e.Description, Hash: hex.EncodeToString(sum[:]), serialised: serialised}, nil
+	schemas := sha256.Sum256([]byte(input + "\x00" + output))
+	uri := e.URI
+	if l.kind == KindResourceTemplate {
+		uri = e.URITemplate
+	}
+	return Item{
+		Kind: l.kind, Name: e.Name, URI: uri, Description: e.Description, InputSchema: input, OutputSchema: output,
+		Hash: hex.EncodeToString(sum[:]), SchemaHash: hex.EncodeToString(schemas[:]), serialised: serialised,
+	}, nil
 }
 
 // canonical renders raw JSON with object keys sorted, no whitespace, numbers

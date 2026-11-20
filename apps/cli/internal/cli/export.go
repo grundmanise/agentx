@@ -23,9 +23,14 @@ import (
 // writes. It is the version of that document alone: the settings object
 // inside it carries the settings schema version, and an event carries the
 // output schema version. Version 1 was the export document of lineage
-// records an earlier agentx wrote; a reader refuses it like any other
-// version but this one.
-const snapshotSchemaVersion = 2
+// records an earlier agentx wrote, and a reader refuses it like any other
+// version but this one and readableSnapshotVersion.
+const snapshotSchemaVersion = 3
+
+// readableSnapshotVersion is the earlier version a reader takes as well:
+// version 2 lacks only the fields version 3 added, a server's logical id
+// and a tool's id, definition and hashes, which an import never reads.
+const readableSnapshotVersion = 2
 
 // settingsSchemaVersion is the version of the machine settings file this
 // CLI writes, which is what an import may restore.
@@ -38,8 +43,11 @@ const settingsSchemaVersion = home.SettingsSchemaVersion
 // published to, the version it is at and the configurations it is placed
 // in, by configuration id, and the MCP servers and plugins as the scan found
 // them. It leaves out the absolute paths, the state and drift, the scan's
-// counters and warnings, and every id of the inventory's graph: the
-// physical and logical ids, the occurrence ids and the edges. Nothing it
+// counters and warnings, and every id of the inventory's graph that names
+// this machine: the physical ids, the logical ids of configurations and
+// skills, the occurrence ids and the edges. It keeps a server's logical id
+// and its tools' ids, which are the same on every machine the server is, so
+// that the tools of one server can be compared across machines. Nothing it
 // holds is the content of a skill.
 //
 // A snapshot is one machine's whole state, so it always holds the settings.
@@ -108,9 +116,10 @@ type snapshotSkill struct {
 	Placements      []string `json:"placements"`
 }
 
-// snapshotServer is one MCP server node of the inventory, without its ids
-// and when its signature was taken.
+// snapshotServer is one MCP server node of the inventory, without its
+// physical id and when its signature was taken.
 type snapshotServer struct {
+	LogicalID   string                     `json:"logical_id,omitempty"` // absent from a version 2 snapshot
 	Name        string                     `json:"name"`
 	Signature   string                     `json:"signature"`
 	Tools       []snapshotTool             `json:"tools,omitempty"`
@@ -118,11 +127,18 @@ type snapshotServer struct {
 }
 
 // snapshotTool is one tool, prompt, resource or resource template a server
-// exposed, without its id.
+// exposed, as the inventory has it. A version 2 snapshot holds its kind,
+// name and description alone.
 type snapshotTool struct {
-	Kind        string `json:"kind"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	ID           string          `json:"id,omitempty"`
+	Kind         string          `json:"kind"`
+	Name         string          `json:"name"`
+	URI          string          `json:"uri,omitempty"`
+	Description  string          `json:"description"`
+	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
+	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
+	Hash         string          `json:"hash,omitempty"`
+	SchemaHash   string          `json:"schema_hash,omitempty"`
 }
 
 // snapshotServerOccurrence is one declaration of a server, without its id,
@@ -437,9 +453,9 @@ func snapshotConfigurations(inventory scan.Inventory) []snapshotConfiguration {
 func snapshotServers(inventory scan.Inventory) []snapshotServer {
 	servers := make([]snapshotServer, 0, len(inventory.MCPServers))
 	for _, node := range inventory.MCPServers {
-		srv := snapshotServer{Name: node.Name, Signature: node.Signature, Occurrences: []snapshotServerOccurrence{}}
+		srv := snapshotServer{LogicalID: node.LogicalID, Name: node.Name, Signature: node.Signature, Occurrences: []snapshotServerOccurrence{}}
 		for _, tool := range node.Tools {
-			srv.Tools = append(srv.Tools, snapshotTool{Kind: tool.Kind, Name: tool.Name, Description: tool.Description})
+			srv.Tools = append(srv.Tools, snapshotTool(tool))
 		}
 		for _, o := range node.Occurrences {
 			srv.Occurrences = append(srv.Occurrences, snapshotServerOccurrence{

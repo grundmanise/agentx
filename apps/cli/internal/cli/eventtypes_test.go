@@ -218,6 +218,8 @@ var valueLists = []valueList{
 // say it: raw JSON, which the CLI writes as it was read.
 var typeOverrides = []typeOverride{
 	{fieldRef{home.Settings{}, "CopyMode"}, "Record<string, string[]>"},
+	{fieldRef{home.Tool{}, "InputSchema"}, "Record<string, unknown>"},
+	{fieldRef{home.Tool{}, "OutputSchema"}, "Record<string, unknown>"},
 }
 
 // typeNames names the structs whose Go name would read wrongly in the app or
