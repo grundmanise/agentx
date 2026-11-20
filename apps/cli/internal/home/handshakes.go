@@ -18,12 +18,19 @@ type Handshake struct {
 	At        string `json:"at"` // RFC 3339, UTC
 }
 
-// Tool is one tool, prompt, resource or resource template of a server.
+// Tool is one tool, prompt, resource or resource template of a server: its
+// identity, which stays the same when its definition changes, the
+// definition and the hashes that version it.
 type Tool struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"` // tool, prompt, resource or resource_template
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	ID           string          `json:"id"`
+	Kind         string          `json:"kind"` // tool, prompt, resource or resource_template
+	Name         string          `json:"name"`
+	URI          string          `json:"uri,omitempty"` // a resource's URI, a resource template's URI template
+	Description  string          `json:"description"`
+	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
+	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
+	Hash         string          `json:"hash,omitempty"`        // the whole definition; absent from an entry an earlier agentx stored
+	SchemaHash   string          `json:"schema_hash,omitempty"` // the two schemas alone; absent likewise
 }
 
 func handshakesPath(dir string) string { return filepath.Join(dir, "handshakes.json") }

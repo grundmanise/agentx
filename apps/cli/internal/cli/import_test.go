@@ -540,8 +540,8 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"trailing rubbish", soundSnapshot + "}", "not an agentx snapshot"},
 		{"no version", `{"settings":{},"skills":[]}`, "carries no schema_version"},
 		{"settings of JSON null", edited(func(doc map[string]any) { doc["settings"] = nil }), "carries no settings"},
-		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 3 }), "schema version 3, and this agentx reads version 2"},
-		{"the export document of version 1", edited(func(doc map[string]any) { doc["schema_version"] = 1 }), "schema version 1, and this agentx reads version 2"},
+		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 4 }), "schema version 4, and this agentx reads version 3"},
+		{"the export document of version 1", edited(func(doc map[string]any) { doc["schema_version"] = 1 }), "schema version 1, and this agentx reads version 3"},
 		{"a field agentx does not know", edited(func(doc map[string]any) { doc["inventory"] = map[string]any{} }), "not an agentx snapshot"},
 		{"a server field agentx does not know", edited(func(doc map[string]any) {
 			doc["mcp_servers"] = []any{map[string]any{"name": "s", "physical_id": "x"}}
