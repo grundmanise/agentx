@@ -15,6 +15,7 @@ import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import {
   ExpandToggle,
   FilterChip,
+  FilterTagsChip,
   SortToggle,
 } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
@@ -73,15 +74,25 @@ const agentChipLabel = (agents: string[], chosen: Configuration[]): string => {
   return chosen[0]?.name ?? one;
 };
 
-/** The chip in the filter row that echoes the agent filter: one agent, or how many. */
+/** How many logos the agent chip shows at rest: its tags name the rest. */
+const CHIP_LOGOS = 3;
+
+/**
+ * The chip in the filter row that echoes the agent filter. One agent: its logo and name, with a
+ * cross that clears it. Several: a few logos and how many, opening on hover or focus into a
+ * removable tag per chosen agent (`FilterTagsChip`).
+ */
 export const AgentFilterChip = ({
   agents,
   configurations,
   onClear,
+  onRemove,
 }: {
   agents: string[];
   configurations: Configuration[];
   onClear: () => void;
+  /** Takes one agent, a configuration id or `UNIVERSAL`, off the filter. */
+  onRemove: (agent: string) => void;
 }) => {
   const universal = configurations.filter((c) => c.reads_library);
   const chosen = agents
@@ -90,16 +101,63 @@ export const AgentFilterChip = ({
     )
     .filter((c, i, all) => all.indexOf(c) === i);
   const [single] = chosen;
-  const oneAgent = agents.length === 1 && agents[0] !== UNIVERSAL;
+  const summary = (
+    <LogoStack
+      clients={chosen.slice(0, CHIP_LOGOS)}
+      size={16}
+      tooltip={false}
+      decorative
+    />
+  );
+  if (agents.length === 1) {
+    return (
+      <FilterChip clearLabel="Clear agents" onClear={onClear}>
+        {agents[0] !== UNIVERSAL && single !== undefined ? (
+          <AgentLogo client={single} size={16} />
+        ) : (
+          summary
+        )}
+        <span className="truncate">{agentChipLabel(agents, chosen)}</span>
+      </FilterChip>
+    );
+  }
+  const tags = agents.map((id) => {
+    if (id === UNIVERSAL) {
+      return {
+        icon: (
+          <LogoStack
+            clients={universal.slice(0, 2)}
+            size={16}
+            tooltip={false}
+            decorative
+          />
+        ),
+        key: id,
+        label: "Universal",
+      };
+    }
+    const configuration = configurations.find((c) => c.id === id);
+    return {
+      icon:
+        configuration === undefined ? null : (
+          <AgentLogo
+            client={configuration}
+            size={16}
+            tooltip={false}
+            decorative
+          />
+        ),
+      key: id,
+      label: configuration?.name ?? id,
+    };
+  });
   return (
-    <FilterChip clearLabel="Clear agents" onClear={onClear}>
-      {oneAgent && single !== undefined ? (
-        <AgentLogo client={single} size={16} />
-      ) : (
-        <LogoStack clients={chosen} size={16} />
-      )}
-      <span className="truncate">{agentChipLabel(agents, chosen)}</span>
-    </FilterChip>
+    <FilterTagsChip
+      summary={summary}
+      label={agentChipLabel(agents, chosen)}
+      tags={tags}
+      onRemove={onRemove}
+    />
   );
 };
 
@@ -826,6 +884,12 @@ export const SkillList = ({
               configurations={configurations}
               onClear={() => {
                 onFilters({ ...filters, agents: [] });
+              }}
+              onRemove={(agent) => {
+                onFilters({
+                  ...filters,
+                  agents: filters.agents.filter((a) => a !== agent),
+                });
               }}
             />
           )}

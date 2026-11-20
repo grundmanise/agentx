@@ -80,6 +80,79 @@ export const FilterChip = ({
   </span>
 );
 
+/** One applied value in a `FilterTagsChip`: what it shows, and the key its removal reports. */
+export interface FilterTag {
+  key: string;
+  label: string;
+  /** A mark before the label, such as an agent's logo. */
+  icon: ReactNode;
+}
+
+/**
+ * A chip in the filter row echoing several applied values of one filter. At rest it shows a
+ * summary: a few marks and a count. Pointing at it, or tabbing into it, opens a panel over the list
+ * in the search field's surface, from the chip's own place, with the summary on top and one tag
+ * per value below, inset like the summary's marks, which wrap and scroll past
+ * `filter-tags.max-height`. The tags run to the panel's bottom edge, so a tag cut there says the
+ * list scrolls; their bottom padding comes only at the end of the scroll. A tag is a button that
+ * removes its value; pointing at it shows a cross over the end of its label. The panel has no
+ * close control: it goes when the pointer or the focus leaves it.
+ */
+export const FilterTagsChip = ({
+  summary,
+  label,
+  tags,
+  onRemove,
+}: {
+  /** The marks shown at rest, such as a few logos. */
+  summary: ReactNode;
+  /** The count, such as "17 agents"; it also names the tags' group. */
+  label: string;
+  tags: FilterTag[];
+  onRemove: (key: string) => void;
+}) => (
+  <div className="group/tags relative inline-flex min-w-0">
+    <span
+      aria-hidden
+      className="rounded-pill bg-filter-chip-bg type-button-sm text-filter-chip-text h-filter inline-flex min-w-0 items-center gap-2 pr-3 pl-2 group-focus-within/tags:invisible group-hover/tags:invisible"
+    >
+      {summary}
+      <span className="truncate">{label}</span>
+    </span>
+    <fieldset
+      aria-label={label}
+      className="rounded-popover border-input-border bg-input-bg shadow-popover w-filter-tags pointer-events-none absolute -top-px -left-px z-30 m-0 flex min-w-0 flex-col overflow-hidden border opacity-0 group-focus-within/tags:pointer-events-auto group-focus-within/tags:opacity-100 group-hover/tags:pointer-events-auto group-hover/tags:opacity-100"
+    >
+      <span
+        aria-hidden
+        className="type-button-sm text-filter-chip-text h-filter flex flex-none items-center gap-2 pr-3 pl-2"
+      >
+        {summary}
+        <span className="truncate">{label}</span>
+      </span>
+      <span className="max-h-filter-tags flex flex-wrap gap-1.5 overflow-y-auto overscroll-contain px-2 pt-1.5 pb-2.5">
+        {tags.map((tag) => (
+          <button
+            key={tag.key}
+            type="button"
+            aria-label={`Remove ${tag.label}`}
+            onClick={() => {
+              onRemove(tag.key);
+            }}
+            className="group/tag rounded-pill bg-filter-chip-bg type-secondary text-text-secondary hover:bg-filter-chip-hover hover:text-text-primary relative inline-flex h-6 max-w-full min-w-0 items-center gap-1.5 overflow-hidden pr-2.5 pl-1"
+          >
+            {tag.icon}
+            <span className="truncate">{tag.label}</span>
+            <span className="from-filter-chip-hover via-filter-chip-hover absolute inset-y-0 right-0 flex items-center bg-linear-to-l to-transparent pr-1.5 pl-4 opacity-0 group-hover/tag:opacity-100 group-focus-visible/tag:opacity-100">
+              <CloseIcon size="xs" />
+            </span>
+          </button>
+        ))}
+      </span>
+    </fieldset>
+  </div>
+);
+
 const sortVariants = cva(
   "rounded-button type-button-sm text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary inline-flex h-7 items-center gap-1 px-2 font-medium",
   {
