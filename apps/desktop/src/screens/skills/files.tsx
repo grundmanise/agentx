@@ -174,7 +174,8 @@ const MAX_PLACE_LOGOS = 4;
 
 /**
  * Who uses a place of Show in Finder's menu: the library by name; one agent by its logo and name;
- * several, whose symlinks lead there, by their logos stacked, each name in a Tooltip.
+ * several, whose symlinks lead there, by their logos stacked, whose "+n" lists every name beside
+ * the menu.
  */
 const PlaceAgents = ({
   clients,
@@ -191,6 +192,7 @@ const PlaceAgents = ({
         hidden={clients.slice(MAX_PLACE_LOGOS)}
         size={20}
         surface="overlay"
+        listSide="left"
       />
     );
   }

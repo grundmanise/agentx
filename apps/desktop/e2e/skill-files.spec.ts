@@ -826,6 +826,17 @@ test("symlinks of many agents that lead to one place are one row of the menu", a
       "u"
     )
   );
+  // Pointing at the count lists all 24, to the menu's left.
+  await links.getByText("+20").hover();
+  const listed = page.getByRole("list", { name: "Agents" });
+  await expect(listed.getByRole("listitem")).toHaveCount(24);
+  const [card, menuBox] = await Promise.all([
+    listed.boundingBox(),
+    menu.boundingBox(),
+  ]);
+  expect((card?.x ?? 0) + (card?.width ?? 0)).toBeLessThanOrEqual(
+    menuBox?.x ?? 0
+  );
   // The copy keeps its own row, with its agent's name and path.
   await expect(items.last()).toHaveText(`Junie${junie}`);
   await links.click();
