@@ -4,9 +4,10 @@
 // them. `list` is the Sources list (DESIGN.md §6 "Sources screen"): each item its own card, which
 // the parent places. Both have a chevron that turns down when a row is open. Several rows can be
 // open at once, so the root is always `type="multiple"`; its animation classes are dropped
-// (DESIGN.md §8). A `card` set to `fill` grows to the height its flex column gives it: the closed
-// rows keep their height and the open ones share the rest, each at least `code.min-height` under
-// its row. Below that, the card keeps those heights and its column scrolls.
+// (DESIGN.md §8). A `card` set to `fill` lays its items out in the parent's flex column, each as
+// high as its content: an item set to `content` keeps that height, and an open one set to
+// `scroll` gives up height, never below `file.open-min-height`, when the items overflow the
+// column, which scrolls past that.
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { Accordion as AccordionPrimitive } from "radix-ui";
@@ -15,16 +16,26 @@ import type { ReactNode } from "react";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import type { OwnProps } from "#/lib/utils.ts";
 
-const accordionVariants = cva("flex flex-col", {
+const accordionVariants = cva("", {
+  compoundVariants: [
+    {
+      className:
+        "rounded-file-card border-card-border bg-card-bg flex flex-col overflow-hidden border",
+      fill: false,
+      variant: "card",
+    },
+    // Its items lay out in the parent's flex column, which scrolls when they overflow it.
+    { className: "contents", fill: true, variant: "card" },
+  ],
   defaultVariants: { fill: false, variant: "card" },
   variants: {
     fill: {
       false: "",
-      true: "shrink-0 grow",
+      true: "",
     },
     variant: {
-      card: "rounded-file-card border-card-border bg-card-bg overflow-hidden border",
-      list: "",
+      card: "",
+      list: "flex flex-col",
     },
   },
 });
@@ -34,6 +45,19 @@ const accordionVariants = cva("flex flex-col", {
 // `add-card.hover-border`; selected, `add-card.selected-bg` and `add-card.selected-border`.
 const itemVariants = cva("", {
   compoundVariants: [
+    {
+      className: "border-file-row-divider border-b last:border-b-0",
+      fill: false,
+      variant: "card",
+    },
+    // A row of a card whose items lay out in the parent's column: the item draws its part of the
+    // card's border, the first rounding the top and the last the bottom.
+    {
+      className:
+        "border-card-border bg-card-bg first:rounded-t-file-card last:rounded-b-file-card not-last:border-b-file-row-divider flex shrink-0 flex-col overflow-hidden border-x border-b first:border-t",
+      fill: ["content", "scroll"],
+      variant: "card",
+    },
     {
       className:
         "border-card-border bg-card-bg hover:border-add-card-hover-border",
@@ -49,15 +73,16 @@ const itemVariants = cva("", {
   defaultVariants: { fill: false, selected: false, variant: "card" },
   variants: {
     fill: {
+      content: "",
       false: "",
-      true: "data-[state=open]:min-h-file-open flex shrink-0 flex-col data-[state=open]:shrink data-[state=open]:grow data-[state=open]:basis-0",
+      scroll: "data-[state=open]:min-h-file-open data-[state=open]:shrink",
     },
     selected: {
       false: "",
       true: "",
     },
     variant: {
-      card: "border-file-row-divider border-b last:border-b-0",
+      card: "",
       list: "rounded-add-card overflow-hidden border",
     },
   },
@@ -299,7 +324,7 @@ const contentVariants = cva("overflow-hidden", {
   variants: {
     fill: {
       false: "",
-      true: "min-h-code flex grow basis-0 flex-col",
+      true: "flex min-h-0 flex-col",
     },
   },
 });

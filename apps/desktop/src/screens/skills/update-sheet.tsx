@@ -11,7 +11,7 @@ import type {
   FileStatus,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
-import { CodePane, parsePatch } from "#/components/code-pane.tsx";
+import { CodePane, codeLines, parsePatch } from "#/components/code-pane.tsx";
 import {
   Accordion,
   AccordionContent,
@@ -64,11 +64,21 @@ const READING = "Reading the changes…";
 
 const BINARY = /^Binary files /mu;
 
+/**
+ * The most lines a patch has that keeps its block as high as all of them in a short window: they
+ * fit in `code.min-height`, so the block never gives up height for the others.
+ */
+const SHORT_PATCH_LINES = 7;
+
+/** Whether the block of `patch` gives up height, down to its minimum, when the blocks overflow. */
+const fillOf = (patch: string) =>
+  codeLines({ patch }).length > SHORT_PATCH_LINES ? "scroll" : "content";
+
 /** One file's patch: its hunks in the Code pane, or what the patch says when it has none. */
 const Patch = ({ path, patch }: { path: string; patch: string }) => {
   if (parsePatch(patch).length === 0) {
     return (
-      <p className="bg-code-bg py-code px-file-row type-secondary text-text-hint m-0 grow">
+      <p className="bg-code-bg py-code px-file-row type-secondary text-text-hint m-0">
         {BINARY.test(patch) ? "Binary file" : "No line changes"}
       </p>
     );
@@ -104,7 +114,7 @@ const FilesOnly = ({ update }: { update: UpdateAvailableEvent }) => (
   </div>
 );
 
-const revealVariants = cva("flex min-h-0 grow basis-0 flex-col", {
+const revealVariants = cva("flex min-h-0 flex-col", {
   variants: {
     revealing: {
       false: "",
@@ -135,14 +145,14 @@ const Reading = ({
   return (
     <Accordion
       label="Changes"
-      fill={open.length > 0}
+      fill
       value={open}
       onValueChange={(value) => {
         onClosedChange(paths.filter((p) => !value.includes(p)));
       }}
     >
       {files.map((file, i) => (
-        <AccordionItem key={file.path} value={file.path} fill>
+        <AccordionItem key={file.path} value={file.path} fill="scroll">
           <AccordionTrigger label={file.path} open={open.includes(file.path)}>
             <Status status={file.status} />
             <Path path={file.path} />
@@ -157,9 +167,9 @@ const Reading = ({
 };
 
 /**
- * What the update changes, from `skill diff <name> --update`, one block per file, all open. The
- * open blocks share the sheet's height, each at least `code.min-height`, and the sheet scrolls
- * past that.
+ * What the update changes, from `skill diff <name> --update`, one block per file, all open. A
+ * block is as high as its lines. When the blocks overflow the sheet, a long patch's block gives up
+ * height, down to `file.open-min-height`, and the sheet scrolls past that.
  */
 const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
   const stored = useAppStore((s) => s.updateDiffs[update.name]);
@@ -210,21 +220,25 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
   return (
     <Accordion
       label="Changes"
-      fill={open.length > 0}
+      fill
       value={open}
       onValueChange={(value) => {
         setClosed(paths.filter((p) => !value.includes(p)));
       }}
     >
       {diffs.map((diff, i) => (
-        <AccordionItem key={diff.path} value={diff.path} fill>
+        <AccordionItem
+          key={diff.path}
+          value={diff.path}
+          fill={fillOf(diff.patch)}
+        >
           <AccordionTrigger label={diff.path} open={open.includes(diff.path)}>
             <Status status={diff.status} />
             <Path path={diff.path} />
           </AccordionTrigger>
           <AccordionContent fill>
             {/* One tree, faded in or not, so that the pane is not remounted when the fade ends. */}
-            <div className="relative flex min-h-0 grow basis-0 flex-col">
+            <div className="relative flex min-h-0 flex-col">
               <div className={revealVariants({ revealing })}>
                 <Patch path={diff.path} patch={diff.patch} />
               </div>

@@ -115,24 +115,13 @@ test.describe("the What's new sheet", () => {
       "and convert",
     ]);
 
-    // The open blocks share the sheet's height down to its bottom padding.
-    const card = sheet(page).locator('[data-slot="accordion"]');
-    const gap = await sheet(page).evaluate(
-      (el, cardEl) =>
-        el.getBoundingClientRect().bottom -
-        Number(getComputedStyle(el).borderBottomWidth.replace("px", "")) -
-        Number(getComputedStyle(el).paddingBottom.replace("px", "")) -
-        cardEl.getBoundingClientRect().bottom,
-      await card.elementHandle()
-    );
-    expect(Math.abs(gap)).toBeLessThan(1);
-    const heights = await Promise.all(
-      ["SKILL.md", "scripts/convert.py"].map(async (path) => {
-        const patchBox = await patch(page, path).boundingBox();
-        return patchBox?.height ?? 0;
-      })
-    );
-    expect(Math.abs((heights[0] ?? 0) - (heights[1] ?? 0))).toBeLessThan(2);
+    // A block is as high as its lines: a short patch leaves no empty pane under them.
+    const short = await patch(page, "scripts/convert.py").evaluate((el) => ({
+      client: el.clientHeight,
+      scroll: el.scrollHeight,
+    }));
+    expect(short.client).toBe(short.scroll);
+    expect(short.client).toBeLessThan(100);
 
     // A block closes and opens again.
     await block(page, "SKILL.md").click();
@@ -155,6 +144,50 @@ test.describe("the What's new sheet", () => {
       .getByRole("button", { exact: true, name: "Close" })
       .click();
     await expect(sheet(page)).toHaveCount(0);
+  });
+
+  test("lets a long patch take the sheet's height and scroll inside it", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "review");
+    const lines = Array.from({ length: 80 }, (_, i) => `+Step ${i + 1}.`);
+    cli.register(["skill", "diff", "review", "--update"], {
+      events: [
+        {
+          name: "review",
+          patch: [
+            "diff --git a/SKILL.md b/SKILL.md",
+            "--- a/SKILL.md",
+            "+++ b/SKILL.md",
+            "@@ -0,0 +1,80 @@",
+            ...lines,
+            "",
+          ].join("\n"),
+          path: "SKILL.md",
+          status: "modified",
+          type: "diff",
+        },
+      ],
+    });
+    await seeChanges(page, "review").click();
+    const longPane = patch(page, "SKILL.md");
+    await expect(longPane).toBeVisible();
+    // The block ends at the sheet's bottom padding, and its lines scroll inside it.
+    const gap = await sheet(page).evaluate(
+      (el, paneEl) =>
+        el.getBoundingClientRect().bottom -
+        Number(getComputedStyle(el).borderBottomWidth.replace("px", "")) -
+        Number(getComputedStyle(el).paddingBottom.replace("px", "")) -
+        (paneEl?.getBoundingClientRect().bottom ?? 0),
+      await longPane.elementHandle()
+    );
+    expect(Math.abs(gap)).toBeLessThan(2);
+    const sizes = await longPane.evaluate((el) => ({
+      client: el.clientHeight,
+      scroll: el.scrollHeight,
+    }));
+    expect(sizes.scroll).toBeGreaterThan(sizes.client);
   });
 
   test("keeps an open block at least code.min-height high in a short window, and scrolls", async ({

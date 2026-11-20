@@ -278,7 +278,7 @@ const loadingVariants = cva("bg-code-bg overflow-hidden", {
   compoundVariants: [
     { className: "h-code", height: "capped", leaving: false },
     {
-      className: "flex min-h-0 grow basis-0 flex-col",
+      className: "flex min-h-0 flex-col",
       height: "fill",
       leaving: false,
     },
@@ -311,7 +311,7 @@ const revealVariants = cva("", {
  * spinner on top, at the Code pane's full height. `leaving`, it lies over the real SKILL.md as
  * that comes in and fades out, hidden from assistive technology, then calls `onLeft`. `label` is
  * what it says to assistive technology. `height` is the Code pane's: `capped` at `code.height`, or
- * `fill` to take the room its flex column gives it. `spinner` false leaves the spinner and its
+ * `fill`, as high as the stand-in while its flex column has the room. `spinner` false leaves the spinner and its
  * status to another loading pane beside this one.
  */
 export const LoadingPane = ({
@@ -342,7 +342,7 @@ export const LoadingPane = ({
     <div
       aria-hidden
       inert
-      className="blur-code-loading pointer-events-none flex min-h-0 grow basis-0 flex-col select-none"
+      className="blur-code-loading pointer-events-none flex min-h-0 flex-col select-none"
     >
       <CodePane
         path={SKILL_MD}

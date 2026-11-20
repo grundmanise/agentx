@@ -4,7 +4,7 @@ import { DefaultLinesDiffComputer } from "#/vendor/vscode-diff/index.ts";
 
 // The Code pane (DESIGN.md §6 "Code pane"): a file's lines in a grid of line number, marker and
 // text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it, or, set to
-// `fill`, as high as its column lets it, at least `code.min-height`. The tints
+// `fill`, as high as its lines while its flex column has the room, and scrolling past it. The tints
 // of a change: an added line with "+" in `accent.primary` on `diff.added-bg`, the palette's green,
 // a removed line with "−" in `accent.danger` on
 // `diff.removed-bg` and no number. Within a change, the characters that differ between its removed
@@ -434,8 +434,8 @@ export interface CodePaneProps {
    */
   tint?: "added" | "removed";
   /**
-   * How high the pane is: `capped` at `code.max-height`, or `fill` to take the room its flex
-   * column gives it, scrolling past it.
+   * How high the pane is at most: `capped` at `code.max-height`, or `fill` to give up height when
+   * its flex column has less room than its lines, scrolling past it.
    */
   height?: "capped" | "fill";
 }
@@ -445,7 +445,7 @@ const paneVariants = cva("bg-code-bg py-code type-code overflow-auto", {
   variants: {
     height: {
       capped: "max-h-code",
-      fill: "min-h-0 grow basis-0",
+      fill: "min-h-0",
     },
   },
 });
