@@ -540,8 +540,8 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"trailing rubbish", soundSnapshot + "}", "not an agentx snapshot"},
 		{"no version", `{"settings":{},"skills":[]}`, "carries no schema_version"},
 		{"settings of JSON null", edited(func(doc map[string]any) { doc["settings"] = nil }), "carries no settings"},
-		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 4 }), "schema version 4, and this agentx reads version 3"},
-		{"the export document of version 1", edited(func(doc map[string]any) { doc["schema_version"] = 1 }), "schema version 1, and this agentx reads version 3"},
+		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 5 }), "schema version 5, and this agentx reads version 4"},
+		{"the export document of version 1", edited(func(doc map[string]any) { doc["schema_version"] = 1 }), "schema version 1, and this agentx reads version 4"},
 		{"a field agentx does not know", edited(func(doc map[string]any) { doc["inventory"] = map[string]any{} }), "not an agentx snapshot"},
 		{"a server field agentx does not know", edited(func(doc map[string]any) {
 			doc["mcp_servers"] = []any{map[string]any{"name": "s", "physical_id": "x"}}
@@ -1449,5 +1449,36 @@ func TestImportWithNoSkillsStillAddsTheSources(t *testing.T) {
 	}
 	if !reflect.DeepEqual(notAdded, want) {
 		t.Errorf("the imported sources not added are\n %+v\nwant\n %+v", notAdded, want)
+	}
+}
+
+// A version 3 snapshot holds one signature and its tools on a server; a
+// reader moves them into the server's one version, which each of its
+// declarations answered with, and one never handshaken has no version.
+func TestDecodeSnapshotMovesAServerSignatureIntoItsVersion(t *testing.T) {
+	t.Parallel()
+	doc := `{"schema_version": 3, "settings": {"schema_version": 1}, "mcp_servers": [
+  {"logical_id": "server:a", "name": "github", "signature": "` + strings.Repeat("a", 64) + `",
+   "tools": [{"id": "tool:x", "kind": "tool", "name": "search", "description": "Search", "hash": "1", "schema_hash": "2"}],
+   "occurrences": [{"configuration": "claude-code", "command": "npx", "args": [], "env_keys": [], "url": "", "header_keys": [], "transport": "stdio"}]},
+  {"name": "never", "signature": "none", "occurrences": [{"configuration": "cursor", "command": "x", "args": [], "env_keys": [], "url": "", "header_keys": [], "transport": "stdio"}]}]}`
+	snap, err := decodeSnapshot("snapshot.json", []byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	github, never := snap.MCPServers[0], snap.MCPServers[1]
+	equal(t, "versions", len(github.Versions), 1)
+	equal(t, "signature", github.Versions[0].Signature, strings.Repeat("a", 64))
+	equal(t, "tools", fmt.Sprint(github.Versions[0].Tools), "[{tool:x tool search  Search 1 2}]")
+	equal(t, "occurrence signature", github.Occurrences[0].Signature, strings.Repeat("a", 64))
+	equal(t, "legacy cleared", github.LegacySignature+fmt.Sprint(github.LegacyTools), "[]")
+	equal(t, "never versions", len(never.Versions), 0)
+	equal(t, "never occurrence signature", never.Occurrences[0].Signature, "none")
+	b, err := json.Marshal(snap.MCPServers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), `"tools":[{"id":"tool:x"`) && !strings.Contains(string(b), `"versions":[{"signature"`) {
+		t.Errorf("written again with its tools outside a version: %s", b)
 	}
 }
