@@ -590,27 +590,14 @@ test.describe("the Update skills dialog", () => {
     await dialog.getByText("release-notes", { exact: true }).click();
     await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
 
-    // A group's button reads Select all while some of its skills are left out and selects them
-    // all, then reads Deselect all and clears them all, in a group of one skill too.
-    const account = dialog.getByRole("region", { name: "me/account" });
-    await account
-      .getByRole("button", { exact: true, name: "Select all" })
-      .click();
-    await expect(dialog.getByText("All 4 selected")).toBeVisible();
+    // The group headers hold no Select all or Deselect all; the select-all row selects every skill.
     await expect(
-      account.getByRole("button", { exact: true, name: "Deselect all" })
-    ).toBeVisible();
-    // The button sits in the header and leaves the section open.
-    await expect(account.getByRole("listitem")).toHaveCount(1);
-    const groupButton = (name: string) =>
-      acme.getByRole("button", { exact: true, name });
-    await expect(groupButton("Deselect all")).toBeVisible();
-    await dialog.getByText("pdf-letters", { exact: true }).click();
-    await groupButton("Select all").click();
-    await expect(dialog.getByText("All 4 selected")).toBeVisible();
-    await groupButton("Deselect all").click();
-    await expect(dialog.getByText("1 of 4 selected")).toBeVisible();
-    await groupButton("Select all").click();
+      dialog.getByRole("button", { exact: true, name: "Select all" })
+    ).toHaveCount(0);
+    await expect(
+      dialog.getByRole("button", { exact: true, name: "Deselect all" })
+    ).toHaveCount(0);
+    await dialog.getByText("3 of 4 selected").click();
     await expect(dialog.getByText("All 4 selected")).toBeVisible();
     // pdf is left out of the run.
     await dialog.getByText("pdf", { exact: true }).click();
