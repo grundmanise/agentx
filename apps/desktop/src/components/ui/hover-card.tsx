@@ -1,6 +1,8 @@
 // shadcn/ui Hover Card (`pnpm dlx shadcn@latest add hover-card`), on our tokens: DESIGN.md §6
 // "Hover card". Its parts keep shadcn's names and `data-slot` attributes and take no `className`;
 // its animation classes are dropped (DESIGN.md §8), and its frame is the popover's.
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 import { HoverCard as HoverCardPrimitive } from "radix-ui";
 
 import type { OwnProps } from "#/lib/utils.ts";
@@ -27,11 +29,28 @@ const HoverCardTrigger = ({
   <HoverCardPrimitive.Trigger data-slot="hover-card-trigger" {...props} />
 );
 
+const hoverCardContentVariants = cva(
+  "rounded-popover border-overlay-border bg-overlay-bg shadow-popover w-popover max-h-hover-card gap-popover z-50 flex flex-col overflow-y-auto border outline-none",
+  {
+    defaultVariants: { padding: "all" },
+    variants: {
+      padding: {
+        // 14 on every side.
+        all: "p-3.5",
+        // No bottom padding: a list that scrolls runs to the card's bottom edge, its own bottom
+        // padding at the end of the scroll.
+        list: "px-3.5 pt-3.5",
+      },
+    },
+  }
+);
+
 /**
  * `popover.width`, `popover.radius`, `overlay.bg` with `overlay.border` and `popover.shadow`, 14
  * padding with `popover.gap` between its blocks; below its trigger, aligned to its start,
  * `popover.offset` away and `popover.window-inset` from the window's edges. No taller than
- * `hover-card.max-height`, the room the window has for it: past that it scrolls.
+ * `hover-card.max-height`, the room the window has for it: past that it scrolls. `padding="list"`
+ * leaves the bottom open for a list that scrolls to the edge.
  */
 const HoverCardContent = ({
   align = "start",
@@ -39,15 +58,17 @@ const HoverCardContent = ({
   sideOffset = 8,
   // popover.window-inset
   collisionPadding = 10,
+  padding,
   ...props
-}: OwnProps<typeof HoverCardPrimitive.Content>) => (
+}: OwnProps<typeof HoverCardPrimitive.Content> &
+  VariantProps<typeof hoverCardContentVariants>) => (
   <HoverCardPrimitive.Portal data-slot="hover-card-portal">
     <HoverCardPrimitive.Content
       data-slot="hover-card-content"
       align={align}
       sideOffset={sideOffset}
       collisionPadding={collisionPadding}
-      className="rounded-popover border-overlay-border bg-overlay-bg shadow-popover w-popover max-h-hover-card gap-popover z-50 flex flex-col overflow-y-auto border p-3.5 outline-none"
+      className={hoverCardContentVariants({ padding })}
       {...props}
     />
   </HoverCardPrimitive.Portal>

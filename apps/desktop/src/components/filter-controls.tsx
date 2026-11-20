@@ -92,7 +92,9 @@ export interface FilterTag {
  * A chip in the filter row echoing several applied values of one filter. At rest it shows a
  * summary: a few marks and a count. Pointing at it, or tabbing into it, opens a panel over the list
  * in the search field's surface, from the chip's own place, with the summary on top and one tag
- * per value below, which wrap and scroll past `filter-tags.max-height`. A tag is a button that
+ * per value below, inset like the summary's marks, which wrap and scroll past
+ * `filter-tags.max-height`. The tags run to the panel's bottom edge, so a tag cut there says the
+ * list scrolls; their bottom padding comes only at the end of the scroll. A tag is a button that
  * removes its value; pointing at it shows a cross over the end of its label. The panel has no
  * close control: it goes when the pointer or the focus leaves it.
  */
@@ -119,7 +121,7 @@ export const FilterTagsChip = ({
     </span>
     <fieldset
       aria-label={label}
-      className="rounded-popover border-input-border bg-input-bg shadow-popover w-filter-tags pointer-events-none absolute -top-px -left-px z-30 m-0 flex min-w-0 flex-col border pb-2.5 opacity-0 group-focus-within/tags:pointer-events-auto group-focus-within/tags:opacity-100 group-hover/tags:pointer-events-auto group-hover/tags:opacity-100"
+      className="rounded-popover border-input-border bg-input-bg shadow-popover w-filter-tags pointer-events-none absolute -top-px -left-px z-30 m-0 flex min-w-0 flex-col overflow-hidden border opacity-0 group-focus-within/tags:pointer-events-auto group-focus-within/tags:opacity-100 group-hover/tags:pointer-events-auto group-hover/tags:opacity-100"
     >
       <span
         aria-hidden
@@ -128,7 +130,7 @@ export const FilterTagsChip = ({
         {summary}
         <span className="truncate">{label}</span>
       </span>
-      <span className="max-h-filter-tags flex flex-wrap gap-1.5 overflow-y-auto overscroll-contain px-3 pt-1.5">
+      <span className="max-h-filter-tags flex flex-wrap gap-1.5 overflow-y-auto overscroll-contain px-2 pt-1.5 pb-2.5">
         {tags.map((tag) => (
           <button
             key={tag.key}
