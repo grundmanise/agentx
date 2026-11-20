@@ -45,3 +45,4 @@ Zenflow
 symlinks?
 OpenCode
 Cline
+WebSocket

@@ -256,13 +256,7 @@ func TestRemoveChildProcess(t *testing.T) {
 	if name == "" {
 		t.Skip("not the remove child process")
 	}
-	env := map[string]string{}
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			env[k] = v
-		}
-	}
-	os.Exit(Run(context.Background(), []string{"skill", "remove", name}, env, strings.NewReader(""), os.Stdout, os.Stderr))
+	os.Exit(Run(context.Background(), []string{"skill", "remove", name}, processEnv(), strings.NewReader(""), os.Stdout, os.Stderr))
 }
 
 // TestSkillRemoveOfAnAbsentSkillRecovers kills the removal with SIGKILL at

@@ -147,6 +147,30 @@ type writer struct {
 	// skill, when set, is the skill every warning written meanwhile is
 	// about, which its log event names, see about.
 	skill string
+
+	// tee, when set, is handed every event, in either mode: what stdout
+	// carries with --json, and the log events stderr does. Serve sets it
+	// for good, to send its own events through its other door, see
+	// serveDoor; caught is set for the length of one inner run.
+	tee func(ev any)
+}
+
+// teed hands ev to tee.
+func (w *writer) teed(ev any) {
+	if w.tee != nil {
+		w.tee(ev)
+	}
+}
+
+// logged hands a log event to tee and, in JSON mode, writes it to stderr.
+// It reports whether it wrote it: otherwise the caller writes the line a
+// person reads.
+func (w *writer) logged(ev logEvent) bool {
+	w.teed(ev)
+	if w.json {
+		w.line(w.stderr, ev)
+	}
+	return w.json
 }
 
 // out is the ink for stdout; err the ink for stderr.
@@ -168,6 +192,7 @@ func (w *writer) emit(ev any) {
 	if w.caught != nil {
 		w.caught(ev)
 	}
+	w.teed(ev)
 	if w.json {
 		w.line(w.stdout, ev)
 	}
@@ -246,8 +271,7 @@ func (w *writer) warnEvent(msg string) logEvent {
 
 // warn logs at warn level.
 func (w *writer) warn(msg string) {
-	if w.json {
-		w.line(w.stderr, w.warnEvent(msg))
+	if w.logged(w.warnEvent(msg)) {
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg)))
@@ -258,8 +282,7 @@ func (w *writer) warn(msg string) {
 // log event carries no hint, so in JSON mode the one event's message holds
 // both, joined by "; ", and a script finds the way on where a person does.
 func (w *writer) warnWith(msg, next string) {
-	if w.json {
-		w.line(w.stderr, w.warnEvent(msg+"; "+next))
+	if w.logged(w.warnEvent(msg + "; " + next)) {
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n  %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg), sanitised(next)))
@@ -271,8 +294,7 @@ func (w *writer) debugf(format string, args ...any) {
 		return
 	}
 	msg := fmt.Sprintf(format, args...)
-	if w.json {
-		w.line(w.stderr, logEvent{event: newEvent("log"), Level: levelDebug, Message: msg})
+	if w.logged(logEvent{event: newEvent("log"), Level: levelDebug, Message: msg}) {
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(muted, "debug:"), sanitised(msg)))
