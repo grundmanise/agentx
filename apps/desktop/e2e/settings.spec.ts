@@ -1,16 +1,10 @@
 // The Settings page: This machine (the label, saved with `config set label`, and the machine id),
-// Comparing edits (`config set ignore_system_files`), Storage (the paths and the account repo's
-// size from `machine`) and Command line (the versions and Run checks). Every row reads the store,
+// Comparing edits (`config set ignore_system_files`), Storage (the library's path and the account
+// repo's size from `machine`) and Command line (the versions and Run checks). Every row reads the store,
 // and every control runs exactly its command.
 import type { Page } from "@playwright/test";
 
-import {
-  ACCOUNT_REPO,
-  HOME,
-  MACHINE_ID,
-  machine,
-  settings,
-} from "./fixtures/settings.ts";
+import { MACHINE_ID, machine, settings } from "./fixtures/settings.ts";
 import {
   cliVersion,
   expect,
@@ -95,11 +89,8 @@ test("each section shows what the store holds", async ({ cli, page }) => {
       - heading "Storage" [level=2]
       - term: Library
       - definition: ${libraryPath}
-      - term: Home
-      - definition: ${HOME}
       - term: Account repo
-      - definition: ${ACCOUNT_REPO} · 1.5 MiB
-      - paragraph: There is no cache to clear; what agentx fetched lives in the account repo.
+      - definition: 1.5 MiB
   `);
 
   await expect(section(page, "Command line")).toContainText(
