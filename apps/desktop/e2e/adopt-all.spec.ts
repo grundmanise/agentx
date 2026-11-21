@@ -129,8 +129,8 @@ test.describe("the Adopt skills section of Settings", () => {
   }) => {
     await openSettings(cli, page);
     await expect(settingsSection(page).getByRole("button")).toHaveText([
-      "Adopt Skills CLI skills",
-      "Adopt Skillshare skills",
+      "Adopt skills from Skills CLI",
+      "Adopt skills from Skillshare",
     ]);
   });
 
@@ -140,7 +140,7 @@ test.describe("the Adopt skills section of Settings", () => {
   }) => {
     await openSettings(cli, page, previewWith(skillshareNames));
     await expect(settingsSection(page).getByRole("button")).toHaveText([
-      "Adopt Skills CLI skills",
+      "Adopt skills from Skills CLI",
     ]);
   });
 
@@ -164,12 +164,12 @@ test.describe("the Adopt skills section of Settings", () => {
   }) => {
     await openSettings(cli, page);
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skills CLI skills" })
+      .getByRole("button", { name: "Adopt skills from Skills CLI" })
       .click();
     const open = dialog(page);
-    await expect(open).toHaveAccessibleName("Adopt Skills CLI skills");
+    await expect(open).toHaveAccessibleName("Adopt skills from Skills CLI");
     await expect(open.getByRole("paragraph")).toHaveText([
-      "agentx will import these 3 skills and manage them from now on. Skills CLI keeps its own files. Edits you made to the copies in your library are not kept. 1 skill can't be adopted and is left out.",
+      "agentx will manage these 3 skills. Skills CLI keeps its files. Edits to the copies in your library are lost. 1 skill can't be adopted.",
       "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     await expect(rows(open, "Skills CLI")).toHaveText([
@@ -185,11 +185,11 @@ test.describe("the Adopt skills section of Settings", () => {
   test("the dialog for one skill says so", async ({ cli, page }) => {
     await openSettings(cli, page, previewWith(["api-docs"]));
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skillshare skills" })
+      .getByRole("button", { name: "Adopt skills from Skillshare" })
       .click();
     const open = dialog(page);
     await expect(open).toHaveAccessibleDescription(
-      "agentx will import this skill and manage it from now on. Skillshare keeps its own files. Edits you made to the copies in your library are not kept."
+      "agentx will manage this skill. Skillshare keeps its files. Edits to the copies in your library are lost."
     );
     await expect(rows(open, "Skillshare")).toHaveText([
       "Waiting: frontend__ui",
@@ -209,7 +209,7 @@ test.describe("the Adopt skills section of Settings", () => {
       logs: skillsCliWarnings.map((message) => ({ level: "warn", message })),
     });
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skills CLI skills" })
+      .getByRole("button", { name: "Adopt skills from Skills CLI" })
       .click();
     const open = dialog(page);
     await open.getByRole("button", { name: "Adopt" }).click();
@@ -238,7 +238,7 @@ test.describe("the Adopt skills section of Settings", () => {
         })
         .getByRole("button", {
           includeHidden: true,
-          name: "Adopt Skillshare skills",
+          name: "Adopt skills from Skillshare",
         })
     ).toBeDisabled();
 
@@ -256,7 +256,7 @@ test.describe("the Adopt skills section of Settings", () => {
     // Each skill the run did not adopt says why once, under its name, as the warning the CLI
     // logged for it did.
     await expect(open.getByRole("paragraph")).toHaveText([
-      /^agentx will import these 3 skills/u,
+      /^agentx will manage these 3 skills/u,
       "https://github.com/vercel/skills holds no skill at commit-style now.",
       "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
@@ -277,7 +277,7 @@ test.describe("the Adopt skills section of Settings", () => {
     cli.register(["adopt", "skillshare", "--all"], { events: skillshareRun });
     cli.register(["adopt"], { events: previewWith(skillshareNames) });
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skillshare skills" })
+      .getByRole("button", { name: "Adopt skills from Skillshare" })
       .click();
     const open = dialog(page);
     await open.getByRole("button", { name: "Adopt" }).click();
@@ -291,7 +291,7 @@ test.describe("the Adopt skills section of Settings", () => {
     ]);
     await open.getByRole("button", { name: "Done" }).click();
     await expect(settingsSection(page).getByRole("button")).toHaveText([
-      "Adopt Skills CLI skills",
+      "Adopt skills from Skills CLI",
     ]);
   });
 
@@ -305,7 +305,7 @@ test.describe("the Adopt skills section of Settings", () => {
       exitCode: 5,
     });
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skills CLI skills" })
+      .getByRole("button", { name: "Adopt skills from Skills CLI" })
       .click();
     const open = dialog(page);
     await open.getByRole("button", { name: "Adopt" }).click();
@@ -334,7 +334,7 @@ test.describe("the Adopt skills section of Settings", () => {
       exitCode: 10,
     });
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skillshare skills" })
+      .getByRole("button", { name: "Adopt skills from Skillshare" })
       .click();
     const open = dialog(page);
     await open.getByRole("button", { name: "Adopt" }).click();
@@ -376,7 +376,7 @@ test.describe("Adopt all in the Unmanaged header", () => {
       "Adopt skills from Skills CLI and Skillshare"
     );
     await expect(open).toHaveAccessibleDescription(
-      "agentx will import these 5 skills and manage them from now on. Skills CLI and Skillshare keep their own files. Edits you made to the copies in your library are not kept. 1 skill can't be adopted and is left out."
+      "agentx will manage these 5 skills. Skills CLI and Skillshare keep their files. Edits to the copies in your library are lost. 1 skill can't be adopted."
     );
     await expect(open.getByRole("heading", { level: 3 })).toHaveText([
       "Skills CLI",

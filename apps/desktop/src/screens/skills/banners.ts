@@ -229,7 +229,7 @@ const table: BannerRule[] = [
   {
     // No action: Fork is in the action row.
     banner: (row) => ({
-      text: "It seems this skill was removed from the source.",
+      text: "The source no longer has this skill.",
       title: `No longer in ${shortSource(row.entry?.source ?? "")}`,
       tone: "danger",
     }),
@@ -256,7 +256,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "publish" },
-      text: "The skill is only available on this machine. Publish it to distribute it to other machines or clients.",
+      text: "Publish it to use it on your other machines.",
       title: "Not published",
       tone: "yours",
     }),
@@ -285,8 +285,8 @@ const table: BannerRule[] = [
           : undefined,
         text:
           n === undefined
-            ? "Updates won't overwrite your edits."
-            : `${filesWord(n)} ${n === 1 ? "differs" : "differ"} from ${shortSource(source)}. Updates won't overwrite them.`,
+            ? "Updates keep your edits."
+            : `${filesWord(n)} ${n === 1 ? "differs" : "differ"} from ${shortSource(source)}. Updates keep your edits.`,
         title: "Edited locally",
         tone: "attention",
       };

@@ -61,12 +61,12 @@ for (const [problem, want] of table) {
 const keepTable: [Problem, readonly string[], string][] = [
   [
     {
-      hint: "move its .git out of the skill, or fork it beside the skill with --name <new>",
+      hint: "move .git out of the skill, or fork it under a new name with --name <new>",
       message:
-        "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git",
+        "scratch has its own Git repository at /home/me/.agents/skills/scratch/.git",
     },
     ["scratch"],
-    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill, or fork it beside the skill with --name <new>.",
+    "scratch has its own Git repository at /home/me/.agents/skills/scratch/.git. Move .git out of the skill, or fork it under a new name with --name <new>.",
   ],
   [
     {

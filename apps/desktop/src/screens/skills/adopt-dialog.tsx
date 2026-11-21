@@ -161,24 +161,19 @@ const Description = ({ tools }: { tools: readonly ToolSummary[] }) => {
   const offered = tools.reduce((n, t) => n + t.offered, 0);
   const refused = tools.reduce((n, t) => n + t.refused, 0);
   const what =
-    offered === 1
-      ? "this skill and manage it"
-      : `these ${plural(offered, "skill")} and manage them`;
+    offered === 1 ? "this skill" : `these ${plural(offered, "skill")}`;
   const keeps = tools.length > 1 ? "keep their" : "keeps its";
   return (
     <DialogDescription>
-      {`agentx will import ${what} from now on. ${namesOf(tools)} ${keeps} own files. Edits you made to the copies in your library are not kept.`}
-      {refused > 0 &&
-        ` ${refused} ${refused === 1 ? "skill can't be adopted and is" : "skills can't be adopted and are"} left out.`}
+      {`agentx will manage ${what}. ${namesOf(tools)} ${keeps} files. Edits to the copies in your library are lost.`}
+      {refused > 0 && ` ${plural(refused, "skill")} can't be adopted.`}
     </DialogDescription>
   );
 };
 
 /** The dialog's title: the tool it adopts the skills of, or both. */
 const titleOf = (tools: readonly { name: string }[]) =>
-  tools.length === 1
-    ? `Adopt ${namesOf(tools)} skills`
-    : `Adopt skills from ${namesOf(tools)}`;
+  `Adopt skills from ${namesOf(tools)}`;
 
 /**
  * The adopt dialog for `tools`, the arguments of `adopt` it covers, in the app's order. Before the

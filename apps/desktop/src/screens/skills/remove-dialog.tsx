@@ -108,8 +108,8 @@ export const RemoveDialog = ({
           <AlertDialogTitle>{`Remove ${row.name}?`}</AlertDialogTitle>
           <AlertDialogDescription>
             {fromUniversal
-              ? "Universal agents read your library, where agentx keeps this skill. Removing it there removes it from every agent that has it:"
-              : "It will be removed from every agent that has it:"}
+              ? "Removing it from your library removes it from:"
+              : "Removes it from:"}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {/* The one block that scrolls: past the dialog's height, the header, the consequence and

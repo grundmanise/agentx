@@ -208,7 +208,7 @@ test("Change… warns before it replaces the account remote", async ({
     name: "Replace the account remote?",
   });
   await expect(confirm).toContainText(
-    "Your skills stay on this machine and show as not published until you publish each one to the new account remote."
+    "Your skills show as not published until you publish them to the new remote."
   );
   await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(confirm).toHaveCount(0);
@@ -233,7 +233,7 @@ test("Detach warns, runs source remove and shows the field once source list has 
     name: "Detach the account remote?",
   });
   await expect(confirm).toContainText(
-    "agentx stops publishing to this repository. Your skills and the repository stay as they are."
+    "agentx stops publishing here. Nothing is deleted."
   );
   await expect(confirm).toContainText(ACCOUNT);
   cli.register(["source", "remove", ACCOUNT], {

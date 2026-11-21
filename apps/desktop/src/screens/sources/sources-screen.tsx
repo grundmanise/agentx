@@ -13,8 +13,9 @@ import { Spinner } from "#/components/spinner.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
-import { skillNamesOf } from "#/lib/problem-text.ts";
+import { problemSentence, skillNamesOf } from "#/lib/problem-text.ts";
 import { FloatingActionBar } from "#/screens/sources/action-bar.tsx";
+import { addProblem, isHeldWarning } from "#/screens/sources/add-problem.ts";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
 import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
@@ -391,6 +392,18 @@ export const SourcesScreen = () => {
       return true;
     }
     const outcome = await agentx(plan.args, {
+      failure: (o) => {
+        const error = o.events.find((e) => e.type === "error");
+        const words = error === undefined ? undefined : addProblem(error);
+        return words === undefined
+          ? undefined
+          : {
+              ...words,
+              warnings: o.logs
+                .filter((l) => l.level === "warn" && !isHeldWarning(l.message))
+                .map((l) => l.message),
+            };
+      },
       label: ADD_LABEL,
       // The rim reads the CLI's steps (three per skill and a rescan) as a share of the whole install.
       onProgress: (event) => {
@@ -425,9 +438,15 @@ export const SourcesScreen = () => {
       const error = outcome.events.find((e) => e.type === "error");
       if (installed.length > 0 && error !== undefined) {
         // Some skills were skipped: what was added, why the rest was not, and each skipped skill.
+        const words = addProblem(error);
         notifyError({
-          details: error.hint === undefined ? [] : [error.hint],
-          hint: error.message,
+          details:
+            words !== undefined || error.hint === undefined ? [] : [error.hint],
+          // In the app's words, the reason and its way out read as one sentence each.
+          hint:
+            words === undefined
+              ? error.message
+              : problemSentence(words, { keep: plan.names }),
           // A skill's name that starts the CLI's message keeps its case.
           keep: [
             ...plan.names,
@@ -435,7 +454,7 @@ export const SourcesScreen = () => {
           ],
           message: `Added ${installed.length} of ${count(plan.names.length, "skill")}`,
           warnings: outcome.logs
-            .filter((l) => l.level === "warn")
+            .filter((l) => l.level === "warn" && !isHeldWarning(l.message))
             .map((l) => l.message),
         });
         setSelection((prev) =>

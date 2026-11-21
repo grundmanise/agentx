@@ -61,7 +61,7 @@ test("exports under the name given and toasts the path the CLI wrote", async ({
   await openSettings(cli, page);
   const section = exportSettings(page);
   await expect(section).toContainText(
-    "Saves your settings and the list of your skills to a file. Import it on another machine to transfer them."
+    "Saves your settings and skill list to a file."
   );
   const name = section.getByRole("textbox", { name: "File name" });
   await expect(name).toHaveValue("agentx-export");
@@ -173,7 +173,7 @@ test("imports the picked file after its confirm, adds the sources it names witho
   });
   await expect(confirm).toBeVisible();
   await expect(confirm.getByRole("paragraph")).toHaveText([
-    "Missing skills will be installed during import, and existing might get updated.",
+    "Installs missing skills and may update others.",
     SNAPSHOT,
   ]);
   expect(cli.openDialogs).toEqual([

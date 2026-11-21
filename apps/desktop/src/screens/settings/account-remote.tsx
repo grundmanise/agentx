@@ -211,7 +211,7 @@ const RemoteForm = ({
         open={confirming}
         onOpenChange={setConfirming}
         title="Replace the account remote?"
-        warning="Your skills stay on this machine and show as not published until you publish each one to the new account remote."
+        warning="Your skills show as not published until you publish them to the new remote."
         action="Replace"
         onConfirm={() => {
           void save();
@@ -293,7 +293,7 @@ const AccountRemoteRow = ({
         open={detaching}
         onOpenChange={setDetaching}
         title="Detach the account remote?"
-        warning="agentx stops publishing to this repository. Your skills and the repository stay as they are."
+        warning="agentx stops publishing here. Nothing is deleted."
         detail={url}
         action="Detach"
         danger

@@ -118,7 +118,7 @@ export const publishFailure = (
  * source, which `source` names by its URL.
  */
 export const changedElsewhere = (name: string, source?: string) =>
-  `There is a newer version of ${name} skill ${source === undefined ? "on the account remote" : `in ${shortSource(source)}`}. Update it first, then publish your changes.`;
+  `${name} skill has a newer version ${source === undefined ? "on the account remote" : `in ${shortSource(source)}`}. Update it, then publish.`;
 
 /** The toast of a publish that sent nothing: the skill already matches what is published. */
 export const alreadyPublished = (name: string) =>

@@ -88,7 +88,7 @@ test("a skill of a source: Fork runs skill fork <name> and the pane redraws from
   await actions(page, "pdf").getByRole("button", { name: "Fork" }).click();
   const dialog = forkDialog(page, "pdf");
   await expect(dialog).toContainText(
-    "A copy will be created in your skill library. Keep the same name to use it in place of this skill, or choose a new name to use both. You can still get updates from the original."
+    "Creates a copy in your library. Keep the name to replace this skill, or pick a new name to keep both. Updates from the original still apply."
   );
   await expect(
     dialog.getByRole("switch", { name: "Use a different name" })
@@ -181,7 +181,7 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
   // name keeps its case. Exit 6 turns the switch on, so the hint names what is left to do with
   // the form as it now stands.
   await expect(alert).toHaveText(
-    "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git. Move its .git out of the skill, or type a new name."
+    "pdf has its own Git repository at /home/me/.agents/skills/pdf/.git. Move .git out of the skill, or type a new name."
   );
   await expect(
     dialog.getByRole("switch", { name: "Use a different name" })
@@ -305,7 +305,7 @@ test("refused in place with Use a different name on: the hint leaves the switch 
   });
   await dialog.getByRole("button", { name: "Fork" }).click();
   await expect(dialog.getByRole("alert")).toHaveText(
-    "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git. Move its .git out of the skill."
+    "pdf has its own Git repository at /home/me/.agents/skills/pdf/.git. Move .git out of the skill."
   );
   expect(forks(cli)).toEqual([
     ["skill", "fork", "pdf", "--name", "pdf", "--json"],
@@ -322,7 +322,7 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
     .click();
   const dialog = forkDialog(page, "commit-helper");
   await expect(dialog).toContainText(
-    "A copy will be created in your skill library. The plugin keeps its own skill."
+    "Creates a copy in your library. The plugin's skill stays."
   );
   const toggle = dialog.getByRole("switch", { name: "Use a different name" });
   await expect(toggle).toBeChecked();

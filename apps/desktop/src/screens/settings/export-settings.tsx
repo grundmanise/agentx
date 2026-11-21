@@ -112,7 +112,7 @@ const ExportForm = () => {
 export const ExportSettingsSection = () => (
   <SettingsSection
     title="Export settings"
-    description="Saves your settings and the list of your skills to a file. Import it on another machine to transfer them."
+    description="Saves your settings and skill list to a file."
   >
     <ExportForm />
   </SettingsSection>

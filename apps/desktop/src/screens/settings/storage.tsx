@@ -48,10 +48,6 @@ export const StorageSection = () => {
         <Place name="Home" value={machine.home} />
         <Place name="Account repo" value={repo} />
       </dl>
-      <p className="type-secondary text-text-muted m-0">
-        There is no cache to clear; what agentx fetched lives in the account
-        repo.
-      </p>
     </SettingsSection>
   );
 };

@@ -699,7 +699,7 @@ test.describe("Remove", () => {
     // only with the library.
     await chip(article, "Universal").click();
     await expect(dialog).toContainText(
-      "Universal agents read your library, where agentx keeps this skill. Removing it there removes it from every agent that has it:"
+      "Removing it from your library removes it from:"
     );
     await expect(
       dialog
@@ -722,7 +722,7 @@ test.describe("Remove", () => {
     await article.getByRole("button", { name: "Remove" }).click();
     // The Remove button has no reason to give: the dialog says only what goes.
     await expect(
-      dialog.getByText("It will be removed from every agent that has it:", {
+      dialog.getByText("Removes it from:", {
         exact: true,
       })
     ).toBeVisible();

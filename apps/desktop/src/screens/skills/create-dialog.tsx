@@ -271,8 +271,7 @@ export const CreateSkillDialog = ({
         <DialogHeader>
           <DialogTitle>Create skill</DialogTitle>
           <DialogDescription>
-            Creates a skill of your own in your library and adds it to your
-            agents.
+            Adds a new skill to your library and your agents.
           </DialogDescription>
         </DialogHeader>
         <CreateSkillForm

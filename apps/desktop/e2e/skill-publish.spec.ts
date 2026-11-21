@@ -48,7 +48,7 @@ const pane = (page: Page, name: string) =>
     .getByRole("article", { name });
 const banner = (article: Locator) => article.getByRole("note");
 const dialog = (page: Page, name: string) =>
-  page.getByRole("dialog", { name: `Publish ${name}` });
+  page.getByRole("dialog", { name: `Publish ${name} skill` });
 
 /** Opens a skill on the fixture machine, with every read registered. */
 const openSkill = async (
@@ -129,7 +129,7 @@ test.describe("banners", () => {
     const note = banner(pane(page, "draft"));
     await expect(note).toHaveAccessibleName("Not published");
     await expect(note).toContainText(
-      "The skill is only available on this machine. Publish it to distribute it to other machines or clients."
+      "Publish it to use it on your other machines."
     );
     await expect(note.getByRole("button")).toHaveText(["Publish"]);
   });
@@ -155,7 +155,7 @@ test.describe("banners", () => {
     const note = banner(pane(page, "review"));
     await expect(note).toHaveAccessibleName("Edited locally");
     await expect(note).toContainText(
-      "3 files differ from acme/skills. Updates won't overwrite them."
+      "3 files differ from acme/skills. Updates keep your edits."
     );
     await expect(note.getByRole("button")).toHaveText([
       "Publish to acme/skills",
@@ -192,7 +192,7 @@ test.describe("banners", () => {
     const note = banner(pane(page, "lint"));
     await expect(note).toHaveAccessibleName("Edited locally");
     await expect(note).toContainText(
-      "1 file differs from zeta/tools. Updates won't overwrite them."
+      "1 file differs from zeta/tools. Updates keep your edits."
     );
   });
 
@@ -203,7 +203,7 @@ test.describe("banners", () => {
     await openSkill(cli, page, "review", sources, ["review"]);
     const note = banner(pane(page, "review"));
     await expect(note).toHaveAccessibleName("Edited locally");
-    await expect(note).toContainText("Updates won't overwrite your edits.");
+    await expect(note).toContainText("Updates keep your edits.");
     await expect(note.getByRole("button")).toHaveText([
       "Publish to acme/skills",
     ]);
@@ -211,33 +211,25 @@ test.describe("banners", () => {
 });
 
 test.describe("the Publish dialog", () => {
-  test("reads the changed files when it opens; Publish with no message runs skill publish <name>", async ({
+  test("reads the changed files when it opens; Publish with the summary it starts with runs skill publish <name>", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "changelog");
     await expect(
       pane(page, "changelog").getByRole("region", { name: "Files" })
-    ).toContainText("edited by you");
+    ).toContainText("edited");
     expect(diffReads(cli, "changelog")).toBe(1);
     const shown = await openDialog(page, "changelog");
     expect(diffReads(cli, "changelog")).toBe(2);
-    await expect(shown).toContainText(`To your account remote: ${ACCOUNT}`);
-    await expect(
-      shown.getByRole("textbox", { name: "What changed" })
-    ).toHaveCount(0);
-    await shown.getByRole("checkbox", { name: "Add a custom message" }).click();
-    await expect(
-      shown.getByRole("textbox", { name: "What changed" })
-    ).toHaveAttribute("placeholder", "Describe your changes");
-    await expect(
-      shown.getByRole("textbox", { name: "What changed" })
-    ).toBeFocused();
-    await shown.getByRole("checkbox", { name: "Add a custom message" }).click();
+    await expect(shown).toContainText("To me/account");
+    const field = shown.getByRole("textbox", { name: "What changed" });
+    await expect(field).toHaveValue("Edit SKILL.md and add examples.md");
+    await expect(field).toBeFocused();
     const changed = shown.getByRole("list", { name: "Changed files" });
     await expect(changed.getByRole("listitem")).toHaveText([
-      "SKILL.mdedited by you",
-      "examples.mdadded by you",
+      "SKILL.mdedited",
+      "examples.mdadded",
     ]);
     cli.register(
       ["skill", "publish", "changelog"],
@@ -255,10 +247,9 @@ test.describe("the Publish dialog", () => {
     ]);
   });
 
-  test("Enter publishes, with the custom message", async ({ cli, page }) => {
+  test("Enter publishes, with the message typed", async ({ cli, page }) => {
     await openSkill(cli, page, "changelog");
     const shown = await openDialog(page, "changelog");
-    await shown.getByRole("checkbox", { name: "Add a custom message" }).click();
     cli.register(
       ["skill", "publish", "changelog", "--message", "Tighten the wording"],
       publishReply("changelog", "pushed")
@@ -279,24 +270,14 @@ test.describe("the Publish dialog", () => {
     ]);
   });
 
-  test("a custom message is required once its box is checked: Publish with it empty marks it and runs nothing", async ({
+  test("What changed is optional: Publish with it empty runs with no message", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "changelog");
     const shown = await openDialog(page, "changelog");
-    const box = shown.getByRole("checkbox", { name: "Add a custom message" });
-    await box.click();
     const field = shown.getByRole("textbox", { name: "What changed" });
-    await expect(field).not.toHaveAttribute("aria-invalid");
     await field.fill("   ");
-    await shown.getByRole("button", { name: "Publish" }).click();
-    await expect(field).toHaveAttribute("aria-invalid", "true");
-    await expect(field).toBeFocused();
-    await expect(shown).toBeVisible();
-    expect(later(cli).some((l) => l[1] === "publish")).toBe(false);
-    // Unchecking the box drops the requirement: Publish runs with no message.
-    await box.click();
     cli.register(
       ["skill", "publish", "changelog"],
       publishReply("changelog", "pushed")
@@ -350,7 +331,7 @@ test.describe("the Publish dialog", () => {
   }) => {
     await openSkill(cli, page, "draft");
     const shown = await openDialog(page, "draft");
-    await expect(shown).toContainText(`To your account remote: ${ACCOUNT}`);
+    await expect(shown).toContainText("To me/account");
     // Never published: every file goes, even of a fork that matches the commit that created it.
     await expect(shown.getByRole("listitem")).toHaveText([
       "SKILL.mdnew",
@@ -374,9 +355,7 @@ test.describe("the Publish dialog", () => {
   }) => {
     await openSkill(cli, page, "review");
     const shown = await openDialog(page, "review", "Publish to acme/skills");
-    await expect(shown).toContainText(
-      "To acme/skills, as a change under your own Git name"
-    );
+    await expect(shown).toContainText("To acme/skills");
     await expect(shown.getByRole("listitem")).toHaveCount(3);
     cli.register(
       ["skill", "publish", "review"],
@@ -446,7 +425,7 @@ test.describe("outcomes", () => {
       );
       await shown.getByRole("button", { name: "Publish" }).click();
       const toast = toasts(page).getByText(
-        "There is a newer version of changelog skill on the account remote. Update it first, then publish your changes."
+        "changelog skill has a newer version on the account remote. Update it, then publish."
       );
       await expect(toast).toBeVisible();
       cli.register(["skill", "update", "changelog"], {
@@ -484,7 +463,7 @@ test.describe("outcomes", () => {
     await shown.getByRole("button", { name: "Publish" }).click();
     await expect(
       toasts(page).getByText(
-        "There is a newer version of review skill in acme/skills. Update it first, then publish your changes."
+        "review skill has a newer version in acme/skills. Update it, then publish."
       )
     ).toBeVisible();
     await expect(

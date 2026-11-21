@@ -57,9 +57,9 @@ interface FileRow {
 
 /** What a changed file's row says beside its path, by its status in `skill diff`. */
 export const fileStatusLabels: Record<DiffEvent["status"], string> = {
-  added: "added by you",
-  deleted: "removed by you",
-  modified: "edited by you",
+  added: "added",
+  deleted: "removed",
+  modified: "edited",
 };
 
 /** What the row says beside the path: the line count, "binary", or that the file is too large. */
@@ -454,9 +454,7 @@ const Reading = ({
 
 /** What the edits of a modified skill are compared with, by what the skill is. */
 const comparedWith = (row: SkillRow) =>
-  row.kind === "yours"
-    ? "Compared with what you last published"
-    : "Compared with the version you installed";
+  row.kind === "yours" ? "Since your last publish" : "Since you installed it";
 
 /**
  * FILES in the detail pane: every file of the skill from `skill files`, read when the skill is

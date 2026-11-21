@@ -196,7 +196,7 @@ const ImportFile = () => {
           }
         }}
         title={`Replace settings with ${fileName(picked ?? "")}?`}
-        description="Missing skills will be installed during import, and existing might get updated."
+        description="Installs missing skills and may update others."
         detail={picked}
         action="Import"
         onConfirm={() => {

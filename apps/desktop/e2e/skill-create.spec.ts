@@ -143,9 +143,7 @@ test("Create in the Skills header runs skill new with the description and select
 }) => {
   await openDialog(cli, page);
   await expect(
-    dialog(page).getByText(
-      "Creates a skill of your own in your library and adds it to your agents."
-    )
+    dialog(page).getByText("Adds a new skill to your library and your agents.")
   ).toBeVisible();
   await expect(nameField(page)).toBeFocused();
   await expect(createButton(page)).toBeDisabled();
