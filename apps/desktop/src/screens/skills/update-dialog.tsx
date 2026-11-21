@@ -33,6 +33,7 @@ import {
 import { formatAgo, formatDate } from "#/lib/dates.ts";
 import { plural } from "#/lib/plural.ts";
 import { problemSentence } from "#/lib/problem-text.ts";
+import { cn } from "#/lib/utils.ts";
 import { useNow } from "#/screens/settings/clock.ts";
 import { shortSource, updateVersions } from "#/screens/skills/projection.ts";
 import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
@@ -265,17 +266,6 @@ const noteOf = (row: UpdateRunRow, idle: boolean): Note | undefined => {
   return undefined;
 };
 
-const rowVariants = cva("relative flex items-start gap-3 px-3 py-2", {
-  variants: {
-    state: {
-      // Before the run: the whole row toggles its skill.
-      idle: "rounded-update-skills-row hover:bg-update-skills-row-hover",
-      // In the run and after it.
-      run: "",
-    },
-  },
-});
-
 /**
  * "2 days ago", with the date in full as its tooltip. Before the run it is a second
  * label of the row's checkbox, above the row's hit area so that its tooltip shows, and a click on
@@ -339,7 +329,13 @@ const Row = ({
   const note = noteOf(row, idle);
   const selected = row.status !== "skipped";
   return (
-    <li className={rowVariants({ state: idle ? "idle" : "run" })}>
+    <li
+      className={cn(
+        "relative flex items-start gap-3 px-3 py-2",
+        // Before the run: the whole row toggles its skill.
+        idle && "rounded-update-skills-row hover:bg-update-skills-row-hover"
+      )}
+    >
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex min-w-0 items-baseline gap-2">
           {/* Above the name's hit area, which comes after it. */}

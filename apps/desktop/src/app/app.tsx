@@ -1,4 +1,3 @@
-import { cva } from "class-variance-authority";
 import { Activity, useEffect, useState } from "react";
 import type { ReactElement } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
@@ -37,21 +36,6 @@ const built: Record<string, ReactElement> = {
 };
 
 // `isolate` keeps a screen's own layers, such as the list's pinned headers, under the frosted pane.
-const screenVariants = cva(
-  "isolate flex min-h-0 flex-1 flex-col transition-opacity duration-200",
-  {
-    variants: {
-      // The kept inventory is there with the first render: it does not fade in.
-      enter: { fade: "animate-fade-in", none: "" },
-      // Under the frosted pane, and out of reach, while it may not be this machine as it is now.
-      loading: {
-        false: "",
-        true: "pointer-events-none select-none",
-      },
-    },
-  }
-);
-
 const elementOf = (path: string) =>
   built[path] ?? <PlaceholderScreen title={titles[path]} />;
 
@@ -63,10 +47,13 @@ const Screen = ({ cached, ready }: Pick<StartupState, "cached" | "ready">) =>
   ready || cached ? (
     <div
       inert={!ready}
-      className={screenVariants({
-        enter: cached ? "none" : "fade",
-        loading: !ready,
-      })}
+      className={cn(
+        "isolate flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+        // The kept inventory is there with the first render: it does not fade in.
+        !cached && "animate-fade-in",
+        // Under the frosted pane, and out of reach, while it may not be this machine as it is now.
+        !ready && "pointer-events-none select-none"
+      )}
     >
       <KeptScreens elementOf={elementOf} />
     </div>

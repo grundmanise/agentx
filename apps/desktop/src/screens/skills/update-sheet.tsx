@@ -25,6 +25,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "#/components/ui/sheet.tsx";
+import { cn } from "#/lib/utils.ts";
 import { LoadingPane } from "#/screens/skills/files.tsx";
 import { fromAnotherMachine } from "#/screens/skills/projection.ts";
 import { loadUpdateDiff } from "#/store/loaders.ts";
@@ -113,15 +114,6 @@ const FilesOnly = ({ update }: { update: UpdateAvailableEvent }) => (
     </ul>
   </div>
 );
-
-const revealVariants = cva("flex min-h-0 flex-col", {
-  variants: {
-    revealing: {
-      false: "",
-      true: "animate-code-reveal",
-    },
-  },
-});
 
 /**
  * The changes while they are read: the block of every file the update check lists, open unless
@@ -239,7 +231,12 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
           <AccordionContent fill>
             {/* One tree, faded in or not, so that the pane is not remounted when the fade ends. */}
             <div className="relative flex min-h-0 flex-col">
-              <div className={revealVariants({ revealing })}>
+              <div
+                className={cn(
+                  "flex min-h-0 flex-col",
+                  revealing && "animate-code-reveal"
+                )}
+              >
                 <Patch path={diff.path} patch={diff.patch} />
               </div>
               {revealing && (
