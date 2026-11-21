@@ -205,6 +205,58 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
   ]);
 });
 
+/** The inventory with pdf's update merge pending. */
+const pdfMerging = {
+  ...inventory,
+  library: inventory.library.map((e) =>
+    e.name === "pdf" ? { ...e, pending_merge: true } : e
+  ),
+};
+
+test("a merge pending: Fork looks disabled, opens nothing and says it cannot fork while the update is in progress", async ({
+  cli,
+  page,
+}) => {
+  await openSkill(cli, page, "pdf", { first: pdfMerging });
+  const fork = actions(page, "pdf").getByRole("button", { name: "Fork" });
+  await expect(fork).toHaveAttribute("aria-disabled", "true");
+  await fork.hover();
+  await expect(page.getByRole("tooltip")).toHaveText(
+    "Can't fork while update in progress"
+  );
+  // It reads as disabled, so Playwright would wait for it: the click is forced, as a user's is.
+  await fork.click({ force: true });
+  await expect(forkDialog(page, "pdf")).toHaveCount(0);
+  expect(forks(cli)).toEqual([]);
+});
+
+test("refused for a merge pending: exit 4 with no conflict keeps the dialog open with the CLI's words", async ({
+  cli,
+  page,
+}) => {
+  await openSkill(cli, page, "pdf");
+  await actions(page, "pdf").getByRole("button", { name: "Fork" }).click();
+  const dialog = forkDialog(page, "pdf");
+  cli.register(["skill", "fork", "pdf"], {
+    events: [
+      {
+        code: "pending_merge",
+        hint: "run 'agentx skill update pdf --abort' to give the merge up; the library directory stays as it is",
+        message:
+          "pdf has a merge with its update pending, so it cannot be forked until the merge is resolved or given up",
+        type: "error",
+      },
+    ],
+    exitCode: 4,
+  });
+
+  await dialog.getByRole("button", { name: "Fork" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "pdf has a merge with its update pending, so it cannot be forked until the merge is resolved or given up. Finish the update first."
+  );
+  expect(forks(cli)).toEqual([["skill", "fork", "pdf", "--json"]]);
+});
+
 test("a refusal clears when the switch or the name changes", async ({
   cli,
   page,
