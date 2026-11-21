@@ -12,7 +12,7 @@ import type {
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { cachedRead, keepRead } from "#/store/read-cache.ts";
-import { onFinished, runCommand } from "#/store/runner.ts";
+import { agentx, onFinished } from "#/store/runner.ts";
 import type { Finished } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { AppState, FilesRead } from "#/store/store.ts";
@@ -34,7 +34,10 @@ const runLoad = async (
   mine: number
 ) => {
   const key = args.join(" ");
-  const outcome = await runCommand(args, { label: `load ${key}` });
+  const outcome = await agentx(args, {
+    label: `load ${key}`,
+    sideEffect: false,
+  });
   if (latest.get(key) !== mine) {
     // A later run replaced this one: it ends with that run, so its caller finds the store filled.
     await running.get(key);
@@ -190,8 +193,9 @@ export const loadHistory = async (name: string, version: string) => {
       histories: { ...s.histories, [name]: { entries: kept, version } },
     }));
   }
-  const outcome = await runCommand(["skill", "history", name], {
+  const outcome = await agentx(["skill", "history", name], {
     label: `history ${name}`,
+    sideEffect: false,
   });
   if (historyVersions.get(name) !== version) {
     return;
@@ -259,11 +263,15 @@ export const loadFiles = async (
     return;
   }
   const [files, diff] = await Promise.all([
-    runCommand(["skill", "files", ...request.args], { label: `files ${key}` }),
+    agentx(["skill", "files", ...request.args], {
+      label: `files ${key}`,
+      sideEffect: false,
+    }),
     request.diff === undefined
       ? undefined
-      : runCommand(["skill", "diff", request.diff], {
+      : agentx(["skill", "diff", request.diff], {
           label: `diff ${request.diff}`,
+          sideEffect: false,
         }),
   ]);
   if (fileVersions.get(key) !== version) {
@@ -340,14 +348,12 @@ export const loadSkillMd = async (key: string, request: SkillMdRequest) => {
     return;
   }
   const subpath = request.subpath === "" ? "." : request.subpath;
-  const outcome = await runCommand(
-    ["source", "read", request.source, subpath],
-    {
-      label: `read ${request.source} ${subpath}`,
-      // The row says the file could not be read; a toast per row opened would add nothing.
-      ownFailure: true,
-    }
-  );
+  const outcome = await agentx(["source", "read", request.source, subpath], {
+    label: `read ${request.source} ${subpath}`,
+    // The row says the file could not be read; a toast per row opened would add nothing.
+    ownFailure: true,
+    sideEffect: false,
+  });
   if (skillMdVersions.get(key) !== version) {
     return;
   }
@@ -409,9 +415,10 @@ export const loadUpdateDiff = async (
     }));
     return;
   }
-  const outcome = await runCommand(["skill", "diff", name, "--update"], {
+  const outcome = await agentx(["skill", "diff", name, "--update"], {
     label: updateDiffLabel(name),
     ownFailure: true,
+    sideEffect: false,
   });
   if (updateDiffCandidates.get(name) !== candidate) {
     return;

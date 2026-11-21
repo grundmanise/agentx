@@ -30,7 +30,7 @@ import {
 import { skillFile } from "#/screens/skills/edit.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { runCommand, usePending } from "#/store/runner.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import { afterSettled } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -127,7 +127,7 @@ const CreateSkillForm = ({
       return;
     }
     setRefusal(undefined);
-    const outcome = await runCommand(createArgs(name, description.trim()), {
+    const outcome = await agentx(createArgs(name, description.trim()), {
       label: CREATE_SKILL_LABEL,
       ownFailure: true,
       success: (events) =>

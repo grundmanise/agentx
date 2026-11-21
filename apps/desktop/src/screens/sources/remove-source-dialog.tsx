@@ -21,7 +21,7 @@ import {
   installedFrom,
   removedText,
 } from "#/screens/sources/projection.ts";
-import { runCommand } from "#/store/runner.ts";
+import { agentx } from "#/store/runner.ts";
 
 /** The pending label of the removal of the source `id`, with its skills when chosen. */
 export const removeSourceLabel = (id: string) => `remove source ${id}`;
@@ -38,7 +38,7 @@ const removeSource = async (
   const label = removeSourceLabel(source.id);
   for (const [i, name] of skills.entries()) {
     // oxlint-disable-next-line no-await-in-loop -- one command at a time, in order
-    const outcome = await runCommand(["skill", "remove", name], {
+    const outcome = await agentx(["skill", "remove", name], {
       label,
       retry: () => {
         void removeSource(source, skills.slice(i), total);
@@ -48,7 +48,7 @@ const removeSource = async (
       return;
     }
   }
-  await runCommand(["source", "remove", source.url], {
+  await agentx(["source", "remove", source.url], {
     label,
     success: removedText(total),
   });

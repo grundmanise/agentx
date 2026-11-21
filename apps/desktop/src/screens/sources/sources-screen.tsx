@@ -47,7 +47,7 @@ import {
   loadListing,
   loadSources,
 } from "#/store/loaders.ts";
-import { cancelCommand, runCommand, usePending } from "#/store/runner.ts";
+import { cancelCommand, agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /** The pending label of the install the action bar runs. */
@@ -124,7 +124,7 @@ const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
  * `skill list --remote`, so they are read again too, whenever there is an account remote.
  */
 const refreshAll = async () => {
-  const outcome = await runCommand(["source", "fetch", "--all"], {
+  const outcome = await agentx(["source", "fetch", "--all"], {
     label: REFRESH_ALL_LABEL,
   });
   const { sources } = useAppStore.getState();
@@ -390,7 +390,7 @@ export const SourcesScreen = () => {
     if (plan === undefined) {
       return true;
     }
-    const outcome = await runCommand(plan.args, {
+    const outcome = await agentx(plan.args, {
       label: ADD_LABEL,
       // The rim reads the CLI's steps (three per skill and a rescan) as a share of the whole install.
       onProgress: (event) => {
