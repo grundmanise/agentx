@@ -58,6 +58,7 @@ cd apps/desktop
 pnpm exec playwright install chromium   # once, for the end-to-end tests
 pnpm tauri dev                          # the app in its window
 pnpm dev                                # the frontend alone, at http://localhost:1420
+pnpm dev:browser                        # the frontend in a browser against this machine, at http://localhost:1430
 ```
 
 A release build runs only the `agentx` next to its executable: the CLI of its own release, built from the same commit. A debug build (`pnpm tauri dev`) also looks on the `PATH` your login shell sets, so put a CLI there, for example with `go build -o ~/go/bin/agentx .` in `apps/cli`.
@@ -93,8 +94,16 @@ Run these in `apps/desktop`:
 | `pnpm fix` | Applies the lint's safe fixes, formats, then lists what is left (`ultracite fix`) |
 | `pnpm test` | Runs the end-to-end tests in Chromium. It starts the dev server, or reuses a running one outside CI |
 | `pnpm build` | Builds the frontend into `dist` with Vite. It does not check types: `pnpm check` does, and `pnpm tauri build` runs `pnpm check` first |
+| `pnpm dev:browser` | Runs the frontend in a browser against `agentx serve --listen` on this machine ([ADR 0016](../../docs/adr/0016-serve-is-the-backend-of-the-app-and-of-the-frontend-in-a-browser.md)), at http://localhost:1430. See [The frontend in a browser](#the-frontend-in-a-browser) |
+| `pnpm preview:browser` | The same with the built bundle: builds into `dist` and serves it at http://localhost:1431, so that a bug only the build has shows too |
 
 From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `check`, `test` and `build`, then `cargo fmt --check`, Clippy and `cargo test` for the Rust side. `cargo test` drives the supervisor against a stub CLI script.
+
+### The frontend in a browser
+
+`pnpm dev:browser` and `pnpm preview:browser` (`scripts/browser.ts`) build the CLI from `apps/cli` into `node_modules/.cache/agentx`, so you need Go too; set `AGENTX_CLI` to an `agentx` to use that one instead. They start `agentx serve --json --listen 127.0.0.1:0` with the page's origins, `http://localhost:<port>` and `http://127.0.0.1:<port>`, read the address and token from its `listening` event, and start Vite. Vite answers `GET /agentx-serve.json` with `{"url", "token"}`, which the page reads when it loads, so the bundle holds no token and one build works with any serve. Ctrl-C stops both.
+
+Serve uses your shell's environment, so it serves the agentx home of `HOME`, or `AGENTX_HOME` when set. Only one serve runs per home: while the desktop app is open, the command exits with code 6.
 
 ### The pnpm workspace
 
