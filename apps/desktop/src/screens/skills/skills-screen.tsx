@@ -1,3 +1,4 @@
+import { useWindowEvent } from "@mantine/hooks";
 import { useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 
@@ -174,32 +175,26 @@ export const SkillsScreen = () => {
 
   // j/k and the arrows move the selection through the visible rows, in group order, past the
   // rows of a collapsed group or subgroup. Not under the launch pane: the list waits for the startup checks.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (
-        !useStartup.getState().ready ||
-        e.metaKey ||
-        e.ctrlKey ||
-        e.altKey ||
-        inField(e.target)
-      ) {
-        return;
-      }
-      const step = steps[e.key] ?? 0;
-      if (step === 0 || flat.length === 0) {
-        return;
-      }
-      e.preventDefault();
-      const at = flat.findIndex((r) => r.key === current.current);
-      const next = nextShown(flat, at, step, sections);
-      if (next !== undefined && next.key !== current.current) {
-        select(next);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-    };
+  useWindowEvent("keydown", (e) => {
+    if (
+      !useStartup.getState().ready ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.altKey ||
+      inField(e.target)
+    ) {
+      return;
+    }
+    const step = steps[e.key] ?? 0;
+    if (step === 0 || flat.length === 0) {
+      return;
+    }
+    e.preventDefault();
+    const at = flat.findIndex((r) => r.key === current.current);
+    const next = nextShown(flat, at, step, sections);
+    if (next !== undefined && next.key !== current.current) {
+      select(next);
+    }
   });
 
   return (

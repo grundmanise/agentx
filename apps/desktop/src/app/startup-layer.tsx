@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useWindowEvent } from "@mantine/hooks";
 import { useNavigate } from "react-router";
 
 import { AgentxMark } from "#/components/agentx-mark.tsx";
@@ -39,20 +39,14 @@ export const StartupLayer = () => {
 
   // Enter triggers the primary action, unless focus is on a button, which handles Enter itself.
   const act = primary?.act;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const onButton =
-        e.target instanceof Element && e.target.closest("button") !== null;
-      if (e.key === "Enter" && act !== undefined && !onButton) {
-        e.preventDefault();
-        act();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [act]);
+  useWindowEvent("keydown", (e) => {
+    const onButton =
+      e.target instanceof Element && e.target.closest("button") !== null;
+    if (e.key === "Enter" && act !== undefined && !onButton) {
+      e.preventDefault();
+      act();
+    }
+  });
 
   return (
     <section
