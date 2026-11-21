@@ -87,6 +87,28 @@ agentx serve --once
 
 Serve scans once, prints the inventory and exits. It repairs nothing, watches nothing and runs no update check or maintenance. To read the full inventory, run [`agentx scan`](/cli/scan).
 
+## Answer a browser on this machine
+
+```sh
+agentx serve --listen localhost --origin http://localhost:1420
+```
+
+```text
+listening: ws://127.0.0.1:53124/
+token: 4KQZ7MXB...
+inventory 1: 3 configurations, 5 skills
+```
+
+With `--listen`, serve also answers on a WebSocket, so that a page in a browser on this machine can be its client. It is for the development of agentx. The app does not need it.
+
+- **Address**: pass a loopback address, such as `localhost`, `127.0.0.1` or `[::1]`, with a port if you want a fixed one, such as `localhost:4319`. Without a port, serve takes a free one. Serve refuses any other address, so other machines cannot connect.
+- **Token**: serve makes a new token each time it starts and prints it once. A client must present it. Keep it secret: a client that has it can run any agentx command as you.
+- **Origin**: pass `--origin` for each web page address that may connect, such as your development server. Without `--origin`, no browser can connect.
+
+A client speaks JSON-RPC 2.0. It can run agentx commands, ask for a rescan and search your sources, and it gets every inventory as serve reports it. The [CLI contract](https://github.com/grundmanise/agentx/blob/main/docs/spec/cli-contract.md#the-websocket-door) describes the protocol.
+
+Keep the terminal open: serve stops when you press Ctrl-C or its stdin closes, and it then stops every command a client started.
+
 ## One serve per home
 
 Only one serve runs for each agentx home (`~/.agentx`). A second `agentx serve`, `--once` included, exits with code 6 and names the lock file, `~/.agentx/serve.lock`. Stop the running serve first.

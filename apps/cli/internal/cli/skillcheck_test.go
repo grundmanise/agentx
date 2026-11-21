@@ -1350,12 +1350,7 @@ func TestCheckChildProcess(t *testing.T) {
 	if os.Getenv(checkChildEnv) == "" {
 		t.Skip("not the check child process")
 	}
-	env := map[string]string{}
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			env[k] = v
-		}
-	}
+	env := processEnv()
 	os.Exit(Run(context.Background(), []string{"skill", "check-updates"}, env, strings.NewReader(""), os.Stdout, os.Stderr))
 }
 

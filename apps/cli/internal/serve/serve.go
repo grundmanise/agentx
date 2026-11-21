@@ -1,6 +1,7 @@
 // Package serve is the long-running child the desktop app holds open: it
 // scans on start, rescans when the machine changes, and answers requests
-// read from stdin.
+// read from stdin and, through its Requests, from another door of the
+// process.
 package serve
 
 import (
@@ -43,6 +44,10 @@ type Options struct {
 	Once  bool                                                                           // scan once, emit and return
 	Stdin io.Reader                                                                      // request lines
 
+	// Requests is what another door of the process asks through; nil for
+	// none.
+	Requests *Requests
+
 	// Check is the update check, run once, off the loop's goroutine, after
 	// the initial inventory; it returns what reports its outcome, nil for
 	// nothing to report. nil checks nothing, and so does Once. It starts
@@ -66,6 +71,55 @@ type Options struct {
 	Warn            func(message string)
 }
 
+// Requests is how another door of the serve process, such as its
+// WebSocket, asks for what stdin's requests ask for. Its methods are
+// called from any goroutine, before and while Run serves; one Requests
+// serves one Run.
+type Requests struct {
+	refreshes chan func(counter int, err error)
+	loop      atomic.Pointer[loop]
+}
+
+// NewRequests makes the Requests of one Run, to be passed in its Options.
+func NewRequests() *Requests {
+	return &Requests{refreshes: make(chan func(int, error))}
+}
+
+// Refresh asks for a scan as a refresh request does, and waits for it: the
+// counter it returns is that of the current inventory, changed or not,
+// after a scan that began once Refresh was called. The error is the
+// scan's, or ctx's when ctx is done first. Run answers no request once it
+// has returned, so ctx must be done by then.
+func (r *Requests) Refresh(ctx context.Context) (counter int, err error) {
+	type outcome struct {
+		counter int
+		err     error
+	}
+	done := make(chan outcome, 1)
+	select {
+	case r.refreshes <- func(counter int, err error) { done <- outcome{counter, err} }:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	select {
+	case o := <-done:
+		return o.counter, o.err
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+// Search answers a search as a search request is answered: from the index
+// in memory, while a scan is in progress. Before the first index is built
+// it finds nothing.
+func (r *Requests) Search(query string) []source.Match {
+	var idx *source.Index
+	if l := r.loop.Load(); l != nil {
+		idx = l.index.Load()
+	}
+	return idx.Search(query)
+}
+
 // Job is one job serve runs off the loop's goroutine, once the initial
 // inventory is out: each of Jobs once, beside each other, and the checks,
 // see Check and Recheck. The report a run returns, nil
@@ -87,6 +141,11 @@ const (
 func Run(ctx context.Context, o Options) error {
 	ctx, cancel := context.WithCancel(ctx) // ends the stdin reader when Run returns for another reason
 	l := &loop{Options: o}
+	var refreshes chan func(counter int, err error) // nil without Requests: never ready
+	if o.Requests != nil {
+		refreshes = o.Requests.refreshes
+		o.Requests.loop.Store(l)
+	}
 	var checking sync.WaitGroup
 	defer func() {
 		cancel()
@@ -184,9 +243,12 @@ func Run(ctx context.Context, o Options) error {
 			case r.RequestID == "":
 				o.BadRequest("refresh request has no request_id", requestHint)
 			default:
-				l.pending = append(l.pending, r.RequestID)
+				l.pending = append(l.pending, func(counter int, err error) { o.RefreshComplete(r.RequestID, counter, err) })
 				schedule()
 			}
+		case done := <-refreshes:
+			l.pending = append(l.pending, done)
+			schedule()
 		case <-w.events:
 			schedule()
 		case err := <-w.errors:
@@ -221,9 +283,11 @@ func Run(ctx context.Context, o Options) error {
 // loop is the state one serve child keeps between scans.
 type loop struct {
 	Options
-	last    []byte   // canonical bytes of the last emitted inventory
-	counter int      // scan_counter of the last emitted inventory; 0 before the first
-	pending []string // refresh request ids received before the next scan
+	last    []byte // canonical bytes of the last emitted inventory
+	counter int    // scan_counter of the last emitted inventory; 0 before the first
+	// pending are the refresh requests received before the next scan, each
+	// as what acknowledges it: RefreshComplete for one read from stdin.
+	pending []func(counter int, err error)
 
 	index  atomic.Pointer[source.Index] // what searches are answered from; replaced whole after a scan
 	mu     sync.Mutex                   // held while a search is answered, and to close
@@ -274,8 +338,8 @@ func (l *loop) scan(ctx context.Context) error {
 		return ctx.Err()
 	}
 	if err != nil {
-		for _, id := range pending {
-			l.RefreshComplete(id, 0, err)
+		for _, acknowledge := range pending {
+			acknowledge(0, err)
 		}
 		return err
 	}
@@ -287,8 +351,8 @@ func (l *loop) scan(ctx context.Context) error {
 		l.Inventory(inventory)
 	}
 	l.reindex(ctx)
-	for _, id := range pending {
-		l.RefreshComplete(id, l.counter, nil)
+	for _, acknowledge := range pending {
+		acknowledge(l.counter, nil)
 	}
 	return nil
 }

@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 )
 
-// Handshake is what one server exposed the last time it was handshaken,
-// kept in handshakes.json by the server's logical id.
+// Handshake is what one server declaration exposed the last time it was
+// handshaken, kept in handshakes.json by the declaration's occurrence id.
+// An earlier agentx kept one entry per server, by its logical id.
 type Handshake struct {
 	Signature string `json:"signature"`
 	Tools     []Tool `json:"tools"`

@@ -23,7 +23,7 @@ import {
   sourceAddArgs,
 } from "#/screens/settings/transfer.ts";
 import { loadSources } from "#/store/loaders.ts";
-import { runCommand } from "#/store/runner.ts";
+import { agentx } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -46,7 +46,7 @@ const addMissingSources = async (sources: readonly SourceEvent[]) => {
   for (const source of notFetched(sources)) {
     // One after another: each source add takes the lock, so a second would wait or fail.
     // oxlint-disable-next-line no-await-in-loop
-    const outcome = await runCommand(sourceAddArgs(source), {
+    const outcome = await agentx(sourceAddArgs(source), {
       label: ADD_SOURCES_LABEL,
       ownFailure: true,
     });

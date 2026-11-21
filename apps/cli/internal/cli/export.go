@@ -24,13 +24,15 @@ import (
 // inside it carries the settings schema version, and an event carries the
 // output schema version. Version 1 was the export document of lineage
 // records an earlier agentx wrote, and a reader refuses it like any other
-// version but this one and readableSnapshotVersion.
-const snapshotSchemaVersion = 3
+// version but this one and readableSnapshotVersions.
+const snapshotSchemaVersion = 4
 
-// readableSnapshotVersion is the earlier version a reader takes as well:
-// version 2 lacks only the fields version 3 added, a server's logical id
-// and a tool's id, definition and hashes, which an import never reads.
-const readableSnapshotVersion = 2
+// readableSnapshotVersions are the earlier versions a reader takes as well.
+// They differ only in their servers, which an import never reads: version
+// 2 lacks a server's logical id and a tool's id and hashes, which version 3
+// added, and both hold one signature and its tools on a server where
+// version 4 holds its versions, so a reader moves those into one version.
+var readableSnapshotVersions = []int{2, 3}
 
 // settingsSchemaVersion is the version of the machine settings file this
 // CLI writes, which is what an import may restore.
@@ -117,13 +119,24 @@ type snapshotSkill struct {
 }
 
 // snapshotServer is one MCP server node of the inventory, without its
-// physical id and when its signature was taken.
+// physical id and when its versions were taken.
 type snapshotServer struct {
 	LogicalID   string                     `json:"logical_id,omitempty"` // absent from a version 2 snapshot
 	Name        string                     `json:"name"`
-	Signature   string                     `json:"signature"`
-	Tools       []snapshotTool             `json:"tools,omitempty"`
+	Versions    []snapshotVersion          `json:"versions,omitempty"`
 	Occurrences []snapshotServerOccurrence `json:"occurrences"`
+
+	// What a version 2 or 3 snapshot holds in place of versions, which a
+	// reader moves into them; never written.
+	LegacySignature string         `json:"signature,omitempty"`
+	LegacyTools     []snapshotTool `json:"tools,omitempty"`
+}
+
+// snapshotVersion is one version of a server: its signature and what it
+// exposed.
+type snapshotVersion struct {
+	Signature string         `json:"signature"`
+	Tools     []snapshotTool `json:"tools,omitempty"`
 }
 
 // snapshotTool is one tool, prompt, resource or resource template a server
@@ -143,6 +156,7 @@ type snapshotTool struct {
 // snapshotServerOccurrence is one declaration of a server, without its id,
 // the file it is declared in and what this scan's handshake of it found.
 type snapshotServerOccurrence struct {
+	Name          string   `json:"name,omitempty"` // absent from a version 2 or 3 snapshot
 	Configuration string   `json:"configuration"`
 	Command       string   `json:"command"`
 	Args          []string `json:"args"`
@@ -150,6 +164,7 @@ type snapshotServerOccurrence struct {
 	URL           string   `json:"url"`
 	HeaderKeys    []string `json:"header_keys"`
 	Transport     string   `json:"transport"`
+	Signature     string   `json:"signature,omitempty"` // absent from a version 2 or 3 snapshot until read
 	Plugin        string   `json:"plugin,omitempty"`
 	Enabled       *bool    `json:"enabled,omitempty"`
 }
@@ -452,14 +467,18 @@ func snapshotConfigurations(inventory scan.Inventory) []snapshotConfiguration {
 func snapshotServers(inventory scan.Inventory) []snapshotServer {
 	servers := make([]snapshotServer, 0, len(inventory.MCPServers))
 	for _, node := range inventory.MCPServers {
-		srv := snapshotServer{LogicalID: node.LogicalID, Name: node.Name, Signature: node.Signature, Occurrences: []snapshotServerOccurrence{}}
-		for _, tool := range node.Tools {
-			srv.Tools = append(srv.Tools, snapshotTool{ID: tool.ID, Kind: tool.Kind, Name: tool.Name, URI: tool.URI, Description: tool.Description, Hash: tool.Hash, SchemaHash: tool.SchemaHash})
+		srv := snapshotServer{LogicalID: node.LogicalID, Name: node.Name, Versions: []snapshotVersion{}, Occurrences: []snapshotServerOccurrence{}}
+		for _, v := range node.Versions {
+			version := snapshotVersion{Signature: v.Signature}
+			for _, tool := range v.Tools {
+				version.Tools = append(version.Tools, snapshotTool{ID: tool.ID, Kind: tool.Kind, Name: tool.Name, URI: tool.URI, Description: tool.Description, Hash: tool.Hash, SchemaHash: tool.SchemaHash})
+			}
+			srv.Versions = append(srv.Versions, version)
 		}
 		for _, o := range node.Occurrences {
 			srv.Occurrences = append(srv.Occurrences, snapshotServerOccurrence{
-				Configuration: o.Configuration, Command: o.Command, Args: o.Args, EnvKeys: o.EnvKeys,
-				URL: o.URL, HeaderKeys: o.HeaderKeys, Transport: o.Transport, Plugin: o.Plugin, Enabled: o.Enabled,
+				Name: o.Name, Configuration: o.Configuration, Command: o.Command, Args: o.Args, EnvKeys: o.EnvKeys,
+				URL: o.URL, HeaderKeys: o.HeaderKeys, Transport: o.Transport, Signature: o.Signature, Plugin: o.Plugin, Enabled: o.Enabled,
 			})
 		}
 		sort.SliceStable(srv.Occurrences, func(i, j int) bool {

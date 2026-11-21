@@ -20,6 +20,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -204,7 +205,7 @@ func decodeSnapshot(path string, b []byte) (snapshot, error) {
 	switch {
 	case envelope.SchemaVersion == nil:
 		return snapshot{}, notAnExport(path, "it carries no schema_version")
-	case *envelope.SchemaVersion != snapshotSchemaVersion && *envelope.SchemaVersion != readableSnapshotVersion:
+	case *envelope.SchemaVersion != snapshotSchemaVersion && !slices.Contains(readableSnapshotVersions, *envelope.SchemaVersion):
 		return snapshot{}, fail(exitRefused,
 			fmt.Sprintf("%s is a snapshot of schema version %d, and this agentx reads version %d", path, *envelope.SchemaVersion, snapshotSchemaVersion),
 			"export it again from that machine with this version of agentx, or upgrade agentx here")
@@ -226,7 +227,30 @@ func decodeSnapshot(path string, b []byte) (snapshot, error) {
 			snap.Skills[i].Kind = lineage.KindManaged
 		}
 	}
+	for i := range snap.MCPServers {
+		upgradeServer(&snap.MCPServers[i])
+	}
 	return snap, nil
+}
+
+// upgradeServer moves the one signature and tools a version 2 or 3 snapshot
+// holds on a server into its one version, which each of its declarations
+// answered with, so that the snapshot is written again as this version
+// writes it.
+func upgradeServer(srv *snapshotServer) {
+	legacy := srv.LegacySignature
+	if legacy == "" {
+		return
+	}
+	if legacy != scan.NoSignature && len(srv.Versions) == 0 {
+		srv.Versions = []snapshotVersion{{Signature: legacy, Tools: srv.LegacyTools}}
+	}
+	for i := range srv.Occurrences {
+		if srv.Occurrences[i].Signature == "" {
+			srv.Occurrences[i].Signature = legacy
+		}
+	}
+	srv.LegacySignature, srv.LegacyTools = "", nil
 }
 
 // decodeStrictly decodes b into v, refusing a field v does not know, since

@@ -9,6 +9,7 @@ import type {
   InventoryEvent,
   McpServer,
   ServerOccurrence,
+  ServerVersion,
   Transport,
 } from "#/cli/events.gen.ts";
 import type { HandshakeFailure } from "#/store/store.ts";
@@ -30,7 +31,10 @@ export interface ServerRow {
   address: string;
   /** The transports of its declarations, distinct, in order of first appearance. */
   transports: Transport[];
-  /** How many signature versions of the server this machine has; over 1, the versions disagree. */
+  /**
+   * How many signature versions its declarations answered with on this machine: 0 when never
+   * checked, over 1 when the versions disagree.
+   */
   versions: number;
   /** How many tools (entries of kind `tool`) the latest version exposed; undefined when never checked. */
   tools: number | undefined;
@@ -55,9 +59,6 @@ export const failureWords: Record<HandshakeReason, string> = {
   unreachable: "unreachable",
 };
 
-/** The signature of a server the CLI never checked. */
-const NO_SIGNATURE = "none";
-
 const distinct = <T>(items: T[]): T[] => [...new Set(items)];
 
 const time = (at: string | undefined) => {
@@ -68,15 +69,15 @@ const time = (at: string | undefined) => {
   return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t;
 };
 
-/** The version checked last, or the first when none was. */
-const latestOf = (nodes: McpServer[]): McpServer | undefined => {
-  let best: McpServer | undefined;
-  for (const node of nodes) {
+/** The version whose signature was taken last, or undefined when the server has none. */
+const latestOf = (versions: ServerVersion[]): ServerVersion | undefined => {
+  let best: ServerVersion | undefined;
+  for (const version of versions) {
     if (
       best === undefined ||
-      time(node.signature_at) > time(best.signature_at)
+      time(version.signature_at) > time(best.signature_at)
     ) {
-      best = node;
+      best = version;
     }
   }
   return best;
@@ -93,10 +94,10 @@ export const addressOf = (occurrence: ServerOccurrence | undefined) => {
   return [occurrence.command, ...occurrence.args].join(" ");
 };
 
-const toolCount = (node: McpServer | undefined): number | undefined =>
-  node === undefined || node.signature === NO_SIGNATURE
+const toolCount = (version: ServerVersion | undefined): number | undefined =>
+  version === undefined
     ? undefined
-    : (node.tools ?? []).filter((t) => t.kind === "tool").length;
+    : (version.tools ?? []).filter((t) => t.kind === "tool").length;
 
 /** Whether a declaration is on: its client records it as turned off only with `enabled` false. */
 const isOn = (o: ServerOccurrence) => o.enabled !== false;
@@ -130,11 +131,18 @@ const rowOf = (
   nodes: McpServer[],
   input: ProjectionInput
 ): ServerRow => {
-  const latest = latestOf(nodes);
   const occurrences = nodes.flatMap((n) => n.occurrences);
+  const signatures = distinct(
+    nodes.flatMap((n) => n.versions.map((v) => v.signature))
+  );
+  const latest = latestOf(nodes.flatMap((n) => n.versions));
   const order = input.inventory.configurations.map((c) => c.id);
   return {
-    address: addressOf(latest?.occurrences[0] ?? occurrences[0]),
+    // The address of a declaration that answered with the latest version, else of the first.
+    address: addressOf(
+      occurrences.find((o) => o.signature === latest?.signature) ??
+        occurrences[0]
+    ),
     agents: agentsOf(occurrences, order),
     failures: failuresOf(logicalId, input.handshakeFailures),
     key: logicalId,
@@ -146,7 +154,7 @@ const rowOf = (
     tools: toolCount(latest),
     transports: distinct(occurrences.map((o) => o.transport)),
     turnedOff: occurrences.length > 0 && !occurrences.some(isOn),
-    versions: nodes.length,
+    versions: signatures.length,
   };
 };
 

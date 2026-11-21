@@ -32,12 +32,7 @@ func TestSignalChildProcess(t *testing.T) {
 	if os.Getenv(signalChildEnv) == "" {
 		t.Skip("not the signal child process")
 	}
-	env := map[string]string{}
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			env[k] = v
-		}
-	}
+	env := processEnv()
 	os.Exit(Main(strings.Fields(os.Getenv(signalChildArgs)), env, strings.NewReader(""), os.Stdout, os.Stderr))
 }
 

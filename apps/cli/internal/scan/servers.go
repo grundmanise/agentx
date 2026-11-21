@@ -9,9 +9,9 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/mcp"
 )
 
-// noSignature marks a server that was never handshaken. A handshake replaces
-// it with the signature hash and sets Handshake on the occurrence.
-const noSignature = "none"
+// NoSignature marks a declaration that was never handshaken. A handshake
+// replaces it with the signature hash and sets Handshake on the occurrence.
+const NoSignature = "none"
 
 // declaration is one server declared in one configuration file. Its node is
 // built when the inventory is composed, since the physical identity depends
@@ -83,28 +83,33 @@ func (s *Scan) serverLogicalID(server mcp.Server) string {
 	return id("server", parts...)
 }
 
-// composeServers builds the server nodes from the declarations: this scan's
-// handshake gives the signature, else the stored one, else noSignature. The
-// fresh handshakes are returned by logical id for the handshakes file.
+// composeServers builds the server nodes from the declarations, one per
+// logical server: each declaration's version is this scan's handshake, else
+// the one stored for it, else none. The fresh handshakes are returned by
+// occurrence id for the handshakes file, so two declarations of one server
+// keep their own answers.
 func (s *Scan) composeServers() map[string]home.Handshake {
 	fresh := map[string]home.Handshake{}
 	for _, d := range s.declared {
-		signature, tools, at := noSignature, []home.Tool(nil), ""
+		physical := id("server", d.logical, s.MachineID)
+		occurrence := id("occurrence", d.conf.PhysicalID, physical, s.portable(d.file), d.server.Name)
+		signature, tools, at := NoSignature, []home.Tool(nil), ""
 		if d.fresh != nil {
 			signature, tools, at = d.fresh.Signature, s.tools(d.logical, d.fresh.Items), d.at
-			fresh[d.logical] = home.Handshake{Signature: signature, Tools: tools, At: at}
-		} else if h, ok := s.stored[d.logical]; ok {
+			fresh[occurrence] = home.Handshake{Signature: signature, Tools: tools, At: at}
+		} else if h, ok := s.storedFor(occurrence, d.logical); ok {
 			signature, tools, at = h.Signature, keyed(d.logical, h.Tools), h.At
 		}
-		physical := id("server", d.logical, s.MachineID, signature)
 		node, ok := s.servers[physical]
 		if !ok {
-			node = &Server{PhysicalID: physical, LogicalID: d.logical, Name: d.server.Name, Signature: signature, SignatureAt: at, Tools: tools}
+			node = &Server{PhysicalID: physical, LogicalID: d.logical, Name: d.server.Name, Versions: []ServerVersion{}}
 			s.servers[physical] = node
-		} else if d.fresh != nil {
-			node.SignatureAt = at
+		}
+		if signature != NoSignature {
+			node.addVersion(ServerVersion{Signature: signature, SignatureAt: at, Tools: tools})
 		}
 		occ := ServerOccurrence{
+			Name:          d.server.Name,
 			Configuration: d.conf.ID,
 			ConfigFile:    d.file,
 			Command:       d.server.Command,
@@ -113,6 +118,7 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 			URL:           d.server.URL,
 			HeaderKeys:    d.server.HeaderKeys,
 			Transport:     d.server.Transport,
+			Signature:     signature,
 			Handshake:     d.fresh != nil,
 			HandshakeErr:  d.failed,
 			Plugin:        d.plugin,
@@ -120,7 +126,7 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 		if d.disabled {
 			occ.Enabled = new(bool)
 		}
-		occ.ID = id("occurrence", d.conf.PhysicalID, physical, s.portable(d.file), d.server.Name)
+		occ.ID = occurrence
 		if !s.seen[occ.ID] {
 			s.seen[occ.ID] = true
 			node.Occurrences = append(node.Occurrences, occ)
@@ -131,6 +137,42 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 		}
 	}
 	return fresh
+}
+
+// storedFor is the handshake stored for the declaration with this
+// occurrence id, else the one an earlier agentx stored for its logical
+// server, which kept one entry per server.
+func (s *Scan) storedFor(occurrence, logical string) (home.Handshake, bool) {
+	if h, ok := s.stored[occurrence]; ok {
+		return h, true
+	}
+	h, ok := s.stored[logical]
+	return h, ok
+}
+
+// addVersion records v on the server, once per signature, keeping the
+// latest time it was taken.
+func (node *Server) addVersion(v ServerVersion) {
+	for i, have := range node.Versions {
+		if have.Signature == v.Signature {
+			if v.SignatureAt > have.SignatureAt {
+				node.Versions[i].SignatureAt = v.SignatureAt
+			}
+			return
+		}
+	}
+	node.Versions = append(node.Versions, v)
+}
+
+// ToolsOf is what the server exposed to the declaration o: the tools of the
+// version o answered with, none when it never answered.
+func (node Server) ToolsOf(o ServerOccurrence) []home.Tool {
+	for _, v := range node.Versions {
+		if v.Signature == o.Signature {
+			return v.Tools
+		}
+	}
+	return nil
 }
 
 // tools are the nodes of what a server exposed, one per identity.

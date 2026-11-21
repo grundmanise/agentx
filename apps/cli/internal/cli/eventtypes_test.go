@@ -64,6 +64,7 @@ var eventTypes = []struct {
 	{"refresh_complete", refreshCompleteEvent{}},
 	{"search", searchEvent{}},
 	{"update_check", updateCheckEvent{}},
+	{"listening", listeningEvent{}},
 }
 
 // reservedEventTypes are event types the contract reserves and no command

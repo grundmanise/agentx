@@ -28,7 +28,9 @@ The events are unchanged inside the notification, so the app's generated event t
 
 Serve runs each `run` as a child process of its own: the same `agentx` executable, in a process group of its own, with serve's environment and working directory. It forwards the child's lines as `event` notifications, and on `$/cancelRequest` or a passed deadline sends the group SIGTERM, then SIGKILL 2 seconds later. This is what the Rust shell does today, moved into Go where every client can use it.
 
-So a command behaves exactly as it does now. A crash in a command ends that command alone, a cancel ends every git the command started, and no state is shared between two commands. When a command that may have changed something ends, serve scans, and the result names the inventory that holds the change, so a client no longer sends `refresh` after its own commands.
+So a command behaves exactly as it does now. A crash in a command ends that command alone, a cancel ends every git the command started, and no state is shared between two commands.
+
+Serve does not scan for a command it ran. Two jobs are kept apart. Serve keeps the inventory equal to the machine: it scans when the machine changes and sends the inventory that results. Whether a client needs the inventory to hold what its own command changed before it goes on is for the client to say, since only the client knows what it shows and what it does next. It says so with `refresh`, sent after a command that may have changed something, as the desktop app does today. So `run` carries a command and its outcome and nothing else, both wires follow one rule, and neither the CLI nor serve keeps a list of the commands that change nothing.
 
 Running a command inside the serve process, with no process start, is a later step and is decided per command by measurement. It is not free: the commands that finish a merge change the process's working directory, git calls read it, a panic in a goroutine a command started would end serve, and a command that ignores its context could not be stopped. A command moves inside serve only when a measured start-up cost justifies it and those four are handled for it. No client changes when one does: the request and its events stay the same.
 
@@ -79,11 +81,17 @@ The terminal CLI as a client of a running serve: the CLI on `PATH` and the serve
 
 Request lines of our own, as `refresh` and `search` are today, with a run and a cancel request added: fewer changes, but a protocol only agentx documents. Newline-delimited JSON says how messages are framed and nothing about requests, ids, errors or cancelling, so each of those would be ours to define and to explain to whoever writes a client.
 
+Serve scanning after every command it ran, with the result naming the inventory that holds the change: a client would need no rule of its own, but a command that only reads would pay for a scan, and the choice of when data must be fresh would sit in the transport, away from the client that makes it.
+
+The CLI marking the commands that change nothing, for serve to skip the scan after them and for the app to read as a generated list: no list is written by hand, but the CLI and serve would carry a fact that only a client uses, and a mark for each command cannot tell a run that previews, as `adopt` with no flag does, from one that writes.
+
 gRPC, or a schema compiler beside Go: a second toolchain for the same events, and nothing a browser speaks without a proxy.
 
 ## Consequences
 
-The [CLI contract](../spec/cli-contract.md) gains the protocol, the methods, `--listen`, `--origin` and the `listening` event. Its section on serve's stdin requests becomes the `refresh` and `search` methods, and serve's own events become `event` notifications; the request lines of today stay accepted until the desktop app has moved. The [inventory-ordering contract](../spec/inventory-ordering.md) gains that serve scans after a command it ran.
+The [CLI contract](../spec/cli-contract.md) gains the protocol, the methods, `--listen`, `--origin` and the `listening` event. Its section on serve's stdin requests becomes the `refresh` and `search` methods, and serve's own events become `event` notifications; the request lines of today stay accepted until the desktop app has moved. The [inventory-ordering contract](../spec/inventory-ordering.md) gains that a client of the door sends `refresh` after its own commands, as the desktop app does.
+
+The desktop app stops keeping a list of the commands that change nothing: the code that runs a command says whether it reads or changes state, and a refresh follows the second kind.
 
 The end-to-end tests keep the mocked CLI. A small set of tests runs the frontend in a browser against a real `agentx serve --listen`, one happy path per screen.
 

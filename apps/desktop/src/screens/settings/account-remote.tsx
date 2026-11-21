@@ -27,7 +27,7 @@ import type { HintRule } from "#/lib/app-hint.ts";
 import { useNow } from "#/screens/settings/clock.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { accountLine, accountRemote } from "#/screens/settings/source-rows.ts";
-import { runCommand, usePending } from "#/store/runner.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
@@ -98,7 +98,7 @@ const saveHintRules: HintRule[] = [
 /** What went wrong with Save, as the CLI said it; undefined when the runner shows it itself. */
 const saveProblem = (
   typed: string,
-  outcome: Awaited<ReturnType<typeof runCommand>>
+  outcome: Awaited<ReturnType<typeof agentx>>
 ): Problem | undefined => {
   // Exit 7 is the runner's "Another agentx command is running" with its Retry, and exit 8 brings
   // the startup layer back, which says why.
@@ -145,7 +145,7 @@ const RemoteForm = ({
       return;
     }
     setProblem(undefined);
-    const outcome = await runCommand(["source", "add", typed, "--account"], {
+    const outcome = await agentx(["source", "add", typed, "--account"], {
       label: SAVE_ACCOUNT_LABEL,
       ownFailure: true,
       success: (events) => {
@@ -239,7 +239,7 @@ const AccountRemoteRow = ({
   const busy = usePending(DETACH_ACCOUNT_LABEL);
 
   const detach = () => {
-    void runCommand(["source", "remove", url], {
+    void agentx(["source", "remove", url], {
       label: DETACH_ACCOUNT_LABEL,
       success: "The account remote is no longer set",
     });

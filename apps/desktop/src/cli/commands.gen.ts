@@ -51,7 +51,9 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
     project: true,
   },
   serve: {
+    listen: true,
     once: false,
+    origin: true,
   },
   "skill add": {
     all: false,

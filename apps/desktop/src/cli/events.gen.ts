@@ -253,9 +253,7 @@ export interface McpServer {
   physical_id: string;
   logical_id: string;
   name: string;
-  signature: string;
-  signature_at?: string;
-  tools?: McpTool[];
+  versions: ServerVersion[];
   occurrences: ServerOccurrence[];
 }
 
@@ -288,6 +286,35 @@ export interface Occurrence {
   plugin?: string;
 }
 
+export interface ServerVersion {
+  signature: string;
+  signature_at: string;
+  tools?: McpTool[];
+}
+
+export interface ServerOccurrence {
+  id: string;
+  name: string;
+  configuration: string;
+  config_file: string;
+  command: string;
+  args: string[];
+  env_keys: string[];
+  url: string;
+  header_keys: string[];
+  transport: Transport;
+  signature: string;
+  handshake: boolean;
+  handshake_error?: HandshakeError;
+  plugin?: string;
+  enabled?: boolean;
+}
+
+export interface Hook {
+  event: string;
+  name: string;
+}
+
 export interface McpTool {
   id: string;
   kind: ToolKind;
@@ -298,27 +325,6 @@ export interface McpTool {
   output_schema?: Record<string, unknown>;
   hash?: string;
   schema_hash?: string;
-}
-
-export interface ServerOccurrence {
-  id: string;
-  configuration: string;
-  config_file: string;
-  command: string;
-  args: string[];
-  env_keys: string[];
-  url: string;
-  header_keys: string[];
-  transport: Transport;
-  handshake: boolean;
-  handshake_error?: HandshakeError;
-  plugin?: string;
-  enabled?: boolean;
-}
-
-export interface Hook {
-  event: string;
-  name: string;
 }
 
 export interface HandshakeError {
@@ -644,6 +650,13 @@ export interface UpdateCheckEvent {
   fetched: boolean;
 }
 
+export interface ListeningEvent {
+  type: "listening";
+  schema_version: number;
+  url: string;
+  token: string;
+}
+
 // Reserved by the contract and never emitted: known, and not rendered.
 export interface OperationEvent {
   type: "operation";
@@ -687,6 +700,7 @@ export type CliEvent =
   | RefreshCompleteEvent
   | SearchEvent
   | UpdateCheckEvent
+  | ListeningEvent
   | OperationEvent
   | FleetEvent;
 export type CliEventType = CliEvent["type"];

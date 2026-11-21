@@ -110,7 +110,7 @@ func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 
 	doc := h.readExportFile(file)
 	equal(t, "the snapshot's fields", keysOf(doc), "configurations,machine,mcp_servers,plugins,schema_version,settings,skills")
-	equal(t, "schema_version", doc["schema_version"], float64(3))
+	equal(t, "schema_version", doc["schema_version"], float64(4))
 	equal(t, "machine.label", doc["machine"].(map[string]any)["label"], "test-host")
 	confs := doc["configurations"].([]any)
 	equal(t, "configurations", len(confs), 2)
@@ -356,5 +356,5 @@ func TestExportRefusesADirectoryWithAHintThatHelps(t *testing.T) {
 	contains(t, "stderr", again.stderr, "pass --force to overwrite it")
 	equal(t, "the file", readText(t, file), "not an export\n")
 	equal(t, "with --force", h.run("export", "backup", "--force").exit, 0)
-	equal(t, "schema_version", h.readExportFile(file)["schema_version"], float64(3))
+	equal(t, "schema_version", h.readExportFile(file)["schema_version"], float64(4))
 }

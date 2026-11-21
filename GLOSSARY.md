@@ -19,7 +19,7 @@ A directory following the Agent Skills standard, containing a SKILL.md with fron
 _Avoid_: prompt, command, rule
 
 **MCP server**:
-One server declared in an agent configuration, in one specific tool-signature version.
+One server declared in an agent configuration. What it exposed to a handshake, its tool signature, is one of its versions, recorded on it and never part of its identity.
 
 **Plugin**:
 A bundle of skills, MCP servers, hooks and subagents installed from a marketplace into an agent client. Identified across machines by its marketplace and plugin name.
@@ -43,7 +43,7 @@ _Avoid_: skill id, key
 The permanent identity assigned when one of the user's own skills is created, by `agentx skill new` or `agentx skill fork`, or by `agentx adopt` of a skill with its files as they are, carried by the commit that creates it, which is never amended. Installing that published skill elsewhere preserves it, and so does renaming it; independently creating another skill assigns a different identity, even from the same upstream version.
 
 **Physical asset**:
-One logical asset on one machine in one version, the version being the content hash for a skill and the tool signature for a server. The unit drift is evaluated on and machine views count.
+One logical asset on one machine: for a skill in one version, its content hash; for a server whatever it exposed, its versions, the tool signatures its declarations answered with, recorded on it. The unit drift is evaluated on and machine views count.
 
 **Occurrence**:
 One placement of a physical asset inside one agent configuration.
