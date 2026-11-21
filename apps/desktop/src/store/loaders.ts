@@ -11,9 +11,10 @@ import type {
   SkillFileEvent,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
+import { checksPass } from "#/startup/startup.ts";
 import { cachedRead, keepRead } from "#/store/read-cache.ts";
 import { onFinished, runCommand } from "#/store/runner.ts";
-import type { Finished } from "#/store/runner.ts";
+import type { CommandOptions, Finished } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { AppState, FilesRead } from "#/store/store.ts";
 
@@ -22,6 +23,15 @@ import type { AppState, FilesRead } from "#/store/store.ts";
  * version without one is not kept for the next launch, since it names no content.
  */
 const hashed = (version: string) => !version.startsWith(":");
+
+/**
+ * Runs a read for a screen. A screen that shows the kept inventory under the frosted pane asks for
+ * its reads as it mounts: such a read runs once the startup checks pass, however long that takes.
+ */
+const runRead = async (args: readonly string[], options: CommandOptions) => {
+  await checksPass();
+  return await runCommand(args, options);
+};
 
 // Each read's latest run: a slower earlier run of the same read does not overwrite a later one.
 const latest = new Map<string, number>();
@@ -34,7 +44,7 @@ const runLoad = async (
   mine: number
 ) => {
   const key = args.join(" ");
-  const outcome = await runCommand(args, { label: `load ${key}` });
+  const outcome = await runRead(args, { label: `load ${key}` });
   if (latest.get(key) !== mine) {
     // A later run replaced this one: it ends with that run, so its caller finds the store filled.
     await running.get(key);
@@ -190,7 +200,7 @@ export const loadHistory = async (name: string, version: string) => {
       histories: { ...s.histories, [name]: { entries: kept, version } },
     }));
   }
-  const outcome = await runCommand(["skill", "history", name], {
+  const outcome = await runRead(["skill", "history", name], {
     label: `history ${name}`,
   });
   if (historyVersions.get(name) !== version) {
@@ -259,10 +269,10 @@ export const loadFiles = async (
     return;
   }
   const [files, diff] = await Promise.all([
-    runCommand(["skill", "files", ...request.args], { label: `files ${key}` }),
+    runRead(["skill", "files", ...request.args], { label: `files ${key}` }),
     request.diff === undefined
       ? undefined
-      : runCommand(["skill", "diff", request.diff], {
+      : runRead(["skill", "diff", request.diff], {
           label: `diff ${request.diff}`,
         }),
   ]);
@@ -340,14 +350,11 @@ export const loadSkillMd = async (key: string, request: SkillMdRequest) => {
     return;
   }
   const subpath = request.subpath === "" ? "." : request.subpath;
-  const outcome = await runCommand(
-    ["source", "read", request.source, subpath],
-    {
-      label: `read ${request.source} ${subpath}`,
-      // The row says the file could not be read; a toast per row opened would add nothing.
-      ownFailure: true,
-    }
-  );
+  const outcome = await runRead(["source", "read", request.source, subpath], {
+    label: `read ${request.source} ${subpath}`,
+    // The row says the file could not be read; a toast per row opened would add nothing.
+    ownFailure: true,
+  });
   if (skillMdVersions.get(key) !== version) {
     return;
   }
@@ -409,7 +416,7 @@ export const loadUpdateDiff = async (
     }));
     return;
   }
-  const outcome = await runCommand(["skill", "diff", name, "--update"], {
+  const outcome = await runRead(["skill", "diff", name, "--update"], {
     label: updateDiffLabel(name),
     ownFailure: true,
   });

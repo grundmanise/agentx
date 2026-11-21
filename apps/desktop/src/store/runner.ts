@@ -17,7 +17,6 @@ import {
 import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
 import { skillNamesOf } from "#/lib/problem-text.ts";
-import { checksPass } from "#/startup/startup.ts";
 import { refresh } from "#/store/feed.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 import type { Problem, Tone } from "#/store/store.ts";
@@ -378,25 +377,13 @@ const report = (
 };
 
 /**
- * Holds a command until the startup checks pass, while the screens show the kept inventory: the
- * control shows as pending meanwhile. Only a read a screen starts as it mounts waits here, since
- * the frosted pane keeps every control out of reach until the checks pass (src/app/app.tsx).
- */
-const afterChecks = async (label: string) => {
-  setPending(label, `checks ${crypto.randomUUID()}`);
-  await checksPass();
-};
-
-/**
  * Runs `agentx <args> --json` for the control named `options.label`, and returns how it ended
  * so that the caller can follow up. It never rejects: a CLI that could not start is an outcome.
- * A command started while the screens show the kept inventory waits for the startup checks.
  */
 export const runCommand = async (
   args: readonly string[],
   options: CommandOptions
 ): Promise<Outcome> => {
-  await afterChecks(options.label);
   const started = run(args, { deadlineMs: options.deadlineMs });
   setPending(options.label, started.runId);
   const following =
