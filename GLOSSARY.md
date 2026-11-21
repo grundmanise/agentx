@@ -168,7 +168,7 @@ Applying a managed skill's update candidate, only ever at the user's request: th
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict, or the account step of an update when a fork's commits and the account remote's conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update applies the resolved merge, or the merge is given up with `skill update --abort`. While it exists the skill is not removed. Survives restarts.
+The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict, or the account step of an update when a fork's commits and the account remote's conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git, or by editing its files and running `skill update --continue`. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update applies the resolved merge, `skill update --theirs` drops the edits and applies the update candidate instead, or the merge is given up with `skill update --abort`. While it exists the skill is not removed. Survives restarts.
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:

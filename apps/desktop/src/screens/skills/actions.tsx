@@ -1,7 +1,7 @@
 // The buttons of the Skills detail pane's banners. Each runs exactly one command line and redraws from the inventory that
 // follows; a Reconnect the CLI refuses because the folder holds another version opens a confirm
-// dialog, whose Replace runs the same command with --force. Abort, on a pending merge, asks first
-// too. Show folder runs no command: it shows the merge folder in Finder.
+// dialog, whose Replace runs the same command with --force. Discard my edits, on a pending merge,
+// asks first too. Show folder runs no command: it shows the merge folder in Finder.
 import { useRef, useState } from "react";
 import { create } from "zustand";
 
@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from "#/components/ui/alert-dialog.tsx";
 import { Button } from "#/components/ui/button.tsx";
-import { revealInFinder } from "#/lib/reveal.ts";
+import { revealIfThere, revealInFinder } from "#/lib/reveal.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
   adoptArgs,
@@ -31,7 +31,11 @@ import {
 import { shortSource, updateVersions } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
-import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
+import {
+  settleMerge,
+  updateLabel,
+  updateSkill,
+} from "#/screens/skills/updates.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -44,7 +48,6 @@ const reconnectLabel = (row: SkillRow, placement: LibraryPlacement) =>
   `put back ${row.key} ${placement.configuration}`;
 
 const addSourceLabel = (source: string) => `add source ${source}`;
-const abortLabel = (name: string) => `abort update ${name}`;
 
 /** The name the CLI reports for the skill a run of `adopt` took over as one of your own. */
 const adoptedName = (events: CliEvent[]) =>
@@ -403,10 +406,19 @@ export const SeeChanges = ({ row }: { row: SkillRow }) => {
   );
 };
 
+/** Shows `<checkout>/<name>` in Finder, or the checkout when it holds no folder of that name. */
+const revealMergeFolder = async (checkout: string, name: string) => {
+  if (!(await revealIfThere(`${checkout}/${name}`))) {
+    await revealInFinder(checkout);
+  }
+};
+
 /**
- * Show folder: the folder of a pending merge, `<agentx home>/merges/<name>/<name>`, where the
- * conflicts are resolved, shown in Finder. agentx home is the machine's, from `machine`; the
- * button waits for it.
+ * Show folder: the skill's folder in the checkout of a pending merge, where the conflicts are
+ * resolved, shown in Finder. The checkout is `<agentx home>/merges/<name>`, and the skill's folder
+ * in it is named after its folder in the source, which is the skill's name but for a skill at a
+ * repository's root or one named otherwise: then the checkout itself is shown, holding that one
+ * folder. agentx home is the machine's, from `machine`; the button waits for it.
  */
 export const ShowMergeFolder = ({ name }: { name: string }) => {
   const home = useAppStore((s) => s.machine?.home);
@@ -417,7 +429,7 @@ export const ShowMergeFolder = ({ name }: { name: string }) => {
       disabled={home === undefined}
       onClick={() => {
         if (home !== undefined) {
-          void revealInFinder(`${home}/merges/${name}/${name}`);
+          void revealMergeFolder(`${home}/merges/${name}`, name);
         }
       }}
     >
@@ -427,12 +439,34 @@ export const ShowMergeFolder = ({ name }: { name: string }) => {
 };
 
 /**
- * Abort: `skill update <name> --abort` gives up a pending merge, after a confirm dialog. The
- * skill and the update stay as they were; what was resolved in the merge folder is discarded.
+ * Apply merge: `skill update <name> --continue` applies a pending merge with the files of the
+ * merge folder as the user left them, saved with no Git. A file still holding a conflict marker
+ * is refused, and the runner's toast names it and its line.
  */
-export const AbortMerge = ({ name }: { name: string }) => {
-  const label = abortLabel(name);
-  const pending = useSettling(label);
+export const ApplyMerge = ({ row }: { row: SkillRow }) => {
+  const pending = useSettling(updateLabel(row.name));
+  return (
+    <Button
+      variant="primary"
+      size="sm"
+      disabled={pending}
+      aria-busy={pending ? true : undefined}
+      onClick={() => {
+        void settleMerge(row, "--continue");
+      }}
+    >
+      {pending && <Spinner />}
+      Apply merge
+    </Button>
+  );
+};
+
+/**
+ * Discard my edits: `skill update <name> --theirs` drops the skill's edits and applies the update
+ * as published, after a confirm dialog, since the edits are lost.
+ */
+export const DiscardEdits = ({ row }: { row: SkillRow }) => {
+  const pending = useSettling(updateLabel(row.name));
   const [confirm, setConfirm] = useState(false);
   return (
     <>
@@ -440,21 +474,18 @@ export const AbortMerge = ({ name }: { name: string }) => {
         variant="danger"
         size="sm"
         disabled={pending}
-        aria-busy={pending ? true : undefined}
         onClick={() => {
           setConfirm(true);
         }}
       >
-        {pending && <Spinner />}
-        Abort
+        Discard my edits
       </Button>
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{`Abort the update of ${name}?`}</AlertDialogTitle>
+            <AlertDialogTitle>Update discarding local edits?</AlertDialogTitle>
             <AlertDialogDescription>
-              Your resolved files in the merge folder are discarded. The skill
-              and the update stay as they were.
+              Your local changes to the skill will be overwritten by the update.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -465,13 +496,10 @@ export const AbortMerge = ({ name }: { name: string }) => {
               variant="danger"
               onClick={() => {
                 setConfirm(false);
-                void runUntilSettled(["skill", "update", name, "--abort"], {
-                  label,
-                  success: `Aborted the update of ${name} skill`,
-                });
+                void settleMerge(row, "--theirs");
               }}
             >
-              Abort
+              Discard
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

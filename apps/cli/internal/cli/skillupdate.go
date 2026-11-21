@@ -20,9 +20,9 @@ import (
 )
 
 func newSkillUpdateCommand(inv *invocation) *cobra.Command {
-	var all, abort bool
+	var all, abort, resume, theirs bool
 	cmd := &cobra.Command{
-		Use:         "update [<name>...] [--abort]",
+		Use:         "update [<name>...] [--continue | --theirs | --abort]",
 		Short:       "Apply the update the last check found",
 		Annotations: map[string]string{annotationSection: "updates", annotationSynopsis: "<name>..."},
 		Long: "Replace the library directory of a managed skill with the newer upstream version\n" +
@@ -32,7 +32,9 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"it is and the conflicting files are listed: the merge waits, an ordinary Git merge\n" +
 			"in progress in a Git worktree under agentx home, never in the library, for you to\n" +
 			"resolve with git. Run the update again once it is resolved to apply it, or pass\n" +
-			"--abort to give it up. Files git ignores in the skill, such as a .DS_Store or an\n" +
+			"--abort to give it up. Pass --continue to apply the files of the worktree as you\n" +
+			"left them, with no git, once no conflict marker is left in them, or --theirs to\n" +
+			"drop your edits and apply the update as published. Files git ignores in the skill, such as a .DS_Store or an\n" +
 			"ignored build directory, are not edits, and stay. A copy placement that holds the\n" +
 			"version replaced is refreshed; a copy edited on its own is kept and named.\n\n" +
 			"A forked skill's update is always merged, with the upstream version it was last\n" +
@@ -55,48 +57,95 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"agentx skill update pdf", "apply the update found for one skill",
 			"agentx skill update pdf docx", "apply the updates found for two skills in one run",
 			"agentx skill update --all", "apply every update the last check found",
+			"agentx skill update docx --continue", "apply a merge that conflicted, with its files as you left them",
+			"agentx skill update docx --theirs", "drop your edits and apply the update instead",
 			"agentx skill update docx --abort", "give up a merge that conflicted",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			names, f := updateNames(args, all, abort)
+			names, f := updateNames(args, all, pendingFlag(abort, resume, theirs))
 			switch {
 			case f != nil:
 				return f
 			case abort:
 				return inv.abortMerge(cmd.Context(), names[0])
+			case resume || theirs:
+				if err := inv.settleMerge(cmd.Context(), names[0], theirs); err != nil {
+					return err
+				}
 			}
 			return inv.skillUpdate(cmd.Context(), names)
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill the last check found an update for, and every skill of your own another machine published to")
+	cmd.Flags().BoolVar(&resume, "continue", false, "apply the merge pending for the skill with the files of its worktree as you left them, once no conflict marker is left")
+	cmd.Flags().BoolVar(&theirs, "theirs", false, "drop your edits and apply the update the merge pending for the skill merges, as published")
 	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory, or the worktree and branch of one of your own, stay as they are")
+	cmd.MarkFlagsMutuallyExclusive("continue", "theirs", "abort")
 	return cmd
+}
+
+// pendingFlag is the flag of skill update that acts on one skill's pending
+// merge, --continue, --theirs or --abort, or "" for none; cobra refuses
+// more than one. Pure.
+func pendingFlag(abort, resume, theirs bool) string {
+	switch {
+	case abort:
+		return "--abort"
+	case resume:
+		return "--continue"
+	case theirs:
+		return "--theirs"
+	}
+	return ""
 }
 
 // updateNames is what one run of skill update was asked to update, from
 // its arguments: the names given, in name order, each once however often it
-// was given, or nil for --all. A name and --all together, neither, --abort
-// with --all and --abort with more than one name are usage errors, in that
-// order. Pure.
-func updateNames(args []string, all, abort bool) ([]string, *failure) {
+// was given, or nil for --all. A name and --all together, neither, a
+// pending merge's flag, --continue, --theirs or --abort, with --all and
+// with more than one name are usage errors, in that order. Pure.
+func updateNames(args []string, all bool, pending string) ([]string, *failure) {
 	const hint = "name the skills to update, or run 'agentx skill update --all' to update every skill the last check found an update for"
-	const abortHint = "run 'agentx skill update <name> --abort' for each skill whose merge to give up"
+	abortHint := "run 'agentx skill update <name> " + pending + "' for each skill whose merge to " + pendingVerb(pending)
 	names := slices.Clone(args)
 	slices.Sort(names)
 	names = slices.Compact(names)
 	switch {
 	case all && len(names) > 0:
 		return nil, refuse(exitUsage, "skill update takes skill names or --all, not both", hint)
-	case all && abort:
-		return nil, refuse(exitUsage, "--abort gives up the merge of one skill, not of --all", abortHint)
+	case all && pending != "":
+		return nil, refuse(exitUsage, pending+" "+pendingVerbs(pending)+" the merge of one skill, not of --all", abortHint)
 	case all:
 		return nil, nil
 	case len(names) == 0:
 		return nil, refuse(exitUsage, "no skill to update", hint)
-	case abort && len(names) > 1:
-		return nil, refuse(exitUsage, "--abort gives up the merge of one skill, not of several", abortHint)
+	case pending != "" && len(names) > 1:
+		return nil, refuse(exitUsage, pending+" "+pendingVerbs(pending)+" the merge of one skill, not of several", abortHint)
 	}
 	return names, nil
+}
+
+// pendingVerb is what the pending merge's flag does to a merge, as a verb:
+// give up for --abort, apply for --continue, replace for --theirs. Pure.
+func pendingVerb(pending string) string {
+	switch pending {
+	case "--continue":
+		return "apply"
+	case "--theirs":
+		return "replace with the update"
+	}
+	return "give up"
+}
+
+// pendingVerbs is pendingVerb for the flag as the subject. Pure.
+func pendingVerbs(pending string) string {
+	switch pending {
+	case "--continue":
+		return "applies"
+	case "--theirs":
+		return "replaces"
+	}
+	return "gives up"
 }
 
 // errSourceRemoved marks the refusal of a managed skill whose source was

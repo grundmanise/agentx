@@ -1,6 +1,6 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
 // with its button: See changes and Update on the lime banners of an update (See changes opens the
-// What's new sheet), Show folder, Abort and Update on the amber one of a pending merge, Add to
+// What's new sheet), Show folder, Discard my edits and Apply merge on the amber one of a pending merge, Add to
 // agents on the gray "Not in any agent" banner, Reconnect on the amber one of a displaced skill,
 // Adopt or Add source on the others, Publish or Settings on your own skills' banners, and
 // Publish to on an edited skill of a source this machine can write to. The banner of a skill gone
@@ -9,10 +9,11 @@
 // The box itself is a Callout (src/components/callout.tsx).
 import { Callout } from "#/components/callout.tsx";
 import {
-  AbortMerge,
   AddSource,
   AddToAgents,
   Adopt,
+  ApplyMerge,
+  DiscardEdits,
   Reconnect,
   SeeChanges,
   ShowMergeFolder,
@@ -39,8 +40,8 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
       return (
         <>
           <ShowMergeFolder name={row.name} />
-          <AbortMerge name={row.name} />
-          <UpdateButton row={row} />
+          <DiscardEdits row={row} />
+          <ApplyMerge row={row} />
         </>
       );
     }
