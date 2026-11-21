@@ -163,12 +163,7 @@ func TestNewChildProcess(t *testing.T) {
 	if name == "" {
 		t.Skip("not the skill new child process")
 	}
-	env := map[string]string{}
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			env[k] = v
-		}
-	}
+	env := processEnv()
 	os.Exit(Run(context.Background(), []string{"skill", "new", name}, env, strings.NewReader(""), os.Stdout, os.Stderr))
 }
 

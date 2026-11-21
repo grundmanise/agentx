@@ -95,6 +95,8 @@ const declaration = (
   handshake: false,
   header_keys: [],
   id: `occurrence:${configurationId}:${name}`,
+  name,
+  signature: "none",
   transport: "stdio",
   url: "",
   ...overrides,
@@ -114,8 +116,8 @@ const teamDb: McpServer = {
       plugin: "acme-tools",
     }),
   ],
-  physical_id: `server:${TEAM_DB}:v1`,
-  signature: "none",
+  physical_id: `server:${TEAM_DB}`,
+  versions: [],
 };
 
 /** Servers of the configurations' own, enough to push the plugin's server out of the first view. */
@@ -130,8 +132,8 @@ const fillers: McpServer[] = Array.from({ length: 9 }, (_, i) => {
         url: `https://mcp.example.com/${name}`,
       }),
     ],
-    physical_id: `server:${name}:v1`,
-    signature: "none",
+    physical_id: `server:${name}`,
+    versions: [],
   };
 });
 

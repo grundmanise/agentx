@@ -321,7 +321,7 @@ func (inv *invocation) printInventory(inventory scan.Inventory) {
 				what += "  " + out.paint(tagStyle, "(plugin "+sanitised(o.Plugin)+")")
 			}
 			cells := []cell{c(sanitised(s.Name), heading), c(o.Transport, muted), c(what, plain)}
-			if n := len(s.Tools); n > 0 {
+			if n := len(s.ToolsOf(o)); n > 0 {
 				cells = append(cells, c(plural(n, "tool"), noteStyle))
 			}
 			if e := o.HandshakeErr; e != nil {

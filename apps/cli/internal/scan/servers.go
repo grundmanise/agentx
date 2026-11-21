@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"encoding/json"
 	"os"
 	"slices"
 
@@ -8,9 +9,9 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/mcp"
 )
 
-// noSignature marks a server that was never handshaken. A handshake replaces
-// it with the signature hash and sets Handshake on the occurrence.
-const noSignature = "none"
+// NoSignature marks a declaration that was never handshaken. A handshake
+// replaces it with the signature hash and sets Handshake on the occurrence.
+const NoSignature = "none"
 
 // declaration is one server declared in one configuration file. Its node is
 // built when the inventory is composed, since the physical identity depends
@@ -82,28 +83,33 @@ func (s *Scan) serverLogicalID(server mcp.Server) string {
 	return id("server", parts...)
 }
 
-// composeServers builds the server nodes from the declarations: this scan's
-// handshake gives the signature, else the stored one, else noSignature. The
-// fresh handshakes are returned by logical id for the handshakes file.
+// composeServers builds the server nodes from the declarations, one per
+// logical server: each declaration's version is this scan's handshake, else
+// the one stored for it, else none. The fresh handshakes are returned by
+// occurrence id for the handshakes file, so two declarations of one server
+// keep their own answers.
 func (s *Scan) composeServers() map[string]home.Handshake {
 	fresh := map[string]home.Handshake{}
 	for _, d := range s.declared {
-		signature, tools, at := noSignature, []home.Tool(nil), ""
+		physical := id("server", d.logical, s.MachineID)
+		occurrence := id("occurrence", d.conf.PhysicalID, physical, s.portable(d.file), d.server.Name)
+		signature, tools, at := NoSignature, []home.Tool(nil), ""
 		if d.fresh != nil {
 			signature, tools, at = d.fresh.Signature, s.tools(d.logical, d.fresh.Items), d.at
-			fresh[d.logical] = home.Handshake{Signature: signature, Tools: tools, At: at}
-		} else if h, ok := s.stored[d.logical]; ok {
-			signature, tools, at = h.Signature, h.Tools, h.At
+			fresh[occurrence] = home.Handshake{Signature: signature, Tools: tools, At: at}
+		} else if h, ok := s.storedFor(occurrence, d.logical); ok {
+			signature, tools, at = h.Signature, keyed(d.logical, h.Tools), h.At
 		}
-		physical := id("server", d.logical, s.MachineID, signature)
 		node, ok := s.servers[physical]
 		if !ok {
-			node = &Server{PhysicalID: physical, LogicalID: d.logical, Name: d.server.Name, Signature: signature, SignatureAt: at, Tools: tools}
+			node = &Server{PhysicalID: physical, LogicalID: d.logical, Name: d.server.Name, Versions: []ServerVersion{}}
 			s.servers[physical] = node
-		} else if d.fresh != nil {
-			node.SignatureAt = at
+		}
+		if signature != NoSignature {
+			node.addVersion(ServerVersion{Signature: signature, SignatureAt: at, Tools: tools})
 		}
 		occ := ServerOccurrence{
+			Name:          d.server.Name,
 			Configuration: d.conf.ID,
 			ConfigFile:    d.file,
 			Command:       d.server.Command,
@@ -112,6 +118,7 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 			URL:           d.server.URL,
 			HeaderKeys:    d.server.HeaderKeys,
 			Transport:     d.server.Transport,
+			Signature:     signature,
 			Handshake:     d.fresh != nil,
 			HandshakeErr:  d.failed,
 			Plugin:        d.plugin,
@@ -119,7 +126,7 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 		if d.disabled {
 			occ.Enabled = new(bool)
 		}
-		occ.ID = id("occurrence", d.conf.PhysicalID, physical, s.portable(d.file), d.server.Name)
+		occ.ID = occurrence
 		if !s.seen[occ.ID] {
 			s.seen[occ.ID] = true
 			node.Occurrences = append(node.Occurrences, occ)
@@ -132,19 +139,100 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 	return fresh
 }
 
-// tools are the nodes of what a server exposed, one per distinct item.
+// storedFor is the handshake stored for the declaration with this
+// occurrence id, else the one an earlier agentx stored for its logical
+// server, which kept one entry per server.
+func (s *Scan) storedFor(occurrence, logical string) (home.Handshake, bool) {
+	if h, ok := s.stored[occurrence]; ok {
+		return h, true
+	}
+	h, ok := s.stored[logical]
+	return h, ok
+}
+
+// addVersion records v on the server, once per signature, keeping the
+// latest time it was taken.
+func (node *Server) addVersion(v ServerVersion) {
+	for i, have := range node.Versions {
+		if have.Signature == v.Signature {
+			if v.SignatureAt > have.SignatureAt {
+				node.Versions[i].SignatureAt = v.SignatureAt
+			}
+			return
+		}
+	}
+	node.Versions = append(node.Versions, v)
+}
+
+// ToolsOf is what the server exposed to the declaration o: the tools of the
+// version o answered with, none when it never answered.
+func (node Server) ToolsOf(o ServerOccurrence) []home.Tool {
+	for _, v := range node.Versions {
+		if v.Signature == o.Signature {
+			return v.Tools
+		}
+	}
+	return nil
+}
+
+// tools are the nodes of what a server exposed, one per identity.
 func (s *Scan) tools(logical string, items []mcp.Item) []home.Tool {
-	tools := []home.Tool{}
-	seen := map[string]bool{}
+	tools := make([]home.Tool, 0, len(items))
 	for _, it := range items {
-		tid := id("tool", logical, it.Hash)
-		if seen[tid] {
+		tools = append(tools, home.Tool{
+			Kind: it.Kind, Name: it.Name, URI: it.URI, Description: it.Description,
+			InputSchema: raw(it.InputSchema), OutputSchema: raw(it.OutputSchema),
+			Hash: it.Hash, SchemaHash: it.SchemaHash,
+		})
+	}
+	return keyed(logical, tools)
+}
+
+// keyed gives every tool its identity and keeps the first of those sharing
+// one, in the order the handshake sorted them. The identity is computed
+// afresh, so a stored entry an earlier agentx keyed by its hash takes this
+// one too, except a resource stored with no URI, whose name may not be
+// unique: it keeps its stored id until a handshake gives its URI.
+func keyed(logical string, tools []home.Tool) []home.Tool {
+	out := []home.Tool{}
+	seen := map[string]bool{}
+	for _, t := range tools {
+		if !legacyResource(t) {
+			t.ID = toolID(logical, t)
+		}
+		if seen[t.ID] {
 			continue
 		}
-		seen[tid] = true
-		tools = append(tools, home.Tool{ID: tid, Kind: it.Kind, Name: it.Name, Description: it.Description})
+		seen[t.ID] = true
+		out = append(out, t)
 	}
-	return tools
+	return out
+}
+
+// toolID is what a tool is, whatever its definition: its server's logical
+// id, its kind and its key, the URI of a resource or a resource template and
+// the name of anything else, which the protocol makes unique within a
+// server. It is the same on every machine the server's logical id is.
+func toolID(logical string, t home.Tool) string {
+	key := t.Name
+	if t.URI != "" && (t.Kind == mcp.KindResource || t.Kind == mcp.KindResourceTemplate) {
+		key = t.URI
+	}
+	return id("tool", logical, t.Kind, key)
+}
+
+// legacyResource is a resource or resource template an earlier agentx
+// stored, with an id and no URI.
+func legacyResource(t home.Tool) bool {
+	return t.ID != "" && t.URI == "" && (t.Kind == mcp.KindResource || t.Kind == mcp.KindResourceTemplate)
+}
+
+// raw is canonical JSON as a value to write, nil when absent.
+func raw(canonical string) json.RawMessage {
+	if canonical == "" {
+		return nil
+	}
+	return json.RawMessage(canonical)
 }
 
 // addPlugin records p inside conf with an edge from conf, then the skills

@@ -11,15 +11,19 @@ import { CircleXIcon } from "#/components/icons/circle-x.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 
 /**
- * Where toasts show (DESIGN.md §6 "Toast"): top right, `toast.offset` from the window's edges,
- * one at a time, tinted by outcome with Sonner's rich colours.
+ * Where toasts show (DESIGN.md §6 "Toast"): top right, `toast.offset` below the title bar and
+ * from the window's right edge, so a toast never covers the title bar's sync status. One at a
+ * time, tinted by outcome with Sonner's rich colours. Both lengths are the tokens' own CSS
+ * variables, so the toast follows the title bar's height.
  */
 export const Toaster = () => (
   <Sonner
     theme="dark"
     position="top-right"
-    // toast.offset
-    offset={24}
+    offset={{
+      right: "var(--inset-toast)",
+      top: "calc(var(--height-titlebar) + var(--inset-toast))",
+    }}
     visibleToasts={1}
     richColors
     icons={{

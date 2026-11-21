@@ -94,7 +94,46 @@ func serverNodes(inventory jsonEvent) map[string][]map[string]any {
 	return nodes
 }
 
-// tools lists "kind name" for a node's tools, and their ids by name.
+// declaration is one occurrence of a server node, by the name it is
+// declared under.
+type declaration struct {
+	node, occurrence map[string]any
+}
+
+// serverDeclarations lists every server occurrence of an inventory by its name.
+func serverDeclarations(inventory jsonEvent) map[string][]declaration {
+	out := map[string][]declaration{}
+	for _, s := range inventory["mcp_servers"].([]any) {
+		node := s.(map[string]any)
+		for _, o := range node["occurrences"].([]any) {
+			occ := o.(map[string]any)
+			out[occ["name"].(string)] = append(out[occ["name"].(string)], declaration{node, occ})
+		}
+	}
+	return out
+}
+
+// versions are the versions of a server node.
+func versions(node map[string]any) []map[string]any {
+	var out []map[string]any
+	list, _ := node["versions"].([]any)
+	for _, v := range list {
+		out = append(out, v.(map[string]any))
+	}
+	return out
+}
+
+// version is the version a declaration answered with, empty when none.
+func (d declaration) version() map[string]any {
+	for _, v := range versions(d.node) {
+		if v["signature"] == d.occurrence["signature"] {
+			return v
+		}
+	}
+	return map[string]any{}
+}
+
+// tools lists "kind name" for a version's tools, and their ids by name.
 func tools(node map[string]any) (rows []string, ids map[string]string) {
 	ids = map[string]string{}
 	list, _ := node["tools"].([]any)
@@ -104,6 +143,17 @@ func tools(node map[string]any) (rows []string, ids map[string]string) {
 		ids[tool["name"].(string)] = tool["id"].(string)
 	}
 	return rows, ids
+}
+
+// toolNamed is the tool of a version with that name.
+func toolNamed(node map[string]any, name string) map[string]any {
+	list, _ := node["tools"].([]any)
+	for _, item := range list {
+		if tool := item.(map[string]any); tool["name"] == name {
+			return tool
+		}
+	}
+	return nil
 }
 
 func TestScanHandshake(t *testing.T) {
@@ -148,60 +198,84 @@ func TestScanHandshake(t *testing.T) {
 	nodes := serverNodes(inventory)
 	hex64 := regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-	// The same command line with different environments: one logical server,
-	// two physical ones, telling the tool descriptions apart.
+	// The same command line with different environments: one server, one
+	// node, whose two declarations each name the version they answered with.
 	fix := nodes["fix"]
-	equal(t, "fix nodes", len(fix), 2)
-	equal(t, "fix logical ids", fix[0]["logical_id"], fix[1]["logical_id"])
-	if fix[0]["physical_id"] == fix[1]["physical_id"] || fix[0]["signature"] == fix[1]["signature"] {
-		t.Errorf("the two variants share a physical identity: %v", fix)
+	equal(t, "fix nodes", len(fix), 1)
+	fixVersions := versions(fix[0])
+	equal(t, "fix versions", len(fixVersions), 2)
+	if fixVersions[0]["signature"] == fixVersions[1]["signature"] {
+		t.Errorf("the two variants share a signature: %v", fixVersions)
 	}
-	var variantB map[string]any
-	for _, node := range fix {
-		if !hex64.MatchString(node["signature"].(string)) {
-			t.Errorf("fix signature = %v, want 64 hex characters", node["signature"])
+	var variantA, variantB map[string]any
+	var occurrenceA, occurrenceB string
+	for _, d := range serverDeclarations(inventory)["fix"] {
+		equal(t, "fix handshake", d.occurrence["handshake"], true)
+		v := d.version()
+		if !hex64.MatchString(fmt.Sprint(v["signature"])) {
+			t.Errorf("fix signature = %v, want 64 hex characters", v["signature"])
 		}
-		if _, err := time.Parse(time.RFC3339, node["signature_at"].(string)); err != nil {
-			t.Errorf("fix signature_at = %v: %v", node["signature_at"], err)
+		if _, err := time.Parse(time.RFC3339, fmt.Sprint(v["signature_at"])); err != nil {
+			t.Errorf("fix signature_at = %v: %v", v["signature_at"], err)
 		}
-		rows, _ := tools(node)
+		rows, _ := tools(v)
 		if want := []string{"prompt summarize", "resource notes", "tool add", "tool echo"}; !reflect.DeepEqual(rows, want) {
 			t.Errorf("fix tools = %v, want %v", rows, want)
 		}
-		occ := node["occurrences"].([]any)
-		equal(t, "fix occurrences", len(occ), 1)
-		equal(t, "fix handshake", occ[0].(map[string]any)["handshake"], true)
-		if occ[0].(map[string]any)["configuration"] == "cursor" {
-			variantB = node
+		if d.occurrence["configuration"] == "cursor" {
+			variantB, occurrenceB = v, d.occurrence["id"].(string)
+		} else {
+			variantA, occurrenceA = v, d.occurrence["id"].(string)
 		}
 	}
-	_, idsA := tools(fix[0])
-	_, idsB := tools(fix[1])
+	if variantA == nil || variantB == nil || variantA["signature"] == variantB["signature"] {
+		t.Fatalf("want one declaration per variant, each with its own version: %v", fix[0])
+	}
+	// A tool is one identity across its versions: the echo tool's
+	// description differs between the variants, so its hash does, while its
+	// id and its schemas' hash do not.
+	_, idsA := tools(variantA)
+	_, idsB := tools(variantB)
 	equal(t, "add tool id", idsA["add"], idsB["add"])
-	if idsA["echo"] == idsB["echo"] {
-		t.Errorf("the echo tool has one id in both variants: %s", idsA["echo"])
+	equal(t, "echo tool id", idsA["echo"], idsB["echo"])
+	echoA, echoB := toolNamed(variantA, "echo"), toolNamed(variantB, "echo")
+	if echoA["hash"] == echoB["hash"] {
+		t.Errorf("the echo tool has one hash in both variants: %v", echoA["hash"])
+	}
+	equal(t, "echo schema_hash", echoA["schema_hash"], echoB["schema_hash"])
+	for _, field := range []string{"hash", "schema_hash"} {
+		if !hex64.MatchString(fmt.Sprint(echoA[field])) {
+			t.Errorf("echo %s = %v, want 64 hex characters", field, echoA[field])
+		}
+	}
+	equal(t, "echo output_schema", fmt.Sprint(echoA["output_schema"]), "map[properties:map[text:map[type:string]] type:object]")
+	add := toolNamed(variantA, "add")
+	if _, ok := add["output_schema"]; ok {
+		t.Errorf("add carries an output_schema it never declared: %v", add)
+	}
+	equal(t, "add required", fmt.Sprint(add["input_schema"].(map[string]any)["required"]), "[a b]")
+	equal(t, "resource uri", toolNamed(variantA, "notes")["uri"], "file:///notes.md")
+	if _, ok := toolNamed(variantA, "summarize")["uri"]; ok {
+		t.Errorf("a prompt carries a uri: %v", toolNamed(variantA, "summarize"))
 	}
 
 	web := nodes["web"][0]
-	if rows, _ := tools(web); !reflect.DeepEqual(rows, []string{"tool search"}) {
+	webVersion := serverDeclarations(inventory)["web"][0].version()
+	if rows, _ := tools(webVersion); !reflect.DeepEqual(rows, []string{"tool search"}) {
 		t.Errorf("web tools = %v", rows)
 	}
 	equal(t, "web handshake", web["occurrences"].([]any)[0].(map[string]any)["handshake"], true)
 
 	for _, name := range []string{"hang", "linger", "exit", "missing"} {
 		node := nodes[name][0]
-		equal(t, name+" signature", node["signature"], "none")
+		equal(t, name+" signature", node["occurrences"].([]any)[0].(map[string]any)["signature"], "none")
 		equal(t, name+" handshake", node["occurrences"].([]any)[0].(map[string]any)["handshake"], false)
-		for _, field := range []string{"tools", "signature_at"} {
-			if _, ok := node[field]; ok {
-				t.Errorf("%s carries %s: %v", name, field, node[field])
-			}
-		}
+		equal(t, name+" versions", len(versions(node)), 0)
 	}
 	// Why each one failed, with a hint, for a consumer of the inventory.
 	for name, reason := range map[string]string{"hang": "timeout", "linger": "timeout", "exit": "failed", "missing": "not_found", "locked": "unauthorized"} {
 		node := nodes[name][0]
-		equal(t, name+" signature", node["signature"], "none")
+		equal(t, name+" signature", node["occurrences"].([]any)[0].(map[string]any)["signature"], "none")
 		failure, _ := node["occurrences"].([]any)[0].(map[string]any)["handshake_error"].(map[string]any)
 		equal(t, name+" reason", failure["reason"], reason)
 		for _, field := range []string{"message", "hint"} {
@@ -229,7 +303,7 @@ func TestScanHandshake(t *testing.T) {
 	equal(t, "warnings", len(inventory["warnings"].([]any)), 6)
 
 	// The handshakes file, corrupt before, now keeps the last signature per
-	// logical server and nothing for a server that failed; it is derived
+	// declaration and nothing for a server that failed; it is derived
 	// state, so no version bump.
 	stored := map[string]map[string]any{}
 	b, err := os.ReadFile(filepath.Join(h.agentx, "handshakes.json"))
@@ -239,35 +313,90 @@ func TestScanHandshake(t *testing.T) {
 	if err := json.Unmarshal(b, &stored); err != nil {
 		t.Fatal(err)
 	}
-	equal(t, "stored servers", len(stored), 2)
-	entry := stored[variantB["logical_id"].(string)]
-	equal(t, "stored signature", entry["signature"], variantB["signature"])
+	equal(t, "stored declarations", len(stored), 3)
+	equal(t, "stored signature a", stored[occurrenceA]["signature"], variantA["signature"])
+	entry := stored[occurrenceB]
+	equal(t, "stored signature b", entry["signature"], variantB["signature"])
 	equal(t, "stored tools", len(entry["tools"].([]any)), 4)
 	if _, err := time.Parse(time.RFC3339, entry["at"].(string)); err != nil {
 		t.Errorf("stored at = %v: %v", entry["at"], err)
 	}
-	equal(t, "web stored", stored[web["logical_id"].(string)]["signature"], web["signature"])
+	equal(t, "web stored", stored[web["occurrences"].([]any)[0].(map[string]any)["id"].(string)]["signature"], webVersion["signature"])
 	if _, err := os.Stat(filepath.Join(h.agentx, "version")); !os.IsNotExist(err) {
 		t.Errorf("the handshake bumped the version file: %v", err)
 	}
 
-	// A plain scan reuses the stored signature: the two declarations now
-	// merge into one node, and no occurrence claims a handshake.
+	// A plain scan reuses the stored signatures: each declaration keeps the
+	// version it answered with, the node keeps its id, and no occurrence
+	// claims a handshake.
 	after := h.inventory(t)
 	equal(t, "warnings after", len(after["warnings"].([]any)), 0)
 	plain := serverNodes(after)
 	equal(t, "fix nodes after", len(plain["fix"]), 1)
-	equal(t, "fix signature after", plain["fix"][0]["signature"], variantB["signature"])
-	equal(t, "fix signature_at after", plain["fix"][0]["signature_at"], variantB["signature_at"])
+	equal(t, "fix physical_id after", plain["fix"][0]["physical_id"], fix[0]["physical_id"])
+	plainFix := versions(plain["fix"][0])
+	equal(t, "fix versions after", len(plainFix), 2)
 	equal(t, "fix occurrences after", len(plain["fix"][0]["occurrences"].([]any)), 2)
-	for _, o := range plain["fix"][0]["occurrences"].([]any) {
-		equal(t, "fix handshake after", o.(map[string]any)["handshake"], false)
+	for _, d := range serverDeclarations(after)["fix"] {
+		equal(t, "fix handshake after", d.occurrence["handshake"], false)
+		want := variantA
+		if d.occurrence["configuration"] == "cursor" {
+			want = variantB
+		}
+		v := d.version()
+		equal(t, "fix signature after", v["signature"], want["signature"])
+		equal(t, "fix signature_at after", v["signature_at"], want["signature_at"])
+		if rows, _ := tools(v); len(rows) != 4 {
+			t.Errorf("fix tools after = %v", rows)
+		}
 	}
-	if rows, _ := tools(plain["fix"][0]); len(rows) != 4 {
-		t.Errorf("fix tools after = %v", rows)
+	equal(t, "web signature after", versions(plain["web"][0])[0]["signature"], webVersion["signature"])
+	equal(t, "hang versions after", len(versions(plain["hang"][0])), 0)
+
+	// A snapshot keeps what compares a server's tools across machines: the
+	// server's logical id and each tool's id and hashes, as the inventory
+	// has them.
+	equal(t, "export exit", h.run("--json", "export").exit, 0)
+	var snapFix map[string]any
+	for _, s := range h.readExportFile(h.snapshotPath(defaultSnapshot))["mcp_servers"].([]any) {
+		if srv := s.(map[string]any); srv["name"] == "fix" {
+			snapFix = srv
+		}
 	}
-	equal(t, "web signature after", plain["web"][0]["signature"], web["signature"])
-	equal(t, "hang signature after", plain["hang"][0]["signature"], "none")
+	equal(t, "snapshot logical_id", snapFix["logical_id"], plain["fix"][0]["logical_id"])
+	snapVersions := versions(snapFix)
+	equal(t, "snapshot versions", len(snapVersions), 2)
+	var snapB map[string]any
+	for _, v := range snapVersions {
+		if v["signature"] == variantB["signature"] {
+			snapB = v
+		}
+	}
+	if snapB == nil {
+		t.Fatalf("the snapshot has no version %v: %v", variantB["signature"], snapVersions)
+	}
+	signatures := map[any]bool{}
+	for _, o := range snapFix["occurrences"].([]any) {
+		signatures[o.(map[string]any)["signature"]] = true
+	}
+	equal(t, "snapshot occurrence signatures", len(signatures), 2)
+	echo := toolNamed(snapB, "echo")
+	equal(t, "snapshot echo id", echo["id"], idsB["echo"])
+	equal(t, "snapshot echo hash", echo["hash"], echoB["hash"])
+	equal(t, "snapshot echo schema_hash", echo["schema_hash"], echoA["schema_hash"])
+
+	// A file an earlier agentx wrote keeps one entry per logical server:
+	// every declaration of it with no entry of its own takes that one.
+	legacy, err := json.Marshal(map[string]any{fix[0]["logical_id"].(string): entry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h.agentx, "handshakes.json"), legacy, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range serverDeclarations(h.inventory(t))["fix"] {
+		equal(t, "fix signature from an earlier file", d.occurrence["signature"], variantB["signature"])
+	}
 
 	// The text output of a handshake, which prints no secret either.
 	args = []string{"scan", "--handshake"}
@@ -373,11 +502,11 @@ enabled = false
 	h.env["AGENTX_TEST_BIN"] = mcpServer
 
 	inventory := h.inventory(t, "--handshake")
-	nodes := serverNodes(inventory)
+	decls := serverDeclarations(inventory)
 	occurrence := func(name string) map[string]any {
 		t.Helper()
-		equal(t, name+" nodes", len(nodes[name]), 1)
-		return nodes[name][0]["occurrences"].([]any)[0].(map[string]any)
+		equal(t, name+" declarations", len(decls[name]), 1)
+		return decls[name][0].occurrence
 	}
 	for name, want := range map[string]string{
 		"bearer": "tool search", "there": "tool add", "here": "tool add", "inside": "tool add",
@@ -387,7 +516,7 @@ enabled = false
 		"copilot-key": "tool search", "copilot-home": "tool add",
 	} {
 		equal(t, name+" handshake", occurrence(name)["handshake"], true)
-		if rows, _ := tools(nodes[name][0]); len(rows) == 0 || !slices.Contains(rows, want) {
+		if rows, _ := tools(decls[name][0].version()); len(rows) == 0 || !slices.Contains(rows, want) {
 			t.Errorf("%s tools = %v, want %s among them", name, rows, want)
 		}
 	}
