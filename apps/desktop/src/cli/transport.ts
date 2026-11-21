@@ -1,13 +1,13 @@
-// The app's one way to the CLI. It wraps the Tauri commands and events of the Rust supervisor:
-// one-shot runs whose lines arrive as they are written, and the one serve child the window keeps
-// open, whose stdout and stderr arrive the same way. Events are typed by events.gen.ts, which is generated from the CLI of this app's own
-// release, so no schema_version is checked here. An event of a type the app does not know is
-// passed on as it came.
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import type { UnlistenFn } from "@tauri-apps/api/event";
-
+// The app's one way to the CLI: one-shot runs whose lines arrive as they are written, and the one
+// serve child the window keeps open, whose stdout and stderr arrive the same way. Two wires carry
+// them (ADR 0016): the Tauri commands and events of the Rust supervisor inside the window
+// (tauri-wire.ts), and JSON-RPC over the WebSocket door of `agentx serve --listen` in a browser
+// (socket-wire.ts). Events are typed by events.gen.ts, which is generated from the CLI of this
+// app's own release, so no schema_version is checked here. An event of a type the app does not
+// know is passed on as it came.
 import type { CliEvent, LogEvent, ServeRequest } from "#/cli/events.gen.ts";
+import { socketWire } from "#/cli/socket-wire.ts";
+import { tauriWire } from "#/cli/tauri-wire.ts";
 import {
   logCommandEnd,
   logCommandStart,
@@ -54,8 +54,11 @@ export interface RunOptions {
 export interface Resolution {
   /** The CLI's path; null when none was found. */
   path: string | null;
-  /** Found next to the app, or, in a debug build, on the login shell's PATH. */
-  found: "bundled" | "path" | null;
+  /**
+   * Found next to the app, or, in a debug build, on the login shell's PATH; in a browser, the CLI
+   * of the serve whose door the path is.
+   */
+  found: "bundled" | "path" | "serve" | null;
 }
 
 /**
@@ -79,33 +82,37 @@ export interface ServeExit {
   restartInMs: number | null;
 }
 
-// What the supervisor sends, as Rust names it.
-type WireRunLine = RunLine & { run_id: string };
-interface WireRunEnd {
-  run_id: string;
-  exit_code: number | null;
-  events: CliEvent[];
-  logs: LogEvent[];
-  invalid: InvalidLine[];
-  cancelled: boolean;
-  timed_out: boolean;
+type MaybePromise<T> = T | Promise<T>;
+
+/** What the transport sends through: the Rust shell inside the Tauri window, or serve's door. */
+export interface Wire {
+  resolve: () => Promise<Resolution>;
+  /** Runs the command line; each line goes to onLine as it arrives, before the run ends. */
+  run: (
+    runId: string,
+    args: readonly string[],
+    deadlineMs: number | undefined,
+    onLine: (line: RunLine) => void
+  ) => Promise<RunResult>;
+  cancel: (runId: string) => MaybePromise<boolean>;
+  onRunEnd: (
+    handle: (end: { runId: string; exitCode: number | null }) => void
+  ) => MaybePromise<() => void>;
+  serve: {
+    logPath: () => MaybePromise<string>;
+    onEvent: (handle: (line: ServeLine) => void) => MaybePromise<() => void>;
+    onExit: (handle: (exit: ServeExit) => void) => MaybePromise<() => void>;
+    request: (request: ServeRequest) => Promise<void>;
+    start: () => Promise<number>;
+    verbose: (on: boolean) => MaybePromise<void>;
+  };
 }
-type WireServeLine = (
-  | { kind: "event"; event: CliEvent }
-  | { kind: "log"; event: LogEvent }
-  | ({ kind: "invalid" } & InvalidLine)
-) & { child_id: number };
-interface WireServeExit {
-  child_id: number;
-  exit_code: number | null;
-  stderr: string[];
-  restarting: boolean;
-  restart_in_ms: number | null;
-}
-interface WireResolution {
-  path: string | null;
-  found: "bundled" | "path" | null;
-}
+
+/**
+ * Inside the Tauri window, and under the end-to-end tests' mocked Rust shell, the Rust shell; in
+ * a browser, serve's WebSocket door.
+ */
+const wire: Wire = "__TAURI_INTERNALS__" in globalThis ? tauriWire : socketWire;
 
 /** A stream and the functions that feed it. Nothing waits on its reader: it holds every chunk. */
 const channel = <T>() => {
@@ -137,16 +144,7 @@ const channel = <T>() => {
 };
 
 /** Where the CLI is, and how it was found. */
-export const resolveCli = async (): Promise<Resolution> => {
-  const r = await invoke<WireResolution>("cli_resolve");
-  return {
-    found: r.found,
-    path: r.path,
-  };
-};
-
-/** Each run's subscription to its events, until it ends. The run is sent once it is in place. */
-const subscribed = new Map<string, Promise<UnlistenFn[]>>();
+export const resolveCli = async (): Promise<Resolution> => await wire.resolve();
 
 /**
  * The arguments as they are sent: with `--verbose`, before a `--` that ends the flags, while the
@@ -162,8 +160,8 @@ const sentArgs = (args: readonly string[]): readonly string[] => {
 };
 
 /**
- * Runs `agentx <args> --json`. The supervisor adds `--json`. Every run is a line of the
- * activity log (src/store/activity-log.ts), from its start to how it ended.
+ * Runs `agentx <args> --json`. The wire adds `--json`. Every run is a line of the activity log
+ * (src/store/activity-log.ts), from its start to how it ended.
  */
 export const run = (
   given: readonly string[],
@@ -173,59 +171,14 @@ export const run = (
   const logged = logCommandStart(args);
   const runId = crypto.randomUUID();
   const lines = channel<RunLine>();
-  const ends = channel<WireRunEnd>();
-  const subscribe = async (): Promise<UnlistenFn[]> => {
-    const settled = await Promise.allSettled([
-      listen<WireRunLine>("cli-run", ({ payload }) => {
-        if (payload.run_id === runId) {
-          const { run_id: _, ...line } = payload;
-          lines.push(line);
-        }
-      }),
-      listen<WireRunEnd>("cli-run-end", ({ payload }) => {
-        if (payload.run_id === runId) {
-          ends.push(payload);
-        }
-      }),
-    ]);
-    const stops = settled.flatMap((s) =>
-      s.status === "fulfilled" ? [s.value] : []
-    );
-    const failed = settled.find((s) => s.status === "rejected");
-    if (failed !== undefined) {
-      // One listener may be in place while the other failed: it goes with the run.
-      for (const stop of stops) {
-        stop();
-      }
-      throw new Error(`cannot listen to the run: ${String(failed.reason)}`);
-    }
-    return stops;
-  };
-  const subscription = subscribe();
-  subscribed.set(runId, subscription);
   const start = async (): Promise<RunResult> => {
-    let unlisten: UnlistenFn[] = [];
     try {
-      // Inside the try: a run that cannot be listened to ends its line as one that did not start.
-      unlisten = await subscription;
-      await invoke("cli_run", {
+      const result = await wire.run(
+        runId,
         args,
-        deadline_ms: options.deadlineMs ?? null,
-        run_id: runId,
-      });
-      // The end event follows every line event; the command's own answer can overtake them.
-      const { value: end } = await ends.stream.getReader().read();
-      if (end === undefined) {
-        throw new Error(`run ${runId} ended without its end event`);
-      }
-      const result = {
-        cancelled: end.cancelled,
-        events: end.events,
-        exitCode: end.exit_code,
-        invalid: end.invalid,
-        logs: end.logs,
-        timedOut: end.timed_out,
-      };
+        options.deadlineMs,
+        lines.push
+      );
       logCommandEnd(logged, result);
       return result;
     } catch (error) {
@@ -240,79 +193,38 @@ export const run = (
       });
       throw error;
     } finally {
-      subscribed.delete(runId);
-      for (const stop of unlisten) {
-        stop();
-      }
       lines.close();
     }
   };
   return { lines: lines.stream, result: start(), runId };
 };
 
-/**
- * Stops a one-shot run, even one that has not started yet. False when no such run is going. It is
- * sent after the run itself, so that the supervisor knows the run.
- */
-export const cancel = async (runId: string): Promise<boolean> => {
-  await subscribed.get(runId);
-  return await invoke<boolean>("cli_cancel", { run_id: runId });
-};
+/** Stops a one-shot run, even one that has not started yet. False when no such run is going. */
+export const cancel = async (runId: string): Promise<boolean> =>
+  await wire.cancel(runId);
 
 /** Calls `handle` with the run id and exit code each time any one-shot run ends. */
 export const onRunEnd = async (
   handle: (end: { runId: string; exitCode: number | null }) => void
-): Promise<UnlistenFn> =>
-  await listen<WireRunEnd>("cli-run-end", ({ payload }) => {
-    handle({ exitCode: payload.exit_code, runId: payload.run_id });
-  });
-
-/** Starts the serve child unless one runs, and gives its child id. */
-const startServe = async (): Promise<number> =>
-  await invoke<number>("serve_start");
-
-/** Calls `handle` with every line of every serve child's output, each stream in order. */
-const onServeLine = async (
-  handle: (line: ServeLine) => void
-): Promise<UnlistenFn> =>
-  await listen<WireServeLine>("serve-event", ({ payload }) => {
-    const { child_id: childId, ...line } = payload;
-    handle({ childId, ...line });
-  });
-
-/** Calls `handle` each time a serve child ends. */
-const onServeExit = async (
-  handle: (exit: ServeExit) => void
-): Promise<UnlistenFn> =>
-  await listen<WireServeExit>("serve-exit", ({ payload }) => {
-    handle({
-      childId: payload.child_id,
-      exitCode: payload.exit_code,
-      restartInMs: payload.restart_in_ms,
-      restarting: payload.restarting,
-      stderr: payload.stderr,
-    });
-  });
-
-/** Writes one request to the serve child's stdin. */
-const requestServe = async (request: ServeRequest): Promise<void> => {
-  await invoke("serve_request", { line: JSON.stringify(request) });
-};
-
-/** The path of the serve log file, which holds everything serve wrote to stderr. */
-const serveLogPath = async (): Promise<string> =>
-  await invoke<string>("serve_log_path");
-
-/** Whether serve logs at debug level; a change restarts the serve child. */
-const setServeVerbose = async (on: boolean): Promise<void> => {
-  await invoke("serve_verbose", { on });
-};
+): Promise<() => void> => await wire.onRunEnd(handle);
 
 export const serve = {
-  logPath: serveLogPath,
-  onEvent: onServeLine,
-  onExit: onServeExit,
-  request: requestServe,
-  start: startServe,
-  verbose: setServeVerbose,
+  /** The path of the serve log file, which holds everything serve wrote to stderr. */
+  logPath: async () => await wire.serve.logPath(),
+  /** Calls `handle` with every line of every serve child's output, each stream in order. */
+  onEvent: async (handle: (line: ServeLine) => void) =>
+    await wire.serve.onEvent(handle),
+  /** Calls `handle` each time a serve child ends. */
+  onExit: async (handle: (exit: ServeExit) => void) =>
+    await wire.serve.onExit(handle),
+  /** Sends one request to the serve child. */
+  request: async (request: ServeRequest) => {
+    await wire.serve.request(request);
+  },
+  /** Starts the serve child unless one runs, and gives its child id. */
+  start: async () => await wire.serve.start(),
+  /** Whether serve logs at debug level; a change restarts the serve child. */
+  verbose: async (on: boolean) => {
+    await wire.serve.verbose(on);
+  },
 };
