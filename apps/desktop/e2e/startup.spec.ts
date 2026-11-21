@@ -182,18 +182,7 @@ const relaunch = async (cli: MockCli, page: Page, more: string[] = []) => {
   return { commands: () => cli.commands.slice(before), doctor: held };
 };
 
-/** Starts a command as a control does, through the store harness, which it loads first. */
-const start = async (page: Page, args: string[]) => {
-  await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
-  await page.waitForFunction(() => "store" in window);
-  await page.evaluate((a) => {
-    window.store.run(a, { label: a.join(" ") });
-  }, args);
-};
-
-const removeNotes = ["skill", "remove", "notes"];
-
-test("a later launch shows the kept inventory at once under a frosted pane, and runs commands once the checks pass", async ({
+test("a later launch shows the kept inventory at once under a frosted pane, and runs its reads once the checks pass", async ({
   cli,
   page,
 }) => {
@@ -217,14 +206,6 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
   await page.keyboard.press("Control+K");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // A change started now waits too, and Cancel stops one that waits.
-  cli.register(["skill", "place", "notes"], {});
-  await start(page, ["skill", "place", "notes"]);
-  await start(page, removeNotes);
-  await page.evaluate(async (label) => {
-    await window.store.cancel(label);
-  }, removeNotes.join(" "));
-
   doctor.release();
   await expect(veil(page)).toHaveCount(0);
   await expect(screen(page)).not.toHaveAttribute("inert");
@@ -232,13 +213,7 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await expect
     .poll(() => commands())
-    .toEqual(
-      expect.arrayContaining([
-        ["skill", "place", "notes", "--json"],
-        ...loadLines,
-      ])
-    );
-  expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
+    .toEqual(expect.arrayContaining(loadLines));
   // The skill's files show from the read the first launch kept.
   await expect(page.getByRole("region", { name: "Files" })).toContainText(
     "Use this skill to notes."
@@ -265,30 +240,11 @@ test("the arrows do not move the selection under the launch pane", async ({
   await expect(detail("todo")).toBeVisible();
 });
 
-test("a change started on a kept inventory does not run on a machine that is no longer as it showed", async ({
+test("a later launch whose check fails shows the layer, and Retry brings the screens back", async ({
   cli,
   page,
 }) => {
   const { commands, doctor } = await relaunch(cli, page);
-  // The skill went while the app was closed: the serve child's first inventory has none.
-  cli.onServeStart({ events: [firstInventory()] });
-  await start(page, removeNotes);
-  doctor.release();
-
-  await expect(screen(page)).toHaveCSS("opacity", "1");
-  await expect(page.getByRole("heading", { name: "notes" })).toHaveCount(0);
-  await expect
-    .poll(() => commands())
-    .toEqual(expect.arrayContaining(loadLines));
-  expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
-});
-
-test("a later launch whose check fails shows the layer, and drops a change started before it", async ({
-  cli,
-  page,
-}) => {
-  const { commands, doctor } = await relaunch(cli, page);
-  await start(page, removeNotes);
   doctor.expire();
   await expect(title(page)).toHaveText("agentx can't check this machine");
 
@@ -299,7 +255,6 @@ test("a later launch whose check fails shows the layer, and drops a change start
   await expect
     .poll(() => commands())
     .toEqual(expect.arrayContaining(loadLines));
-  expect(commands()).not.toContainEqual([...removeNotes, "--json"]);
 });
 
 test("a machine with no skills and no agents passes", async ({ cli, page }) => {

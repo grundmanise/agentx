@@ -11,8 +11,7 @@ The app now keeps the last inventory it applied, with the slices it loads once t
 
 The kept inventory is shown, never trusted:
 
-- **No command runs against it.** A command a control starts before the checks pass waits for them, and the control shows as pending. Cancel stops a command that waits, and it never starts. A read waits for the checks however long they take.
-- **A change runs only on the machine the user saw.** A command names a skill, and the CLI looks the name up when it runs. So a command that changes something runs after the checks only if the serve child's first inventory says of the machine what the kept one said: otherwise the name may now be another skill's, and the command is dropped. The screen then shows the machine as it is, and the user can start the command again. Such a command does not outlive a failed check either: the startup layer has replaced the control that started it, so it does not run after a Retry.
+- **No command runs against it.** The pane keeps every control out of reach, so the user starts no command before the checks pass, and none that changes something can run on a machine that is no longer as the screen showed it. A read a screen starts by itself as it mounts under the pane, such as a skill's files, waits for the checks however long they take, and the screen shows it as loading.
 - **It is not applied.** It has no serve child, instance or scan counter, so the first inventory of the first serve child replaces it whole, by the [inventory-ordering contract](../spec/inventory-ordering.md). The slices are replaced by the reads that follow the checks.
 - **A failed check hides it.** The startup layer takes the window, as on any launch.
 
