@@ -1,9 +1,9 @@
 // The one way a control runs a command. The control shows its command as pending, the command
-// runs, and the outcome is a toast and an activity entry. The caller says which of two kinds the
-// command is: `runCommand` for one that may change something, `readCommand` for one that only
-// reads. After a command that may have changed something, whatever its exit code, the serve child
-// is asked to scan again: the screens redraw from the inventory that follows, never from a result
-// the app predicts. The command's outcome and the inventory's freshness are separate states.
+// runs, and the outcome is a toast and an activity entry. The caller says when its command only
+// reads, with `sideEffect: false`. After any other command, whatever its exit code, the serve
+// child is asked to scan again: the screens redraw from the inventory that follows, never from a
+// result the app predicts. The command's outcome and the inventory's freshness are separate
+// states.
 import { CLI_COMMANDS } from "#/cli/commands.gen.ts";
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LogEvent, ProgressEvent } from "#/cli/events.gen.ts";
@@ -36,6 +36,12 @@ export const commandOf = (args: readonly string[]): string => {
 export interface CommandOptions {
   /** Names the control: it shows as pending while the command runs, and Cancel stops it. */
   label: string;
+  /**
+   * False for a command that only reads, such as `skill diff` or the preview that `adopt` with no
+   * flag is: no scan follows it, and it adds no activity entry. Leave it out for a command that
+   * may change something, and for one of unknown kind.
+   */
+  sideEffect?: boolean;
   /**
    * The toast and activity entry when the command exits 0; none when the events say the control
    * shows the outcome itself. The logs are the command's log events, its warnings among them.
@@ -117,7 +123,7 @@ export interface Outcome {
 export interface Finished extends Outcome {
   args: readonly string[];
   command: string;
-  /** The caller ran it with `readCommand`: it changed nothing. */
+  /** The caller said it only reads, with `sideEffect: false`: it changed nothing. */
   read: boolean;
 }
 
@@ -396,14 +402,14 @@ const afterChecks = async (
  * so that the caller can follow up. It never rejects: a CLI that could not start is an outcome.
  * A command started while the screens show the kept inventory waits for the startup checks. One
  * that may not run then (src/startup/startup.ts, `checksPass`), or that the user stopped while it
- * waited, ends as a command the user stopped does, unreported. A command that only reads asks for
- * no scan after it and adds no activity entry.
+ * waited, ends as a command the user stopped does, unreported. A command that only reads
+ * (`options.sideEffect` is false) asks for no scan after it and adds no activity entry.
  */
-const start = async (
+export const agentx = async (
   args: readonly string[],
-  options: CommandOptions,
-  read: boolean
+  options: CommandOptions
 ): Promise<Outcome> => {
+  const read = options.sideEffect === false;
   if (!(await afterChecks(!read, options.label))) {
     return {
       cancelled: true,
@@ -456,7 +462,7 @@ const start = async (
     !read,
     options.retry ??
       (() => {
-        void start(args, options, read);
+        void agentx(args, options);
       })
   );
   for (const handle of finishedListeners) {
@@ -464,21 +470,3 @@ const start = async (
   }
   return outcome;
 };
-
-/**
- * Runs a command that may change something, as `start` describes: a scan follows it, and its
- * outcome is an activity entry. A command of unknown kind is run with this.
- */
-export const runCommand = async (
-  args: readonly string[],
-  options: CommandOptions
-): Promise<Outcome> => await start(args, options, false);
-
-/**
- * Runs a command that only reads, as `start` describes, such as `skill diff` or the preview that
- * `adopt` with no flag is: no scan follows it, and it adds no activity entry.
- */
-export const readCommand = async (
-  args: readonly string[],
-  options: CommandOptions
-): Promise<Outcome> => await start(args, options, true);

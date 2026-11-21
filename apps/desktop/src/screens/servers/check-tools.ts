@@ -7,7 +7,7 @@ import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, McpServer } from "#/cli/events.gen.ts";
 import { notify } from "#/components/toast.tsx";
 import { checkSummary, failuresIn } from "#/screens/servers/projection.ts";
-import { cancelCommand, runCommand, usePending } from "#/store/runner.ts";
+import { cancelCommand, agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /** The control's label, which the runner shows as pending while the check runs. */
@@ -38,7 +38,7 @@ export const checkTools = async () => {
     },
     { kind: "progress", lasting: true }
   );
-  const outcome = await runCommand(["scan", "--handshake"], {
+  const outcome = await agentx(["scan", "--handshake"], {
     deadlineMs: CHECK_DEADLINE_MS,
     label: CHECK_TOOLS,
     success: (events) => checkSummary(serversOf(events)),

@@ -3,7 +3,7 @@
 // read the store and run commands through this module. The dev server serves the app's own store
 // module at the URL the app uses, so this is the app's store.
 import { refresh } from "#/store/feed.ts";
-import { cancelCommand, runCommand } from "#/store/runner.ts";
+import { cancelCommand, agentx } from "#/store/runner.ts";
 import type { CommandOptions } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { AppState } from "#/store/store.ts";
@@ -58,7 +58,7 @@ window.store = {
   cancel: cancelCommand,
   refresh,
   run: (args, options) => {
-    void runCommand(args, options);
+    void agentx(args, options);
   },
   state: () => useAppStore.getState(),
 };

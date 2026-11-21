@@ -15,7 +15,7 @@ import {
   DEFAULT_SNAPSHOT_NAME,
   isSnapshotName,
 } from "#/screens/settings/transfer.ts";
-import { runCommand, usePending } from "#/store/runner.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import type { Problem } from "#/store/store.ts";
 
 const EXPORT_LABEL = "export settings";
@@ -32,7 +32,7 @@ const ExportForm = () => {
   const exportAs = async (force: boolean) => {
     setProblem(undefined);
     const args = force ? ["export", name, "--force"] : ["export", name];
-    const outcome = await runCommand(args, {
+    const outcome = await agentx(args, {
       label: EXPORT_LABEL,
       ownFailure: true,
       success: (events) => {

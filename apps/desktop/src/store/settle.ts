@@ -6,7 +6,7 @@
 // the control pending through the refresh the runner asked for.
 import { create } from "zustand";
 
-import { runCommand, usePending } from "#/store/runner.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import type { CommandOptions, Outcome } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { AppState } from "#/store/store.ts";
@@ -54,9 +54,9 @@ const clearWhenSettled = (label: string) => {
 };
 
 /**
- * Runs a command for the control named `options.label`, as `runCommand` does, and keeps the
+ * Runs a command for the control named `options.label`, as `agentx` does, and keeps the
  * control pending until the inventory that follows the command has arrived. It resolves when the
- * command ends, as `runCommand` does, so the caller can act on the outcome at once.
+ * command ends, as `agentx` does, so the caller can act on the outcome at once.
  */
 export const runUntilSettled = async (
   args: readonly string[],
@@ -66,7 +66,7 @@ export const runUntilSettled = async (
   useSettlingStore.setState((s) => ({
     labels: { ...s.labels, [label]: true },
   }));
-  const outcome = await runCommand(args, options);
+  const outcome = await agentx(args, options);
   // The runner asked for the refresh before it returned: the mark goes with its answer.
   clearWhenSettled(label);
   return outcome;

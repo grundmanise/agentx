@@ -7,7 +7,7 @@ import { Spinner } from "#/components/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { loadLabel } from "#/store/loaders.ts";
-import { runCommand, usePending } from "#/store/runner.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /** The pending label of `config set ignore_system_files`. */
@@ -49,15 +49,12 @@ const IgnoreSystemFiles = ({ checked }: { checked: boolean }) => {
           disabled={pending}
           aria-busy={pending ? true : undefined}
           onCheckedChange={(on) => {
-            void runCommand(
-              ["config", "set", "ignore_system_files", String(on)],
-              {
-                label: IGNORE_LABEL,
-                success: on
-                  ? "System files are ignored"
-                  : "System files count as edits now",
-              }
-            );
+            void agentx(["config", "set", "ignore_system_files", String(on)], {
+              label: IGNORE_LABEL,
+              success: on
+                ? "System files are ignored"
+                : "System files count as edits now",
+            });
           }}
         />
       </span>

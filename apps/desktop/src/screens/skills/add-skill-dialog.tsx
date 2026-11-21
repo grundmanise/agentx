@@ -49,7 +49,7 @@ import {
 import type { SkillCard } from "#/screens/sources/projection.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillRows } from "#/screens/sources/skill-rows.tsx";
-import { readCommand, runCommand, usePending } from "#/store/runner.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { afterSettled } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
@@ -176,12 +176,13 @@ const AddSkillForm = ({
     setProblem(undefined);
     setFound(undefined);
     setSelection(new Set());
-    const listed = await readCommand(["source", "skills", typed], {
+    const listed = await agentx(["source", "skills", typed], {
       label: FIND_SKILLS_LABEL,
       ownFailure: true,
       retry: () => {
         void lookUp(typed);
       },
+      sideEffect: false,
     });
     // The link changed while it was looked up: what was found is not under it.
     if (current.current.trim() !== typed) {
@@ -227,7 +228,7 @@ const AddSkillForm = ({
       selected,
       targets: chosen,
     });
-    const outcome = await runCommand(plan.args, {
+    const outcome = await agentx(plan.args, {
       label: ADD_SKILL_LABEL,
       ownFailure: true,
       success: (events) => installedText(events, found.url),
