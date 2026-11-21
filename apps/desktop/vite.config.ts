@@ -1,5 +1,6 @@
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // Tauri serves the dev build from a fixed port and expects it to fail rather than move.
@@ -21,6 +22,12 @@ export default defineConfig(({ command }) => ({
   optimizeDeps: {
     include: ["@tauri-apps/api/core", "@tauri-apps/api/event", "idb-keyval"],
   },
-  plugins: [react(), tailwindcss()],
+  // React Compiler memoizes components and hooks at build time. It skips any it cannot compile
+  // safely; oxlint's React Compiler rules (ultracite/oxlint/react) report those.
+  plugins: [
+    react(),
+    babel({ presets: [reactCompilerPreset()] }),
+    tailwindcss(),
+  ],
   server: { port: 1420, strictPort: true },
 }));
