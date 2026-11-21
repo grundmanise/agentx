@@ -14,7 +14,7 @@ import {
 } from "#/screens/sources/remove-source-dialog.tsx";
 import { SourceDetail } from "#/screens/sources/source-detail.tsx";
 import { loadInstallable, loadLabel } from "#/store/loaders.ts";
-import { runCommand, usePending } from "#/store/runner.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 
 /** The pending label of Refresh on a shared source. */
 export const REFRESH_LABEL = "refresh source";
@@ -29,7 +29,7 @@ const refresh = (pill: SourcePill) => {
   if (pill.key === YOUR_SKILLS) {
     void loadInstallable();
   } else {
-    void runCommand(["source", "fetch", pill.key], { label: REFRESH_LABEL });
+    void agentx(["source", "fetch", pill.key], { label: REFRESH_LABEL });
   }
 };
 

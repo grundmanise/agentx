@@ -38,7 +38,7 @@ import {
   publishFailure,
   refusedForAccountRemote,
 } from "#/screens/skills/publish.ts";
-import { runCommand } from "#/store/runner.ts";
+import { agentx } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
@@ -180,8 +180,9 @@ const ChangedFiles = ({ files }: { files: FilesState }) => {
 const readChanged = async (row: SkillRow): Promise<FilesState> => {
   const { name } = row;
   if (notPublished(row)) {
-    const outcome = await runCommand(["skill", "files", name], {
+    const outcome = await agentx(["skill", "files", name], {
       label: `publish files ${name}`,
+      sideEffect: false,
     });
     if (outcome.exitCode !== EXIT_CODES.ok) {
       return { kind: "failed" };
@@ -203,8 +204,9 @@ const readChanged = async (row: SkillRow): Promise<FilesState> => {
     diffs.sort((a, b) => (a.path < b.path ? -1 : 1));
     return { diffs, fresh: true, kind: "read" };
   }
-  const outcome = await runCommand(["skill", "diff", name], {
+  const outcome = await agentx(["skill", "diff", name], {
     label: `publish diff ${name}`,
+    sideEffect: false,
   });
   return outcome.exitCode === EXIT_CODES.ok
     ? { diffs: outcome.events.filter((e) => e.type === "diff"), kind: "read" }

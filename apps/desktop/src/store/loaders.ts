@@ -13,7 +13,7 @@ import type {
 } from "#/cli/events.gen.ts";
 import { checksPass } from "#/startup/startup.ts";
 import { cachedRead, keepRead } from "#/store/read-cache.ts";
-import { onFinished, runCommand } from "#/store/runner.ts";
+import { agentx, onFinished } from "#/store/runner.ts";
 import type { CommandOptions, Finished } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { AppState, FilesRead } from "#/store/store.ts";
@@ -25,12 +25,16 @@ import type { AppState, FilesRead } from "#/store/store.ts";
 const hashed = (version: string) => !version.startsWith(":");
 
 /**
- * Runs a read for a screen. A screen that shows the kept inventory under the frosted pane asks for
- * its reads as it mounts: such a read runs once the startup checks pass, however long that takes.
+ * Runs a read for a screen: a command with no side effect. A screen that shows the kept inventory
+ * under the frosted pane asks for its reads as it mounts: such a read runs once the startup checks
+ * pass, however long that takes.
  */
-const runRead = async (args: readonly string[], options: CommandOptions) => {
+const runRead = async (
+  args: readonly string[],
+  options: Omit<CommandOptions, "sideEffect">
+) => {
   await checksPass();
-  return await runCommand(args, options);
+  return await agentx(args, { ...options, sideEffect: false });
 };
 
 // Each read's latest run: a slower earlier run of the same read does not overwrite a later one.

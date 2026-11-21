@@ -22,7 +22,7 @@ import { andList } from "#/lib/plural.ts";
 import { checkingText } from "#/screens/skills/checking-text.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
-import { cancelCommand, runCommand, usePending } from "#/store/runner.ts";
+import { cancelCommand, agentx, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
@@ -220,7 +220,7 @@ export const checkUpdates = async () => {
     },
   };
   notify(checkingText(), cancel, { kind: "progress", lasting: true });
-  const { exitCode } = await runCommand(["skill", "check-updates"], {
+  const { exitCode } = await agentx(["skill", "check-updates"], {
     failure: unreachableFailure,
     label: CHECK_UPDATES,
     onProgress: (event) => {

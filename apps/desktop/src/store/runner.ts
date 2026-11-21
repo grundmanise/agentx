@@ -1,8 +1,9 @@
 // The one way a control runs a command. The control shows its command as pending, the command
-// runs, and the outcome is a toast and an activity entry. After any command that may have changed
-// something, whatever its exit code, the serve child is asked to scan again: the screens redraw
-// from the inventory that follows, never from a result the app predicts. The command's outcome
-// and the inventory's freshness are separate states.
+// runs, and the outcome is a toast and an activity entry. The caller says when its command only
+// reads, with `sideEffect: false`. After any other command, whatever its exit code, the serve
+// child is asked to scan again: the screens redraw from the inventory that follows, never from a
+// result the app predicts. The command's outcome and the inventory's freshness are separate
+// states.
 import { CLI_COMMANDS } from "#/cli/commands.gen.ts";
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LogEvent, ProgressEvent } from "#/cli/events.gen.ts";
@@ -21,22 +22,6 @@ import { refresh } from "#/store/feed.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
 import type { Problem, Tone } from "#/store/store.ts";
 
-/** The commands that change nothing: no refresh follows them, and they add no activity entry. */
-const READS = new Set([
-  "version",
-  "doctor",
-  "machine",
-  "config list",
-  "config get",
-  "source list",
-  "source read",
-  "source skills",
-  "skill list",
-  "skill diff",
-  "skill files",
-  "skill history",
-]);
-
 /** The command that `args` name: the longest run of leading words that is one. */
 export const commandOf = (args: readonly string[]): string => {
   const end = args.findIndex((arg) => arg.startsWith("-"));
@@ -47,15 +32,15 @@ export const commandOf = (args: readonly string[]): string => {
   return name ?? words[0] ?? "";
 };
 
-/** Whether `args` change nothing. `adopt` with no flag is a preview, which writes nothing. */
-export const isRead = (args: readonly string[]) => {
-  const command = commandOf(args);
-  return READS.has(command) || (command === "adopt" && args.length === 1);
-};
-
 export interface CommandOptions {
   /** Names the control: it shows as pending while the command runs, and Cancel stops it. */
   label: string;
+  /**
+   * False for a command that only reads, such as `skill diff` or the preview that `adopt` with no
+   * flag is: no scan follows it, and it adds no activity entry. Leave it out for a command that
+   * may change something, and for one of unknown kind.
+   */
+  sideEffect?: boolean;
   /**
    * The toast and activity entry when the command exits 0; none when the events say the control
    * shows the outcome itself. The logs are the command's log events, its warnings among them.
@@ -137,6 +122,7 @@ export interface Outcome {
 export interface Finished extends Outcome {
   args: readonly string[];
   command: string;
+  /** The caller said it only reads, with `sideEffect: false`: it changed nothing. */
   read: boolean;
 }
 
@@ -320,9 +306,9 @@ const report = (
   args: readonly string[],
   options: CommandOptions,
   outcome: Outcome,
+  log: boolean,
   again: () => void
 ) => {
-  const log = !isRead(args);
   const { exitCode, events } = outcome;
   if (exitCode === EXIT_CODES.ok) {
     reportSuccess(options, outcome, log);
@@ -379,11 +365,14 @@ const report = (
 /**
  * Runs `agentx <args> --json` for the control named `options.label`, and returns how it ended
  * so that the caller can follow up. It never rejects: a CLI that could not start is an outcome.
+ * A command that only reads (`options.sideEffect` is false) asks for no scan after it and adds no
+ * activity entry.
  */
-export const runCommand = async (
+export const agentx = async (
   args: readonly string[],
   options: CommandOptions
 ): Promise<Outcome> => {
+  const read = options.sideEffect === false;
   const started = run(args, { deadlineMs: options.deadlineMs });
   setPending(options.label, started.runId);
   const following =
@@ -417,7 +406,6 @@ export const runCommand = async (
     }
   }
   keepConflicts(outcome.events);
-  const read = isRead(args);
   if (!read) {
     void refresh();
   }
@@ -425,9 +413,10 @@ export const runCommand = async (
     args,
     options,
     outcome,
+    !read,
     options.retry ??
       (() => {
-        void runCommand(args, options);
+        void agentx(args, options);
       })
   );
   for (const handle of finishedListeners) {

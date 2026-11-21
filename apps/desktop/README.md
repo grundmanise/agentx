@@ -133,7 +133,7 @@ These rules are for anyone writing a component, people and coding agents alike.
 - A component in `src/components/` is allowed only when shadcn has no equivalent (the agent client logo, the skill glyph, a list row). Never write a wrapper directly on `radix-ui` or `cmdk`: only `src/components/ui` imports them.
 - Import from `src` with the `#/` prefix and the file's extension: `import { SearchIcon } from "#/components/icons/search.tsx"`. `#/` is a Node subpath import declared in `package.json` (`"imports"`), so TypeScript, Vite and the lint resolve it the same way, and like Node they need the extension.
 - Show only what the CLI reports. A screen never predicts the result of a command.
-- Read CLI data from `useAppStore` (`src/store/store.ts`) with a selector, and run a command with `runCommand` (`src/store/runner.ts`), never with the transport directly. The screen redraws from the inventory that follows the command.
+- Read CLI data from `useAppStore` (`src/store/store.ts`) with a selector, and run a command with `agentx` (`src/store/runner.ts`), never with the transport directly. Pass `sideEffect: false` for a command that only reads. The screen redraws from the inventory that follows the command.
 
 ### Copy
 

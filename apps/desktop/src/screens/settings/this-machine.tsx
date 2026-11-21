@@ -8,7 +8,7 @@ import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
-import { runCommand, usePending } from "#/store/runner.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
@@ -53,7 +53,7 @@ const LabelField = ({ label }: { label: string }) => {
     }
     setSent(value);
     setProblem(undefined);
-    const outcome = await runCommand(["config", "set", "label", value], {
+    const outcome = await agentx(["config", "set", "label", value], {
       label: LABEL_LABEL,
       ownFailure: true,
       success: "Label saved",
