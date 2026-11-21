@@ -650,6 +650,13 @@ export interface UpdateCheckEvent {
   fetched: boolean;
 }
 
+export interface ListeningEvent {
+  type: "listening";
+  schema_version: number;
+  url: string;
+  token: string;
+}
+
 // Reserved by the contract and never emitted: known, and not rendered.
 export interface OperationEvent {
   type: "operation";
@@ -693,6 +700,7 @@ export type CliEvent =
   | RefreshCompleteEvent
   | SearchEvent
   | UpdateCheckEvent
+  | ListeningEvent
   | OperationEvent
   | FleetEvent;
 export type CliEventType = CliEvent["type"];

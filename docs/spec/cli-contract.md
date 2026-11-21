@@ -1143,7 +1143,7 @@ Without `--json`: `export` prints `✓ exported the settings and <n> skills to <
 
 ## Serve
 
-`agentx serve --json` is the long-running child the desktop app holds open. It scans once on start, emits that inventory, then rescans when the machine changes and emits the inventory again only when it changed. It runs until its stdin closes or its context is cancelled, then emits `result` and exits 0. Without `--json` it prints one line per event: `inventory <counter>: <n> configurations, <n> skills`, `refresh <request_id>: ok, inventory <counter>`, `refresh <request_id>: failed: <error>`, `search <request_id>: <n> results` (`1 result`), `update <name>: <short upstream commit> -> <short candidate upstream commit>, <n> files` (`1 file`), and for an update another machine published `update <name>: <short commit here> -> <short commit on the account remote>, <n> files`, `check <scope>: ok`, with `, fetched` when the check fetched, or `check <scope>: failed`, for an `update_check`, or `reconcile <name>: <outcome>`, for every outcome but `restored`, the name sanitised.
+`agentx serve --json` is the long-running child the desktop app holds open. It scans once on start, emits that inventory, then rescans when the machine changes and emits the inventory again only when it changed. It runs until its stdin closes or its context is cancelled, then emits `result` and exits 0. Without `--json` it prints one line per event: `inventory <counter>: <n> configurations, <n> skills`, `refresh <request_id>: ok, inventory <counter>`, `refresh <request_id>: failed: <error>`, `search <request_id>: <n> results` (`1 result`), `update <name>: <short upstream commit> -> <short candidate upstream commit>, <n> files` (`1 file`), and for an update another machine published `update <name>: <short commit here> -> <short commit on the account remote>, <n> files`, `check <scope>: ok`, with `, fetched` when the check fetched, or `check <scope>: failed`, for an `update_check`, or `reconcile <name>: <outcome>`, for every outcome but `restored`, the name sanitised. With `--listen` it first prints `listening: <url>` and `token: <token>`, see [the WebSocket door](#the-websocket-door).
 
 One serve child per agentx home: on start it takes an exclusive advisory `flock` on `serve.lock` in agentx home and holds it until it exits. A second `agentx serve` for the same home, `--once` included, exits at once with code 6 and a hint naming `serve.lock`. This lock is distinct from `lock`: serve never blocks a mutating command.
 
@@ -1228,4 +1228,67 @@ Serve answers from the source index it holds in memory: one skill list per sourc
 
 A search takes no lock, runs no git process and makes no network call. It is answered from the index as it stands, while a scan is in progress, without waiting for it, so a search sent after a refresh can be answered before that refresh's `refresh_complete`.
 
-`agentx serve --once` takes the serve lock, runs the initial scan, emits its inventory and exits 0 with exactly the events `inventory` and `result`. It reconciles nothing, watches nothing, reads no requests and runs no update check and no maintenance, and with no inventory before its one it emits no `drift`.
+`agentx serve --once` takes the serve lock, runs the initial scan, emits its inventory and exits 0 with exactly the events `inventory` and `result`. It reconciles nothing, watches nothing, reads no requests and runs no update check and no maintenance, and with no inventory before its one it emits no `drift`. It opens no door: `--once` with `--listen` is a usage error.
+
+### The WebSocket door
+
+`agentx serve --listen <address>` also answers clients on a WebSocket, so that the desktop app's frontend can run in a browser on this machine ([ADR 0016](../adr/0016-serve-is-the-backend-of-the-app-and-of-the-frontend-in-a-browser.md)). Everything above stays as it is: stdin still carries the request lines, stdout the events, and serve still ends when its stdin closes, so whoever starts it keeps its stdin open.
+
+`<address>` is a loopback address, so that the door is open to this machine alone: an address in `127.0.0.0/8`, `localhost`, which stands for `127.0.0.1`, or `::1`, in brackets when a port follows, each with an optional `:<port>`. With no port, or port `0`, serve takes a free one. Any other address is a usage error, and so is `--origin` without `--listen`. A port that is taken ends serve with exit code 6. `--origin <origin>`, repeatable, names a web origin that may connect, written as a browser sends it, such as `http://localhost:1420`: a scheme, `http` or `https`, a host, and the port when it is not the scheme's own, in lower case, with nothing after them; anything else is a usage error.
+
+Serve opens the door once it holds `serve.lock`, before reconciliation and the initial scan, and emits one `listening` event, on stdout alone:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `url` | string | what a client connects to: `ws://<host>:<port>/`, the address the door listens on, the port being the one serve took when none was given |
+| `token` | string | what a client presents; random for each serve process |
+
+The token appears in this event, in the `token:` line without `--json`, and nowhere else: serve writes it to no log and sends it to no client.
+
+Who may connect: serve answers a WebSocket handshake at the path `/` and refuses every other request, in this order: `404` for another path; `403` for a `Host` header that is neither the `<host>:<port>` of `url` nor `localhost:<port>`, so that a web page cannot reach the door through a name that resolves to this machine; `403` for an `Origin` header that is not one of `--origin`, compared whole, so with no `--origin` no browser may connect, while a client that sends no `Origin`, which is no browser, is not held to the list; `401` for a missing or wrong token. A client presents the token as the query parameter `token`, `<url>?token=<token>`: a browser can set no header on a WebSocket handshake.
+
+The protocol is JSON-RPC 2.0, one message per frame. A message over 1 MiB ends the connection. Serve answers a batch, an array of messages, with error `-32600`: a client sends one message per frame. Serve sends no request of its own, and ignores a response and a notification it does not know.
+
+| Method | Kind | Params | Result |
+|---|---|---|---|
+| `run` | request | `args`: array of strings, the command line after `agentx`, at least one; `deadline_ms`: integer, optional, `0` or `null` for none | see below |
+| `refresh` | request | none | `instance_id`, `scan_counter` |
+| `search` | request | `query`: string, not empty | `instance_id`, `query`, `results` |
+| `$/cancelRequest` | notification to serve | `id`: the id of a request of this connection | none |
+| `event` | notification from serve | see below | none |
+
+The id of a request is a string or a number, and no two requests in progress on one connection share one. Each request is answered on its own, so a client may send requests while others run. A request serve could not carry out is answered with an error:
+
+| Code | Meaning |
+|---|---|
+| `-32700` | the message is not JSON |
+| `-32600` | the message is not a request: JSON that is no object, a batch among it, no `"jsonrpc": "2.0"`, no method, an id that is no string or number, or an id in progress |
+| `-32601` | an unknown method |
+| `-32602` | params the method does not take |
+| `-32000` | serve could not carry the request out: the command could not start, or the scan of a `refresh` failed; `message` says which |
+| `-32800` | a `refresh` that `$/cancelRequest` cancelled, by the code of the Language Server Protocol |
+
+`run` runs one command as the desktop app's shell does: the same `agentx` executable as serve, as a child process in a process group of its own, with `--json` added unless `args` hold it, before a `--` when there is one, with serve's environment and working directory and no stdin. A request names no environment and no directory: the environment decides which programs git starts. Every line the child writes is sent, as it is written, in an `event` notification to the client that made the request:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | string or number | the id of the `run` request; absent for an event serve emits on its own |
+| `stream` | string | `stdout` or `stderr` |
+| `event` | object | the line, when it is a JSON object: the event the CLI wrote, unchanged |
+| `line` | string | the line, when it is no JSON object; a blank line is not sent |
+
+`$/cancelRequest` naming the request, or the deadline passing, sends the child's process group SIGTERM, and SIGKILL 2 seconds later if it has not ended, as [Stopping a run](#stopping-a-run) describes. The response follows the child's last line. A command that ends with an exit code other than 0 ran, so it is a result and never an error:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `exit_code` | integer or null | the command's exit code; `null` when a signal ended it |
+| `cancelled` | boolean | whether the request was cancelled before the command ended |
+| `timed_out` | boolean | whether the deadline passed before the command ended |
+
+Serve does not scan for a command it ran. A client that needs the inventory to hold what the command changed sends `refresh` once the command has ended, as the desktop app does after a command of its shell ([inventory ordering](inventory-ordering.md)): the scan begins after the request, and a changed inventory reaches the client before the response that names it.
+
+`refresh` is the stdin request, with the same rule for the scan that satisfies it; its result carries what `refresh_complete` carries for a scan that succeeded. `search` is the stdin request, answered the same way from the same index; its result carries what the `search` event carries.
+
+Serve's own events: every event serve emits on its own, on stdout or as a `log` event on stderr, is also sent to every client in an `event` notification with no `id`: `inventory`, `drift`, `reconcile`, `update_available`, `update_check` and `log`. The answers to stdin's requests, `refresh_complete`, `search` and `error`, go to stdout alone, as do `listening` and `result`. The last `inventory` serve emitted, once it has emitted one, is the first message a client is sent when it connects, so a client that connects later starts from the current inventory; it is sent no other earlier event. An event of serve's own never waits for a client: one that is 1024 messages behind is disconnected.
+
+A connection that closes cancels its requests in progress as `$/cancelRequest` does. When serve ends, it does the same for every connection and waits for the commands to end before it exits, so that no command it started outlives it.

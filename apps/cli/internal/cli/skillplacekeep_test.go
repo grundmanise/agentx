@@ -1471,13 +1471,7 @@ func TestPlaceChildProcess(t *testing.T) {
 	if len(args) == 0 {
 		t.Skip("not the skill place child process")
 	}
-	env := map[string]string{}
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			env[k] = v
-		}
-	}
-	os.Exit(Run(context.Background(), append([]string{"skill", "place"}, args...), env, strings.NewReader(""), os.Stdout, os.Stderr))
+	os.Exit(Run(context.Background(), append([]string{"skill", "place"}, args...), processEnv(), strings.NewReader(""), os.Stdout, os.Stderr))
 }
 
 // killedPlace runs one skill place in a child process that a git wrapper
