@@ -216,7 +216,7 @@ const ApplyFile = () => {
 export const ApplySnapshotSection = () => (
   <SettingsSection
     title="Apply snapshot"
-    description="Load settings and skills from a snapshot saved on this or another device."
+    description="Load settings and skills from a snapshot."
   >
     <ApplyFile />
   </SettingsSection>
