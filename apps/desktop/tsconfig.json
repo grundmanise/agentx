@@ -18,6 +18,7 @@
   "include": [
     "src",
     "e2e",
+    "scripts",
     "playwright.config.ts",
     "vite.config.ts",
     "oxlint.config.ts",
