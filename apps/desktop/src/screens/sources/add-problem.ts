@@ -24,6 +24,6 @@ export const addProblem = (problem: Problem): Problem | undefined => {
   const one = names.length === 1;
   return {
     hint: `remove ${one ? "it" : "them"}, then add again`,
-    message: `${names.join(", ")} ${one ? "is" : "are"} already in your library`,
+    message: `${names.join(", ")} ${one ? "skill is" : "are"} already in your library`,
   };
 };

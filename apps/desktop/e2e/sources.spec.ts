@@ -920,7 +920,7 @@ test("a partial failure lists what was added and why the rest was not, in the ap
     .getByRole("listitem")
     .filter({ hasText: "Added 1 of 2 skills" });
   await expect(toast).toBeVisible();
-  await expect(toast).toContainText("docx is already in your library.");
+  await expect(toast).toContainText("docx skill is already in your library.");
   await expect(toast).toContainText("Remove it, then add again.");
   // The skill that landed leaves the selection; the skipped one stays.
   await expect(

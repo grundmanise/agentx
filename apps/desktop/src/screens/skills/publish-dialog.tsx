@@ -62,7 +62,7 @@ const update = (name: string) => {
  */
 export const publishArgs = (name: string, message: string, summary = "") => {
   const text = message.trim();
-  return text === "" || text === summary
+  return text === "" || text === summary.trim()
     ? ["skill", "publish", name]
     : ["skill", "publish", name, "--message", text];
 };
