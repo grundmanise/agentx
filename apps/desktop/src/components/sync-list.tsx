@@ -75,7 +75,11 @@ export const SyncNote = ({ children }: { children: ReactNode }) => (
   <p className="type-secondary text-text-muted m-0 px-2">{children}</p>
 );
 
-/** The account remote's short form at the left, when it was last checked at the right. */
+/**
+ * The account remote's short form at the left, when it was last checked at the right. The remote
+ * never truncates: the popover widens to fit it, and in a window too narrow even for that, the
+ * time wraps under it.
+ */
 export const SyncFooter = ({
   remote,
   checked,
@@ -83,8 +87,8 @@ export const SyncFooter = ({
   remote: string;
   checked: string;
 }) => (
-  <div className="flex items-center justify-between gap-2.5 px-2">
-    <span className="type-technical-sm text-text-caption truncate">
+  <div className="flex flex-wrap items-center justify-between gap-x-2.5 gap-y-1 px-2">
+    <span className="type-technical-sm text-text-caption break-all">
       {remote}
     </span>
     <span className="type-secondary text-text-hint flex-none">{checked}</span>

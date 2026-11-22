@@ -12,7 +12,6 @@ import type { AdoptionEvent, CliEvent } from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import { plural } from "#/lib/plural.ts";
 import { toolName } from "#/screens/skills/projection.ts";
-import { loadAdoption } from "#/store/loaders.ts";
 import type { ActivityText, Outcome } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
 import { addActivity } from "#/store/store.ts";
@@ -352,7 +351,7 @@ const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
 
 /**
  * Adopts every skill of `rows` that is waiting, one tool after another, in the dialog's order.
- * The preview is read again afterwards; the inventory follows each run.
+ * Each run reads the preview again (src/store/loaders.ts), and the inventory follows it.
  */
 export const adoptAll = async (tools: ToolSummary[], rows: AdoptRow[]) => {
   if (useAdoptRun.getState().run !== undefined) {
@@ -377,5 +376,4 @@ export const adoptAll = async (tools: ToolSummary[], rows: AdoptRow[]) => {
     }
   }
   update((run) => (run.phase === "running" ? { ...run, phase: "ended" } : run));
-  await loadAdoption();
 };
