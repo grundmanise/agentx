@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -116,21 +120,37 @@ func TestServeOnceEmitsInitialInventory(t *testing.T) {
 	contains(t, "stdout", out.stdout, "inventory 1: 1 configuration, 1 skill")
 }
 
-func TestServeRefusesASecondChild(t *testing.T) {
+// A second serve of one home cannot serve, says so in an error event of
+// its own and stays up to run commands until its stdin ends: it refuses a
+// refresh and finds nothing on a search. A one-shot serve is refused at
+// once.
+func TestServeStaysUpBesideASecondChild(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
+	h.env[cliChildEnv] = "1"
 	p := h.serve(t, "--json")
 	p.next("inventory")
 
-	out := h.run("serve", "--json")
-	equal(t, "exit", out.exit, 6)
-	events := h.events(out.stdout)
-	if got, want := h.types(events), []string{"error", "result"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("event types = %v, want %v", got, want)
-	}
-	equal(t, "error.code", events[0]["code"], "refused")
-	contains(t, "error.hint", events[0]["hint"].(string), filepath.Join(h.agentx, "serve.lock"))
-	out = h.run("serve", "--once")
+	second := h.serve(t, "--json", "--listen", "127.0.0.1")
+	c := dialDoor(t, second.next("listening"), "")
+	e := second.next("error")
+	equal(t, "error.code", e["code"], "refused")
+	contains(t, "error.hint", e["hint"].(string), filepath.Join(h.agentx, "serve.lock"))
+	second.request(1, "run", map[string]any{"args": []string{"version"}})
+	result, _, run, _ := second.answer(float64(1))
+	alike(t, "run events", h.types(run), []string{"version", "result"})
+	equal(t, "exit_code", result["exit_code"], float64(0))
+	// The door is open too, and answers as stdin does.
+	c.send(1, "refresh", nil)
+	_, rpcError, _, _ := c.answer(1)
+	equal(t, "refresh error.code", rpcError["code"], float64(-32000))
+	contains(t, "refresh error.message", rpcError["message"].(string), "another agentx serve is running")
+	second.request("s1", "search", map[string]any{"query": "commit"})
+	alike(t, "search results", second.answered("s1")["results"], []any{})
+	equal(t, "exit", second.close(), 6)
+	equal(t, "result.ok", second.next("result")["ok"], false)
+
+	out := h.run("serve", "--once")
 	equal(t, "exit", out.exit, 6)
 	contains(t, "stderr", out.stderr, "serve.lock")
 
@@ -142,6 +162,9 @@ func TestServeRefusesASecondChild(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 }
 
+// Stdin carries JSON-RPC: a refresh is answered with the counter of the
+// inventory after its scan, a search from the index, and a line that is no
+// JSON with the error JSON-RPC gives it, after which serve goes on.
 func TestServeAnswersRequests(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
@@ -149,28 +172,72 @@ func TestServeAnswersRequests(t *testing.T) {
 	inventory := p.next("inventory")
 	equal(t, "scan_counter", inventory["scan_counter"], float64(1))
 
-	p.send(`{"type":"bogus"}`)
-	e := p.next("error")
-	equal(t, "error.code", e["code"], "usage")
-	contains(t, "error.message", e["message"].(string), `"bogus"`)
 	p.send(`not json`)
-	e = p.next("error")
-	equal(t, "error.code", e["code"], "usage")
-	contains(t, "error.hint", e["hint"].(string), `"refresh"`)
-	p.send(`{"type":"refresh"}`)
-	e = p.next("error")
-	contains(t, "error.message", e["message"].(string), "request_id")
+	_, rpcError := p.response(nil)
+	equal(t, "error.code", rpcError["code"], float64(-32700))
+	p.request("q", "search", nil)
+	_, rpcError = p.response("q")
+	equal(t, "error.code", rpcError["code"], float64(-32602))
 
-	p.send(`{"type":"refresh","request_id":"r1"}`)
-	e = p.next("refresh_complete")
-	equal(t, "request_id", e["request_id"], "r1")
-	equal(t, "instance_id", e["instance_id"], inventory["instance_id"])
-	equal(t, "ok", e["ok"], true)
-	equal(t, "scan_counter", e["scan_counter"], float64(1))
+	e := p.refreshed("r1")
+	alike(t, "refresh", e, jsonEvent{"instance_id": inventory["instance_id"], "scan_counter": float64(1)})
 
 	equal(t, "exit", p.close(), 0)
 	r := p.next("result")
 	equal(t, "result.ok", r["ok"], true)
+}
+
+// A command runs through stdin as through the door: its events come as
+// they are written and its exit code after them. A cancel stops it, and so
+// does the end of stdin, which ends serve once the command has ended.
+func TestServeRunsCommandsFromStdin(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	h.env[cliChildEnv] = "1"
+	waiting := filepath.Join(t.TempDir(), "waiting")
+	stubGit(t, h, "#!/bin/sh\n"+hostPATH()+`case "$*" in *never.invalid*) echo $$ > `+shellWord(waiting)+`; exec sleep 60 ;; esac
+exec git "$@"
+`)
+	waitingGit := func() (pid int) {
+		awaitTrue(t, "the command to wait for its git", func() bool {
+			b, _ := os.ReadFile(waiting)
+			pid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+			return pid != 0
+		})
+		return pid
+	}
+	p := h.serve(t, "--json")
+	p.request("v", "run", map[string]any{"args": []string{"version"}})
+	result, _, run, _ := p.answer("v")
+	alike(t, "run events", h.types(run), []string{"version", "result"})
+	alike(t, "result", result, jsonEvent{"exit_code": float64(0), "cancelled": false, "timed_out": false})
+
+	p.request(1, "run", map[string]any{"args": []string{"source", "add", "https://never.invalid/skills.git"}})
+	waitingGit()
+	p.request(nil, "$/cancelRequest", map[string]any{"id": 1})
+	result, _, _, _ = p.answer(float64(1))
+	equal(t, "cancelled", result["cancelled"], true)
+	equal(t, "exit_code", result["exit_code"], float64(exitInterrupted.exit))
+
+	if err := os.Remove(waiting); err != nil {
+		t.Fatal(err)
+	}
+	p.request(2, "run", map[string]any{"args": []string{"source", "add", "https://never.invalid/skills.git"}})
+	git := waitingGit()
+	equal(t, "exit", p.close(), 0)
+	equal(t, "the git the command waited for", syscall.Kill(git, 0), error(syscall.ESRCH))
+	result, _, _, _ = p.answer(float64(2))
+	equal(t, "cancelled", result["cancelled"], true)
+}
+
+// Under --json every event of serve's own goes out as an event
+// notification with no id, one line each.
+func TestEventNotificationsEncloseEachEvent(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	w := &writer{stdout: eventNotifications{out: &out}, stderr: io.Discard, json: true}
+	w.result(true, "")
+	equal(t, "stdout", out.String(), `{"jsonrpc":"2.0","method":"event","params":{"stream":"stdout","event":{"type":"result","schema_version":`+strconv.Itoa(schemaVersion)+`,"ok":true}}}`+"\n")
 }
 
 func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
@@ -189,8 +256,8 @@ func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		t.Fatal(err)
 	}
-	p.send(`{"type":"refresh","request_id":"r1"}`)
-	p.send(`{"type":"refresh","request_id":"r2"}`)
+	p.refresh("r1")
+	p.refresh("r2")
 	h.addLibrarySkill(t, "review")
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
 		t.Fatal(err)
@@ -199,12 +266,17 @@ func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
 	inventory := p.next("inventory")
 	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
 	equal(t, "skills", strings.Join(skillNames(inventory), " "), "review")
-	for _, id := range []string{"r1", "r2"} {
-		e := p.next("refresh_complete")
-		equal(t, "request_id", e["request_id"], id)
-		equal(t, "ok", e["ok"], true)
-		equal(t, "scan_counter", e["scan_counter"], float64(2))
+	// Each request is answered on its own, so the two answers come in
+	// either order.
+	answered := map[any]any{}
+	for range 2 {
+		var m jsonEvent
+		if err := json.Unmarshal([]byte(<-p.lines), &m); err != nil {
+			t.Fatal(err)
+		}
+		answered[m["id"]] = m["result"].(map[string]any)["scan_counter"]
 	}
+	alike(t, "the counters the refreshes were answered with", answered, map[any]any{"r1": float64(2), "r2": float64(2)})
 	equal(t, "exit", p.close(), 0)
 }
 
@@ -216,25 +288,21 @@ func TestServeRescansOnVersionBumpWithoutInventory(t *testing.T) {
 	// Wait until serve is idle: its first scan created the lock file, a
 	// change in agentx home that schedules one more scan, and a mutation
 	// that meets a scan's read section exits 7 instead of waiting.
-	p.send(`{"type":"refresh","request_id":"idle"}`)
-	p.next("refresh_complete")
+	p.refreshed("idle")
 
 	// A one-shot mutation that changes nothing the inventory shows.
 	out := h.run("config", "set", "accept_operations", "true")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "version", readVersion(t, h), 1)
-	p.send(`{"type":"refresh","request_id":"after-bump"}`)
-	e := p.next("refresh_complete")
-	equal(t, "request_id", e["request_id"], "after-bump")
+	e := p.refreshed("after-bump")
 	equal(t, "scan_counter", e["scan_counter"], float64(1))
 
 	// A change the inventory shows: the counter moves and the inventory precedes the acknowledgement.
 	h.addLibrarySkill(t, "commit")
-	p.send(`{"type":"refresh","request_id":"after-skill"}`)
+	p.refresh("after-skill")
 	inventory := p.next("inventory")
 	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
-	e = p.next("refresh_complete")
-	equal(t, "request_id", e["request_id"], "after-skill")
+	e = p.answered("after-skill")
 	equal(t, "scan_counter", e["scan_counter"], float64(2))
 	equal(t, "exit", p.close(), 0)
 }
@@ -267,10 +335,7 @@ func TestServeWatchesTheLibrary(t *testing.T) {
 	equal(t, "scan_counter", inventory["scan_counter"], float64(4))
 	equal(t, "skills", strings.Join(skillNames(inventory), " "), "")
 
-	p.send(`{"type":"refresh","request_id":"r1"}`)
-	e := p.next("refresh_complete")
-	equal(t, "request_id", e["request_id"], "r1")
-	equal(t, "ok", e["ok"], true)
+	e := p.refreshed("r1")
 	equal(t, "scan_counter", e["scan_counter"], float64(4))
 	equal(t, "exit", p.close(), 0)
 	equal(t, "stderr", p.stderr.String(), "")
@@ -285,8 +350,7 @@ func TestServeWatchesInsideSkills(t *testing.T) {
 	equal(t, "skills", strings.Join(skillDescriptions(inventory), " "), "A commit skill")
 	// Wait until serve is idle: its first scan created the lock file, a
 	// change in agentx home that schedules one more scan.
-	p.send(`{"type":"refresh","request_id":"idle"}`)
-	p.next("refresh_complete")
+	p.refreshed("idle")
 
 	// An edit inside the skill directory is a change signal: no refresh is requested.
 	h.editLibrarySkill(t, "commit", "Write a commit message")
@@ -354,8 +418,7 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 	equal(t, "skills", strings.Join(skillDescriptions(inventory), " "), "A commit skill")
 	// Wait until serve is idle: its first scan created the lock file, a
 	// change in agentx home that schedules one more scan.
-	p.send(`{"type":"refresh","request_id":"idle"}`)
-	p.next("refresh_complete")
+	p.refreshed("idle")
 
 	// An edit inside the skill directory is a change signal: no refresh is requested.
 	h.editSkill(t, skills, "commit", "Write a commit message")
@@ -403,11 +466,10 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	p := h.serve(t, "--json")
 	first := p.next("inventory")
 	equal(t, "library at start", len(first["library"].([]any)), 1)
-	p.send(`{"type":"refresh","request_id":"idle"}`)
-	p.next("refresh_complete")
+	p.refreshed("idle")
 
 	setHead("garbage\n")
-	p.send(`{"type":"refresh","request_id":"broken"}`)
+	p.refresh("broken")
 	broken := p.next("inventory")
 	equal(t, "library while broken", len(broken["library"].([]any)), 0)
 	equal(t, "skills while broken", strings.Join(skillNames(broken), " "), "alpha")
@@ -415,13 +477,10 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) {
 		t.Errorf("warnings = %q, want one naming %s", warnings, account)
 	}
-	e := p.next("refresh_complete")
-	equal(t, "request_id", e["request_id"], "broken")
-	equal(t, "ok", e["ok"], true)
+	p.answered("broken")
 
 	replaceFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited while the account repo was broken\n")
 	setHead(string(healthy))
-	p.send(`{"type":"refresh","request_id":"repaired"}`)
 	events := p.until("repaired")
 	var repaired jsonEvent
 	for _, e := range events {
@@ -443,7 +502,6 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	equal(t, "the skill after the repair", entry["name"], "alpha")
 	equal(t, "its state after the repair", entry["state"], stateModified)
 	equal(t, "warnings after the repair", len(repaired["warnings"].([]any)), 0)
-	equal(t, "ok after the repair", events[len(events)-1]["ok"], true)
 	equal(t, "exit", p.close(), 0)
 }
 
@@ -457,7 +515,9 @@ func TestServeEndsOnCancel(t *testing.T) {
 	equal(t, "stderr", p.stderr.String(), "")
 }
 
-func TestServeRefusesWhenWatchingFails(t *testing.T) {
+// A directory serve cannot watch is reported, and serve goes on: it scans
+// when it is asked to.
+func TestServeGoesOnWhenWatchingFails(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	// A library that resolves to a symlink loop cannot be watched.
@@ -473,6 +533,31 @@ func TestServeRefusesWhenWatchingFails(t *testing.T) {
 	contains(t, "error.message", e["message"].(string), "cannot watch for changes")
 	contains(t, "error.message", e["message"].(string), h.library)
 	contains(t, "error.hint", e["hint"].(string), "watch limit")
-	equal(t, "result.ok", p.next("result")["ok"], false)
-	equal(t, "exit", p.close(), 6)
+	p.next("inventory")
+	equal(t, "refresh", p.refreshed("r1")["scan_counter"], float64(1))
+	equal(t, "exit", p.close(), 0)
+	equal(t, "result.ok", p.next("result")["ok"], true)
+}
+
+// A scan that fails at start, as one does while git is broken, is
+// reported with the code of its error, and serve goes on: the first scan
+// that succeeds, here the one a refresh asks for, emits inventory 1.
+func TestServeGoesOnFromAFailedInitialScan(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	broken := filepath.Join(t.TempDir(), "broken")
+	writeFile(t, broken, "")
+	stubGit(t, h, "#!/bin/sh\n"+hostPATH()+"if [ -e "+shellWord(broken)+" ]; then echo 'git is broken' >&2; exit 1; fi\nexec git \"$@\"\n")
+	p := h.serve(t, "--json")
+	e := p.next("error")
+	equal(t, "error.code", e["code"], "git")
+	contains(t, "error.message", e["message"].(string), "git is broken")
+
+	if err := os.Remove(broken); err != nil {
+		t.Fatal(err)
+	}
+	p.refresh("r1")
+	equal(t, "the first inventory", p.next("inventory")["scan_counter"], float64(1))
+	equal(t, "refresh", p.answered("r1")["scan_counter"], float64(1))
+	equal(t, "exit", p.close(), 0)
 }

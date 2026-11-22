@@ -2,7 +2,6 @@ package serve
 
 import (
 	"context"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,31 +18,23 @@ import (
 // it, and Run returns only once it has.
 func TestTheChecksRunOneAtATime(t *testing.T) {
 	t.Parallel()
-	stdinR, stdinW, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stdinW.Close()
-	defer stdinR.Close()
-
+	requests := NewRequests()
 	var inventories, checks, rechecks, running atomic.Int32
 	var overlapped, early atomic.Bool // a check ran beside another; the recheck ran before the check's report
 	var checkReported atomic.Bool
 	var held atomic.Bool           // the second job, still running when serve stops, ended
 	started := make(chan int32, 1) // the inventories out when the check started
 	reported := make(chan struct{}, 1)
-	acked := make(chan string, 4)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
 		done <- Run(ctx, Options{
-			Scan:            func(context.Context) (scan.Inventory, error) { return scan.Inventory{}, nil },
-			Stdin:           stdinR,
-			Inventory:       func(scan.Inventory) { inventories.Add(1) },
-			RefreshComplete: func(id string, _ int, _ error) { acked <- id },
-			BadRequest:      func(string, string) {},
-			Warn:            func(string) {},
+			Scan:      func(context.Context) (scan.Inventory, error) { return scan.Inventory{}, nil },
+			Requests:  requests,
+			Inventory: func(scan.Inventory) { inventories.Add(1) },
+			Fail:      func(err error) { t.Errorf("Fail(%v)", err) },
+			Warn:      func(string) {},
 			Check: func(context.Context) func() {
 				if running.Add(1) > 1 {
 					overlapped.Store(true)
@@ -91,14 +82,12 @@ func TestTheChecksRunOneAtATime(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the check's report was never made")
 	}
-	for _, id := range []string{"r1", "r2"} {
-		if _, err := stdinW.WriteString(`{"type":"refresh","request_id":"` + id + `"}` + "\n"); err != nil {
-			t.Fatal(err)
-		}
-		select {
-		case <-acked:
-		case <-time.After(10 * time.Second):
-			t.Fatalf("refresh %s was never acknowledged", id)
+	for range 2 {
+		refreshCtx, stop := context.WithTimeout(ctx, 10*time.Second)
+		_, err := requests.Refresh(refreshCtx)
+		stop()
+		if err != nil {
+			t.Fatalf("a refresh was answered %v", err)
 		}
 	}
 	deadline := time.Now().Add(10 * time.Second)

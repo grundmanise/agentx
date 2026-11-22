@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -284,11 +285,19 @@ func contains(t *testing.T, what, text, sub string) {
 
 // serveProc is one `agentx serve` run in a goroutine, driven through pipes.
 // Every wait on stdout is a channel or a pipe read, never a sleep: send
-// writes a request line, next reads the next stdout event, close ends stdin
-// and cancelRun ends the context; both return the exit code once Run
-// returned. stderr can be read while serve runs: what serve does on its
-// timer and logs there has no stdout event to wait for, so a test polls for
-// it with awaitTrue.
+// writes a line, request a JSON-RPC request, next reads the next event of
+// serve's own, close ends stdin and cancelRun ends the context; both return
+// the exit code once Run returned. stderr can be read while serve runs:
+// what serve does on its timer and logs there has no stdout event to wait
+// for, so a test polls for it with awaitTrue.
+//
+// With --json, and without --once, every line serve writes on stdout is a
+// JSON-RPC message, and lines holds each of serve's own events as the
+// event itself, taken out of its notification, so that a test reads them
+// as a one-shot command's events are read; a response, and a notification
+// of a run, is held as the message it is. A line that is no JSON-RPC
+// message is held with a prefix that no JSON parses, so that the test that
+// reads it fails on it.
 type serveProc struct {
 	t      *testing.T
 	stdin  *os.File
@@ -337,12 +346,18 @@ func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &serveProc{t: t, stdin: inW, lines: make(chan string, 256), done: make(chan struct{}), cancel: cancel}
+	rpc := slices.Contains(args, "--json") && !slices.Contains(args, "--once")
 	go func() {
 		defer close(p.lines)
 		defer outR.Close()
 		sc := bufio.NewScanner(outR)
+		sc.Buffer(nil, 16<<20)
 		for sc.Scan() {
-			p.lines <- sc.Text()
+			line := sc.Text()
+			if rpc {
+				line = ownEvent(line)
+			}
+			p.lines <- line
 		}
 	}()
 	go func() {
@@ -359,12 +374,147 @@ func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 	return p
 }
 
-// send writes one request line to the child's stdin.
+// ownEvent is a line serve wrote on stdout as lines holds it, see serveProc.
+func ownEvent(line string) string {
+	var m struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Method  string          `json:"method"`
+		Params  struct {
+			ID     json.RawMessage `json:"id"`
+			Stream string          `json:"stream"`
+			Event  json.RawMessage `json:"event"`
+		} `json:"params"`
+	}
+	switch err := json.Unmarshal([]byte(line), &m); {
+	case err != nil || m.JSONRPC != "2.0":
+		return "not a JSON-RPC message: " + line
+	case m.Method == "event" && m.ID == nil && m.Params.ID == nil:
+		if m.Params.Stream != "stdout" || m.Params.Event == nil {
+			return "not an event of serve's own: " + line
+		}
+		return string(m.Params.Event)
+	}
+	return line
+}
+
+// send writes one line to the child's stdin.
 func (p *serveProc) send(line string) {
 	p.t.Helper()
 	if _, err := p.stdin.Write([]byte(line + "\n")); err != nil {
 		p.t.Fatal(err)
 	}
+}
+
+// request sends a JSON-RPC request, or a notification when id is nil.
+func (p *serveProc) request(id any, method string, params any) {
+	p.t.Helper()
+	m := map[string]any{"jsonrpc": "2.0", "method": method}
+	if id != nil {
+		m["id"] = id
+	}
+	if params != nil {
+		m["params"] = params
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	p.send(string(b))
+}
+
+// refresh sends a refresh request.
+func (p *serveProc) refresh(id string) {
+	p.t.Helper()
+	p.request(id, "refresh", nil)
+}
+
+// response reads the response to the request with id, which must be the
+// next message but for the events next passes over. It returns its result
+// or its error.
+func (p *serveProc) response(id any) (result, rpcError jsonEvent) {
+	p.t.Helper()
+	deadline := time.After(serveDeadline)
+	for {
+		select {
+		case line, ok := <-p.lines:
+			if !ok {
+				p.t.Fatalf("serve ended before the response to %v", id)
+			}
+			var m jsonEvent
+			if err := json.Unmarshal([]byte(line), &m); err != nil {
+				p.t.Fatalf("not a JSON message: %q: %v", line, err)
+			}
+			if m["jsonrpc"] == nil && (m["type"] == "reconcile" || m["type"] == "update_check") {
+				continue
+			}
+			if m["jsonrpc"] != "2.0" || m["id"] != id {
+				p.t.Fatalf("next message = %v, want the response to %v", m, id)
+			}
+			result, _ = m["result"].(map[string]any)
+			rpcError, _ = m["error"].(map[string]any)
+			return result, rpcError
+		case <-deadline:
+			p.t.Fatalf("no response to %v within %s", id, serveDeadline)
+		}
+	}
+}
+
+// answer reads up to the response to the request with id. It returns the
+// response's result, or its error, the events of the request's run and the
+// events serve emitted on its own meanwhile, each in the order it came.
+func (p *serveProc) answer(id any) (result, rpcError jsonEvent, run, own []jsonEvent) {
+	p.t.Helper()
+	deadline := time.After(runDeadline)
+	for {
+		select {
+		case line, ok := <-p.lines:
+			if !ok {
+				p.t.Fatalf("serve ended before the response to %v", id)
+			}
+			var m jsonEvent
+			if err := json.Unmarshal([]byte(line), &m); err != nil {
+				p.t.Fatalf("not a JSON message: %q: %v", line, err)
+			}
+			if m["jsonrpc"] == nil {
+				own = append(own, m)
+				continue
+			}
+			if m["id"] == id {
+				result, _ = m["result"].(map[string]any)
+				rpcError, _ = m["error"].(map[string]any)
+				return result, rpcError, run, own
+			}
+			params, _ := m["params"].(map[string]any)
+			ev, ok := params["event"].(map[string]any)
+			if m["method"] != "event" || params["id"] != id || !ok {
+				p.t.Fatalf("a message that is no event of the run of %v: %v", id, m)
+			}
+			checkEvent(p.t, ev)
+			run = append(run, ev)
+		case <-deadline:
+			p.t.Fatalf("no response to %v within %s", id, runDeadline)
+		}
+	}
+}
+
+// refreshed sends a refresh request and returns its result, which must be
+// the next message but for the events next passes over.
+func (p *serveProc) refreshed(id string) jsonEvent {
+	p.t.Helper()
+	p.refresh(id)
+	return p.answered(id)
+}
+
+// answered reads the response to the request with id, as response does,
+// which must carry a result, and returns it.
+func (p *serveProc) answered(id any) jsonEvent {
+	p.t.Helper()
+	result, rpcError := p.response(id)
+	if rpcError != nil {
+		p.t.Fatalf("the request %v was answered with error %v", id, rpcError)
+	}
+	return result
 }
 
 // next returns the next stdout event, which must be of type typ. The

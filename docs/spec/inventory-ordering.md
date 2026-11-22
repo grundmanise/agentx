@@ -12,13 +12,13 @@ At launch, before any serve child runs, the desktop may display the kept invento
 
 ## Refresh after a command
 
-After a one-shot command terminates, including a partial failure or cancellation that might have changed state, the desktop sends a `refresh` request with a unique `request_id` to its active serve child. Command outcome and inventory freshness are separate states in the UI.
+After a one-shot command terminates, including a partial failure or cancellation that might have changed state, the desktop sends a `refresh` request to its active serve child. Command outcome and inventory freshness are separate states in the UI.
 
 A client of serve's WebSocket door runs its commands through serve with `run`, and follows the same rule: serve does not scan for a command it ran, so the client sends the `refresh` method after one that might have changed state.
 
 Serve serializes scans. A refresh requires a scan begun after the request was received. A scan already in progress cannot satisfy it. Multiple requests received before a subsequent scan begins may share that scan. The initial scan may satisfy a request only if it begins after that request.
 
-Compute identities and drift before comparing canonical inventory data. Exclude instance ids, counters, observation times and request ids from that comparison. When the inventory changed, emit the whole inventory first. Always emit `refresh_complete` for each satisfied request with `request_id`, `instance_id`, `ok: true` and the `scan_counter` of the current inventory, even when the inventory is unchanged. Accept a matching acknowledgement even when its counter equals the displayed inventory's counter. A failed or unstable scan returns `ok: false` with an error and cannot mark inventory fresh. If serve restarts, the desktop reissues pending requests to the new child with new request ids.
+Compute identities and drift before comparing canonical inventory data. Exclude instance ids, counters, observation times and request ids from that comparison. When the inventory changed, emit the whole inventory first. Always answer each satisfied request with the `instance_id` and the `scan_counter` of the current inventory, even when the inventory is unchanged. Accept a matching answer even when its counter equals the displayed inventory's counter. A failed or unstable scan answers with an error and cannot mark inventory fresh. If serve restarts, the desktop reissues pending requests to the new child.
 
 Serve always emits an initial whole inventory. Later unchanged background scans emit no inventory. Terminal mutations reach serve through the existing change signal and filesystem watches. If an operation requests fresh inventory, it uses the same refresh acknowledgement rule rather than waiting for a content-change event.
 

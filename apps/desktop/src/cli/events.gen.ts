@@ -109,7 +109,7 @@ export const EXIT_CODES = {
 } as const;
 export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
 
-// The objects events carry.
+// The objects events and method results carry.
 export interface Settings {
   schema_version: number;
   label?: string;
@@ -621,25 +621,6 @@ export interface DriftEvent {
   previous_drift: DriftState[];
 }
 
-export interface RefreshCompleteEvent {
-  type: "refresh_complete";
-  schema_version: number;
-  request_id: string;
-  instance_id: string;
-  ok: boolean;
-  scan_counter?: number;
-  error?: string;
-}
-
-export interface SearchEvent {
-  type: "search";
-  schema_version: number;
-  request_id: string;
-  instance_id: string;
-  query: string;
-  results: SearchResult[];
-}
-
 export interface UpdateCheckEvent {
   type: "update_check";
   schema_version: number;
@@ -697,8 +678,6 @@ export type CliEvent =
   | AdoptionEvent
   | ReconcileEvent
   | DriftEvent
-  | RefreshCompleteEvent
-  | SearchEvent
   | UpdateCheckEvent
   | ListeningEvent
   | OperationEvent
@@ -706,14 +685,20 @@ export type CliEvent =
 export type CliEventType = CliEvent["type"];
 export type EventOf<T extends CliEventType> = Extract<CliEvent, { type: T }>;
 
-// The requests serve reads on its stdin, one JSON object a line.
-export interface RefreshRequest {
-  type: "refresh";
-  request_id: string;
+// The result of each method of serve's JSON-RPC.
+export interface RunMethodResult {
+  exit_code: number | null;
+  cancelled: boolean;
+  timed_out: boolean;
 }
-export interface SearchRequest {
-  type: "search";
-  request_id: string;
+
+export interface RefreshMethodResult {
+  instance_id: string;
+  scan_counter: number;
+}
+
+export interface SearchMethodResult {
+  instance_id: string;
   query: string;
+  results: SearchResult[];
 }
-export type ServeRequest = RefreshRequest | SearchRequest;

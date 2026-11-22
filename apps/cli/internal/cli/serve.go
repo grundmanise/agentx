@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -15,19 +16,11 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/rpc"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
-
-type refreshCompleteEvent struct {
-	event
-	RequestID   string `json:"request_id"`
-	InstanceID  string `json:"instance_id"`
-	OK          bool   `json:"ok"`
-	ScanCounter int    `json:"scan_counter,omitempty"` // absent when the scan failed: no freshness is claimed
-	Error       string `json:"error,omitempty"`
-}
 
 // updateCheckEvent ends the report of one update check of the serve child,
 // after its update_available events: which check it was, when it ended,
@@ -55,18 +48,6 @@ const (
 const accountCheckInterval = 10 * time.Minute
 
 var accountCheckEvery = accountCheckInterval
-
-// searchEvent answers one search request: every skill of every source
-// whose name or description matches, each naming its source by the
-// canonical URL, which is what source list prints and what an install
-// takes.
-type searchEvent struct {
-	event
-	RequestID  string         `json:"request_id"`
-	InstanceID string         `json:"instance_id"`
-	Query      string         `json:"query"`
-	Results    []source.Match `json:"results"` // empty, never absent, when nothing matched
-}
 
 // driftEvent says that one skill of the library is no longer in the state
 // the last inventory showed it in: its state, its drift, or both changed
@@ -140,11 +121,20 @@ func newServeCommand(inv *invocation) *cobra.Command {
 		Annotations: map[string]string{annotationSection: "diagnostics"},
 		Args:        cobra.NoArgs,
 		Example: examples(
-			"agentx serve --json", "the desktop app's mode: inventories until stdin closes",
+			"agentx serve --json", "the desktop app's mode: JSON-RPC on stdin and stdout until stdin closes",
 			"agentx serve --once", "scan once, emit the inventory and exit",
 			"agentx serve --json --listen localhost --origin http://localhost:1420", "answer the frontend in a browser on this machine too",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			stdout := inv.out.stdout
+			if !once && inv.out.json {
+				// Everything serve writes on stdout is a JSON-RPC message, so
+				// that its client reads one protocol: its own events, the
+				// error and the result it ends with among them, go out as
+				// event notifications, and the answers to stdin go to
+				// stdout as they are.
+				inv.out.stdout = eventNotifications{out: stdout}
+			}
 			var address string
 			switch {
 			case listen != "" && once:
@@ -162,97 +152,176 @@ func newServeCommand(inv *invocation) *cobra.Command {
 					}
 				}
 			}
-			lock, err := home.TakeServeLock(inv.dirs.Home)
-			if errors.Is(err, home.ErrServing) {
-				return fail(exitRefused, err.Error(), "stop the agentx serve holding "+home.ServeLockPath(inv.dirs.Home)+" first")
+			if once {
+				return inv.serveOnce(cmd.Context())
 			}
-			if err != nil {
-				return err
-			}
-			defer home.Unlock(lock)
-			inv.instanceID() // fixed here, before two goroutines report it
-			inv.verdicts = map[string]keptVerdict{}
-			inv.forkWalks = lineage.NewWalkCache()
-			inv.forksWarned = true // reconciliation and every inventory name them
-			// The door opens before reconciliation and the first scan, so
-			// that whoever started serve learns at once where it is; a
-			// client that connects meanwhile is answered once serve scans.
-			var requests *serve.Requests
-			if address != "" {
-				door, err := inv.openDoor(address, origins)
-				if err != nil {
-					return err
-				}
-				defer door.close()
-				requests = door.requests
-			}
-			if !once {
-				// Reconciliation reports and repairs before the first scan,
-				// so the inventory shows what it put back. One that cannot
-				// run leaves serve to report what the scan finds.
-				if err := inv.serveReconcile(cmd.Context()); err != nil {
-					if cmd.Context().Err() != nil {
-						return nil
-					}
-					inv.out.warn("reconcile: " + err.Error())
-				}
-			}
-			dirs, trees := inv.watchedDirs()
-			// The library of the last inventory emitted, which the next one's
-			// drift is told against. Inventories are reported from the loop's
-			// goroutine alone, so nothing else touches it.
-			var library map[string]scan.LibraryEntry
-			checks := &serveChecks{inv: inv}
-			err = serve.Run(cmd.Context(), serve.Options{
-				Scan:         func(ctx context.Context) (scan.Inventory, error) { return inv.inventory(ctx, 0, "", false) },
-				Index:        inv.sourceIndex,
-				Watch:        dirs,
-				Trees:        trees,
-				Once:         once,
-				Stdin:        cmd.InOrStdin(),
-				Requests:     requests,
-				Check:        checks.startup,
-				Recheck:      checks.account,
-				RecheckEvery: accountCheckEvery,
-				Jobs:         []serve.Job{inv.maintenanceJob},
-				Inventory: func(inventory scan.Inventory) {
-					inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
-					inv.out.print(inv.out.paint(heading, fmt.Sprintf("inventory %d", inventory.ScanCounter)), ": ",
-						plural(len(inventory.Configurations), "configuration"), ", ", plural(len(inventory.Skills), "skill"))
-					for _, ev := range driftTransitions(library, inventory) {
-						inv.out.emit(ev)
-					}
-					library = libraryByName(inventory.Library)
-				},
-				RefreshComplete: func(id string, counter int, err error) {
-					ev := refreshCompleteEvent{event: newEvent("refresh_complete"), RequestID: id, InstanceID: inv.instanceID(), OK: err == nil, ScanCounter: counter}
-					if err != nil {
-						ev.Error = err.Error()
-						inv.out.print(inv.out.paint(heading, "refresh "+id), ": ", inv.out.paint(failStyle, "failed"), ": ", err.Error())
-					} else {
-						inv.out.print(inv.out.paint(heading, "refresh "+id), ": ", inv.out.paint(okStyle, "ok"), fmt.Sprintf(", inventory %d", counter))
-					}
-					inv.out.emit(ev)
-				},
-				Search: func(id, query string, results []source.Match) {
-					inv.out.emit(searchEvent{event: newEvent("search"), RequestID: id, InstanceID: inv.instanceID(), Query: query, Results: results})
-					inv.out.print(inv.out.paint(heading, "search "+id), ": ", plural(len(results), "result"))
-				},
-				BadRequest: func(message, hint string) {
-					inv.out.fail(&failure{status: exitUsage, message: message, hint: hint})
-				},
-				Warn: inv.out.warn,
-			})
-			if errors.Is(err, serve.ErrWatch) {
-				return fail(exitRefused, err.Error(), "raise the system's watch limit: fs.inotify.max_user_watches on Linux, open files (ulimit -n) on macOS")
-			}
-			return err
+			return inv.serve(cmd.Context(), cmd.InOrStdin(), stdout, address, origins)
 		},
 	}
 	cmd.Flags().BoolVar(&once, "once", false, "scan once, emit the inventory and exit")
 	cmd.Flags().StringVar(&listen, "listen", "", "also answer JSON-RPC on a WebSocket at this address of this machine, such as localhost or 127.0.0.1:4319")
 	cmd.Flags().StringArrayVar(&origins, "origin", nil, "a web origin that may connect to --listen, such as http://localhost:1420 (repeatable)")
 	return cmd
+}
+
+// watchHint is what to do about a directory serve cannot watch.
+const watchHint = "raise the system's watch limit: fs.inotify.max_user_watches on Linux, open files (ulimit -n) on macOS"
+
+// serveLockRefusal is how serve answers err, another serve holding the
+// serve lock of agentx home dir.
+func serveLockRefusal(dir string, err error) *failure {
+	return refuse(exitRefused, err.Error(), "stop the agentx serve holding "+home.ServeLockPath(dir)+" first")
+}
+
+// prepareServe sets what the scans of one serve process share.
+func (inv *invocation) prepareServe() {
+	inv.instanceID() // fixed here, before the goroutines that report it
+	inv.verdicts = map[string]keptVerdict{}
+	inv.forkWalks = lineage.NewWalkCache()
+	inv.forksWarned = true // reconciliation and every inventory name them
+}
+
+// serveScan is one scan of serve. It checks git first: serve starts
+// without one, see needsGit, so that it stays up to say what is wrong, and
+// the scan after git is installed finds it.
+func (inv *invocation) serveScan(ctx context.Context) (scan.Inventory, error) {
+	if _, err := inv.gitVersion(ctx); err != nil {
+		return scan.Inventory{}, err
+	}
+	return inv.inventory(ctx, 0, "", false)
+}
+
+// inventoryReporter reports each inventory serve emits, with the drift
+// events against the inventory before it. It keeps the library of the last
+// inventory emitted, which the next one's drift is told against;
+// inventories are reported from the loop's goroutine alone, so nothing else
+// touches it.
+func (inv *invocation) inventoryReporter() func(scan.Inventory) {
+	var library map[string]scan.LibraryEntry
+	return func(inventory scan.Inventory) {
+		inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
+		inv.out.print(inv.out.paint(heading, fmt.Sprintf("inventory %d", inventory.ScanCounter)), ": ",
+			plural(len(inventory.Configurations), "configuration"), ", ", plural(len(inventory.Skills), "skill"))
+		for _, ev := range driftTransitions(library, inventory) {
+			inv.out.emit(ev)
+		}
+		library = libraryByName(inventory.Library)
+	}
+}
+
+// serveOnce is serve --once: the initial scan and its inventory, and
+// nothing else. It reads no stdin, and another serve holding the lock, or
+// a scan that fails, ends it with that error.
+func (inv *invocation) serveOnce(ctx context.Context) error {
+	lock, err := home.TakeServeLock(inv.dirs.Home)
+	if errors.Is(err, home.ErrServing) {
+		return serveLockRefusal(inv.dirs.Home, err)
+	}
+	if err != nil {
+		return err
+	}
+	defer home.Unlock(lock)
+	inv.prepareServe()
+	return serve.Run(ctx, serve.Options{Scan: inv.serveScan, Once: true, Inventory: inv.inventoryReporter(), Warn: inv.out.warn})
+}
+
+// serve is serve without --once: JSON-RPC on stdin and stdout, and on the
+// WebSocket door when address is set, until stdin ends or ctx is done. It
+// answers stdin before it does anything else, so that run is answered
+// while serve takes its lock, reconciles and scans, and what keeps it from
+// serving is an error event of its own rather than its end: another serve
+// holding the lock, a scan that fails, as one does without git, and
+// watching that fails.
+func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Writer, address string, origins []string) error {
+	inv.prepareServe()
+	methods, err := inv.newServeMethods()
+	if err != nil {
+		return err
+	}
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
+	stdio := rpc.ServeStdio(ctx, stdin, lockedWriter{w: inv.out, out: stdout}, methods.table())
+	// The end of stdin ends serve once the runs it asked for have stopped,
+	// and serve ending for another reason stops them and waits for them
+	// too, so that no command it started outlives it.
+	go func() {
+		<-stdio.Done()
+		stop()
+	}()
+	defer func() {
+		stop()
+		<-stdio.Done()
+	}()
+	// The door opens before the lock, reconciliation and the first scan,
+	// so that whoever started serve learns at once where it is; a client
+	// that connects meanwhile is answered as stdin is.
+	if address != "" {
+		door, err := inv.openDoor(address, origins, methods.table())
+		if err != nil {
+			return err
+		}
+		defer door.close()
+	}
+	lock, err := home.TakeServeLock(inv.dirs.Home)
+	if errors.Is(err, home.ErrServing) {
+		// Without the lock serve scans, watches and checks nothing, and
+		// answers a refresh with the refusal, until stdin ends: the
+		// client that started it reads why from the error event, and
+		// can still run commands through it.
+		f := serveLockRefusal(inv.dirs.Home, err)
+		inv.out.fail(f)
+		methods.requests.Refuse(err)
+		<-ctx.Done()
+		f.reported = true
+		return f
+	}
+	if err != nil {
+		return err
+	}
+	defer home.Unlock(lock)
+	// Reconciliation reports and repairs before the first scan, so the
+	// inventory shows what it put back. One that cannot run leaves serve
+	// to report what the scan finds, and without git the scan says so.
+	if _, err := inv.gitVersion(ctx); err == nil {
+		if err := inv.serveReconcile(ctx); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			inv.out.warn("reconcile: " + err.Error())
+		}
+	}
+	dirs, trees := inv.watchedDirs()
+	checks := &serveChecks{inv: inv}
+	return serve.Run(ctx, serve.Options{
+		Scan:         inv.serveScan,
+		Index:        inv.sourceIndex,
+		Watch:        dirs,
+		Trees:        trees,
+		Requests:     methods.requests,
+		Check:        checks.startup,
+		Recheck:      checks.account,
+		RecheckEvery: accountCheckEvery,
+		Jobs:         []serve.Job{inv.maintenanceJob},
+		Inventory:    inv.inventoryReporter(),
+		Fail:         inv.serveFailed,
+		Warn:         inv.out.warn,
+	})
+}
+
+// serveFailed reports what serve goes on from as an error event of its
+// own, see serve.Options.Fail: a directory it cannot watch is refused, and
+// a scan that failed carries the code of its error, as the exit code of a
+// command that failed the same way would.
+func (inv *invocation) serveFailed(err error) {
+	if errors.Is(err, serve.ErrWatch) {
+		inv.out.fail(refuse(exitRefused, err.Error(), watchHint))
+		return
+	}
+	f, ok := knownFailure(inv.dirs.Home, err)
+	if !ok {
+		f = &failure{status: exitInternal, message: err.Error()}
+	}
+	inv.out.fail(f)
 }
 
 // serveChecks are the update checks of the serve child: the full check it
