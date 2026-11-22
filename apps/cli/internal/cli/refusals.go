@@ -24,7 +24,7 @@ type brokenSkill struct {
 // ends with.
 type refusals struct {
 	broken []brokenSkill
-	verb   string // what the skills could not be: installed, adopted, updated
+	verb   string // what the skills could not be: installed, imported, updated
 	noun   string // what the run calls what it works on, "skill" when empty
 	mixed  string // the hint of a run whose causes disagree
 }

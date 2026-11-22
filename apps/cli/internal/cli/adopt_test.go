@@ -399,22 +399,22 @@ func TestAdoptRefusesAName(t *testing.T) {
 		exit status
 		want string
 	}{
-		{"nowhere", exitNotFound, `no skill called "nowhere" can be adopted: no record names it`},
+		{"nowhere", exitNotFound, `no skill called "nowhere" can be imported: no record names it`},
 		{"gone", exitNotFound, "this machine no longer holds it"},
 		{"shared", exitRefused, "shared is already managed by agentx"},
 		{"mine", exitRefused, "mine is already one of your own skills"},
-		{"dup", exitRefused, "the library already holds a skill called dup, a skill of a shared source, so " + filepath.Join(claude, "dup") + " cannot be adopted under that name"},
-		{"lost", exitRefused, "agentx already manages a skill called lost, so " + filepath.Join(claude, "lost") + " cannot be adopted under that name"},
-		{"published", exitRefused, "you already published a skill called published, so " + filepath.Join(claude, "published") + " cannot be adopted under that name"},
+		{"dup", exitRefused, "the library already holds a skill called dup, a skill of a shared source, so " + filepath.Join(claude, "dup") + " cannot be imported under that name"},
+		{"lost", exitRefused, "agentx already manages a skill called lost, so " + filepath.Join(claude, "lost") + " cannot be imported under that name"},
+		{"published", exitRefused, "you already published a skill called published, so " + filepath.Join(claude, "published") + " cannot be imported under that name"},
 		{"differs", exitRefused, "differs is in several agents' skills folders, with different files: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cortex, "differs") + " (cortex)"},
-		{"linked", exitRefused, "so there is no folder of linked to adopt"},
-		{"liblink", exitRefused, "liblink is a symlink to " + filepath.Join(h.home, "elsewhere") + ", and agentx adopts folders only"},
-		{"cloned", exitRefused, "cloned is a Git repository of its own, which agentx cannot adopt"},
-		{"held", exitRefused, filepath.Join(h.agentx, "worktrees", "held") + " is in the way: agentx keeps held there once it is adopted"},
-		{"occupied", exitRefused, filepath.Join(h.library, "occupied") + " is in the way: adopting occupied puts the skill there"},
-		{"locked", exitRefused, "locked cannot be adopted: agentx cannot write to " + gemini + " (permission denied)"},
+		{"linked", exitRefused, "so there is no folder of linked to import"},
+		{"liblink", exitRefused, "liblink is a symlink to " + filepath.Join(h.home, "elsewhere") + ", and agentx imports folders only"},
+		{"cloned", exitRefused, "cloned is a Git repository of its own, which agentx cannot import"},
+		{"held", exitRefused, filepath.Join(h.agentx, "worktrees", "held") + " is in the way: agentx keeps held there once it is imported"},
+		{"occupied", exitRefused, filepath.Join(h.library, "occupied") + " is in the way: importing occupied puts the skill there"},
+		{"locked", exitRefused, "locked cannot be imported: agentx cannot write to " + gemini + " (permission denied)"},
 		{"My_Skill", exitRefused, "My_Skill is not a valid skill name"},
-		{"tidy", exitNotFound, `no skill called "tidy" can be adopted: no record names it`},
+		{"tidy", exitNotFound, `no skill called "tidy" can be imported: no record names it`},
 	} {
 		if c.name == "locked" && os.Geteuid() == 0 {
 			continue
@@ -424,7 +424,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 		e := lastError(t, h.events(out.stdout))
 		contains(t, c.name+": the error", e["message"].(string), c.want)
 		if c.name == "dup" {
-			equal(t, "dup: the hint", e["hint"], "rename the folder and adopt it under the new name, or replace it with 'agentx skill place dup --to claude-code --force', which discards what it holds")
+			equal(t, "dup: the hint", e["hint"], "rename the folder and import it under the new name, or replace it with 'agentx skill place dup --to claude-code --force', which discards what it holds")
 		}
 	}
 	equal(t, "the refs", h.accountGit("for-each-ref"), refs)
@@ -435,9 +435,9 @@ func TestAdoptRefusesAName(t *testing.T) {
 	all := h.run("--json", "skill", "import", "--all")
 	equal(t, "every skill: exit", all.exit, 0)
 	for _, row := range []string{
-		"published could not be adopted: " + filepath.Join(claude, "published") + " has the name of a skill you already published. To adopt it, rename that folder",
-		"differs could not be adopted: in several agents' skills folders, with different files: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cortex, "differs") + " (cortex). To adopt it, keep one and remove or rename the others",
-		"held could not be adopted: " + filepath.Join(h.agentx, "worktrees", "held") + " is in the way: agentx keeps the skill there. To adopt it, move " + filepath.Join(h.agentx, "worktrees", "held") + " somewhere else",
+		"published could not be imported: " + filepath.Join(claude, "published") + " has the name of a skill you already published. To import it, rename that folder",
+		"differs could not be imported: in several agents' skills folders, with different files: " + filepath.Join(claude, "differs") + " (claude-code), " + filepath.Join(cortex, "differs") + " (cortex). To import it, keep one and remove or rename the others",
+		"held could not be imported: " + filepath.Join(h.agentx, "worktrees", "held") + " is in the way: agentx keeps the skill there. To import it, move " + filepath.Join(h.agentx, "worktrees", "held") + " somewhere else",
 	} {
 		contains(t, "every skill: stderr", all.stderr, row)
 	}
@@ -543,7 +543,7 @@ func TestAdoptReplacesAClientsCopyOfALibrarySkill(t *testing.T) {
 
 	out := h.run("skill", "import", "rex")
 	equal(t, "other files: exit", out.exit, 6)
-	equal(t, "other files: stderr", out.stderr, "error: rex cannot be adopted: \""+cortex+"\" contains files that differ from the skill version\n")
+	equal(t, "other files: stderr", out.stderr, "error: rex cannot be imported: \""+cortex+"\" contains files that differ from the skill version\n")
 	for _, dir := range []string{library, claude, cortex} {
 		if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
 			t.Errorf("the refused adoption changed %s: %v", dir, err)
@@ -685,17 +685,17 @@ func TestAsItIsRefusal(t *testing.T) {
 	}{
 		{rec: record{name: "folder"}},
 		{rec: record{name: "client"}},
-		{rec: record{name: "linked"}, reason: "a symlink to " + filepath.Join(root, "work", "linked") + ". To adopt it, move that folder to " + at("linked")},
-		{rec: record{name: "elsewhere"}, reason: "a symlink to " + filepath.Join(root, "work", "linked") + ". To adopt it, move that folder to " + filepath.Join(claude, "elsewhere")},
-		{rec: record{name: "file"}, reason: "a file, and a skill is a folder. To adopt it, put the skill's folder at " + at("file")},
-		{rec: record{name: "bare"}, reason: "a folder with no SKILL.md file. To adopt it, add a SKILL.md to " + at("bare")},
-		{rec: record{name: "Bad_Name"}, reason: "not a valid skill name. To adopt it, rename " + at("Bad_Name")},
-		{rec: record{name: "cloned"}, reason: "a Git repository of its own. To adopt it, move " + filepath.Join(at("cloned"), ".git") + " out of the folder"},
-		{rec: record{name: "apart", dir: filepath.Join(store, "apart")}, reason: "only in " + filepath.Join(store, "apart") + ", where no agent looks for skills. To adopt it, move that folder to " + at("apart")},
+		{rec: record{name: "linked"}, reason: "a symlink to " + filepath.Join(root, "work", "linked") + ". To import it, move that folder to " + at("linked")},
+		{rec: record{name: "elsewhere"}, reason: "a symlink to " + filepath.Join(root, "work", "linked") + ". To import it, move that folder to " + filepath.Join(claude, "elsewhere")},
+		{rec: record{name: "file"}, reason: "a file, and a skill is a folder. To import it, put the skill's folder at " + at("file")},
+		{rec: record{name: "bare"}, reason: "a folder with no SKILL.md file. To import it, add a SKILL.md to " + at("bare")},
+		{rec: record{name: "Bad_Name"}, reason: "not a valid skill name. To import it, rename " + at("Bad_Name")},
+		{rec: record{name: "cloned"}, reason: "a Git repository of its own. To import it, move " + filepath.Join(at("cloned"), ".git") + " out of the folder"},
+		{rec: record{name: "apart", dir: filepath.Join(store, "apart")}, reason: "only in " + filepath.Join(store, "apart") + ", where no agent looks for skills. To import it, move that folder to " + at("apart")},
 		{rec: record{name: "apart", dir: filepath.Join(store, "apart"), tracked: true},
 			reason: "a whole repository that Skillshare tracks. Add it with 'agentx source add <url>', then install its skills"},
 		{rec: record{name: "folder"}, managed: true,
-			reason: "agentx already manages a skill of this name, whose folder " + at("folder") + " is missing. To adopt this one, first run 'agentx skill remove folder'"},
+			reason: "agentx already manages a skill of this name, whose folder " + at("folder") + " is missing. To import this one, first run 'agentx skill remove folder'"},
 	} {
 		reason, f := inv.asItIsRefusal(tc.rec, tc.managed)
 		if reason != tc.reason || (f == nil) != (tc.reason == "") {
@@ -717,15 +717,15 @@ func TestLooseSkillReason(t *testing.T) {
 		{"a folder of the library", looseSkill{name: "notes", path: "/lib/notes"}, ""},
 		{"a folder of a client", looseSkill{name: "jot", path: "/claude/jot"}, ""},
 		{"a symlink in the library", looseSkill{name: "linked", path: "/lib/linked", link: "/work/linked"},
-			"a symlink to /work/linked. To adopt it, move that folder to /lib/linked"},
+			"a symlink to /work/linked. To import it, move that folder to /lib/linked"},
 		{"a name that is no skill name", looseSkill{name: "My_Skill", path: "/lib/My_Skill"},
-			"not a valid skill name. To adopt it, rename /lib/My_Skill"},
+			"not a valid skill name. To import it, rename /lib/My_Skill"},
 		{"a folder that is a Git repository", looseSkill{name: "cloned", path: "/lib/cloned", repo: "/lib/cloned/.git"},
-			"a Git repository of its own. To adopt it, move /lib/cloned/.git out of the folder"},
+			"a Git repository of its own. To import it, move /lib/cloned/.git out of the folder"},
 		{"a client's folder named as a managed skill", looseSkill{name: "pdf", path: "/claude/pdf", managed: true},
-			"/claude/pdf has the name of a skill agentx already manages. To adopt it, rename that folder"},
+			"/claude/pdf has the name of a skill agentx already manages. To import it, rename that folder"},
 		{"a client's folder whose library path is taken", looseSkill{name: "pdf", path: "/claude/pdf", blocked: "/lib/pdf"},
-			"/lib/pdf is in the way and is not a skill. To adopt it, move /lib/pdf somewhere else"},
+			"/lib/pdf is in the way and is not a skill. To import it, move /lib/pdf somewhere else"},
 	} {
 		if got := tc.skill.reason(); got != tc.reason {
 			t.Errorf("%s: reason = %q, want %q", tc.name, got, tc.reason)

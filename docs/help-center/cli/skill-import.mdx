@@ -3,7 +3,7 @@ title: "agentx skill import"
 description: "Import the unmanaged skills on this machine: the ones the Vercel skills CLI or Skillshare installed, and the ones no tool installed."
 ---
 
-`agentx skill import` makes agentx manage the skills on this machine that it does not manage yet. Some messages call this adopting a skill. How a skill is imported depends on where it came from:
+`agentx skill import` makes agentx manage the skills on this machine that it does not manage yet. How a skill is imported depends on where it came from:
 
 - **A skill another tool installed from a git source.** The Vercel skills CLI and Skillshare both record where each skill they installed came from. agentx installs the skill from that source, the way [`agentx skill add`](/cli/skill#install-a-skill) does. Afterwards agentx knows the source and can update the skill. See [Skills installed from a git source](#skills-installed-from-a-git-source).
 - **Any other skill.** A skill no tool installed, or one another tool installed from a place agentx cannot install from, such as a local folder, is imported with its files as they are. It becomes [one of your own skills](/cli/fork) and gets no updates. See [Skills imported as they are](#skills-imported-as-they-are).
@@ -23,8 +23,8 @@ Ready to import (4)
   jot, notes, pdf, scraper
 
 Cannot import (2)
-  cloned    a Git repository of its own. To adopt it, move /home/me/.agents/skills/cloned/.git out of the folder
-  shortcut  a symlink to /home/me/work/shortcut. To adopt it, move that folder to /home/me/.agents/skills/shortcut
+  cloned    a Git repository of its own. To import it, move /home/me/.agents/skills/cloned/.git out of the folder
+  shortcut  a symlink to /home/me/work/shortcut. To import it, move that folder to /home/me/.agents/skills/shortcut
 
 Already managed by agentx (1)
   xlsx
@@ -84,8 +84,8 @@ agentx skill import --all
 Imported skills stay on this machine until you publish them: run 'agentx source add <url> --account', then 'agentx skill publish <name>'.
 
 Could not import (2)
-  cloned    a Git repository of its own. To adopt it, move /home/me/.agents/skills/cloned/.git out of the folder
-  shortcut  a symlink to /home/me/work/shortcut. To adopt it, move that folder to /home/me/.agents/skills/shortcut
+  cloned    a Git repository of its own. To import it, move /home/me/.agents/skills/cloned/.git out of the folder
+  shortcut  a symlink to /home/me/work/shortcut. To import it, move that folder to /home/me/.agents/skills/shortcut
 
 Imported 4 skills; 2 could not be imported.
 ```
@@ -106,7 +106,7 @@ agentx skill import pdf scraper
 A skill you name that agentx cannot import stops with exit code 6 and says what to do:
 
 ```text
-error: cloned is a Git repository of its own, which agentx cannot adopt
+error: cloned is a Git repository of its own, which agentx cannot import
 hint: move /home/me/.agents/skills/cloned/.git out of the folder, then run 'agentx skill import cloned' again
 ```
 
@@ -232,23 +232,23 @@ The preview lists a skill under `Cannot import` with the reason and what to do. 
 
 | The row says | What it means |
 |---|---|
-| `a symlink to <folder>. To adopt it, move that folder to <path>` | Your library, or a client's skills folder, holds a link to the skill. agentx imports folders only. Move the folder the link points to into its place |
-| `a Git repository of its own. To adopt it, move <path>/.git out of the folder` | The skill's folder holds its own `.git`. Move the `.git` somewhere else |
-| `not a valid skill name. To adopt it, rename <folder>` | The name breaks the [naming rule](/cli/fork#choose-a-name), such as `My_Skill`. Rename the folder |
-| `<folder> has the name of a skill agentx already manages. To adopt it, rename that folder` | A client's skills folder holds a skill with the name of a skill agentx manages. A name that differs only by capital letters counts as the same |
-| `<path> is in the way and is not a skill. To adopt it, move <path> somewhere else` | The skill is in a client's skills folder, and your library holds something else under its name |
-| `only in <folder>, where no agent looks for skills. To adopt it, move that folder to <path>` | Another tool installed the skill from a place agentx cannot install from, and keeps it in a folder of its own. Move it into your library |
+| `a symlink to <folder>. To import it, move that folder to <path>` | Your library, or a client's skills folder, holds a link to the skill. agentx imports folders only. Move the folder the link points to into its place |
+| `a Git repository of its own. To import it, move <path>/.git out of the folder` | The skill's folder holds its own `.git`. Move the `.git` somewhere else |
+| `not a valid skill name. To import it, rename <folder>` | The name breaks the [naming rule](/cli/fork#choose-a-name), such as `My_Skill`. Rename the folder |
+| `<folder> has the name of a skill agentx already manages. To import it, rename that folder` | A client's skills folder holds a skill with the name of a skill agentx manages. A name that differs only by capital letters counts as the same |
+| `<path> is in the way and is not a skill. To import it, move <path> somewhere else` | The skill is in a client's skills folder, and your library holds something else under its name |
+| `only in <folder>, where no agent looks for skills. To import it, move that folder to <path>` | Another tool installed the skill from a place agentx cannot install from, and keeps it in a folder of its own. Move it into your library |
 | `a whole repository that Skillshare tracks. Add it with 'agentx source add <url>', then install its skills` | Skillshare tracks the whole repository, as a `_name` folder with skills inside. Add the repository with `agentx source add` and install its skills with `agentx skill add` |
-| `a file, and a skill is a folder. To adopt it, put the skill's folder at <path>` | Your library holds a file under the skill's name |
-| `a folder with no SKILL.md file. To adopt it, add a SKILL.md to <path>` | The folder is not a skill yet |
-| `agentx already manages a skill of this name, whose folder <path> is missing. To adopt this one, first run 'agentx skill remove <name>'` | agentx manages a skill of this name that is gone from your library |
+| `a file, and a skill is a folder. To import it, put the skill's folder at <path>` | Your library holds a file under the skill's name |
+| `a folder with no SKILL.md file. To import it, add a SKILL.md to <path>` | The folder is not a skill yet |
+| `agentx already manages a skill of this name, whose folder <path> is missing. To import this one, first run 'agentx skill remove <name>'` | agentx manages a skill of this name that is gone from your library |
 
 The last five reasons apply to skills another tool installed from a place agentx cannot install from.
 
 `agentx skill import <name>` on such a skill stops with exit code 6 and gives the same advice:
 
 ```text
-error: shortcut is a symlink to /home/me/work/shortcut, and agentx adopts folders only
+error: shortcut is a symlink to /home/me/work/shortcut, and agentx imports folders only
 hint: move /home/me/work/shortcut to /home/me/.agents/skills/shortcut, then run 'agentx skill import shortcut' again
 ```
 
@@ -309,7 +309,7 @@ Good to know: Skillshare does not know about the import. If you run `skillshare 
 agentx keeps one ref for each source, its pin. The records name a ref for each skill, so skills from the same source can have different refs. When a run adds a source, agentx pins it to the ref of the first skill the run imports from it, in alphabetical order. If those skills have different refs, agentx warns you:
 
 ```text
-warning: https://github.com/anthropics/skills was installed at more than one ref (v1.2.0, main); it is added pinned to v1.2.0. To change the pin, run 'agentx source add https://github.com/anthropics/skills#<ref>' and adopt again
+warning: https://github.com/anthropics/skills was installed at more than one ref (v1.2.0, main); it is added pinned to v1.2.0. To change the pin, run 'agentx source add https://github.com/anthropics/skills#<ref>' and import again
 ```
 
 A source you already have keeps its pin. To choose the pin yourself, add the source at that ref before you import. If you already have the source, this changes its pin:

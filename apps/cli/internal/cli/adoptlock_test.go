@@ -94,7 +94,7 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 		{"escaping", adoptCandidate, ""},
 		{"newline", adoptCandidate, ""},
 		{"wellknown", adoptCandidate, ""},
-		{"aliased", adoptRefused, "a symlink to " + filepath.Join(h.library, "wellknown") + ". To adopt it, move that folder to " + filepath.Join(h.library, "aliased")},
+		{"aliased", adoptRefused, "a symlink to " + filepath.Join(h.library, "wellknown") + ". To import it, move that folder to " + filepath.Join(h.library, "aliased")},
 	} {
 		if states[c.name] != c.state {
 			t.Errorf("%s is %q, want %q", c.name, states[c.name], c.state)
@@ -117,12 +117,12 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	// Without --json the skills are grouped by what adopting would do.
 	human := h.run("skill", "import")
 	equal(t, "exit", human.exit, 0)
-	aliased := "a symlink to " + filepath.Join(h.library, "wellknown") + ". To adopt it, move that folder to " + filepath.Join(h.library, "aliased")
+	aliased := "a symlink to " + filepath.Join(h.library, "wellknown") + ". To import it, move that folder to " + filepath.Join(h.library, "aliased")
 	equal(t, "the preview", human.stdout, "Found 9 unmanaged skills.\n\n"+
 		"Ready to import (7)\n  alpha, escaping, linked, newline, notaskill, sourceless, wellknown\n\n"+
 		"Cannot import (2)\n"+
 		"  aliased   "+aliased+"\n"+
-		"  shortcut  a symlink to "+filepath.Join(h.home, "work", "shortcut")+". To adopt it, move that folder to "+filepath.Join(h.library, "shortcut")+"\n\n"+
+		"  shortcut  a symlink to "+filepath.Join(h.home, "work", "shortcut")+". To import it, move that folder to "+filepath.Join(h.library, "shortcut")+"\n\n"+
 		"To import:\n"+
 		"  agentx skill import --all   all 7 skills\n"+
 		"  agentx skill import <name>  one skill\n")
@@ -131,7 +131,7 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	refused := h.run("--json", "skill", "import", "aliased")
 	equal(t, "a symlink: exit", refused.exit, exitRefused.exit)
 	e := lastError(t, h.events(refused.stdout))
-	equal(t, "a symlink: the error", e["message"], "aliased is a symlink to "+filepath.Join(h.library, "wellknown")+", and agentx adopts folders only")
+	equal(t, "a symlink: the error", e["message"], "aliased is a symlink to "+filepath.Join(h.library, "wellknown")+", and agentx imports folders only")
 	equal(t, "a symlink: the hint", e["hint"], "move "+filepath.Join(h.library, "wellknown")+" to "+filepath.Join(h.library, "aliased")+", then run 'agentx skill import aliased' again")
 	equal(t, "a symlink: the adoption", h.one(refused.stdout, "adoption")["reason"], aliased)
 	// Naming the other tool reads its records alone, and it recorded none.
@@ -167,8 +167,8 @@ func TestAdoptAllAdoptsFoldersAsTheyAre(t *testing.T) {
 	if err := os.Symlink(work, filepath.Join(h.library, "shortcut")); err != nil {
 		t.Fatal(err)
 	}
-	cloned := "a Git repository of its own. To adopt it, move " + git + " out of the folder"
-	shortcut := "a symlink to " + work + ". To adopt it, move that folder to " + filepath.Join(h.library, "shortcut")
+	cloned := "a Git repository of its own. To import it, move " + git + " out of the folder"
+	shortcut := "a symlink to " + work + ". To import it, move that folder to " + filepath.Join(h.library, "shortcut")
 
 	out := h.run("skill", "import", "--all")
 	equal(t, "exit", out.exit, 0)
@@ -191,7 +191,7 @@ func TestAdoptAllAdoptsFoldersAsTheyAre(t *testing.T) {
 	adoption := h.one(again.stdout, "adoption")
 	equal(t, "again: the adoption", adoption["name"].(string)+" "+adoption["state"].(string), "alpha "+adoptManaged)
 	equal(t, "again: the summary", h.one(again.stdout, "result")["summary"], "no skills imported; 2 could not be imported")
-	for _, warning := range []string{"cloned could not be adopted: " + cloned, "shortcut could not be adopted: " + shortcut} {
+	for _, warning := range []string{"cloned could not be imported: " + cloned, "shortcut could not be imported: " + shortcut} {
 		contains(t, "again: stderr", again.stderr, warning)
 	}
 }
@@ -313,10 +313,10 @@ func TestAdoptOneSkillOfSeveral(t *testing.T) {
 	}
 	equal(t, "the adoption events", strings.Join(events, ", "), "alpha "+adoptAdopted+", beta "+adoptRefused)
 	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/beta"); err == nil {
-		t.Error("beta was adopted although the source holds no skill at its subpath")
+		t.Error("beta was imported although the source holds no skill at its subpath")
 	}
 	if h.accountGit("rev-parse", "--verify", "refs/heads/managed/alpha") == "" {
-		t.Error("alpha was not adopted although the source holds it")
+		t.Error("alpha was not imported although the source holds it")
 	}
 	list := h.run("--json", "skill", "list")
 	kinds := map[string]any{}

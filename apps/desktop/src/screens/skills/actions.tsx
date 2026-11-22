@@ -66,9 +66,9 @@ const LEFT_FOLDER =
 
 const DIFFERS = "contains files that differ from the skill version";
 
-/** The folders `<name> cannot be adopted: "<path>" <why>, and …` names, or none for another refusal. */
+/** The folders `<name> cannot be imported: "<path>" <why>, and …` names, or none for another refusal. */
 const leftFolders = (name: string, message: string): LeftFolder[] => {
-  const prefix = `${name} cannot be adopted: `;
+  const prefix = `${name} cannot be imported: `;
   if (!message.startsWith(prefix)) {
     return [];
   }

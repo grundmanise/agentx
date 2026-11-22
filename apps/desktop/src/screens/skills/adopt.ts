@@ -233,11 +233,11 @@ const settled = (
 };
 
 /** How the CLI starts the warning it logs for a skill a run of every skill cannot adopt. */
-const cannotAdopt = (name: string) => `${name} could not be adopted: `;
+const cannotAdopt = (name: string) => `${name} could not be imported: `;
 
 /**
  * The warnings a run logged, but those about a skill it did not adopt, whose row says why: the
- * warning that the skill could not be adopted ("<name> could not be adopted: …"), and one that only
+ * warning that the skill could not be imported ("<name> could not be imported: …"), and one that only
  * repeats a row's reason ("<name>: <reason>").
  */
 const otherWarnings = (outcome: Outcome) => {

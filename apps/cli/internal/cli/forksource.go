@@ -51,7 +51,7 @@ func (m forkMode) takesUnmanaged() bool { return m == modeAdopt }
 // did not do it to.
 func (m forkMode) done() string {
 	if m == modeAdopt {
-		return "adopted"
+		return "imported"
 	}
 	return "forked"
 }

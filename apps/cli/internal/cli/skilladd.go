@@ -1476,7 +1476,7 @@ func installSummary(dones []*installed, skippedSkills int) string {
 		summary = fmt.Sprintf("installed %s from %s in %s", strings.Join(names, ", "), first.imp.Source, plural(len(covered), "configuration"))
 	}
 	if len(dones) == 1 && adopted == 1 {
-		summary = strings.Replace(summary, "installed ", "adopted ", 1)
+		summary = strings.Replace(summary, "installed ", "imported ", 1)
 	} else if adopted > 0 {
 		summary += fmt.Sprintf(", %d already in the library", adopted)
 	}
@@ -1528,11 +1528,10 @@ func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 	out, v := inv.out, done.v
 	rows := inv.ownPlacements(v.name, done.placed, ev.Placements)
 	what := "installed"
-	switch {
-	case v.replace:
-		what = "imported" // agentx skill import takes the skill over from another tool
-	case done.adopted:
-		what = "adopted"
+	if v.replace || done.adopted {
+		// agentx skill import takes the skill over from another tool, and an
+		// install the library already held a folder of takes that folder over.
+		what = "imported"
 	}
 	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path) +
 		": " + out.paint(noteStyle, plural(len(rows), "placement"))

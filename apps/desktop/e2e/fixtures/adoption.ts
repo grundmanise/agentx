@@ -109,7 +109,7 @@ export const adoption: AdoptionEvent[] = [
   {
     file: "/home/me/.agents/.skill-lock.json",
     name: "legacy",
-    reason: `a symlink to /home/me/work/legacy. To adopt it, move that folder to ${LIBRARY}/legacy`,
+    reason: `a symlink to /home/me/work/legacy. To import it, move that folder to ${LIBRARY}/legacy`,
     schema_version: 4,
     state: "refused",
     tool: "vercel",

@@ -328,7 +328,7 @@ test.describe("chips", () => {
         {
           code: "refused",
           message:
-            'scratch cannot be adopted: "/home/me/.claude/skills/scratch" contains files that differ from the skill version',
+            'scratch cannot be imported: "/home/me/.claude/skills/scratch" contains files that differ from the skill version',
           type: "error",
         },
       ],
@@ -370,7 +370,7 @@ test.describe("chips", () => {
         {
           code: "refused",
           message:
-            'scratch cannot be adopted: "/home/me/.claude/skills/scratch" is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks',
+            'scratch cannot be imported: "/home/me/.claude/skills/scratch" is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks',
           type: "error",
         },
       ],

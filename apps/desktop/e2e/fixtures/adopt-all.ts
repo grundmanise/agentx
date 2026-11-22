@@ -118,7 +118,7 @@ const record = (
  * Why the CLI refuses legacy, the same in the preview and in a run of every skill: its record
  * names nowhere to install it from, and the library holds a symlink of it.
  */
-const legacyReason = `a symlink to /home/me/work/legacy. To adopt it, move that folder to ${LIBRARY}/legacy`;
+const legacyReason = `a symlink to /home/me/work/legacy. To import it, move that folder to ${LIBRARY}/legacy`;
 
 /** The record of legacy: refused, with no source, since it names none agentx can install from. */
 const legacyRecord: AdoptionEvent = {
@@ -132,7 +132,7 @@ const legacyRecord: AdoptionEvent = {
 };
 
 /** The warning a run of every skill logs for legacy, which it cannot adopt. */
-const legacyWarning = `legacy could not be adopted: ${legacyReason}`;
+const legacyWarning = `legacy could not be imported: ${legacyReason}`;
 
 /** The hint of a run that failed because the source no longer holds a skill. */
 const movedHint =
@@ -200,7 +200,7 @@ export const skillshareRun: InlineEvent[] = [
     type: "library_skill",
   })),
   ...skillshareNames.map((name) => record(name, "skillshare", "adopted")),
-  { ok: true, summary: "adopted 2 skills", type: "result" },
+  { ok: true, summary: "imported 2 skills", type: "result" },
 ];
 
 /**
@@ -218,7 +218,7 @@ export const skillsCliRun: InlineEvent[] = [
   record("scratch", "vercel", "adopted"),
   {
     hint: movedHint,
-    message: `1 of 3 skills could not be adopted: commit-style: ${movedReason}`,
+    message: `1 of 3 skills could not be imported: commit-style: ${movedReason}`,
     type: "error",
   },
 ];
@@ -245,7 +245,7 @@ export const skillsCliAllRun: InlineEvent[] = [
   record("scratch", "vercel", "adopted"),
   {
     ok: true,
-    summary: "adopted 3 skills; 1 could not be adopted",
+    summary: "imported 3 skills; 1 could not be imported",
     type: "result",
   },
 ];
@@ -267,7 +267,7 @@ export const skillsCliNoneRun: InlineEvent[] = [
   record("scratch", "vercel", "refused", goneReason("scratch")),
   {
     hint: movedHint,
-    message: `3 of 3 skills could not be adopted: ${[
+    message: `3 of 3 skills could not be imported: ${[
       "commit-style",
       "deck-outline",
       "scratch",

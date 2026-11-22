@@ -474,7 +474,7 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 		// Managed, but the library no longer holds it as a directory: the
 		// other tool took it back, or the user removed it. Adopting again
 		// installs it again, and moves the branch when the source moved on.
-		c.reason = "agentx manages it but the library no longer holds it; adopting installs it again"
+		c.reason = "agentx manages it but the library no longer holds it; importing installs it again"
 	}
 }
 
@@ -495,7 +495,7 @@ func (inv *invocation) judgeAsItIs(c *candidate, managed bool) {
 // reasonNotAdded is the reason of a candidate whose source the settings do
 // not hold. The adoption event carries it; the preview leaves it out, since
 // adding the source is part of every adoption.
-const reasonNotAdded = "its source is not added yet; adopting adds and fetches it"
+const reasonNotAdded = "its source is not added yet; importing adds and fetches it"
 
 // isRealDirectory reports whether path is a real directory: what the library
 // holds for a managed skill, as against nothing or another tool's link.
@@ -583,7 +583,7 @@ func goneRecord(name string, records []record) error {
 	for _, r := range records {
 		if r.name == name {
 			return fail(exitNotFound, fmt.Sprintf("%s says %q was installed, and this machine no longer holds it", r.file, name),
-				"run 'agentx skill import' to see what can be adopted")
+				"run 'agentx skill import' to see what can be imported")
 		}
 	}
 	return nil
@@ -596,7 +596,7 @@ func notAdoptable(name string, records []record) error {
 	if err := goneRecord(name, records); err != nil {
 		return err
 	}
-	return fail(exitNotFound, fmt.Sprintf("no skill called %q can be adopted: no record names it, and neither the library nor an agent client's skills directory holds it", sanitised(name)),
+	return fail(exitNotFound, fmt.Sprintf("no skill called %q can be imported: no record names it, and neither the library nor an agent client's skills directory holds it", sanitised(name)),
 		"run 'agentx skill import' to see what another tool installed, and 'agentx skill list' to see the library")
 }
 
@@ -611,7 +611,7 @@ func noAdoptionNamed(name string, cands []*candidate, records []record, tool str
 	for _, c := range cands {
 		names = append(names, sanitised(c.rec.name))
 	}
-	hint := "run 'agentx skill import' to see what can be adopted"
+	hint := "run 'agentx skill import' to see what can be imported"
 	if len(names) > 0 {
 		if len(names) > namesInAHint {
 			names = append(names[:namesInAHint], "...")
@@ -687,7 +687,7 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, lo
 		return nil
 	}
 	b := newBatch(inv, selected)
-	b.verb, b.mixed = "adopted", "run 'agentx skill import' to see what is left, and adopt the rest one at a time"
+	b.verb, b.mixed = "imported", "run 'agentx skill import' to see what is left, and import the rest one at a time"
 	b.listsRefused = all
 	inv.publishHintOnce = all
 	for _, c := range judged {
@@ -745,7 +745,7 @@ func adoptRow(f *failure) string {
 	case f.hint == "":
 		return f.message
 	}
-	return f.message + ". To adopt it, " + f.hint
+	return f.message + ". To import it, " + f.hint
 }
 
 // toolsOf are the tools whose records cands are.
@@ -774,7 +774,7 @@ func (inv *invocation) reportUnadopted(left []unadopted, adopted int, mixed bool
 	for _, u := range left {
 		t.add(refusedRow(u.name, u.tool, u.reason, mixed)...)
 		if out.json {
-			out.warn(sanitised(u.name) + " could not be adopted: " + u.reason)
+			out.warn(sanitised(u.name) + " could not be imported: " + u.reason)
 		}
 	}
 	out.render(t, "  ")
@@ -849,7 +849,7 @@ func (inv *invocation) adoptFromSources(ctx context.Context, b *batch, ready []*
 	if err := inv.reportInstalled(ctx, b, dones); err != nil {
 		return false, err
 	}
-	inv.summary = "imported " + strings.TrimPrefix(strings.TrimPrefix(inv.summary, "installed "), "adopted ")
+	inv.summary = "imported " + strings.TrimPrefix(strings.TrimPrefix(inv.summary, "installed "), "imported ")
 	return true, nil
 }
 
@@ -940,7 +940,7 @@ func (inv *invocation) adoptListing(ctx context.Context, b *batch, url string, c
 			// One source has one pin on a machine, and it governs every
 			// later install from it, so records of two refs of it cannot
 			// be answered in silence.
-			inv.out.warn(fmt.Sprintf("%s was installed at more than one ref (%s); it is added pinned to %s. To change the pin, run 'agentx source add %s#<ref>' and adopt again",
+			inv.out.warn(fmt.Sprintf("%s was installed at more than one ref (%s); it is added pinned to %s. To change the pin, run 'agentx source add %s#<ref>' and import again",
 				url, strings.Join(pinNames(recorded), ", "), pinName(pin), url))
 		}
 		b.total++ // the fetch step of the source
