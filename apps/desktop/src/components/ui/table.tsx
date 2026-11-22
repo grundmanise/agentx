@@ -16,12 +16,22 @@ const tableContainerVariants = cva("relative w-full", {
   },
 });
 
+// With `layout="fixed"`, the columns take the widths of the table's `col`s, not of their content,
+// so a cell can truncate or clamp its text.
+const tableVariants = cva("type-secondary w-full border-collapse", {
+  defaultVariants: { layout: "auto" },
+  variants: { layout: { auto: "", fixed: "table-fixed" } },
+});
+
 // A scrolling table's container takes focus, so the keyboard can scroll it in WebKit, where a
 // scroller with no focusable content is otherwise out of reach. It is a region named as its table.
 const Table = ({
   scroll,
+  layout,
   ...props
-}: OwnProps<"table"> & VariantProps<typeof tableContainerVariants>) => (
+}: OwnProps<"table"> &
+  VariantProps<typeof tableContainerVariants> &
+  VariantProps<typeof tableVariants>) => (
   <div
     data-slot="table-container"
     className={tableContainerVariants({ scroll })}
@@ -31,11 +41,7 @@ const Table = ({
       tabIndex: 0,
     })}
   >
-    <table
-      data-slot="table"
-      className="type-secondary w-full border-collapse"
-      {...props}
-    />
+    <table data-slot="table" className={tableVariants({ layout })} {...props} />
   </div>
 );
 

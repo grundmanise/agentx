@@ -166,6 +166,37 @@ test("only the table scrolls, under its pinned column captions", async ({
   expect(captionTop).toBe(scrollerTop);
 });
 
+test("the name column is 200px: a name past two lines ends in an ellipsis, with the whole name in a tooltip", async ({
+  cli,
+  page,
+}) => {
+  const long =
+    "release-check-before-it-ships-to-every-store-in-every-region-and-every-channel";
+  await openPlugins(cli, page, {
+    ...inventory,
+    skills: inventory.skills.map((s) =>
+      s.name === "release-check" ? { ...s, name: long } : s
+    ),
+  });
+  const table = detail(page).getByRole("table", { name: "Skills" });
+  const caption = table.getByRole("columnheader", { name: "Skill" });
+  expect(await caption.evaluate((el) => el.getBoundingClientRect().width)).toBe(
+    200
+  );
+  // A name that fits gets no tooltip.
+  await table.getByRole("button", { name: "commit-helper" }).hover();
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  // A long one wraps to two lines, cut short, and shows whole in a tooltip.
+  const name = table.getByRole("button", { name: long });
+  expect(
+    await name
+      .locator("span")
+      .evaluate((el) => el.scrollHeight > el.clientHeight)
+  ).toBe(true);
+  await name.hover();
+  await expect(page.getByRole("tooltip")).toHaveText(long);
+});
+
 test("Search, the agent filter and the sort toggle", async ({ cli, page }) => {
   await openPlugins(cli, page, moreInventory);
   // A to Z by name at first: the plugin turned off sorts with the rest.

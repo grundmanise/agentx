@@ -697,6 +697,7 @@
   --size-plugin-row-tile: 28px;
   --gap-plugin-details: 40px;
   --gap-plugin-details-y: 12px;
+  --width-plugin-name-col: 200px;
   --padding-add-card: 6px;
 
   /* Overlays */
