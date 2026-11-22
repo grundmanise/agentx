@@ -225,6 +225,22 @@ const stackVariants = cva("flex items-center", {
   },
 });
 
+/**
+ * The "+n" after a stack that hides clients. It sits outside the stack, so the logos' overlap does
+ * not pull it onto the last logo, and it grows with the logos.
+ */
+const countVariants = cva("", {
+  variants: {
+    size: {
+      16: "type-technical-sm text-text-hint ml-1",
+      20: "type-technical-sm text-text-hint ml-1",
+      24: "type-technical-sm text-text-hint ml-1.5",
+      28: "type-technical-sm text-text-hint ml-1.5",
+      44: "type-agent-card-name text-card-text ml-3",
+    },
+  },
+});
+
 /** The side of its trigger an agent list card opens on. */
 export type AgentListSide = "top" | "right" | "bottom" | "left";
 
@@ -257,7 +273,7 @@ export const AgentListCard = ({
     >
       <ul
         aria-label="Agents"
-        className="max-h-agent-list m-0 grid list-none grid-cols-2 gap-x-3.5 overflow-y-auto overscroll-contain px-0 py-3.5"
+        className="max-h-agent-list m-0 grid list-none grid-cols-2 gap-x-3.5 overflow-y-auto overscroll-contain px-0 py-2.5"
       >
         {clients.map((c) => (
           <li
@@ -311,9 +327,6 @@ export const LogoStack = ({
           tooltip={listed ? false : tooltip}
         />
       ))}
-      {listed && (
-        <span className="type-technical-sm text-text-hint pl-2">{`+${hidden.length}`}</span>
-      )}
     </span>
   );
   if (!listed) {
@@ -321,7 +334,10 @@ export const LogoStack = ({
   }
   return (
     <AgentListCard clients={[...clients, ...hidden]} side={listSide}>
-      {stack}
+      <span className="flex items-center">
+        {stack}
+        <span className={countVariants({ size })}>{`+${hidden.length}`}</span>
+      </span>
     </AgentListCard>
   );
 };

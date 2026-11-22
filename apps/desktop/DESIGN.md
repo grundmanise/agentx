@@ -662,6 +662,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-card.gap` | 12 | `gap-agent-card` | Grid gap |
 | `agent-card.logo` | 44 | `size-agent-card-logo` |  |
 | `universal-card.lead-width` | 260 | `w-universal-lead` | Lead column of the Universal card |
+| `universal-card.column-min-width` | 220 | `grid-cols-universal` | Narrowest client column of the Universal card |
 | `plugin.tile` | 40 | `size-plugin-tile` | Plugin icon or monogram tile in the detail pane |
 | `plugin.row-tile` | 28 | `size-plugin-row-tile` | Plugin icon or monogram tile in a Plugins list row |
 | `plugin-details.gap` | 12 40 | `gap-y-plugin-details-y gap-x-plugin-details` | Between the details under a plugin's name (row, column) |
@@ -904,7 +905,7 @@ Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
 
-- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. The list runs to the card's top and bottom edges: its 14px padding sits inside the scroll, at its start and end, so a scrolled row is cut at the card's edge, and a row cut at the bottom says the list scrolls. Its logos then name no client in a Tooltip of their own. It opens below the stack, ending at its right edge; for a stack inside a menu, it opens beside the menu instead, so it covers none of the menu's rows. Like a tooltip, a hover card stacks over a menu.
+- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`, 4px after the last logo (6px for 24 and 28px logos); after 44px logos, in `type.agent-card-name` `card.text`, 12px after. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. The card is as wide as the list, at most `popover.width`, so the list sits 14px inside every edge: the first logo 14px from the top, the longest name 14px from the right. The list runs to the card's top and bottom edges: its 10px padding (plus the row's own 5px above its logo) sits inside the scroll, at its start and end, so a scrolled row is cut at the card's edge, and a row cut at the bottom says the list scrolls. Its logos then name no client in a Tooltip of their own. It opens below the stack, ending at its right edge; for a stack inside a menu, it opens beside the menu instead, so it covers none of the menu's rows. Like a tooltip, a hover card stacks over a menu.
 
 ### Agent filter chip
 
@@ -1052,7 +1053,7 @@ One card per agent configuration whose client does not read the library, in a 4-
 
 ### Universal card (Agents page)
 
-One full-width card below the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. No switch and no placement: a universal client sees every library skill whatever its setting, through the library itself.
+One full-width card above the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), at most five then "+n", whose hover lists every client (the agent list card), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. The columns share the rest of the width and wrap into more rows when a row would make them narrower than `universal-card.column-min-width`. No switch and no placement: a universal client sees every library skill whatever its setting, through the library itself.
 
 ### Tabs
 
@@ -1141,7 +1142,7 @@ A help term (`src/components/help-term.tsx`) is a word in running text that expl
 
 ### Hover card
 
-shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding (none at the top and bottom for a list that scrolls to the card's edges, `padding="list"`), `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
+shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding (none at the top and bottom for a list that scrolls to the card's edges, `padding="list"`, which also fits the card to the list's width), `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
 
 ### Popover (Filter)
 

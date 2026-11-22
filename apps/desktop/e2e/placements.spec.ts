@@ -44,6 +44,14 @@ const later = (cli: MockCli) =>
 
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
+/**
+ * The toast on screen. A replaced toast stays in the region for its exit animation (Sonner marks
+ * it not front, then removed), so this skips it.
+ */
+const liveToast = (page: Page) =>
+  toasts(page).locator(
+    '[data-sonner-toast][data-front="true"]:not([data-removed="true"])'
+  );
 const pane = (page: Page, name: string) =>
   page
     .getByRole("region", { name: "Skill details" })
@@ -252,10 +260,19 @@ test.describe("chips", () => {
     const reason = "Comes with the acme-tools plugin. Fork to edit";
     await expect(chip(plugin, "Cursor")).toHaveAttribute("title", reason);
     await chip(plugin, "Cursor").click();
-    await expect(toasts(page).getByText(reason)).toBeVisible();
+    await expect(liveToast(page).getByText(reason)).toBeVisible();
+    const cursorToast = await liveToast(page).elementHandle();
     await chip(plugin, "Universal").click();
-    // The toast before, with the same text, may still be on its way out.
-    await expect(toasts(page).getByText(reason).last()).toBeVisible();
+    // The Cursor toast gives way to the Universal one, with the same text.
+    await expect
+      .poll(async () => {
+        const gone = await cursorToast.evaluate(
+          (toast) => !toast.isConnected || toast.dataset.removed === "true"
+        );
+        return gone;
+      })
+      .toBe(true);
+    await expect(liveToast(page).getByText(reason)).toBeVisible();
 
     const skills = page.getByRole("navigation", { name: "Skills" });
     await skills.getByRole("button", { exact: true, name: "scratch" }).click();
