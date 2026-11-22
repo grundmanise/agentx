@@ -177,7 +177,6 @@
   --color-source-pill-active-text: var(--color-on-accent);
   --color-source-pill-count: var(--gray-400);
   --color-source-pill-active-count: var(--gray-600);
-  --color-button-split-divider: var(--gray-800);
 
   /* Status pills */
   --color-pill-update-bg: var(--color-accent-primary);
