@@ -24,7 +24,7 @@ import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
-import { useNow } from "#/screens/settings/clock.ts";
+import { useNow } from "#/lib/now.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { accountLine, accountRemote } from "#/screens/settings/source-rows.ts";
 import { agentx, usePending } from "#/store/runner.ts";

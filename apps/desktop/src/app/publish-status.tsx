@@ -30,7 +30,7 @@ import {
 } from "#/components/ui/popover.tsx";
 import { formatAgo } from "#/lib/dates.ts";
 import { navigateTo } from "#/lib/navigate.ts";
-import { useNow } from "#/screens/settings/clock.ts";
+import { useNow } from "#/lib/now.ts";
 import { accountRemoteOf } from "#/screens/skills/banners.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
