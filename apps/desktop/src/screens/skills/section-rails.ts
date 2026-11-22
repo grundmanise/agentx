@@ -5,6 +5,7 @@
 // span takes its height from here: the list sizes the drawn spans from the offsets it already
 // holds. The rail itself has no height, so sizing a span never resizes an item the list watches.
 import type { Virtualizer } from "@tanstack/react-virtual";
+import { useCallback, useMemo } from "react";
 
 /** Where an item is in the list: its offset from the top, and its end, in px. */
 interface Measured {
@@ -78,20 +79,25 @@ export const sizeRails = (
 export const useRailHeader = (
   virtualizer: Virtualizer<HTMLElement, Element>
 ) => {
-  // The compiler treats only a function that calls a hook as a hook; this one calls none.
-  "use memo";
-  const observer = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      const rail = entry.target.closest("[data-rail]");
-      if (rail !== null) {
-        virtualizer.measureElement(rail);
-      }
-    }
-  });
-  return (header: HTMLDivElement) => {
-    observer.observe(header);
-    return () => {
-      observer.unobserve(header);
-    };
-  };
+  const observer = useMemo(
+    () =>
+      new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const rail = entry.target.closest("[data-rail]");
+          if (rail !== null) {
+            virtualizer.measureElement(rail);
+          }
+        }
+      }),
+    [virtualizer]
+  );
+  return useCallback(
+    (header: HTMLDivElement) => {
+      observer.observe(header);
+      return () => {
+        observer.unobserve(header);
+      };
+    },
+    [observer]
+  );
 };
