@@ -547,11 +547,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `page.section-gap` | 28–40 |  | Between sections |
 | `page.max-width` | 1200 | `max-w-page` | Inbox |
 | `split.list-width` | 420 | `w-split-list` | Skills left column |
-| `split.header-padding` | 30 20 0 28 | `pt-split-header-top pr-split-header-right pb-0 pl-split-header-left` | Skills list header |
-| `split.toolbar-padding` | 20 20 12 28 | `pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left` | Search + filter row block |
+| `split.header-padding` | 30 28 0 | `pt-split-header-top px-split-header pb-0` | Skills list header |
+| `split.toolbar-padding` | 20 28 12 | `pt-split-toolbar-top px-split-toolbar pb-split-toolbar-bottom` | Search + filter row block |
 | `split.toolbar-gap` | 12 | `gap-split-toolbar` | Search → filter row |
 | `split.filter-gap` | 6 | `gap-split-filter` | Filter button → chip → sort |
-| `split.list-padding` | 0 12 24 14 | `pt-0 pr-split-list-right pb-split-list-bottom pl-split-list-left` | Scrolling list |
+| `split.list-padding` | 0 28 24 14 | `pt-0 pr-split-list-right pb-split-list-bottom pl-split-list-left` | Scrolling list |
 | `detail.padding` | 34 40 48 | `pt-detail-top px-detail pb-detail-bottom` | Detail pane content |
 | `detail.max-width` | 900 | `max-w-detail` |  |
 | `detail.section-gap` | 28 | `gap-detail-section` | Header → banner → agents → files → details/history |
