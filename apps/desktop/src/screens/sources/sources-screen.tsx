@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type {
   LibraryEntry,
@@ -144,13 +144,9 @@ const usePills = (
   if (justAdded !== undefined && sources.some((s) => s.id === justAdded.id)) {
     setJustAdded(undefined);
   }
-  const pills = useMemo(
-    () =>
-      sourcePills(
-        justAdded === undefined ? sources : [...sources, justAdded],
-        listings
-      ),
-    [sources, justAdded, listings]
+  const pills = sourcePills(
+    justAdded === undefined ? sources : [...sources, justAdded],
+    listings
   );
   return { pills, setJustAdded };
 };
@@ -251,7 +247,7 @@ export const SourcesScreen = () => {
     activePill === undefined || activePill.key === YOUR_SKILLS
       ? undefined
       : listings[activePill.key];
-  const shown = useMemo((): SkillCard[] => {
+  const shownCards = (): SkillCard[] => {
     if (activePill === undefined) {
       return noCards;
     }
@@ -270,26 +266,24 @@ export const SourcesScreen = () => {
             pageRef(sources.find((s) => s.id === activePill.key))
           )
         );
-  }, [activePill, installable, listing, library, sources]);
+  };
+  const shown = shownCards();
   // A search answer replaces the listing. While the latest query waits for its answer, the last
   // answer stays, so the list and its Select all count change once, not back to the listing between.
   const results = query.trim() === "" ? undefined : found;
-  const resultGroups = useMemo(
-    () =>
-      results === undefined
-        ? undefined
-        : groupCards(
-            nameOrder(
-              resultCards(
-                // A source removed while the answer is shown takes its results with it.
-                results.filter((r) => sources.some((s) => s.url === r.source)),
-                library,
-                (url) => pageRef(sources.find((s) => s.url === url))
-              )
+  const resultGroups =
+    results === undefined
+      ? undefined
+      : groupCards(
+          nameOrder(
+            resultCards(
+              // A source removed while the answer is shown takes its results with it.
+              results.filter((r) => sources.some((s) => s.url === r.source)),
+              library,
+              (url) => pageRef(sources.find((s) => s.url === url))
             )
-          ),
-    [results, library, sources]
-  );
+          )
+        );
   const groups: CardGroup[] =
     resultGroups ??
     (activePill === undefined
