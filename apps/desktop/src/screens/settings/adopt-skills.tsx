@@ -38,7 +38,7 @@ export const AdoptSkillsSection = () => {
                 setOpen(true);
               }}
             >
-              {`Adopt ${tool.name} skills`}
+              {`Adopt skills from ${tool.name}`}
             </Button>
           ))}
         </div>

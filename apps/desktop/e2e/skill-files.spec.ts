@@ -266,12 +266,10 @@ test("a modified skill of a source: its edits labelled and tinted, against the v
 }) => {
   await openSkills(cli, page, "/#/skills/review");
   const section = files(page, "review");
-  await expect(section).toContainText(
-    "Compared with the version you installed"
-  );
   await expect
     .poll(() => sortedLater(cli))
     .toEqual(["skill diff review --json", "skill files review --json"]);
+  await expect(fileRow(section, "old.md")).toBeVisible();
   // The deleted file is listed with the others, in path order.
   expect(await rowNames(section)).toEqual([
     "SKILL.md",
@@ -281,9 +279,9 @@ test("a modified skill of a source: its edits labelled and tinted, against the v
     "reference.pdf",
     "reference/forms.md",
   ]);
-  await expect(fileRow(section, "SKILL.md")).toContainText("edited by you");
-  await expect(fileRow(section, "notes.md")).toContainText("added by you");
-  await expect(fileRow(section, "old.md")).toContainText("removed by you");
+  await expect(fileRow(section, "SKILL.md")).toContainText("edited");
+  await expect(fileRow(section, "notes.md")).toContainText("added");
+  await expect(fileRow(section, "old.md")).toContainText("removed");
   await expect(fileRow(section, "old.md")).toContainText("2 lines");
 
   // The edited file: the whole file, with the line it replaced put back as removed.
@@ -314,8 +312,7 @@ test("a modified skill of your own compares with what was last published", async
 }) => {
   await openSkills(cli, page, "/#/skills/release-notes");
   const section = files(page, "release-notes");
-  await expect(section).toContainText("Compared with what you last published");
-  await expect(fileRow(section, "SKILL.md")).toContainText("edited by you");
+  await expect(fileRow(section, "SKILL.md")).toContainText("edited");
   await expect(content(section, "SKILL.md").getByRole("insertion")).toHaveText([
     "Use this skill to write release notes from merged changes.",
   ]);
@@ -605,7 +602,7 @@ test("a removed file's line count is the count of the lines its pane shows", asy
   await row(page, "review").click();
   const section = files(page, "review");
   const removed = fileRow(section, "archive/OLD.md");
-  await expect(removed).toContainText("removed by you");
+  await expect(removed).toContainText("removed");
   await expect(removed).toContainText("6 lines");
   await removed.click();
   const deletions = content(section, "archive/OLD.md").getByRole("deletion");

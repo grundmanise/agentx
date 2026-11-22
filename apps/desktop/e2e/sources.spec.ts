@@ -555,16 +555,16 @@ test("Remove on an Added skill confirms, then runs skill remove for every agent"
   const run = cli.register(["skill", "remove", "pdf"], {
     events: [{ ok: true, summary: "removed pdf", type: "result" }],
   });
-  const confirm = page.getByRole("alertdialog", { name: "Remove pdf?" });
+  const confirm = page.getByRole("alertdialog", {
+    name: "Remove pdf from this machine?",
+  });
   // Cancel puts the focus back on the card's Remove: the dialog has no trigger.
   await remove.click();
   await confirm.getByRole("button", { exact: true, name: "Cancel" }).click();
   await expect(confirm).toBeHidden();
   await expect(remove).toBeFocused();
   await remove.click();
-  await expect(confirm).toContainText(
-    "It will be removed from every agent that has it:"
-  );
+  await expect(confirm).toContainText("Removes it from:");
   await expect(
     confirm.getByRole("list", { name: "Agents that see it" })
   ).toContainText("Codex");
@@ -885,26 +885,31 @@ test("Retry after the lock installs again, and the bar closes once it ends", asy
   await expect(bar(page)).toHaveCount(0, { timeout: 10_000 });
 });
 
-test("a partial failure lists what was added, the error, its hint and each skipped skill", async ({
+test("a partial failure lists what was added and why the rest was not, in the app's words", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
   const error = {
     code: "refused",
-    hint: "remove it with 'agentx skill remove docx', then install again",
+    hint: "remove it with 'agentx skill remove docx', then install again; to keep it, first fork it with 'agentx skill fork docx --name <new>'",
     message:
-      "1 of 2 skills could not be installed: docx: the library already holds docx",
+      "1 of 2 skills could not be installed: docx: the library already holds docx at /home/me/.agents/skills",
     type: "error",
   } as const;
-  const warning =
+  const held =
     "docx: the library already holds docx at /home/me/.agents/skills";
+  const other =
+    "/home/me/.cursor/skills is a link of your own and was left as it is; no placement was made for cursor";
   const add = cli.register(
     ["skill", "add", ACME, "--name", "artifacts", "--name", "docx"],
     {
       events: [{ name: "artifacts", type: "library_skill" }, error],
       exitCode: 6,
-      logs: [{ level: "warn", message: warning }],
+      logs: [
+        { level: "warn", message: held },
+        { level: "warn", message: other },
+      ],
     }
   );
   await check(page, "artifacts").click();
@@ -915,9 +920,8 @@ test("a partial failure lists what was added, the error, its hint and each skipp
     .getByRole("listitem")
     .filter({ hasText: "Added 1 of 2 skills" });
   await expect(toast).toBeVisible();
-  await expect(toast).toContainText(error.message);
-  await expect(toast).toContainText(error.hint);
-  await expect(toast).toContainText(warning);
+  await expect(toast).toContainText("docx skill is already in your library.");
+  await expect(toast).toContainText("Remove it, then add again.");
   // The skill that landed leaves the selection; the skipped one stays.
   await expect(
     bar(page).getByRole("button", { exact: true, name: "Add 1" })

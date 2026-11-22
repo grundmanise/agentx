@@ -915,9 +915,7 @@ test.describe("the detail pane", () => {
     const banner = article.getByRole("note", {
       name: "No longer in zeta/tools",
     });
-    await expect(banner).toContainText(
-      "It seems this skill was removed from the source."
-    );
+    await expect(banner).toContainText("The source no longer has this skill.");
 
     await row(page, "release-notes").click();
     const cursor = pane(page, "release-notes").getByRole("switch", {

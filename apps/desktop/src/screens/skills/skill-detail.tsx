@@ -243,6 +243,7 @@ export const SkillDetail = ({
             )}
           </div>
         </div>
+        <SightsNotice sights={sights} />
         {row.description !== "" && (
           <p className="type-detail-desc text-text-muted m-0 text-pretty select-text">
             {row.description}
@@ -260,7 +261,6 @@ export const SkillDetail = ({
             setRemoveOpen(true);
           }}
         />
-        <SightsNotice sights={sights} />
       </section>
       {row.entry !== undefined && (
         <RemoveDialog
