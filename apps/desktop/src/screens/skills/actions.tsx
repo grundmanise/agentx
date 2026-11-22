@@ -49,7 +49,7 @@ const reconnectLabel = (row: SkillRow, placement: LibraryPlacement) =>
 
 const addSourceLabel = (source: string) => `add source ${source}`;
 
-/** The name the CLI reports for the skill a run of `adopt` took over as one of your own. */
+/** The name the CLI reports for the skill a `skill import` run took over as one of your own. */
 const adoptedName = (events: CliEvent[]) =>
   events.find((e) => e.type === "library_skill")?.name;
 
@@ -122,10 +122,10 @@ const adoptRefusal = (
 };
 
 /**
- * Adopt: the `adopt` command line of `adoptArgs` for an unmanaged skill, which agentx manages
- * from then on. A skill taken out of a client's own skills directory becomes a library skill
- * under its directory's name, so it is selected by the name the CLI reports. With `force`, an
- * agent's folder of the skill whose files differ gives way to it.
+ * Adopt: the `skill import` command line of `adoptArgs` for an unmanaged skill, which agentx
+ * manages from then on. A skill taken out of a client's own skills directory becomes a library
+ * skill under its directory's name, so it is selected by the name the CLI reports. With `force`,
+ * an agent's folder of the skill whose files differ gives way to it.
  */
 export const adopt = async (row: SkillRow, force = false) => {
   const args = adoptArgs(row);
@@ -188,7 +188,7 @@ export const AddToAgents = ({ row }: { row: SkillRow }) => {
   );
 };
 
-/** Adopt, for an unmanaged skill `adopt` can take over. */
+/** Adopt, for an unmanaged skill `skill import` can take over. */
 export const Adopt = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(adoptLabel(row));
   return (

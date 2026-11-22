@@ -38,7 +38,7 @@ export type BannerAction =
   | { kind: "add-to-agents" }
   /** `skill place <name> --to <configuration>` for the displaced placement. */
   | { kind: "put-back"; placement: LibraryPlacement; agent: string }
-  /** The `adopt` command line of `adoptArgs`, for an unmanaged skill `adopt` can take over. */
+  /** The `skill import` command line of `adoptArgs`, for an unmanaged skill it can take over. */
   | { kind: "adopt" }
   /** `source add <url>`, for a skill whose source was removed. */
   | { kind: "add-source"; source: string }

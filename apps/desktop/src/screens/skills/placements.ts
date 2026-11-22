@@ -1,5 +1,5 @@
 // What the AGENTS chips, the banners and the Remove dialog say about a skill's placements, the
-// `adopt` command line that takes over an unmanaged skill, and what the toasts after their
+// `skill import` command line that takes over an unmanaged skill, and what the toasts after their
 // commands say: pure functions over a row, the configurations and a command's events, so that
 // every control reads a placement the same way. Nothing here predicts: a chip's state comes from
 // the inventory, and a count from the CLI's result.
@@ -146,12 +146,12 @@ export const inertReason = (
   }
 };
 
-/** `adopt --skill <name>`. It names no tool, so the CLI decides by itself how it adopts the skill. */
-const adoptLine = (name: string): string[] => ["adopt", "--skill", name];
+/** `skill import <name>`. It names no tool, so the CLI decides by itself how it takes the skill. */
+const adoptLine = (name: string): string[] => ["skill", "import", name];
 
 /**
- * The `adopt` command line that takes over an unmanaged skill, or undefined when `adopt` has no
- * way to take it:
+ * The `skill import` command line that takes over an unmanaged skill, or undefined when
+ * `skill import` has no way to take it:
  *
  * - a skill another tool recorded, which the CLI can adopt (`candidate`), is installed from its
  *   source, or becomes one of your own with its files as they are when the record names none;
@@ -160,8 +160,9 @@ const adoptLine = (name: string): string[] => ["adopt", "--skill", name];
  *   directory, which moves into the library, unless the library holds another skill under that
  *   name.
  *
- * A skill whose record the CLI refuses is one no form of `adopt` takes. A skill of a project, a
- * symlink in a client's skills directory and a plugin's skill are not `adopt`'s to take either.
+ * A skill whose record the CLI refuses is one no form of `skill import` takes. A skill of a
+ * project, a symlink in a client's skills directory and a plugin's skill are not its to take
+ * either.
  */
 export const adoptArgs = (row: SkillRow): string[] | undefined => {
   if (row.kind !== "disk") {

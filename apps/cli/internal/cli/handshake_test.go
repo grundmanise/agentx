@@ -356,7 +356,7 @@ func TestScanHandshake(t *testing.T) {
 	// A snapshot keeps what compares a server's tools across machines: the
 	// server's logical id and each tool's id and hashes, as the inventory
 	// has them.
-	equal(t, "export exit", h.run("--json", "export").exit, 0)
+	equal(t, "export exit", h.run("--json", "snapshot", "save").exit, 0)
 	var snapFix map[string]any
 	for _, s := range h.readExportFile(h.snapshotPath(defaultSnapshot))["mcp_servers"].([]any) {
 		if srv := s.(map[string]any); srv["name"] == "fix" {

@@ -110,7 +110,7 @@ func forkBaseRecord(rec lineage.Record) (lineage.Record, *failure) {
 			"run '"+skillCommand("history", rec.Name)+"' to read it, and 'agentx doctor' to check the account repo")
 	}
 	return lineage.Record{}, refuse(exitRefused, name+" has no upstream to update from",
-		"a skill created with 'agentx skill new', adopted with 'agentx adopt', or forked from a plugin's skill, has no upstream version; its versions are its own commits")
+		"a skill created with 'agentx skill new', imported with 'agentx skill import', or forked from a plugin's skill, has no upstream version; its versions are its own commits")
 }
 
 // forkBaseOf is forkBaseRecord for a fork whose lineage was not read yet:

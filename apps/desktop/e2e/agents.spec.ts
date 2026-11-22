@@ -29,7 +29,7 @@ const card = (page: Page, name: string) =>
 
 const openAgents = async (cli: MockCli, page: Page) => {
   cli.onServeStart({ events: [inventory] });
-  cli.register(["adopt"], { events: adoption });
+  cli.register(["skill", "import"], { events: adoption });
   cli.register(["source", "list"], { events: sources });
   await page.goto("/#/agents");
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();

@@ -276,7 +276,7 @@ type batch struct {
 	done     []*installed // the skills that landed, in the order they were installed
 	skipped  int          // the skills passed over, see skip
 	// listsRefused says the run lists the skills it refused once it ends,
-	// as agentx adopt --all does, so drop warns of no refusal as it happens.
+	// as agentx skill import --all does, so drop warns of no refusal as it happens.
 	listsRefused bool
 }
 
@@ -1200,7 +1200,7 @@ func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Recor
 	case !known:
 		// An unmanaged skill, which an adoption takes over in its place, so
 		// the rename is what frees the name.
-		hint += "or, to keep it, adopt it with '" + adoptCommand(v.name) + "' and rename it with '" + skillCommand("rename", v.name, "<new>") + "', then install again"
+		hint += "or, to keep it, import it with '" + adoptCommand(v.name) + "' and rename it with '" + skillCommand("rename", v.name, "<new>") + "', then install again"
 	case rec.Kind == lineage.KindFork:
 		hint = ownSkillHint(v.name)
 	default:
@@ -1528,7 +1528,10 @@ func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 	out, v := inv.out, done.v
 	rows := inv.ownPlacements(v.name, done.placed, ev.Placements)
 	what := "installed"
-	if done.adopted || v.replace {
+	switch {
+	case v.replace:
+		what = "imported" // agentx skill import takes the skill over from another tool
+	case done.adopted:
 		what = "adopted"
 	}
 	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path) +

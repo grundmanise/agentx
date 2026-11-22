@@ -23,20 +23,20 @@ You need:
 - Skills on the cloud machine. On your computer, copy all of its skills to the cloud machine:
 
   ```sh
-  agentx export --machine cloud
+  agentx snapshot save --machine cloud
   ```
 
   Or turn on one skill at a time, see [Change the cloud machine's skills](#change-the-cloud-machines-skills). Until the cloud machine has a snapshot, sessions start without your skills.
 - A token that can only read the account remote. See [Create a read-only token](#create-a-read-only-token).
 
-`agentx export --machine cloud` copies your computer's settings, skills and placements to the cloud machine:
+`agentx snapshot save --machine cloud` copies your computer's settings, skills and placements to the cloud machine:
 
-- The snapshot keeps each MCP server's command, arguments and URL as your configuration writes them, and these can hold a token. Keep the account remote private, or remove such values from your configuration before you export.
+- The snapshot keeps each MCP server's command, arguments and URL as your configuration writes them, and these can hold a token. Keep the account remote private, or remove such values from your configuration before you save the snapshot.
 - It replaces the cloud machine's whole snapshot. A skill you placed only on the cloud machine, or a `--copy` you gave with `--machine cloud`, is gone until you place it again.
-- A skill from a shared source stays at the version your computer had. To move it to a newer version, export again, or run `agentx skill place <name> --machine cloud`. After that, sessions take its latest version.
+- A skill from a shared source stays at the version your computer had. To move it to a newer version, save the snapshot again, or run `agentx skill place <name> --machine cloud`. After that, sessions take its latest version.
 - Sessions install your own skills at their latest version on the account remote.
 
-See [Seed another machine](/cli/export#seed-another-machine).
+See [Seed another machine](/cli/snapshot#seed-another-machine).
 
 ## Create a read-only token
 
@@ -99,9 +99,9 @@ git config --global "credential.$remote.helper" "!f() { echo username=x-access-t
 
 # 4. Add a SessionStart hook to ~/.claude/settings.json, keeping every other
 #    setting and hook. On every start and resume it applies the cloud machine's
-#    snapshot, logs to /tmp/agentx-import.log, and asks Claude Code to look for
+#    snapshot, logs to /tmp/agentx-snapshot.log, and asks Claude Code to look for
 #    skills again.
-hook="\"$agentx\" import --machine cloud --yes >> /tmp/agentx-import.log 2>&1; echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"reloadSkills\":true}}'"
+hook="\"$agentx\" snapshot apply --machine cloud --yes >> /tmp/agentx-snapshot.log 2>&1; echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"reloadSkills\":true}}'"
 python3 - "$HOME/.claude/settings.json" "$hook" << 'EOF'
 import json, os, sys
 
@@ -110,7 +110,7 @@ settings = json.load(open(path)) if os.path.exists(path) else {}
 groups = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
 # Drop an earlier agentx hook, so running the script again adds no second one.
 for g in groups:
-    g["hooks"] = [h for h in g["hooks"] if "import --machine cloud" not in h.get("command", "")]
+    g["hooks"] = [h for h in g["hooks"] if not any(c in h.get("command", "") for c in ("import --machine cloud", "apply --machine cloud"))]
 groups[:] = [g for g in groups if g["hooks"]]
 groups.append({"matcher": "startup|resume", "hooks": [{"type": "command", "command": command, "timeout": 300}]})
 os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -130,7 +130,7 @@ exit 0
 3. Adds the account remote with `agentx source add <url> --account`.
 4. Adds a `SessionStart` hook to `~/.claude/settings.json`. It keeps every other setting and hook in the file, and replaces only an earlier agentx hook, so running the script again adds no second hook.
 
-The hook runs `agentx import --machine cloud --yes` each time a session starts or resumes. The import installs the skills that the snapshot on `machines/cloud` lists, and places them. Then the hook asks Claude Code to look for skills again, so a skill the import installs is there in that same session. See [Restore from the account remote](/cli/export#restore-from-the-account-remote).
+The hook runs `agentx snapshot apply --machine cloud --yes` each time a session starts or resumes. It installs the skills that the snapshot on `machines/cloud` lists, and places them. Then the hook asks Claude Code to look for skills again, so a skill it installs is there in that same session. See [Restore from the account remote](/cli/snapshot#restore-from-the-account-remote).
 
 The script always exits 0, so the environment starts even if a step fails. The setup output shows the error.
 
@@ -149,14 +149,14 @@ agentx skill remove <name> --machine cloud
 - Add `--copy` to `skill place` for a client that cannot follow a symlink. Sessions then give that client a copy of the skill.
 - `skill remove` with `--from` takes the skill out of those configurations and keeps it on the cloud machine. Without `--from`, it takes the skill off the cloud machine.
 - Each command commits to `machines/cloud` on your account remote, pushes, and changes nothing on your computer.
-- A later `agentx export --machine cloud` replaces all of these changes with your computer's skills and settings.
+- A later `agentx snapshot save --machine cloud` replaces all of these changes with your computer's skills and settings.
 
 The next session that starts or resumes applies the change. A session that already installed a skill you took off keeps it until a new session starts. For the details and the refusals, see [Turn skills on for your cloud agents](/cli/skill#turn-skills-on-for-your-cloud-agents).
 
 ## Limits
 
 - The hook relies on Claude Code reading `~/.claude/settings.json` on the session's own computer. This works in Claude Code on the web today, but Claude Code does not document it, so it can change.
-- The token reads only the account remote. If a skill comes from a source the session cannot reach, such as another private repository or an SSH URL, the import skips it, and the log says why.
+- The token reads only the account remote. If a skill comes from a source the session cannot reach, such as another private repository or an SSH URL, applying the snapshot skips it, and the log says why.
 - A session reads the cloud machine's snapshot and never writes it. Edits you make to a skill in a session stay in that session.
 
 ## Revoke the token
@@ -167,27 +167,27 @@ The token is in the environment's setup script. If someone else can read the scr
 
 ### A skill is missing in a session
 
-The hook writes the output of every import to `/tmp/agentx-import.log`. The log names each skill that the import skipped, and why.
+The hook writes the output of every `agentx snapshot apply` to `/tmp/agentx-snapshot.log`. The log names each skill that it skipped, and why.
 
 Ask the agent:
 
 ```text
 An agentx skill is missing in this session. Find out why from
-/tmp/agentx-import.log and ~/.local/bin/agentx skill list.
+/tmp/agentx-snapshot.log and ~/.local/bin/agentx skill list.
 See https://docs.agentx.wtf/cloud. Fix the cause or tell me what to change.
 If it is a bug in agentx, open an issue in https://github.com/grundmanise/agentx
 with its bug report template and steps to reproduce, or give me the text.
 Leave out tokens and anything private.
 ```
 
-### The import log is missing
+### The snapshot log is missing
 
 The hook did not run. The cause is often a step of the setup script that failed. The environment's setup output shows the error.
 
 Ask the agent:
 
 ```text
-/tmp/agentx-import.log is missing, so the agentx hook did not run in this session.
+/tmp/agentx-snapshot.log is missing, so the agentx hook did not run in this session.
 Find out why. See https://docs.agentx.wtf/cloud for what the setup script does.
 Fix the cause or tell me what to change in the setup script.
 If it is a bug in agentx, open an issue in https://github.com/grundmanise/agentx

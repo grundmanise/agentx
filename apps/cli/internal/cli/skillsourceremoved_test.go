@@ -244,13 +244,13 @@ func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 	beforeJSON := h.mustRun("--json", "skill", "list").stdout
 	here := h.exportSnapshot("here")
 
-	h.mustRun("import", elsewhere, "--yes")
+	h.mustRun("snapshot", "apply", elsewhere, "--yes")
 	equal(t, "drift under settings without the source", drift(h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")), "source removed")
 	equal(t, "inventory drift", drift(h.inventoryLibrary("alpha")), "source removed")
 
 	h.mustRun("source", "remove", s.url) // takes the ref the import left behind, and no entry
 	h.offline()
-	h.mustRun("import", here, "--yes")
+	h.mustRun("snapshot", "apply", here, "--yes")
 	if _, err := h.accountGitErr("rev-parse", "--verify", source.Ref(source.ID(s.url))); err == nil {
 		t.Fatal("the account repo holds the source ref; the test proves nothing")
 	}

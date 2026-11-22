@@ -17,7 +17,7 @@ const kindPlugin = "plugin"
 
 // forkSource is the skill a fork is made of: a managed skill, a fork or a
 // skill a plugin provides, for skill fork, and an unmanaged skill, of the
-// library or of an agent client's own skills directory, for agentx adopt.
+// library or of an agent client's own skills directory, for agentx skill import.
 type forkSource struct {
 	kind   string            // lineage.KindManaged, lineage.KindFork, lineage.KindUnmanaged or kindPlugin
 	name   string            // its name: its library entry's, or its directory's in the plugin or the client
@@ -39,7 +39,7 @@ type forkMode int
 const (
 	modeFork   forkMode = iota // skill fork
 	modeRename                 // the first step of skill rename, which removes the source next
-	modeAdopt                  // agentx adopt, which takes an unmanaged skill over as it is
+	modeAdopt                  // agentx skill import, which takes an unmanaged skill over as it is
 )
 
 // takesUnmanaged reports whether a run in this mode takes an unmanaged
@@ -56,10 +56,10 @@ func (m forkMode) done() string {
 	return "forked"
 }
 
-// adoptCommand is the agentx adopt command a line tells the user to run on
+// adoptCommand is the agentx skill import command a line tells the user to run on
 // the skill called name, quoted for a shell.
 func adoptCommand(name string) string {
-	return "agentx adopt --skill " + shellWord(name)
+	return "agentx skill import " + shellWord(name)
 }
 
 // unmanagedRefusal refuses the unmanaged skill called name for a mode that
@@ -69,7 +69,7 @@ func unmanagedRefusal(name string, mode forkMode) error {
 	if mode == modeRename {
 		message = sanitised(name) + " is not a skill of the account remote, so it cannot be renamed"
 	}
-	return fail(exitRefused, message, "adopt it first with '"+adoptCommand(name)+"'")
+	return fail(exitRefused, message, "import it first with '"+adoptCommand(name)+"'")
 }
 
 // forkSourceOf finds the skill arg names. The library comes first, its

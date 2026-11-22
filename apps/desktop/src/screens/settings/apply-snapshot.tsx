@@ -1,10 +1,10 @@
-// The Import settings section of Settings: replaces this machine's settings with the ones in a
-// file Export settings wrote, a snapshot in the CLI's words (docs/help-center/cli/export.mdx).
-// The user picks the file in the native open dialog and confirms, then the section runs
-// `import <file> --yes`, reads `source list`, and runs `source add` for each source of the
-// imported settings that this machine has not downloaded, one after another, without asking.
-// The result is the names of the skills the import installed and updated, the ones it skipped
-// as a warning with the CLI's reason on each name, and the sources it could not reach. The app
+// The Apply snapshot section of Settings: replaces this machine's settings, skills and placements
+// with the ones in a snapshot that Save snapshot wrote (docs/help-center/cli/snapshot.mdx). The
+// user picks the file in the native open dialog and confirms, then the section runs
+// `snapshot apply <file> --yes`, reads `source list`, and runs `source add` for each source of the
+// applied settings that this machine has not downloaded, one after another, without asking. The
+// result is the names of the skills the snapshot installed and updated, the ones it skipped as a
+// warning with the CLI's reason on each name, and the sources it could not reach. The app
 // writes no file: the only path it handles is the one the dialog returns, passed to the CLI.
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -27,17 +27,17 @@ import { agentx } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
-const IMPORT_LABEL = "import settings";
-const ADD_SOURCES_LABEL = "add imported sources";
+const APPLY_LABEL = "apply snapshot";
+const ADD_SOURCES_LABEL = "add snapshot sources";
 
-/** What the last import of this visit did: its `import_skill` events and the sources it could not add. */
-interface ImportResult {
+/** What the last apply of this visit did: its `import_skill` events and the sources it could not add. */
+interface ApplyResult {
   skills: ImportSkillEvent[];
   unreachable: string[];
 }
 
 /**
- * Adds each source of the imported settings this machine has not downloaded, as the settings
+ * Adds each source of the applied settings this machine has not downloaded, as the settings
  * hold it, one after another, and returns the URLs of the ones that failed. A failure is the
  * result's to show, so no error toast shows for it.
  */
@@ -57,7 +57,7 @@ const addMissingSources = async (sources: readonly SourceEvent[]) => {
   return unreachable;
 };
 
-/** The entries the import gave `action`. */
+/** The entries the apply gave `action`. */
 const withAction = (
   skills: ImportSkillEvent[],
   action: ImportSkillEvent["action"]
@@ -75,10 +75,10 @@ const Warning = ({ children }: { children: ReactNode }) => (
 
 /**
  * The result: "Installed: …" and "Updated: …", "Skipped: …" as a warning with the CLI's reason
- * on each name, and "Couldn't reach …" for a source that could not be added. A skill the import
+ * on each name, and "Couldn't reach …" for a source that could not be added. A skill the apply
  * kept, placed or unplaced is not shown.
  */
-const Result = ({ result }: { result: ImportResult }) => {
+const Result = ({ result }: { result: ApplyResult }) => {
   const installed = withAction(result.skills, "installed");
   const updated = withAction(result.skills, "updated");
   const skipped = withAction(result.skills, "skipped");
@@ -86,7 +86,7 @@ const Result = ({ result }: { result: ImportResult }) => {
     installed.length === 0 && updated.length === 0 && skipped.length === 0;
   return (
     <section
-      aria-label="Import result"
+      aria-label="Apply result"
       className="flex min-w-0 flex-col gap-1.5"
     >
       {installed.length > 0 && (
@@ -127,15 +127,15 @@ const Result = ({ result }: { result: ImportResult }) => {
   );
 };
 
-/** Import…: the open dialog, the confirm, `import <file> --yes`, the sources, and the result. */
-const ImportFile = () => {
+/** Apply…: the open dialog, the confirm, `snapshot apply <file> --yes`, the sources, and the result. */
+const ApplyFile = () => {
   const library = useAppStore((s) => s.machine?.library);
   // The file picked last. It stays while its confirm closes, so the confirm's text does not change.
   const [picked, setPicked] = useState<string>();
   const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<ImportResult>();
+  const [result, setResult] = useState<ApplyResult>();
   const [adding, setAdding] = useState(false);
-  const pending = useSettling(IMPORT_LABEL) || adding;
+  const pending = useSettling(APPLY_LABEL) || adding;
 
   const pick = async () => {
     const path = await pickSnapshot(library);
@@ -145,12 +145,15 @@ const ImportFile = () => {
     }
   };
 
-  /** The import, then the sources it names that this machine lacks; undefined when it failed. */
-  const runImport = async (path: string): Promise<ImportResult | undefined> => {
-    const outcome = await runUntilSettled(["import", path, "--yes"], {
-      label: IMPORT_LABEL,
-      success: `Imported settings from ${fileName(path)}`,
-    });
+  /** The apply, then the sources it names that this machine lacks; undefined when it failed. */
+  const runApply = async (path: string): Promise<ApplyResult | undefined> => {
+    const outcome = await runUntilSettled(
+      ["snapshot", "apply", path, "--yes"],
+      {
+        label: APPLY_LABEL,
+        success: `Applied snapshot ${fileName(path)}`,
+      }
+    );
     if (outcome.exitCode !== EXIT_CODES.ok) {
       return undefined;
     }
@@ -164,11 +167,11 @@ const ImportFile = () => {
     };
   };
 
-  const importFile = async (path: string) => {
+  const applyFile = async (path: string) => {
     setConfirming(false);
     setResult(undefined);
     setAdding(true);
-    const done = await runImport(path);
+    const done = await runApply(path);
     setAdding(false);
     setResult(done);
   };
@@ -185,7 +188,7 @@ const ImportFile = () => {
           }}
         >
           {pending && <Spinner />}
-          Import…
+          Apply…
         </Button>
       </span>
       <Confirm
@@ -195,13 +198,13 @@ const ImportFile = () => {
             setConfirming(false);
           }
         }}
-        title="Replace your current settings and update library?"
-        description="This will install missing skills and may update existing skills."
+        title="Apply this snapshot?"
+        description="This will replace your current settings, install missing skills and may update existing skills."
         detail={picked}
-        action="Import"
+        action="Apply"
         onConfirm={() => {
           if (picked !== undefined) {
-            void importFile(picked);
+            void applyFile(picked);
           }
         }}
       />
@@ -210,11 +213,11 @@ const ImportFile = () => {
   );
 };
 
-export const ImportSettingsSection = () => (
+export const ApplySnapshotSection = () => (
   <SettingsSection
-    title="Import settings"
-    description="Replaces the settings on this machine with the ones from an exported file."
+    title="Apply snapshot"
+    description="Replaces this machine's settings, skills and placements with the ones in a snapshot."
   >
-    <ImportFile />
+    <ApplyFile />
   </SettingsSection>
 );

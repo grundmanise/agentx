@@ -34,12 +34,12 @@
       {
         "group": "Skills",
         "icon": "wand-sparkles",
-        "pages": ["sources", "cli/skill", "cli/source", "cli/adopt", "cli/fork"]
+        "pages": ["sources", "cli/skill", "cli/source", "cli/skill-import", "cli/fork"]
       },
       {
         "group": "This machine",
         "icon": "laptop",
-        "pages": ["cli/machine", "cli/config", "agent-placement", "remove-agent", "cli/export", "cli/doctor", "cli/update", "activity-log"]
+        "pages": ["cli/machine", "cli/config", "agent-placement", "remove-agent", "cli/snapshot", "cli/doctor", "cli/update", "activity-log"]
       },
       {
         "group": "Reference",

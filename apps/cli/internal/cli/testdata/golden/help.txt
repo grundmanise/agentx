@@ -12,59 +12,59 @@ Usage:
   agentx [--json] [--verbose] [--color on|off] <command> [arguments]
 
 SKILLS
-  skill add <source>              Install skills from a source and place them
-  skill new <name>                Create a skill of your own from the template
-  skill fork <name>               Fork a skill into one of your own, with a history
-  skill list                      List the library: sources, states and placements
-  skill place <name>              Place a skill, or put its placements back
-  skill remove <name>             Remove a skill from a client or from the machine
-  skill rename <old> <new>        Rename one of your own skills
-  skill diff <name>               Show unpublished edits, or what an update changes
-  skill history <name>            List the commits of one of your own skills
-  skill files <name>              Read every file of a skill, with its content
+  skill add <source>                     Install skills from a source and place them
+  skill new <name>                       Create a skill of your own from the template
+  skill import [<name>...]               Import skills another tool installed, and unmanaged skills
+  skill fork <name>                      Fork a skill into one of your own, with a history
+  skill list                             List the library: sources, states and placements
+  skill place <name>                     Place a skill, or put its placements back
+  skill remove <name>                    Remove a skill from a client or from the machine
+  skill rename <old> <new>               Rename one of your own skills
+  skill diff <name>                      Show unpublished edits, or what an update changes
+  skill history <name>                   List the commits of one of your own skills
+  skill files <name>                     Read every file of a skill, with its content
 
 UPDATES AND PUBLISHING
-  skill check-updates             Look for upstream updates and other machines' edits
-  skill update <name>...          Apply the update the last check found
-  skill publish [<name>...]       Publish edits to the source or the account remote
+  skill check-updates                    Look for upstream updates and other machines' edits
+  skill update <name>...                 Apply the update the last check found
+  skill publish [<name>...]              Publish edits to the source or the account remote
 
 SOURCES
-  source add <url>                Fetch a git repository and add it as a source
-  source list                     List the sources of this machine
-  source skills <url|id>          List the installable skills of a source
-  source read <url|id> <subpath>  Read the SKILL.md of a skill in a source
-  source fetch [<url|id>...]      Fetch sources again and report what moved
-  source remove <url|id>          Remove a source and what was fetched from it
+  source add <url>                       Fetch a git repository and add it as a source
+  source list                            List the sources of this machine
+  source skills <url|id>                 List the installable skills of a source
+  source read <url|id> <subpath>         Read the SKILL.md of a skill in a source
+  source fetch [<url|id>...]             Fetch sources again and report what moved
+  source remove <url|id>                 Remove a source and what was fetched from it
 
 MACHINES
-  machine                         Print this machine's id, label and agentx's paths
-  machine rename <label>          Change this machine's label
-  machine reset-id                Replace this machine's id with a new random one
-  export [<name>]|--machine <id>  Write a snapshot to the library or the account remote
-  import <file>|--machine <id>    Apply a snapshot: settings, skills and placements
+  machine                                Print this machine's id, label and agentx's paths
+  machine rename <label>                 Change this machine's label
+  machine reset-id                       Replace this machine's id with a new random one
+  snapshot save [<name>]|--machine <id>  Save a snapshot to the library or the account remote
+  snapshot apply <file>|--machine <id>   Apply a snapshot: settings, skills and placements
 
 SETTINGS
-  config list                     Print every setting
-  config get <key>                Print one setting
-  config set <key> <value>        Change label, accept_operations or ignore_system_files
-  config enable <configuration>   Select a client for placements by default
-  config disable <configuration>  Leave a client out of placements by default
-  config placement <id> <mode>    Choose whether a client gets symlinks or copies
-  config remove <id>...           Delete the configuration directory of a client
+  config list                            Print every setting
+  config get <key>                       Print one setting
+  config set <key> <value>               Change label, accept_operations or ignore_system_files
+  config enable <configuration>          Select a client for placements by default
+  config disable <configuration>         Leave a client out of placements by default
+  config placement <id> <mode>           Choose whether a client gets symlinks or copies
+  config remove <id>...                  Delete the configuration directory of a client
 
 INVENTORY AND DIAGNOSTICS
-  scan                            Inventory the clients, their skills, MCP servers and plugins
-  serve                           Stream an inventory on every change, for the desktop app
-  doctor                          Check that agentx can run: git, home and the account repo
-  adopt [skills-cli|skillshare]   Adopt skills another tool installed, and unmanaged skills
-  version                         Print the CLI version and its output schema version
-  update                          Update agentx to the latest release, or check for one
+  scan                                   Inventory the clients, their skills, MCP servers and plugins
+  serve                                  Stream an inventory on every change, for the desktop app
+  doctor                                 Check that agentx can run: git, home and the account repo
+  version                                Print the CLI version and its output schema version
+  update                                 Update agentx to the latest release, or check for one
 
 Examples:
   agentx skill add anthropics/skills --name pdf  install one skill into every enabled client
   agentx skill new release-notes                 create a skill of your own
   agentx skill check-updates                     see what changed upstream before you update
-  agentx export --machine cloud                  seed the cloud machine with this one's skills
+  agentx snapshot save --machine cloud           seed the cloud machine with this one's skills
 
 Global flags:
       --color string  colour the text output: on or off; left out, a terminal gets colour and a pipe does not

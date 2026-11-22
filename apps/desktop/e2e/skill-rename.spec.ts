@@ -27,7 +27,7 @@ const openSkill = async (
   key = name
 ) => {
   cli.onServeStart({ events: [commitHelperForked] });
-  cli.register(["adopt"], { events: adoption });
+  cli.register(["skill", "import"], { events: adoption });
   cli.register(["source", "list"], { events: sources });
   for (const n of ["commit-helper", "my-commit-helper", "release-notes"]) {
     cli.register(["skill", "history", n], { events: [] });

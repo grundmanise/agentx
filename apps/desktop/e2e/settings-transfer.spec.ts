@@ -1,8 +1,9 @@
-// The Export settings and Import settings sections of Settings, the last ones of the page: Export
-// settings runs `export <name>` (with --force after the overwrite confirm), and Import settings
-// runs `import <file> --yes` on the file the open dialog returns after its confirm, then
-// `source add` for each source of the imported settings this machine has not downloaded, one
-// after another and without asking, and shows what was installed, updated and skipped.
+// The Save snapshot and Apply snapshot sections of Settings, the last ones of the page: Save
+// snapshot runs `snapshot save <name>` (with --force after the overwrite confirm), and Apply
+// snapshot runs `snapshot apply <file> --yes` on the file the open dialog returns after its
+// confirm, then `source add` for each source of the applied settings this machine has not
+// downloaded, one after another and without asking, and shows what was installed, updated and
+// skipped.
 import type { Page } from "@playwright/test";
 
 import {
@@ -38,10 +39,10 @@ const later = (cli: MockCli) =>
 
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
-const exportSettings = (page: Page) =>
-  page.getByRole("region", { name: "Export settings" });
-const importSettings = (page: Page) =>
-  page.getByRole("region", { name: "Import settings" });
+const saveSnapshot = (page: Page) =>
+  page.getByRole("region", { name: "Save snapshot" });
+const applySnapshot = (page: Page) =>
+  page.getByRole("region", { name: "Apply snapshot" });
 
 const openSettings = async (cli: MockCli, page: Page) => {
   cli.register(["source", "list"], { events: sourcesBefore });
@@ -49,47 +50,47 @@ const openSettings = async (cli: MockCli, page: Page) => {
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })
   ).toBeVisible();
-  await expect(exportSettings(page)).toBeVisible();
-  await expect(importSettings(page)).toBeVisible();
+  await expect(saveSnapshot(page)).toBeVisible();
+  await expect(applySnapshot(page)).toBeVisible();
 };
 
-test("exports under the name given and toasts the path the CLI wrote", async ({
+test("saves under the name given and toasts the path the CLI wrote", async ({
   cli,
   page,
 }) => {
-  cli.register(["export", "agentx-export"], { events: exported });
+  cli.register(["snapshot", "save", "agentx-export"], { events: exported });
   await openSettings(cli, page);
-  const section = exportSettings(page);
+  const section = saveSnapshot(page);
   await expect(section).toContainText(
-    "Save your settings and library to back up or import on another device."
+    "Save your settings and library to back up or move to another device."
   );
   const name = section.getByRole("textbox", { name: "File name" });
   await expect(name).toHaveValue("agentx-export");
-  await section.getByRole("button", { exact: true, name: "Export" }).click();
+  await section.getByRole("button", { exact: true, name: "Save" }).click();
   await expect(toasts(page)).toContainText(
-    `Exported settings to ${LIBRARY}/agentx-export.json`
+    `Saved snapshot to ${LIBRARY}/agentx-export.json`
   );
-  expect(later(cli)).toEqual([["export", "agentx-export", "--json"]]);
+  expect(later(cli)).toEqual([["snapshot", "save", "agentx-export", "--json"]]);
 
-  // A name export would refuse disables Export.
+  // A name snapshot save would refuse disables Save.
   await name.fill("snapshot.json");
   await expect(section).toContainText(
     "Enter a file name without an extension or a slash"
   );
   await expect(
-    section.getByRole("button", { exact: true, name: "Export" })
+    section.getByRole("button", { exact: true, name: "Save" })
   ).toBeDisabled();
   await name.fill("work-laptop");
   await expect(
-    section.getByRole("button", { exact: true, name: "Export" })
+    section.getByRole("button", { exact: true, name: "Save" })
   ).toBeEnabled();
 });
 
-test("a failed export shows the CLI's message and hint under the field, as one paragraph", async ({
+test("a failed save shows the CLI's message and hint under the field, as one paragraph", async ({
   cli,
   page,
 }) => {
-  cli.register(["export", "agentx-export"], {
+  cli.register(["snapshot", "save", "agentx-export"], {
     events: [
       {
         code: "internal",
@@ -101,27 +102,29 @@ test("a failed export shows the CLI's message and hint under the field, as one p
     exitCode: 10,
   });
   await openSettings(cli, page);
-  const section = exportSettings(page);
-  await section.getByRole("button", { exact: true, name: "Export" }).click();
+  const section = saveSnapshot(page);
+  await section.getByRole("button", { exact: true, name: "Save" }).click();
   // The message and the hint as one sentence-cased paragraph.
   await expect(section.getByRole("alert")).toHaveText(
     `Can't write ${LIBRARY}/agentx-export.json: permission denied. Check that you can write to the library.`
   );
-  expect(later(cli)).toEqual([["export", "agentx-export", "--json"]]);
+  expect(later(cli)).toEqual([["snapshot", "save", "agentx-export", "--json"]]);
 });
 
-test("asks before it replaces a file in the library, then exports with --force", async ({
+test("asks before it replaces a file in the library, then saves with --force", async ({
   cli,
   page,
 }) => {
-  cli.register(["export", "agentx-export"], {
+  cli.register(["snapshot", "save", "agentx-export"], {
     events: alreadyThere,
     exitCode: 6,
   });
-  cli.register(["export", "agentx-export", "--force"], { events: exported });
+  cli.register(["snapshot", "save", "agentx-export", "--force"], {
+    events: exported,
+  });
   await openSettings(cli, page);
-  await exportSettings(page)
-    .getByRole("button", { exact: true, name: "Export" })
+  await saveSnapshot(page)
+    .getByRole("button", { exact: true, name: "Save" })
     .click();
   const confirm = page.getByRole("alertdialog", {
     name: "Replace agentx-export.json?",
@@ -130,23 +133,23 @@ test("asks before it replaces a file in the library, then exports with --force",
   await expect(confirm).toContainText(
     "A file with this name is already in your library."
   );
-  expect(later(cli)).toEqual([["export", "agentx-export", "--json"]]);
+  expect(later(cli)).toEqual([["snapshot", "save", "agentx-export", "--json"]]);
   await confirm.getByRole("button", { name: "Replace" }).click();
   await expect(toasts(page)).toContainText(
-    `Exported settings to ${LIBRARY}/agentx-export.json`
+    `Saved snapshot to ${LIBRARY}/agentx-export.json`
   );
   expect(later(cli)).toEqual([
-    ["export", "agentx-export", "--json"],
-    ["export", "agentx-export", "--force", "--json"],
+    ["snapshot", "save", "agentx-export", "--json"],
+    ["snapshot", "save", "agentx-export", "--force", "--json"],
   ]);
 });
 
-test("imports the picked file after its confirm, adds the sources it names without asking and shows what changed", async ({
+test("applies the picked snapshot after its confirm, adds the sources it names without asking and shows what changed", async ({
   cli,
   page,
 }) => {
   cli.answerOpenDialog(SNAPSHOT);
-  cli.register(["import", SNAPSHOT, "--yes"], { events: imported });
+  cli.register(["snapshot", "apply", SNAPSHOT, "--yes"], { events: imported });
   const accountAdd = cli.register(["source", "add", NEW_ACCOUNT, "--account"], {
     events: [
       { account: true, id: "s-new-account", type: "source", url: NEW_ACCOUNT },
@@ -158,43 +161,43 @@ test("imports the picked file after its confirm, adds the sources it names witho
     exitCode: 3,
   });
   await openSettings(cli, page);
-  const section = importSettings(page);
+  const section = applySnapshot(page);
   await expect(section).toContainText(
-    "Replaces the settings on this machine with the ones from an exported file."
+    "Replaces this machine's settings, skills and placements with the ones in a snapshot."
   );
-  const importButton = section.getByRole("button", { name: "Import…" });
-  await importButton.click();
+  const applyButton = section.getByRole("button", { name: "Apply…" });
+  await applyButton.click();
 
   const confirm = page.getByRole("alertdialog", {
-    name: "Replace your current settings and update library?",
+    name: "Apply this snapshot?",
   });
   await expect(confirm).toBeVisible();
   await expect(confirm.getByRole("paragraph")).toHaveText([
-    "This will install missing skills and may update existing skills.",
+    "This will replace your current settings, install missing skills and may update existing skills.",
     SNAPSHOT,
   ]);
   expect(cli.openDialogs).toEqual([
     expect.objectContaining({ defaultPath: LIBRARY, multiple: false }),
   ]);
 
-  // The imported settings name sources this machine has not downloaded.
+  // The applied settings name sources this machine has not downloaded.
   cli.register(["source", "list"], { events: sourcesAfterImport });
-  await confirm.getByRole("button", { name: "Import" }).click();
+  await confirm.getByRole("button", { name: "Apply" }).click();
   await expect(toasts(page)).toContainText(
-    "Imported settings from agentx-export.json"
+    "Applied snapshot agentx-export.json"
   );
 
-  // The sources are added one after another, with no click, and Import… waits for the last.
+  // The sources are added one after another, with no click, and Apply… waits for the last.
   await expect
     .poll(() => later(cli))
     .toEqual([
-      ["import", SNAPSHOT, "--yes", "--json"],
+      ["snapshot", "apply", SNAPSHOT, "--yes", "--json"],
       ["source", "add", NEW_ACCOUNT, "--account", "--json"],
     ]);
-  await expect(importButton).toBeDisabled();
-  await expect(importButton).toHaveAttribute("aria-busy", "true");
+  await expect(applyButton).toBeDisabled();
+  await expect(applyButton).toHaveAttribute("aria-busy", "true");
   accountAdd.release();
-  const result = section.getByRole("region", { name: "Import result" });
+  const result = section.getByRole("region", { name: "Apply result" });
 
   await expect(result.getByRole("paragraph")).toHaveText([
     "Installed: pdf, review-kit",
@@ -202,7 +205,7 @@ test("imports the picked file after its confirm, adds the sources it names witho
     "Skipped: notes, drafts",
     `Couldn't reach ${TEAM}`,
   ]);
-  // Import… waits for the inventory that follows the commands, then is free again.
+  // Apply… waits for the inventory that follows the commands, then is free again.
   await cli.serveEmit(
     cli.requestIds.map((id) => ({
       ok: true,
@@ -210,9 +213,9 @@ test("imports the picked file after its confirm, adds the sources it names witho
       type: "refresh_complete" as const,
     }))
   );
-  await expect(importButton).toBeEnabled();
+  await expect(applyButton).toBeEnabled();
   expect(later(cli)).toEqual([
-    ["import", SNAPSHOT, "--yes", "--json"],
+    ["snapshot", "apply", SNAPSHOT, "--yes", "--json"],
     ["source", "add", NEW_ACCOUNT, "--account", "--json"],
     ["source", "add", `${TEAM}#v2`, "--json"],
   ]);
@@ -222,24 +225,28 @@ test("imports the picked file after its confirm, adds the sources it names witho
   await expect(notes).toHaveAccessibleDescription(UNMANAGED_REASON);
 });
 
-test("an import that installed, updated and skipped nothing says so", async ({
+test("a snapshot that installed, updated and skipped nothing says so", async ({
   cli,
   page,
 }) => {
   cli.answerOpenDialog(SNAPSHOT);
-  cli.register(["import", SNAPSHOT, "--yes"], { events: nothingNew });
+  cli.register(["snapshot", "apply", SNAPSHOT, "--yes"], {
+    events: nothingNew,
+  });
   await openSettings(cli, page);
-  const section = importSettings(page);
-  await section.getByRole("button", { name: "Import…" }).click();
+  const section = applySnapshot(page);
+  await section.getByRole("button", { name: "Apply…" }).click();
   await page
     .getByRole("alertdialog", {
-      name: "Replace your current settings and update library?",
+      name: "Apply this snapshot?",
     })
-    .getByRole("button", { name: "Import" })
+    .getByRole("button", { name: "Apply" })
     .click();
-  const result = section.getByRole("region", { name: "Import result" });
+  const result = section.getByRole("region", { name: "Apply result" });
   await expect(result.getByRole("paragraph")).toHaveText([
     "No skills were installed or updated.",
   ]);
-  expect(later(cli)).toEqual([["import", SNAPSHOT, "--yes", "--json"]]);
+  expect(later(cli)).toEqual([
+    ["snapshot", "apply", SNAPSHOT, "--yes", "--json"],
+  ]);
 });

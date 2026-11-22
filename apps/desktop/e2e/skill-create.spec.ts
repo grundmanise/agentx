@@ -79,7 +79,7 @@ const createButton = (page: Page) =>
 /** Registers the reads of the fixture machine and of the new skill once it is selected. */
 const registerReads = (cli: MockCli, machine: InlineEvent = inventory) => {
   cli.onServeStart({ events: [machine] });
-  cli.register(["adopt"], { events: adoption });
+  cli.register(["skill", "import"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });

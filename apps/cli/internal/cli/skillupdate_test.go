@@ -903,7 +903,7 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 						h.mustRun("skill", "new", "forky")
 					},
 					message: "forky has no upstream to update from",
-					hint:    "a skill created with 'agentx skill new', adopted with 'agentx adopt', or forked from a plugin's skill, has no upstream version; its versions are its own commits",
+					hint:    "a skill created with 'agentx skill new', imported with 'agentx skill import', or forked from a plugin's skill, has no upstream version; its versions are its own commits",
 				},
 				{
 					name: "an edited skill with no update", skill: "alpha", exit: 0,
@@ -1825,7 +1825,7 @@ func TestSkillUpdateOfAnAdoptedSkill(t *testing.T) {
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
 		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha/SKILL.md",
 	}})
-	h.mustRun("adopt", "--all")
+	h.mustRun("skill", "import", "--all")
 	s.write("skills/alpha/notes.md", "alpha notes, revised again\n")
 	s.commit("a third version")
 	h.mustRun("skill", "check-updates")

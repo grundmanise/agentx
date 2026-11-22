@@ -16,7 +16,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// agentx adopt takes over an unmanaged skill, one no other tool recorded
+// agentx skill import takes over an unmanaged skill, one no other tool recorded
 // or one whose record names nowhere agentx can install it from, as one of
 // the user's own. It is a fork in the skill's place with nothing to fork
 // from, see forkOf and makeFork: a branch of its own whose first commit
@@ -171,7 +171,7 @@ func ownRepoRefusal(name, repo string) *failure {
 // name name, which agentx cannot give a skill.
 func invalidNameRefusal(name, dir string) *failure {
 	return refuse(exitRefused, forkNameRefusal(name),
-		"rename "+quotedPath(dir)+" to a valid name, then run 'agentx adopt --skill <new name>'").listed(invalidNameRow(dir))
+		"rename "+quotedPath(dir)+" to a valid name, then run 'agentx skill import <new name>'").listed(invalidNameRow(dir))
 }
 
 // adoptChanged refuses an adoption of the skill called name that found it
@@ -894,8 +894,8 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, nil)
 	out.emit(ev)
 	if len(fk.places) == 0 && len(fk.copies) == 0 {
-		inv.summary = "adopted " + name
-		out.done("adopted " + out.paint(heading, name))
+		inv.summary = "imported " + name
+		out.done("imported " + out.paint(heading, name))
 		inv.noAccountRemoteHint(ev)
 		return nil
 	}
@@ -910,10 +910,10 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 		from = " from " + quotedPath(fk.from)
 	}
 	rows := inv.ownPlacements(fk.target, done.placed, filterPlacements(ev.Placements, targetIDs(done.placed)))
-	out.done("adopted " + out.paint(heading, name) + from + ": " + out.paint(noteStyle, plural(len(rows), "placement")))
+	out.done("imported " + out.paint(heading, name) + from + ": " + out.paint(noteStyle, plural(len(rows), "placement")))
 	inv.printPlacementRows(fk.target, rows)
 	inv.printUniversal(ev.Universal)
 	inv.noAccountRemoteHint(ev)
-	inv.summary = "adopted " + name + from + " in " + plural(len(done.placed), "configuration") + universalClause(ev.Universal)
+	inv.summary = "imported " + name + from + " in " + plural(len(done.placed), "configuration") + universalClause(ev.Universal)
 	return nil
 }

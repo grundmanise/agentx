@@ -5,7 +5,7 @@
 // editor of their choice (ADR 0001, ADR 0013). Its calls to the operating system beside that are the opener plugin, which
 // shows a path selected in Finder (the file manager elsewhere) and opens a skill's file in the
 // system's default application when the user asks, and the dialog plugin's open dialog, in which
-// the user picks a file to import: it returns the path, and the app passes it to the CLI without
+// the user picks a snapshot to apply: it returns the path, and the app passes it to the CLI without
 // reading the file.
 
 mod editor;

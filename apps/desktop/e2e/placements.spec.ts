@@ -63,7 +63,7 @@ const openSkill = async (
   records: InlineEvent[] = adoption
 ) => {
   cli.onServeStart({ events: [machine] });
-  cli.register(["adopt"], { events: records });
+  cli.register(["skill", "import"], { events: records });
   cli.register(["source", "list"], { events: sources });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
@@ -268,7 +268,7 @@ test.describe("chips", () => {
     await chip(candidate, "Claude Code").click();
     await expect(toasts(page).getByText(adopt)).toBeVisible();
     // The toast offers what unlocks the chips: Adopt, for a skill another tool installed.
-    cli.register(["adopt", "--skill", "scratch"]);
+    cli.register(["skill", "import", "scratch"]);
     await toasts(page).getByRole("button", { name: "Import" }).click();
     await expect(
       toasts(page).getByText("Imported scratch skill")
@@ -279,7 +279,7 @@ test.describe("chips", () => {
     await skills.getByRole("button", { exact: true, name: "notes" }).click();
     await chip(pane(page, "notes"), "Claude Code").click();
     await expect(toasts(page).getByText(adopt)).toBeVisible();
-    cli.register(["adopt", "--skill", "notes"], {
+    cli.register(["skill", "import", "notes"], {
       events: [{ name: "notes", type: "library_skill" }],
     });
     await toasts(page).getByRole("button", { name: "Import" }).click();
@@ -307,14 +307,14 @@ test.describe("chips", () => {
         "This skill is not managed by agentx. Import it to manage"
       )
     ).toBeVisible();
-    cli.register(["adopt", "--skill", "scratch"], {
+    cli.register(["skill", "import", "scratch"], {
       events: [{ name: "scratch", type: "library_skill" }],
     });
     await toasts(page).getByRole("button", { name: "Import" }).click();
     await expect(
       toasts(page).getByText("Imported scratch skill")
     ).toBeVisible();
-    expect(later(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
+    expect(later(cli)).toEqual([["skill", "import", "scratch", "--json"]]);
   });
 
   test("an adoption a folder whose files differ stops: says so, and Replace asks before --force", async ({
@@ -323,7 +323,7 @@ test.describe("chips", () => {
   }) => {
     await openSkill(cli, page, "scratch", "scratch", inventory, []);
     await chip(pane(page, "scratch"), "Claude Code").click();
-    cli.register(["adopt", "--skill", "scratch"], {
+    cli.register(["skill", "import", "scratch"], {
       events: [
         {
           code: "refused",
@@ -341,7 +341,7 @@ test.describe("chips", () => {
     await expect(toast).toContainText(
       "/home/me/.claude/skills/scratch contains files that differ from the skill version"
     );
-    cli.register(["adopt", "--skill", "scratch", "--force"], {
+    cli.register(["skill", "import", "scratch", "--force"], {
       events: [{ name: "scratch", type: "library_skill" }],
     });
     await toast.getByRole("button", { name: "Replace" }).click();
@@ -354,8 +354,8 @@ test.describe("chips", () => {
       toasts(page).getByText("Imported scratch skill")
     ).toBeVisible();
     expect(later(cli)).toEqual([
-      ["adopt", "--skill", "scratch", "--json"],
-      ["adopt", "--skill", "scratch", "--force", "--json"],
+      ["skill", "import", "scratch", "--json"],
+      ["skill", "import", "scratch", "--force", "--json"],
     ]);
   });
 
@@ -365,7 +365,7 @@ test.describe("chips", () => {
   }) => {
     await openSkill(cli, page, "scratch", "scratch", inventory, []);
     await chip(pane(page, "scratch"), "Claude Code").click();
-    cli.register(["adopt", "--skill", "scratch"], {
+    cli.register(["skill", "import", "scratch"], {
       events: [
         {
           code: "refused",

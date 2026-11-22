@@ -1,6 +1,6 @@
-// What the Export settings and Import settings sections of Settings are tested against: the
-// sources before and after an import, and the events of `export`, `import --yes` and a
-// `source add` that cannot reach its source.
+// What the Save snapshot and Apply snapshot sections of Settings are tested against: the sources
+// before and after a snapshot is applied, and the events of `snapshot save`,
+// `snapshot apply --yes` and a `source add` that cannot reach its source.
 import type { InlineEvent } from "../harness/cli.ts";
 
 export const LIBRARY = "/home/me/.agents/skills";
@@ -78,8 +78,8 @@ export const UNMANAGED_REASON =
   "notes is unmanaged, so there is no source to install it from";
 
 /**
- * What `import <file> --yes` reports: the settings it wrote, then one `import_skill` per entry,
- * two installed, one updated, one kept, one placed and two skipped.
+ * What `snapshot apply <file> --yes` reports: the settings it wrote, then one `import_skill` per
+ * entry, two installed, one updated, one kept, one placed and two skipped.
  */
 export const imported: InlineEvent[] = [
   { type: "settings" },

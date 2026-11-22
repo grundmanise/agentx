@@ -100,8 +100,9 @@ export const inventory = {
 } satisfies InlineEvent;
 
 /**
- * What `adopt` would take over: the candidate of the Skills fixture, and one entry it refuses, in
- * the CLI's words. That one names no source: the CLI gives one only where it can install from it.
+ * What `skill import` would take over: the candidate of the Skills fixture, and one entry it
+ * refuses, in the CLI's words. That one names no source: the CLI gives one only where it can
+ * install from it.
  */
 export const adoption: AdoptionEvent[] = [
   ...skillsAdoption,

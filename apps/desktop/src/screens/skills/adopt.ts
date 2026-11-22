@@ -1,9 +1,10 @@
 // Adopting the skills another tool installed, all at once: which tools have skills to adopt, and
 // the one run that adopts them, which the Adopt skills section of Settings and the Unmanaged
 // group's Adopt all both start through the adopt dialog (`adopt-dialog.tsx`). The run is
-// `adopt <tool> --all` per tool, one after another. Each skill of the dialog is a row whose state
-// follows the run's `progress` events, and whose result is the `adoption` event the run reports
-// for it. The dialog shows the result, so no toast does; the activity list still logs each run.
+// `skill import --from <tool> --all` per tool, one after another. Each skill of the dialog is a
+// row whose state follows the run's `progress` events, and whose result is the `adoption` event
+// the run reports for it. The dialog shows the result, so no toast does; the activity list still
+// logs each run.
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -17,10 +18,10 @@ import { runUntilSettled } from "#/store/settle.ts";
 import { addActivity } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
-/** The argument of `adopt` that names a tool. */
+/** The value of `skill import --from` that names a tool. */
 export type ToolArg = "skills-cli" | "skillshare";
 
-/** A tool `adopt` takes the skills of: the `tool` of its records, and the argument that names it. */
+/** A tool `skill import` takes the skills of: the `tool` of its records, and its `--from` value. */
 interface Tool {
   tool: AdoptionEvent["tool"];
   arg: ToolArg;
@@ -282,8 +283,8 @@ const answeredByRunner = (outcome: Outcome) =>
   outcome.cancelled;
 
 /**
- * Runs one tool's `adopt <tool> --all` and settles its rows. Returns false when the run did not
- * report its skills, and the runs after it should not start.
+ * Runs one tool's `skill import --from <tool> --all` and settles its rows. Returns false when the
+ * run did not report its skills, and the runs after it should not start.
  */
 const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
   const offered = new Set(
@@ -291,21 +292,26 @@ const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
       .filter((r) => r.tool === tool && r.status === "waiting")
       .map((r) => r.name)
   );
-  const outcome = await runUntilSettled(["adopt", tool, "--all"], {
-    label: `adopt all ${tool}`,
-    onProgress: (progress) => {
-      const { phase, subject } = progress;
-      update((run) => ({
-        ...run,
-        rows: run.rows.map((row) =>
-          row.tool === tool && row.name === subject ? stepped(row, phase) : row
-        ),
-        started: run.started + (phase === "blobs" ? 1 : 0),
-      }));
-    },
-    ownActivity: (failed) => activityOf(failed.events, offered),
-    ownFailure: true,
-  });
+  const outcome = await runUntilSettled(
+    ["skill", "import", "--from", tool, "--all"],
+    {
+      label: `adopt all ${tool}`,
+      onProgress: (progress) => {
+        const { phase, subject } = progress;
+        update((run) => ({
+          ...run,
+          rows: run.rows.map((row) =>
+            row.tool === tool && row.name === subject
+              ? stepped(row, phase)
+              : row
+          ),
+          started: run.started + (phase === "blobs" ? 1 : 0),
+        }));
+      },
+      ownActivity: (failed) => activityOf(failed.events, offered),
+      ownFailure: true,
+    }
+  );
   const adoption = adoptionsOf(outcome.events);
   if (outcome.exitCode === EXIT_CODES.ok) {
     const text = activityOf(outcome.events, offered);

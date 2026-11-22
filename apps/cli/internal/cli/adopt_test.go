@@ -181,7 +181,7 @@ func TestAdoptInstallsTheVersionTheSourceHoldsNow(t *testing.T) {
 		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha/SKILL.md",
 	}})
 
-	out := h.run("--json", "adopt", "--all")
+	out := h.run("--json", "skill", "import", "--all")
 	equal(t, "exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
 	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), map[string]string{
@@ -200,7 +200,7 @@ func TestAdoptInstallsTheVersionTheSourceHoldsNow(t *testing.T) {
 	if phases := progressPhases(h.eventsOfType(out.stdout, "progress")); strings.Join(phases, ",") != adoptPhases {
 		t.Errorf("progress phases = %v, want %s", phases, adoptPhases)
 	}
-	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "adopted alpha from "+s.url)
+	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "imported alpha from "+s.url)
 	// The Vercel CLI's link in the client's folder already leads to the
 	// library directory, so it is the placement, kept as it is.
 	if link, err := os.Readlink(filepath.Join(h.home, ".claude", "skills", "alpha")); err != nil || filepath.IsAbs(link) {
@@ -208,15 +208,15 @@ func TestAdoptInstallsTheVersionTheSourceHoldsNow(t *testing.T) {
 	}
 	equal(t, "placements", len(installed["placements"].([]any)), 1)
 
-	preview := h.run("--json", "adopt")
+	preview := h.run("--json", "skill", "import")
 	equal(t, "exit", preview.exit, 0)
 	equal(t, "state afterwards", h.one(preview.stdout, "adoption")["state"], adoptManaged)
-	human := h.run("adopt")
+	human := h.run("skill", "import")
 	equal(t, "preview", human.stdout, "Already managed by agentx (1)\n  alpha\n\n"+
-		"Nothing to adopt: this machine has no unmanaged skill.\n")
-	again := h.run("adopt", "--all")
+		"Nothing to import: this machine has no unmanaged skill.\n")
+	again := h.run("skill", "import", "--all")
 	equal(t, "exit", again.exit, 0)
-	contains(t, "stdout", again.stdout, "Already adopted.")
+	contains(t, "stdout", again.stdout, "Already imported.")
 }
 
 // TestAdoptPreviewWritesNothing: with no flag the command only looks, an
@@ -232,7 +232,7 @@ func TestAdoptPreviewWritesNothing(t *testing.T) {
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "notes"), "SKILL.md"), skill("notes", "Take notes"))
 	before := names(t, h.agentx)
 
-	out := h.run("--json", "adopt")
+	out := h.run("--json", "skill", "import")
 	equal(t, "exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
 	if after := names(t, h.agentx); after != before {
@@ -285,11 +285,11 @@ func TestAdoptPrintsWhatItAdopted(t *testing.T) {
 		"alpha": {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha"},
 	})
 
-	out := h.run("adopt", "--skill", "alpha")
+	out := h.run("skill", "import", "alpha")
 	equal(t, "exit", out.exit, 0)
 	lines := strings.SplitN(out.stdout, "\n", 3)
 	equal(t, "the source line", lines[0], "✓ added source "+s.url+": 1 skill")
-	equal(t, "the skill line", lines[1], "✓ adopted alpha from "+s.url+" under skills/alpha: 1 placement")
+	equal(t, "the skill line", lines[1], "✓ imported alpha from "+s.url+" under skills/alpha: 1 placement")
 }
 
 // TestAdoptAddsTheSourceItNeeds: the source the lock file names has never
@@ -305,7 +305,7 @@ func TestAdoptAddsTheSourceItNeeds(t *testing.T) {
 		SkillPath: "skills/alpha", Ref: "v1",
 	}})
 
-	out := h.run("--json", "adopt", "--all")
+	out := h.run("--json", "skill", "import", "--all")
 	equal(t, "exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
 	settings, err := os.ReadFile(filepath.Join(h.agentx, "settings.json"))
@@ -334,7 +334,7 @@ func progressPhases(events []jsonEvent) []string {
 // --skill that cannot be adopted. A name can miss in two ways: no record
 // names it and nothing holds it, or a record holds it for a directory this
 // machine no longer has. The rest name a skill no record covers, which is
-// refused as agentx adopt refuses an unmanaged skill: one agentx manages
+// refused as agentx skill import refuses an unmanaged skill: one agentx manages
 // already, a name the library, the account repo or the account remote
 // holds for another skill, directories that differ between two clients, a
 // symlink where the directory would be, and what keeps a directory from
@@ -419,7 +419,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 		if c.name == "locked" && os.Geteuid() == 0 {
 			continue
 		}
-		out := h.run("--json", "adopt", "--skill", c.name)
+		out := h.run("--json", "skill", "import", c.name)
 		equal(t, c.name+": exit", out.exit, c.exit.exit)
 		e := lastError(t, h.events(out.stdout))
 		contains(t, c.name+": the error", e["message"].(string), c.want)
@@ -432,7 +432,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 
 	// Adopting every skill lists, in the preview's words, each one that
 	// only the run finds cannot be adopted, and succeeds.
-	all := h.run("--json", "adopt", "--all")
+	all := h.run("--json", "skill", "import", "--all")
 	equal(t, "every skill: exit", all.exit, 0)
 	for _, row := range []string{
 		"published could not be adopted: " + filepath.Join(claude, "published") + " has the name of a skill you already published. To adopt it, rename that folder",
@@ -461,9 +461,9 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	h, s := installHarness(t)
 	h.withIdentity("Ada Lovelace", "ada@example.com")
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "notes"), "SKILL.md"), skill("notes", "Take notes"))
-	text := h.mustRun("adopt", "--skill", "notes")
+	text := h.mustRun("skill", "import", "notes")
 	// No account remote is set, so the adoption ends with how to publish it.
-	equal(t, "the text output", text.stdout, "✓ adopted notes\n"+
+	equal(t, "the text output", text.stdout, "✓ imported notes\n"+
 		"No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish notes' to publish it.\n")
 	tip := h.ref(lineage.ForkRef("notes"))
 	equal(t, "the history", h.accountGit("rev-list", "--parents", lineage.ForkRef("notes")), tip)
@@ -483,12 +483,12 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 		writeFile(t, mkdirs(t, clients[client], "SKILL.md"), skill("jot", "Jot things down"))
 		writeFile(t, filepath.Join(clients[client], "pad.md"), "a pad\n")
 	}
-	out := h.run("--json", "adopt", "--skill", "jot")
+	out := h.run("--json", "skill", "import", "jot")
 	equal(t, "from the clients: exit", out.exit, 0)
 	equal(t, "from the clients: adoption events", len(h.eventsOfType(out.stdout, "adoption")), 0)
 	equal(t, "from the clients: kind", h.librarySkill(out.stdout, "jot")["kind"], lineage.KindManaged)
 	equal(t, "from the clients: the summary", h.one(out.stdout, "result")["summary"],
-		"adopted jot from "+clients[".claude"]+" in 3 configurations; always available to universal clients: codex, gemini-cli")
+		"imported jot from "+clients[".claude"]+" in 3 configurations; always available to universal clients: codex, gemini-cli")
 	equal(t, "from the clients: the tree", h.accountGit("ls-tree", "-r", "--name-only", h.ref(lineage.ForkRef("jot"))), "jot/SKILL.md\njot/pad.md")
 	equal(t, "from the clients: the moved file", fileBody(t, filepath.Join(h.agentx, "worktrees", "jot", "jot", "pad.md")), "a pad\n")
 	if link, _ := os.Readlink(filepath.Join(h.library, "jot")); link != "../../../agentx/worktrees/jot/jot" {
@@ -509,15 +509,15 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"beta": {
 		Source: "owner/repo", SourceType: "well-known", SourceURL: s.url, SkillPath: "skills/beta/SKILL.md",
 	}})
-	out = h.run("--json", "adopt", "skills-cli", "--skill", "beta")
+	out = h.run("--json", "skill", "import", "beta", "--from", "skills-cli")
 	equal(t, "installed from no git repository: exit", out.exit, 0)
 	h.lockUnchanged(h.lockPath(), lock)
 	equal(t, "installed from no git repository: the events", strings.Join(h.types(h.events(out.stdout)), ", "), "library_skill, adoption, result")
 	equal(t, "installed from no git repository: the adoption", h.one(out.stdout, "adoption")["state"], adoptAdopted)
-	equal(t, "installed from no git repository: the summary", h.one(out.stdout, "result")["summary"], "adopted beta")
+	equal(t, "installed from no git repository: the summary", h.one(out.stdout, "result")["summary"], "imported beta")
 	equal(t, "installed from no git repository: the edit", fileBody(t, filepath.Join(h.agentx, "worktrees", "beta", "beta", "notes.md")), "an edit of mine\n")
 	equal(t, "installed from no git repository: the subject", h.accountGit("log", "-1", "--format=%s", h.ref(lineage.ForkRef("beta"))), "Adopt beta")
-	again := h.run("--json", "adopt", "--all")
+	again := h.run("--json", "skill", "import", "--all")
 	equal(t, "adopted already: exit", again.exit, 0)
 	equal(t, "adopted already: the adoption", h.one(again.stdout, "adoption")["state"], adoptManaged)
 }
@@ -541,7 +541,7 @@ func TestAdoptReplacesAClientsCopyOfALibrarySkill(t *testing.T) {
 	cortex := filepath.Join(h.home, ".snowflake", "cortex", "skills", "rex")
 	writeFile(t, mkdirs(t, cortex, "SKILL.md"), skill("rex", "Run other things"))
 
-	out := h.run("adopt", "--skill", "rex")
+	out := h.run("skill", "import", "rex")
 	equal(t, "other files: exit", out.exit, 6)
 	equal(t, "other files: stderr", out.stderr, "error: rex cannot be adopted: \""+cortex+"\" contains files that differ from the skill version\n")
 	for _, dir := range []string{library, claude, cortex} {
@@ -551,11 +551,11 @@ func TestAdoptReplacesAClientsCopyOfALibrarySkill(t *testing.T) {
 	}
 	equal(t, "the other files", fileBody(t, filepath.Join(cortex, "SKILL.md")), skill("rex", "Run other things"))
 
-	out = h.run("--json", "adopt", "--skill", "rex", "--force")
+	out = h.run("--json", "skill", "import", "rex", "--force")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "warnings", out.stderr, "")
 	equal(t, "kind", h.librarySkill(out.stdout, "rex")["kind"], lineage.KindManaged)
-	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "adopted rex in 2 configurations")
+	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "imported rex in 2 configurations")
 	if link, _ := os.Readlink(library); link != "../../../agentx/worktrees/rex/rex" {
 		t.Errorf("the library symlink is %q", link)
 	}
@@ -584,17 +584,17 @@ func TestAdoptKeepsAClientsCopyWhereItPlacesCopies(t *testing.T) {
 	writeFile(t, mkdirs(t, edited, "SKILL.md"), skill("max", "Run more, edited"))
 	writeFile(t, filepath.Join(edited, "notes.md"), "mine\n")
 
-	out := h.run("--json", "adopt", "--skill", "max", "--force")
+	out := h.run("--json", "skill", "import", "max", "--force")
 	equal(t, "--force: exit", out.exit, 0)
 	equal(t, "--force: the copy", fileBody(t, filepath.Join(edited, "SKILL.md")), skill("max", "Run more"))
 	if _, err := os.Lstat(filepath.Join(edited, "notes.md")); !os.IsNotExist(err) {
 		t.Errorf("--force kept the copy's own file: %v", err)
 	}
 
-	out = h.run("--json", "adopt", "--skill", "rex")
+	out = h.run("--json", "skill", "import", "rex")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "warnings", out.stderr, "")
-	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "adopted rex in 1 configuration")
+	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "imported rex in 1 configuration")
 	if info, err := os.Lstat(claude); err != nil || !info.IsDir() {
 		t.Fatalf("claude-code's copy is gone or no directory: %v", err)
 	}
@@ -740,9 +740,9 @@ func TestPreviewSummary(t *testing.T) {
 		ready, refused, managed, gone int
 		want                          string
 	}{
-		{0, 0, 0, 0, "nothing to adopt"},
-		{2, 1, 1, 1, "3 unmanaged skills, 2 to adopt, 1 that cannot be adopted, 1 already managed, 1 no longer on this machine"},
-		{1, 0, 0, 0, "1 unmanaged skill, 1 to adopt"},
+		{0, 0, 0, 0, "nothing to import"},
+		{2, 1, 1, 1, "3 unmanaged skills, 2 to import, 1 that cannot be imported, 1 already managed, 1 no longer on this machine"},
+		{1, 0, 0, 0, "1 unmanaged skill, 1 to import"},
 		{0, 0, 2, 0, "no unmanaged skill, 2 already managed"},
 	} {
 		if got := previewSummary(tc.ready, tc.refused, tc.managed, tc.gone); got != tc.want {
@@ -789,9 +789,9 @@ func TestAdoptSelectionCheck(t *testing.T) {
 		{"a preview", adoptSelection{}, ""},
 		{"every skill", adoptSelection{all: true}, ""},
 		{"two skills", adoptSelection{names: []string{"alpha", "beta"}}, ""},
-		{"every skill and one", adoptSelection{all: true, names: []string{"alpha"}}, "--all and --skill"},
+		{"every skill and one", adoptSelection{all: true, names: []string{"alpha"}}, "--all and a skill name"},
 		{"one skill, forced", adoptSelection{names: []string{"alpha"}, force: true}, ""},
-		{"every skill, forced", adoptSelection{all: true, force: true}, "--force needs --skill"},
+		{"every skill, forced", adoptSelection{all: true, force: true}, "--force needs a skill name"},
 	} {
 		err := tc.sel.check()
 		if tc.says == "" {
@@ -814,14 +814,14 @@ func TestAdoptSelectionCheck(t *testing.T) {
 func TestAdoptFlagsThatAskForTwoThings(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	out := h.run("--json", "adopt", "--all", "--skill", "alpha")
+	out := h.run("--json", "skill", "import", "alpha", "--all")
 	equal(t, "exit", out.exit, exitUsage.exit)
 	equal(t, "error.code", lastError(t, h.events(out.stdout))["code"], "usage")
 
 	// The argument names a tool; a skill name there is pointed at --skill.
-	out = h.run("--json", "adopt", "zoom;out")
+	out = h.run("--json", "skill", "import", "--from", "zoom;out")
 	equal(t, "exit", out.exit, exitUsage.exit)
-	contains(t, "the hint", lastError(t, h.events(out.stdout))["hint"].(string), "agentx adopt --skill "+shellWord("zoom;out"))
+	contains(t, "the hint", lastError(t, h.events(out.stdout))["hint"].(string), "agentx skill import "+shellWord("zoom;out"))
 }
 
 // TestMixedPlacements names the configurations that read one directory
