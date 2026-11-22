@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type {
   LibraryEntry,
@@ -13,8 +13,9 @@ import { Spinner } from "#/components/spinner.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
-import { skillNamesOf } from "#/lib/problem-text.ts";
+import { problemSentence, skillNamesOf } from "#/lib/problem-text.ts";
 import { FloatingActionBar } from "#/screens/sources/action-bar.tsx";
+import { addProblem } from "#/screens/sources/add-problem.ts";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
 import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
@@ -143,13 +144,9 @@ const usePills = (
   if (justAdded !== undefined && sources.some((s) => s.id === justAdded.id)) {
     setJustAdded(undefined);
   }
-  const pills = useMemo(
-    () =>
-      sourcePills(
-        justAdded === undefined ? sources : [...sources, justAdded],
-        listings
-      ),
-    [sources, justAdded, listings]
+  const pills = sourcePills(
+    justAdded === undefined ? sources : [...sources, justAdded],
+    listings
   );
   return { pills, setJustAdded };
 };
@@ -250,7 +247,7 @@ export const SourcesScreen = () => {
     activePill === undefined || activePill.key === YOUR_SKILLS
       ? undefined
       : listings[activePill.key];
-  const shown = useMemo((): SkillCard[] => {
+  const shownCards = (): SkillCard[] => {
     if (activePill === undefined) {
       return noCards;
     }
@@ -269,26 +266,24 @@ export const SourcesScreen = () => {
             pageRef(sources.find((s) => s.id === activePill.key))
           )
         );
-  }, [activePill, installable, listing, library, sources]);
+  };
+  const shown = shownCards();
   // A search answer replaces the listing. While the latest query waits for its answer, the last
   // answer stays, so the list and its Select all count change once, not back to the listing between.
   const results = query.trim() === "" ? undefined : found;
-  const resultGroups = useMemo(
-    () =>
-      results === undefined
-        ? undefined
-        : groupCards(
-            nameOrder(
-              resultCards(
-                // A source removed while the answer is shown takes its results with it.
-                results.filter((r) => sources.some((s) => s.url === r.source)),
-                library,
-                (url) => pageRef(sources.find((s) => s.url === url))
-              )
+  const resultGroups =
+    results === undefined
+      ? undefined
+      : groupCards(
+          nameOrder(
+            resultCards(
+              // A source removed while the answer is shown takes its results with it.
+              results.filter((r) => sources.some((s) => s.url === r.source)),
+              library,
+              (url) => pageRef(sources.find((s) => s.url === url))
             )
-          ),
-    [results, library, sources]
-  );
+          )
+        );
   const groups: CardGroup[] =
     resultGroups ??
     (activePill === undefined
@@ -391,6 +386,11 @@ export const SourcesScreen = () => {
       return true;
     }
     const outcome = await agentx(plan.args, {
+      failure: (o) => {
+        const error = o.events.find((e) => e.type === "error");
+        const words = error === undefined ? undefined : addProblem(error);
+        return words;
+      },
       label: ADD_LABEL,
       // The rim reads the CLI's steps (three per skill and a rescan) as a share of the whole install.
       onProgress: (event) => {
@@ -424,19 +424,22 @@ export const SourcesScreen = () => {
     } else {
       const error = outcome.events.find((e) => e.type === "error");
       if (installed.length > 0 && error !== undefined) {
-        // Some skills were skipped: what was added, why the rest was not, and each skipped skill.
+        // Some skills were skipped: what was added, and why the rest was not.
+        const words = addProblem(error);
         notifyError({
-          details: error.hint === undefined ? [] : [error.hint],
-          hint: error.message,
+          details:
+            words !== undefined || error.hint === undefined ? [] : [error.hint],
+          // In the app's words, the reason and its way out read as one sentence each.
+          hint:
+            words === undefined
+              ? error.message
+              : problemSentence(words, { keep: plan.names }),
           // A skill's name that starts the CLI's message keeps its case.
           keep: [
             ...plan.names,
             ...skillNamesOf(useAppStore.getState().inventory),
           ],
           message: `Added ${installed.length} of ${count(plan.names.length, "skill")}`,
-          warnings: outcome.logs
-            .filter((l) => l.level === "warn")
-            .map((l) => l.message),
         });
         setSelection((prev) =>
           without(

@@ -158,17 +158,17 @@ export const dismissAdoptRun = () => {
 /** "Adopting 2 of 3" in skills, or "Adopting…" before the first skill, while sources are fetched. */
 export const progressText = ({ started, total }: AdoptRun) =>
   started === 0
-    ? "Adopting…"
-    : `Adopting ${Math.min(started, total)} of ${total}`;
+    ? "Importing…"
+    : `Importing ${Math.min(started, total)} of ${total}`;
 
 /** What a run adopted out of the skills it offered: "Adopted 2 of 3 skills". */
 const adoptedText = (adopted: number, offered: number) => {
   if (adopted === 0) {
-    return "No skills were adopted";
+    return "No skills were imported";
   }
   return adopted >= offered
-    ? `Adopted ${plural(adopted, "skill")}`
-    : `Adopted ${adopted} of ${plural(offered, "skill")}`;
+    ? `Imported ${plural(adopted, "skill")}`
+    : `Imported ${adopted} of ${plural(offered, "skill")}`;
 };
 
 /** The dialog's line once the run ended: how many of the skills it offered were adopted. */
@@ -265,7 +265,7 @@ const failureOf = (outcome: Outcome): Problem => {
     return {
       message:
         outcome.startError === undefined
-          ? "agentx adopt did not finish"
+          ? "The import did not finish"
           : `agentx could not start: ${outcome.startError}`,
     };
   }
