@@ -1,15 +1,19 @@
 // JSON-RPC 2.0 with `agentx serve` (docs/spec/cli-contract.md, The WebSocket door), whatever
-// carries the messages: a WebSocket in a browser (socket-wire.ts). Serve answers `refresh` and
-// `search` with results; they reach the store as the `refresh_complete` and `search` events the
-// serve child writes on its stdout, so the store reads every wire alike.
+// carries the messages: a WebSocket in a browser (socket-wire.ts), or the serve child's stdin and
+// stdout inside the Tauri window (tauri-wire.ts). Serve answers `refresh` and `search` with
+// results; they reach the store as `refresh_complete` and `search` events of the child
+// (transport.ts), so the store reads every wire alike.
 import { SCHEMA_VERSION } from "#/cli/events.gen.ts";
+import type { CliEvent, LogEvent } from "#/cli/events.gen.ts";
 import type {
-  CliEvent,
-  LogEvent,
+  RunLine,
+  RunResult,
   SearchResult,
+  ServeExit,
+  ServeLine,
   ServeRequest,
-} from "#/cli/events.gen.ts";
-import type { RunLine, RunResult, ServeLine, Wire } from "#/cli/transport.ts";
+  Wire,
+} from "#/cli/transport.ts";
 import { slot } from "#/lib/slot.ts";
 
 /** The params of an `event` notification. */
@@ -29,17 +33,23 @@ export type Answer =
 /** One connection to serve: a WebSocket, or the serve child's stdin and stdout. */
 export interface Peer {
   childId: number;
-  /** Sends a request; its `event` notifications go to onEvent until serve answers it. */
+  /**
+   * Sends a request; its `event` notifications go to onEvent until serve answers it. onWritten is
+   * called once the request was written, or with why it could not be.
+   */
   request: (
     id: string,
     method: string,
     params?: unknown,
-    onEvent?: (params: EventParams) => void
+    handlers?: {
+      onEvent?: (params: EventParams) => void;
+      onWritten?: (failure?: string) => void;
+    }
   ) => Promise<Answer>;
   notify: (method: string, params: unknown) => void;
   /** The instance id of the last inventory serve sent on it. */
   instanceId: () => string;
-  /** Passes on the inventory held until serve was started, and from then on every event. */
+  /** Passes on the lines of serve's own held until serve was started, and from then on each one. */
   release: () => void;
 }
 
@@ -117,17 +127,20 @@ const lineOf = (params: EventParams): RunLine | undefined => {
 /** A peer and what its carrier calls: each message serve sent, and the close of the carrier. */
 export interface Connected extends Peer {
   receive: (data: unknown) => void;
+  /** A line of serve's own that is no JSON-RPC message: a log event on stderr, or an invalid line. */
+  own: (line: RunLine) => void;
   close: (reason: string) => void;
 }
 
 /**
  * The JSON-RPC side of one connection, with the child id it stands for. `send` writes one message
- * to the carrier. Serve's own events go to `emitLine` from `release` on: until then only the last
- * inventory is held, which serve sends first.
+ * to the carrier, and fails when it cannot. Serve's own lines go to `emitLine` from `release` on:
+ * until then they are held, in order, so that neither the inventory serve sends first nor a
+ * warning it logs while it starts is missed.
  */
 export const peer = (
   childId: number,
-  send: (message: object) => void,
+  send: (message: object) => void | Promise<void>,
   releasedAtStart: boolean,
   emitLine: (line: ServeLine) => void
 ): Connected => {
@@ -138,25 +151,16 @@ export const peer = (
   let closed: string | undefined;
   let instanceId = "";
   let released = releasedAtStart;
-  let held: ServeLine | undefined;
+  let held: ServeLine[] = [];
 
-  const ownEvent = (params: EventParams) => {
-    const line = lineOf(params);
-    if (line === undefined) {
-      return;
-    }
-    const inventory =
-      line.kind === "event" && line.event.type === "inventory"
-        ? line.event
-        : undefined;
-    if (inventory !== undefined) {
-      instanceId = inventory.instance_id;
+  const own = (line: RunLine) => {
+    if (line.kind === "event" && line.event.type === "inventory") {
+      instanceId = line.event.instance_id;
     }
     if (released) {
       emitLine({ childId, ...line });
-    } else if (inventory !== undefined) {
-      // Serve sends its last inventory first, which serve's start must not miss.
-      held = { childId, ...line };
+    } else if (closed === undefined) {
+      held.push({ childId, ...line });
     }
   };
 
@@ -176,7 +180,10 @@ export const peer = (
     if (method === "event") {
       if (isEventParams(params)) {
         if (params.id === undefined) {
-          ownEvent(params);
+          const line = lineOf(params);
+          if (line !== undefined) {
+            own(line);
+          }
         } else {
           pending.get(params.id)?.onEvent?.(params);
         }
@@ -195,10 +202,42 @@ export const peer = (
     }
   };
 
+  /** The requests being written. */
+  const writing = new Set<Promise<void>>();
+
+  /** Writes a request; a notification sent meanwhile waits for it. */
+  const write = async (message: object) => {
+    const written = (async () => {
+      await send(message);
+    })();
+    writing.add(written);
+    try {
+      await written;
+    } finally {
+      writing.delete(written);
+    }
+  };
+
+  /**
+   * Sends a notification once the requests being written are, so that a cancel follows its run
+   * whatever the carrier does with writes at the same time. Nobody waits on it: one that cannot be
+   * sent has nothing left to reach.
+   */
+  const notifyLater = async (message: object) => {
+    await Promise.allSettled(writing);
+    try {
+      await send(message);
+    } catch {
+      // The carrier is gone, and with it what the message was for.
+    }
+  };
+
   return {
     childId,
     close: (reason) => {
       closed = reason;
+      // A connection that closed before serve was started never passes its lines on.
+      held = [];
       for (const { answer } of pending.values()) {
         answer({ closed: reason });
       }
@@ -207,43 +246,103 @@ export const peer = (
     instanceId: () => instanceId,
     notify: (method, params) => {
       if (closed === undefined) {
-        send({ method, params });
+        void notifyLater({ method, params });
       }
     },
+    own,
     receive,
     release: () => {
       released = true;
-      if (held !== undefined) {
-        emitLine(held);
-        held = undefined;
+      const lines = held;
+      held = [];
+      for (const line of lines) {
+        emitLine(line);
       }
     },
-    request: async (id, method, params, onEvent) => {
+    request: async (id, method, params, handlers = {}) => {
       if (closed !== undefined) {
+        handlers.onWritten?.(closed);
         return { closed };
       }
       const answer = slot<Answer>();
-      pending.set(id, { answer: answer.put, onEvent });
-      send(params === undefined ? { id, method } : { id, method, params });
+      pending.set(id, { answer: answer.put, onEvent: handlers.onEvent });
+      try {
+        await write(
+          params === undefined ? { id, method } : { id, method, params }
+        );
+      } catch (error) {
+        // Nothing was sent, so nothing answers: the request ends as on a connection that closed.
+        pending.delete(id);
+        const failure = error instanceof Error ? error.message : String(error);
+        handlers.onWritten?.(failure);
+        return { closed: failure };
+      }
+      handlers.onWritten?.();
       return (await answer.take()) ?? { closed: "no answer" };
     },
   };
 };
 
+/** A run that ended: its id and exit code. */
+export interface RunEnd {
+  runId: string;
+  exitCode: number | null;
+}
+
+/** Adds `handle` to `handlers`, and gives the function that takes it away. */
+const subscribe =
+  <T>(handlers: Set<T>) =>
+  (handle: T) => {
+    handlers.add(handle);
+    return () => {
+      handlers.delete(handle);
+    };
+  };
+
+/** Calls every handler in `handlers` with the value. */
+const callAll =
+  <T>(handlers: Set<(value: T) => void>) =>
+  (value: T) => {
+    for (const handle of handlers) {
+      handle(value);
+    }
+  };
+
 /**
- * Runs, cancels and serve's requests over the connection `connection` gives, which it opens when
- * needed; `current` gives the connection serve was started on, if any.
+ * What a wire tells the transport, whatever carries it: each line of serve's own, each end of a
+ * serve child and each end of a run. `on…` adds a handler, `emit…` calls them all.
+ */
+export const wireEvents = () => {
+  const lines = new Set<(line: ServeLine) => void>();
+  const exits = new Set<(exit: ServeExit) => void>();
+  const runEnds = new Set<(end: RunEnd) => void>();
+  return {
+    emitExit: callAll(exits),
+    emitLine: callAll(lines),
+    emitRunEnd: callAll(runEnds),
+    onExit: subscribe(exits),
+    onLine: subscribe(lines),
+    onRunEnd: subscribe(runEnds),
+  };
+};
+
+/**
+ * Runs, cancels, serve's requests and serve's start over the connection `connection` gives, which
+ * it opens when needed; `current` gives the connection serve was started on, if any, and
+ * `onStart` marks serve as started.
  */
 export const rpcCalls = ({
   connection,
   current,
   emitLine,
   onRunEnd,
+  onStart,
 }: {
   connection: () => Promise<Peer>;
   current: () => Promise<Peer> | undefined;
   emitLine: (line: ServeLine) => void;
-  onRunEnd: (end: { runId: string; exitCode: number | null }) => void;
+  onRunEnd: (end: RunEnd) => void;
+  onStart: () => void;
 }) => {
   /** The runs going, by run id: whether one was cancelled, and the connection it was sent on. */
   const runs = new Map<string, { cancelled: boolean; socket?: Peer }>();
@@ -270,19 +369,21 @@ export const rpcCalls = ({
           runId,
           "run",
           { args, deadline_ms: deadlineMs ?? null },
-          (params) => {
-            const line = lineOf(params);
-            if (line === undefined) {
-              return;
-            }
-            onLine(line);
-            if (line.kind === "event") {
-              result.events.push(line.event);
-            } else if (line.kind === "log") {
-              result.logs.push(line.event);
-            } else {
-              result.invalid.push({ line: line.line, stream: line.stream });
-            }
+          {
+            onEvent: (params) => {
+              const line = lineOf(params);
+              if (line === undefined) {
+                return;
+              }
+              onLine(line);
+              if (line.kind === "event") {
+                result.events.push(line.event);
+              } else if (line.kind === "log") {
+                result.logs.push(line.event);
+              } else {
+                result.invalid.push({ line: line.line, stream: line.stream });
+              }
+            },
           }
         );
         if ("closed" in answer) {
@@ -316,8 +417,14 @@ export const rpcCalls = ({
   };
 
   /** Passes serve's answer to a refresh request on as the `refresh_complete` event of a child. */
-  const refreshed = async (socket: Peer, requestId: string) => {
-    const answer = await socket.request(requestId, "refresh");
+  const refreshed = async (
+    socket: Peer,
+    requestId: string,
+    onWritten: (failure?: string) => void
+  ) => {
+    const answer = await socket.request(requestId, "refresh", undefined, {
+      onWritten,
+    });
     // A closed connection answers nothing: the next one gets the request again, as a restarted
     // child does.
     if ("closed" in answer) {
@@ -346,8 +453,18 @@ export const rpcCalls = ({
   };
 
   /** Passes serve's answer to a search request on as the `search` event of a child. */
-  const searched = async (socket: Peer, requestId: string, query: string) => {
-    const answer = await socket.request(requestId, "search", { query });
+  const searched = async (
+    socket: Peer,
+    requestId: string,
+    query: string,
+    onWritten: (failure?: string) => void
+  ) => {
+    const answer = await socket.request(
+      requestId,
+      "search",
+      { query },
+      { onWritten }
+    );
     // Unanswered, as a search the serve child could not answer: the next search asks anew.
     if ("result" in answer && isSearchAnswer(answer.result)) {
       emitLine({
@@ -363,16 +480,36 @@ export const rpcCalls = ({
     }
   };
 
-  /** Sends a request to serve, and fails when serve was not started, as with no serve child. */
+  /**
+   * Sends a request to serve, and resolves once it is written; its answer comes as an event. It
+   * fails when serve was not started, or when the request could not be written, as to a serve
+   * child that ended.
+   */
   const request = async (r: ServeRequest): Promise<void> => {
     const started = current();
     if (started === undefined) {
       throw new Error("agentx serve is not running");
     }
     const socket = await started;
+    const written = slot<{ failure?: string }>();
+    const onWritten = (failure?: string) => {
+      written.put(failure === undefined ? {} : { failure });
+    };
     void (r.type === "refresh"
-      ? refreshed(socket, r.request_id)
-      : searched(socket, r.request_id, r.query));
+      ? refreshed(socket, r.request_id, onWritten)
+      : searched(socket, r.request_id, r.query, onWritten));
+    const { failure } = (await written.take()) ?? {};
+    if (failure !== undefined) {
+      throw new Error(failure);
+    }
   };
-  return { cancel, request, run };
+
+  /** Starts serve: its lines are passed on from now, those it wrote before first. */
+  const start = async (): Promise<number> => {
+    const socket = await connection();
+    onStart();
+    socket.release();
+    return socket.childId;
+  };
+  return { cancel, request, run, start };
 };

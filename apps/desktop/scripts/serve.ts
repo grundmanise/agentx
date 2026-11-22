@@ -73,18 +73,43 @@ const field = (event: object, key: string): string => {
 };
 
 /**
- * The door a line of serve's stdout names, when it is the `listening` event. An `error` event,
- * which serve writes when it refuses to start, is shown, since with --json serve says why on
- * stdout alone.
+ * The event of serve's own a line of its stdout carries. Under --json serve's stdout is JSON-RPC:
+ * its own events are `event` notifications with no request id.
  */
-const parseDoor = (line: string): Door | null => {
-  let event: unknown = null;
+const ownEvent = (line: string): object | null => {
+  let message: unknown = null;
   try {
-    event = JSON.parse(line);
+    message = JSON.parse(line);
   } catch {
     return null;
   }
-  if (typeof event !== "object" || event === null) {
+  if (
+    typeof message !== "object" ||
+    message === null ||
+    field(message, "method") !== "event"
+  ) {
+    return null;
+  }
+  const params: unknown = Reflect.get(message, "params");
+  if (
+    typeof params !== "object" ||
+    params === null ||
+    Reflect.get(params, "id") !== undefined
+  ) {
+    return null;
+  }
+  const event: unknown = Reflect.get(params, "event");
+  return typeof event === "object" && event !== null ? event : null;
+};
+
+/**
+ * The door a line of serve's stdout names, when it is the `listening` event. An `error` event,
+ * which serve writes when it cannot serve this home, is shown, since with --json serve says why on
+ * stdout alone.
+ */
+const parseDoor = (line: string): Door | null => {
+  const event = ownEvent(line);
+  if (event === null) {
     return null;
   }
   const type = field(event, "type");
@@ -170,7 +195,8 @@ const port =
     : fail("Vite did not say which port it listens on");
 const origins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 
-// Serve ends when its standard input closes, so the pipe stays open while this script runs.
+// Serve reads JSON-RPC on its standard input and ends when it closes, so the pipe stays open,
+// and unwritten, while this script runs.
 const serve = spawn(
   cli,
   [
@@ -191,8 +217,8 @@ const serveExit = async (): Promise<number> => {
   return serve.exitCode ?? 128;
 };
 
-// Serve writes the `listening` event before any other. Once it has, the lines after it are
-// dropped unread, so that a full pipe never holds serve up.
+// Serve writes the `listening` event early; an `error` event before it is shown. Once it has, the
+// lines after it are dropped unread, so that a full pipe never holds serve up.
 const readDoor = async (): Promise<Door | null> => {
   for await (const line of createInterface({ input: serve.stdout })) {
     const found = parseDoor(line);
@@ -204,7 +230,7 @@ const readDoor = async (): Promise<Door | null> => {
 };
 const listening = await readDoor();
 if (listening === null) {
-  // Exit code 6: another serve, such as the desktop app's, already runs for this home.
+  // Serve ended before it listened, such as on a flag it refused.
   await server.close();
   process.exit(await serveExit());
 }

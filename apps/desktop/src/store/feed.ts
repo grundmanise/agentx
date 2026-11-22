@@ -7,17 +7,16 @@
 // `update_check` events say when the last update check ended, which the title bar shows. The
 // activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
 // exit of the active child.
+import type { DriftEvent, InventoryEvent, LogEvent } from "#/cli/events.gen.ts";
+import { serve } from "#/cli/transport.ts";
 import type {
-  CliEvent,
-  DriftEvent,
-  InventoryEvent,
-  LogEvent,
   RefreshCompleteEvent,
   SearchEvent,
   SearchResult,
-} from "#/cli/events.gen.ts";
-import { serve } from "#/cli/transport.ts";
-import type { ServeExit, ServeLine } from "#/cli/transport.ts";
+  ServeEvent,
+  ServeExit,
+  ServeLine,
+} from "#/cli/transport.ts";
 import { plural } from "#/lib/plural.ts";
 import {
   formatDuration,
@@ -252,7 +251,7 @@ const acknowledge = (event: RefreshCompleteEvent) => {
   });
 };
 
-const apply = (childId: number, event: CliEvent) => {
+const apply = (childId: number, event: ServeEvent) => {
   if (event.type === "inventory") {
     applyInventory(childId, event);
   } else if (event.type === "refresh_complete") {
@@ -287,12 +286,12 @@ const apply = (childId: number, event: CliEvent) => {
       failed: true,
       output: event.hint === undefined ? [] : [event.hint],
     });
-    errors.set(
-      childId,
+    const problem: Problem =
       event.hint === undefined
         ? { message: event.message }
-        : { hint: event.hint, message: event.message }
-    );
+        : { hint: event.hint, message: event.message };
+    errors.set(childId, problem);
+    set({ serveError: { childId, problem } });
   }
 };
 

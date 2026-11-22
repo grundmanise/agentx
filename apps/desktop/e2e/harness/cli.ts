@@ -1,7 +1,9 @@
 // The mocked CLI transport. The tests run against the Vite dev server, which has no Tauri runtime,
-// so this fixture stands in for the Rust supervisor under the app's real transport module
-// (src/cli/transport.ts): the page's Tauri calls come here, to the test, which answers them with
-// the events it registered and records every command line, cancel and serve request.
+// so this fixture stands in for the Rust supervisor, and for the serve child behind it, under the
+// app's real transport module (src/cli/transport.ts): the page's Tauri calls come here, to the
+// test. Every command is a JSON-RPC `run` request the app writes to serve's stdin; the mock
+// answers it with the events the test registered, as `event` notifications and then the run's
+// response, and records every command line, cancel and serve request.
 //
 //   import { expect, test } from "./harness/cli.ts";
 //   test("…", async ({ cli, page }) => {
@@ -15,9 +17,9 @@
 //
 // The app checks the machine on launch (src/startup/startup.ts), so the mock starts out with a
 // passing launch: `version` and `doctor` replies, and a serve child that writes its first inventory
-// when it starts. Once the checks pass the store loads its slices (src/store/loaders.ts), so the
-// mock answers `config list`, `source list`, `skill import` and `machine` too. A test replaces any
-// of them with register() and onServeStart().
+// when it starts, which the first command does. Once the checks pass the store loads its slices
+// (src/store/loaders.ts), so the mock answers `config list`, `source list`, `skill import` and
+// `machine` too. A test replaces any of them with register() and onServeStart().
 //
 // The mock also answers the native open dialog of Tauri's dialog plugin with the path a test gives
 // answerOpenDialog(), or with null, a Cancel, until one does, and records every Tauri call in `calls`.
@@ -27,19 +29,22 @@ import { test as base } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { SCHEMA_VERSION } from "#/cli/events.gen.ts";
-import type {
-  CliEventType,
-  Configuration,
-  EventOf,
-  LogEvent,
-} from "#/cli/events.gen.ts";
+import type { Configuration, LogEvent } from "#/cli/events.gen.ts";
+import type { ServeEvent } from "#/cli/transport.ts";
 
 import { refusal } from "./command-line.ts";
 
-/** An event with only the fields a test checks. The mock adds schema_version. */
+type EventType = ServeEvent["type"];
+
+/**
+ * An event with only the fields a test checks. The mock adds schema_version. A `refresh_complete`
+ * or `search` event of serve's is the mock's answer to the request of that id.
+ */
 export type InlineEvent = {
-  [T in CliEventType]: { type: T } & Partial<Omit<EventOf<T>, "type">>;
-}[CliEventType];
+  [T in EventType]: { type: T } & Partial<
+    Omit<Extract<ServeEvent, { type: T }>, "type">
+  >;
+}[EventType];
 
 export interface Reply {
   /** The events on stdout, in order. */
@@ -254,6 +259,13 @@ const installInPage = () => {
   };
 };
 
+/** A refresh or search request serve has not answered yet, and the child it was sent to. */
+interface Asked {
+  method: "refresh" | "search";
+  query: string;
+  childId: number;
+}
+
 /** The event as the CLI writes it. */
 const full = <E extends object>(event: E) => ({
   schema_version: SCHEMA_VERSION,
@@ -286,11 +298,16 @@ const nextDetail = async (
 export class MockCli {
   /** Every command line, as the supervisor would run it (with --json). */
   readonly commands: string[][] = [];
-  /** The run id of every cancel. */
+  /** The run id of every cancel (`$/cancelRequest`). */
   readonly cancels: string[] = [];
   /** The deadline of every run, in order; null for a run with none. */
   readonly deadlines: (number | null)[] = [];
-  /** Every line written to serve's stdin. */
+  /** Every line written to serve's stdin: JSON-RPC messages, runs among them. */
+  readonly stdin: string[] = [];
+  /**
+   * Every refresh and search request written to serve's stdin, in order, as the store made it: a
+   * JSON object with `type`, `request_id` and, for a search, `query`.
+   */
   readonly serveRequests: string[] = [];
   /** The paths of every call to the opener plugin's reveal, in order: what the app showed in Finder. */
   readonly reveals: string[][] = [];
@@ -305,7 +322,7 @@ export class MockCli {
    * the opener plugin's open, else the editor the saved preferences held when `editor_open` ran.
    */
   readonly editorOpens: { path: string; editor: unknown }[] = [];
-  /** The request id of every line written to serve's stdin, in order. */
+  /** The request id of every refresh and search request, in order. */
   get requestIds(): string[] {
     return this.serveRequests.map((written) => {
       const request: unknown = JSON.parse(written);
@@ -326,6 +343,8 @@ export class MockCli {
   private readonly page: Page;
   private readonly replies = new Map<string, Pending>();
   private readonly running = new Map<string, Pending>();
+  /** The refresh and search requests serve has not answered, by request id. */
+  private readonly asked = new Map<string, Asked>();
   private readonly problems: string[] = [];
   private resolution: Resolution = {
     found: "bundled",
@@ -333,6 +352,8 @@ export class MockCli {
   };
   private childId = 1;
   private serving = false;
+  /** The start of the serve child going on, which a start meanwhile waits for, as Rust's lock. */
+  private starting: Promise<number> | undefined;
   private serveStart: ServeStart = { events: [firstInventory()] };
   private openAnswer: string | null = null;
   private editors: { id: string; name: string }[] = [];
@@ -473,34 +494,89 @@ export class MockCli {
   }
 
   /**
-   * Emits serve stdout events under the current child id, or `childId` for a child that ended. An
-   * inventory gets the fields it must have and the test left out: no items, this machine, and
-   * `instance-<child id>`.
+   * Emits serve stdout events under the current child id, or `childId` for a child that ended, as
+   * `event` notifications of serve's own. An inventory gets the fields it must have and the test
+   * left out: no items, this machine, and `instance-<child id>`. A `refresh_complete` or `search`
+   * event is serve's response to the request of its `request_id` instead, which only a request
+   * serve has not answered gets; the child it was sent to answers it once.
    */
   async serveEmit(events: InlineEvent[], childId = this.childId) {
-    await this.emit(
-      "serve-event",
-      events.map((event) => ({
-        child_id: childId,
-        event: full(
-          event.type === "inventory"
-            ? {
-                configurations: [],
-                edges: [],
-                instance_id: `instance-${childId}`,
-                library: [],
-                machine: { id: "machine-1", label: machineLabel },
-                mcp_servers: [],
-                plugins: [],
-                skills: [],
-                warnings: [],
-                ...event,
-              }
-            : event
-        ),
-        kind: "event",
-      }))
-    );
+    const messages = events.flatMap((event) => {
+      if (event.type === "refresh_complete" || event.type === "search") {
+        return this.answer(event, childId);
+      }
+      return [
+        {
+          jsonrpc: "2.0",
+          method: "event",
+          params: {
+            event: full(
+              event.type === "inventory"
+                ? {
+                    configurations: [],
+                    edges: [],
+                    instance_id: `instance-${childId}`,
+                    library: [],
+                    machine: { id: "machine-1", label: machineLabel },
+                    mcp_servers: [],
+                    plugins: [],
+                    skills: [],
+                    warnings: [],
+                    ...event,
+                  }
+                : event
+            ),
+            stream: "stdout",
+          },
+        },
+      ];
+    });
+    await this.emitMessages(messages, childId);
+  }
+
+  /** Serve's response to the refresh or search request an answer event names, if it awaits one. */
+  private answer(
+    event: Extract<InlineEvent, { type: "refresh_complete" | "search" }>,
+    childId: number
+  ): object[] {
+    const id = event.request_id ?? "";
+    const asked = this.asked.get(id);
+    if (asked === undefined) {
+      return [];
+    }
+    if (asked.childId === childId) {
+      this.asked.delete(id);
+    }
+    const instanceId = event.instance_id ?? `instance-${childId}`;
+    if (event.type === "search") {
+      return [
+        {
+          id,
+          jsonrpc: "2.0",
+          result: {
+            instance_id: instanceId,
+            query: event.query ?? asked.query,
+            results: event.results ?? [],
+          },
+        },
+      ];
+    }
+    return [
+      event.ok === false
+        ? {
+            error: { code: -32_000, message: event.error ?? "the scan failed" },
+            id,
+            jsonrpc: "2.0",
+          }
+        : {
+            id,
+            jsonrpc: "2.0",
+            result: {
+              instance_id: instanceId,
+              scan_counter: event.scan_counter ?? 1,
+            },
+          },
+    ];
   }
 
   /**
@@ -531,6 +607,12 @@ export class MockCli {
     restartInMs: number | null = 500
   ) {
     this.serving = false;
+    // An ended child answers nothing more.
+    for (const [id, asked] of this.asked) {
+      if (asked.childId === this.childId) {
+        this.asked.delete(id);
+      }
+    }
     await this.emit("serve-exit", [
       {
         child_id: this.childId,
@@ -561,6 +643,14 @@ export class MockCli {
     this.serving = false;
   }
 
+  /** Emits JSON-RPC messages the child wrote on stdout, as the supervisor reports them. */
+  private async emitMessages(messages: object[], childId = this.childId) {
+    await this.emit(
+      "serve-event",
+      messages.map((event) => ({ child_id: childId, event, kind: "event" }))
+    );
+  }
+
   private async emit(event: string, payloads: unknown[]) {
     await this.page.evaluate(
       ([name, all]) => {
@@ -586,47 +676,27 @@ export class MockCli {
           path: this.resolution.path,
         };
       }
-      case "cli_run": {
-        const runArgs = field(args, "args");
-        const deadline = field(args, "deadline_ms");
-        this.deadlines.push(typeof deadline === "number" ? deadline : null);
-        return await this.run(
-          Array.isArray(runArgs) ? runArgs.map(String) : [],
-          String(field(args, "run_id"))
-        );
-      }
-      case "cli_cancel": {
-        const runId = String(field(args, "run_id"));
-        this.cancels.push(runId);
-        const pending = this.running.get(runId);
-        pending?.signals.dispatchEvent(
-          new CustomEvent("resume", { detail: "cancel" })
-        );
-        return pending !== undefined;
-      }
       case "serve_start": {
+        if (this.starting !== undefined) {
+          return await this.starting;
+        }
         if (this.serving) {
           return this.childId;
         }
-        // A child that ended is followed by a new one, with the next id.
-        if (this.serveStarts > 0) {
-          this.childId += 1;
+        this.starting = this.startServe();
+        try {
+          return await this.starting;
+        } finally {
+          this.starting = undefined;
         }
-        this.serveStarts += 1;
-        this.serving = true;
-        const { events = [], exit } = this.serveStart;
-        await this.serveEmit(events);
-        if (exit !== undefined) {
-          const restart = [2, 6, 8].includes(exit.code) ? null : 500;
-          await this.serveExit(exit.code, exit.stderr, restart);
-        }
-        return this.childId;
       }
       case "serve_request": {
         if (!this.serving) {
           throw new Error("serve is not running");
         }
-        this.serveRequests.push(String(field(args, "line")));
+        const written = String(field(args, "line"));
+        this.stdin.push(written);
+        this.read(JSON.parse(written));
         return null;
       }
       case "plugin:opener|reveal_item_in_dir": {
@@ -651,6 +721,25 @@ export class MockCli {
         return this.handleShell(command, args);
       }
     }
+  }
+
+  /**
+   * Starts a serve child, which writes what onServeStart says. A child that ended is followed by
+   * a new one, with the next id, as the supervisor's restart is.
+   */
+  private async startServe(): Promise<number> {
+    if (this.serveStarts > 0) {
+      this.childId += 1;
+    }
+    this.serveStarts += 1;
+    this.serving = true;
+    const { events = [], exit } = this.serveStart;
+    await this.serveEmit(events);
+    if (exit !== undefined) {
+      const restart = [2, 6, 8].includes(exit.code) ? null : 500;
+      await this.serveExit(exit.code, exit.stderr, restart);
+    }
+    return this.childId;
   }
 
   /** The Rust shell's own commands beside the supervisor's: the editor and the app's preferences. */
@@ -700,24 +789,87 @@ export class MockCli {
     }
   }
 
-  private async run(args: string[], runId: string) {
-    this.commands.push([...args, "--json"]);
-    const reason = refusal(args);
-    if (reason !== undefined) {
-      this.refuse(`"${line(args)}": ${reason}`);
+  /** Reads one JSON-RPC message from serve's stdin, as serve does. */
+  private read(message: unknown) {
+    const method = field(message, "method");
+    const id = String(field(message, "id"));
+    const params = field(message, "params");
+    if (field(message, "jsonrpc") !== "2.0") {
+      this.refuse(`serve read a line that is no JSON-RPC 2.0 message`);
     }
+    if (method === "run") {
+      const runArgs = field(params, "args");
+      const deadline = field(params, "deadline_ms");
+      this.deadlines.push(typeof deadline === "number" ? deadline : null);
+      // Serve answers a run when it ends; it reads the next line meanwhile.
+      void this.run(
+        Array.isArray(runArgs) ? runArgs.map(String) : [],
+        id,
+        this.childId
+      );
+    } else if (method === "$/cancelRequest") {
+      const runId = String(field(params, "id"));
+      this.cancels.push(runId);
+      this.running
+        .get(runId)
+        ?.signals.dispatchEvent(
+          new CustomEvent("resume", { detail: "cancel" })
+        );
+    } else if (method === "refresh" || method === "search") {
+      const given = field(params, "query");
+      const query = typeof given === "string" ? given : "";
+      this.asked.set(id, { childId: this.childId, method, query });
+      this.serveRequests.push(
+        JSON.stringify(
+          method === "refresh"
+            ? { request_id: id, type: method }
+            : { query, request_id: id, type: method }
+        )
+      );
+    } else {
+      this.refuse(`serve has no method ${String(method)}`);
+    }
+  }
+
+  private async run(args: string[], runId: string, childId: number) {
+    try {
+      await this.runReply(args, runId, childId);
+    } catch {
+      // The page closed while the run went on: nothing reads its answer.
+    }
+  }
+
+  private async runReply(args: string[], runId: string, childId: number) {
+    this.commands.push([...args, "--json"]);
+    const notify = async (params: object[]) => {
+      await this.emitMessages(
+        params.map((p) => ({
+          jsonrpc: "2.0",
+          method: "event",
+          params: { id: runId, ...p },
+        })),
+        childId
+      );
+    };
     const pending = this.replies.get(line(args));
-    if (pending === undefined) {
-      this.refuse(`"${line(args)}": the test registered no reply`);
+    const problem =
+      refusal(args) ??
+      (pending === undefined ? "the test registered no reply" : undefined);
+    if (problem !== undefined || pending === undefined) {
+      // Serve would run it, and the CLI refuse it: the run fails, and so does the test.
+      const message = `"${line(args)}": ${problem ?? ""}`;
+      this.problems.push(message);
+      await this.emitMessages(
+        [{ error: { code: -32_602, message }, id: runId, jsonrpc: "2.0" }],
+        childId
+      );
+      return;
     }
     const { reply, signals } = pending;
     const events = (reply.events ?? []).map(full);
     const held = reply.holdAfter ?? events.length;
     const send = async (chunk: object[]) => {
-      await this.emit(
-        "cli-run",
-        chunk.map((event) => ({ event, kind: "event", run_id: runId }))
-      );
+      await notify(chunk.map((event) => ({ event, stream: "stdout" })));
     };
     // Listen before the first events go out: the test may release the run as soon as it sees them.
     const resumed =
@@ -730,27 +882,27 @@ export class MockCli {
     const timedOut = resumedWith === "expire";
     this.running.delete(runId);
     const stopped = cancelled || timedOut;
-    const sent = stopped ? events.slice(0, held) : events;
     if (!stopped) {
       await send(events.slice(held));
     }
     const logs = (reply.logs ?? []).map((log) => full({ type: "log", ...log }));
-    await this.emit(
-      "cli-run",
-      logs.map((event) => ({ event, kind: "log", run_id: runId }))
+    await notify(logs.map((event) => ({ event, stream: "stderr" })));
+    await this.emitMessages(
+      [
+        {
+          id: runId,
+          jsonrpc: "2.0",
+          result: {
+            cancelled,
+            // A cancel or a deadline stops agentx with SIGTERM, on which it reports the stop and
+            // exits 9.
+            exit_code: stopped ? 9 : (reply.exitCode ?? 0),
+            timed_out: timedOut,
+          },
+        },
+      ],
+      childId
     );
-    const end = {
-      cancelled,
-      events: sent,
-      // A cancel or a deadline stops agentx with SIGTERM, on which it reports the stop and exits 9.
-      exit_code: stopped ? 9 : (reply.exitCode ?? 0),
-      invalid: [],
-      logs,
-      run_id: runId,
-      timed_out: timedOut,
-    };
-    await this.emit("cli-run-end", [end]);
-    return end;
   }
 }
 

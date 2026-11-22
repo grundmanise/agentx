@@ -5,14 +5,9 @@
 // for the serve child of the Tauri window: each connection has a child id of its own, a closed one
 // is a child that ended, and the next one is its restart, with the supervisor's backoff. The
 // JSON-RPC itself is rpc-client.ts.
-import { isObject, peer, rpcCalls } from "#/cli/rpc-client.ts";
+import { isObject, peer, rpcCalls, wireEvents } from "#/cli/rpc-client.ts";
 import type { Peer } from "#/cli/rpc-client.ts";
-import type {
-  Resolution,
-  ServeExit,
-  ServeLine,
-  Wire,
-} from "#/cli/transport.ts";
+import type { Resolution, Wire } from "#/cli/transport.ts";
 import { slot } from "#/lib/slot.ts";
 
 /** The path, on the page's own server, that answers where serve's door is. */
@@ -52,17 +47,7 @@ const findDoor = async (): Promise<Door | undefined> => {
   }
 };
 
-const lineHandlers = new Set<(line: ServeLine) => void>();
-const exitHandlers = new Set<(exit: ServeExit) => void>();
-const runEndHandlers = new Set<
-  (end: { runId: string; exitCode: number | null }) => void
->();
-
-const emitLine = (line: ServeLine) => {
-  for (const handle of lineHandlers) {
-    handle(line);
-  }
-};
+const events = wireEvents();
 
 /** Whether serve was started: its own events are passed on, and a closed connection reopens. */
 let started = false;
@@ -87,7 +72,7 @@ const open = async (
       ws.send(JSON.stringify({ jsonrpc: "2.0", ...message }));
     },
     started,
-    emitLine
+    events.emitLine
   );
   ws.addEventListener("message", ({ data }) => {
     connected.receive(data);
@@ -135,15 +120,13 @@ const connection = async (): Promise<Peer> => {
   const restart = (stderr: string[]) => {
     const wait = delay;
     delay = Math.min(delay * 2, BACKOFF_CAP_MS);
-    for (const handle of exitHandlers) {
-      handle({
-        childId,
-        exitCode: null,
-        restartInMs: wait,
-        restarting: true,
-        stderr,
-      });
-    }
+    events.emitExit({
+      childId,
+      exitCode: null,
+      restartInMs: wait,
+      restarting: true,
+      stderr,
+    });
     reopening = setTimeout(() => {
       reopening = undefined;
       void (async () => {
@@ -195,44 +178,26 @@ const resolve = async (): Promise<Resolution> => {
 const calls = rpcCalls({
   connection,
   current: (): Promise<Peer> | undefined => (started ? current : undefined),
-  emitLine,
-  onRunEnd: (end) => {
-    for (const handle of runEndHandlers) {
-      handle(end);
-    }
+  emitLine: events.emitLine,
+  onRunEnd: events.emitRunEnd,
+  onStart: () => {
+    started = true;
   },
 });
 
-const start = async (): Promise<number> => {
-  const socket = await connection();
-  started = true;
-  socket.release();
-  return socket.childId;
-};
-
-/** Adds `handle` to `handlers`, and gives the function that takes it away. */
-const subscribe =
-  <T>(handlers: Set<T>) =>
-  (handle: T) => {
-    handlers.add(handle);
-    return () => {
-      handlers.delete(handle);
-    };
-  };
-
 export const socketWire: Wire = {
   cancel: calls.cancel,
-  onRunEnd: subscribe(runEndHandlers),
+  onRunEnd: events.onRunEnd,
   resolve,
   run: calls.run,
   serve: {
     logPath: () => {
       throw new Error("the serve log is not reachable from a browser");
     },
-    onEvent: subscribe(lineHandlers),
-    onExit: subscribe(exitHandlers),
+    onEvent: events.onLine,
+    onExit: events.onExit,
     request: calls.request,
-    start,
+    start: calls.start,
     verbose: () => {
       throw new Error("serve's log level cannot be set from a browser");
     },

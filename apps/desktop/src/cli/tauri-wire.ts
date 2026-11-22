@@ -1,35 +1,28 @@
-// The wire inside the Tauri window: the commands and events of the Rust supervisor, which runs
-// each one-shot as a process of its own and keeps one serve child open, writing its requests to
-// the child's stdin.
+// The wire inside the Tauri window: JSON-RPC 2.0 with the serve child the Rust supervisor keeps
+// open, over the child's stdin and stdout (docs/spec/cli-contract.md, The WebSocket door, whose
+// messages stdio carries too). The supervisor writes each message to the child's stdin as one
+// line (`serve_request`), and emits each line the child writes as a `serve-event` and its end as
+// a `serve-exit`, each with the child's id. Every command is a `run` request, so the first one
+// starts serve. Each child is one connection of rpc-client.ts: the supervisor's restart is a new
+// one, and a child that ends fails the requests it did not answer.
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { UnlistenFn } from "@tauri-apps/api/event";
 
-import type { CliEvent, LogEvent, ServeRequest } from "#/cli/events.gen.ts";
+import type { LogEvent } from "#/cli/events.gen.ts";
+import { isObject, peer, rpcCalls, wireEvents } from "#/cli/rpc-client.ts";
+import type { Connected, Peer } from "#/cli/rpc-client.ts";
 import type {
   InvalidLine,
   Resolution,
-  RunLine,
-  RunResult,
   ServeExit,
-  ServeLine,
   Wire,
 } from "#/cli/transport.ts";
-import { slot } from "#/lib/slot.ts";
+import { lastStderr } from "#/store/activity-log.ts";
 
-// What the supervisor sends, as Rust names it.
-type WireRunLine = RunLine & { run_id: string };
-interface WireRunEnd {
-  run_id: string;
-  exit_code: number | null;
-  events: CliEvent[];
-  logs: LogEvent[];
-  invalid: InvalidLine[];
-  cancelled: boolean;
-  timed_out: boolean;
-}
+// What the supervisor sends, as Rust names it. An object the child wrote on stdout is an event,
+// which under --json is a JSON-RPC message.
 type WireServeLine = (
-  | { kind: "event"; event: CliEvent }
+  | { kind: "event"; event: unknown }
   | { kind: "log"; event: LogEvent }
   | ({ kind: "invalid" } & InvalidLine)
 ) & { child_id: number };
@@ -45,6 +38,103 @@ interface WireResolution {
   found: "bundled" | "path" | null;
 }
 
+const events = wireEvents();
+
+/** Whether serve was started: a child's own lines are passed on from its first one. */
+let started = false;
+/**
+ * Each child's connection, by child id. One that ended stays, closed, so that a request to it
+ * fails at once with how it ended.
+ */
+const peers = new Map<number, Connected>();
+/** The latest child known: the one serve's requests go to. */
+let latest = 0;
+/** The children that ended, by child id. */
+const ended = new Set<number>();
+
+/** Writes one message to the child's stdin, as one line. It fails when no child runs. */
+const send = async (message: object): Promise<void> => {
+  await invoke("serve_request", {
+    line: JSON.stringify({ jsonrpc: "2.0", ...message }),
+  });
+};
+
+const peerOf = (childId: number): Connected => {
+  const known = peers.get(childId);
+  if (known !== undefined) {
+    return known;
+  }
+  const created = peer(childId, send, started, events.emitLine);
+  peers.set(childId, created);
+  latest = Math.max(latest, childId);
+  return created;
+};
+
+const isRpcMessage = (value: unknown): value is Record<string, unknown> =>
+  isObject(value) && value.jsonrpc === "2.0";
+
+/** How a child ended, as the requests it did not answer report it. */
+const endOf = (exit: ServeExit): string => {
+  const how =
+    exit.exitCode === null
+      ? "agentx serve was stopped by a signal"
+      : `agentx serve exited with code ${exit.exitCode}`;
+  const last = lastStderr(exit.stderr);
+  return last === undefined ? how : `${how}: ${last}`;
+};
+
+const subscribe = async () => {
+  await listen<WireServeLine>("serve-event", ({ payload }) => {
+    const { child_id: childId, ...line } = payload;
+    const connected = peerOf(childId);
+    if (line.kind !== "event") {
+      connected.own(line);
+    } else if (isRpcMessage(line.event)) {
+      connected.receive(line.event);
+    } else {
+      // Under --json serve writes JSON-RPC alone on stdout: anything else is an invalid line.
+      connected.own({
+        kind: "invalid",
+        line: JSON.stringify(line.event),
+        stream: "stdout",
+      });
+    }
+  });
+  await listen<WireServeExit>("serve-exit", ({ payload }) => {
+    const exit: ServeExit = {
+      childId: payload.child_id,
+      exitCode: payload.exit_code,
+      restartInMs: payload.restart_in_ms,
+      restarting: payload.restarting,
+      stderr: payload.stderr,
+    };
+    ended.add(exit.childId);
+    peerOf(exit.childId).close(endOf(exit));
+    events.emitExit(exit);
+  });
+};
+
+let listening: Promise<void> | undefined;
+
+/** Listens to the supervisor's events, once: before the first child starts. */
+const listened = async () => {
+  listening ??= subscribe();
+  await listening;
+};
+
+/**
+ * The serve child's connection: the latest child's while it runs, else the one `serve_start`
+ * starts and gives the id of. While the supervisor waits to restart a child that ended, it starts
+ * the next one at once.
+ */
+const connection = async (): Promise<Connected> => {
+  await listened();
+  if (latest > 0 && !ended.has(latest)) {
+    return peerOf(latest);
+  }
+  return peerOf(await invoke<number>("serve_start"));
+};
+
 const resolve = async (): Promise<Resolution> => {
   const r = await invoke<WireResolution>("cli_resolve");
   return {
@@ -53,115 +143,34 @@ const resolve = async (): Promise<Resolution> => {
   };
 };
 
-/** Each run's subscription to its events, until it ends. The run is sent once it is in place. */
-const subscribed = new Map<string, Promise<UnlistenFn[]>>();
-
-const run: Wire["run"] = async (runId, args, deadlineMs, onLine) => {
-  const end = slot<WireRunEnd>();
-  const subscribe = async (): Promise<UnlistenFn[]> => {
-    const settled = await Promise.allSettled([
-      listen<WireRunLine>("cli-run", ({ payload }) => {
-        if (payload.run_id === runId) {
-          const { run_id: _, ...line } = payload;
-          onLine(line);
-        }
-      }),
-      listen<WireRunEnd>("cli-run-end", ({ payload }) => {
-        if (payload.run_id === runId) {
-          end.put(payload);
-        }
-      }),
-    ]);
-    const stops = settled.flatMap((s) =>
-      s.status === "fulfilled" ? [s.value] : []
-    );
-    const failed = settled.find((s) => s.status === "rejected");
-    if (failed !== undefined) {
-      // One listener may be in place while the other failed: it goes with the run.
-      for (const stop of stops) {
-        stop();
-      }
-      throw new Error(`cannot listen to the run: ${String(failed.reason)}`);
-    }
-    return stops;
-  };
-  const subscription = subscribe();
-  subscribed.set(runId, subscription);
-  let unlisten: UnlistenFn[] = [];
-  try {
-    // Inside the try: a run that cannot be listened to ends as one that did not start.
-    unlisten = await subscription;
-    await invoke("cli_run", {
-      args,
-      deadline_ms: deadlineMs ?? null,
-      run_id: runId,
-    });
-    // The end event follows every line event; the command's own answer can overtake them.
-    const ended = await end.take();
-    if (ended === undefined) {
-      throw new Error(`run ${runId} ended without its end event`);
-    }
-    return {
-      cancelled: ended.cancelled,
-      events: ended.events,
-      exitCode: ended.exit_code,
-      invalid: ended.invalid,
-      logs: ended.logs,
-      timedOut: ended.timed_out,
-    } satisfies RunResult;
-  } finally {
-    subscribed.delete(runId);
-    for (const stop of unlisten) {
-      stop();
-    }
-  }
-};
-
-/** It is sent after the run itself, so that the supervisor knows the run. */
-const cancel = async (runId: string): Promise<boolean> => {
-  await subscribed.get(runId);
-  return await invoke<boolean>("cli_cancel", { run_id: runId });
-};
-
-const onRunEnd: Wire["onRunEnd"] = async (handle) =>
-  await listen<WireRunEnd>("cli-run-end", ({ payload }) => {
-    handle({ exitCode: payload.exit_code, runId: payload.run_id });
-  });
-
-const onServeLine = async (
-  handle: (line: ServeLine) => void
-): Promise<UnlistenFn> =>
-  await listen<WireServeLine>("serve-event", ({ payload }) => {
-    const { child_id: childId, ...line } = payload;
-    handle({ childId, ...line });
-  });
-
-const onServeExit = async (
-  handle: (exit: ServeExit) => void
-): Promise<UnlistenFn> =>
-  await listen<WireServeExit>("serve-exit", ({ payload }) => {
-    handle({
-      childId: payload.child_id,
-      exitCode: payload.exit_code,
-      restartInMs: payload.restart_in_ms,
-      restarting: payload.restarting,
-      stderr: payload.stderr,
-    });
-  });
+const calls = rpcCalls({
+  connection,
+  current: (): Promise<Peer> | undefined =>
+    started && latest > 0 ? Promise.resolve(peerOf(latest)) : undefined,
+  emitLine: events.emitLine,
+  onRunEnd: events.emitRunEnd,
+  onStart: () => {
+    started = true;
+  },
+});
 
 export const tauriWire: Wire = {
-  cancel,
-  onRunEnd,
+  cancel: calls.cancel,
+  onRunEnd: events.onRunEnd,
   resolve,
-  run,
+  run: calls.run,
   serve: {
     logPath: async () => await invoke<string>("serve_log_path"),
-    onEvent: onServeLine,
-    onExit: onServeExit,
-    request: async (request: ServeRequest) => {
-      await invoke("serve_request", { line: JSON.stringify(request) });
+    onEvent: async (handle) => {
+      await listened();
+      return events.onLine(handle);
     },
-    start: async () => await invoke<number>("serve_start"),
+    onExit: async (handle) => {
+      await listened();
+      return events.onExit(handle);
+    },
+    request: calls.request,
+    start: calls.start,
     verbose: async (on: boolean) => {
       await invoke("serve_verbose", { on });
     },

@@ -1,9 +1,11 @@
 // The launch sequence and the state of the startup layer. On launch the app resolves the CLI, runs
 // `version` and `doctor` at the same time, then starts the serve child and waits for its first
-// inventory. The layer shows only when a check fails, when a command exits with code 8, and in
-// manual mode. Until the checks pass, the panel shows the kept inventory under a frosted
-// pane (src/store/launch-cache.ts), or, on a launch with none, that it loads. The
-// only commands it runs are `version`, `doctor` and `serve`: it changes nothing on disk.
+// inventory, or for a problem it reports. Both commands run through serve, so the first of them
+// starts its child; serve's own events count from the serve step on. The layer shows only when a
+// check fails, when a command exits with code 8, and in manual mode. Until the checks pass, the
+// panel shows the kept inventory under a frosted pane (src/store/launch-cache.ts), or, on a launch
+// with none, that it loads. The only commands it runs are `version`, `doctor` and `serve`: it
+// changes nothing on disk.
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -13,13 +15,13 @@ import type {
   InventoryEvent,
 } from "#/cli/events.gen.ts";
 import { onRunEnd, resolveCli, run } from "#/cli/transport.ts";
-import type { RunResult } from "#/cli/transport.ts";
+import type { RefreshCompleteEvent, RunResult } from "#/cli/transport.ts";
 import { readChecks } from "#/startup/checks.ts";
 import type { Findings, Problem } from "#/startup/checks.ts";
-import { connect, startServe } from "#/store/feed.ts";
+import { connect, rescan, startServe } from "#/store/feed.ts";
 import { keepLaunch, restoreLaunch } from "#/store/launch-cache.ts";
 import { useAppStore } from "#/store/store.ts";
-import type { ServeEnd } from "#/store/store.ts";
+import type { ServeEnd, ServeError } from "#/store/store.ts";
 
 /** How long a check may take before it fails. A launch normally takes well under a second. */
 export const CHECK_DEADLINE_MS = 30_000;
@@ -69,7 +71,7 @@ const update = (patch: Partial<StartupState>) => {
   useStartup.setState(patch);
 };
 
-// The one-shot runs the sequence started: their exit 8 is a check result, not a reason to restart.
+// The runs the sequence started: their exit 8 is a check result, not a reason to restart.
 const ownRuns = new Set<string>();
 
 const problemOf = (events: CliEvent[], fallback: string): Problem => {
@@ -85,15 +87,17 @@ const problemOf = (events: CliEvent[], fallback: string): Problem => {
 type ServeOutcome = { inventory: InventoryEvent } | { error: Problem };
 
 /**
- * What serve child `childId`, or a later one, has reported: its first inventory or its exit, if
- * either is in. `ended` is a child that had already ended, with a restart to come, when the wait
- * began: not the answer, since the next child is.
+ * What serve child `childId`, or a later one, has reported: its first inventory, a problem it
+ * reported before that, or its exit, if any is in. `ended` is a child that had already ended, with
+ * a restart to come, when the wait began: not the answer, since the next child is. `reported` is
+ * a problem the last wait already showed: not the answer either, since a Retry asks again.
  */
 const outcomeOf = (
   childId: number,
-  ended: ServeEnd | undefined
+  ended: ServeEnd | undefined,
+  reported: ServeError | undefined
 ): ServeOutcome | undefined => {
-  const { applied, inventory, serveEnd } = useAppStore.getState();
+  const { applied, inventory, serveEnd, serveError } = useAppStore.getState();
   const after = Math.max(childId, (ended?.childId ?? 0) + 1);
   if (
     applied !== undefined &&
@@ -101,6 +105,14 @@ const outcomeOf = (
     applied.childId >= after
   ) {
     return { inventory };
+  }
+  // Serve keeps running when it cannot scan or watch this machine, and says why.
+  if (
+    serveError !== undefined &&
+    serveError !== reported &&
+    serveError.childId >= childId
+  ) {
+    return { error: serveError.problem };
   }
   if (
     serveEnd !== undefined &&
@@ -113,10 +125,16 @@ const outcomeOf = (
 };
 
 /**
- * Waits for serve child `childId`, or a later one, to write an inventory or to exit, until the
- * deadline. A child that is only slow keeps running: a Retry waits for it again.
+ * Waits for serve child `childId`, or a later one, to write an inventory, to report a problem
+ * other than `reported`, or to exit, until the deadline. `rescanning`, the scan a Retry asked a
+ * running child for, ends the wait too when it fails. A child that is only slow keeps running: a
+ * Retry waits for it again.
  */
-const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
+const serveOutcome = async (
+  childId: number,
+  reported: ServeError | undefined,
+  rescanning: Promise<RefreshCompleteEvent | undefined> | undefined
+): Promise<ServeOutcome> => {
   const { serveEnd } = useAppStore.getState();
   const ended = serveEnd?.restarting === true ? serveEnd : undefined;
   let unsubscribe: (() => void) | undefined;
@@ -124,9 +142,17 @@ const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
   const outcomes = new ReadableStream<ServeOutcome>({
     start: (controller) => {
       const check = () => {
-        const outcome = outcomeOf(childId, ended);
+        const outcome = outcomeOf(childId, ended, reported);
         if (outcome !== undefined) {
           controller.enqueue(outcome);
+        }
+      };
+      const failedScan = async () => {
+        const answer = await rescanning;
+        if (answer?.ok === false) {
+          controller.enqueue({
+            error: { message: answer.error ?? "the scan failed" },
+          });
         }
       };
       unsubscribe = useAppStore.subscribe(check);
@@ -138,6 +164,7 @@ const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
         });
       }, CHECK_DEADLINE_MS);
       check();
+      void failedScan();
     },
   });
   try {
@@ -153,7 +180,7 @@ const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
 };
 
 /**
- * Runs a one-shot as part of the sequence; a CLI that could not start, or did not finish by the
+ * Runs a command as part of the sequence; a CLI that could not start, or did not finish by the
  * deadline, is reported as a problem.
  */
 const oneShot = async (
@@ -179,6 +206,8 @@ const oneShot = async (
 
 // Each sequence gets a number; a later one makes the earlier one's findings stale.
 let generation = 0;
+/** The serve child the last serve step waited for. */
+let waitedFor: number | undefined;
 
 const sequence = async () => {
   generation += 1;
@@ -257,6 +286,10 @@ const sequence = async () => {
     }
 
     nextStep();
+    // A problem the child the last step waited for reported is the one a Retry asks about again.
+    // Any other is new: serve holds its lines until it is started, and passes them on as it starts.
+    const { serveError } = useAppStore.getState();
+    const reported = serveError?.childId === waitedFor ? serveError : undefined;
     let childId: number;
     try {
       childId = await startServe();
@@ -264,7 +297,19 @@ const sequence = async () => {
       found({ serve: { error: { message: String(error) } } });
       return;
     }
-    found({ serve: await serveOutcome(childId) });
+    // A Retry asks a child that still runs with no inventory to scan again: one that could not
+    // scan reports its problem once, and scans again only when something changes.
+    const again =
+      childId === waitedFor &&
+      useAppStore.getState().applied?.childId !== childId;
+    waitedFor = childId;
+    found({
+      serve: await serveOutcome(
+        childId,
+        reported,
+        again ? rescan() : undefined
+      ),
+    });
   } finally {
     if (mine === generation) {
       const { passed } = readChecks(findings, false);
@@ -292,7 +337,7 @@ const accountRepoLost = () => {
   void sequence();
 };
 
-/** Runs the checks again whenever a serve child or a one-shot exits with code 8. */
+/** Runs the checks again whenever a serve child or a run exits with code 8. */
 const listen = async () => {
   useAppStore.subscribe(({ serveEnd }, previous) => {
     if (

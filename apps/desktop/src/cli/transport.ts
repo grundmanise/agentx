@@ -1,11 +1,11 @@
-// The app's one way to the CLI: one-shot runs whose lines arrive as they are written, and the one
-// serve child the window keeps open, whose stdout and stderr arrive the same way. Two wires carry
-// them (ADR 0016): the Tauri commands and events of the Rust supervisor inside the window
-// (tauri-wire.ts), and JSON-RPC over the WebSocket door of `agentx serve --listen` in a browser
-// (socket-wire.ts). Events are typed by events.gen.ts, which is generated from the CLI of this
-// app's own release, so no schema_version is checked here. An event of a type the app does not
-// know is passed on as it came.
-import type { CliEvent, LogEvent, ServeRequest } from "#/cli/events.gen.ts";
+// The app's one way to the CLI: runs whose lines arrive as they are written, and the one serve
+// child the window keeps open, whose own lines arrive the same way. Every run goes through serve,
+// with JSON-RPC 2.0 (ADR 0016), on one of two wires: the serve child's stdin and stdout, which the
+// Rust supervisor relays, inside the Tauri window (tauri-wire.ts), and the WebSocket door of
+// `agentx serve --listen` in a browser (socket-wire.ts). Events are typed by events.gen.ts, which
+// is generated from the CLI of this app's own release, so no schema_version is checked here. An
+// event of a type the app does not know is passed on as it came.
+import type { CliEvent, LogEvent } from "#/cli/events.gen.ts";
 import { socketWire } from "#/cli/socket-wire.ts";
 import { tauriWire } from "#/cli/tauri-wire.ts";
 import {
@@ -20,7 +20,7 @@ export interface InvalidLine {
   line: string;
 }
 
-/** One line of a one-shot run: an event on stdout, a log event on stderr, or an invalid line. */
+/** One line of a run: an event on stdout, a log event on stderr, or an invalid line. */
 export type RunLine =
   | { kind: "event"; event: CliEvent }
   | { kind: "log"; event: LogEvent }
@@ -61,12 +61,60 @@ export interface Resolution {
   found: "bundled" | "path" | "serve" | null;
 }
 
+/** A skill a search found in a source. */
+export interface SearchResult {
+  source: string;
+  subpath: string;
+  name: string;
+  description: string;
+  tree: string;
+}
+
 /**
- * One line of the serve child's output, with the id of the child that wrote it: an event on
+ * Serve's answer to a refresh request, as the store reads it: whether the scan it asked for
+ * succeeded. Serve answers the `refresh` request; rpc-client.ts makes this event of the answer.
+ */
+export interface RefreshCompleteEvent {
+  type: "refresh_complete";
+  schema_version: number;
+  request_id: string;
+  instance_id: string;
+  ok: boolean;
+  scan_counter?: number;
+  error?: string;
+}
+
+/** Serve's answer to a search request, as the store reads it, made the same way. */
+export interface SearchEvent {
+  type: "search";
+  schema_version: number;
+  request_id: string;
+  instance_id: string;
+  query: string;
+  results: SearchResult[];
+}
+
+/** An event of the serve child's own: one it wrote, or an answer to a request of the store. */
+export type ServeEvent = CliEvent | RefreshCompleteEvent | SearchEvent;
+
+/** The requests the store sends to the serve child. */
+export interface RefreshRequest {
+  type: "refresh";
+  request_id: string;
+}
+export interface SearchRequest {
+  type: "search";
+  request_id: string;
+  query: string;
+}
+export type ServeRequest = RefreshRequest | SearchRequest;
+
+/**
+ * One line of the serve child's own output, with the id of the child that wrote it: an event on
  * stdout, a log event on stderr, or an invalid line.
  */
 export type ServeLine = { childId: number } & (
-  | { kind: "event"; event: CliEvent }
+  | { kind: "event"; event: ServeEvent }
   | { kind: "log"; event: LogEvent }
   | ({ kind: "invalid" } & InvalidLine)
 );
@@ -109,8 +157,8 @@ export interface Wire {
 }
 
 /**
- * Inside the Tauri window, and under the end-to-end tests' mocked Rust shell, the Rust shell; in
- * a browser, serve's WebSocket door.
+ * Inside the Tauri window, and under the end-to-end tests' mocked Rust shell, the serve child's
+ * stdin and stdout, through the Rust shell; in a browser, serve's WebSocket door.
  */
 const wire: Wire = "__TAURI_INTERNALS__" in globalThis ? tauriWire : socketWire;
 
@@ -199,11 +247,11 @@ export const run = (
   return { lines: lines.stream, result: start(), runId };
 };
 
-/** Stops a one-shot run, even one that has not started yet. False when no such run is going. */
+/** Stops a run, even one that has not started yet. False when no such run is going. */
 export const cancel = async (runId: string): Promise<boolean> =>
   await wire.cancel(runId);
 
-/** Calls `handle` with the run id and exit code each time any one-shot run ends. */
+/** Calls `handle` with the run id and exit code each time any run ends. */
 export const onRunEnd = async (
   handle: (end: { runId: string; exitCode: number | null }) => void
 ): Promise<() => void> => await wire.onRunEnd(handle);
