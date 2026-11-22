@@ -474,10 +474,16 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })
   ).toBeVisible();
-  // The serve child already running answered check 5; none was started again.
+  // The serve child already running answered check 5; none was started again. Settings reads the
+  // import preview again.
   await expect
     .poll(() => launchCommands(cli))
-    .toEqual([...launchLines, ...loadLines, ...launchLines]);
+    .toEqual([
+      ...launchLines,
+      ...loadLines,
+      ...launchLines,
+      ["skill", "import", "--json"],
+    ]);
   expect(cli.serveStarts).toBe(1);
 });
 

@@ -1,5 +1,6 @@
 // The slices that one-shot reads fill: settings, sources and the adoption preview. Each loads
-// once the startup checks pass, and again after the commands that change it. The update check of
+// once the startup checks pass, and again after the commands that change it. The adoption preview
+// also loads when Settings opens and on Check updates. The update check of
 // `skill check-updates` replaces the update candidates serve found and sets when the last check
 // ended, and `skill update` takes away those of the skills it updated.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -167,11 +168,36 @@ export const loadInstallable = async () => {
   }
 };
 
-/** Loads what `skill import` would take over, from its preview, which writes nothing. */
-export const loadAdoption = async () => {
-  await load(["skill", "import"], (events) => ({
-    adoption: events.filter((e) => e.type === "adoption"),
-  }));
+// The preview's run, while one runs, and whether a write since it started asks for one more.
+let adoptionRun: Promise<void> | undefined;
+let adoptionStale = false;
+
+/** Runs the preview until no write asked for another run while it ran. */
+const readAdoption = async () => {
+  try {
+    do {
+      adoptionStale = false;
+      // oxlint-disable-next-line no-await-in-loop
+      await load(["skill", "import"], (events) => ({
+        adoption: events.filter((e) => e.type === "adoption"),
+      }));
+    } while (adoptionStale);
+  } finally {
+    adoptionRun = undefined;
+  }
+};
+
+/**
+ * Loads what `skill import` would take over, from its preview, which writes nothing. A call while
+ * the preview runs joins that run; `afterWrite`, a call after an import, runs it once more after.
+ */
+export const loadAdoption = async ({ afterWrite = false } = {}) => {
+  if (adoptionRun === undefined) {
+    adoptionRun = readAdoption();
+  } else {
+    adoptionStale ||= afterWrite;
+  }
+  await adoptionRun;
 };
 
 // The version of each skill whose history was read, or is being read: name → version.
@@ -465,11 +491,8 @@ export const loadUpdateDiff = async (
   updateDiffCandidates.delete(name);
 };
 
-/** What to load again after a command that may have changed something. */
-const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
-  if (read) {
-    return;
-  }
+/** Loads again the one-shot reads a command that writes may have changed. */
+const reloadReads = (command: string, args: readonly string[]) => {
   if (command.startsWith("config ") || command === "snapshot apply") {
     void loadSettings();
   }
@@ -487,6 +510,22 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   ) {
     void loadSources();
   }
+  // The preview is read on demand, not on each scan: what another tool installed seldom changes.
+  // An import changes it, and Check updates is the Skills screen's refresh.
+  if (command === "skill import" && args.length > 2) {
+    void loadAdoption({ afterWrite: true });
+  }
+  if (command === "skill check-updates") {
+    void loadAdoption();
+  }
+};
+
+/** What to load again after a command that may have changed something. */
+const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
+  if (read) {
+    return;
+  }
+  reloadReads(command, args);
   // A check that could not reach a source (exit 3) still lists what it found elsewhere.
   if (
     command === "skill check-updates" &&
@@ -535,19 +574,6 @@ export const startLoaders = () => {
   }
   started = true;
   onFinished(afterCommand);
-  // A change to the library can change what `skill import` would take over.
-  useAppStore.subscribe((s, previous) => {
-    const before = previous.inventory?.library;
-    const now = s.inventory?.library;
-    if (
-      before !== undefined &&
-      now !== undefined &&
-      before !== now &&
-      JSON.stringify(before) !== JSON.stringify(now)
-    ) {
-      void loadAdoption();
-    }
-  });
   void loadSettings();
   void loadSources();
   void loadAdoption();
