@@ -1,5 +1,5 @@
 // Adopting another tool's skills all at once: the Adopt skills section of Settings and the
-// Unmanaged group's Adopt all, both opening the adopt dialog. The dialog lists the skills before
+// Unmanaged group's Import all, both opening the adopt dialog. The dialog lists the skills before
 // the run (the ones the preview refuses marked, with the reason), runs `adopt <tool> --all` for
 // each tool in turn with each row's state and one progress line, then shows each row's result and
 // a summary. A run that fails as a whole says why in the dialog.
@@ -31,7 +31,7 @@ const pane = (page: Page, name: string) =>
     .getByRole("region", { name: "Skill details" })
     .getByRole("article", { name });
 const settingsSection = (page: Page) =>
-  page.getByRole("region", { exact: true, name: "Adopt skills" });
+  page.getByRole("region", { exact: true, name: "Import skills" });
 const dialog = (page: Page) => page.getByRole("dialog");
 /** The rows of the dialog's list of `tool`, each read as "{state}: {name}" then any reason. */
 const rows = (where: Locator, tool: string) =>
@@ -40,6 +40,9 @@ const rows = (where: Locator, tool: string) =>
     .getByRole("region", { name: tool })
     .getByRole("listitem");
 const progress = (where: Locator) => where.getByRole("status");
+/** The skills the preview refused, folded under the list. */
+const refused = (where: Locator) =>
+  where.getByRole("region", { name: "Can't be imported" });
 
 /** The command lines the screens ran: everything but the launch, the store's and the pane's reads. */
 const ran = (cli: MockCli) =>
@@ -122,15 +125,15 @@ const afterRun = async (cli: MockCli, managed: string[]) => {
   ]);
 };
 
-test.describe("the Adopt skills section of Settings", () => {
+test.describe("the Import skills section of Settings", () => {
   test("has a button for each tool that has skills to adopt", async ({
     cli,
     page,
   }) => {
     await openSettings(cli, page);
     await expect(settingsSection(page).getByRole("button")).toHaveText([
-      "Adopt Skills CLI skills",
-      "Adopt Skillshare skills",
+      "Import skills from Skills CLI",
+      "Import skills from Skillshare",
     ]);
   });
 
@@ -140,7 +143,7 @@ test.describe("the Adopt skills section of Settings", () => {
   }) => {
     await openSettings(cli, page, previewWith(skillshareNames));
     await expect(settingsSection(page).getByRole("button")).toHaveText([
-      "Adopt Skills CLI skills",
+      "Import skills from Skills CLI",
     ]);
   });
 
@@ -154,7 +157,7 @@ test.describe("the Adopt skills section of Settings", () => {
       "Let agentx manage the skills another tool installed."
     );
     await expect(section).toContainText(
-      "No skills from the Skills CLI or Skillshare to adopt"
+      "No skills from the Skills CLI or Skillshare to import"
     );
   });
 
@@ -164,19 +167,27 @@ test.describe("the Adopt skills section of Settings", () => {
   }) => {
     await openSettings(cli, page);
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skills CLI skills" })
+      .getByRole("button", { name: "Import skills from Skills CLI" })
       .click();
     const open = dialog(page);
-    await expect(open).toHaveAccessibleName("Adopt Skills CLI skills");
+    await expect(open).toHaveAccessibleName("Import skills from Skills CLI");
     await expect(open.getByRole("paragraph")).toHaveText([
-      "agentx will import these 3 skills and manage them from now on. Skills CLI keeps its own files. Edits you made to the copies in your library are not kept. 1 skill can't be adopted and is left out.",
-      "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
+      "Manage the 3 skills you added with Skills CLI in agentx. Skills CLI isn't affected, but any custom edits to these skills in your library will be lost.",
     ]);
     await expect(rows(open, "Skills CLI")).toHaveText([
       "Waiting: commit-style",
       "Waiting: deck-outline",
       "Waiting: scratch",
-      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
+    ]);
+    // The refused skill is folded under the list, its reason shown once opened.
+    const fold = refused(open).getByRole("button", {
+      name: "1 skill can't be imported",
+    });
+    await expect(fold).toHaveAttribute("aria-expanded", "false");
+    await expect(refused(open).getByRole("listitem")).toHaveCount(0);
+    await fold.click();
+    await expect(refused(open).getByRole("listitem")).toHaveText([
+      "Can't be imported: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     await open.getByRole("button", { name: "Cancel" }).click();
     await expect(open).toHaveCount(0);
@@ -185,18 +196,18 @@ test.describe("the Adopt skills section of Settings", () => {
   test("the dialog for one skill says so", async ({ cli, page }) => {
     await openSettings(cli, page, previewWith(["api-docs"]));
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skillshare skills" })
+      .getByRole("button", { name: "Import skills from Skillshare" })
       .click();
     const open = dialog(page);
     await expect(open).toHaveAccessibleDescription(
-      "agentx will import this skill and manage it from now on. Skillshare keeps its own files. Edits you made to the copies in your library are not kept."
+      "Manage the skill you added with Skillshare in agentx. Skillshare isn't affected, but any custom edits to this skill in your library will be lost."
     );
     await expect(rows(open, "Skillshare")).toHaveText([
       "Waiting: frontend__ui",
     ]);
   });
 
-  test("Adopt runs in the dialog: each row's state, the progress, then each result", async ({
+  test("Import runs in the dialog: each row's state, the progress, then each result", async ({
     cli,
     page,
   }) => {
@@ -209,19 +220,18 @@ test.describe("the Adopt skills section of Settings", () => {
       logs: skillsCliWarnings.map((message) => ({ level: "warn", message })),
     });
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skills CLI skills" })
+      .getByRole("button", { name: "Import skills from Skills CLI" })
       .click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
+    await open.getByRole("button", { exact: true, name: "Import" }).click();
     await run.started;
-    await expect(progress(open)).toHaveText("Adopting 1 of 3");
+    await expect(progress(open)).toHaveText("Importing 1 of 3");
     await expect(rows(open, "Skills CLI")).toHaveText([
       "Waiting: commit-style",
-      "Adopting: deck-outline",
+      "Importing: deck-outline",
       "Waiting: scratch",
-      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
-    const adopt = open.getByRole("button", { name: "Adopt" });
+    const adopt = open.getByRole("button", { exact: true, name: "Import" });
     await expect(adopt).toBeDisabled();
     await expect(adopt).toHaveAttribute("aria-busy", "true");
     await expect(open.getByRole("button", { name: "Cancel" })).toBeDisabled();
@@ -234,11 +244,11 @@ test.describe("the Adopt skills section of Settings", () => {
         .getByRole("region", {
           exact: true,
           includeHidden: true,
-          name: "Adopt skills",
+          name: "Import skills",
         })
         .getByRole("button", {
           includeHidden: true,
-          name: "Adopt Skillshare skills",
+          name: "Import skills from Skillshare",
         })
     ).toBeDisabled();
 
@@ -246,23 +256,21 @@ test.describe("the Adopt skills section of Settings", () => {
       events: previewWith(["deck-outline", "scratch"]),
     });
     run.release();
-    await expect(progress(open)).toHaveText("Adopted 2 of 3 skills");
+    await expect(progress(open)).toHaveText("Imported 2 of 3 skills");
     await expect(rows(open, "Skills CLI")).toHaveText([
-      "Not adopted: commit-stylehttps://github.com/vercel/skills holds no skill at commit-style now.",
-      "Adopted: deck-outline",
-      "Adopted: scratch",
-      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
+      "Not imported: commit-stylehttps://github.com/vercel/skills holds no skill at commit-style now.",
+      "Imported: deck-outline",
+      "Imported: scratch",
     ]);
     // Each skill the run did not adopt says why once, under its name, as the warning the CLI
     // logged for it did.
     await expect(open.getByRole("paragraph")).toHaveText([
-      /^agentx will import these 3 skills/u,
+      /^Manage the 3 skills/u,
       "https://github.com/vercel/skills holds no skill at commit-style now.",
-      "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     // The activity list logs the result.
     expect(await activity(page)).toEqual([
-      { message: "Adopted 2 of 3 skills", tone: "attention" },
+      { message: "Imported 2 of 3 skills", tone: "attention" },
     ]);
     await open.getByRole("button", { name: "Done" }).click();
     await expect(open).toHaveCount(0);
@@ -277,21 +285,21 @@ test.describe("the Adopt skills section of Settings", () => {
     cli.register(["adopt", "skillshare", "--all"], { events: skillshareRun });
     cli.register(["adopt"], { events: previewWith(skillshareNames) });
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skillshare skills" })
+      .getByRole("button", { name: "Import skills from Skillshare" })
       .click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
-    await expect(progress(open)).toHaveText("Adopted 2 skills");
+    await open.getByRole("button", { exact: true, name: "Import" }).click();
+    await expect(progress(open)).toHaveText("Imported 2 skills");
     await expect(rows(open, "Skillshare")).toHaveText([
-      "Adopted: api-docs",
-      "Adopted: frontend__ui",
+      "Imported: api-docs",
+      "Imported: frontend__ui",
     ]);
     expect(await activity(page)).toEqual([
-      { message: "Adopted 2 skills", tone: "success" },
+      { message: "Imported 2 skills", tone: "success" },
     ]);
     await open.getByRole("button", { name: "Done" }).click();
     await expect(settingsSection(page).getByRole("button")).toHaveText([
-      "Adopt Skills CLI skills",
+      "Import skills from Skills CLI",
     ]);
   });
 
@@ -305,16 +313,16 @@ test.describe("the Adopt skills section of Settings", () => {
       exitCode: 5,
     });
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skills CLI skills" })
+      .getByRole("button", { name: "Import skills from Skills CLI" })
       .click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
-    await expect(progress(open)).toHaveText("No skills were adopted");
+    await open.getByRole("button", { exact: true, name: "Import" }).click();
+    await expect(progress(open)).toHaveText("No skills were imported");
     await expect(rows(open, "Skills CLI").first()).toHaveText(
-      "Not adopted: commit-stylehttps://github.com/vercel/skills holds no skill at commit-style now."
+      "Not imported: commit-stylehttps://github.com/vercel/skills holds no skill at commit-style now."
     );
     expect(await activity(page)).toEqual([
-      { message: "No skills were adopted", tone: "attention" },
+      { message: "No skills were imported", tone: "attention" },
     ]);
   });
 
@@ -334,10 +342,10 @@ test.describe("the Adopt skills section of Settings", () => {
       exitCode: 10,
     });
     await settingsSection(page)
-      .getByRole("button", { name: "Adopt Skillshare skills" })
+      .getByRole("button", { name: "Import skills from Skillshare" })
       .click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
+    await open.getByRole("button", { exact: true, name: "Import" }).click();
     await expect(open.getByRole("alert")).toHaveText(
       "The store of Skillshare is not JSON. Fix the file, or move it aside."
     );
@@ -353,7 +361,7 @@ test.describe("the Adopt skills section of Settings", () => {
   });
 });
 
-test.describe("Adopt all in the Unmanaged header", () => {
+test.describe("Import all in the Unmanaged header", () => {
   test("covers both tools, grouped, and runs them one after the other with one progress", async ({
     cli,
     page,
@@ -370,13 +378,13 @@ test.describe("Adopt all in the Unmanaged header", () => {
       // Its fetch and api-docs' first step.
       holdAfter: 2,
     });
-    await unmanaged(page).getByRole("button", { name: "Adopt all" }).click();
+    await unmanaged(page).getByRole("button", { name: "Import all" }).click();
     const open = dialog(page);
     await expect(open).toHaveAccessibleName(
-      "Adopt skills from Skills CLI and Skillshare"
+      "Import skills from Skills CLI and Skillshare"
     );
     await expect(open).toHaveAccessibleDescription(
-      "agentx will import these 5 skills and manage them from now on. Skills CLI and Skillshare keep their own files. Edits you made to the copies in your library are not kept. 1 skill can't be adopted and is left out."
+      "Manage the 5 skills you added with Skills CLI and Skillshare in agentx. Skills CLI and Skillshare aren't affected, but any custom edits to these skills in your library will be lost."
     );
     await expect(open.getByRole("heading", { level: 3 })).toHaveText([
       "Skills CLI",
@@ -386,37 +394,40 @@ test.describe("Adopt all in the Unmanaged header", () => {
       "Waiting: api-docs",
       "Waiting: frontend__ui",
     ]);
-    await open.getByRole("button", { name: "Adopt" }).click();
+    await open.getByRole("button", { exact: true, name: "Import" }).click();
     await first.started;
-    await expect(progress(open)).toHaveText("Adopting…");
+    await expect(progress(open)).toHaveText("Importing…");
     cli.register(["adopt"], {
       events: previewWith([...skillsCliNames, ...skillshareNames]),
     });
     first.release();
     await second.started;
     // Three of the Skills CLI's, then the first of Skillshare's: one count over both.
-    await expect(progress(open)).toHaveText("Adopting 4 of 5");
+    await expect(progress(open)).toHaveText("Importing 4 of 5");
     await expect(rows(open, "Skills CLI").first()).toHaveText(
-      "Adopted: commit-style"
+      "Imported: commit-style"
     );
     await expect(rows(open, "Skillshare")).toHaveText([
-      "Adopting: api-docs",
+      "Importing: api-docs",
       "Waiting: frontend__ui",
     ]);
     second.release();
-    await expect(progress(open)).toHaveText("Adopted 5 skills");
+    await expect(progress(open)).toHaveText("Imported 5 skills");
     await expect(rows(open, "Skills CLI").last()).toHaveText(
-      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy."
+      "Imported: scratch"
     );
+    await expect(
+      refused(open).getByRole("button", { name: "1 skill can't be imported" })
+    ).toBeVisible();
     // The Skills CLI's run exits 0 and warns of the record the preview refused, whose row says why
     // already: a success.
     expect(await activity(page)).toEqual([
-      { message: "Adopted 2 skills", tone: "success" },
-      { message: "Adopted 3 skills", tone: "success" },
+      { message: "Imported 2 skills", tone: "success" },
+      { message: "Imported 3 skills", tone: "success" },
     ]);
     await open.getByRole("button", { name: "Done" }).click();
     await afterRun(cli, [...skillsCliNames, ...skillshareNames]);
-    await expect(page.getByRole("button", { name: "Adopt all" })).toHaveCount(
+    await expect(page.getByRole("button", { name: "Import all" })).toHaveCount(
       0
     );
     expect(ran(cli)).toEqual([
@@ -438,10 +449,10 @@ test.describe("Adopt all in the Unmanaged header", () => {
     cli.register(["adopt"], {
       events: previewWith(["deck-outline", "scratch", ...skillshareNames]),
     });
-    await unmanaged(page).getByRole("button", { name: "Adopt all" }).click();
+    await unmanaged(page).getByRole("button", { name: "Import all" }).click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
-    await expect(progress(open)).toHaveText("Adopted 4 of 5 skills");
+    await open.getByRole("button", { exact: true, name: "Import" }).click();
+    await expect(progress(open)).toHaveText("Imported 4 of 5 skills");
     await open.getByRole("button", { name: "Done" }).click();
     await afterRun(cli, ["deck-outline", "scratch", ...skillshareNames]);
     const article = pane(page, MOVED);

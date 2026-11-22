@@ -268,8 +268,8 @@ func (inv *invocation) planForkPlace(ctx context.Context, f forkSite, facts fork
 func (inv *invocation) adoptableLibrary(f forkSite) error {
 	again := "then run '" + skillCommand("place", f.name, "--force") + "' again"
 	if own := filepath.Join(f.libPath, ".git"); lexists(own) {
-		return fail(exitRefused, quotedPath(f.libPath)+" is itself a Git repository, at "+quotedPath(own)+", which git would take for the fork",
-			"move its .git out of the directory, "+again)
+		return fail(exitRefused, quotedPath(f.libPath)+" has a Git repository at "+quotedPath(own),
+			"move .git out of the directory, "+again)
 	}
 	same, err := home.SameDevice(filepath.Dir(f.libPath), existingAncestor(inv.worktreesDir()))
 	if err != nil {
@@ -348,8 +348,8 @@ func (inv *invocation) adoptableRoot(f forkSite, again string) (string, error) {
 		switch {
 		case e.Name() == f.dir && e.IsDir():
 			if own := filepath.Join(f.skillDir, ".git"); lexists(own) {
-				return "", fail(exitRefused, quotedPath(f.skillDir)+" is itself a Git repository, at "+quotedPath(own)+", which git would take for the fork",
-					"move its .git out of the directory, then "+again)
+				return "", fail(exitRefused, quotedPath(f.skillDir)+" has a Git repository at "+quotedPath(own),
+					"move .git out of the directory, then "+again)
 			}
 		case e.Name() == ".git" && e.Type().IsRegular():
 			if holder, held := home.HeldBy(f.root); held {

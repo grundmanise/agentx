@@ -591,8 +591,8 @@ export const SkillList = ({
     }
   }, []);
   // The virtualizer's functions return new values while they stay the same functions, which
-  // React Compiler cannot memoize. The app is built without it, and this component reads them
-  // on every render and passes none of them to a memoized component.
+  // React Compiler cannot memoize, so it skips this component. The component reads them on
+  // every render and passes none of them to a memoized component.
   // oxlint-disable-next-line react/incompatible-library
   const virtualizer = useVirtualizer({
     count: items.length,

@@ -57,9 +57,9 @@ interface FileRow {
 
 /** What a changed file's row says beside its path, by its status in `skill diff`. */
 export const fileStatusLabels: Record<DiffEvent["status"], string> = {
-  added: "added by you",
-  deleted: "removed by you",
-  modified: "edited by you",
+  added: "added",
+  deleted: "removed",
+  modified: "edited",
 };
 
 /** What the row says beside the path: the line count, "binary", or that the file is too large. */
@@ -452,12 +452,6 @@ const Reading = ({
   </Accordion>
 );
 
-/** What the edits of a modified skill are compared with, by what the skill is. */
-const comparedWith = (row: SkillRow) =>
-  row.kind === "yours"
-    ? "Compared with what you last published"
-    : "Compared with the version you installed";
-
 /**
  * FILES in the detail pane: every file of the skill from `skill files`, read when the skill is
  * selected, as an accordion with SKILL.md first and open. For a modified skill, `skill diff
@@ -499,10 +493,6 @@ export const FilesSection = ({
       setRevealing(first.failed !== true);
     }
   );
-  const compared =
-    current?.failed === undefined && current?.diffs !== undefined
-      ? comparedWith(row)
-      : undefined;
 
   let body: ReactNode;
   if (request === undefined) {
@@ -585,11 +575,6 @@ export const FilesSection = ({
     <section aria-label="Files" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline gap-3">
         {heading}
-        {compared !== undefined && (
-          <span className="type-technical-sm text-text-caption">
-            {compared}
-          </span>
-        )}
         {current?.failed === undefined && current?.diffFailed === true && (
           <span className="type-technical-sm text-text-caption">
             The edits could not be read

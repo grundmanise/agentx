@@ -8,7 +8,7 @@
 // order is fixed when the pane opens, so a chip stays where it is when it is toggled. Collapsed,
 // the section shows the chips that fit in two rows, and every chip that is on. A displaced or
 // inherited chip runs nothing: its switch is disabled, and its Tooltip says why.
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import type { Configuration, LogEvent } from "#/cli/events.gen.ts";
@@ -115,7 +115,7 @@ const toggle = (
 const unlockAction = (row: SkillRow, lock: Lock): ToastAction | undefined =>
   lock.action === "adopt"
     ? {
-        label: "Adopt",
+        label: "Import",
         onClick: () => {
           void adopt(row);
         },
@@ -324,7 +324,7 @@ export const AgentsSection = ({
   const [sizes, setSizes] = useState<Sizes | null>(null);
   // Measures when the list mounts, before it is painted, then whenever the pane, a chip or the
   // button changes size: a resized window, a font that loads, the button's label.
-  const measured = useCallback((list: HTMLDivElement) => {
+  const measured = (list: HTMLDivElement) => {
     const measure = () => {
       const next = sizesOf(list);
       setSizes((last) => (sameSizes(last, next) ? last : next));
@@ -338,7 +338,7 @@ export const AgentsSection = ({
     return () => {
       observer.disconnect();
     };
-  }, []);
+  };
   const fit = fitOf(
     sizes,
     entries.map((e) => kept.has(e.id))

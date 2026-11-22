@@ -289,7 +289,7 @@ const card = (
       c.title = `Remove or rename ${name} first`;
     }
     if (status === "on-disk") {
-      c.title = `A folder named ${name} is already in your library, added outside agentx. Adopt it in Skills to manage it, or remove it to add this one.`;
+      c.title = `A folder named ${name} is already in your library, added outside agentx. Import it in Skills to manage it, or remove it to add this one.`;
     }
   }
   return c;

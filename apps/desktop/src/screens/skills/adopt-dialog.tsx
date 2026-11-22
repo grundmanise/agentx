@@ -1,9 +1,12 @@
 // The adopt dialog: what adopting the skills of one tool, or of both, would do, the skills it
-// covers by name (the ones the preview refuses marked from the start, with the CLI's reason), then
-// Cancel · Adopt. Adopt runs in the dialog (`adopt.ts`): each row shows its state, then its result,
+// covers by name, the ones the preview refuses folded under the list with the CLI's reason, then
+// Cancel · Import. Import runs in the dialog (`adopt.ts`): each row shows its state, then its result,
 // with the reason of a skill the CLI did not adopt; one line counts the skills started, then says
 // how many were adopted. The dialog cannot be dismissed while the run goes, and Done closes it.
+import { useState } from "react";
+
 import { CheckIcon } from "#/components/icons/check.tsx";
+import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
@@ -40,11 +43,11 @@ import { useAppStore } from "#/store/store.ts";
 
 /** What a screen reader hears for each state, before the name. */
 const statusNames: Record<RowStatus, string> = {
-  adopted: "Adopted",
-  failed: "Not adopted",
+  adopted: "Imported",
+  failed: "Not imported",
   installed: "Installed",
-  "left-out": "Can't be adopted",
-  running: "Adopting",
+  "left-out": "Can't be imported",
+  running: "Importing",
   waiting: "Waiting",
 };
 
@@ -119,7 +122,10 @@ const Row = ({ row }: { row: AdoptRow }) => (
   </li>
 );
 
-/** The skills of the dialog, by tool when it covers two, in a list that scrolls past its height. */
+/**
+ * The skills the dialog adopts, by tool when it covers two, in a list that scrolls past its height
+ * and gives up room when the window is short.
+ */
 const Rows = ({
   rows,
   tools,
@@ -129,28 +135,76 @@ const Rows = ({
 }) => (
   <section
     aria-label="Skills"
-    className="max-h-adopt-list flex flex-col gap-4 overflow-auto"
+    className="max-h-adopt-list flex min-h-0 flex-col gap-4 overflow-auto"
   >
-    {tools.map((tool) => (
-      <section
-        key={tool.arg}
-        aria-label={tool.name}
-        className="flex flex-col gap-2"
-      >
-        {tools.length > 1 && (
-          <h3 className="type-caption text-text-caption m-0">{tool.name}</h3>
-        )}
-        <ul className="m-0 flex list-none flex-col gap-2 p-0">
-          {rows
-            .filter((r) => r.tool === tool.arg)
-            .map((row) => (
-              <Row key={row.name} row={row} />
-            ))}
-        </ul>
-      </section>
-    ))}
+    {tools
+      .filter((tool) => rows.some((r) => r.tool === tool.arg))
+      .map((tool) => (
+        <section
+          key={tool.arg}
+          aria-label={tool.name}
+          className="flex flex-col gap-2"
+        >
+          {tools.length > 1 && (
+            <h3 className="type-caption text-text-caption m-0">{tool.name}</h3>
+          )}
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {rows
+              .filter((r) => r.tool === tool.arg)
+              .map((row) => (
+                <Row key={row.name} row={row} />
+              ))}
+          </ul>
+        </section>
+      ))}
   </section>
 );
+
+/**
+ * The skills the preview refused, folded under the list behind one line that counts them; opened,
+ * each shows the CLI's reason, in a list that scrolls past its height.
+ */
+const Refused = ({ rows }: { rows: AdoptRow[] }) => {
+  const [open, setOpen] = useState(false);
+  if (rows.length === 0) {
+    return null;
+  }
+  return (
+    <section
+      aria-label="Can't be imported"
+      className="border-overlay-border flex min-h-0 flex-col gap-2 border-t pt-3"
+    >
+      <div>
+        <Button
+          variant="plain"
+          size="inline"
+          aria-expanded={open}
+          onClick={() => {
+            setOpen((o) => !o);
+          }}
+        >
+          <span
+            className={
+              open
+                ? "text-text-caption flex h-5 rotate-90 items-center"
+                : "text-text-caption flex h-5 items-center"
+            }
+          >
+            <ChevronIcon size="xs" />
+          </span>
+          {`${plural(rows.length, "skill")} can't be imported`}
+        </Button>
+      </div>
+      {open && (
+        <ul className="max-h-adopt-list m-0 flex min-h-0 list-none flex-col gap-2 overflow-auto p-0">
+          {rows.map((row) => (
+            <Row key={`${row.tool}:${row.name}`} row={row} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+};
 
 /** "Skills CLI", "Skills CLI and Skillshare". */
 const namesOf = (tools: readonly { name: string }[]) =>
@@ -159,26 +213,18 @@ const namesOf = (tools: readonly { name: string }[]) =>
 /** What adopting does, and to the other tool's own files: what the CLI contract says it does. */
 const Description = ({ tools }: { tools: readonly ToolSummary[] }) => {
   const offered = tools.reduce((n, t) => n + t.offered, 0);
-  const refused = tools.reduce((n, t) => n + t.refused, 0);
-  const what =
-    offered === 1
-      ? "this skill and manage it"
-      : `these ${plural(offered, "skill")} and manage them`;
-  const keeps = tools.length > 1 ? "keep their" : "keeps its";
+  const one = offered === 1;
+  const what = one ? "the skill" : `the ${plural(offered, "skill")}`;
   return (
     <DialogDescription>
-      {`agentx will import ${what} from now on. ${namesOf(tools)} ${keeps} own files. Edits you made to the copies in your library are not kept.`}
-      {refused > 0 &&
-        ` ${refused} ${refused === 1 ? "skill can't be adopted and is" : "skills can't be adopted and are"} left out.`}
+      {`Manage ${what} you added with ${namesOf(tools)} in agentx. ${namesOf(tools)} ${tools.length > 1 ? "aren't" : "isn't"} affected, but any custom edits to ${one ? "this skill" : "these skills"} in your library will be lost.`}
     </DialogDescription>
   );
 };
 
 /** The dialog's title: the tool it adopts the skills of, or both. */
 const titleOf = (tools: readonly { name: string }[]) =>
-  tools.length === 1
-    ? `Adopt ${namesOf(tools)} skills`
-    : `Adopt skills from ${namesOf(tools)}`;
+  `Import skills from ${namesOf(tools)}`;
 
 /**
  * The adopt dialog for `tools`, the arguments of `adopt` it covers, in the app's order. Before the
@@ -200,6 +246,8 @@ export const AdoptDialog = ({
   const tools = run?.tools ?? summariesOf(records);
   const rows = run?.rows ?? rowsOf(records);
   const running = run?.phase === "running";
+  const offered = rows.filter((r) => r.status !== "left-out");
+  const refused = rows.filter((r) => r.status === "left-out");
   const close = () => {
     if (running) {
       return;
@@ -232,7 +280,8 @@ export const AdoptDialog = ({
           <DialogTitle>{titleOf(tools)}</DialogTitle>
           <Description tools={tools} />
         </DialogHeader>
-        <Rows rows={rows} tools={tools} />
+        <Rows rows={offered} tools={tools} />
+        <Refused rows={refused} />
         {run?.failure !== undefined && <ProblemText problem={run.failure} />}
         {run !== undefined &&
           run.phase !== "running" &&
@@ -256,14 +305,14 @@ export const AdoptDialog = ({
               </DialogClose>
               <Button
                 variant="primary"
-                disabled={running || rows.length === 0}
+                disabled={running || offered.length === 0}
                 aria-busy={running ? true : undefined}
                 onClick={() => {
                   void adoptAll(tools, rows);
                 }}
               >
                 {running && <Spinner />}
-                Adopt
+                Import
               </Button>
             </>
           ) : (

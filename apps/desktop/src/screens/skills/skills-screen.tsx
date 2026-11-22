@@ -1,4 +1,5 @@
-import { useEffect, useEffectEvent, useMemo, useRef } from "react";
+import { useWindowEvent } from "@mantine/hooks";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { useNavigate } from "react-router";
 
 import { useRouteKey } from "#/lib/route-key.ts";
@@ -84,23 +85,14 @@ export const SkillsScreen = () => {
     toggleCollapsed,
     toggleExpanded,
   } = useSkillsView();
-  const sections = useMemo(
-    () => ({ collapsed, expanded }),
-    [collapsed, expanded]
-  );
+  const sections = { collapsed, expanded };
 
-  const rows = useMemo(
-    () =>
-      inventory === undefined
-        ? none
-        : projectRows({ adoption, inventory, updates }),
-    [inventory, updates, adoption]
-  );
-  const groups = useMemo(
-    () => groupRows(filterRows(rows, filters), order),
-    [rows, filters, order]
-  );
-  const flat = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
+  const rows =
+    inventory === undefined
+      ? none
+      : projectRows({ adoption, inventory, updates });
+  const groups = groupRows(filterRows(rows, filters), order);
+  const flat = groups.flatMap((g) => g.rows);
   // Collapse all closes every group and every plugin's subgroup; Expand all opens every group and
   // each plugin's subgroup the filters list.
   const toggleAll = (open: boolean) => {
@@ -174,32 +166,26 @@ export const SkillsScreen = () => {
 
   // j/k and the arrows move the selection through the visible rows, in group order, past the
   // rows of a collapsed group or subgroup. Not under the launch pane: the list waits for the startup checks.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (
-        !useStartup.getState().ready ||
-        e.metaKey ||
-        e.ctrlKey ||
-        e.altKey ||
-        inField(e.target)
-      ) {
-        return;
-      }
-      const step = steps[e.key] ?? 0;
-      if (step === 0 || flat.length === 0) {
-        return;
-      }
-      e.preventDefault();
-      const at = flat.findIndex((r) => r.key === current.current);
-      const next = nextShown(flat, at, step, sections);
-      if (next !== undefined && next.key !== current.current) {
-        select(next);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-    };
+  useWindowEvent("keydown", (e) => {
+    if (
+      !useStartup.getState().ready ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.altKey ||
+      inField(e.target)
+    ) {
+      return;
+    }
+    const step = steps[e.key] ?? 0;
+    if (step === 0 || flat.length === 0) {
+      return;
+    }
+    e.preventDefault();
+    const at = flat.findIndex((r) => r.key === current.current);
+    const next = nextShown(flat, at, step, sections);
+    if (next !== undefined && next.key !== current.current) {
+      select(next);
+    }
   });
 
   return (

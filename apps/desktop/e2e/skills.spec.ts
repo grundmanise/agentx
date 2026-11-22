@@ -207,13 +207,13 @@ test.describe("the list", () => {
       list(page).getByRole("button", { name: /^(?:Collapse|Expand) all$/u })
     ).toHaveCount(0);
     await header("PLUGINS 1").click();
-    // The Unmanaged group collapses too, and keeps its Adopt all.
+    // The Unmanaged group collapses too, and keeps its Import all.
     await header("UNMANAGED 2").click();
     await expect(
       group(page, "UNMANAGED (2)").getByRole("listitem")
     ).toHaveCount(0);
     await expect(
-      list(page).getByRole("button", { name: "Adopt all" })
+      list(page).getByRole("button", { name: "Import all" })
     ).toBeVisible();
   });
 
@@ -915,9 +915,7 @@ test.describe("the detail pane", () => {
     const banner = article.getByRole("note", {
       name: "No longer in zeta/tools",
     });
-    await expect(banner).toContainText(
-      "It seems this skill was removed from the source."
-    );
+    await expect(banner).toContainText("The source no longer has this skill.");
 
     await row(page, "release-notes").click();
     const cursor = pane(page, "release-notes").getByRole("switch", {
@@ -1041,9 +1039,11 @@ test.describe("settling a skill", () => {
     const adoptBanner = pane(page, "scratch").getByRole("note", {
       name: "Added by Skills CLI",
     });
-    await expect(adoptBanner).toContainText("Adopt to manage it from agentx");
-    await adoptBanner.getByRole("button", { name: "Adopt" }).click();
-    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    await expect(adoptBanner).toContainText("Import to manage it from agentx");
+    await adoptBanner.getByRole("button", { name: "Import" }).click();
+    await expect(
+      toasts(page).getByText("Imported scratch skill")
+    ).toBeVisible();
 
     // A skill no tool recorded, here one Cursor holds in its own folder.
     await row(page, "notes").click();
@@ -1052,10 +1052,10 @@ test.describe("settling a skill", () => {
       name: "Not managed by agentx",
     });
     await expect(unmanagedBanner).toContainText(
-      "Adopt to manage it from agentx"
+      "Import to manage it from agentx"
     );
-    await unmanagedBanner.getByRole("button", { name: "Adopt" }).click();
-    await expect(toasts(page).getByText("Adopted notes skill")).toBeVisible();
+    await unmanagedBanner.getByRole("button", { name: "Import" }).click();
+    await expect(toasts(page).getByText("Imported notes skill")).toBeVisible();
 
     await row(page, "lint").click();
     cli.register(["source", "add", OLD]);
