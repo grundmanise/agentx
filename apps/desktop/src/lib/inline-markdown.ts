@@ -2,7 +2,9 @@
 // frontmatter, read with marked's inline lexer (GitHub Flavored Markdown): code spans, strong,
 // emphasis and strikethrough. A link shows its text and an image its alt text, as a description
 // sits inside a row that opens on a click; HTML shows as written. Block syntax (headings, lists,
-// quotes) stays as written, as only the inline lexer reads the text.
+// quotes) stays as written, as only the inline lexer reads the text. marked keeps a text token
+// HTML-escaped for its HTML output, so its entities are decoded: `R&amp;D` reads as R&D.
+import { decodeHTML } from "entities";
 import { Lexer } from "marked";
 import type { MarkedToken, Token } from "marked";
 
@@ -48,7 +50,9 @@ const nodesOf = (tokens: Token[]): InlineNode[] => {
       add(" ");
     } else if (token.type === "text") {
       add(
-        ...(token.tokens === undefined ? [token.text] : nodesOf(token.tokens))
+        ...(token.tokens === undefined
+          ? [decodeHTML(token.text)]
+          : nodesOf(token.tokens))
       );
     } else if (token.type === "escape") {
       add(token.text);
