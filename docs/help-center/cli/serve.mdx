@@ -21,7 +21,7 @@ inventory 2: 3 configurations, 5 skills
 
 The first `inventory` line is the inventory when serve starts. Each later `inventory` line means the inventory changed. A change that leaves the inventory as it was prints nothing. Each `update` line is a skill with an update available. To stop serve, press Ctrl-C or close its stdin. Serve then exits with code `0`.
 
-The desktop app runs serve with [`--json`](/cli/output#json-output). The JSON output also carries the whole inventory and a notice each time a skill changes state.
+The desktop app runs serve with [`--json`](/cli/output#json-output) and talks to it in JSON-RPC 2.0 over its stdin and stdout: it runs its commands through serve, asks for a rescan and searches your sources. The JSON output also carries the whole inventory and a notice each time a skill changes state.
 
 ## What counts as a change
 
@@ -111,12 +111,16 @@ Keep the terminal open: serve stops when you press Ctrl-C or its stdin closes, a
 
 ## One serve per home
 
-Only one serve runs for each agentx home (`~/.agentx`). A second `agentx serve`, `--once` included, exits with code 6 and names the lock file, `~/.agentx/serve.lock`. Stop the running serve first.
+Only one serve runs for each agentx home (`~/.agentx`). A second `agentx serve --once` exits with code 6 and names the lock file, `~/.agentx/serve.lock`. A second `agentx serve` prints the same error and keeps running without scanning, so that the app can still run commands through it. It exits with code 6 once its stdin closes. Stop the running serve first.
 
 ## When watching is not possible
 
-If a directory cannot be watched, serve exits with code 6 and an error naming the directory and the cause. On Linux this usually means the inotify watch limit is reached. Raise `fs.inotify.max_user_watches`.
+If a directory cannot be watched, serve prints an error naming the directory and the cause, and keeps running. It stops watching, so it rescans only when the app asks it to. On Linux this usually means the inotify watch limit is reached. Raise `fs.inotify.max_user_watches`, then restart serve.
 
 On macOS, use the released binary or the Homebrew build. A binary [built from source](/install#build-from-source) without cgo soon reaches the default open-file limit. Raise it with `ulimit -n`.
 
 Serve cannot watch a skills directory that does not exist yet. When another change causes a rescan, serve finds the new directory and watches it from then on.
+
+## When the first scan fails
+
+If the first scan fails, for example because Git is missing, serve prints the error and keeps running. Fix the cause, such as installing Git. The next change, or a rescan the app asks for, scans again and prints the first inventory.

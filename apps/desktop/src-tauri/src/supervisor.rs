@@ -1,14 +1,16 @@
-// The CLI's process supervisor: one-shot commands, and the one serve child the window keeps open.
-// It knows nothing about Tauri; what it reports goes through an `Emit` function, which the app
+// The CLI's process supervisor: the one serve child the window keeps open. The app sends serve
+// every command as a JSON-RPC request, which the supervisor writes to serve's stdin, and serve's
+// answers and events come back on its stdout, which the supervisor reports line by line. It knows
+// nothing about Tauri or JSON-RPC; what it reports goes through an `Emit` function, which the app
 // turns into Tauri events and the tests collect.
 //
-// Every child gets the login shell's environment, runs in a process group of its own and is
-// stopped by signalling that group, so the git and the helpers it started stop with it.
+// The child gets the login shell's environment, runs in a process group of its own and is stopped
+// by signalling that group, so the git and the helpers it started stop with it.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -24,20 +26,14 @@ use crate::shell::{self, Found};
 /// Reports to the frontend: an event name and its payload.
 pub type Emit = Arc<dyn Fn(&'static str, Value) + Send + Sync>;
 
-/// A line of a one-shot run, with its `run_id`.
-pub const RUN_LINE: &str = "cli-run";
-/// The end of a one-shot run.
-pub const RUN_END: &str = "cli-run-end";
 /// A line of the serve child's output, an event on stdout or a log event on stderr, with its
 /// `child_id`.
 pub const SERVE_LINE: &str = "serve-event";
 /// The serve child ended.
 pub const SERVE_EXIT: &str = "serve-exit";
 
-/// How long a stopped child has between SIGTERM and SIGKILL.
-const KILL_GRACE: Duration = Duration::from_secs(2);
 /// How long the output a child left in its pipes is read after it exits. A grandchild that keeps
-/// a pipe open must not hold the run open.
+/// a pipe open must not hold the exit back.
 const DRAIN: Duration = Duration::from_secs(1);
 /// How long closing the window waits for serve to end after its stdin closes.
 const SERVE_STOP: Duration = Duration::from_secs(3);
@@ -47,11 +43,11 @@ const BACKOFF_FIRST: Duration = Duration::from_millis(500);
 const BACKOFF_CAP: Duration = Duration::from_secs(30);
 const BACKOFF_RESET: Duration = Duration::from_secs(60);
 /// Exit codes after which serve is not restarted: git missing (2), serve refused (6: another
-/// serve holds `serve.lock`, or the watch limit), and the account repo unusable (8). A restart
-/// cannot fix them; the startup screen shows them and offers Retry, which starts serve again.
+/// serve holds `serve.lock`, or the watch limit), and the account repo unusable (8). Serve reports
+/// these as `error` events and stays up to answer requests; should it still exit with one of
+/// them, a restart cannot fix it, so the startup screen shows it and offers Retry, which starts
+/// serve again.
 const NO_RESTART: [i32; 3] = [2, 6, 8];
-/// How many cancels of runs that have not arrived yet are kept.
-const EARLY_CANCELS: usize = 64;
 /// How many of serve's last stderr lines its exit carries. Debug log events do not count: with
 /// `--verbose` they would push out the line that says why serve stopped.
 const STDERR_TAIL: usize = 20;
@@ -110,19 +106,6 @@ pub enum Line {
     Invalid(Invalid),
 }
 
-/// How a one-shot run ended.
-#[derive(Clone, Debug, Serialize)]
-pub struct RunEnd {
-    pub run_id: String,
-    /// The exit code; absent when a signal ended the CLI.
-    pub exit_code: Option<i32>,
-    pub events: Vec<Value>,
-    pub logs: Vec<Value>,
-    pub invalid: Vec<Invalid>,
-    pub cancelled: bool,
-    pub timed_out: bool,
-}
-
 /// How a serve child ended.
 #[derive(Clone, Debug, Serialize)]
 pub struct ServeExit {
@@ -142,25 +125,6 @@ struct Shell {
     cli: Option<(PathBuf, Found)>,
 }
 
-/// A one-shot run in progress. It is registered before the CLI starts, so that a cancel that
-/// arrives while the login shell is still being read stops the run before it starts.
-#[derive(Default)]
-struct RunControl {
-    /// The CLI's pid, which leads its process group; 0 until it starts.
-    pid: AtomicU32,
-    cancelled: AtomicBool,
-    stop: Notify,
-}
-
-/// The one-shot runs going, and cancels that arrived before their run. Tauri may handle a cancel
-/// before the run it names, when both are sent at once: such a cancel is kept and stops the run as
-/// it arrives. Both are under one lock, so that a cancel and its run cannot miss each other.
-#[derive(Default)]
-struct Runs {
-    going: HashMap<String, Arc<RunControl>>,
-    early: VecDeque<String>,
-}
-
 #[derive(Default)]
 struct ServeState {
     child_id: u64,
@@ -168,16 +132,21 @@ struct ServeState {
     stdin: Option<ChildStdin>,
     running: bool,
     stopping: bool,
+    /// Whether the restart loop waits to start the next child after one exited.
+    waiting: bool,
+    /// A child `serve_start` started during that wait, which the restart loop takes up and
+    /// watches in place of one of its own.
+    started: Option<Child>,
 }
 
 pub struct Supervisor {
     config: Config,
     emit: Emit,
     shell: tokio::sync::Mutex<Option<Arc<Shell>>>,
-    runs: Mutex<Runs>,
     serve: tokio::sync::Mutex<ServeState>,
     serve_running: watch::Sender<bool>,
-    serve_stop: Notify,
+    /// Wakes the restart wait: the window closes, or a child was started on request.
+    serve_wake: Notify,
     next_child: AtomicU64,
     /// Whether serve children run with `--verbose`.
     serve_verbose: AtomicBool,
@@ -191,10 +160,9 @@ impl Supervisor {
             config,
             emit,
             shell: tokio::sync::Mutex::new(None),
-            runs: Mutex::new(Runs::default()),
             serve: tokio::sync::Mutex::new(ServeState::default()),
             serve_running: watch::Sender::new(false),
-            serve_stop: Notify::new(),
+            serve_wake: Notify::new(),
             next_child: AtomicU64::new(1),
             serve_verbose: AtomicBool::new(false),
             log: Mutex::new(log),
@@ -243,7 +211,7 @@ impl Supervisor {
         Shell { env, cli }
     }
 
-    /// The login shell's environment, which every CLI child gets: an editor the app starts gets
+    /// The login shell's environment, which the serve child gets: an editor the app starts gets
     /// it too, so that it finds what the user's terminal finds.
     pub async fn login_env(&self) -> HashMap<String, String> {
         self.shell().await.env.clone()
@@ -264,7 +232,7 @@ impl Supervisor {
             .as_ref()
             .ok_or("agentx was not found next to the app or on PATH")?;
         let mut cmd = Command::new(cli);
-        cmd.args(json_args(args))
+        cmd.args(args)
             .env_clear()
             .envs(&shell.env)
             .stdout(Stdio::piped())
@@ -273,141 +241,23 @@ impl Supervisor {
         Ok(cmd)
     }
 
-    /// Runs `agentx <args> --json`, emits each line as it arrives and the end, and returns the
-    /// end. A deadline stops the run when it passes.
-    pub async fn run(
-        &self,
-        run_id: String,
-        args: Vec<String>,
-        deadline: Option<Duration>,
-    ) -> Result<RunEnd, String> {
-        let control = Arc::new(RunControl::default());
-        {
-            let mut runs = self.runs.lock().unwrap();
-            if runs.going.contains_key(&run_id) {
-                return Err(format!("run {run_id} is already running"));
-            }
-            if let Some(at) = runs.early.iter().position(|id| *id == run_id) {
-                runs.early.remove(at);
-                control.cancelled.store(true, Ordering::SeqCst);
-            }
-            runs.going.insert(run_id.clone(), control.clone());
-        }
-        let end = self.start_run(&run_id, &args, &control, deadline).await;
-        self.runs.lock().unwrap().going.remove(&run_id);
-        let end = end?;
-        (self.emit)(RUN_END, to_value(&end));
-        Ok(end)
-    }
-
-    async fn start_run(
-        &self,
-        run_id: &str,
-        args: &[String],
-        control: &RunControl,
-        deadline: Option<Duration>,
-    ) -> Result<RunEnd, String> {
-        let shell = self.shell().await;
-        let mut end = RunEnd {
-            run_id: run_id.to_owned(),
-            exit_code: None,
-            events: vec![],
-            logs: vec![],
-            invalid: vec![],
-            cancelled: false,
-            timed_out: false,
-        };
-        if control.cancelled.load(Ordering::SeqCst) {
-            end.cancelled = true;
-            return Ok(end);
-        }
-        let mut child = self
-            .command(&shell, args)?
-            .stdin(Stdio::null())
-            .spawn()
-            .map_err(|err| format!("agentx: {err}"))?;
-        let pid = child.id().ok_or("agentx exited at once")?;
-        control.pid.store(pid, Ordering::SeqCst);
-        self.watch_run(&mut end, &mut child, pid, control, deadline)
-            .await;
-        Ok(end)
-    }
-
-    /// Emits the run's lines as they arrive into `end`, until the CLI exits.
-    async fn watch_run(
-        &self,
-        end: &mut RunEnd,
-        child: &mut Child,
-        pid: u32,
-        control: &RunControl,
-        deadline: Option<Duration>,
-    ) {
-        let run_id = end.run_id.clone();
-        let mut lines = read_lines(child);
-        let mut record = |stream, text| {
-            let Some(line) = classify(stream, text) else {
-                return;
-            };
-            (self.emit)(RUN_LINE, with_id("run_id", &run_id, &line));
-            match line {
-                Line::Event { event } => end.events.push(event),
-                Line::Log { event } => end.logs.push(event),
-                Line::Invalid(invalid) => end.invalid.push(invalid),
-            }
-        };
-        let deadline = async {
-            match deadline {
-                Some(d) => tokio::time::sleep(d).await,
-                None => std::future::pending().await,
-            }
-        };
-        tokio::pin!(deadline);
-        let mut timed_out = false;
-        let mut open = true;
-        let status = loop {
-            tokio::select! {
-                line = lines.recv(), if open => match line {
-                    Some((stream, text)) => record(stream, text),
-                    None => open = false,
-                },
-                status = child.wait() => break status,
-                () = &mut deadline, if !timed_out => {
-                    timed_out = true;
-                    stop(pid);
-                }
-                // A cancel that arrived while the CLI was starting left its notification here.
-                () = control.stop.notified() => stop(pid),
-            }
-        };
-        drain(&mut lines, &mut record).await;
-        end.exit_code = status.ok().and_then(|s| s.code());
-        end.cancelled = control.cancelled.load(Ordering::SeqCst);
-        end.timed_out = timed_out;
-    }
-
-    /// Stops a one-shot run: its process group gets SIGTERM, on which agentx reports the stop and
-    /// exits 9, then SIGKILL if it is still there. Returns false when no such run is going; the
-    /// cancel is then kept, and stops the run if it arrives later. Run ids are never reused (the
-    /// transport makes each a random UUID), so a kept cancel of a run that already ended stops
-    /// nothing.
-    pub fn cancel(&self, run_id: &str) -> bool {
-        let mut runs = self.runs.lock().unwrap();
-        let Some(control) = runs.going.get(run_id).cloned() else {
-            if runs.early.len() == EARLY_CANCELS {
-                runs.early.pop_front();
-            }
-            runs.early.push_back(run_id.to_owned());
-            return false;
-        };
-        drop(runs);
-        control.cancelled.store(true, Ordering::SeqCst);
-        control.stop.notify_one();
-        true
-    }
-
-    /// Starts the serve child unless one is running, and returns its child id.
+    /// Starts the serve child unless one is running, and returns its child id. The app calls it
+    /// before it sends a request, so it may be called often and at once: the calls take the serve
+    /// lock in turn, and all but the one that starts the child return the id of the running child.
+    /// While serve waits to be restarted after an exit, the next child is started at once, since a
+    /// request is waiting for it; the restart loop then watches that child and starts none of its
+    /// own, and keeps its delay for the next restart nobody asked for.
     pub async fn serve_start(self: &Arc<Self>) -> Result<u64, String> {
         let mut state = self.serve.lock().await;
+        if state.running && state.waiting && !state.stopping {
+            // The environment is captured again, as for a restart.
+            let shell = self.refresh_shell().await;
+            let child = self.spawn_serve(&shell, &mut state)?;
+            state.waiting = false;
+            state.started = Some(child);
+            self.serve_wake.notify_one();
+            return Ok(state.child_id);
+        }
         if state.running {
             return Ok(state.child_id);
         }
@@ -445,6 +295,7 @@ impl Supervisor {
         if self.serve_verbose.load(Ordering::SeqCst) {
             args.push("--verbose".to_owned());
         }
+        args.push("--json".to_owned());
         let mut child = self
             .command(shell, &args)?
             .stdin(Stdio::piped())
@@ -477,6 +328,7 @@ impl Supervisor {
                     self.serve_ended(&mut state);
                     return;
                 }
+                state.waiting = true;
             }
             match self.restart(&mut delay).await {
                 Some(next) => child = next,
@@ -486,34 +338,43 @@ impl Supervisor {
     }
 
     /// Waits `delay`, then starts a new serve child, doubling the delay up to the cap each time.
-    /// A child that cannot start is reported as one that exited, and tried again. Returns None
-    /// once the window is closing.
+    /// A child that cannot start is reported as one that exited, and tried again. A child that
+    /// `serve_start` started during the wait is returned instead, and none is started here.
+    /// Returns None once the window is closing.
     async fn restart(&self, delay: &mut Duration) -> Option<Child> {
         loop {
-            let wait = *delay;
+            let wait = tokio::time::sleep(*delay);
             *delay = (*delay * 2).min(BACKOFF_CAP);
-            tokio::select! {
-                () = tokio::time::sleep(wait) => {}
-                () = self.serve_stop.notified() => {}
-            }
-            // Closing the window wakes the wait: stop before reading the login shell for nothing.
-            {
-                let mut state = self.serve.lock().await;
-                if state.stopping {
-                    self.serve_ended(&mut state);
-                    return None;
+            tokio::pin!(wait);
+            // A wake left over from an earlier wait finds nothing to do, and the wait goes on.
+            loop {
+                tokio::select! {
+                    () = &mut wait => break,
+                    () = self.serve_wake.notified() => {
+                        let state = self.serve.lock().await;
+                        if state.stopping || state.started.is_some() {
+                            break;
+                        }
+                    }
                 }
+            }
+            // Closing the window or a child started on request ends the wait: neither needs the
+            // login shell read again.
+            if let Some(next) = self.after_wait(&mut *self.serve.lock().await) {
+                return next;
             }
             // The environment is captured again, so that a change to the user's shell profile
             // reaches the next child.
             let shell = self.refresh_shell().await;
             let mut state = self.serve.lock().await;
-            if state.stopping {
-                self.serve_ended(&mut state);
-                return None;
+            if let Some(next) = self.after_wait(&mut state) {
+                return next;
             }
             match self.spawn_serve(&shell, &mut state) {
-                Ok(child) => return Some(child),
+                Ok(child) => {
+                    state.waiting = false;
+                    return Some(child);
+                }
                 Err(err) => {
                     state.child_id = self.next_child.fetch_add(1, Ordering::SeqCst);
                     self.serve_exited(state.child_id, None, vec![err], Some(*delay));
@@ -539,13 +400,28 @@ impl Supervisor {
         (self.emit)(SERVE_EXIT, to_value(&exit));
     }
 
+    /// What ends a restart wait other than its delay: the child `serve_start` started, which is
+    /// taken up even when the window is closing, as closing it stops that child too; or else the
+    /// window closing, after which no child is started.
+    fn after_wait(&self, state: &mut ServeState) -> Option<Option<Child>> {
+        if let Some(child) = state.started.take() {
+            return Some(Some(child));
+        }
+        if state.stopping {
+            self.serve_ended(state);
+            return Some(None);
+        }
+        None
+    }
+
     fn serve_ended(&self, state: &mut ServeState) {
         state.running = false;
         state.stopping = false;
+        state.waiting = false;
         self.serve_running.send_replace(false);
     }
 
-    /// Emits the serve child's lines as a one-shot's are, and returns its exit code and last
+    /// Emits each of the serve child's lines as it arrives, and returns its exit code and last
     /// stderr lines once it exits. Its stderr also goes to the log, whole, so that the warnings
     /// the app shows and the debug lines it does not can be read back after the fact.
     async fn watch_serve(&self, child_id: u64, child: &mut Child) -> (Option<i32>, Vec<String>) {
@@ -581,7 +457,9 @@ impl Supervisor {
         (status.ok().and_then(|s| s.code()), tail.into())
     }
 
-    /// Writes one request to the serve child's stdin, as one line.
+    /// Writes one message to the serve child's stdin, as one line. Any JSON object is written, so
+    /// that JSON-RPC requests and notifications both pass; serve answers one it cannot take with
+    /// a JSON-RPC error. What is not a JSON object, a JSON-RPC batch included, is refused here.
     pub async fn serve_request(&self, line: &str) -> Result<(), String> {
         let request: Value =
             serde_json::from_str(line).map_err(|err| format!("not a JSON request: {err}"))?;
@@ -602,17 +480,10 @@ impl Supervisor {
             .map_err(|err| format!("serve's stdin: {err}"))
     }
 
-    /// Stops everything when the window closes: one-shot runs are killed; serve's stdin is closed,
-    /// on which it emits its `result` and exits, and its process group is killed if it has not
+    /// Stops serve when the window closes: its stdin is closed, on which it stops the runs in
+    /// progress, emits its `result` and exits, and its process group is killed if it has not
     /// within 3s.
     pub async fn shutdown(&self) {
-        for control in self.runs.lock().unwrap().going.values() {
-            control.cancelled.store(true, Ordering::SeqCst);
-            match control.pid.load(Ordering::SeqCst) {
-                0 => {}
-                pid => signal_group(pid, libc::SIGKILL),
-            }
-        }
         let pid = {
             let mut state = self.serve.lock().await;
             if !state.running {
@@ -622,7 +493,7 @@ impl Supervisor {
             state.stdin = None;
             state.pid
         };
-        self.serve_stop.notify_one();
+        self.serve_wake.notify_one();
         let mut running = self.serve_running.subscribe();
         let ended = tokio::time::timeout(SERVE_STOP, running.wait_for(|r| !r)).await;
         if ended.is_err() {
@@ -631,16 +502,6 @@ impl Supervisor {
             }
         }
     }
-}
-
-/// The arguments with `--json` added, before a `--` that ends the flags.
-fn json_args(args: &[String]) -> Vec<String> {
-    let mut out = args.to_vec();
-    if !out.iter().any(|a| a == "--json") {
-        let at = out.iter().position(|a| a == "--").unwrap_or(out.len());
-        out.insert(at, "--json".to_owned());
-    }
-    out
 }
 
 /// Reads the child's stdout and stderr, each line tagged with its stream, in the order they
@@ -723,15 +584,6 @@ fn with_id(key: &str, id: impl Serialize, line: &Line) -> Value {
     value
 }
 
-/// Stops a process group: SIGTERM now, SIGKILL after the grace period.
-fn stop(pid: u32) {
-    signal_group(pid, libc::SIGTERM);
-    tokio::spawn(async move {
-        tokio::time::sleep(KILL_GRACE).await;
-        signal_group(pid, libc::SIGKILL);
-    });
-}
-
 /// Sends `signal` to the process group `pid` leads. A group that is gone is not an error.
 pub(crate) fn signal_group(pid: u32, signal: i32) {
     if let Ok(pid) = libc::pid_t::try_from(pid) {
@@ -745,20 +597,6 @@ pub(crate) fn signal_group(pid: u32, signal: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn json_goes_before_the_end_of_the_flags() {
-        let args = |a: &[&str]| a.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
-        assert_eq!(json_args(&args(&["version"])), args(&["version", "--json"]));
-        assert_eq!(
-            json_args(&args(&["skill", "add", "--", "-x"])),
-            args(&["skill", "add", "--json", "--", "-x"])
-        );
-        assert_eq!(
-            json_args(&args(&["--json", "doctor"])),
-            args(&["--json", "doctor"])
-        );
-    }
 
     #[test]
     fn classify_reports_what_is_not_a_json_object() {

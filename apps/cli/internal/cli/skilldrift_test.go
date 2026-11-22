@@ -313,30 +313,35 @@ func mkdirs(t *testing.T, dir, name string) string {
 	return filepath.Join(dir, name)
 }
 
-// until reads the child's events up to and including the refresh_complete
-// of the request id, and returns them in order. A change on disk can reach
-// serve as one rescan or as two, the second finding nothing new, so a test
-// that asks what a change emitted reads everything up to the refresh it
-// sent after the change rather than a fixed number of events.
+// until sends a refresh request with id and reads the child's events up to
+// its response, which must be a result, and returns them in order. A change
+// on disk can reach serve as one rescan or as two, the second finding
+// nothing new, so a test that asks what a change emitted reads everything
+// up to the refresh it sent after the change rather than a fixed number of
+// events.
 func (p *serveProc) until(id string) []jsonEvent {
 	p.t.Helper()
+	p.refresh(id)
 	var events []jsonEvent
 	for {
 		select {
 		case line, ok := <-p.lines:
 			if !ok {
-				p.t.Fatalf("serve ended before the refresh_complete of %s", id)
+				p.t.Fatalf("serve ended before the response to refresh %s", id)
 			}
 			var e jsonEvent
 			if err := json.Unmarshal([]byte(line), &e); err != nil {
 				p.t.Fatalf("not a JSON event: %q: %v", line, err)
 			}
-			events = append(events, e)
-			if e["type"] == "refresh_complete" && e["request_id"] == id {
+			if e["jsonrpc"] == "2.0" && e["id"] == id {
+				if e["result"] == nil {
+					p.t.Fatalf("refresh %s was answered %v", id, e)
+				}
 				return events
 			}
+			events = append(events, e)
 		case <-time.After(serveDeadline):
-			p.t.Fatalf("no refresh_complete of %s within %s", id, serveDeadline)
+			p.t.Fatalf("no response to refresh %s within %s", id, serveDeadline)
 		}
 	}
 }
@@ -380,13 +385,11 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
 	first := p.next("inventory")
-	p.send(`{"type":"refresh","request_id":"start"}`)
-	equal(t, "the event after the first inventory", p.next("refresh_complete")["request_id"], "start")
+	p.refreshed("start") // the message after the first inventory
 
 	change := func(id string, do func()) jsonEvent {
 		t.Helper()
 		do()
-		p.send(`{"type":"refresh","request_id":"` + id + `"}`)
 		var inventory, found jsonEvent
 		for _, e := range p.until(id) {
 			switch e["type"] {
@@ -447,7 +450,6 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 
 	// A skill that arrives in the library is in the next inventory.
 	h.runBesideServe("skill", "add", s.url, "--name", "beta")
-	p.send(`{"type":"refresh","request_id":"arrived"}`)
 	var arrived jsonEvent
 	for _, e := range p.until("arrived") {
 		if e["type"] == "inventory" {
@@ -490,8 +492,7 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
 	p.next("inventory")
-	p.send(`{"type":"refresh","request_id":"start"}`)
-	equal(t, "the event after the first inventory", p.next("refresh_complete")["request_id"], "start")
+	p.refreshed("start") // the message after the first inventory
 
 	// One rename takes the whole directory away, so the watcher never sees
 	// the skill half deleted, which would be an edit of its own.
@@ -500,7 +501,6 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	}
 	want := "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add " +
 		shellWord(s.url) + " --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it"
-	p.send(`{"type":"refresh","request_id":"gone"}`)
 	var inventory jsonEvent
 	for _, e := range p.until("gone") {
 		if e["type"] == "inventory" {
@@ -643,8 +643,7 @@ func TestServeReportsForkDrift(t *testing.T) {
 	p := h.serve(t, "--json")
 	first := p.next("inventory")["library"].([]any)
 	equal(t, "the fork's first state", first[0].(map[string]any)["state"], stateCurrent)
-	p.send(`{"type":"refresh","request_id":"start"}`)
-	equal(t, "the event after the first inventory", p.next("refresh_complete")["request_id"], "start")
+	p.refreshed("start") // the message after the first inventory
 	expect := func(what, state, previous string, drift ...string) {
 		t.Helper()
 		e := p.nextOf("drift")

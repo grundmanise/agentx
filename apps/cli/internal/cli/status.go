@@ -53,6 +53,10 @@ type failure struct {
 	// a preview says it of a skill it cannot adopt. "" for one no list
 	// words on its own, see adoptRow.
 	row string
+	// reported says the run reported the failure as an error event when
+	// it happened, as serve does with a lock another serve holds, staying
+	// up afterwards: its end says so in the result alone.
+	reported bool
 }
 
 func (f *failure) Error() string { return f.message }

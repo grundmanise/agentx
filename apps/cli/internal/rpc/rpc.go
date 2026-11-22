@@ -1,6 +1,8 @@
-// Package rpc is the WebSocket door of the serve child: a JSON-RPC 2.0
-// server that takes one message per frame from the clients that may
-// connect, and answers each request from the method it names.
+// Package rpc is the JSON-RPC 2.0 server of the serve child, with its two
+// doors: the WebSocket, which takes one message per frame from the clients
+// that may connect, and the standard streams, which take one message per
+// line from the process that started serve. Both answer each request from
+// the method it names, in the same way.
 package rpc
 
 import (
@@ -55,7 +57,13 @@ type Call struct {
 // no other. It waits while that client is behind on reading, as a pipe
 // does, and gives up when the client has gone.
 func (c Call) Notify(method string, params any) {
-	c.conn.send(encode(message{JSONRPC: version, Method: method, Params: raw(params)}))
+	c.conn.put(Notification(method, params))
+}
+
+// Notification is a notification as it is sent: one JSON object, with no
+// newline after it.
+func Notification(method string, params any) []byte {
+	return encode(message{JSONRPC: version, Method: method, Params: raw(params)})
 }
 
 // Method answers one request. ctx is done when the client cancels the
@@ -78,7 +86,7 @@ type Server struct {
 	cancel context.CancelFunc
 
 	mu       sync.Mutex
-	conns    map[*conn]struct{}
+	conns    map[*socket]struct{}
 	retained []byte // the notification every new client is sent first
 	closed   bool
 	serving  sync.WaitGroup // one per connection
@@ -88,7 +96,7 @@ type Server struct {
 // New makes a server; nothing runs until a client connects.
 func New(o Options) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Server{o: o, ctx: ctx, cancel: cancel, conns: map[*conn]struct{}{}, queue: queueLength}
+	return &Server{o: o, ctx: ctx, cancel: cancel, conns: map[*socket]struct{}{}, queue: queueLength}
 }
 
 // ServeHTTP refuses a request that is not for this door, in this order: a
@@ -121,10 +129,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return // Accept has answered
 	}
 	ws.SetReadLimit(readLimit)
-	ctx, cancel := context.WithCancel(s.ctx)
-	c := &conn{ws: ws, ctx: ctx, cancel: cancel, out: make(chan []byte, s.queue), methods: s.o.Methods, calls: map[string]context.CancelFunc{}}
+	c := &socket{ws: ws, out: make(chan []byte, s.queue)}
+	c.conn = newConn(s.ctx, s.o.Methods, c.send)
 	if !s.add(c) { // closed since it was asked
-		cancel()
+		c.cancel()
 		_ = ws.CloseNow()
 		return
 	}
@@ -150,7 +158,7 @@ func (s *Server) authorised(r *http.Request) bool {
 // add takes a new connection in and queues the retained notification for
 // it, both under the lock a broadcast holds, so that the client misses no
 // broadcast after the retained one and gets none before it.
-func (s *Server) add(c *conn) bool {
+func (s *Server) add(c *socket) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -169,7 +177,7 @@ func (s *Server) add(c *conn) bool {
 // the notification is also the first thing every later client is sent,
 // until another one is retained.
 func (s *Server) Notify(method string, params any, retain bool) {
-	b := encode(message{JSONRPC: version, Method: method, Params: raw(params)})
+	b := Notification(method, params)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if retain {
@@ -190,22 +198,45 @@ func (s *Server) Close() {
 	s.serving.Wait()
 }
 
-// conn is one client.
+// conn is one client, whichever door it came through: the requests it
+// made that are in progress, and how a message reaches it.
 type conn struct {
-	ws      *websocket.Conn
 	ctx     context.Context // done when the connection ends, from either side
 	cancel  context.CancelFunc
-	out     chan []byte // what the writer sends, in order
 	methods map[string]Method
+	put     func(b []byte) // sends one message to the client
 
 	mu      sync.Mutex
 	calls   map[string]context.CancelFunc // the requests in progress, by id
 	calling sync.WaitGroup
 }
 
+func newConn(ctx context.Context, methods map[string]Method, put func([]byte)) *conn {
+	ctx, cancel := context.WithCancel(ctx)
+	return &conn{ctx: ctx, cancel: cancel, methods: methods, put: put, calls: map[string]context.CancelFunc{}}
+}
+
+// end stops what the client asked for and was not answered yet, as a
+// cancel stops it, and waits for the methods to return. It cancels under
+// mu, under which handle checks the context, so that no request is taken
+// once the wait has begun.
+func (c *conn) end() {
+	c.mu.Lock()
+	c.cancel()
+	c.mu.Unlock()
+	c.calling.Wait()
+}
+
+// socket is one client of the WebSocket door.
+type socket struct {
+	*conn
+	ws  *websocket.Conn
+	out chan []byte // what the writer sends, in order
+}
+
 // serve reads messages until the connection ends, then stops what the
 // client asked for and was not answered yet.
-func (c *conn) serve() {
+func (c *socket) serve() {
 	written := make(chan struct{})
 	go func() {
 		defer close(written)
@@ -218,14 +249,13 @@ func (c *conn) serve() {
 		}
 		c.handle(data)
 	}
-	c.cancel()
-	c.calling.Wait()
+	c.end()
 	<-written
 	_ = c.ws.CloseNow()
 }
 
 // write sends the queue, one message per frame.
-func (c *conn) write() {
+func (c *socket) write() {
 	for {
 		select {
 		case <-c.ctx.Done():
@@ -243,7 +273,7 @@ func (c *conn) write() {
 }
 
 // send queues b and waits for room.
-func (c *conn) send(b []byte) {
+func (c *socket) send(b []byte) {
 	select {
 	case c.out <- b:
 	case <-c.ctx.Done():
@@ -252,7 +282,7 @@ func (c *conn) send(b []byte) {
 
 // offer queues b when there is room and ends the connection when there is
 // none.
-func (c *conn) offer(b []byte) {
+func (c *socket) offer(b []byte) {
 	select {
 	case c.out <- b:
 	default:
@@ -274,7 +304,7 @@ type message struct {
 var null = json.RawMessage("null")
 
 func (c *conn) fail(id json.RawMessage, code int, text string) {
-	c.send(encode(message{JSONRPC: version, ID: id, Error: &Error{Code: code, Message: text}}))
+	c.put(encode(message{JSONRPC: version, ID: id, Error: &Error{Code: code, Message: text}}))
 }
 
 // handle takes one message: a request is answered on a goroutine of its
@@ -325,12 +355,17 @@ func (c *conn) handle(data []byte) {
 	}
 	ctx, cancel := context.WithCancel(c.ctx)
 	c.mu.Lock()
+	ended := c.ctx.Err() != nil
 	_, busy := c.calls[key]
-	if !busy {
+	if !busy && !ended {
 		c.calls[key] = cancel
 		c.calling.Add(1)
 	}
 	c.mu.Unlock()
+	if ended { // the connection ended while the message was read
+		cancel()
+		return
+	}
 	if busy {
 		cancel()
 		c.fail(m.ID, CodeInvalidRequest, "a request with this id is in progress")
@@ -344,10 +379,10 @@ func (c *conn) handle(data []byte) {
 		c.mu.Unlock()
 		cancel()
 		if rpcErr != nil {
-			c.send(encode(message{JSONRPC: version, ID: m.ID, Error: rpcErr}))
+			c.put(encode(message{JSONRPC: version, ID: m.ID, Error: rpcErr}))
 			return
 		}
-		c.send(encode(message{JSONRPC: version, ID: m.ID, Result: raw(result)}))
+		c.put(encode(message{JSONRPC: version, ID: m.ID, Result: raw(result)}))
 	}()
 }
 
