@@ -260,7 +260,7 @@ test.describe("chips", () => {
     const skills = page.getByRole("navigation", { name: "Skills" });
     await skills.getByRole("button", { exact: true, name: "scratch" }).click();
     const candidate = pane(page, "scratch");
-    const adopt = "This skill is not managed by agentx. Adopt it to manage";
+    const adopt = "This skill is not managed by agentx. Import it to manage";
     await expect(chip(candidate, "Claude Code")).toHaveAttribute(
       "title",
       adopt
@@ -269,8 +269,10 @@ test.describe("chips", () => {
     await expect(toasts(page).getByText(adopt)).toBeVisible();
     // The toast offers what unlocks the chips: Adopt, for a skill another tool installed.
     cli.register(["adopt", "--skill", "scratch"]);
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
-    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
+    await expect(
+      toasts(page).getByText("Imported scratch skill")
+    ).toBeVisible();
 
     // A skill an agent holds in its own folder is adopted by its directory's name, and selected
     // as the library skill the CLI reports.
@@ -280,8 +282,8 @@ test.describe("chips", () => {
     cli.register(["adopt", "--skill", "notes"], {
       events: [{ name: "notes", type: "library_skill" }],
     });
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
-    await expect(toasts(page).getByText("Adopted notes skill")).toBeVisible();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
+    await expect(toasts(page).getByText("Imported notes skill")).toBeVisible();
     await expect(page).toHaveURL(/#\/skills\/notes$/u);
 
     // A symlink in an agent's folder is not adopt's to take: the toast has no action.
@@ -302,14 +304,16 @@ test.describe("chips", () => {
     await chip(pane(page, "scratch"), "Claude Code").click();
     await expect(
       toasts(page).getByText(
-        "This skill is not managed by agentx. Adopt it to manage"
+        "This skill is not managed by agentx. Import it to manage"
       )
     ).toBeVisible();
     cli.register(["adopt", "--skill", "scratch"], {
       events: [{ name: "scratch", type: "library_skill" }],
     });
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
-    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
+    await expect(
+      toasts(page).getByText("Imported scratch skill")
+    ).toBeVisible();
     expect(later(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
   });
 
@@ -330,10 +334,10 @@ test.describe("chips", () => {
       ],
       exitCode: 6,
     });
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
     const toast = toasts(page)
       .getByRole("listitem")
-      .filter({ hasText: "scratch skill wasn't adopted" });
+      .filter({ hasText: "scratch skill wasn't imported" });
     await expect(toast).toContainText(
       "/home/me/.claude/skills/scratch contains files that differ from the skill version"
     );
@@ -346,7 +350,9 @@ test.describe("chips", () => {
     });
     await expect(dialog).toContainText("/home/me/.claude/skills/scratch");
     await dialog.getByRole("button", { name: "Replace" }).click();
-    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    await expect(
+      toasts(page).getByText("Imported scratch skill")
+    ).toBeVisible();
     expect(later(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
       ["adopt", "--skill", "scratch", "--force", "--json"],
@@ -370,10 +376,10 @@ test.describe("chips", () => {
       ],
       exitCode: 6,
     });
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
     const toast = toasts(page)
       .getByRole("listitem")
-      .filter({ hasText: "scratch skill wasn't adopted" });
+      .filter({ hasText: "scratch skill wasn't imported" });
     await expect(toast).toContainText(
       "/home/me/.claude/skills/scratch is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks"
     );
