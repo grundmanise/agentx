@@ -21,6 +21,9 @@ export default defineConfig(({ command }) => ({
   optimizeDeps: {
     include: ["@tauri-apps/api/core", "@tauri-apps/api/event", "idb-keyval"],
   },
-  plugins: [react(), tailwindcss()],
+  // React Compiler, in Oxc's Rust port (oxc-transform-react), memoizes components and hooks at
+  // build time. It skips any it cannot compile safely; oxlint's React Compiler rules
+  // (ultracite/oxlint/react) report those.
+  plugins: [react({ compiler: true }), tailwindcss()],
   server: { port: 1420, strictPort: true },
 }));

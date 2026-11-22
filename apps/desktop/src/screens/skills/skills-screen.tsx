@@ -1,5 +1,5 @@
 import { useWindowEvent } from "@mantine/hooks";
-import { useEffect, useEffectEvent, useMemo, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { useNavigate } from "react-router";
 
 import { useRouteKey } from "#/lib/route-key.ts";
@@ -85,23 +85,14 @@ export const SkillsScreen = () => {
     toggleCollapsed,
     toggleExpanded,
   } = useSkillsView();
-  const sections = useMemo(
-    () => ({ collapsed, expanded }),
-    [collapsed, expanded]
-  );
+  const sections = { collapsed, expanded };
 
-  const rows = useMemo(
-    () =>
-      inventory === undefined
-        ? none
-        : projectRows({ adoption, inventory, updates }),
-    [inventory, updates, adoption]
-  );
-  const groups = useMemo(
-    () => groupRows(filterRows(rows, filters), order),
-    [rows, filters, order]
-  );
-  const flat = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
+  const rows =
+    inventory === undefined
+      ? none
+      : projectRows({ adoption, inventory, updates });
+  const groups = groupRows(filterRows(rows, filters), order);
+  const flat = groups.flatMap((g) => g.rows);
   // Collapse all closes every group and every plugin's subgroup; Expand all opens every group and
   // each plugin's subgroup the filters list.
   const toggleAll = (open: boolean) => {

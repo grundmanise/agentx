@@ -19,12 +19,12 @@ export const AdoptSkillsSection = () => {
   const tools = toolsToAdopt(adoption);
   return (
     <SettingsSection
-      title="Adopt skills"
+      title="Import skills"
       description="Let agentx manage the skills another tool installed."
     >
       {tools.length === 0 ? (
         <p className="type-secondary text-text-muted m-0">
-          No skills from the Skills CLI or Skillshare to adopt
+          No skills from the Skills CLI or Skillshare to import
         </p>
       ) : (
         <div className="gap-button flex flex-wrap items-center">
@@ -38,7 +38,7 @@ export const AdoptSkillsSection = () => {
                 setOpen(true);
               }}
             >
-              {`Adopt ${tool.name} skills`}
+              {`Import skills from ${tool.name}`}
             </Button>
           ))}
         </div>

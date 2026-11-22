@@ -65,7 +65,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
   await expect(sections).toHaveText([
     /^This machine/u,
     /^Account remote/u,
-    /^Adopt skills/u,
+    /^Import skills/u,
     /^Comparing edits/u,
     /^Editor/u,
     /^Storage/u,
@@ -99,7 +99,6 @@ test("each section shows what the store holds", async ({ cli, page }) => {
       - definition: ${HOME}
       - term: Account repo
       - definition: ${ACCOUNT_REPO} · 1.5 MiB
-      - paragraph: There is no cache to clear; what agentx fetched lives in the account repo.
   `);
 
   await expect(section(page, "Command line")).toContainText(

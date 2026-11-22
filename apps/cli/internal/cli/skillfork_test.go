@@ -317,7 +317,7 @@ func TestSkillForkRefusals(t *testing.T) {
 		{[]string{"gamma"}, exitRefused, "is a symlink to"},
 		{[]string{"held"}, exitRefused, "worktrees/held already exists"},
 		{[]string{"beta"}, exitRefused, "beta holds a Git repository at vendor/.git"},
-		{[]string{"cloned"}, exitRefused, "cloned is itself a Git repository"},
+		{[]string{"cloned"}, exitRefused, "cloned has a Git repository"},
 	} {
 		out := h.run(append([]string{"--json", "skill", "fork"}, tc.args...)...)
 		equal(t, strings.Join(tc.args, " ")+": exit", out.exit, tc.exit.exit)

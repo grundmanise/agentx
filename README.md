@@ -14,7 +14,7 @@
 
 </div>
 
-![The Skills page of the agentx app: skills grouped by source, with one selected and its agents, files, details and history](docs/help-center/images/skills-list.png)
+https://github.com/user-attachments/assets/ef627466-8ad5-44c3-b3b6-f105fd109c36
 
 ## Install
 
