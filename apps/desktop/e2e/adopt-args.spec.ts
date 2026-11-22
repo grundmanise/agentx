@@ -57,6 +57,8 @@ const inProject = inCursor("project-notes", {
   resolved_path: "/home/me/work/app/.cursor/skills/project-notes",
   scope: "project",
 });
+/** Cursor's own directory whose name reads as a flag. */
+const dashed = inCursor("--all", {});
 
 /** The row `key` names on the fixture machine with `more` skills, by the adoption preview `records`. */
 const rowOf = (
@@ -123,6 +125,11 @@ const table: [string, ReturnType<typeof rowOf>, string[] | undefined][] = [
     "a directory whose name is not the skill's frontmatter name",
     rowOf("skill:h-meeting", [], inventory, [meetingNotes]),
     ["skill", "import", "meeting-notes"],
+  ],
+  [
+    "a directory whose name starts with a dash, after --",
+    rowOf("skill:h-own---all", [], inventory, [dashed]),
+    ["skill", "import", "--", "--all"],
   ],
   [
     "a directory under a name the library holds another skill by",

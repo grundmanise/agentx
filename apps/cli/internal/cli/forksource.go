@@ -59,7 +59,7 @@ func (m forkMode) done() string {
 // adoptCommand is the agentx skill import command a line tells the user to run on
 // the skill called name, quoted for a shell.
 func adoptCommand(name string) string {
-	return "agentx skill import " + shellWord(name)
+	return skillCommand("import", name)
 }
 
 // unmanagedRefusal refuses the unmanaged skill called name for a mode that

@@ -147,7 +147,11 @@ export const inertReason = (
 };
 
 /** `skill import <name>`. It names no tool, so the CLI decides by itself how it takes the skill. */
-const adoptLine = (name: string): string[] => ["skill", "import", name];
+/** A name that starts with a dash goes after `--`, so the CLI does not read it as a flag. */
+const adoptLine = (name: string): string[] =>
+  name.startsWith("-")
+    ? ["skill", "import", "--", name]
+    : ["skill", "import", name];
 
 /**
  * The `skill import` command line that takes over an unmanaged skill, or undefined when

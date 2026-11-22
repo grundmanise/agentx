@@ -110,7 +110,7 @@ settings = json.load(open(path)) if os.path.exists(path) else {}
 groups = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
 # Drop an earlier agentx hook, so running the script again adds no second one.
 for g in groups:
-    g["hooks"] = [h for h in g["hooks"] if not any(c in h.get("command", "") for c in ("import --machine cloud", "apply --machine cloud"))]
+    g["hooks"] = [h for h in g["hooks"] if not any(c in h.get("command", "") for c in ("agentx\" import --machine cloud", "agentx\" snapshot apply --machine cloud"))]
 groups[:] = [g for g in groups if g["hooks"]]
 groups.append({"matcher": "startup|resume", "hooks": [{"type": "command", "command": command, "timeout": 300}]})
 os.makedirs(os.path.dirname(path), exist_ok=True)

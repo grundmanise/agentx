@@ -34,7 +34,7 @@ To import:
   agentx skill import <name>  one skill
 ```
 
-With no flags, the command only shows what it found. It writes nothing and makes no network calls.
+With no arguments, the command only shows what it found. It writes nothing and makes no network calls.
 
 The preview lists every unmanaged skill on this machine:
 
@@ -337,7 +337,7 @@ For what each code means, see [Exit codes](/cli/output#exit-codes). These causes
 | 1 | `--all` is given with a skill name, or `--from` is not `skills-cli` or `skillshare`. | Fix the command line. |
 | 3 | agentx cannot fetch a skill's source. | Check the URL and your credentials, then run the command again. |
 | 5 | A skill you named is not on this machine, or its source no longer holds it. | See [When a run stops](#when-a-run-stops). |
-| 6 | A skill you named cannot be imported. With several skills, the others are imported, and the code is 6 when the failures differ. | Read the message, then see [Skills agentx cannot import](#skills-agentx-cannot-import). |
+| 6 | A skill you named cannot be imported. With several skills, the others are imported, and the code is 6 when the failures differ. If a skill you named that no tool installed is refused, the run stops and imports none. | Read the message, then see [Skills agentx cannot import](#skills-agentx-cannot-import). |
 | 7 | Another agentx command is running. | Retry when it finishes. |
 | 10 | agentx cannot read a file the other tool keeps its records in. | Fix the file or move it aside. See [Where agentx reads the records](#where-agentx-reads-the-records). |
 
