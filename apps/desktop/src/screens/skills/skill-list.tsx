@@ -847,7 +847,7 @@ export const SkillList = ({
       aria-label="Skills list"
       className="w-split-list bg-shell-content-bg border-shell-divider flex flex-none flex-col border-r"
     >
-      <div className="pt-split-header-top pr-split-header-right pl-split-header-left flex items-end justify-between gap-3 pb-0">
+      <div className="pt-split-header-top px-split-header flex items-end justify-between gap-3 pb-0">
         <div className="flex items-baseline gap-3">
           <h1 className="type-page-title text-text-primary m-0">Skills</h1>
           <span
@@ -862,7 +862,7 @@ export const SkillList = ({
           <AddSkills />
         </div>
       </div>
-      <div className="pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left gap-split-toolbar flex flex-col">
+      <div className="pt-split-toolbar-top px-split-toolbar pb-split-toolbar-bottom gap-split-toolbar flex flex-col">
         <SearchField
           label="Filter skills by name"
           placeholder="Search"
