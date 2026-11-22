@@ -707,6 +707,7 @@
   --max-height-dialog: calc(100vh - 64px);
   --gap-popover: 16px;
   --width-popover: 360px;
+  --min-width-popover: var(--width-popover);
   --min-width-menu: 240px;
   --padding-menu: 6px;
   --width-sheet: 1120px;
@@ -1024,6 +1025,14 @@
 /* popover.max-height: the room between the popover's anchor and the window's edge. */
 @utility max-h-popover {
   max-height: var(--radix-popover-content-available-height);
+}
+/* popover.max-width: the room the window has for a popover that fits its content across. */
+@utility max-w-popover {
+  max-width: var(--radix-popover-content-available-width);
+}
+/* popover.origin: the point on the popover nearest its anchor, so it zooms from there. */
+@utility origin-popover {
+  transform-origin: var(--radix-popover-content-transform-origin);
 }
 /* hover-card.max-height: the room between the hover card's trigger and the window's edge. */
 @utility max-h-hover-card {

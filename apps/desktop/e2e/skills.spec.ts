@@ -552,6 +552,8 @@ test.describe("filters", () => {
       agents.getByRole("checkbox", { name: "Zencoder" })
     ).toBeChecked();
     await page.keyboard.press("Escape");
+    // Gone once it has faded out, so its Reset filters is no Filter button.
+    await expect(filters(page)).toBeHidden();
     await page.getByRole("button", { name: "Filter" }).click();
     expect(await names(agents.getByRole("checkbox").first())).toEqual([
       "Zencoder",
