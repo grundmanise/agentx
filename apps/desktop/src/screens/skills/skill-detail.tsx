@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
+import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { PillButton } from "#/components/pill.tsx";
 import { SelectableLink } from "#/components/selectable-link.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
@@ -246,7 +247,7 @@ export const SkillDetail = ({
         <SightsNotice sights={sights} />
         {row.description !== "" && (
           <p className="type-detail-desc text-text-muted m-0 text-pretty select-text">
-            {row.description}
+            <InlineMarkdown text={row.description} />
           </p>
         )}
       </header>

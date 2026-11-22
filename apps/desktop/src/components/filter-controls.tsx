@@ -12,18 +12,7 @@ import { CloseIcon } from "#/components/icons/close.tsx";
 import { CollapseIcon } from "#/components/icons/collapse.tsx";
 import { ExpandIcon } from "#/components/icons/expand.tsx";
 import { FilterIcon } from "#/components/icons/filter.tsx";
-
-const filterButtonVariants = cva(
-  "rounded-button type-button-sm h-filter inline-flex items-center gap-2 px-3 font-medium",
-  {
-    variants: {
-      active: {
-        false: "bg-filter-bg text-filter-text hover:text-text-primary",
-        true: "bg-filter-active-bg text-filter-active-text",
-      },
-    },
-  }
-);
+import { cn } from "#/lib/utils.ts";
 
 /**
  * The Filter button that opens the popover: `filter.bg` at rest, `filter.active-bg` with a count
@@ -40,7 +29,12 @@ export const FilterButton = ({
 }) => (
   <button
     type="button"
-    className={filterButtonVariants({ active: count > 0 })}
+    className={cn(
+      "rounded-button type-button-sm h-filter inline-flex items-center gap-2 px-3 font-medium",
+      count > 0
+        ? "bg-filter-active-bg text-filter-active-text"
+        : "bg-filter-bg text-filter-text hover:text-text-primary"
+    )}
     {...props}
   >
     <FilterIcon size="xs" />
@@ -153,18 +147,6 @@ export const FilterTagsChip = ({
   </div>
 );
 
-const sortVariants = cva(
-  "rounded-button type-button-sm text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary inline-flex h-7 items-center gap-1 px-2 font-medium",
-  {
-    variants: {
-      order: {
-        asc: "",
-        desc: "[&>svg]:rotate-180",
-      },
-    },
-  }
-);
-
 /** What the sort toggle shows and says for each order. */
 const sortLabels = {
   asc: { name: "A to Z", shown: "A-Z" },
@@ -187,7 +169,10 @@ export const SortToggle = ({
     aria-label={`Sort: ${sortLabels[order].name}`}
     title={`Sort: ${sortLabels[order].name}`}
     onClick={onToggle}
-    className={sortVariants({ order })}
+    className={cn(
+      "rounded-button type-button-sm text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary inline-flex h-7 items-center gap-1 px-2 font-medium",
+      order === "desc" && "[&>svg]:rotate-180"
+    )}
   >
     <span aria-hidden>{sortLabels[order].shown}</span>
     <ArrowDownIcon size="xs" />
@@ -210,19 +195,6 @@ export const ChoiceGroup = ({
   </fieldset>
 );
 
-const choiceVariants = cva(
-  "rounded-pill type-secondary has-focus-visible:outline-shell-focus-ring relative inline-flex h-7.5 cursor-pointer items-center gap-2 px-3 has-focus-visible:outline-2 has-focus-visible:outline-offset-2",
-  {
-    variants: {
-      active: {
-        false:
-          "text-text-muted hover:bg-popover-row-hover hover:text-text-primary",
-        true: "bg-button-secondary-bg text-text-primary",
-      },
-    },
-  }
-);
-
 /** One choice of a one-of group in the popover (SHOW), with its count. */
 export const ChoicePill = ({
   group,
@@ -238,7 +210,14 @@ export const ChoicePill = ({
   children: string;
   onSelect: () => void;
 }) => (
-  <label className={choiceVariants({ active })}>
+  <label
+    className={cn(
+      "rounded-pill type-secondary has-focus-visible:outline-shell-focus-ring relative inline-flex h-7.5 cursor-pointer items-center gap-2 px-3 has-focus-visible:outline-2 has-focus-visible:outline-offset-2",
+      active
+        ? "bg-button-secondary-bg text-text-primary"
+        : "text-text-muted hover:bg-popover-row-hover hover:text-text-primary"
+    )}
+  >
     <input
       type="radio"
       name={group}
@@ -268,19 +247,6 @@ const trackVariants = cva(
       surface: {
         card: "bg-segmented-card-track-bg",
         overlay: "bg-segmented-track-bg",
-      },
-    },
-  }
-);
-
-const segmentVariants = cva(
-  "rounded-segmented type-segment has-focus-visible:outline-shell-focus-ring relative inline-flex h-6 flex-1 cursor-pointer items-center justify-center px-2.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-disabled:cursor-default",
-  {
-    variants: {
-      selected: {
-        false:
-          "text-segmented-text hover:text-text-primary has-disabled:hover:text-segmented-text",
-        true: "bg-segmented-neutral-selected text-text-primary",
       },
     },
   }
@@ -326,7 +292,12 @@ export const Segmented = <T extends string>({
     {options.map((o) => (
       <label
         key={o.value}
-        className={segmentVariants({ selected: o.value === value })}
+        className={cn(
+          "rounded-segmented type-segment has-focus-visible:outline-shell-focus-ring relative inline-flex h-6 flex-1 cursor-pointer items-center justify-center px-2.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-disabled:cursor-default",
+          o.value === value
+            ? "bg-segmented-neutral-selected text-text-primary"
+            : "text-segmented-text hover:text-text-primary has-disabled:hover:text-segmented-text"
+        )}
       >
         <input
           type="radio"

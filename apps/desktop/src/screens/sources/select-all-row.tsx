@@ -1,29 +1,8 @@
-import { cva } from "class-variance-authority";
 import { useId } from "react";
 
 import { Checkbox } from "#/components/ui/checkbox.tsx";
+import { cn } from "#/lib/utils.ts";
 import { selectAllLabel } from "#/screens/sources/projection.ts";
-
-// `start`: the checkbox before its label, at the left, heading a column of checkboxes (the Add
-// skill and Update skills dialogs). `end`: the label, then the checkbox, at the right, the
-// checkbox centred over the round checks at the end of the Sources cards.
-const rowVariants = cva("flex items-center", {
-  variants: {
-    align: {
-      end: "justify-end pr-4.5",
-      start: "",
-    },
-  },
-});
-
-const labelVariants = cva("flex items-center gap-2.5", {
-  variants: {
-    align: {
-      end: "flex-row-reverse",
-      start: "",
-    },
-  },
-});
 
 /**
  * The row above the cards: one checkbox that selects every selectable card, checked, unchecked or
@@ -42,7 +21,12 @@ export const SelectAllRow = ({
   total: number;
   onSelectAll: () => void;
   onClear: () => void;
-  /** Where the row sits, and which side of its label the checkbox takes. */
+  /**
+   * Where the row sits, and which side of its label the checkbox takes. `start`: the checkbox
+   * before its label, at the left, heading a column of checkboxes (the Add skill and Update skills
+   * dialogs). `end`: the label, then the checkbox, at the right, the checkbox centred over the
+   * round checks at the end of the Sources cards.
+   */
   align?: "start" | "end";
 }) => {
   const id = useId();
@@ -54,8 +38,19 @@ export const SelectAllRow = ({
     checked = "indeterminate";
   }
   return (
-    <div className={rowVariants({ align })}>
-      <label htmlFor={id} className={labelVariants({ align })}>
+    <div
+      className={cn(
+        "flex items-center",
+        align === "end" && "justify-end pr-4.5"
+      )}
+    >
+      <label
+        htmlFor={id}
+        className={cn(
+          "flex items-center gap-2.5",
+          align === "end" && "flex-row-reverse"
+        )}
+      >
         <Checkbox
           id={id}
           checked={checked}
