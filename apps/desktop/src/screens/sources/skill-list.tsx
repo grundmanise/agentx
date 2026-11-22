@@ -13,6 +13,7 @@ import type { ReactNode, RefObject } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { CodePane } from "#/components/code-pane.tsx";
+import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { RemoveSwap } from "#/components/remove-swap.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import {
@@ -27,6 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
 import type { SkillRow } from "#/screens/skills/projection.ts";
@@ -218,7 +220,7 @@ const Details = ({ card }: { card: SkillCard }) => {
         <div className="px-file-row flex flex-col gap-2 pb-3.5">
           {description !== undefined && (
             <p className="type-body text-text-muted m-0 text-pretty">
-              {description}
+              <InlineMarkdown text={description} />
             </p>
           )}
           {card.title !== undefined && (
@@ -331,7 +333,7 @@ const SkillItemView = ({
   }, [wanted, card.key, source, subpath, tree]);
   const status =
     card.status === undefined ? undefined : statusLabels[card.status];
-  const description = [status, card.description]
+  const description = [status, markdownText(card.description)]
     .filter((part) => part !== undefined && part !== "")
     .join(". ");
   let action: ReactNode;
@@ -386,7 +388,7 @@ const SkillItemView = ({
             aria-hidden
             className="type-row-desc text-text-muted min-w-0 flex-1 truncate"
           >
-            {open ? "" : card.description}
+            {open ? "" : <InlineMarkdown text={card.description} />}
           </span>
         )}
         {description !== "" && (
