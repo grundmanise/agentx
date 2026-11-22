@@ -169,7 +169,7 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
   await openSettings(cli, page);
   const section = applySnapshot(page);
   await expect(section).toContainText(
-    "Replaces this machine's settings, skills and placements with the ones in a snapshot."
+    "Replaces your settings with the snapshot's, and installs, updates and places its skills. Other skills stay as they are."
   );
   const applyButton = section.getByRole("button", { name: "Apply…" });
   await applyButton.click();

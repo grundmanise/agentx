@@ -216,7 +216,7 @@ const ApplyFile = () => {
 export const ApplySnapshotSection = () => (
   <SettingsSection
     title="Apply snapshot"
-    description="Replaces this machine's settings, skills and placements with the ones in a snapshot."
+    description="Replaces your settings with the snapshot's, and installs, updates and places its skills. Other skills stay as they are."
   >
     <ApplyFile />
   </SettingsSection>
