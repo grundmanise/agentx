@@ -16,24 +16,20 @@ const refused = (message: string, hint: string): ErrorEvent => ({
 });
 
 const beside =
-  "fork it beside the skill with 'agentx skill fork pdf --name <new>'";
+  "fork it under a new name with 'agentx skill fork pdf --name <new>'";
 
 const gitRepo = refused(
-  "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork",
-  `move its .git out of the skill, then run 'agentx skill fork pdf' again, or ${beside}`
+  "pdf has a Git repository at /home/me/.agents/skills/pdf/.git",
+  `move .git out of the skill, then run 'agentx skill fork pdf' again, or ${beside}`
 );
 
 // [the CLI's error, the form as the refusal leaves it, the hint the dialog shows]
 const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   // Fork ran with the switch off: exit 6 turns it on, and no name is typed yet.
-  [gitRepo, "on", "move its .git out of the skill, or type a new name"],
+  [gitRepo, "on", "move .git out of the skill, or type a new name"],
   // Fork ran with the switch on and the skill's own name typed.
-  [gitRepo, "named", "move its .git out of the skill"],
-  [
-    gitRepo,
-    "off",
-    "move its .git out of the skill, or turn on Use a different name",
-  ],
+  [gitRepo, "named", "move .git out of the skill"],
+  [gitRepo, "off", "move .git out of the skill, or use a different name"],
   [
     refused(
       "/home/me/.agents/skills/pdf is a symlink to /home/me/work/pdf; forking pdf in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to",
@@ -141,14 +137,12 @@ for (const [exitCode, renaming, name, want] of formTable) {
 test("forkHint tells a refusal by exit 6 and the code refused, not by the message alone", () => {
   const error = {
     ...refused(
-      "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git",
-      "move its .git out of the skill"
+      "pdf has a Git repository at /home/me/.agents/skills/pdf/.git",
+      "move .git out of the skill"
     ),
     code: "internal",
   } as const;
-  expect(forkHint(error, 10, "pdf", "off")).toBe(
-    "move its .git out of the skill"
-  );
+  expect(forkHint(error, 10, "pdf", "off")).toBe("move .git out of the skill");
 });
 
 const sharedTable: [string | undefined, string | undefined][] = [

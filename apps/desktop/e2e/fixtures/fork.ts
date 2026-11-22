@@ -187,8 +187,7 @@ export const forked = (name: string): InlineEvent => ({
 /** The refusal of an in-place fork of a skill folder that holds its own `.git`. */
 export const refusedInPlace: InlineEvent = {
   code: "refused",
-  hint: "move its .git out of the skill, or fork it beside the skill with --name <new>",
-  message:
-    "pdf is itself a Git repository, at /home/me/.agents/skills/pdf/.git",
+  hint: "move .git out of the skill, or fork it under a new name with --name <new>",
+  message: "pdf has a Git repository at /home/me/.agents/skills/pdf/.git",
   type: "error",
 };

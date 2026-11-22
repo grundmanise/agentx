@@ -1,7 +1,7 @@
 // The Account remote section of Settings: the Git repository your own skills publish to. With none
 // set, a URL field and Save, which runs `source add <url> --account`. With one set, its URL, how
 // many of your skills it holds and when it was fetched, a Read-only tag when access is limited, and
-// Change… (a new URL, after the replace warning) and Detach (`source remove <url>`, after its warning).
+// Change… (a new URL, after the replace warning) and Unlink (`source remove <url>`, after its warning).
 // What it shows is the Sources slice, which `source list` fills again after each command; a
 // failure of Save shows under the field, in the CLI's words as one sentence-cased paragraph, a
 // hint that names a command put in the app's words (docs/help-center/cli/source.mdx).
@@ -210,9 +210,9 @@ const RemoteForm = ({
       <Confirm
         open={confirming}
         onOpenChange={setConfirming}
-        title="Replace the account remote?"
-        warning="Your skills stay on this machine and show as not published until you publish each one to the new account remote."
-        action="Replace"
+        title="Change your account remote?"
+        warning="Skills from the previous account remote will stay but show as not published."
+        action="Change"
         onConfirm={() => {
           void save();
         }}
@@ -223,7 +223,7 @@ const RemoteForm = ({
 
 /**
  * The account remote set now: its URL, a Read-only tag when access is limited, its skills and
- * fetch, Change… and Detach. Like a source's card, it shows a tag only for a limit.
+ * fetch, Change… and Unlink. Like a source's card, it shows a tag only for a limit.
  */
 const AccountRemoteRow = ({
   url,
@@ -285,17 +285,17 @@ const AccountRemoteRow = ({
             }}
           >
             {busy && <Spinner />}
-            Detach
+            Unlink
           </Button>
         </div>
       )}
       <Confirm
         open={detaching}
         onOpenChange={setDetaching}
-        title="Detach the account remote?"
-        warning="agentx stops publishing to this repository. Your skills and the repository stay as they are."
+        title="Unlink the account remote?"
+        warning="agentx stops publishing here. Nothing is deleted."
         detail={url}
-        action="Detach"
+        action="Unlink"
         danger
         onConfirm={detach}
       />

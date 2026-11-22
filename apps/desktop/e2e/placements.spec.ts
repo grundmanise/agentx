@@ -260,7 +260,7 @@ test.describe("chips", () => {
     const skills = page.getByRole("navigation", { name: "Skills" });
     await skills.getByRole("button", { exact: true, name: "scratch" }).click();
     const candidate = pane(page, "scratch");
-    const adopt = "This skill is not managed by agentx. Adopt it to manage";
+    const adopt = "This skill is not managed by agentx. Import it to manage";
     await expect(chip(candidate, "Claude Code")).toHaveAttribute(
       "title",
       adopt
@@ -269,8 +269,10 @@ test.describe("chips", () => {
     await expect(toasts(page).getByText(adopt)).toBeVisible();
     // The toast offers what unlocks the chips: Adopt, for a skill another tool installed.
     cli.register(["adopt", "--skill", "scratch"]);
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
-    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
+    await expect(
+      toasts(page).getByText("Imported scratch skill")
+    ).toBeVisible();
 
     // A skill an agent holds in its own folder is adopted by its directory's name, and selected
     // as the library skill the CLI reports.
@@ -280,8 +282,8 @@ test.describe("chips", () => {
     cli.register(["adopt", "--skill", "notes"], {
       events: [{ name: "notes", type: "library_skill" }],
     });
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
-    await expect(toasts(page).getByText("Adopted notes skill")).toBeVisible();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
+    await expect(toasts(page).getByText("Imported notes skill")).toBeVisible();
     await expect(page).toHaveURL(/#\/skills\/notes$/u);
 
     // A symlink in an agent's folder is not adopt's to take: the toast has no action.
@@ -302,14 +304,16 @@ test.describe("chips", () => {
     await chip(pane(page, "scratch"), "Claude Code").click();
     await expect(
       toasts(page).getByText(
-        "This skill is not managed by agentx. Adopt it to manage"
+        "This skill is not managed by agentx. Import it to manage"
       )
     ).toBeVisible();
     cli.register(["adopt", "--skill", "scratch"], {
       events: [{ name: "scratch", type: "library_skill" }],
     });
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
-    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
+    await expect(
+      toasts(page).getByText("Imported scratch skill")
+    ).toBeVisible();
     expect(later(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
   });
 
@@ -330,10 +334,10 @@ test.describe("chips", () => {
       ],
       exitCode: 6,
     });
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
     const toast = toasts(page)
       .getByRole("listitem")
-      .filter({ hasText: "scratch skill wasn't adopted" });
+      .filter({ hasText: "scratch skill wasn't imported" });
     await expect(toast).toContainText(
       "/home/me/.claude/skills/scratch contains files that differ from the skill version"
     );
@@ -346,7 +350,9 @@ test.describe("chips", () => {
     });
     await expect(dialog).toContainText("/home/me/.claude/skills/scratch");
     await dialog.getByRole("button", { name: "Replace" }).click();
-    await expect(toasts(page).getByText("Adopted scratch skill")).toBeVisible();
+    await expect(
+      toasts(page).getByText("Imported scratch skill")
+    ).toBeVisible();
     expect(later(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
       ["adopt", "--skill", "scratch", "--force", "--json"],
@@ -370,10 +376,10 @@ test.describe("chips", () => {
       ],
       exitCode: 6,
     });
-    await toasts(page).getByRole("button", { name: "Adopt" }).click();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
     const toast = toasts(page)
       .getByRole("listitem")
-      .filter({ hasText: "scratch skill wasn't adopted" });
+      .filter({ hasText: "scratch skill wasn't imported" });
     await expect(toast).toContainText(
       "/home/me/.claude/skills/scratch is also read by Cursor agent which is set to copy files, while Claude Code uses symlinks"
     );
@@ -545,14 +551,16 @@ test.describe("many agents", () => {
       manyAgentsInventory(manyConfigurations.map((c) => c.id))
     );
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Remove pdf?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove pdf from this machine?",
+    });
     const list = dialog.getByRole("list", { name: "Agents that see it" });
     await expect(list.getByRole("listitem")).toHaveCount(27);
     const box = await dialog.boundingBox();
     expect(box?.y).toBeGreaterThanOrEqual(0);
     expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(600);
     await expect(
-      dialog.getByRole("heading", { name: "Remove pdf?" })
+      dialog.getByRole("heading", { name: "Remove pdf from this machine?" })
     ).toBeInViewport();
     await expect(
       dialog.getByRole("button", { name: "Remove" })
@@ -692,14 +700,14 @@ test.describe("Remove", () => {
     await openSkill(cli, page, "pdf-letters");
     const article = pane(page, "pdf-letters");
     const dialog = page.getByRole("alertdialog", {
-      name: "Remove pdf-letters?",
+      name: "Remove pdf-letters from this machine?",
     });
 
     // The Universal chip, on, is the removal: a client that reads the library loses a skill
     // only with the library.
     await chip(article, "Universal").click();
     await expect(dialog).toContainText(
-      "Universal agents read your library, where agentx keeps this skill. Removing it there removes it from every agent that has it:"
+      "Removing it from universal agents will also remove it from your library. It will be removed from:"
     );
     await expect(
       dialog
@@ -712,9 +720,6 @@ test.describe("Remove", () => {
     const remote = dialog.getByRole("checkbox", {
       name: /^Also delete it from your account remote/u,
     });
-    await expect(dialog).toContainText(
-      "Your other machines keep it until you remove it there."
-    );
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
 
@@ -722,7 +727,7 @@ test.describe("Remove", () => {
     await article.getByRole("button", { name: "Remove" }).click();
     // The Remove button has no reason to give: the dialog says only what goes.
     await expect(
-      dialog.getByText("It will be removed from every agent that has it:", {
+      dialog.getByText("Removes it from:", {
         exact: true,
       })
     ).toBeVisible();
@@ -746,7 +751,7 @@ test.describe("Remove", () => {
     await openSkill(cli, page, "pdf-letters");
     const article = pane(page, "pdf-letters");
     const dialog = page.getByRole("alertdialog", {
-      name: "Remove pdf-letters?",
+      name: "Remove pdf-letters from this machine?",
     });
     const remote = dialog.getByRole("checkbox", {
       name: /^Also delete it from your account remote/u,
@@ -780,7 +785,9 @@ test.describe("Remove", () => {
     await openSkill(cli, page, "draft");
     cli.register(["skill", "remove", "draft"]);
     await pane(page, "draft").getByRole("button", { name: "Remove" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Remove draft?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove draft from this machine?",
+    });
     await dialog.getByRole("button", { name: "Remove" }).click();
     await expect(toasts(page).getByText("Removed draft skill")).toBeVisible();
     expect(later(cli)).toEqual([["skill", "remove", "draft", "--json"]]);
@@ -792,7 +799,9 @@ test.describe("Remove", () => {
   }) => {
     await openSkill(cli, page, "pdf");
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Remove pdf?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove pdf from this machine?",
+    });
     await expect(
       dialog
         .getByRole("list", { name: "Agents that see it" })

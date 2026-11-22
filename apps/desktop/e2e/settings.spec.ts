@@ -59,7 +59,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
   await expect(sections).toHaveText([
     /^This machine/u,
     /^Account remote/u,
-    /^Adopt skills/u,
+    /^Import skills/u,
     /^Comparing edits/u,
     /^Editor/u,
     /^Storage/u,

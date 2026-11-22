@@ -5,7 +5,6 @@
 // the CLI emits about its skill. Each runs through the runner and says what happened by what the
 // CLI emitted; the list redraws from the inventory and the update check that follow, never from a
 // result predicted here.
-import { useMemo } from "react";
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -157,10 +156,7 @@ export const offeredUpdates = (
 export const useOfferedUpdates = () => {
   const updates = useAppStore((s) => s.updates);
   const library = useAppStore((s) => s.inventory?.library);
-  return useMemo(
-    () => offeredUpdates(Object.values(updates), library ?? []),
-    [updates, library]
-  );
+  return offeredUpdates(Object.values(updates), library ?? []);
 };
 
 /** How many skills the check offers an update for: a skill with a pending merge is not offered one. */

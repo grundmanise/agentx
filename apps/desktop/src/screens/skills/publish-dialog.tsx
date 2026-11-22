@@ -2,8 +2,9 @@
 // banner buttons that open it, and the toast each outcome of `skill publish` gives. The button
 // reads the changed files as it opens the dialog: `skill diff <name>`, or, for a skill never
 // published, every file `skill files <name>` lists, since the publish sends them all. Publish runs
-// `skill publish <name>`, with `--message <text>` when Add a custom message is checked: its field
-// is then required, and Publish with it empty marks it invalid and runs nothing, showing the run's progress until it ends. The toast follows the `publish` event's outcome and the exit code; a failure the
+// `skill publish <name>`, with `--message <text>` when What changed holds text other than the
+// summary it starts with, which says what the CLI's own message says; the run's progress shows
+// until it ends. The toast follows the `publish` event's outcome and the exit code; a failure the
 // toast does not name keeps the runner's error toast, the CLI's message then its hint as one
 // sentence-cased paragraph, the skill's name keeping its case, and the hint in the app's words
 // where the CLI's names a command (`publishFailure` in publish.ts).
@@ -14,7 +15,6 @@ import type { DiffEvent, ProgressEvent } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { notify, notifySuccess } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
-import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
   Dialog,
   DialogClose,
@@ -56,12 +56,45 @@ const update = (name: string) => {
   });
 };
 
-/** The command line of a publish: `--message` only when What changed holds more than spaces. */
-export const publishArgs = (name: string, message: string) => {
+/**
+ * The command line of a publish: `--message` only when What changed holds more than spaces and
+ * more than `summary`, the text it starts with, for which the CLI writes its own message.
+ */
+export const publishArgs = (name: string, message: string, summary = "") => {
   const text = message.trim();
-  return text === ""
+  return text === "" || text === summary.trim()
     ? ["skill", "publish", name]
     : ["skill", "publish", name, "--message", text];
+};
+
+/** What the CLI's message says a commit does to a file, by its status in `skill diff`. */
+const summaryVerbs: Record<DiffEvent["status"], string> = {
+  added: "add",
+  deleted: "delete",
+  modified: "edit",
+};
+
+/**
+ * What What changed starts with: what the commit does to its first two files, and how many more
+ * it changes, as the CLI's own message says it ("Edit SKILL.md, add examples.md and 3 more files").
+ * Empty while the files are unread or none changed.
+ */
+export const changeSummary = (files: FilesState) => {
+  if (files.kind !== "read" || files.diffs.length === 0) {
+    return "";
+  }
+  const said = files.diffs
+    .slice(0, 2)
+    .map(
+      (d) =>
+        `${files.fresh === true ? "add" : summaryVerbs[d.status]} ${d.path}`
+    );
+  const more = files.diffs.length - 2;
+  const text =
+    more > 0
+      ? `${said.join(", ")} and ${more === 1 ? "1 more file" : `${more} more files`}`
+      : said.join(" and ");
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 };
 
 /**
@@ -130,7 +163,7 @@ const progressText = (name: string, progress: ProgressEvent | undefined) => {
  * The files a publish sends, read when the dialog opens: the changed files `skill diff <name>`
  * reports, or, with `fresh`, every file of a skill never published, each new to the remote.
  */
-type FilesState =
+export type FilesState =
   | { kind: "reading" }
   | { kind: "read"; diffs: DiffEvent[]; fresh?: boolean }
   | { kind: "failed" };
@@ -225,13 +258,10 @@ const PublishForm = ({
 }) => {
   const { name } = row;
   const fieldId = useId();
-  const toggleId = useId();
-  const field = useRef<HTMLInputElement>(null);
-  const [custom, setCustom] = useState(false);
-  const [message, setMessage] = useState("");
-  // Publish was pressed with the custom message empty: the field shows its error border.
-  const [tried, setTried] = useState(false);
-  const messageMissing = custom && message.trim() === "";
+  const summary = changeSummary(files);
+  // Undefined until the user types: the field then shows the summary, once the files are read.
+  const [typed, setTyped] = useState<string | undefined>();
+  const message = typed ?? summary;
   const [progress, setProgress] = useState<ProgressEvent | undefined>();
   const pending = useSettling(publishLabel(name));
   const [running, setRunning] = useState(false);
@@ -240,22 +270,14 @@ const PublishForm = ({
     if (running || pending) {
       return;
     }
-    if (messageMissing) {
-      setTried(true);
-      field.current?.focus();
-      return;
-    }
     setRunning(true);
     setProgress(undefined);
-    const outcome = await runUntilSettled(
-      publishArgs(name, custom ? message : ""),
-      {
-        failure: (ended) => publishFailure(ended, row.entry?.source),
-        keep: [name],
-        label: publishLabel(name),
-        onProgress: setProgress,
-      }
-    );
+    const outcome = await runUntilSettled(publishArgs(name, message, summary), {
+      failure: (ended) => publishFailure(ended, row.entry?.source),
+      keep: [name],
+      label: publishLabel(name),
+      onProgress: setProgress,
+    });
     reportPublish(
       row,
       outcome,
@@ -273,36 +295,19 @@ const PublishForm = ({
       }}
     >
       <div className="gap-input-label flex flex-col">
-        <label htmlFor={toggleId} className="flex items-center gap-2.5">
-          <Checkbox
-            id={toggleId}
-            checked={custom}
-            disabled={running}
-            onCheckedChange={(checked) => {
-              setCustom(checked === true);
-              setTried(false);
-            }}
-          />
-          <span className="type-secondary text-text-muted">
-            Add a custom message
-          </span>
+        <label htmlFor={fieldId} className="type-secondary text-text-secondary">
+          What changed
         </label>
-        {custom && (
-          <Input
-            ref={field}
-            id={fieldId}
-            aria-label="What changed"
-            aria-required
-            aria-invalid={tried && messageMissing ? true : undefined}
-            autoFocus
-            placeholder="Describe your changes"
-            value={message}
-            disabled={running}
-            onChange={(e) => {
-              setMessage(e.target.value);
-            }}
-          />
-        )}
+        <Input
+          id={fieldId}
+          autoFocus
+          placeholder="Describe your changes"
+          value={message}
+          disabled={running}
+          onChange={(e) => {
+            setTyped(e.target.value);
+          }}
+        />
       </div>
       <section aria-label="Files" className="flex flex-col gap-2.5">
         <h3 className="type-caption text-text-caption m-0">Files</h3>
@@ -329,22 +334,21 @@ const PublishForm = ({
 
 /** Where the publish goes: the account remote for one of your own, else the skill's source. */
 const Subtitle = ({ row }: { row: SkillRow }) => {
-  const accountRemote = useAppStore((s) => accountRemoteOf(s.sources));
   if (row.kind === "yours") {
     return (
       <DialogDescription>
-        {`To your account remote: ${accountRemote?.url ?? ""}`}
+        {`The ${row.name} skill will be published to your account remote.`}
       </DialogDescription>
     );
   }
   return (
     <DialogDescription>
-      {`To ${shortSource(row.entry?.source ?? "")}, as a change under your own Git name`}
+      {`The ${row.name} skill will be published to ${shortSource(row.entry?.source ?? "")}.`}
     </DialogDescription>
   );
 };
 
-/** The Publish dialog: "Publish {skill}", where it goes, Add a custom message, the files, Cancel · Publish. */
+/** The Publish dialog: "Publish changes", where they go, What changed, the files, Cancel · Publish. */
 const PublishDialog = ({
   row,
   files,
@@ -359,7 +363,7 @@ const PublishDialog = ({
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent>
       <DialogHeader showCloseButton={false}>
-        <DialogTitle>{`Publish ${row.name}`}</DialogTitle>
+        <DialogTitle>Publish changes</DialogTitle>
         <Subtitle row={row} />
       </DialogHeader>
       <PublishForm

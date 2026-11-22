@@ -241,7 +241,7 @@ const CreateSkillForm = ({
           aria-busy={pending ? true : undefined}
         >
           {pending && <Spinner />}
-          Create and edit
+          Create
         </Button>
       </DialogFooter>
     </form>
@@ -270,10 +270,7 @@ export const CreateSkillDialog = ({
       >
         <DialogHeader>
           <DialogTitle>Create skill</DialogTitle>
-          <DialogDescription>
-            Creates a skill of your own in your library and adds it to your
-            agents.
-          </DialogDescription>
+          <DialogDescription>Add a new skill to your agents.</DialogDescription>
         </DialogHeader>
         <CreateSkillForm
           nameField={nameField}

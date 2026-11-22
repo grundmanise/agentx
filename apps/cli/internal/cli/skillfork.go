@@ -447,7 +447,7 @@ func (inv *invocation) inPlaceRoom(fk *forking) error {
 	if err != nil {
 		return libraryFailure(filepath.Dir(from), err)
 	}
-	beside := ", or fork it beside the skill with '" + skillCommand("fork", name, "--name", "<new>") + "'"
+	beside := ", or fork it under a new name with '" + skillCommand("fork", name, "--name", "<new>") + "'"
 	if adopt {
 		beside = ""
 	}
@@ -468,8 +468,8 @@ func (inv *invocation) inPlaceRoom(fk *forking) error {
 		if adopt {
 			return ownRepoRefusal(name, own)
 		}
-		return fail(exitRefused, sanitised(name)+" is itself a Git repository, at "+quotedPath(own)+"; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork",
-			"move its .git out of the skill, then "+fk.again()+beside)
+		return fail(exitRefused, sanitised(name)+" has a Git repository at "+quotedPath(own),
+			"move .git out of the skill, then "+fk.again()+beside)
 	}
 	if root := inv.worktreeRoot(name); lexists(root) {
 		return fk.rootTaken(root)
