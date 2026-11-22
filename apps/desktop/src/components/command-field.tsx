@@ -11,6 +11,6 @@ export const CommandField = ({ onOpen }: { onOpen: () => void }) => (
   >
     <SearchIcon size="xs" />
     <span className="flex-1 text-left">Search skills or run a command</span>
-    <KeyHint>{isMac ? "⌘K" : "Ctrl K"}</KeyHint>
+    <KeyHint keys={isMac ? ["⌘", "K"] : ["Ctrl", "K"]} />
   </button>
 );

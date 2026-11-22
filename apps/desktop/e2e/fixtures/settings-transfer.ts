@@ -75,7 +75,7 @@ export const alreadyThere: InlineEvent[] = [
 
 /** The reason the CLI gives for a skipped unmanaged skill. */
 export const UNMANAGED_REASON =
-  "notes is unmanaged, so there is no source to install it from";
+  "notes was created by hand, so there is no source to install it from";
 
 /**
  * What `snapshot apply <file> --yes` reports: the settings it wrote, then one `import_skill` per

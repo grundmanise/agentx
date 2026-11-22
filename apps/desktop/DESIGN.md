@@ -387,6 +387,9 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `code.prose` | `gray-250` | Prose |
 | `code.strong` | `gray-100` | Code in diff panes |
 | `code.context` | `gray-500` | Context lines around a change |
+| `markdown.code-bg` | `gray-850` | A code span in inline Markdown, such as a skill's description |
+| `markdown.code-text` | `gray-200` | Its text: 7.3:1 on `markdown.code-bg` |
+| `markdown.strong` | `gray-150` | Strong text in inline Markdown, brighter than the muted text around it |
 | `file-row.hover` | `gray-920` | File tree row hover |
 | `file-row.divider` | `gray-890` |  |
 | `file-row.path` | `gray-200` | Path |
@@ -480,6 +483,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.technical` | mono | 12.5 | 400 |  |  |  | Paths, ids, dates, commands; a skill's origin in the detail header (`text.caption`) |
 | `type.technical-sm` | mono | 12 | 400 |  |  |  | Details values (`text.secondary`), file status in the History sheet, the count beside a group header |
 | `type.code` | mono | 12.5 | 400 | 1.75 |  |  | Code pane |
+| `type.markdown-code` | mono | 0.9em |  |  |  |  | A code span in inline Markdown, sized to the text around it |
 | `type.brand` | sans | 14 | 600 |  | -0.01em |  | Product name in the sidebar |
 | `type.machine-label` | sans | 12 | 400 |  |  |  | Machine label under the product name (`text.muted`) |
 | `type.nav` | sans | 14 | 500 |  |  |  | Nav item |
@@ -543,11 +547,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `page.section-gap` | 28–40 |  | Between sections |
 | `page.max-width` | 1200 | `max-w-page` | Inbox |
 | `split.list-width` | 420 | `w-split-list` | Skills left column |
-| `split.header-padding` | 30 20 0 28 | `pt-split-header-top pr-split-header-right pb-0 pl-split-header-left` | Skills list header |
-| `split.toolbar-padding` | 20 20 12 28 | `pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left` | Search + filter row block |
+| `split.header-padding` | 30 28 0 | `pt-split-header-top px-split-header pb-0` | Skills list header |
+| `split.toolbar-padding` | 20 28 12 | `pt-split-toolbar-top px-split-toolbar pb-split-toolbar-bottom` | Search + filter row block |
 | `split.toolbar-gap` | 12 | `gap-split-toolbar` | Search → filter row |
 | `split.filter-gap` | 6 | `gap-split-filter` | Filter button → chip → sort |
-| `split.list-padding` | 0 12 24 14 | `pt-0 pr-split-list-right pb-split-list-bottom pl-split-list-left` | Scrolling list |
+| `split.list-padding` | 0 28 24 14 | `pt-0 pr-split-list-right pb-split-list-bottom pl-split-list-left` | Scrolling list |
 | `detail.padding` | 34 40 48 | `pt-detail-top px-detail pb-detail-bottom` | Detail pane content |
 | `detail.max-width` | 900 | `max-w-detail` |  |
 | `detail.section-gap` | 28 | `gap-detail-section` | Header → banner → agents → files → details/history |
@@ -658,9 +662,11 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-card.gap` | 12 | `gap-agent-card` | Grid gap |
 | `agent-card.logo` | 44 | `size-agent-card-logo` |  |
 | `universal-card.lead-width` | 260 | `w-universal-lead` | Lead column of the Universal card |
+| `universal-card.column-min-width` | 220 | `grid-cols-universal` | Narrowest client column of the Universal card |
 | `plugin.tile` | 40 | `size-plugin-tile` | Plugin icon or monogram tile in the detail pane |
 | `plugin.row-tile` | 28 | `size-plugin-row-tile` | Plugin icon or monogram tile in a Plugins list row |
 | `plugin-details.gap` | 12 40 | `gap-y-plugin-details-y gap-x-plugin-details` | Between the details under a plugin's name (row, column) |
+| `plugin.name-col` | 200 | `w-plugin-name-col` | The name column of a plugin's Skills, MCP servers and Hooks tables |
 | `add-card.spacing` | 6 | `pt-add-card` | Between the skills' cards of the Sources list: on each card after the first of its source, which the list places itself |
 
 ### Overlays
@@ -707,6 +713,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `filter-tags.max-height` | 112 | `max-h-filter-tags` | The tags in that panel: three rows and half of a fourth, cut through its names at the panel's bottom edge; they scroll past it |
 | `agent-list.max-height` | 240 | `max-h-agent-list` | The list of agents in an agent list card, running to the card's top and bottom edges; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
+| `key-hint.gap` | 2 | `gap-key-hint` | Between the keys of a combination (`⌘` `K`) |
 | `toast.offset` | 24 | none: `--inset-toast`, passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | Below the title bar (`shell.titlebar-height` + `toast.offset` from the top edge) and from the right edge |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
@@ -798,6 +805,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
 | `startup.logo-radius` | 12 | Product mark on the startup layer |
 | `tooltip.radius` | 8 | Tooltip |
+| `markdown.code-radius` | 4 | A code span in inline Markdown |
 
 ## 6. Components
 
@@ -898,7 +906,7 @@ Round, `logo.bg`, inner padding by size (`logo.padding*`), the image contained. 
 - The logos are bundled (`src/assets/logos`) and never fetched. Each is the client's official mark as the vendor publishes it, never one drawn for the app.
 - A logo is never dimmed or greyed. A client that is off says so in text and in the title, and a server row shows only the agents that have the server on.
 
-- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. The list runs to the card's top and bottom edges: its 14px padding sits inside the scroll, at its start and end, so a scrolled row is cut at the card's edge, and a row cut at the bottom says the list scrolls. Its logos then name no client in a Tooltip of their own. It opens below the stack, ending at its right edge; for a stack inside a menu, it opens beside the menu instead, so it covers none of the menu's rows. Like a tooltip, a hover card stacks over a menu.
+- A stack that hides some clients ends with "+n" in `type.technical-sm` `text.hint`, 4px after the last logo (6px for 24 and 28px logos); after 44px logos, in `type.agent-card-name` `card.text`, 12px after. Pointing at the stack opens an agent list card (`AgentListCard`): a hover card (§6 "Hover card") that lists every client, drawn and hidden, a 16px logo beside each name in `type.secondary` `text.primary`, in two columns that scroll past `agent-list.max-height`. The card is as wide as the list, at most `popover.width`, so the list sits 14px inside every edge: the first logo 14px from the top, the longest name 14px from the right. The list runs to the card's top and bottom edges: its 10px padding (plus the row's own 5px above its logo) sits inside the scroll, at its start and end, so a scrolled row is cut at the card's edge, and a row cut at the bottom says the list scrolls. Its logos then name no client in a Tooltip of their own. It opens below the stack, ending at its right edge; for a stack inside a menu, it opens beside the menu instead, so it covers none of the menu's rows. Like a tooltip, a hover card stacks over a menu.
 
 ### Agent filter chip
 
@@ -1046,7 +1054,7 @@ One card per agent configuration whose client does not read the library, in a 4-
 
 ### Universal card (Agents page)
 
-One full-width card below the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. No switch and no placement: a universal client sees every library skill whatever its setting, through the library itself.
+One full-width card above the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), at most five then "+n", whose hover lists every client (the agent list card), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. The columns share the rest of the width and wrap into more rows when a row would make them narrower than `universal-card.column-min-width`. No switch and no placement: a universal client sees every library skill whatever its setting, through the library itself.
 
 ### Tabs
 
@@ -1059,7 +1067,7 @@ The Plugins screen (`src/screens/plugins`) is a split, as Skills is: the list co
 - The list column: the serif title and the plugin count, the search field (§6 "Inputs"), then the filter row: the Filter button, whose popover holds AGENTS, the agent configurations that hold a plugin, each its own choice with no Universal (§6 "Popover (Filter)"), the agents chip while any is checked, and the sort toggle (§6 "Skills list"): A-Z by name at first, and each click flips between A-Z and Z-A. Disabled plugins sort with the rest and read as washed out.
 - The plugins, one row per plugin in one agent configuration in one version, are grouped by agent configuration, A to Z by its name. A group header is a section toggle (§6 "Group header (lists)", `level="group"`): the chevron, the configuration's 16px logo, its name and count. It pins to the top while its group shows, and a click collapses or expands the group. Every group is open at first; a plugin opened from Also installed in opens its group. The rows follow the nesting pattern there: inset by `subgroup.indent`, with the `list.guide` line under the chevron (`LIST_GUIDE`). A row (`src/components/list-row.tsx`) holds the `plugin.row-tile` tile, the name, the Disabled pill when the client turned the plugin off, and the version at the right end in `type.technical-sm` `text.caption`; under them, how many skills, servers and hooks it brings, in `type.row-desc`. A disabled plugin's name and counts are at `row.off`; its tile is not.
 - The detail pane: the `plugin.tile` tile, the name in `type.plugin-name`, the version pill and the Disabled pill. Under them, one row of details that wraps, `plugin-details.gap` apart, each a `type.secondary` `text.hint` label over its value in `type.technical-sm` `text.secondary`: the agent, always with its logo; the marketplace; the path, after a `xs` folder icon in `text.caption`, a link that shows the plugin's directory in Finder; and, when other agents hold the same plugin from the same marketplace, each of them with its logo and version, a link that opens it.
-- Then the tabs (§6 "Tabs"): Skills, MCP servers and Hooks, each with its count, and only those the plugin has; a plugin with none has no tabs. Each tab is a table (`src/components/ui/table.tsx`): a skill and its description, a server and its transport, a hook and its event. A skill's name opens it in Skills, a server's in MCP servers; a hook opens nothing.
+- Then the tabs (§6 "Tabs"): Skills, MCP servers and Hooks, each with its count, and only those the plugin has; a plugin with none has no tabs. Each tab is a table (`src/components/ui/table.tsx`): a skill and its description, a server and its transport, a hook and its event. A skill's name opens it in Skills, a server's in MCP servers; a hook opens nothing. The name column is `plugin.name-col` wide and the other column takes the rest. A name wraps to at most 2 lines: a longer one ends in an ellipsis, and pointing at it shows the whole name in a tooltip. A description renders its inline Markdown (§6 "Inline Markdown"), shows at most 2 lines and ends in an ellipsis past them, with no tooltip.
 - Only the table scrolls. The title, the details and the tabs stay in place, and the table's column captions pin to its top on `shell.content-bg`, so rows pass under them.
 - The tile is the plugin's own icon from the inventory, or the name's first letter in `type.plugin-tile` on `button.secondary-bg`.
 
@@ -1135,7 +1143,7 @@ A help term (`src/components/help-term.tsx`) is a word in running text that expl
 
 ### Hover card
 
-shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding (none at the top and bottom for a list that scrolls to the card's edges, `padding="list"`), `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
+shadcn's Hover Card (`src/components/ui/hover-card.tsx`) shows rich content, such as the table of what each agent sees, while the pointer rests on a word in running text. Its frame is the popover's (§6 "Popover (Filter)"): `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding (none at the top and bottom for a list that scrolls to the card's edges, `padding="list"`, which also fits the card to the list's width), `popover.gap` between its blocks, `popover.offset` below its trigger, at most `hover-card.max-height` high and scrolling past it. It opens `hover-card.open-delay` after the pointer reaches the trigger, so a pointer passing over the text opens nothing, and closes `hover-card.close-delay` after it leaves the trigger and the card, so the pointer can cross the gap into it. Escape closes it. Its trigger is a word with a dashed underline, which a dotted help term (§6 "Tooltip") does not take, so the two read apart. No arrow and no animation.
 
 ### Popover (Filter)
 
@@ -1183,6 +1191,10 @@ The sheet frame (§6 "Sheet") (`src/app/activity-log.tsx`): the last lines of wh
 - Changed text: within a change, the text that differs between its removed lines and its added lines is marked as VS Code's diff editor marks it, with VS Code's own diff (copied into `src/vendor/vscode-diff`): a character diff of the whole change, extended to whole words where most of a word changed, with short kept runs between two changes joined into them. The changed text sits on `diff.removed-word` and `diff.added-word` in `code.strong`, since a line's own tone falls under 4.5:1 on those tints. White space counts, so a change of indentation is marked.
 - A change with one side, only removed or only added lines, has its line tint alone. So does a change that takes longer than 100 ms to compare.
 
+### Inline Markdown
+
+A skill's description is one line of Markdown from its SKILL.md, so wherever it shows (a Skills row, the detail header, the Sources rows, the Add skill dialog) it renders its inline Markdown with `InlineMarkdown` (`src/components/inline-markdown.tsx`), read by marked's inline lexer. It renders inline elements only, so the line keeps its own type, colour, truncation or line clamp. A code span is `type.markdown-code` in `markdown.code-text` on `markdown.code-bg`, `markdown.code-radius`, 4px side padding; strong text is 600 in `markdown.strong`; emphasis is italic and strikethrough is struck. A link shows its text, as the line sits in a row that opens on a click. Block syntax stays as written. Accessible names and descriptions use the text without its Markdown (`markdownText`).
+
 ### File list (detail pane FILES)
 
 A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file-row.height`, `file-row.padding-x`, a 1px `file-row.divider` between rows, `file-row.hover` on hover or focus.
@@ -1195,7 +1207,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file
 
 ### Key hint
 
-A key such as `esc` or `⌘K` (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg`, `type.key-hint` `text.muted`.
+A key or key combination such as `esc` or `⌘K` (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg`, `type.key-hint` `text.muted`. Each key of a combination is its own nested `kbd`, `key-hint.gap` apart, so `⌘K` and `Ctrl K` space their keys the same way. `⌘` is the `3xs` command-key icon (§7), since the mono font lacks the glyph and each system draws its fallback at its own size and height.
 
 ### Inputs
 
@@ -1262,7 +1274,7 @@ Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps and joins. Fil
 
 An icon is a hand-written React component that takes the text colour; an illustration (such as the agentx mark) is an SVG file in `src/assets` shown as `<img>`.
 
-Sizes: `2xs` 12px (in a pill), `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
+Sizes: `3xs` 10px (in a key hint), `2xs` 12px (in a pill), `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
 
 The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-ring` ring: 30px with `shell.logo-radius` in the sidebar (the height of the product name and machine label beside it), 40px with `startup.logo-radius` on the startup layer. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 

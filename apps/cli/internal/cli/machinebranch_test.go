@@ -117,7 +117,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 		applied = append(applied, fmt.Sprint(e["name"], " ", e["action"], " ", e["placements"]))
 	}
 	equal(t, "the skills imported", strings.Join(applied, ", "), "alpha installed [claude-code], beta installed [claude-code]")
-	equal(t, "import's summary", b.one(out.stdout, "result")["summary"], "applied the snapshot from machines/cloud: 2 installed")
+	equal(t, "import's summary", b.one(out.stdout, "result")["summary"], "snapshot applied: 2 skills added, 1 source added")
 	settings, err := home.LoadSettings(b.agentx)
 	if err != nil {
 		t.Fatal(err)
