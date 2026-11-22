@@ -9,7 +9,7 @@ import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
-import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
+import { revealInFinder } from "#/lib/reveal.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import {
@@ -36,14 +36,14 @@ const SaveForm = () => {
       ? ["snapshot", "save", name, "--force"]
       : ["snapshot", "save", name];
     const outcome = await agentx(args, {
-      // The toast shows where the file went.
+      // The toast shows where the file went, and Show opens it in the file manager.
       action: (events) => {
         const written = events.find((e) => e.type === "export");
         const path = written?.type === "export" ? written.path : undefined;
         return path === undefined
           ? undefined
           : {
-              label: showInLabel(),
+              label: "Show",
               onClick: () => {
                 void revealInFinder(path);
               },

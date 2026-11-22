@@ -70,6 +70,9 @@ test("saves under the name given and toasts the path the CLI wrote", async ({
   await expect(toasts(page)).toContainText(
     `Saved snapshot to ${LIBRARY}/agentx-snapshot.json`
   );
+  await expect(
+    toasts(page).getByRole("button", { exact: true, name: "Show" })
+  ).toBeVisible();
   expect(later(cli)).toEqual([
     ["snapshot", "save", "agentx-snapshot", "--json"],
   ]);
