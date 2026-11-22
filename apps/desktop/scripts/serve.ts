@@ -1,7 +1,7 @@
 // Runs the frontend in a browser against `agentx serve --listen` on this machine (ADR 0016).
 //
-//   node scripts/real.ts dev       the source, on Vite's development server
-//   node scripts/real.ts preview   the built bundle, so that a bug only the build has shows too
+//   node scripts/serve.ts dev       the source, on Vite's development server
+//   node scripts/serve.ts preview   the built bundle, so that a bug only the build has shows too
 //
 // It starts Vite on the first free port from 1430 (dev) or 1431 (preview), so that several
 // worktrees can run at once, then starts serve with that port's origins and reads the address
@@ -39,7 +39,7 @@ const appDir = path.join(import.meta.dirname, "..");
 const cliDir = path.join(appDir, "..", "cli");
 
 const fail = (message: string): never => {
-  process.stderr.write(`real: ${message}\n`);
+  process.stderr.write(`serve: ${message}\n`);
   process.exit(1);
 };
 
@@ -138,7 +138,7 @@ const doorPlugin = (): { plugin: Plugin; open: (door: Door) => void } => {
 
 const mode = process.argv.at(2);
 if (!isMode(mode)) {
-  process.stderr.write("usage: node scripts/real.ts dev|preview\n");
+  process.stderr.write("usage: node scripts/serve.ts dev|preview\n");
   process.exit(2);
 }
 const cli = cliPath();
@@ -233,6 +233,6 @@ process.on("SIGTERM", () => {
 // Serve ending on its own leaves the page with nothing to talk to.
 const code = await serveExit();
 if (!stopping) {
-  process.stderr.write(`real: agentx serve exited with code ${code}\n`);
+  process.stderr.write(`serve: agentx serve exited with code ${code}\n`);
   await stop(code === 0 ? 1 : code);
 }

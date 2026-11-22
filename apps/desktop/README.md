@@ -58,7 +58,7 @@ cd apps/desktop
 pnpm exec playwright install chromium   # once, for the end-to-end tests
 pnpm tauri dev                          # the app in its window
 pnpm dev                                # the frontend alone, at http://localhost:1420
-pnpm dev:real                           # the frontend in a browser against the real CLI, at http://localhost:1430
+pnpm dev:serve                          # the frontend in a browser against agentx serve, at http://localhost:1430
 ```
 
 A release build runs only the `agentx` next to its executable: the CLI of its own release, built from the same commit. A debug build (`pnpm tauri dev`) also looks on the `PATH` your login shell sets, so put a CLI there, for example with `go build -o ~/go/bin/agentx .` in `apps/cli`.
@@ -94,16 +94,16 @@ Run these in `apps/desktop`:
 | `pnpm fix` | Applies the lint's safe fixes, formats, then lists what is left (`ultracite fix`) |
 | `pnpm test` | Runs the end-to-end tests in Chromium. It starts the dev server, or reuses a running one outside CI |
 | `pnpm build` | Builds the frontend into `dist` with Vite. It does not check types: `pnpm check` does, and `pnpm tauri build` runs `pnpm check` first |
-| `pnpm dev:real` | Runs the frontend in a browser against `agentx serve --listen` on this machine ([ADR 0016](../../docs/adr/0016-serve-is-the-backend-of-the-app-and-of-the-frontend-in-a-browser.md)), at the first free port from http://localhost:1430. See [The frontend against the real CLI](#the-frontend-against-the-real-cli) |
-| `pnpm preview:real` | The same with the built bundle: builds into `dist` and serves it at the first free port from http://localhost:1431, so that a bug only the build has shows too |
+| `pnpm dev:serve` | Runs the frontend in a browser against `agentx serve --listen` on this machine ([ADR 0016](../../docs/adr/0016-serve-is-the-backend-of-the-app-and-of-the-frontend-in-a-browser.md)), at the first free port from http://localhost:1430. See [The frontend against serve](#the-frontend-against-serve) |
+| `pnpm preview:serve` | The same with the built bundle: builds into `dist` and serves it at the first free port from http://localhost:1431, so that a bug only the build has shows too |
 
 From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `check`, `test` and `build`, then `cargo fmt --check`, Clippy and `cargo test` for the Rust side. `cargo test` drives the supervisor against a stub CLI script.
 
-### The frontend against the real CLI
+### The frontend against serve
 
-`pnpm dev:real` and `pnpm preview:real` (`scripts/real.ts`) build the CLI from `apps/cli` into `node_modules/.cache/agentx`, so you need Go too; set `AGENTX_CLI` to an `agentx` to use that one instead. They start Vite on the first free port from 1430 or 1431, then `agentx serve --json --listen 127.0.0.1:0` with that port's origins, `http://localhost:<port>` and `http://127.0.0.1:<port>`, and read the address and token from its `listening` event. Vite answers `GET /agentx-serve.json` with `{"url", "token"}`, so the bundle holds no token and one build works with any serve. The page reads it on load once the frontend's WebSocket wire is in; until then it uses the Tauri wire. Ctrl-C stops both.
+`pnpm dev:serve` and `pnpm preview:serve` (`scripts/serve.ts`) build the CLI from `apps/cli` into `node_modules/.cache/agentx`, so you need Go too; set `AGENTX_CLI` to an `agentx` to use that one instead. They start Vite on the first free port from 1430 or 1431, then `agentx serve --json --listen 127.0.0.1:0` with that port's origins, `http://localhost:<port>` and `http://127.0.0.1:<port>`, and read the address and token from its `listening` event. Vite answers `GET /agentx-serve.json` with `{"url", "token"}`, so the bundle holds no token and one build works with any serve. The page reads it on load once the frontend's WebSocket wire is in; until then it uses the Tauri wire. Ctrl-C stops both.
 
-Serve uses your shell's environment, so it serves the agentx home of `HOME`, or `AGENTX_HOME` when set. Only one serve runs per home: while the desktop app or another `dev:real` is open on it, the command exits with code 6. To run one per worktree, give each its own home, such as `AGENTX_HOME=/tmp/wt2/.agentx pnpm dev:real`; set `HOME` to a temporary folder too to keep it off your agent folders.
+Serve uses your shell's environment, so it serves the agentx home of `HOME`, or `AGENTX_HOME` when set. Only one serve runs per home: while the desktop app or another `dev:serve` is open on it, the command exits with code 6. To run one per worktree, give each its own home, such as `AGENTX_HOME=/tmp/wt2/.agentx pnpm dev:serve`; set `HOME` to a temporary folder too to keep it off your agent folders.
 
 ### The pnpm workspace
 

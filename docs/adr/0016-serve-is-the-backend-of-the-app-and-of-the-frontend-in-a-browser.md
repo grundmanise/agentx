@@ -45,7 +45,7 @@ Running a command inside the serve process, with no process start, is a later st
 
 The WebSocket door takes no environment and no working directory from a request: a command it runs gets serve's own. The environment decides which programs git starts, so a client that could set it could run any program.
 
-Serve does not serve the frontend. In development the frontend's own server does, which is what a change to it is checked on. One command, `pnpm dev:real` in `apps/desktop`, starts the development server and `agentx serve --listen` with that server's origin, reads the `listening` event, and has the development server hand the address and token to the page, so that opening a browser is all that is left to do.
+Serve does not serve the frontend. In development the frontend's own server does, which is what a change to it is checked on. One command, `pnpm dev:serve` in `apps/desktop`, starts the development server and `agentx serve --listen` with that server's origin, reads the `listening` event, and has the development server hand the address and token to the page, so that opening a browser is all that is left to do.
 
 One serve runs per agentx home, so `agentx serve --listen` exits with code 6 while the desktop app is open. A debug build of the app starts its own serve with `--listen` when asked to, and the browser then shares it.
 
@@ -95,4 +95,4 @@ The desktop app stops keeping a list of the commands that change nothing: the co
 
 The end-to-end tests keep the mocked CLI. A small set of tests runs the frontend in a browser against a real `agentx serve --listen`, one happy path per screen.
 
-The work lands in order, each step usable on its own: the protocol, `run` and the WebSocket door in serve; the browser's way to send and `pnpm dev:real`; the desktop app on serve's standard input and output; then commands inside serve, one at a time, where measured.
+The work lands in order, each step usable on its own: the protocol, `run` and the WebSocket door in serve; the browser's way to send and `pnpm dev:serve`; the desktop app on serve's standard input and output; then commands inside serve, one at a time, where measured.
