@@ -4,7 +4,13 @@
 // `config remove <id> --yes`.
 import type { Locator, Page } from "@playwright/test";
 
-import { inventory, LIBRARY, sources } from "./fixtures/agents.ts";
+import {
+  inventory,
+  LIBRARY,
+  manyAgentsInventory,
+  manyConfigurations,
+  sources,
+} from "./fixtures/agents.ts";
 import { adoption } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
@@ -86,6 +92,30 @@ test("lists the Universal card first, then the direct agents, with their counts"
     .getByRole("region", { name: "Direct agents" })
     .boundingBox();
   expect(universalBox?.y).toBeLessThan(gridBox?.y ?? 0);
+});
+
+test("the Universal card wraps many agents into rows and stacks five logos", async ({
+  cli,
+  page,
+}) => {
+  const configurations = manyConfigurations
+    .slice(0, 24)
+    .map((c, i) => ({ ...c, reads_library: i >= 4 }));
+  cli.onServeStart({ events: [{ ...manyAgentsInventory(), configurations }] });
+  cli.register(["skill", "import"], { events: adoption });
+  cli.register(["source", "list"], { events: sources });
+  await page.goto("/#/agents");
+  const universal = card(page, "Universal");
+  await expect(universal.getByRole("region")).toHaveCount(20);
+  await expect(universal.getByText("+15", { exact: true })).toBeVisible();
+  // The columns wrap into rows, and every column stays inside the card.
+  const box = await universal.boundingBox();
+  const first = await universal.getByRole("region").first().boundingBox();
+  const last = await universal.getByRole("region").last().boundingBox();
+  expect((last?.x ?? 0) + (last?.width ?? 0)).toBeLessThanOrEqual(
+    (box?.x ?? 0) + (box?.width ?? 0)
+  );
+  expect(last?.y).toBeGreaterThan(first?.y ?? 0);
 });
 
 test("turning an agent on runs config enable, and Place all places the library there", async ({

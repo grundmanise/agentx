@@ -693,6 +693,8 @@
   --gap-agent-card: 12px;
   --size-agent-card-logo: 44px;
   --width-universal-lead: 260px;
+  /* Client columns of the Universal card: as many as fit at 220px or wider, sharing the row. */
+  --grid-template-columns-universal: repeat(auto-fit, minmax(220px, 1fr));
   --size-plugin-tile: 40px;
   --size-plugin-row-tile: 28px;
   --gap-plugin-details: 40px;

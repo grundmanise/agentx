@@ -310,6 +310,9 @@ const AgentCard = ({
   );
 };
 
+/** The Universal card's logo stack shows this many logos, then "+n". */
+const STACK_MAX = 5;
+
 const UniversalCard = ({
   universal,
   inventory,
@@ -324,7 +327,13 @@ const UniversalCard = ({
       className="rounded-agent-card border-card-border bg-card-bg p-agent-card flex border"
     >
       <div className="w-universal-lead flex flex-none flex-col gap-3">
-        <LogoStack clients={universal} size={44} surface="card" decorative />
+        <LogoStack
+          clients={universal.slice(0, STACK_MAX)}
+          hidden={universal.slice(STACK_MAX)}
+          size={44}
+          surface="card"
+          decorative
+        />
         <div className="flex flex-col gap-1">
           <h2 className="type-agent-card-name text-card-title m-0">
             Universal
@@ -342,34 +351,36 @@ const UniversalCard = ({
           )}
         </div>
       </div>
-      {universal.map((c) => {
-        const counts = countsOf(inventory, c);
-        return (
-          <section
-            key={c.id}
-            aria-label={c.name}
-            className="border-shell-divider ml-5 flex min-w-0 flex-1 flex-col gap-1 border-l pl-5"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="type-agent-card-name text-card-title m-0">
-                {c.name}
-              </h3>
-              <AgentMenu c={c} />
-            </div>
-            <span
-              className="type-technical text-text-caption truncate"
-              title={c.path}
+      <div className="grid-cols-universal grid min-w-0 flex-1 gap-y-5">
+        {universal.map((c) => {
+          const counts = countsOf(inventory, c);
+          return (
+            <section
+              key={c.id}
+              aria-label={c.name}
+              className="border-shell-divider ml-5 flex min-w-0 flex-col gap-1 border-l pl-5"
             >
-              {c.path}
-            </span>
-            <p className="type-secondary text-card-text m-0 pt-1">
-              <Count n={inventory.library.length} noun="skill" />
-              {" · "}
-              <Count n={counts.servers} noun="server" />
-            </p>
-          </section>
-        );
-      })}
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="type-agent-card-name text-card-title m-0">
+                  {c.name}
+                </h3>
+                <AgentMenu c={c} />
+              </div>
+              <span
+                className="type-technical text-text-caption truncate"
+                title={c.path}
+              >
+                {c.path}
+              </span>
+              <p className="type-secondary text-card-text m-0 pt-1">
+                <Count n={inventory.library.length} noun="skill" />
+                {" · "}
+                <Count n={counts.servers} noun="server" />
+              </p>
+            </section>
+          );
+        })}
+      </div>
     </article>
   );
 };

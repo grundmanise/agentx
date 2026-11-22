@@ -658,6 +658,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-card.gap` | 12 | `gap-agent-card` | Grid gap |
 | `agent-card.logo` | 44 | `size-agent-card-logo` |  |
 | `universal-card.lead-width` | 260 | `w-universal-lead` | Lead column of the Universal card |
+| `universal-card.column-min-width` | 220 | `grid-cols-universal` | Narrowest client column of the Universal card |
 | `plugin.tile` | 40 | `size-plugin-tile` | Plugin icon or monogram tile in the detail pane |
 | `plugin.row-tile` | 28 | `size-plugin-row-tile` | Plugin icon or monogram tile in a Plugins list row |
 | `plugin-details.gap` | 12 40 | `gap-y-plugin-details-y gap-x-plugin-details` | Between the details under a plugin's name (row, column) |
@@ -1044,7 +1045,7 @@ One card per agent configuration whose client does not read the library, in a 4-
 
 ### Universal card (Agents page)
 
-One full-width card above the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. No switch and no placement: a universal client sees every library skill whatever its setting, through the library itself.
+One full-width card above the grid, the same surface, for every configuration whose client reads the library. A lead column `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), at most five then "+n", whose hover lists every client (the agent list card), the title in `type.agent-card-name`, a line in `type.secondary` `card.text` and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` on its left: name, path and counts, the skill count being the library's. The columns share the rest of the width and wrap into more rows when a row would make them narrower than `universal-card.column-min-width`. No switch and no placement: a universal client sees every library skill whatever its setting, through the library itself.
 
 ### Tabs
 
