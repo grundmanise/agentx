@@ -197,7 +197,7 @@ const table: BannerRule[] = [
       return {
         action: { kind: "adopt" },
         coversOrigin: true,
-        text: "Adopt to manage it from agentx",
+        text: "Import to manage it from agentx",
         title: `Added by ${tool}`,
         tone: "neutral",
       };
@@ -208,7 +208,7 @@ const table: BannerRule[] = [
     // An unmanaged skill no tool recorded.
     banner: () => ({
       action: { kind: "adopt" },
-      text: "Adopt to manage it from agentx",
+      text: "Import to manage it from agentx",
       title: "Not managed by agentx",
       tone: "neutral",
     }),
