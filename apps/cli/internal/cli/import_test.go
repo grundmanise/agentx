@@ -185,7 +185,7 @@ func TestImportRestoresAMachine(t *testing.T) {
 		"snapshot applied: 1 skill skipped, 2 skills already up to date")
 	equal(t, "fetches of the second import", fetches(again.stderr), 0)
 	text := h.mustRun("snapshot", "apply", first, "--yes")
-	contains(t, "stdout", text.stdout, "Skills skipped (1)\n  mine was created by hand, so there is no source to install it from\n")
+	contains(t, "stdout", text.stdout, "Skills skipped (1)\n  mine  was created by hand, so there is no source to install it from\n")
 	contains(t, "stdout", text.stdout, "\n2 skills already up to date\n")
 
 	// Placements changed: alpha out of Claude Code and kept in Cortex Code,

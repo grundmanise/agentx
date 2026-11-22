@@ -719,9 +719,9 @@ func (inv *invocation) askToImport(path string, doc snapshot, in io.Reader) erro
 // printImported writes the report of an import: the confirmation, then
 // one section for each kind of change the import made, each section only
 // when it has items: the skills added, updated, whose placements changed
-// and skipped, each with the agents it is placed in now or the reason of
-// the skip; the sources added, and those that could not be added with the
-// source add of each; then the agents enabled, and last how many skills
+// and skipped, each by its name with the agents it is placed in now or the
+// reason of the skip; the sources added, and those that could not be added
+// with the source add of each; then the agents enabled, and last how many skills
 // were up to date already. Every value the snapshot supplies is sanitised:
 // agentx did not write it, and a file handed from another machine may hold
 // anything. settings are the settings the import wrote, and run what it did
@@ -746,9 +746,12 @@ func (inv *invocation) printImported(states []importSkillEvent, settings home.Se
 	printSkillSection(out, "Placements changed", append(by[importPlaced], by[importUnplaced]...), names)
 	if skipped := by[importSkipped]; len(skipped) > 0 {
 		printSection(out, "Skills skipped", len(skipped))
+		t := &table{}
 		for _, st := range skipped {
-			out.print("  ", out.paint(warnStyle, sanitised(st.Reason)))
+			name, reason := sanitised(st.Name), sanitised(st.Reason)
+			t.add(c(name, plain), c(strings.TrimPrefix(reason, name+" "), warnStyle))
 		}
+		out.render(t, "  ")
 	}
 	var added []sourceEvent
 	var failed []home.Source
