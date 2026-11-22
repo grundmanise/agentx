@@ -297,6 +297,18 @@ func TestDoctorReportsHeldLock(t *testing.T) {
 	out = h.run("doctor")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "lock             warn  held by process 4242: "+lock)
+
+	// The agentx serve that runs doctor holds the lock while it scans: that is
+	// no other command at work.
+	if err := f.Truncate(0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt([]byte(strconv.Itoa(os.Getppid())+"\n"), 0); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ = doctorRows(t, h.events(h.run("--json", "doctor").stdout))
+	equal(t, "lock.status", rows["lock"]["status"], "ok")
+	equal(t, "lock.detail", rows["lock"]["detail"], "held by the agentx serve that runs this check")
 }
 
 func TestDoctorReportsCorruptSettings(t *testing.T) {
