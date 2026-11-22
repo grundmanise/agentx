@@ -485,6 +485,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.nav` | sans | 14 | 500 |  |  |  | Nav item |
 | `type.command-field` | sans | 13 | 400 |  |  |  | Command field placeholder |
 | `type.key-hint` | mono | 11 | 400 |  |  |  | Key hint (`esc`, `⌘K`) |
+| `type.key-hint-symbol` | sans | 13 | 400 | 1 |  |  | Modifier symbol in a key hint (`⌘`, `⌥`, `⇧`, `⌃`): the mono font lacks these, and the system glyph it falls back to reads smaller than the letter beside it |
 | `type.status` | sans | 13 | 500 |  |  |  | Publish status label in the title bar (`shell.topbar-text`) |
 | `type.palette-input` | sans | 17 | 400 |  |  |  | Palette search input |
 | `type.palette-hint` | mono | 12 | 400 |  |  |  | Hint at the end of a palette row, keys in the palette footer |
@@ -1194,7 +1195,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file
 
 ### Key hint
 
-A key or key combination such as `esc` or `⌘K` (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg`, `type.key-hint` `text.muted`. Each key of a combination is its own nested `kbd`, `key-hint.gap` apart, so `⌘K` and `Ctrl K` space their keys the same way.
+A key or key combination such as `esc` or `⌘K` (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg`, `type.key-hint` `text.muted`. Each key of a combination is its own nested `kbd`, `key-hint.gap` apart, so `⌘K` and `Ctrl K` space their keys the same way. A modifier symbol takes `type.key-hint-symbol`.
 
 ### Inputs
 
