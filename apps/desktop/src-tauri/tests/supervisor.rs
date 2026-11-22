@@ -417,3 +417,49 @@ async fn a_serve_that_does_not_end_with_its_stdin_is_killed_with_its_process_gro
     assert_eq!(exits[0].1["restarting"], false);
     assert!(gone(grandchild).await, "the grandchild sleep still runs");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn serve_start_during_the_restart_wait_starts_the_next_child_at_once() {
+    let f = Fixture::new("start-in-wait");
+    f.serve_mode("crash");
+    let first = f.sup.serve_start().await.unwrap();
+    let exits = f.wait_for(SERVE_EXIT, 1).await;
+    assert_eq!(exits[0].1["restart_in_ms"], 500);
+    f.serve_mode("echo");
+
+    // A request during the wait does not wait for the delay.
+    let second = f.sup.serve_start().await.unwrap();
+    assert_ne!(second, first);
+    assert!(exits[0].0.elapsed() < Duration::from_millis(450));
+    let inventories = || -> Vec<Value> {
+        f.serve_lines("event")
+            .into_iter()
+            .filter(|(_, l)| l["event"]["type"] == "inventory")
+            .map(|(_, l)| l["child_id"].clone())
+            .collect()
+    };
+    let start = Instant::now();
+    while !inventories().contains(&json!(second)) {
+        assert!(start.elapsed() < Duration::from_secs(10), "no second child");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        f.sup.serve_start().await.unwrap(),
+        second,
+        "one serve child"
+    );
+
+    // The wait ends without starting another child: the one started on request runs on.
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    assert_eq!(f.emitted(SERVE_EXIT).len(), 1);
+    assert_eq!(inventories(), [json!(first), json!(second)]);
+    let request = r#"{"jsonrpc":"2.0","id":1,"method":"run","params":{"args":["version"]}}"#;
+    f.sup.serve_request(request).await.unwrap();
+    f.wait_for_serve("event", 3).await;
+
+    f.sup.shutdown().await;
+    let exits = f.wait_for(SERVE_EXIT, 2).await;
+    assert_eq!(exits[1].1["child_id"], second);
+    assert_eq!(exits[1].1["exit_code"], 0);
+    assert_eq!(exits[1].1["restarting"], false);
+}

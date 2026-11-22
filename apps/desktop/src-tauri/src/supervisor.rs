@@ -132,6 +132,11 @@ struct ServeState {
     stdin: Option<ChildStdin>,
     running: bool,
     stopping: bool,
+    /// Whether the restart loop waits to start the next child after one exited.
+    waiting: bool,
+    /// A child `serve_start` started during that wait, which the restart loop takes up and
+    /// watches in place of one of its own.
+    started: Option<Child>,
 }
 
 pub struct Supervisor {
@@ -140,7 +145,8 @@ pub struct Supervisor {
     shell: tokio::sync::Mutex<Option<Arc<Shell>>>,
     serve: tokio::sync::Mutex<ServeState>,
     serve_running: watch::Sender<bool>,
-    serve_stop: Notify,
+    /// Wakes the restart wait: the window closes, or a child was started on request.
+    serve_wake: Notify,
     next_child: AtomicU64,
     /// Whether serve children run with `--verbose`.
     serve_verbose: AtomicBool,
@@ -156,7 +162,7 @@ impl Supervisor {
             shell: tokio::sync::Mutex::new(None),
             serve: tokio::sync::Mutex::new(ServeState::default()),
             serve_running: watch::Sender::new(false),
-            serve_stop: Notify::new(),
+            serve_wake: Notify::new(),
             next_child: AtomicU64::new(1),
             serve_verbose: AtomicBool::new(false),
             log: Mutex::new(log),
@@ -238,10 +244,20 @@ impl Supervisor {
     /// Starts the serve child unless one is running, and returns its child id. The app calls it
     /// before it sends a request, so it may be called often and at once: the calls take the serve
     /// lock in turn, and all but the one that starts the child return the id of the running child.
-    /// While serve waits to be restarted it still counts as running, and the id returned is the
-    /// one of the child that exited; a request sent then fails, as serve's stdin is closed.
+    /// While serve waits to be restarted after an exit, the next child is started at once, since a
+    /// request is waiting for it; the restart loop then watches that child and starts none of its
+    /// own, and keeps its delay for the next restart nobody asked for.
     pub async fn serve_start(self: &Arc<Self>) -> Result<u64, String> {
         let mut state = self.serve.lock().await;
+        if state.running && state.waiting && !state.stopping {
+            // The environment is captured again, as for a restart.
+            let shell = self.refresh_shell().await;
+            let child = self.spawn_serve(&shell, &mut state)?;
+            state.waiting = false;
+            state.started = Some(child);
+            self.serve_wake.notify_one();
+            return Ok(state.child_id);
+        }
         if state.running {
             return Ok(state.child_id);
         }
@@ -312,6 +328,7 @@ impl Supervisor {
                     self.serve_ended(&mut state);
                     return;
                 }
+                state.waiting = true;
             }
             match self.restart(&mut delay).await {
                 Some(next) => child = next,
@@ -321,34 +338,43 @@ impl Supervisor {
     }
 
     /// Waits `delay`, then starts a new serve child, doubling the delay up to the cap each time.
-    /// A child that cannot start is reported as one that exited, and tried again. Returns None
-    /// once the window is closing.
+    /// A child that cannot start is reported as one that exited, and tried again. A child that
+    /// `serve_start` started during the wait is returned instead, and none is started here.
+    /// Returns None once the window is closing.
     async fn restart(&self, delay: &mut Duration) -> Option<Child> {
         loop {
-            let wait = *delay;
+            let wait = tokio::time::sleep(*delay);
             *delay = (*delay * 2).min(BACKOFF_CAP);
-            tokio::select! {
-                () = tokio::time::sleep(wait) => {}
-                () = self.serve_stop.notified() => {}
-            }
-            // Closing the window wakes the wait: stop before reading the login shell for nothing.
-            {
-                let mut state = self.serve.lock().await;
-                if state.stopping {
-                    self.serve_ended(&mut state);
-                    return None;
+            tokio::pin!(wait);
+            // A wake left over from an earlier wait finds nothing to do, and the wait goes on.
+            loop {
+                tokio::select! {
+                    () = &mut wait => break,
+                    () = self.serve_wake.notified() => {
+                        let state = self.serve.lock().await;
+                        if state.stopping || state.started.is_some() {
+                            break;
+                        }
+                    }
                 }
+            }
+            // Closing the window or a child started on request ends the wait: neither needs the
+            // login shell read again.
+            if let Some(next) = self.after_wait(&mut *self.serve.lock().await) {
+                return next;
             }
             // The environment is captured again, so that a change to the user's shell profile
             // reaches the next child.
             let shell = self.refresh_shell().await;
             let mut state = self.serve.lock().await;
-            if state.stopping {
-                self.serve_ended(&mut state);
-                return None;
+            if let Some(next) = self.after_wait(&mut state) {
+                return next;
             }
             match self.spawn_serve(&shell, &mut state) {
-                Ok(child) => return Some(child),
+                Ok(child) => {
+                    state.waiting = false;
+                    return Some(child);
+                }
                 Err(err) => {
                     state.child_id = self.next_child.fetch_add(1, Ordering::SeqCst);
                     self.serve_exited(state.child_id, None, vec![err], Some(*delay));
@@ -374,9 +400,24 @@ impl Supervisor {
         (self.emit)(SERVE_EXIT, to_value(&exit));
     }
 
+    /// What ends a restart wait other than its delay: the child `serve_start` started, which is
+    /// taken up even when the window is closing, as closing it stops that child too; or else the
+    /// window closing, after which no child is started.
+    fn after_wait(&self, state: &mut ServeState) -> Option<Option<Child>> {
+        if let Some(child) = state.started.take() {
+            return Some(Some(child));
+        }
+        if state.stopping {
+            self.serve_ended(state);
+            return Some(None);
+        }
+        None
+    }
+
     fn serve_ended(&self, state: &mut ServeState) {
         state.running = false;
         state.stopping = false;
+        state.waiting = false;
         self.serve_running.send_replace(false);
     }
 
@@ -452,7 +493,7 @@ impl Supervisor {
             state.stdin = None;
             state.pid
         };
-        self.serve_stop.notify_one();
+        self.serve_wake.notify_one();
         let mut running = self.serve_running.subscribe();
         let ended = tokio::time::timeout(SERVE_STOP, running.wait_for(|r| !r)).await;
         if ended.is_err() {
