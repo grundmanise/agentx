@@ -1,11 +1,13 @@
 // Runs the frontend in a browser against `agentx serve --listen` on this machine (ADR 0016).
 //
-//   node scripts/browser.ts dev       the source, on Vite's development server
-//   node scripts/browser.ts preview   the built bundle, so that a bug only the build has shows too
+//   node scripts/real.ts dev       the source, on Vite's development server
+//   node scripts/real.ts preview   the built bundle, so that a bug only the build has shows too
 //
-// It starts serve with the page's origins, reads the address and token from serve's `listening`
-// event, and starts Vite with a plugin that answers GET /agentx-serve.json with them. The page
-// asks for them when it loads, so the bundle holds no token and one build works with any serve.
+// It starts Vite on the first free port from 1430 (dev) or 1431 (preview), so that several
+// worktrees can run at once, then starts serve with that port's origins and reads the address
+// and token from serve's `listening` event. A plugin answers GET /agentx-serve.json with them.
+// The page asks for them when it loads, so the bundle holds no token and one build works with
+// any serve.
 // The CLI is built from apps/cli, the commit the frontend's generated event types come from;
 // AGENTX_CLI names another executable instead. Serve uses this shell's environment, so
 // AGENTX_HOME and HOME decide which home it serves.
@@ -37,7 +39,7 @@ const appDir = path.join(import.meta.dirname, "..");
 const cliDir = path.join(appDir, "..", "cli");
 
 const fail = (message: string): never => {
-  process.stderr.write(`browser: ${message}\n`);
+  process.stderr.write(`real: ${message}\n`);
   process.exit(1);
 };
 
@@ -98,41 +100,75 @@ const parseDoor = (line: string): Door | null => {
     : null;
 };
 
-/** Answers the page's request for the door, before Vite's fallback answers it with index.html. */
-const doorPlugin = (door: Door): Plugin => {
-  const body = JSON.stringify(door);
+/**
+ * Answers the page's request for the door, before Vite's fallback answers it with index.html.
+ * Vite starts before serve, since serve needs Vite's port, so the door is set once serve listens.
+ */
+const doorPlugin = (): { plugin: Plugin; open: (door: Door) => void } => {
+  let body = "";
   const answer: Connect.NextHandleFunction = (req, res, next) => {
     if (req.method !== "GET" || req.url?.split("?")[0] !== doorPath) {
       next();
       return;
     }
-    res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "no-store");
+    if (body === "") {
+      res.statusCode = 503;
+      res.end();
+      return;
+    }
+    res.setHeader("Content-Type", "application/json");
     res.end(body);
   };
   return {
-    configurePreviewServer: (server) => {
-      server.middlewares.use(answer);
+    open: (door) => {
+      body = JSON.stringify(door);
     },
-    configureServer: (server) => {
-      server.middlewares.use(answer);
+    plugin: {
+      configurePreviewServer: (server) => {
+        server.middlewares.use(answer);
+      },
+      configureServer: (server) => {
+        server.middlewares.use(answer);
+      },
+      name: "agentx-serve-door",
     },
-    name: "agentx-serve-door",
   };
 };
 
 const mode = process.argv.at(2);
 if (!isMode(mode)) {
-  process.stderr.write("usage: node scripts/browser.ts dev|preview\n");
+  process.stderr.write("usage: node scripts/real.ts dev|preview\n");
   process.exit(2);
 }
-const port = ports[mode];
-const origins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
-
 const cli = cliPath();
 if (mode === "preview") {
   await build({ root: appDir });
 }
+
+const door = doorPlugin();
+const startServer = async () => {
+  const options = { plugins: [door.plugin], root: appDir };
+  const port = ports[mode];
+  if (mode === "preview") {
+    return await preview({
+      ...options,
+      preview: { port, strictPort: false },
+    });
+  }
+  const dev = await createServer({
+    ...options,
+    server: { port, strictPort: false },
+  });
+  return await dev.listen();
+};
+const server = await startServer();
+const address = server.httpServer?.address();
+const port =
+  typeof address === "object" && address !== null
+    ? address.port
+    : fail("Vite did not say which port it listens on");
+const origins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 
 // Serve ends when its standard input closes, so the pipe stays open while this script runs.
 const serve = spawn(
@@ -159,37 +195,22 @@ const serveExit = async (): Promise<number> => {
 // dropped unread, so that a full pipe never holds serve up.
 const readDoor = async (): Promise<Door | null> => {
   for await (const line of createInterface({ input: serve.stdout })) {
-    const door = parseDoor(line);
-    if (door !== null) {
-      return door;
+    const found = parseDoor(line);
+    if (found !== null) {
+      return found;
     }
   }
   return null;
 };
-const door = await readDoor();
-if (door === null) {
+const listening = await readDoor();
+if (listening === null) {
   // Exit code 6: another serve, such as the desktop app's, already runs for this home.
+  await server.close();
   process.exit(await serveExit());
 }
+door.open(listening);
 serve.stdout.resume();
 
-const plugins = [doorPlugin(door)];
-const startServer = async () => {
-  if (mode === "preview") {
-    return await preview({
-      plugins,
-      preview: { port, strictPort: true },
-      root: appDir,
-    });
-  }
-  const dev = await createServer({
-    plugins,
-    root: appDir,
-    server: { port, strictPort: true },
-  });
-  return await dev.listen();
-};
-const server = await startServer();
 server.printUrls();
 
 let stopping = false;
@@ -212,6 +233,6 @@ process.on("SIGTERM", () => {
 // Serve ending on its own leaves the page with nothing to talk to.
 const code = await serveExit();
 if (!stopping) {
-  process.stderr.write(`browser: agentx serve exited with code ${code}\n`);
+  process.stderr.write(`real: agentx serve exited with code ${code}\n`);
   await stop(code === 0 ? 1 : code);
 }
