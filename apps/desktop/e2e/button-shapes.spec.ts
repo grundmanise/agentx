@@ -102,6 +102,12 @@ test("ghost and danger buttons have a resting fill; a button group makes one sha
   // The trigger is square.
   expect(menu.right - menu.left).toBeCloseTo(menu.height, 0);
   expect(menu.left - main.right).toBeCloseTo(1, 0);
+  // The separator fills that 1px gap from top to bottom, so it shows.
+  const separator = skillsHeader(page).locator(
+    '[data-slot="button-group-separator"]'
+  );
+  const separatorBox = await separator.boundingBox();
+  expect(separatorBox?.height).toBeCloseTo(main.height, 0);
   // Rounded on the outer corners only.
   expect(main.topLeft).toBeGreaterThan(0);
   expect(main.bottomLeft).toBeGreaterThan(0);
