@@ -705,7 +705,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `filter-tags.max-height` | 112 | `max-h-filter-tags` | The tags in that panel: three rows and half of a fourth, cut through its names at the panel's bottom edge; they scroll past it |
 | `agent-list.max-height` | 240 | `max-h-agent-list` | The list of agents in an agent list card, running to the card's top and bottom edges; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
-| `key-hint.gap` | 4 | `gap-key-hint` | Between the keys of a combination (`⌘` `K`) |
+| `key-hint.gap` | 2 | `gap-key-hint` | Between the keys of a combination (`⌘` `K`) |
 | `toast.offset` | 24 | none: `--inset-toast`, passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | Below the title bar (`shell.titlebar-height` + `toast.offset` from the top edge) and from the right edge |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
