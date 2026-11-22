@@ -70,7 +70,9 @@ test("saves under the name given and toasts the path the CLI wrote", async ({
   await expect(toasts(page)).toContainText(
     `Saved snapshot to ${LIBRARY}/agentx-snapshot.json`
   );
-  expect(later(cli)).toEqual([["snapshot", "save", "agentx-snapshot", "--json"]]);
+  expect(later(cli)).toEqual([
+    ["snapshot", "save", "agentx-snapshot", "--json"],
+  ]);
 
   // A name snapshot save would refuse disables Save.
   await name.fill("snapshot.json");
@@ -108,7 +110,9 @@ test("a failed save shows the CLI's message and hint under the field, as one par
   await expect(section.getByRole("alert")).toHaveText(
     `Can't write ${LIBRARY}/agentx-snapshot.json: permission denied. Check that you can write to the library.`
   );
-  expect(later(cli)).toEqual([["snapshot", "save", "agentx-snapshot", "--json"]]);
+  expect(later(cli)).toEqual([
+    ["snapshot", "save", "agentx-snapshot", "--json"],
+  ]);
 });
 
 test("asks before it replaces a file in the library, then saves with --force", async ({
@@ -133,7 +137,9 @@ test("asks before it replaces a file in the library, then saves with --force", a
   await expect(confirm).toContainText(
     "A file with this name is already in your library."
   );
-  expect(later(cli)).toEqual([["snapshot", "save", "agentx-snapshot", "--json"]]);
+  expect(later(cli)).toEqual([
+    ["snapshot", "save", "agentx-snapshot", "--json"],
+  ]);
   await confirm.getByRole("button", { name: "Replace" }).click();
   await expect(toasts(page)).toContainText(
     `Saved snapshot to ${LIBRARY}/agentx-snapshot.json`
