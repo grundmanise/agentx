@@ -9,6 +9,7 @@ import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import {
@@ -33,6 +34,19 @@ const ExportForm = () => {
     setProblem(undefined);
     const args = force ? ["export", name, "--force"] : ["export", name];
     const outcome = await agentx(args, {
+      // The toast shows where the file went.
+      action: (events) => {
+        const written = events.find((e) => e.type === "export");
+        const path = written?.type === "export" ? written.path : undefined;
+        return path === undefined
+          ? undefined
+          : {
+              label: showInLabel(),
+              onClick: () => {
+                void revealInFinder(path);
+              },
+            };
+      },
       label: EXPORT_LABEL,
       ownFailure: true,
       success: (events) => {
@@ -75,7 +89,7 @@ const ExportForm = () => {
         <Input
           kind="mono"
           aria-label="File name"
-          aria-describedby={hintId}
+          aria-describedby={valid ? undefined : hintId}
           aria-invalid={valid && problem === undefined ? undefined : true}
           value={name}
           onChange={(e) => {
@@ -88,11 +102,11 @@ const ExportForm = () => {
           Export
         </Button>
       </div>
-      <p id={hintId} className="type-secondary text-text-muted m-0">
-        {valid
-          ? `Saved to your library as ${name}.json`
-          : "Enter a file name without an extension or a slash"}
-      </p>
+      {!valid && (
+        <p id={hintId} className="type-secondary text-text-muted m-0">
+          Enter a file name without an extension or a slash
+        </p>
+      )}
       {problem !== undefined && <ProblemText problem={problem} keep={[name]} />}
       <Confirm
         open={overwrite}
@@ -112,7 +126,7 @@ const ExportForm = () => {
 export const ExportSettingsSection = () => (
   <SettingsSection
     title="Export settings"
-    description="Saves your settings and skill list to a file."
+    description="Save your settings and library to back up or import on another device."
   >
     <ExportForm />
   </SettingsSection>

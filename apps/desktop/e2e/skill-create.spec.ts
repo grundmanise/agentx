@@ -74,7 +74,7 @@ const nameField = (page: Page) =>
 const descriptionField = (page: Page) =>
   dialog(page).getByRole("textbox", { name: "Description" });
 const createButton = (page: Page) =>
-  dialog(page).getByRole("button", { exact: true, name: "Create and edit" });
+  dialog(page).getByRole("button", { exact: true, name: "Create" });
 
 /** Registers the reads of the fixture machine and of the new skill once it is selected. */
 const registerReads = (cli: MockCli, machine: InlineEvent = inventory) => {
@@ -143,7 +143,7 @@ test("Create in the Skills header runs skill new with the description and select
 }) => {
   await openDialog(cli, page);
   await expect(
-    dialog(page).getByText("Adds a new skill to your library and your agents.")
+    dialog(page).getByText("Add a new skill to your agents.")
   ).toBeVisible();
   await expect(nameField(page)).toBeFocused();
   await expect(createButton(page)).toBeDisabled();
@@ -609,7 +609,7 @@ test("the description is invalid and Create is disabled past 1024 characters", a
   await expect(dialog(page)).toBeHidden();
 });
 
-test("Create and edit opens the new skill's SKILL.md in the chosen editor once it is selected", async ({
+test("Create opens the new skill's SKILL.md in the chosen editor once it is selected", async ({
   cli,
   page,
 }) => {
@@ -637,7 +637,7 @@ test("Create and edit opens the new skill's SKILL.md in the chosen editor once i
   expect(later(cli)).toEqual([["skill", "new", NEW_SKILL, "--json"]]);
 });
 
-test("with the system default, Create and edit opens SKILL.md through the opener", async ({
+test("with the system default, Create opens SKILL.md through the opener", async ({
   cli,
   page,
 }) => {

@@ -61,13 +61,10 @@ test("exports under the name given and toasts the path the CLI wrote", async ({
   await openSettings(cli, page);
   const section = exportSettings(page);
   await expect(section).toContainText(
-    "Saves your settings and skill list to a file."
+    "Save your settings and library to back up or import on another device."
   );
   const name = section.getByRole("textbox", { name: "File name" });
   await expect(name).toHaveValue("agentx-export");
-  await expect(section).toContainText(
-    "Saved to your library as agentx-export.json"
-  );
   await section.getByRole("button", { exact: true, name: "Export" }).click();
   await expect(toasts(page)).toContainText(
     `Exported settings to ${LIBRARY}/agentx-export.json`
@@ -83,9 +80,9 @@ test("exports under the name given and toasts the path the CLI wrote", async ({
     section.getByRole("button", { exact: true, name: "Export" })
   ).toBeDisabled();
   await name.fill("work-laptop");
-  await expect(section).toContainText(
-    "Saved to your library as work-laptop.json"
-  );
+  await expect(
+    section.getByRole("button", { exact: true, name: "Export" })
+  ).toBeEnabled();
 });
 
 test("a failed export shows the CLI's message and hint under the field, as one paragraph", async ({
@@ -169,11 +166,11 @@ test("imports the picked file after its confirm, adds the sources it names witho
   await importButton.click();
 
   const confirm = page.getByRole("alertdialog", {
-    name: "Replace settings with agentx-export.json?",
+    name: "Replace your current settings and update library?",
   });
   await expect(confirm).toBeVisible();
   await expect(confirm.getByRole("paragraph")).toHaveText([
-    "Installs missing skills and may update others.",
+    "This will install missing skills and may update existing skills.",
     SNAPSHOT,
   ]);
   expect(cli.openDialogs).toEqual([
@@ -236,7 +233,7 @@ test("an import that installed, updated and skipped nothing says so", async ({
   await section.getByRole("button", { name: "Import…" }).click();
   await page
     .getByRole("alertdialog", {
-      name: "Replace settings with agentx-export.json?",
+      name: "Replace your current settings and update library?",
     })
     .getByRole("button", { name: "Import" })
     .click();

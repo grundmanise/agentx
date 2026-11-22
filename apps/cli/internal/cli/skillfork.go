@@ -468,7 +468,7 @@ func (inv *invocation) inPlaceRoom(fk *forking) error {
 		if adopt {
 			return ownRepoRefusal(name, own)
 		}
-		return fail(exitRefused, sanitised(name)+" has its own Git repository at "+quotedPath(own),
+		return fail(exitRefused, sanitised(name)+" has a Git repository at "+quotedPath(own),
 			"move .git out of the skill, then "+fk.again()+beside)
 	}
 	if root := inv.worktreeRoot(name); lexists(root) {

@@ -334,22 +334,21 @@ const PublishForm = ({
 
 /** Where the publish goes: the account remote for one of your own, else the skill's source. */
 const Subtitle = ({ row }: { row: SkillRow }) => {
-  const accountRemote = useAppStore((s) => accountRemoteOf(s.sources));
   if (row.kind === "yours") {
     return (
       <DialogDescription>
-        {`To ${shortSource(accountRemote?.url ?? "")}`}
+        {`The ${row.name} skill will be published to your account remote.`}
       </DialogDescription>
     );
   }
   return (
     <DialogDescription>
-      {`To ${shortSource(row.entry?.source ?? "")}`}
+      {`The ${row.name} skill will be published to ${shortSource(row.entry?.source ?? "")}.`}
     </DialogDescription>
   );
 };
 
-/** The Publish dialog: "Publish {skill} skill", where it goes, What changed, the files, Cancel · Publish. */
+/** The Publish dialog: "Publish changes", where they go, What changed, the files, Cancel · Publish. */
 const PublishDialog = ({
   row,
   files,
@@ -364,7 +363,7 @@ const PublishDialog = ({
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent>
       <DialogHeader showCloseButton={false}>
-        <DialogTitle>{`Publish ${row.name} skill`}</DialogTitle>
+        <DialogTitle>Publish changes</DialogTitle>
         <Subtitle row={row} />
       </DialogHeader>
       <PublishForm

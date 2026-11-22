@@ -160,12 +160,10 @@ const namesOf = (tools: readonly { name: string }[]) =>
 const Description = ({ tools }: { tools: readonly ToolSummary[] }) => {
   const offered = tools.reduce((n, t) => n + t.offered, 0);
   const refused = tools.reduce((n, t) => n + t.refused, 0);
-  const what =
-    offered === 1 ? "this skill" : `these ${plural(offered, "skill")}`;
-  const keeps = tools.length > 1 ? "keep their" : "keeps its";
+  const what = offered === 1 ? "the skill" : `the ${plural(offered, "skill")}`;
   return (
     <DialogDescription>
-      {`agentx will manage ${what}. ${namesOf(tools)} ${keeps} files. Edits to the copies in your library are lost.`}
+      {`Manage ${what} you added with ${namesOf(tools)} in agentx. ${namesOf(tools)} ${tools.length > 1 ? "aren't" : "isn't"} affected. Edits to the copies in your library are lost.`}
       {refused > 0 && ` ${plural(refused, "skill")} can't be adopted.`}
     </DialogDescription>
   );

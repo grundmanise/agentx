@@ -63,10 +63,10 @@ const keepTable: [Problem, readonly string[], string][] = [
     {
       hint: "move .git out of the skill, or fork it under a new name with --name <new>",
       message:
-        "scratch has its own Git repository at /home/me/.agents/skills/scratch/.git",
+        "scratch has a Git repository at /home/me/.agents/skills/scratch/.git",
     },
     ["scratch"],
-    "scratch has its own Git repository at /home/me/.agents/skills/scratch/.git. Move .git out of the skill, or fork it under a new name with --name <new>.",
+    "scratch has a Git repository at /home/me/.agents/skills/scratch/.git. Move .git out of the skill, or fork it under a new name with --name <new>.",
   ],
   [
     {

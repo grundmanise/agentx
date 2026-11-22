@@ -169,7 +169,7 @@ test.describe("the Adopt skills section of Settings", () => {
     const open = dialog(page);
     await expect(open).toHaveAccessibleName("Adopt skills from Skills CLI");
     await expect(open.getByRole("paragraph")).toHaveText([
-      "agentx will manage these 3 skills. Skills CLI keeps its files. Edits to the copies in your library are lost. 1 skill can't be adopted.",
+      "Manage the 3 skills you added with Skills CLI in agentx. Skills CLI isn't affected. Edits to the copies in your library are lost. 1 skill can't be adopted.",
       "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     await expect(rows(open, "Skills CLI")).toHaveText([
@@ -189,7 +189,7 @@ test.describe("the Adopt skills section of Settings", () => {
       .click();
     const open = dialog(page);
     await expect(open).toHaveAccessibleDescription(
-      "agentx will manage this skill. Skillshare keeps its files. Edits to the copies in your library are lost."
+      "Manage the skill you added with Skillshare in agentx. Skillshare isn't affected. Edits to the copies in your library are lost."
     );
     await expect(rows(open, "Skillshare")).toHaveText([
       "Waiting: frontend__ui",
@@ -256,7 +256,7 @@ test.describe("the Adopt skills section of Settings", () => {
     // Each skill the run did not adopt says why once, under its name, as the warning the CLI
     // logged for it did.
     await expect(open.getByRole("paragraph")).toHaveText([
-      /^agentx will manage these 3 skills/u,
+      /^Manage the 3 skills/u,
       "https://github.com/vercel/skills holds no skill at commit-style now.",
       "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
@@ -376,7 +376,7 @@ test.describe("Adopt all in the Unmanaged header", () => {
       "Adopt skills from Skills CLI and Skillshare"
     );
     await expect(open).toHaveAccessibleDescription(
-      "agentx will manage these 5 skills. Skills CLI and Skillshare keep their files. Edits to the copies in your library are lost. 1 skill can't be adopted."
+      "Manage the 5 skills you added with Skills CLI and Skillshare in agentx. Skills CLI and Skillshare aren't affected. Edits to the copies in your library are lost. 1 skill can't be adopted."
     );
     await expect(open.getByRole("heading", { level: 3 })).toHaveText([
       "Skills CLI",

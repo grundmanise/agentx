@@ -50,7 +50,7 @@ export type BannerAction =
    * The button of an edited skill of a source whose source this machine can write to: Publish to
    * {source}, which opens the Publish dialog. Fork is in the action row, not on the banner.
    */
-  | { kind: "edited"; publishTo: string };
+  | { kind: "edited" };
 
 export interface Banner {
   tone: BannerTone;
@@ -256,7 +256,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "publish" },
-      text: "Publish it to use it on your other machines.",
+      text: "Publish it to use it on other machines.",
       title: "Not published",
       tone: "yours",
     }),
@@ -279,10 +279,16 @@ const table: BannerRule[] = [
       const writable =
         facts.sources.find((s) => s.url === source)?.access === "writable";
       const n = facts.changedFiles;
+      // A source the user can write to takes the edits back with Publish.
+      if (writable) {
+        return {
+          action: { kind: "edited" },
+          text: `Publish to share them on ${shortSource(source)}.`,
+          title: "Edits not published",
+          tone: "attention",
+        };
+      }
       return {
-        action: writable
-          ? { kind: "edited", publishTo: shortSource(source) }
-          : undefined,
         text:
           n === undefined
             ? "Updates keep your edits."

@@ -266,10 +266,10 @@ test("a modified skill of a source: its edits labelled and tinted, against the v
 }) => {
   await openSkills(cli, page, "/#/skills/review");
   const section = files(page, "review");
-  await expect(section).toContainText("Since you installed it");
   await expect
     .poll(() => sortedLater(cli))
     .toEqual(["skill diff review --json", "skill files review --json"]);
+  await expect(fileRow(section, "old.md")).toBeVisible();
   // The deleted file is listed with the others, in path order.
   expect(await rowNames(section)).toEqual([
     "SKILL.md",
@@ -312,7 +312,6 @@ test("a modified skill of your own compares with what was last published", async
 }) => {
   await openSkills(cli, page, "/#/skills/release-notes");
   const section = files(page, "release-notes");
-  await expect(section).toContainText("Since your last publish");
   await expect(fileRow(section, "SKILL.md")).toContainText("edited");
   await expect(content(section, "SKILL.md").getByRole("insertion")).toHaveText([
     "Use this skill to write release notes from merged changes.",

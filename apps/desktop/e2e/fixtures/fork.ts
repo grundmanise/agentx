@@ -188,6 +188,6 @@ export const forked = (name: string): InlineEvent => ({
 export const refusedInPlace: InlineEvent = {
   code: "refused",
   hint: "move .git out of the skill, or fork it under a new name with --name <new>",
-  message: "pdf has its own Git repository at /home/me/.agents/skills/pdf/.git",
+  message: "pdf has a Git repository at /home/me/.agents/skills/pdf/.git",
   type: "error",
 };

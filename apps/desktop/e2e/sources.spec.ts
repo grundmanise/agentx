@@ -555,7 +555,9 @@ test("Remove on an Added skill confirms, then runs skill remove for every agent"
   const run = cli.register(["skill", "remove", "pdf"], {
     events: [{ ok: true, summary: "removed pdf", type: "result" }],
   });
-  const confirm = page.getByRole("alertdialog", { name: "Remove pdf?" });
+  const confirm = page.getByRole("alertdialog", {
+    name: "Remove pdf from this machine?",
+  });
   // Cancel puts the focus back on the card's Remove: the dialog has no trigger.
   await remove.click();
   await confirm.getByRole("button", { exact: true, name: "Cancel" }).click();
@@ -920,7 +922,6 @@ test("a partial failure lists what was added and why the rest was not, in the ap
   await expect(toast).toBeVisible();
   await expect(toast).toContainText("docx is already in your library.");
   await expect(toast).toContainText("Remove it, then add again.");
-  await expect(toast).toContainText(other);
   // The skill that landed leaves the selection; the skipped one stays.
   await expect(
     bar(page).getByRole("button", { exact: true, name: "Add 1" })

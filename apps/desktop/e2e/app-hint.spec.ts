@@ -19,7 +19,7 @@ const beside =
   "fork it under a new name with 'agentx skill fork pdf --name <new>'";
 
 const gitRepo = refused(
-  "pdf has its own Git repository at /home/me/.agents/skills/pdf/.git",
+  "pdf has a Git repository at /home/me/.agents/skills/pdf/.git",
   `move .git out of the skill, then run 'agentx skill fork pdf' again, or ${beside}`
 );
 
@@ -29,11 +29,7 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   [gitRepo, "on", "move .git out of the skill, or type a new name"],
   // Fork ran with the switch on and the skill's own name typed.
   [gitRepo, "named", "move .git out of the skill"],
-  [
-    gitRepo,
-    "off",
-    "move .git out of the skill, or turn on Use a different name",
-  ],
+  [gitRepo, "off", "move .git out of the skill, or use a different name"],
   [
     refused(
       "/home/me/.agents/skills/pdf is a symlink to /home/me/work/pdf; forking pdf in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to",
@@ -141,7 +137,7 @@ for (const [exitCode, renaming, name, want] of formTable) {
 test("forkHint tells a refusal by exit 6 and the code refused, not by the message alone", () => {
   const error = {
     ...refused(
-      "pdf has its own Git repository at /home/me/.agents/skills/pdf/.git",
+      "pdf has a Git repository at /home/me/.agents/skills/pdf/.git",
       "move .git out of the skill"
     ),
     code: "internal",

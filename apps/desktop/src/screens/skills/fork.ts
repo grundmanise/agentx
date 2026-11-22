@@ -38,8 +38,8 @@ export const forkArgs = (target: string, newName?: string): string[] =>
 /** What the Fork dialog says forking `row` does: a plugin's skill is forked beside the plugin's. */
 export const forkText = (row: SkillRow): string =>
   row.kind === "plugin"
-    ? "Creates a copy in your library. The plugin's skill stays."
-    : "Creates a copy in your library. Keep the name to replace this skill, or pick a new name to keep both. Updates from the original still apply.";
+    ? "A new copy will be created. Pick a different name, or agents with the plugin will see two skills with that name."
+    : "A new copy will be created. Keep the same name to replace this skill, or pick a different name to keep both.";
 
 /**
  * Whether Use a different name starts on: for a plugin's skill, whose fork under its own name
@@ -83,7 +83,7 @@ export const formAfter = (
 /** What is left to do to fork beside the skill, as the form stands, or nothing once a name is typed. */
 const besideWays: Record<ForkFields, string | undefined> = {
   named: undefined,
-  off: "turn on Use a different name",
+  off: "use a different name",
   on: "type a new name",
 };
 
@@ -104,7 +104,7 @@ const inPlaceHint = (
   target: string,
   form: ForkFields
 ): string | undefined => {
-  if (message.startsWith(`${target} has its own Git repository at `)) {
+  if (message.startsWith(`${target} has a Git repository at `)) {
     return orBeside("move .git out of the skill", form);
   }
   if (/^.+ is a symlink to .+; forking .+ in its place /u.test(message)) {

@@ -70,12 +70,7 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
       return <OpenSettingsButton />;
     }
     case "edited": {
-      return (
-        <PublishButton
-          row={row}
-          label={`Publish to ${banner.action.publishTo}`}
-        />
-      );
+      return <PublishButton row={row} label="Publish" />;
     }
     case undefined: {
       return null;

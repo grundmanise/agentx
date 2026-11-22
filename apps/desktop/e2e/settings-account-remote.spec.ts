@@ -67,7 +67,7 @@ test("the account remote with what the Sources slice reports", async ({
   // Write access is the norm, so it shows no tag.
   await expect(remote.getByText("Read-only", { exact: true })).toHaveCount(0);
   await expect(remote.getByRole("button", { name: "Change…" })).toBeVisible();
-  await expect(remote.getByRole("button", { name: "Detach" })).toBeVisible();
+  await expect(remote.getByRole("button", { name: "Unlink" })).toBeVisible();
 });
 
 test("a read-only account remote has a Read-only tag beside its URL", async ({
@@ -205,10 +205,10 @@ test("Change… warns before it replaces the account remote", async ({
   await urlField(page).fill(next);
   await save.click();
   const confirm = page.getByRole("alertdialog", {
-    name: "Replace the account remote?",
+    name: "Change your account remote?",
   });
   await expect(confirm).toContainText(
-    "Your skills show as not published until you publish them to the new remote."
+    "Skills from the previous account remote will stay but show as not published."
   );
   await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(confirm).toHaveCount(0);
@@ -217,20 +217,20 @@ test("Change… warns before it replaces the account remote", async ({
     events: [{ ...account, url: next }],
   });
   await save.click();
-  await confirm.getByRole("button", { name: "Replace" }).click();
+  await confirm.getByRole("button", { name: "Change" }).click();
   await expect(toasts(page).getByText(`Saved. Reached ${next}`)).toBeVisible();
   await expect(urlField(page)).toHaveCount(0);
   expect(commandLines(cli)).toEqual([`source add ${next} --account`]);
 });
 
-test("Detach warns, runs source remove and shows the field once source list has no account remote", async ({
+test("Unlink warns, runs source remove and shows the field once source list has no account remote", async ({
   cli,
   page,
 }) => {
   await openSettings(cli, page);
-  await accountRemote(page).getByRole("button", { name: "Detach" }).click();
+  await accountRemote(page).getByRole("button", { name: "Unlink" }).click();
   const confirm = page.getByRole("alertdialog", {
-    name: "Detach the account remote?",
+    name: "Unlink the account remote?",
   });
   await expect(confirm).toContainText(
     "agentx stops publishing here. Nothing is deleted."
@@ -240,7 +240,7 @@ test("Detach warns, runs source remove and shows the field once source list has 
     events: [{ id: account.id, type: "source", url: ACCOUNT }],
   });
   cli.register(["source", "list"], { events: sharedOnly });
-  await confirm.getByRole("button", { name: "Detach" }).click();
+  await confirm.getByRole("button", { name: "Unlink" }).click();
   await expect(
     toasts(page).getByText("The account remote is no longer set")
   ).toBeVisible();

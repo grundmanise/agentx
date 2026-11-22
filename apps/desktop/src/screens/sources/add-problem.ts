@@ -8,10 +8,6 @@ const held = /the library already holds (?<name>\S+) at /gu;
 /** The count of skills a run over several could not install, from its message. */
 const refusedCount = /^(?<n>\d+) of \d+ skills? could not be installed: /u;
 
-/** Whether a warning is the CLI's reason for one skill the library already holds. */
-export const isHeldWarning = (message: string) =>
-  /the library already holds \S+ at /u.test(message);
-
 /**
  * `problem` in the app's words when every skill it names was refused because the library already
  * holds one of that name, else undefined.

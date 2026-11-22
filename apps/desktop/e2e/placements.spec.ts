@@ -545,14 +545,16 @@ test.describe("many agents", () => {
       manyAgentsInventory(manyConfigurations.map((c) => c.id))
     );
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Remove pdf?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove pdf from this machine?",
+    });
     const list = dialog.getByRole("list", { name: "Agents that see it" });
     await expect(list.getByRole("listitem")).toHaveCount(27);
     const box = await dialog.boundingBox();
     expect(box?.y).toBeGreaterThanOrEqual(0);
     expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(600);
     await expect(
-      dialog.getByRole("heading", { name: "Remove pdf?" })
+      dialog.getByRole("heading", { name: "Remove pdf from this machine?" })
     ).toBeInViewport();
     await expect(
       dialog.getByRole("button", { name: "Remove" })
@@ -692,14 +694,14 @@ test.describe("Remove", () => {
     await openSkill(cli, page, "pdf-letters");
     const article = pane(page, "pdf-letters");
     const dialog = page.getByRole("alertdialog", {
-      name: "Remove pdf-letters?",
+      name: "Remove pdf-letters from this machine?",
     });
 
     // The Universal chip, on, is the removal: a client that reads the library loses a skill
     // only with the library.
     await chip(article, "Universal").click();
     await expect(dialog).toContainText(
-      "Removing it from your library removes it from:"
+      "Removing it from universal agents will also remove it from your library. It will be removed from:"
     );
     await expect(
       dialog
@@ -712,9 +714,6 @@ test.describe("Remove", () => {
     const remote = dialog.getByRole("checkbox", {
       name: /^Also delete it from your account remote/u,
     });
-    await expect(dialog).toContainText(
-      "Your other machines keep it until you remove it there."
-    );
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
 
@@ -746,7 +745,7 @@ test.describe("Remove", () => {
     await openSkill(cli, page, "pdf-letters");
     const article = pane(page, "pdf-letters");
     const dialog = page.getByRole("alertdialog", {
-      name: "Remove pdf-letters?",
+      name: "Remove pdf-letters from this machine?",
     });
     const remote = dialog.getByRole("checkbox", {
       name: /^Also delete it from your account remote/u,
@@ -780,7 +779,9 @@ test.describe("Remove", () => {
     await openSkill(cli, page, "draft");
     cli.register(["skill", "remove", "draft"]);
     await pane(page, "draft").getByRole("button", { name: "Remove" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Remove draft?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove draft from this machine?",
+    });
     await dialog.getByRole("button", { name: "Remove" }).click();
     await expect(toasts(page).getByText("Removed draft skill")).toBeVisible();
     expect(later(cli)).toEqual([["skill", "remove", "draft", "--json"]]);
@@ -792,7 +793,9 @@ test.describe("Remove", () => {
   }) => {
     await openSkill(cli, page, "pdf");
     await pane(page, "pdf").getByRole("button", { name: "Remove" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Remove pdf?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove pdf from this machine?",
+    });
     await expect(
       dialog
         .getByRole("list", { name: "Agents that see it" })

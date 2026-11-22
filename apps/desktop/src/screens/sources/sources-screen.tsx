@@ -15,7 +15,7 @@ import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { problemSentence, skillNamesOf } from "#/lib/problem-text.ts";
 import { FloatingActionBar } from "#/screens/sources/action-bar.tsx";
-import { addProblem, isHeldWarning } from "#/screens/sources/add-problem.ts";
+import { addProblem } from "#/screens/sources/add-problem.ts";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
 import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
@@ -395,14 +395,7 @@ export const SourcesScreen = () => {
       failure: (o) => {
         const error = o.events.find((e) => e.type === "error");
         const words = error === undefined ? undefined : addProblem(error);
-        return words === undefined
-          ? undefined
-          : {
-              ...words,
-              warnings: o.logs
-                .filter((l) => l.level === "warn" && !isHeldWarning(l.message))
-                .map((l) => l.message),
-            };
+        return words;
       },
       label: ADD_LABEL,
       // The rim reads the CLI's steps (three per skill and a rescan) as a share of the whole install.
@@ -437,7 +430,7 @@ export const SourcesScreen = () => {
     } else {
       const error = outcome.events.find((e) => e.type === "error");
       if (installed.length > 0 && error !== undefined) {
-        // Some skills were skipped: what was added, why the rest was not, and each skipped skill.
+        // Some skills were skipped: what was added, and why the rest was not.
         const words = addProblem(error);
         notifyError({
           details:
@@ -453,9 +446,6 @@ export const SourcesScreen = () => {
             ...skillNamesOf(useAppStore.getState().inventory),
           ],
           message: `Added ${installed.length} of ${count(plan.names.length, "skill")}`,
-          warnings: outcome.logs
-            .filter((l) => l.level === "warn" && !isHeldWarning(l.message))
-            .map((l) => l.message),
         });
         setSelection((prev) =>
           without(

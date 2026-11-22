@@ -271,7 +271,7 @@ test.describe("publish", () => {
 
     const toast = toasts(page);
     await expect(toast).toContainText(
-      "notes skill has a newer version on the account remote. Update it, then publish."
+      "There is a newer version of notes skill on the account remote. Update it first, then publish your changes."
     );
     expect(ran(cli, ["skill", "publish", ...OUTGOING])).toBe(true);
     // Until the inventory that follows arrives, the pill keeps the last count.
