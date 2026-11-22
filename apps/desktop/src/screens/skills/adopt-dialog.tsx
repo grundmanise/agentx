@@ -1,6 +1,6 @@
 // The adopt dialog: what adopting the skills of one tool, or of both, would do, the skills it
 // covers by name, the ones the preview refuses folded under the list with the CLI's reason, then
-// Cancel · Adopt. Adopt runs in the dialog (`adopt.ts`): each row shows its state, then its result,
+// Cancel · Import. Import runs in the dialog (`adopt.ts`): each row shows its state, then its result,
 // with the reason of a skill the CLI did not adopt; one line counts the skills started, then says
 // how many were adopted. The dialog cannot be dismissed while the run goes, and Done closes it.
 import { useState } from "react";
@@ -43,11 +43,11 @@ import { useAppStore } from "#/store/store.ts";
 
 /** What a screen reader hears for each state, before the name. */
 const statusNames: Record<RowStatus, string> = {
-  adopted: "Adopted",
-  failed: "Not adopted",
+  adopted: "Imported",
+  failed: "Not imported",
   installed: "Installed",
-  "left-out": "Can't be adopted",
-  running: "Adopting",
+  "left-out": "Can't be imported",
+  running: "Importing",
   waiting: "Waiting",
 };
 
@@ -171,7 +171,7 @@ const Refused = ({ rows }: { rows: AdoptRow[] }) => {
   }
   return (
     <section
-      aria-label="Can't be adopted"
+      aria-label="Can't be imported"
       className="border-overlay-border flex min-h-0 flex-col gap-2 border-t pt-3"
     >
       <div>
@@ -192,7 +192,7 @@ const Refused = ({ rows }: { rows: AdoptRow[] }) => {
           >
             <ChevronIcon size="xs" />
           </span>
-          {`${plural(rows.length, "skill")} can't be adopted`}
+          {`${plural(rows.length, "skill")} can't be imported`}
         </Button>
       </div>
       {open && (
@@ -224,7 +224,7 @@ const Description = ({ tools }: { tools: readonly ToolSummary[] }) => {
 
 /** The dialog's title: the tool it adopts the skills of, or both. */
 const titleOf = (tools: readonly { name: string }[]) =>
-  `Adopt skills from ${namesOf(tools)}`;
+  `Import skills from ${namesOf(tools)}`;
 
 /**
  * The adopt dialog for `tools`, the arguments of `adopt` it covers, in the app's order. Before the
@@ -312,7 +312,7 @@ export const AdoptDialog = ({
                 }}
               >
                 {running && <Spinner />}
-                Adopt
+                Import
               </Button>
             </>
           ) : (

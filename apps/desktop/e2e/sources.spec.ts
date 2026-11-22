@@ -254,7 +254,7 @@ test("a source listing: the skills A to Z, each state with its label and, once o
     "Remove or rename xlsx first"
   );
   await expect(opened(page, "scratch")).toContainText(
-    "A folder named scratch is already in your library, added outside agentx. Adopt it in Skills to manage it, or remove it to add this one."
+    "A folder named scratch is already in your library, added outside agentx. Import it in Skills to manage it, or remove it to add this one."
   );
 
   // Opening another pill reads that source's listing.

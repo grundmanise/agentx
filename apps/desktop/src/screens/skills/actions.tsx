@@ -117,7 +117,7 @@ const adoptRefusal = (
     details: folders.map(({ path, why }) => `${path} ${why}`),
     keep: [row.name],
     lasting: true,
-    message: `${row.name} skill wasn't adopted`,
+    message: `${row.name} skill wasn't imported`,
   };
 };
 
@@ -135,7 +135,7 @@ export const adopt = async (row: SkillRow, force = false) => {
   const outcome = await runUntilSettled(force ? [...args, "--force"] : args, {
     failure: (failed) => adoptRefusal(row, failed),
     label: adoptLabel(row),
-    success: (events) => `Adopted ${adoptedName(events) ?? row.name} skill`,
+    success: (events) => `Imported ${adoptedName(events) ?? row.name} skill`,
   });
   const adopted = adoptedName(outcome.events);
   if (
@@ -193,7 +193,7 @@ export const Adopt = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(adoptLabel(row));
   return (
     <ActionButton
-      label="Adopt"
+      label="Import"
       pending={pending}
       onClick={() => {
         void adopt(row);
@@ -299,7 +299,7 @@ export const AdoptReplaceConfirm = () => {
             {one ? "Replace this folder?" : "Replace these folders?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {`${one ? "It contains" : "They contain"} files that differ from ${request?.row.name ?? ""} in your library. Adopting the skill replaces ${one ? "it" : "them"}, and deletes those files.`}
+            {`${one ? "It contains" : "They contain"} files that differ from ${request?.row.name ?? ""} in your library. Importing the skill replaces ${one ? "it" : "them"}, and deletes those files.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {request?.paths.map((path) => (

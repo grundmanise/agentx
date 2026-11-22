@@ -200,7 +200,7 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
   }
   return (
     <Button variant="accent" size="inline" disabled={busy} onClick={onOpen}>
-      <span className="type-button-sm">Adopt all</span>
+      <span className="type-button-sm">Import all</span>
     </Button>
   );
 };

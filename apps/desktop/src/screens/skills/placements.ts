@@ -206,7 +206,7 @@ export const lockOf = (row: SkillRow): Lock | undefined => {
     case "disk": {
       return adoptArgs(row) === undefined
         ? { reason: UNMANAGED }
-        : { action: "adopt", reason: `${UNMANAGED}. Adopt it to manage` };
+        : { action: "adopt", reason: `${UNMANAGED}. Import it to manage` };
     }
     case "source":
     case "yours": {

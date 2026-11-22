@@ -115,7 +115,7 @@ const toggle = (
 const unlockAction = (row: SkillRow, lock: Lock): ToastAction | undefined =>
   lock.action === "adopt"
     ? {
-        label: "Adopt",
+        label: "Import",
         onClick: () => {
           void adopt(row);
         },
