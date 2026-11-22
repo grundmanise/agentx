@@ -697,6 +697,8 @@
   --gap-agent-card: 12px;
   --size-agent-card-logo: 44px;
   --width-universal-lead: 260px;
+  /* Client columns of the Universal card: as many as fit at 220px or wider, sharing the row. */
+  --grid-template-columns-universal: repeat(auto-fit, minmax(220px, 1fr));
   --size-plugin-tile: 40px;
   --size-plugin-row-tile: 28px;
   --gap-plugin-details: 40px;
@@ -1039,6 +1041,13 @@
 /* popover.max-width: the room the window has for a popover that fits its content across. */
 @utility max-w-popover {
   max-width: var(--radix-popover-content-available-width);
+}
+/* A hover card that fits a list across: at most popover.width, and no wider than the window allows. */
+@utility max-w-hover-card {
+  max-width: min(
+    var(--width-popover),
+    var(--radix-hover-card-content-available-width)
+  );
 }
 /* popover.origin: the point on the popover nearest its anchor, so it zooms from there. */
 @utility origin-popover {
