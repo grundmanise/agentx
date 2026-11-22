@@ -276,7 +276,7 @@ type batch struct {
 	done     []*installed // the skills that landed, in the order they were installed
 	skipped  int          // the skills passed over, see skip
 	// listsRefused says the run lists the skills it refused once it ends,
-	// as agentx adopt --all does, so drop warns of no refusal as it happens.
+	// as agentx skill import --all does, so drop warns of no refusal as it happens.
 	listsRefused bool
 }
 
@@ -1200,7 +1200,7 @@ func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Recor
 	case !known:
 		// An unmanaged skill, which an adoption takes over in its place, so
 		// the rename is what frees the name.
-		hint += "or, to keep it, adopt it with '" + adoptCommand(v.name) + "' and rename it with '" + skillCommand("rename", v.name, "<new>") + "', then install again"
+		hint += "or, to keep it, import it with '" + adoptCommand(v.name) + "' and rename it with '" + skillCommand("rename", v.name, "<new>") + "', then install again"
 	case rec.Kind == lineage.KindFork:
 		hint = ownSkillHint(v.name)
 	default:
@@ -1476,7 +1476,7 @@ func installSummary(dones []*installed, skippedSkills int) string {
 		summary = fmt.Sprintf("installed %s from %s in %s", strings.Join(names, ", "), first.imp.Source, plural(len(covered), "configuration"))
 	}
 	if len(dones) == 1 && adopted == 1 {
-		summary = strings.Replace(summary, "installed ", "adopted ", 1)
+		summary = strings.Replace(summary, "installed ", "imported ", 1)
 	} else if adopted > 0 {
 		summary += fmt.Sprintf(", %d already in the library", adopted)
 	}
@@ -1528,8 +1528,10 @@ func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 	out, v := inv.out, done.v
 	rows := inv.ownPlacements(v.name, done.placed, ev.Placements)
 	what := "installed"
-	if done.adopted || v.replace {
-		what = "adopted"
+	if v.replace || done.adopted {
+		// agentx skill import takes the skill over from another tool, and an
+		// install the library already held a folder of takes that folder over.
+		what = "imported"
 	}
 	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path) +
 		": " + out.paint(noteStyle, plural(len(rows), "placement"))

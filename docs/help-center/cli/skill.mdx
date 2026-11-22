@@ -9,7 +9,7 @@ Your library is one directory, `~/.agents/skills`, that holds every skill agentx
 
 A skill is a folder with a `SKILL.md`. It lives in one of three places:
 
-- **Your library**, `~/.agents/skills`. agentx installs, creates, forks and adopts skills here.
+- **Your library**, `~/.agents/skills`. agentx installs, creates, forks and imports skills here.
 - **A plugin's own folder**, such as `~/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format`. The plugin owns it. agentx cannot change or remove a plugin's skill.
 - **A client's own skills folder**, such as `~/.claude/skills`. It holds the links and copies agentx puts there, and any folder you or another tool put there.
 
@@ -98,13 +98,13 @@ warning: xlsx: the library already holds xlsx at /home/me/.agents/skills
 ✓ installed pdf from https://github.com/anthropics/skills under skills/pdf: 4 placements
   ...
 error: 1 of 3 skills could not be installed: xlsx: the library already holds xlsx at /home/me/.agents/skills
-hint: remove it with 'agentx skill remove xlsx', then install again; or, to keep it, adopt it with 'agentx adopt --skill xlsx' and rename it with 'agentx skill rename xlsx <new>', then install again
+hint: remove it with 'agentx skill remove xlsx', then install again; or, to keep it, import it with 'agentx skill import xlsx' and rename it with 'agentx skill rename xlsx <new>', then install again
 ```
 
-The hint depends on the skill that holds the name. To keep an unmanaged skill, as here, [adopt it](/cli/adopt#skills-adopted-as-they-are), then rename it:
+The hint depends on the skill that holds the name. To keep an unmanaged skill, as here, [import it](/cli/skill-import#skills-imported-as-they-are), then rename it:
 
 ```sh
-agentx adopt --skill xlsx
+agentx skill import xlsx
 agentx skill rename xlsx my-xlsx
 agentx skill add anthropics/skills --name xlsx
 ```
@@ -347,8 +347,8 @@ Each row shows the skill, its kind, whether it holds edits you have not publishe
 
 | Kind | What it means |
 |---|---|
-| `managed` | A skill agentx keeps: one installed from a source, or one of your own, which you created with [`agentx skill new`](/cli/fork#create-a-skill), forked with [`agentx skill fork`](/cli/fork#fork-a-skill), adopted as it was with [`agentx adopt`](/cli/adopt#skills-adopted-as-they-are) or installed from your account remote. |
-| `unmanaged` | A directory in the library that agentx does not manage. agentx lists it and otherwise leaves it alone. To have agentx manage it, [adopt it](/cli/adopt). |
+| `managed` | A skill agentx keeps: one installed from a source, or one of your own, which you created with [`agentx skill new`](/cli/fork#create-a-skill), forked with [`agentx skill fork`](/cli/fork#fork-a-skill), imported as it was with [`agentx skill import`](/cli/skill-import#skills-imported-as-they-are) or installed from your account remote. |
+| `unmanaged` | A directory in the library that agentx does not manage. agentx lists it and otherwise leaves it alone. To have agentx manage it, [import it](/cli/skill-import). |
 
 The source column shows where the skill is published to:
 
@@ -635,7 +635,7 @@ If a file of the skill changes while the update writes it, agentx stops with exi
 
 ### Update to what another machine published
 
-Your own skills travel between your machines through the [account remote](/account-remote): the ones you created with `agentx skill new`, forked with `agentx skill fork`, adopted as they were with `agentx adopt`, or installed from the account remote. Update them to the latest version you published from another machine the way you take an update:
+Your own skills travel between your machines through the [account remote](/account-remote): the ones you created with `agentx skill new`, forked with `agentx skill fork`, imported as they were with `agentx skill import`, or installed from the account remote. Update them to the latest version you published from another machine the way you take an update:
 
 ```sh
 agentx skill check-updates
@@ -654,7 +654,7 @@ no skill was updated from upstream
 - Edits you have not published are recorded on the skill first, and what the account remote holds is merged with them. They stay unpublished until you [publish](#publish-a-skill) them. Publish with `-m` to publish them under your own message.
 - Update before you publish: [`agentx skill publish`](#publish-a-skill) never merges, and stops with exit code 6 when another machine published changes and this machine has changes of its own.
 - When both machines changed the same lines, the merge waits for you: see [Resolve a conflict](/cli/fork#resolve-a-conflict). Resolve it, then run `agentx skill update <name>` again.
-- A skill with no upstream (one you created with `agentx skill new`, adopted as it was with `agentx adopt`, or forked from a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`. One you never published, or one another machine removed, has no branch there, and the update tells you to run `agentx skill publish <name>`.
+- A skill with no upstream (one you created with `agentx skill new`, imported as it was with `agentx skill import`, or forked from a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`. One you never published, or one another machine removed, has no branch there, and the update tells you to run `agentx skill publish <name>`.
 - If Git cannot reach the account remote, the update of a skill with no upstream stops with exit code 3. A skill you forked from a source gets a warning and still takes its new upstream version.
 
 ### A skill you edited
@@ -767,7 +767,7 @@ With `--all`, agentx updates every skill it can and names each one it could not.
 
 ## Publish a skill
 
-Publish one of your own skills, one you created with `agentx skill new`, forked with `agentx skill fork` or adopted as it was with `agentx adopt`, to your [account remote](/account-remote) so your other machines can install it and get what you change:
+Publish one of your own skills, one you created with `agentx skill new`, forked with `agentx skill fork` or imported as it was with `agentx skill import`, to your [account remote](/account-remote) so your other machines can install it and get what you change:
 
 ```sh
 agentx skill publish release-notes -m "Cover reverted pull requests"
@@ -805,7 +805,7 @@ agentx skill publish release-notes -m "Cover reverted pull requests"
   - A host SSH does not trust yet: connect to it once with `ssh` to add its key to `known_hosts`.
   - An organisation that requires single sign-on or an IP allow list: authorise your token or key for the organisation, or allow this machine's IP address.
 - Publishing needs an [account remote](/account-remote). Without one, it stops with exit code 6 and names `agentx source add <url> --account`.
-- A skill agentx does not manage has no source to publish to: [adopt it](/cli/adopt#skills-adopted-as-they-are) with `agentx adopt --skill <name>` to make it one of your own.
+- A skill agentx does not manage has no source to publish to: [import it](/cli/skill-import#skills-imported-as-they-are) with `agentx skill import <name>` to make it one of your own.
 - To delete a skill's branch from the remote, remove the skill with [`agentx skill remove <name> --remote`](/cli/fork#remove-a-skill-of-your-own).
 
 ### Publish edits to a shared source
@@ -969,7 +969,7 @@ Removing one of your own skills from the machine also deletes its local history.
 
 ## Turn skills on for your cloud agents
 
-Every agent you run in the cloud, such as Claude Code on the web, is one [cloud machine](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md). It has no disk that lasts, so its skills live in its snapshot on your [account remote](/account-remote), on the branch `machines/cloud`. Each cloud session reads that snapshot when it starts. To apply it yourself, for example in a cloud environment's setup script, run `agentx import --machine cloud --yes`, see [Restore from the account remote](/cli/export#restore-from-the-account-remote). Turn a skill on and off there with the same commands you use on this machine, adding `--machine cloud`. Nothing on this machine changes.
+Every agent you run in the cloud, such as Claude Code on the web, is one [cloud machine](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md). It has no disk that lasts, so its skills live in its snapshot on your [account remote](/account-remote), on the branch `machines/cloud`. Each cloud session reads that snapshot when it starts. To apply it yourself, for example in a cloud environment's setup script, run `agentx snapshot apply --machine cloud --yes`, see [Restore from the account remote](/cli/snapshot#restore-from-the-account-remote). Turn a skill on and off there with the same commands you use on this machine, adding `--machine cloud`. Nothing on this machine changes.
 
 Place a skill on the cloud machine:
 
@@ -993,7 +993,7 @@ Add `--copy` to give those configurations a copy instead of a symlink, as on thi
 agentx skill place pdf --machine cloud --to windsurf --copy
 ```
 
-The cloud machine always takes the latest version of the skill: the account remote's for one of your own skills, and the source's for a skill of a source. Publish your own skills first. If the account remote does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine. [Adopt it](/cli/adopt#skills-adopted-as-they-are) and publish it first.
+The cloud machine always takes the latest version of the skill: the account remote's for one of your own skills, and the source's for a skill of a source. Publish your own skills first. If the account remote does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine. [Import it](/cli/skill-import#skills-imported-as-they-are) and publish it first.
 
 Take a skill away from some configurations, or off the cloud machine:
 
@@ -1008,7 +1008,7 @@ Each command writes one commit to `machines/cloud` and pushes it. agentx never f
 
 - `--machine` accepts only `cloud`. A computer's skills live on its own disk, so run the command on that computer.
 - `--force` replaces a directory on this machine's disk, and `--remote` deletes a skill's branch, so agentx refuses each of them with `--machine`.
-- To copy every skill of this machine to the cloud machine at once, export a snapshot to it: see [Seed another machine](/cli/export#seed-another-machine).
+- To copy every skill of this machine to the cloud machine at once, save a snapshot to it: see [Seed another machine](/cli/snapshot#seed-another-machine).
 
 ## Exit codes
 

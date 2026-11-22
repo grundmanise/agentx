@@ -66,7 +66,7 @@ const openSkill = async (
   { key = name, first = inventory } = {}
 ) => {
   cli.onServeStart({ events: [first] });
-  cli.register(["adopt"], { events: adoption });
+  cli.register(["skill", "import"], { events: adoption });
   cli.register(["source", "list"], { events: sources });
   for (const n of libraryNames) {
     cli.register(["skill", "history", n], { events: [] });

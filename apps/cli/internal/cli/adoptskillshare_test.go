@@ -76,7 +76,7 @@ func TestAdoptAgainAfterSkillshareTookTheSkillBack(t *testing.T) {
 		"alpha": {Source: "github.com/owner/repo/skills/alpha", Type: "github-subdir", RepoURL: s.url, Subdir: "skills/alpha"},
 		"beta":  {Source: "github.com/owner/repo/skills/beta", Type: "github-subdir", RepoURL: s.url, Subdir: "skills/beta"},
 	})
-	h.mustRun("adopt", "--all")
+	h.mustRun("skill", "import", "--all")
 	first := h.accountGit("rev-parse", "--verify", "refs/heads/managed/alpha")
 
 	// Skillshare's sync put its link back for alpha and pruned beta, and
@@ -94,12 +94,12 @@ func TestAdoptAgainAfterSkillshareTookTheSkillBack(t *testing.T) {
 	s.commit("alpha revised")
 	h.mustRun("source", "fetch", s.url)
 
-	preview := h.run("--json", "adopt")
+	preview := h.run("--json", "skill", "import")
 	for _, ev := range h.eventsOfType(preview.stdout, "adoption") {
 		equal(t, ev["name"].(string)+" state", ev["state"], adoptCandidate)
 		contains(t, ev["name"].(string)+" reason", ev["reason"].(string), "the library no longer holds it")
 	}
-	out := h.run("--json", "adopt", "--all")
+	out := h.run("--json", "skill", "import", "--all")
 	equal(t, "exit", out.exit, 0)
 	for _, name := range []string{"alpha", "beta"} {
 		if info, err := os.Lstat(filepath.Join(h.library, name)); err != nil || !info.IsDir() {
@@ -148,7 +148,7 @@ func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 	})
 	before := libraryTree(t, h.skillshareSkills())
 
-	out := h.run("--json", "adopt", "--all")
+	out := h.run("--json", "skill", "import", "--all")
 	equal(t, "exit", out.exit, 0)
 	h.lockUnchanged(filepath.Join(h.skillshareSkills(), skillshare.StoreName), store)
 	sameTree(t, "Skillshare's folder", libraryTree(t, h.skillshareSkills()), before)
@@ -219,7 +219,7 @@ func TestAdoptFindsSkillshareWhereItsConfigurationSays(t *testing.T) {
 		"alpha": {Source: "github.com/owner/repo/skills/alpha", Type: "github-subdir", RepoURL: s.url, Subdir: "skills/alpha"},
 	})
 
-	out := h.run("--json", "adopt")
+	out := h.run("--json", "skill", "import")
 	equal(t, "exit", out.exit, 0)
 	ev := h.one(out.stdout, "adoption")
 	equal(t, "name", ev["name"], "alpha")

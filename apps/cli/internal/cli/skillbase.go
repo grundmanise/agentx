@@ -60,7 +60,7 @@ func notAForkRefusal(name string, ok bool) error {
 			"run '"+skillCommand("diff", name)+"' to compare with its base version")
 	}
 	return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no commit to compare with",
-		"adopt it first with '"+adoptCommand(name)+"'")
+		"import it first with '"+adoptCommand(name)+"'")
 }
 
 // readLibraryTree reads a library skill's directory as git would record it,

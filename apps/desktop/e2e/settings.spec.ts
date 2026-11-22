@@ -65,8 +65,8 @@ test("each section shows what the store holds", async ({ cli, page }) => {
     /^Storage/u,
     /^Command line/u,
     /^Activity log/u,
-    /^Export settings/u,
-    /^Import settings/u,
+    /^Save snapshot/u,
+    /^Apply snapshot/u,
   ]);
 
   const thisMachine = section(page, "This machine");

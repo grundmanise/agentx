@@ -8,7 +8,9 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:serve": "node scripts/serve.ts dev",
     "build": "vite build",
+    "preview:serve": "node scripts/serve.ts preview",
     "check": "ultracite check && tsc --noEmit -p .",
     "fix": "ultracite fix",
     "test": "playwright test",

@@ -134,7 +134,7 @@ func (inv *invocation) skillHistory(ctx context.Context, name string) error {
 			"a skill of a shared source is at the version it was installed at or last published; fork it with '"+skillCommand("fork", name)+"' to give its edits a history")
 	case !held && inLibrary:
 		return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no history",
-			"adopt it with '"+adoptCommand(name)+"' to give its edits a history")
+			"import it with '"+adoptCommand(name)+"' to give its edits a history")
 	case !held:
 		return inv.noLibrarySkill(name)
 	}

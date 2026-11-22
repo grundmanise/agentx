@@ -231,8 +231,8 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 	// adoption makes beta one of the user's own in its place, so the rename
 	// is what frees the name for the install.
 	equal(t, "the hint", lastError(t, h.events(out.stdout))["hint"],
-		"remove it with 'agentx skill remove beta', then install again; or, to keep it, adopt it with 'agentx adopt --skill beta' and rename it with 'agentx skill rename beta <new>', then install again")
-	h.mustRun("adopt", "--skill", "beta")
+		"remove it with 'agentx skill remove beta', then install again; or, to keep it, import it with 'agentx skill import beta' and rename it with 'agentx skill rename beta <new>', then install again")
+	h.mustRun("skill", "import", "beta")
 	h.mustRun("skill", "rename", "beta", "my-beta")
 	h.mustRun("skill", "add", s.url, "--name", "beta")
 	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "alpha,beta,gamma,my-beta")

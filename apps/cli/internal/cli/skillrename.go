@@ -47,7 +47,7 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 // the same skill by that fork id, see dropRenamed. Before either step
 // runs, everything either would refuse is asked: what skill fork refuses
 // of old and of newName, see planFork, an unmanaged skill, which is sent
-// to agentx adopt, among them, and what skill remove refuses of old, see
+// to agentx skill import, among them, and what skill remove refuses of old, see
 // judgeForkRemoval. Old's unpublished edits are recorded on its
 // branch only then, as the fork is made, see makeFork, so a refused
 // rename records nothing. A removal that fails once the fork is made says

@@ -199,7 +199,7 @@ func TestHelpSections(t *testing.T) {
 			"  agentx skill add anthropics/skills --name pdf  install one skill into every enabled client\n" +
 			"  agentx skill new release-notes                 create a skill of your own\n" +
 			"  agentx skill check-updates                     see what changed upstream before you update\n" +
-			"  agentx export --machine cloud                  seed the cloud machine with this one's skills\n" +
+			"  agentx snapshot save --machine cloud           seed the cloud machine with this one's skills\n" +
 			"\nGlobal flags:\n" +
 			"      --color string  colour the text output: on or off; left out, a terminal gets colour and a pipe does not\n" +
 			"      --json          write newline-delimited JSON events to stdout\n" +

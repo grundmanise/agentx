@@ -31,7 +31,7 @@ const details = (page: Page) =>
 /** Starts the app on the fixture machine, with pdf-letters' history and every skill's files. */
 const start = (cli: MockCli) => {
   cli.onServeStart({ events: [inventory] });
-  cli.register(["adopt"], { events: adoption });
+  cli.register(["skill", "import"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   for (const read of fileReads) {
     cli.register(["skill", "files", ...read.args], { events: read.events });

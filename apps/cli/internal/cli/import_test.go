@@ -128,7 +128,7 @@ func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
 	to.offline()
-	out := to.run("import", settingsOnly, "--yes")
+	out := to.run("snapshot", "apply", settingsOnly, "--yes")
 	equal(t, "exit", out.exit, 0)
 	if after := readText(t, home.SettingsPath(to.agentx)); after != before {
 		t.Errorf("the settings were not restored byte for byte:\nexported:\n%s\nimported:\n%s", before, after)
@@ -163,7 +163,7 @@ func TestImportRestoresAMachine(t *testing.T) {
 	h.mustRun("skill", "remove", "alpha")
 	h.mustRun("skill", "remove", "beta")
 	remove(t, byHand)
-	out := h.mustRun("--json", "import", first, "--yes")
+	out := h.mustRun("--json", "snapshot", "apply", first, "--yes")
 	actions := map[string]jsonEvent{}
 	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
 		actions[e["name"].(string)] = e
@@ -180,11 +180,11 @@ func TestImportRestoresAMachine(t *testing.T) {
 	after := h.readExportFile(second)["skills"].([]any)
 	equal(t, "the restored skills", fmt.Sprint(after), fmt.Sprint(before[:2]))
 
-	again := h.mustRun("--json", "--verbose", "import", first, "--yes")
+	again := h.mustRun("--json", "--verbose", "snapshot", "apply", first, "--yes")
 	equal(t, "the second import", h.one(again.stdout, "result")["summary"],
 		"snapshot applied: 1 skill skipped, 2 skills already up to date")
 	equal(t, "fetches of the second import", fetches(again.stderr), 0)
-	text := h.mustRun("import", first, "--yes")
+	text := h.mustRun("snapshot", "apply", first, "--yes")
 	contains(t, "stdout", text.stdout, "Skills skipped (1)\n  mine was created by hand, so there is no source to install it from\n")
 	contains(t, "stdout", text.stdout, "\n2 skills already up to date\n")
 
@@ -196,7 +196,7 @@ func TestImportRestoresAMachine(t *testing.T) {
 		skills[0].(map[string]any)["placements"] = []any{"cortex"}
 		skills[1].(map[string]any)["placements"] = []any{}
 	})
-	out = h.mustRun("--json", "import", moved, "--yes")
+	out = h.mustRun("--json", "snapshot", "apply", moved, "--yes")
 	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
 		actions[e["name"].(string)] = e
 	}
@@ -206,7 +206,7 @@ func TestImportRestoresAMachine(t *testing.T) {
 	// A skill whose library directory was deleted by hand is not kept as
 	// though it were there: it is skipped, with the way back.
 	remove(t, filepath.Join(h.library, "alpha"))
-	out = h.mustRun("--json", "import", first, "--yes")
+	out = h.mustRun("--json", "snapshot", "apply", first, "--yes")
 	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
 		actions[e["name"].(string)] = e
 	}
@@ -266,7 +266,7 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 		{"name": "alpha", "source": "`+s.url+`", "subpath": "skills/alpha", "placements": ["claude-code", "cortex"]},
 		{"name": "beta", "source": "`+s.url+`", "subpath": "skills/beta", "placements": ["claude-code", "cortex"]}]}`)
 
-	out := h.mustRun("--json", "import", follow, "--yes")
+	out := h.mustRun("--json", "snapshot", "apply", follow, "--yes")
 	did := map[string]jsonEvent{}
 	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
 		did[e["name"].(string)] = e
@@ -278,11 +278,11 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 	equal(t, "beta's edit", readText(t, filepath.Join(h.library, "beta", "draft.md")), "an edit\n")
 
 	// alpha is ahead of the version the old snapshot names, and beta is at it.
-	out = h.mustRun("--json", "import", old, "--yes")
+	out = h.mustRun("--json", "snapshot", "apply", old, "--yes")
 	equal(t, "the old snapshot", h.one(out.stdout, "result")["summary"], "snapshot applied: 2 skills already up to date")
 
 	h.mustRun("skill", "remove", "alpha")
-	out = h.mustRun("--json", "import", old, "--yes")
+	out = h.mustRun("--json", "snapshot", "apply", old, "--yes")
 	equal(t, "the old snapshot without alpha", h.one(out.stdout, "result")["summary"], "snapshot applied: 1 skill added, 1 skill already up to date")
 	equal(t, "alpha's branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), oldAlpha)
 }
@@ -300,7 +300,7 @@ func TestImportChildProcess(t *testing.T) {
 		t.Skip("not the import child process")
 	}
 	env := processEnv()
-	os.Exit(Run(context.Background(), []string{"import", file, "--yes"}, env, strings.NewReader(""), os.Stdout, os.Stderr))
+	os.Exit(Run(context.Background(), []string{"snapshot", "apply", file, "--yes"}, env, strings.NewReader(""), os.Stdout, os.Stderr))
 }
 
 // TestImportIsFinishedAfterAKill kills an import once the first skill's
@@ -344,7 +344,7 @@ exec %GIT% "$@"
 	if _, err := os.Readlink(filepath.Join(h.home, ".claude", "skills", "alpha")); err != nil {
 		t.Errorf("alpha's placement was not recovered: %v", err)
 	}
-	again := h.mustRun("--json", "import", file, "--yes")
+	again := h.mustRun("--json", "snapshot", "apply", file, "--yes")
 	equal(t, "the import after it", h.one(again.stdout, "result")["summary"], "snapshot applied: 1 skill added, 1 skill already up to date")
 }
 
@@ -388,7 +388,7 @@ func TestImportAsksBeforeItWrites(t *testing.T) {
 
 	// Neither stream is a terminal here, which is every script and the
 	// desktop app; the answer names the flag that says yes.
-	out := to.run("import", file)
+	out := to.run("snapshot", "apply", file)
 	equal(t, "exit", out.exit, 6)
 	contains(t, "stderr", out.stderr, "no terminal to confirm at")
 	contains(t, "stderr", out.stderr, "--yes")
@@ -396,12 +396,12 @@ func TestImportAsksBeforeItWrites(t *testing.T) {
 
 	// In JSON mode the question could not be asked either way: stdout
 	// carries events alone.
-	js := to.run("--json", "import", file)
+	js := to.run("--json", "snapshot", "apply", file)
 	equal(t, "exit", js.exit, 6)
 	equal(t, "code", to.events(js.stdout)[0]["code"], "refused")
 	equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), before)
 
-	equal(t, "with --yes", to.run("import", file, "--yes").exit, 0)
+	equal(t, "with --yes", to.run("snapshot", "apply", file, "--yes").exit, 0)
 	if readText(t, home.SettingsPath(to.agentx)) == before {
 		t.Error("--yes changed nothing")
 	}
@@ -420,12 +420,12 @@ func TestImportOfAPartialSnapshot(t *testing.T) {
 	writeFile(t, file, `{"schema_version": 2, "settings": {"schema_version": 1, "label": "new-label"}, "skills": [{"name": "alpha",
 		"source": "`+s.url+`", "subpath": "skills/alpha", "placements": ["claude-code"]}]}`)
 
-	refused := to.run("import", file)
+	refused := to.run("snapshot", "apply", file)
 	equal(t, "without --yes", refused.exit, 6)
 	contains(t, "stderr", refused.stderr, "importing replaces the settings in "+home.SettingsPath(to.agentx)+
 		" and installs, updates and places the skills of "+file+", and there is no terminal to confirm at")
 
-	out := to.mustRun("import", file, "--yes")
+	out := to.mustRun("snapshot", "apply", file, "--yes")
 	contains(t, "stdout", out.stdout, "Skills added (1)\n  alpha  Claude Code, Codex, Gemini CLI\n")
 	alpha := to.librarySkill(to.mustRun("--json", "skill", "list").stdout, "alpha")
 	equal(t, "the version installed", alpha["upstream_commit"], strings.TrimSpace(s.query("rev-parse", "HEAD")))
@@ -707,7 +707,7 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			file := to.exportPath(strings.ReplaceAll(tc.name, " ", "-") + ".json")
 			writeFile(t, file, tc.content)
-			out := to.run("import", file, "--yes")
+			out := to.run("snapshot", "apply", file, "--yes")
 			equal(t, "exit", out.exit, 6)
 			contains(t, "stderr", out.stderr, tc.says)
 			if strings.Contains(out.stdout+out.stderr, importToken) {
@@ -718,7 +718,7 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 	}
 
 	t.Run("a file that is not there", func(t *testing.T) {
-		out := to.run("import", to.exportPath("nothing.json"), "--yes")
+		out := to.run("snapshot", "apply", to.exportPath("nothing.json"), "--yes")
 		equal(t, "exit", out.exit, 5)
 		contains(t, "stderr", out.stderr, "does not exist")
 		equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), before)
@@ -756,7 +756,7 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	h.accountGit("update-ref", "refs/heads/managed/beta", alpha)
 	equal(t, "remove", h.run("skill", "remove", "gamma").exit, 0)
 
-	out := h.run("--json", "import", file, "--yes")
+	out := h.run("--json", "snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 0)
 	types := h.types(h.events(out.stdout))
 	want := "settings,import_skill,import_skill,import_skill,result"
@@ -917,7 +917,7 @@ func TestImportOntoAMachineWithNoAccountRepo(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		out := to.run("--json", "import", file, "--yes")
+		out := to.run("--json", "snapshot", "apply", file, "--yes")
 		equal(t, settings+": exit", out.exit, 0)
 		skills := to.eventsOfType(out.stdout, "import_skill")
 		equal(t, settings+": skills", len(skills), 1)
@@ -977,7 +977,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 	writeFile(t, file, `{"schema_version":2,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"other"},`+
 		`"settings":{"schema_version":1},"skills":[]}`)
 
-	out := to.run("import", file, "--yes")
+	out := to.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "✓ Snapshot applied\n\nAgents enabled\n")
 	equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), `{
@@ -991,7 +991,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 }
 `)
 	equal(t, "config list", to.run("config", "list").exit, 0)
-	js := to.run("--json", "import", file, "--yes")
+	js := to.run("--json", "snapshot", "apply", file, "--yes")
 	equal(t, "summary", to.one(js.stdout, "result")["summary"],
 		"snapshot applied")
 }
@@ -1007,7 +1007,7 @@ func TestImportSaysWhyWithoutEchoingTheDocument(t *testing.T) {
 	file := h.exportPath("evil.json")
 	writeFile(t, file, "{\"schema_version\": 2, \"\\u001b[31mred\\r\": 1}")
 
-	out := h.run("import", file, "--yes")
+	out := h.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 6)
 	contains(t, "stderr", out.stderr, "not an agentx snapshot")
 	if strings.ContainsAny(out.stderr, "\x1b\r") {
@@ -1084,7 +1084,7 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 		`"settings":{"schema_version":1,"label":"`
 	writeFile(t, file, head+strings.Repeat("L", documentLimit)+`"},"skills":[]}`)
 
-	out := h.run("import", file, "--yes")
+	out := h.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 6)
 	contains(t, "stderr", out.stderr, "is larger than")
 	equal(t, "the settings", readText(t, home.SettingsPath(h.agentx)), before)
@@ -1093,7 +1093,7 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 	// size reaches the settings either way.
 	small := h.exportPath("large-label.json")
 	writeFile(t, small, head+strings.Repeat("L", 100_000)+`"},"skills":[]}`)
-	out = h.run("import", small, "--yes")
+	out = h.run("snapshot", "apply", small, "--yes")
 	equal(t, "exit", out.exit, 6)
 	contains(t, "stderr", out.stderr, "at most 256 bytes")
 	equal(t, "the settings", readText(t, home.SettingsPath(h.agentx)), before)
@@ -1135,7 +1135,7 @@ func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 	to.build(t, fixture{dirs: []string{".claude"}})
 	// The importing machine reaches the sources the way the exporting one does.
 	writeFile(t, filepath.Join(to.home, ".gitconfig"), readText(t, filepath.Join(from.home, ".gitconfig")))
-	out := to.mustRun("--json", "import", file, "--yes")
+	out := to.mustRun("--json", "snapshot", "apply", file, "--yes")
 	events := to.events(out.stdout)
 	equal(t, "the events", strings.Join(to.types(events), " "),
 		"settings source progress source progress source progress import_skill import_skill result")
@@ -1166,7 +1166,7 @@ func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 	}
 	to.mustRun("skill", "add", pinned.URL, "--all")
 
-	again := to.mustRun("--json", "--verbose", "import", file, "--yes")
+	again := to.mustRun("--json", "--verbose", "snapshot", "apply", file, "--yes")
 	equal(t, "fetches of the second import", fetches(again.stderr), 0)
 	equal(t, "the second import's events", strings.Join(to.types(to.events(again.stdout)), " "),
 		"settings import_skill import_skill result")
@@ -1205,7 +1205,7 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
 	writeFile(t, filepath.Join(to.home, ".gitconfig"), readText(t, filepath.Join(h.home, ".gitconfig")))
-	out := to.run("import", file, "--yes")
+	out := to.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stdout", out.stdout, "✓ Snapshot applied\n\n"+
 		"Skills added (1)\n  alpha  Claude Code\n\n"+
@@ -1238,7 +1238,7 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 		}
 	}
 
-	again := to.run("--json", "import", file, "--yes")
+	again := to.run("--json", "snapshot", "apply", file, "--yes")
 	equal(t, "the second import: exit", again.exit, 0)
 	var warned []string
 	for _, line := range strings.Split(strings.TrimSpace(again.stderr), "\n") {
@@ -1368,7 +1368,7 @@ func TestImportQuotesTheSourceAddItPrints(t *testing.T) {
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
 	to.offline()
-	out := to.run("import", file, "--yes")
+	out := to.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "  agentx source add 'https://example.com/o/r#x$(touch${IFS}pwned)'\n")
 
@@ -1417,7 +1417,7 @@ func TestImportWithNoSkillsStillAddsTheSources(t *testing.T) {
 
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
-	out := to.run("import", file, "--yes")
+	out := to.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "Sources added (1)\n  "+kept.url+"\n")
 	contains(t, "stdout", out.stdout, "Sources not added (2)\n"+

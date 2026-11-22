@@ -107,15 +107,15 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch) (sna
 		return snapshot{}, false, accountRepoFailure(err)
 	case !held:
 		return snapshot{}, false, fail(exitRefused, b.name()+" on the account remote holds no "+gitx.SnapshotFile,
-			"write a snapshot to it with 'agentx export --machine "+b.id+"'")
+			"write a snapshot to it with 'agentx snapshot save --machine "+b.id+"'")
 	case size > documentLimit:
 		return snapshot{}, false, fail(exitRefused,
 			fmt.Sprintf("%s on the account remote holds a snapshot larger than %d bytes, which is more than any machine's settings and skills come to", b.name(), documentLimit),
-			"write a snapshot to it with 'agentx export --machine "+b.id+"'")
+			"write a snapshot to it with 'agentx snapshot save --machine "+b.id+"'")
 	}
 	snap, err = decodeSnapshot(b.name(), data)
 	if f := (*failure)(nil); errors.As(err, &f) && f.hint == notAnExportHint {
-		f.hint = "write a snapshot to it with 'agentx export --machine " + b.id + "'"
+		f.hint = "write a snapshot to it with 'agentx snapshot save --machine " + b.id + "'"
 	}
 	return snap, err == nil, err
 }
@@ -135,7 +135,7 @@ func (inv *invocation) importMachine(ctx context.Context, id string) (snapshot, 
 	}
 	if !found {
 		return snapshot{}, "", fail(exitNotFound, "the account remote holds no "+b.name(),
-			"write a snapshot there with 'agentx export --machine "+id+"' on the machine it is to come from")
+			"write a snapshot there with 'agentx snapshot save --machine "+id+"' on the machine it is to come from")
 	}
 	return snap, b.name(), nil
 }
@@ -236,14 +236,14 @@ func (inv *invocation) exportToMachine(ctx context.Context, id string) error {
 	if snap.Machine != nil {
 		label = snap.Machine.Label
 	}
-	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, "Export "+sanitised(label), lineage.OperationTrailers{Operation: lineage.OperationExport}, "agentx export --machine "+id)
+	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, "Export "+sanitised(label), lineage.OperationTrailers{Operation: lineage.OperationExport}, "agentx snapshot save --machine "+id)
 	if err != nil {
 		return err
 	}
 	inv.out.emit(exportEvent{event: newEvent("export"), Machine: id, Commit: commit, Skills: len(snap.Skills)})
 	out := inv.out
 	where := b.name() + " on the account remote"
-	done := "exported the settings and " + plural(len(snap.Skills), "skill") + " to " + where + " at " + short(commit)
+	done := "saved the snapshot of the settings and " + plural(len(snap.Skills), "skill") + " to " + where + " at " + short(commit)
 	if !pushed {
 		done = where + " holds this snapshot already, at " + short(commit) + ", so nothing was pushed"
 	}

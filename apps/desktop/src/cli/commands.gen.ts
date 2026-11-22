@@ -15,11 +15,6 @@ export const GLOBAL_FLAGS: CliFlags = {
 // Every command that runs something, by its words, such as "skill add",
 // with its own flags.
 export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
-  adopt: {
-    all: false,
-    force: false,
-    skill: true,
-  },
   "config disable": {},
   "config enable": {
     "place-all": false,
@@ -34,14 +29,6 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   },
   "config set": {},
   doctor: {},
-  export: {
-    force: false,
-    machine: true,
-  },
-  import: {
-    machine: true,
-    yes: false,
-  },
   machine: {},
   "machine rename": {},
   "machine reset-id": {},
@@ -75,6 +62,11 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
     name: true,
   },
   "skill history": {},
+  "skill import": {
+    all: false,
+    force: false,
+    from: true,
+  },
   "skill list": {
     remote: false,
   },
@@ -101,6 +93,14 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
     all: false,
     continue: false,
     theirs: false,
+  },
+  "snapshot apply": {
+    machine: true,
+    yes: false,
+  },
+  "snapshot save": {
+    force: false,
+    machine: true,
   },
   "source add": {
     account: false,

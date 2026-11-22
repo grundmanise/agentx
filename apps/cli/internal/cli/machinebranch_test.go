@@ -83,7 +83,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	file := a.exportSnapshot("export")
 	equal(t, "the remote's machine branches after an export to a file", remoteGit(t, a, remote, "for-each-ref", "refs/heads/machines/"), "")
 
-	out := a.run("--json", "export", "--machine", "cloud")
+	out := a.run("--json", "snapshot", "save", "--machine", "cloud")
 	equal(t, "export --machine: exit", out.exit, 0)
 	ev := a.one(out.stdout, "export")
 	tip, doc, raw := machineSnapshot(t, a, remote, "cloud")
@@ -98,7 +98,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	equal(t, "the commit's trailers", fmt.Sprintf("%+v", machineOperation(t, a, remote, tip)), fmt.Sprintf("%+v", lineage.OperationTrailers{Operation: "export"}))
 	equal(t, "alpha's placements", fmt.Sprint(doc["skills"].([]any)[0].(map[string]any)["placements"]), "[claude-code codex gemini-cli]")
 
-	again := a.run("export", "--machine", "cloud")
+	again := a.run("snapshot", "save", "--machine", "cloud")
 	equal(t, "export --machine again: exit", again.exit, 0)
 	contains(t, "export --machine again", again.stdout, "machines/cloud on the account remote holds this snapshot already, at "+short(tip)+", so nothing was pushed")
 	equal(t, "the tip after the second export", remoteGit(t, a, remote, "rev-parse", "refs/heads/machines/cloud"), tip)
@@ -109,7 +109,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	b.reachAs(remote, overHTTPS)
 	b.setAccount(overHTTPS)
 	testshim.Write(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\necho 'read only' >&2\nexit 1\n")
-	out = b.run("--json", "import", "--machine", "cloud", "--yes")
+	out = b.run("--json", "snapshot", "apply", "--machine", "cloud", "--yes")
 	equal(t, "import --machine: exit", out.exit, 0)
 	equal(t, "the label imported", b.one(out.stdout, "settings")["settings"].(map[string]any)["label"], "first-laptop")
 	var applied []string
@@ -134,7 +134,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	}
 	equal(t, "the tip after the import", remoteGit(t, a, remote, "rev-parse", "refs/heads/machines/cloud"), tip)
 
-	out = b.run("import", "--machine", strings.Repeat("0", 32), "--yes")
+	out = b.run("snapshot", "apply", "--machine", strings.Repeat("0", 32), "--yes")
 	equal(t, "import of a machine with no branch: exit", out.exit, 5)
 	contains(t, "its error", out.stderr, "the account remote holds no machines/"+strings.Repeat("0", 32))
 }
@@ -187,13 +187,13 @@ func TestABranchWithNoSettingsIsRefused(t *testing.T) {
 	remoteGit(t, h, remote, "update-ref", "refs/heads/"+gitx.MachineBranch("cloud"), commit)
 
 	for _, args := range [][]string{
-		{"import", "--machine", "cloud", "--yes"},
+		{"snapshot", "apply", "--machine", "cloud", "--yes"},
 		{"skill", "place", "alpha", "--machine", "cloud", "--to", "cortex"},
 	} {
 		out := h.run(args...)
 		equal(t, strings.Join(args, " ")+": exit", out.exit, 6)
 		contains(t, strings.Join(args, " ")+": its error", out.stderr, "carries no settings")
-		contains(t, strings.Join(args, " ")+": its hint", out.stderr, "agentx export --machine cloud")
+		contains(t, strings.Join(args, " ")+": its hint", out.stderr, "agentx snapshot save --machine cloud")
 	}
 }
 
@@ -268,8 +268,8 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 		{[]string{"skill", "place", "alpha", "--machine", "cloud", "--force"}, 1},
 		{[]string{"skill", "place", "alpha", "--machine", "cloud", "--to", "universal"}, 5},
 		{[]string{"skill", "remove", "alpha", "--machine", "cloud", "--remote"}, 1},
-		{[]string{"export", "cloud", "--machine", "cloud"}, 1},
-		{[]string{"export", "--machine", "cloud", "--force"}, 1},
+		{[]string{"snapshot", "save", "cloud", "--machine", "cloud"}, 1},
+		{[]string{"snapshot", "save", "--machine", "cloud", "--force"}, 1},
 	} {
 		equal(t, strings.Join(tc.args, " ")+": exit", h.run(tc.args...).exit, tc.exit)
 	}
@@ -324,7 +324,7 @@ func TestPlaceACopyOnTheCloudMachineAndImportIt(t *testing.T) {
 	b.rewrite(s)
 	b.reachAs(remote, overHTTPS)
 	b.setAccount(overHTTPS)
-	out := b.run("import", "--machine", "cloud", "--yes")
+	out := b.run("snapshot", "apply", "--machine", "cloud", "--yes")
 	equal(t, "import --machine: exit", out.exit, 0)
 	settings, err := home.LoadSettings(b.agentx)
 	if err != nil {

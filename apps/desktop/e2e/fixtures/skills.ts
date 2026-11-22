@@ -272,7 +272,7 @@ export const inventory = {
   type: "inventory",
 } satisfies InlineEvent;
 
-/** What `adopt` would take over: the unmanaged library skill the Skills CLI installed. */
+/** What `skill import` would take over: the unmanaged library skill the Skills CLI installed. */
 export const adoption: AdoptionEvent[] = [
   {
     file: "/home/me/.agents/.skill-lock.json",
@@ -592,7 +592,7 @@ export const meetingNotes: SkillNode = {
 
 /**
  * A skill a client's own skills directory holds as a symlink of the user's: there is no directory
- * of it for `adopt` to take.
+ * of it for `skill import` to take.
  */
 export const linked: SkillNode = {
   content_hash: "h-linked",
