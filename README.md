@@ -14,7 +14,7 @@
 
 </div>
 
-VIDEO_URL_PLACEHOLDER
+https://github.com/user-attachments/assets/ef627466-8ad5-44c3-b3b6-f105fd109c36
 
 ## Install
 
