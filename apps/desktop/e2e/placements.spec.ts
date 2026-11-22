@@ -276,14 +276,15 @@ test.describe("chips", () => {
 
     // A skill an agent holds in its own folder is adopted by its directory's name, and selected
     // as the library skill the CLI reports.
+    // The scratch toast, with the same text, leaves before the notes one opens.
+    await expect(toasts(page).getByText(adopt)).toHaveCount(0);
     await skills.getByRole("button", { exact: true, name: "notes" }).click();
     await chip(pane(page, "notes"), "Claude Code").click();
-    // The scratch toast, with the same text, may still be on its way out.
-    await expect(toasts(page).getByText(adopt).last()).toBeVisible();
+    await expect(toasts(page).getByText(adopt)).toBeVisible();
     cli.register(["skill", "import", "notes"], {
       events: [{ name: "notes", type: "library_skill" }],
     });
-    await toasts(page).getByRole("button", { name: "Import" }).last().click();
+    await toasts(page).getByRole("button", { name: "Import" }).click();
     await expect(toasts(page).getByText("Imported notes skill")).toBeVisible();
     await expect(page).toHaveURL(/#\/skills\/notes$/u);
 

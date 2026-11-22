@@ -36,6 +36,9 @@ const table: [string, InlineNode[]][] = [
   ["A <tag> stays", ["A <tag> stays"]],
   ["**unclosed", ["**unclosed"]],
   ["# Not a heading", ["# Not a heading"]],
+  ["R&amp;D", ["R&D"]],
+  ["R&D &#65;", ["R&D A"]],
+  ["`a &amp; b`", [code("a &amp; b")]],
   ["See ![the logo](logo.png) here", ["See the logo here"]],
   ["Docs at https://x.dev now", ["Docs at https://x.dev now"]],
 ];
