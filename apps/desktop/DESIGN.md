@@ -485,7 +485,6 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.nav` | sans | 14 | 500 |  |  |  | Nav item |
 | `type.command-field` | sans | 13 | 400 |  |  |  | Command field placeholder |
 | `type.key-hint` | mono | 11 | 400 |  |  |  | Key hint (`esc`, `⌘K`) |
-| `type.key-hint-symbol` | sans | 12 | 400 | 1 |  |  | Modifier symbol in a key hint (`⌘`, `⌥`, `⇧`, `⌃`): the mono font lacks these, and the system glyph it falls back to reads smaller than the letter beside it |
 | `type.status` | sans | 13 | 500 |  |  |  | Publish status label in the title bar (`shell.topbar-text`) |
 | `type.palette-input` | sans | 17 | 400 |  |  |  | Palette search input |
 | `type.palette-hint` | mono | 12 | 400 |  |  |  | Hint at the end of a palette row, keys in the palette footer |
@@ -1195,7 +1194,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file
 
 ### Key hint
 
-A key or key combination such as `esc` or `⌘K` (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg`, `type.key-hint` `text.muted`. Each key of a combination is its own nested `kbd`, `key-hint.gap` apart, so `⌘K` and `Ctrl K` space their keys the same way. A modifier symbol takes `type.key-hint-symbol`.
+A key or key combination such as `esc` or `⌘K` (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg`, `type.key-hint` `text.muted`. Each key of a combination is its own nested `kbd`, `key-hint.gap` apart, so `⌘K` and `Ctrl K` space their keys the same way. `⌘` is the `3xs` command-key icon (§7), since the mono font lacks the glyph and each system draws its fallback at its own size and height.
 
 ### Inputs
 
@@ -1262,7 +1261,7 @@ Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps and joins. Fil
 
 An icon is a hand-written React component that takes the text colour; an illustration (such as the agentx mark) is an SVG file in `src/assets` shown as `<img>`.
 
-Sizes: `2xs` 12px (in a pill), `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
+Sizes: `3xs` 10px (in a key hint), `2xs` 12px (in a pill), `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
 
 The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-ring` ring: 30px with `shell.logo-radius` in the sidebar (the height of the product name and machine label beside it), 40px with `startup.logo-radius` on the startup layer. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 

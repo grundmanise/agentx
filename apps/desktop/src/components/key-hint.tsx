@@ -1,20 +1,24 @@
-/** Modifier symbols the mono font lacks; they fall back to a smaller system glyph. */
-const symbols = new Set(["⌘", "⌥", "⇧", "⌃"]);
+import type { ReactNode } from "react";
+
+import { CommandKeyIcon } from "#/components/icons/command-key.tsx";
+
+/** Keys drawn as an icon, since the mono font lacks their glyph. */
+const icons: Record<string, ReactNode> = { "⌘": <CommandKeyIcon /> };
 
 /**
  * A key or key combination such as `esc` or `⌘K` (DESIGN.md §6 "Key hint"): one entry in `keys`
- * per key, `key-hint.gap` apart. A modifier symbol is set in `type.key-hint-symbol`, so it reads as
- * large as the letter beside it.
+ * per key, `key-hint.gap` apart.
  */
 export const KeyHint = ({ keys }: { keys: string[] }) => (
   <kbd className="rounded-key-hint bg-button-secondary-bg type-key-hint text-text-muted px-key-hint py-key-hint-y gap-key-hint inline-flex items-center">
-    {keys.map((key) => (
-      <kbd
-        key={key}
-        className={symbols.has(key) ? "type-key-hint-symbol" : undefined}
-      >
-        {key}
-      </kbd>
-    ))}
+    {keys.map((key) =>
+      key in icons ? (
+        <kbd key={key} aria-label={key} className="flex">
+          {icons[key]}
+        </kbd>
+      ) : (
+        <kbd key={key}>{key}</kbd>
+      )
+    )}
   </kbd>
 );
