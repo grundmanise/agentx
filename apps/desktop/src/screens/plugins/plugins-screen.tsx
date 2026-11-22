@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { PluginDetail } from "#/screens/plugins/plugin-detail.tsx";
@@ -27,15 +27,11 @@ const noConfigurations: Configuration[] = [];
  */
 export const PluginsScreen = () => {
   const inventory = useAppStore((s) => s.inventory);
-  const rows = useMemo(
-    () => (inventory === undefined ? noRows : projectPlugins(inventory)),
-    [inventory]
-  );
+  const rows = inventory === undefined ? noRows : projectPlugins(inventory);
   const all = inventory?.configurations ?? noConfigurations;
   // Only the agent configurations that hold a plugin are groups and filter choices.
-  const configurations = useMemo(
-    () => all.filter((c) => rows.some((r) => r.configuration === c.id)),
-    [all, rows]
+  const configurations = all.filter((c) =>
+    rows.some((r) => r.configuration === c.id)
   );
   const [filters, setFilters] = useState<PluginFilters>(noPluginFilters);
   const [order, setOrder] = useState<PluginOrder>("asc");
@@ -53,10 +49,7 @@ export const PluginsScreen = () => {
       return next;
     });
   };
-  const groups = useMemo(
-    () => groupPlugins(rows, configurations, filters, order),
-    [rows, configurations, filters, order]
-  );
+  const groups = groupPlugins(rows, configurations, filters, order);
   const shown = groups.flatMap((g) => g.rows);
   // The plugin opened last while the filters show it, else the first one shown.
   const selected = shown.find((r) => r.key === selectedKey) ?? shown[0];

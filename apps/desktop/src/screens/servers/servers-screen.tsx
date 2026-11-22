@@ -1,5 +1,3 @@
-import { useMemo } from "react";
-
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -53,13 +51,10 @@ export const ServersScreen = () => {
   const routeKey = useRouteKey();
   const inventory = useAppStore((s) => s.inventory);
   const handshakeFailures = useAppStore((s) => s.handshakeFailures);
-  const rows = useMemo(
-    () =>
-      inventory === undefined
-        ? none
-        : projectServers({ handshakeFailures, inventory }),
-    [inventory, handshakeFailures]
-  );
+  const rows =
+    inventory === undefined
+      ? none
+      : projectServers({ handshakeFailures, inventory });
   const configurations = inventory?.configurations ?? [];
   return (
     <div className="px-page pb-page gap-page-title flex h-full flex-col overflow-auto">
