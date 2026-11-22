@@ -105,11 +105,11 @@ export const RemoveDialog = ({
         }}
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>{`Remove ${row.name}?`}</AlertDialogTitle>
+          <AlertDialogTitle>{`Remove ${row.name} from this machine?`}</AlertDialogTitle>
           <AlertDialogDescription>
             {fromUniversal
-              ? "Universal agents read your library, where agentx keeps this skill. Removing it there removes it from every agent that has it:"
-              : "It will be removed from every agent that has it:"}
+              ? "Removing it from universal agents will also remove it from your library. It will be removed from:"
+              : "Removes it from:"}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {/* The one block that scrolls: past the dialog's height, the header, the consequence and
@@ -135,13 +135,8 @@ export const RemoveDialog = ({
                 setRemote(checked === true);
               }}
             />
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="type-body text-text-primary">
-                Also delete it from your account remote
-              </span>
-              <span className="type-secondary text-text-muted">
-                Your other machines keep it until you remove it there.
-              </span>
+            <span className="type-body text-text-primary">
+              Also delete it from your account remote
             </span>
           </label>
         )}

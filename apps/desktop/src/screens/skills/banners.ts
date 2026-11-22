@@ -50,7 +50,7 @@ export type BannerAction =
    * The button of an edited skill of a source whose source this machine can write to: Publish to
    * {source}, which opens the Publish dialog. Fork is in the action row, not on the banner.
    */
-  | { kind: "edited"; publishTo: string };
+  | { kind: "edited" };
 
 export interface Banner {
   tone: BannerTone;
@@ -197,7 +197,7 @@ const table: BannerRule[] = [
       return {
         action: { kind: "adopt" },
         coversOrigin: true,
-        text: "Adopt to manage it from agentx",
+        text: "Import to manage it from agentx",
         title: `Added by ${tool}`,
         tone: "neutral",
       };
@@ -208,7 +208,7 @@ const table: BannerRule[] = [
     // An unmanaged skill no tool recorded.
     banner: () => ({
       action: { kind: "adopt" },
-      text: "Adopt to manage it from agentx",
+      text: "Import to manage it from agentx",
       title: "Not managed by agentx",
       tone: "neutral",
     }),
@@ -229,7 +229,7 @@ const table: BannerRule[] = [
   {
     // No action: Fork is in the action row.
     banner: (row) => ({
-      text: "It seems this skill was removed from the source.",
+      text: "The source no longer has this skill.",
       title: `No longer in ${shortSource(row.entry?.source ?? "")}`,
       tone: "danger",
     }),
@@ -256,7 +256,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "publish" },
-      text: "The skill is only available on this machine. Publish it to distribute it to other machines or clients.",
+      text: "Publish it to use it on other machines.",
       title: "Not published",
       tone: "yours",
     }),
@@ -279,14 +279,20 @@ const table: BannerRule[] = [
       const writable =
         facts.sources.find((s) => s.url === source)?.access === "writable";
       const n = facts.changedFiles;
+      // A source the user can write to takes the edits back with Publish.
+      if (writable) {
+        return {
+          action: { kind: "edited" },
+          text: `Publish to share them on ${shortSource(source)}.`,
+          title: "Edits not published",
+          tone: "attention",
+        };
+      }
       return {
-        action: writable
-          ? { kind: "edited", publishTo: shortSource(source) }
-          : undefined,
         text:
           n === undefined
-            ? "Updates won't overwrite your edits."
-            : `${filesWord(n)} ${n === 1 ? "differs" : "differ"} from ${shortSource(source)}. Updates won't overwrite them.`,
+            ? "Updates keep your edits."
+            : `${filesWord(n)} ${n === 1 ? "differs" : "differ"} from ${shortSource(source)}. Updates keep your edits.`,
         title: "Edited locally",
         tone: "attention",
       };
