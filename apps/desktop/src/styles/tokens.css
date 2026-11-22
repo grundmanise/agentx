@@ -368,6 +368,9 @@
   --color-code-prose: var(--gray-250);
   --color-code-strong: var(--gray-100);
   --color-code-context: var(--gray-500);
+  --color-markdown-code-bg: var(--gray-850);
+  --color-markdown-code-text: var(--gray-200);
+  --color-markdown-strong: var(--gray-150);
   --color-file-row-hover: var(--gray-920);
   --color-file-row-divider: var(--gray-890);
   --color-file-row-path: var(--gray-200);
@@ -518,6 +521,7 @@
   --radius-check-hint: 8px;
   --radius-startup-logo: 12px;
   --radius-tooltip: 8px;
+  --radius-markdown-code: 4px;
 
   /* Font weights, for the few places a variant sets the weight and the type role does not. */
   --font-weight-normal: 400;
@@ -872,6 +876,11 @@
   font-size: 12.5px;
   font-weight: 400;
   line-height: 1.75;
+}
+/* A code span in inline Markdown takes its size from the text around it. */
+@utility type-markdown-code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
 }
 @utility type-brand {
   font-family: var(--font-sans);

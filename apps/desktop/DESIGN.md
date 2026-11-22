@@ -387,6 +387,9 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `code.prose` | `gray-250` | Prose |
 | `code.strong` | `gray-100` | Code in diff panes |
 | `code.context` | `gray-500` | Context lines around a change |
+| `markdown.code-bg` | `gray-850` | A code span in inline Markdown, such as a skill's description |
+| `markdown.code-text` | `gray-200` | Its text: 7.3:1 on `markdown.code-bg` |
+| `markdown.strong` | `gray-150` | Strong text in inline Markdown, brighter than the muted text around it |
 | `file-row.hover` | `gray-920` | File tree row hover |
 | `file-row.divider` | `gray-890` |  |
 | `file-row.path` | `gray-200` | Path |
@@ -480,6 +483,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.technical` | mono | 12.5 | 400 |  |  |  | Paths, ids, dates, commands; a skill's origin in the detail header (`text.caption`) |
 | `type.technical-sm` | mono | 12 | 400 |  |  |  | Details values (`text.secondary`), file status in the History sheet, the count beside a group header |
 | `type.code` | mono | 12.5 | 400 | 1.75 |  |  | Code pane |
+| `type.markdown-code` | mono | 0.9em |  |  |  |  | A code span in inline Markdown, sized to the text around it |
 | `type.brand` | sans | 14 | 600 |  | -0.01em |  | Product name in the sidebar |
 | `type.machine-label` | sans | 12 | 400 |  |  |  | Machine label under the product name (`text.muted`) |
 | `type.nav` | sans | 14 | 500 |  |  |  | Nav item |
@@ -797,6 +801,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
 | `startup.logo-radius` | 12 | Product mark on the startup layer |
 | `tooltip.radius` | 8 | Tooltip |
+| `markdown.code-radius` | 4 | A code span in inline Markdown |
 
 ## 6. Components
 
@@ -1181,6 +1186,10 @@ The sheet frame (§6 "Sheet") (`src/app/activity-log.tsx`): the last lines of wh
 
 - Changed text: within a change, the text that differs between its removed lines and its added lines is marked as VS Code's diff editor marks it, with VS Code's own diff (copied into `src/vendor/vscode-diff`): a character diff of the whole change, extended to whole words where most of a word changed, with short kept runs between two changes joined into them. The changed text sits on `diff.removed-word` and `diff.added-word` in `code.strong`, since a line's own tone falls under 4.5:1 on those tints. White space counts, so a change of indentation is marked.
 - A change with one side, only removed or only added lines, has its line tint alone. So does a change that takes longer than 100 ms to compare.
+
+### Inline Markdown
+
+A skill's description is one line of Markdown from its SKILL.md, so wherever it shows (a Skills row, the detail header, the Sources rows, the Add skill dialog) it renders its inline Markdown with `InlineMarkdown` (`src/components/inline-markdown.tsx`), read by marked's inline lexer. It renders inline elements only, so the line keeps its own type, colour, truncation or line clamp. A code span is `type.markdown-code` in `markdown.code-text` on `markdown.code-bg`, `markdown.code-radius`, 4px side padding; strong text is 600 in `markdown.strong`; emphasis is italic and strikethrough is struck. A link shows its text, as the line sits in a row that opens on a click. Block syntax stays as written. Accessible names and descriptions use the text without its Markdown (`markdownText`).
 
 ### File list (detail pane FILES)
 

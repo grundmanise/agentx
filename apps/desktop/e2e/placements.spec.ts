@@ -278,11 +278,12 @@ test.describe("chips", () => {
     // as the library skill the CLI reports.
     await skills.getByRole("button", { exact: true, name: "notes" }).click();
     await chip(pane(page, "notes"), "Claude Code").click();
-    await expect(toasts(page).getByText(adopt)).toBeVisible();
+    // The scratch toast, with the same text, may still be on its way out.
+    await expect(toasts(page).getByText(adopt).last()).toBeVisible();
     cli.register(["skill", "import", "notes"], {
       events: [{ name: "notes", type: "library_skill" }],
     });
-    await toasts(page).getByRole("button", { name: "Import" }).click();
+    await toasts(page).getByRole("button", { name: "Import" }).last().click();
     await expect(toasts(page).getByText("Imported notes skill")).toBeVisible();
     await expect(page).toHaveURL(/#\/skills\/notes$/u);
 
