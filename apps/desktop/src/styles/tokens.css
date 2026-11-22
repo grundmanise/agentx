@@ -906,7 +906,7 @@
 }
 @utility type-key-hint-symbol {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
   line-height: 1;
 }
