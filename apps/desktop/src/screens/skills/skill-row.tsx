@@ -3,10 +3,12 @@ import { memo } from "react";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { LogoStack } from "#/components/agent-logo.tsx";
 import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
+import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { ListRow } from "#/components/list-row.tsx";
 import { Pill } from "#/components/pill.tsx";
 import type { PillTone } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
+import { markdownText } from "#/lib/inline-markdown.ts";
 import { bannerFor } from "#/screens/skills/banners.ts";
 import type { BannerFacts } from "#/screens/skills/banners.ts";
 import { glyphOf, glyphTitle } from "#/screens/skills/projection.ts";
@@ -65,7 +67,7 @@ const SkillRowView = ({
     ...row.pills.map((pill) => pill.label),
     alert ?? "",
     ...forks.map((fork) => `Forked as ${fork.name}`),
-    row.description,
+    markdownText(row.description),
   ]
     .filter((part) => part !== "")
     .join(". ");
@@ -136,7 +138,7 @@ const SkillRowView = ({
         </span>
         {row.description !== "" && (
           <span className="type-row-desc text-row-desc truncate">
-            {row.description}
+            <InlineMarkdown text={row.description} />
           </span>
         )}
       </span>
