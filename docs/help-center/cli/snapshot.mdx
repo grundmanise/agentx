@@ -74,15 +74,25 @@ agentx snapshot apply ~/snapshot.json
 
 ```text
 Replace the settings in /home/me/.agentx/settings.json with those of my-laptop from /home/me/snapshot.json, and install, update and place its 4 skills? [y/N] y
-✓ applied the snapshot of my-laptop from /home/me/snapshot.json
-  added source https://github.com/example/skills: 12 skills
-  added source https://github.com/example/tools pinned to v2: 3 skills
-4 skills in the snapshot: 1 installed, 1 updated, 1 kept, 1 skipped
-  pdf     managed    installed  https://github.com/example/skills/skills/pdf       placed in claude-code, codex
-  xlsx    managed    updated    https://github.com/example/skills/skills/xlsx      placed in claude-code
-  review  managed    kept       ssh://git@github.com/you/agentx-account (account)  not placed
-  notes   unmanaged  skipped    (none)                                             not placed
-  skipped notes: notes is unmanaged, so there is no source to install it from
+✓ Snapshot applied
+
+Skills added (1)
+  pdf   Claude Code, Codex
+
+Skills updated (1)
+  xlsx  Claude Code
+
+Skills skipped (1)
+  notes  was created by hand, so there is no source to install it from
+
+Sources added (2)
+  https://github.com/example/skills
+  https://github.com/example/tools
+
+Agents enabled
+  Claude Code, Codex
+
+1 skill already up to date
 ```
 
 Apply asks once. Answer `y` or `yes` to apply the whole snapshot. Any other answer changes nothing, so answering no is how you check a snapshot first. Apply then does this:
@@ -113,30 +123,28 @@ To install your own skills, apply needs your account remote. The snapshot's sett
 
 One repository can have more than one URL. Your laptop may reach your account remote over SSH, as `git@github.com:you/agentx-account.git`, while a cloud agent reaches it over HTTPS, as `https://github.com/you/agentx-account`, with a token that can only read. Apply treats both as your account remote, because they have the same host and path. When the snapshot's account remote is the same repository as this machine's, apply keeps this machine's URL, so each machine goes on reaching it its own way. When the snapshot names another repository, apply switches this machine to that one. A host alias from your SSH configuration, such as `github-work`, does not count as the host it stands for here, because apply reads no SSH configuration.
 
-Each line of the listing says what apply did with that skill:
+The report groups the skills by what apply did with them, and names the agents each one is placed in now:
 
-| Action | Meaning |
+| Section | Meaning |
 |---|---|
-| `installed` | This machine did not have the skill. Apply installed it and placed it. |
-| `updated` | Apply moved the skill to the version the snapshot names, or to the latest version. |
-| `placed` | The skill was at its version. Apply placed it in a configuration it was missing from. |
-| `unplaced` | The skill was at its version. Apply only took it out of configurations. |
-| `kept` | Nothing changed: the skill is at its version, or newer, and placed as the snapshot says. |
-| `skipped` | Apply left the skill as it is. The line under the listing says why. |
+| Skills added | This machine did not have the skill. Apply installed it and placed it. |
+| Skills updated | Apply moved the skill to the version the snapshot names, or to the latest version. |
+| Placements changed | The skill was at its version. Apply only placed it in, or took it out of, agents. |
+| Skills skipped | Apply left the skill as it is. Each line says why. |
 
-The last column names the configurations the skill is placed in now.
+A section with nothing in it is left out. The last line counts the skills that were already at their version and placed as the snapshot says. "Agents enabled" lists the agents detected on this machine that the snapshot's settings do not disable.
 
-Apply the same snapshot again and it changes nothing: every skill reads `kept`, or `skipped` for the same reason as before. Apply fetches nothing for a skill the snapshot names at an exact version. It fetches a skill that follows the latest version again, and moves it forward when a newer version exists. It installs a skill it skipped once the reason is gone.
+Apply the same snapshot again and it changes nothing: every skill is already up to date, or skipped for the same reason as before. Apply fetches nothing for a skill the snapshot names at an exact version. It fetches a skill that follows the latest version again, and moves it forward when a newer version exists. It installs a skill it skipped once the reason is gone.
 
 Apply adds every source of the settings, whether a skill of the snapshot comes from it or not, so you can install from any of them right away. It keeps each source's [pin](/cli/source#pin-a-source). A source that this machine has already added and fetched is not fetched again, so applying the same snapshot a second time does not reach the network for it.
 
-If apply cannot reach a source, it prints a warning with git's reason and goes on: the other sources and the skills are still applied, and apply still succeeds. It ends with an `agentx source add` line for each such source:
+If apply cannot reach a source, it prints a warning with git's reason and goes on: the other sources and the skills are still applied, and apply still succeeds. Its report lists an `agentx source add` line for each such source:
 
 ```text
 warning: could not add a source of the imported settings: https://github.com/example/private: git fetch: fatal: could not read Username for 'https://github.com': terminal prompts disabled
 ...
-  add these sources again before you install from them:
-    agentx source add https://github.com/example/private#main
+Sources not added (1)
+  agentx source add https://github.com/example/private#main
 ```
 
 Fix the cause, such as a missing [credential](/cli/source#credentials), then run the line as printed, or apply the snapshot again. The line keeps the source's pin, and apply quotes a URL or pin where needed, so you can paste it into bash or zsh.

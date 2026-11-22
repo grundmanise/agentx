@@ -81,8 +81,8 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 	for _, st := range states {
 		inv.out.emit(st)
 	}
-	inv.printImported(origin, doc, states, doc.Settings, run)
-	inv.summary = importSummary(origin, states)
+	inv.printImported(states, doc.Settings, run)
+	inv.summary = importSummary(states, run)
 	return nil
 }
 
@@ -480,10 +480,10 @@ func skip(why string) *failure { return refuse(exitRefused, why, "") }
 // placed.
 func (r *applyRun) unmanaged(ctx context.Context, e snapshotSkill) (string, error) {
 	if _, ok := r.library[e.Name]; !ok {
-		return "", skip(e.Name + " is unmanaged, so there is no source to install it from")
+		return "", skip(e.Name + " was created by hand, so there is no source to install it from")
 	}
 	if _, managed := r.records[e.Name]; managed {
-		return "", skip("the snapshot lists " + e.Name + " as unmanaged, and agentx manages the one on this machine")
+		return "", skip("the snapshot lists " + e.Name + " as created by hand, and the one on this machine comes from a source")
 	}
 	return r.place(ctx, e, importKept)
 }

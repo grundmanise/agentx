@@ -716,61 +716,115 @@ func (inv *invocation) askToImport(path string, doc snapshot, in io.Reader) erro
 		"run it again with --yes to import without asking")
 }
 
-// printImported writes the confirmation, then one line per source the
-// import added, then one row per entry of the snapshot with what the import
-// did, then the reason of each skip, and last the source add of each source
-// that could not be added. Every value the snapshot supplies is sanitised:
+// printImported writes the report of an import: the confirmation, then
+// one section for each kind of change the import made, each section only
+// when it has items: the skills added, updated, whose placements changed
+// and skipped, each by its name with the agents it is placed in now or the
+// reason of the skip; the sources added, and those that could not be added
+// with the source add of each; then the agents enabled, and last how many skills
+// were up to date already. Every value the snapshot supplies is sanitised:
 // agentx did not write it, and a file handed from another machine may hold
 // anything. settings are the settings the import wrote, and run what it did
 // with their sources.
-func (inv *invocation) printImported(path string, doc snapshot, states []importSkillEvent, settings home.Settings, run *applyRun) {
+func (inv *invocation) printImported(states []importSkillEvent, settings home.Settings, run *applyRun) {
 	out := inv.out
-	if doc.Machine != nil && doc.Machine.Label != "" {
-		out.done("applied the snapshot of " + out.paint(heading, sanitised(doc.Machine.Label)) + " from " + out.paint(heading, path))
-	} else {
-		out.done("applied the snapshot from " + out.paint(heading, path))
+	out.done("Snapshot applied")
+	names := map[string]string{}
+	var enabled []string
+	for _, c := range scan.Detect(inv.dirs) {
+		names[c.Slug()] = c.Name()
+		if !containsString(settings.DisabledConfigurations, c.Slug()) {
+			enabled = append(enabled, c.Name())
+		}
 	}
+	by := map[string][]importSkillEvent{}
+	for _, st := range states {
+		by[st.Action] = append(by[st.Action], st)
+	}
+	printSkillSection(out, "Skills added", by[importInstalled], names)
+	printSkillSection(out, "Skills updated", by[importUpdated], names)
+	printSkillSection(out, "Placements changed", append(by[importPlaced], by[importUnplaced]...), names)
+	if skipped := by[importSkipped]; len(skipped) > 0 {
+		printSection(out, "Skills skipped", len(skipped))
+		t := &table{}
+		for _, st := range skipped {
+			name, reason := sanitised(st.Name), sanitised(st.Reason)
+			t.add(c(name, plain), c(strings.TrimPrefix(reason, name+" "), warnStyle))
+		}
+		out.render(t, "  ")
+	}
+	var added []sourceEvent
 	var failed []home.Source
 	for _, src := range settings.Sources {
 		if ev, ok := run.added[src.URL]; ok {
-			out.print("  ", addedLine(out, ev))
+			added = append(added, ev)
 		}
 		if _, ok := run.failed[src.URL]; ok {
 			failed = append(failed, src)
 		}
 	}
-	if len(states) == 0 {
-		out.print("No skills in the snapshot.")
-	} else {
-		out.print(out.paint(heading, plural(len(states), "skill")+" in the snapshot"), ": ", actionCounts(states))
-		account := documentAccount(settings)
+	if len(added) > 0 {
+		printSection(out, "Sources added", len(added))
 		t := &table{}
-		for _, st := range states {
-			t.add(importRow(out, st, account)...)
-		}
-		out.render(t, "")
-		for _, st := range states {
-			if st.Action == importSkipped {
-				out.print("  ", out.paint(warnStyle, "skipped "+sanitised(st.Name)+": "+sanitised(st.Reason)))
+		for _, ev := range added {
+			kind := c("", muted)
+			if ev.Account {
+				kind = c("account", muted)
 			}
+			t.add(c(sanitised(ev.URL), plain), kind)
+		}
+		out.render(t, "  ")
+	}
+	if len(failed) > 0 {
+		printSection(out, "Sources not added", len(failed))
+		for _, src := range failed {
+			out.print("  ", out.paint(label, sourceAddLine(src)))
 		}
 	}
-	printSourcesToAdd(out, failed)
+	out.print()
+	out.print(out.paint(heading, "Agents enabled"))
+	if len(enabled) == 0 {
+		out.print("  ", out.paint(muted, "none"))
+	} else {
+		out.print("  ", strings.Join(enabled, ", "))
+	}
+	if kept := len(by[importKept]); kept > 0 {
+		out.print()
+		out.print(out.paint(muted, plural(kept, "skill")+" already up to date"))
+	}
 }
 
-// addedLine is the line of one source an import added, ev being the source
-// event its add emitted: the source with its pin and how many skills it
-// holds, or for the account remote how many of your own skills it holds.
-func addedLine(out *writer, ev sourceEvent) string {
-	n := 0
-	if ev.Skills != nil {
-		n = *ev.Skills
+// printSection writes the heading of one section of the report: a blank
+// line, then the title with the number of its items.
+func printSection(out *writer, title string, n int) {
+	out.print()
+	out.print(out.paint(heading, fmt.Sprintf("%s (%d)", title, n)))
+}
+
+// printSkillSection writes one section of skills, each with the agents it
+// is placed in once the import is done, by name where the configuration is
+// detected here and by id otherwise; nothing when there are none.
+func printSkillSection(out *writer, title string, states []importSkillEvent, names map[string]string) {
+	if len(states) == 0 {
+		return
 	}
-	what := "added source " + out.paint(heading, sanitised(ev.URL)) + pinned(out, sanitised(ev.Pin))
-	if ev.Account {
-		what = "added the account remote " + out.paint(heading, sanitised(ev.URL))
+	printSection(out, title, len(states))
+	t := &table{}
+	for _, st := range states {
+		agents := c("not placed", muted)
+		if len(st.Placements) > 0 {
+			shown := make([]string, 0, len(st.Placements))
+			for _, id := range st.Placements {
+				if name, ok := names[id]; ok {
+					id = name
+				}
+				shown = append(shown, id)
+			}
+			agents = c(strings.Join(shown, ", "), plain)
+		}
+		t.add(c(sanitised(st.Name), plain), agents)
 	}
-	return what + ": " + out.paint(noteStyle, plural(n, "skill"))
+	out.render(t, "  ")
 }
 
 // unadded is the sources of settings, the settings an import just wrote,
@@ -813,22 +867,6 @@ func (inv *invocation) unadded(ctx context.Context, settings home.Settings) ([]h
 		missing = append(missing, src)
 	}
 	return missing, nil
-}
-
-// printSourcesToAdd writes the closing line of an import that could not add
-// some sources of the settings, see unadded, and under it the source add
-// that adds each one again. It is printed per source as the settings hold
-// it: source add writes the pin its argument names, so the bare URL would
-// unpin the source this import restored. The account remote is attached
-// again with source add --account.
-func printSourcesToAdd(out *writer, sources []home.Source) {
-	if len(sources) == 0 {
-		return
-	}
-	out.print("  ", out.paint(muted, "add these sources again before you install from them:"))
-	for _, src := range sources {
-		out.print("    ", out.paint(label, sourceAddLine(src)))
-	}
 }
 
 // sourceAddLine is the command that adds src again as the settings hold
@@ -875,57 +913,37 @@ func shellWord(text string) string {
 	return "'" + strings.ReplaceAll(text, "'", `'\''`) + "'"
 }
 
-// importRow is one line of the report: the name, what the account repo
-// knows it as, what the import did, where it is published to and the
-// configurations it is placed in now, account being the account remote the
-// snapshot is read against, to which an entry of one of your own skills,
-// see ownRecord, is published. An unmanaged skill is published nowhere.
-func importRow(out *writer, st importSkillEvent, account string) []cell {
-	action := c(st.Action, okStyle)
-	switch st.Action {
-	case importSkipped:
-		action = c(st.Action, warnStyle)
-	case importKept:
-		action = c(st.Action, muted)
-	}
-	source := c("(none)", muted)
-	if st.Kind != lineage.KindUnmanaged {
-		source = sourceCell(ownRecord(st.snapshotSkill, account), st.Source, st.Subpath, st.Upstream, st.UpstreamSubpath, account)
-	}
-	placed := c("not placed", muted)
-	if len(st.Placements) > 0 {
-		placed = c("placed in "+strings.Join(st.Placements, ", "), plain)
-	}
-	return []cell{c("  "+sanitised(st.Name), heading), c(st.Kind, muted), action, source, placed}
-}
-
-// actionCounts says what an import did with the skills of the snapshot:
-// how many entries took each action, in the order of importActions,
-// leaving out the actions none took, and starting with "no skill changed"
-// when every entry was kept or skipped.
-func actionCounts(states []importSkillEvent) string {
+// importSummary is what the result event says the import did: how many
+// skills took each action and how many sources were added, or not, leaving
+// out every count of none.
+func importSummary(states []importSkillEvent, run *applyRun) string {
 	counts := map[string]int{}
 	for _, st := range states {
 		counts[st.Action]++
 	}
 	var parts []string
-	for _, action := range importActions {
-		if n := counts[action]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", n, action))
+	for _, p := range []struct {
+		n    int
+		what string
+	}{
+		{counts[importInstalled], " added"},
+		{counts[importUpdated], " updated"},
+		{counts[importPlaced] + counts[importUnplaced], " placed differently"},
+		{counts[importSkipped], " skipped"},
+		{counts[importKept], " already up to date"},
+	} {
+		if p.n > 0 {
+			parts = append(parts, plural(p.n, "skill")+p.what)
 		}
 	}
-	said := strings.Join(parts, ", ")
-	if counts[importKept]+counts[importSkipped] == len(states) {
-		said = "no skill changed, " + said
+	if n := len(run.added); n > 0 {
+		parts = append(parts, plural(n, "source")+" added")
 	}
-	return said
-}
-
-// importSummary is what the result event says the import did.
-func importSummary(path string, states []importSkillEvent) string {
-	done := "applied the snapshot from " + path
-	if len(states) == 0 {
-		return done + ": the snapshot lists no skills"
+	if n := len(run.failed); n > 0 {
+		parts = append(parts, plural(n, "source")+" not added")
 	}
-	return done + ": " + actionCounts(states)
+	if len(parts) == 0 {
+		return "snapshot applied"
+	}
+	return "snapshot applied: " + strings.Join(parts, ", ")
 }

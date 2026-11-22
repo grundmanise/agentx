@@ -327,7 +327,7 @@ func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 	writeFile(t, filepath.Join(to.home, ".gitconfig"), readText(t, filepath.Join(h.home, ".gitconfig")))
 	in := to.run("snapshot", "apply", file, "--yes")
 	equal(t, "import", in.exit, 0)
-	contains(t, "stdout", in.stdout, "2 skills in the snapshot: 2 installed")
+	contains(t, "stdout", in.stdout, "Skills added (2)")
 }
 
 // TestExportRefusesADirectoryWithAHintThatHelps: --force overwrites a file

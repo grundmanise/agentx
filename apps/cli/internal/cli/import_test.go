@@ -133,7 +133,7 @@ func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 	if after := readText(t, home.SettingsPath(to.agentx)); after != before {
 		t.Errorf("the settings were not restored byte for byte:\nexported:\n%s\nimported:\n%s", before, after)
 	}
-	contains(t, "stdout", out.stdout, "applied the snapshot of first-laptop")
+	contains(t, "stdout", out.stdout, "Snapshot applied")
 
 	// The settings are now this machine's own, read by every command.
 	equal(t, "label", strings.TrimSpace(to.run("config", "get", "label").stdout), "first-laptop")
@@ -173,8 +173,8 @@ func TestImportRestoresAMachine(t *testing.T) {
 	equal(t, "beta", actions["beta"]["action"], importInstalled)
 	equal(t, "beta's placements", fmt.Sprint(actions["beta"]["placements"]), "[codex cortex gemini-cli]")
 	equal(t, "mine", actions["mine"]["action"], importSkipped)
-	contains(t, "mine's reason", actions["mine"]["reason"].(string), "mine is unmanaged, so there is no source to install it from")
-	equal(t, "summary", h.one(out.stdout, "result")["summary"], "applied the snapshot from "+first+": 2 installed, 1 skipped")
+	contains(t, "mine's reason", actions["mine"]["reason"].(string), "mine was created by hand, so there is no source to install it from")
+	equal(t, "summary", h.one(out.stdout, "result")["summary"], "snapshot applied: 2 skills added, 1 skill skipped")
 
 	second := h.exportSnapshot("second")
 	after := h.readExportFile(second)["skills"].([]any)
@@ -182,12 +182,11 @@ func TestImportRestoresAMachine(t *testing.T) {
 
 	again := h.mustRun("--json", "--verbose", "snapshot", "apply", first, "--yes")
 	equal(t, "the second import", h.one(again.stdout, "result")["summary"],
-		"applied the snapshot from "+first+": no skill changed, 2 kept, 1 skipped")
+		"snapshot applied: 1 skill skipped, 2 skills already up to date")
 	equal(t, "fetches of the second import", fetches(again.stderr), 0)
 	text := h.mustRun("snapshot", "apply", first, "--yes")
-	contains(t, "stdout", text.stdout, "3 skills in the snapshot: no skill changed, 2 kept, 1 skipped")
-	contains(t, "stdout", text.stdout, "  alpha  managed    kept     "+fixtureURL("skills")+"/skills/alpha")
-	contains(t, "stdout", text.stdout, "  skipped mine: mine is unmanaged, so there is no source to install it from")
+	contains(t, "stdout", text.stdout, "Skills skipped (1)\n  mine  was created by hand, so there is no source to install it from\n")
+	contains(t, "stdout", text.stdout, "\n2 skills already up to date\n")
 
 	// Placements changed: alpha out of Claude Code and kept in Cortex Code,
 	// and beta out of every configuration but the clients that read the
@@ -280,11 +279,11 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 
 	// alpha is ahead of the version the old snapshot names, and beta is at it.
 	out = h.mustRun("--json", "snapshot", "apply", old, "--yes")
-	equal(t, "the old snapshot", h.one(out.stdout, "result")["summary"], "applied the snapshot from "+old+": no skill changed, 2 kept")
+	equal(t, "the old snapshot", h.one(out.stdout, "result")["summary"], "snapshot applied: 2 skills already up to date")
 
 	h.mustRun("skill", "remove", "alpha")
 	out = h.mustRun("--json", "snapshot", "apply", old, "--yes")
-	equal(t, "the old snapshot without alpha", h.one(out.stdout, "result")["summary"], "applied the snapshot from "+old+": 1 installed, 1 kept")
+	equal(t, "the old snapshot without alpha", h.one(out.stdout, "result")["summary"], "snapshot applied: 1 skill added, 1 skill already up to date")
 	equal(t, "alpha's branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), oldAlpha)
 }
 
@@ -346,7 +345,7 @@ exec %GIT% "$@"
 		t.Errorf("alpha's placement was not recovered: %v", err)
 	}
 	again := h.mustRun("--json", "snapshot", "apply", file, "--yes")
-	equal(t, "the import after it", h.one(again.stdout, "result")["summary"], "applied the snapshot from "+file+": 1 installed, 1 kept")
+	equal(t, "the import after it", h.one(again.stdout, "result")["summary"], "snapshot applied: 1 skill added, 1 skill already up to date")
 }
 
 // TestPlaceInto: an import places a skill in each detected configuration
@@ -427,8 +426,7 @@ func TestImportOfAPartialSnapshot(t *testing.T) {
 		" and installs, updates and places the skills of "+file+", and there is no terminal to confirm at")
 
 	out := to.mustRun("snapshot", "apply", file, "--yes")
-	contains(t, "stdout", out.stdout, "applied the snapshot from "+file)
-	contains(t, "stdout", out.stdout, "  alpha  managed  installed  "+s.url+"/skills/alpha  placed in claude-code")
+	contains(t, "stdout", out.stdout, "Skills added (1)\n  alpha  Claude Code, Codex, Gemini CLI\n")
 	alpha := to.librarySkill(to.mustRun("--json", "skill", "list").stdout, "alpha")
 	equal(t, "the version installed", alpha["upstream_commit"], strings.TrimSpace(s.query("rev-parse", "HEAD")))
 	equal(t, "the label", strings.TrimSpace(to.mustRun("config", "get", "label").stdout), "new-label")
@@ -779,7 +777,7 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	equal(t, "beta's action", states["beta"]["action"], importSkipped)
 	contains(t, "beta's reason", states["beta"]["reason"].(string), "beta on this machine comes from another source or folder than the one the snapshot names")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"applied the snapshot from "+file+": 1 installed, 1 kept, 1 skipped")
+		"snapshot applied: 1 skill added, 1 skill skipped, 1 skill already up to date")
 }
 
 // TestRestoreStates: a record is looked up in the namespace it belongs in,
@@ -981,7 +979,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 
 	out := to.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "No skills in the snapshot.")
+	contains(t, "stdout", out.stdout, "✓ Snapshot applied\n\nAgents enabled\n")
 	equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), `{
   "schema_version": 1,
   "accept_operations": false,
@@ -995,7 +993,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 	equal(t, "config list", to.run("config", "list").exit, 0)
 	js := to.run("--json", "snapshot", "apply", file, "--yes")
 	equal(t, "summary", to.one(js.stdout, "result")["summary"],
-		"applied the snapshot from "+file+": the snapshot lists no skills")
+		"snapshot applied")
 }
 
 // TestImportSaysWhyWithoutEchoingTheDocument: the reason a document was
@@ -1182,7 +1180,7 @@ func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 // name, keeps the remote they want and nothing fetched. The text ends with
 // the source add of each one that could not be added, with its pin, and a
 // second import tries them again, with a warning and a progress event each.
-// This is the one test of the whole text of the sources an import adds.
+// This is the one test of the whole text of an import's report.
 func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -1209,14 +1207,13 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 	writeFile(t, filepath.Join(to.home, ".gitconfig"), readText(t, filepath.Join(h.home, ".gitconfig")))
 	out := to.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "\n  added source "+other.url+" pinned to main: 1 skill\n")
-	contains(t, "stdout", out.stdout, "\n  added source "+s.url+": 2 skills\n")
-	contains(t, "stdout", out.stdout, "1 skill in the snapshot: 1 installed\n")
-	if !strings.HasSuffix(out.stdout, "\n  add these sources again before you install from them:\n"+
-		"    agentx source add "+account+" --account\n"+
-		"    agentx source add "+shared+"#v1\n") {
-		t.Errorf("stdout does not end with the source add of each source not added:\n%s", out.stdout)
-	}
+	equal(t, "stdout", out.stdout, "✓ Snapshot applied\n\n"+
+		"Skills added (1)\n  alpha  Claude Code\n\n"+
+		"Sources added (2)\n  "+other.url+"\n  "+s.url+"\n\n"+
+		"Sources not added (2)\n"+
+		"  agentx source add "+account+" --account\n"+
+		"  agentx source add "+shared+"#v1\n\n"+
+		"Agents enabled\n  Claude Code\n")
 	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: "+shared+": git ")
 	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: cannot reach the account remote "+account+": ")
 	if !lexists(filepath.Join(to.home, ".claude", "skills", "alpha")) {
@@ -1314,7 +1311,7 @@ func printedSourceAdds(t *testing.T, stdout, dir string) []string {
 	t.Helper()
 	var args []string
 	for _, line := range strings.Split(stdout, "\n") {
-		if word, ok := strings.CutPrefix(line, "    agentx source add "); ok {
+		if word, ok := strings.CutPrefix(line, "  agentx source add "); ok {
 			args = append(args, shellRead(t, word, dir)...)
 		}
 	}
@@ -1373,7 +1370,7 @@ func TestImportQuotesTheSourceAddItPrints(t *testing.T) {
 	to.offline()
 	out := to.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "    agentx source add 'https://example.com/o/r#x$(touch${IFS}pwned)'\n")
+	contains(t, "stdout", out.stdout, "  agentx source add 'https://example.com/o/r#x$(touch${IFS}pwned)'\n")
 
 	dir := t.TempDir()
 	want := []string{
@@ -1391,8 +1388,8 @@ func TestImportQuotesTheSourceAddItPrints(t *testing.T) {
 
 // TestImportWithNoSkillsStillAddsTheSources: a machine that added sources
 // and installed nothing exports no skill, and an import of it still adds
-// its sources. Where one cannot be added its source add follows the line
-// saying the snapshot lists no skills, and its settings entry stays as the
+// its sources. Where one cannot be added its source add is listed under
+// the sources not added, and its settings entry stays as the
 // snapshot holds it but for what the exporting machine found it could do
 // there, which this machine finds out for itself.
 func TestImportWithNoSkillsStillAddsTheSources(t *testing.T) {
@@ -1422,11 +1419,10 @@ func TestImportWithNoSkillsStillAddsTheSources(t *testing.T) {
 	to.build(t, fixture{dirs: []string{".claude"}})
 	out := to.run("snapshot", "apply", file, "--yes")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "  added source "+kept.url+" pinned to main: 1 skill\n")
-	contains(t, "stdout", out.stdout, "No skills in the snapshot.\n"+
-		"  add these sources again before you install from them:\n"+
-		"    agentx source add "+account+" --account\n"+
-		"    agentx source add "+shared+"#release\n")
+	contains(t, "stdout", out.stdout, "Sources added (1)\n  "+kept.url+"\n")
+	contains(t, "stdout", out.stdout, "Sources not added (2)\n"+
+		"  agentx source add "+account+" --account\n"+
+		"  agentx source add "+shared+"#release\n")
 
 	restored, err := home.LoadSettings(to.agentx)
 	if err != nil {
