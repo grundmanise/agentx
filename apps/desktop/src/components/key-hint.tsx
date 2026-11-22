@@ -13,8 +13,9 @@ export const KeyHint = ({ keys }: { keys: string[] }) => (
   <kbd className="rounded-key-hint bg-button-secondary-bg type-key-hint text-text-muted px-key-hint py-key-hint-y gap-key-hint inline-flex items-center">
     {keys.map((key) =>
       key in icons ? (
-        <kbd key={key} aria-label={key} className="flex">
+        <kbd key={key} className="flex">
           {icons[key]}
+          <span className="sr-only">{key}</span>
         </kbd>
       ) : (
         <kbd key={key}>{key}</kbd>
