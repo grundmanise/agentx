@@ -26,7 +26,7 @@ const pane = (page: Page, name: string) =>
 /** Opens the Skills screen on the machine with hundreds of skills, at the skill `name`. */
 const openAt = async (cli: MockCli, page: Page, name: string) => {
   cli.onServeStart({ events: [inventory] });
-  cli.register(["adopt"], { events: adoption });
+  cli.register(["skill", "import"], { events: adoption });
   for (const read of fileReads) {
     cli.register(["skill", "files", ...read.args], { events: read.events });
   }

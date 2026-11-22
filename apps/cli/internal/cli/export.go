@@ -19,7 +19,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
-// snapshotSchemaVersion is the version of the snapshot agentx export
+// snapshotSchemaVersion is the version of the snapshot agentx snapshot save
 // writes. It is the version of that document alone: the settings object
 // inside it carries the settings schema version, and an event carries the
 // output schema version. Version 1 was the export document of lineage
@@ -38,7 +38,7 @@ var readableSnapshotVersions = []int{2, 3}
 // CLI writes, which is what an import may restore.
 const settingsSchemaVersion = home.SettingsSchemaVersion
 
-// snapshot is what agentx export writes and agentx import reads: the
+// snapshot is what agentx snapshot save writes and snapshot apply reads: the
 // inventory of this machine, saved with the machine settings, without what
 // only describes the machine it was taken on. It keeps the agent
 // configurations by client id, every skill of the library with where it is
@@ -179,7 +179,7 @@ type snapshotPlugin struct {
 	Enabled       *bool  `json:"enabled,omitempty"`
 }
 
-// exportEvent reports the snapshot agentx export wrote. The entries
+// exportEvent reports the snapshot agentx snapshot save wrote. The entries
 // themselves are in the file or on the branch; the event says where it is
 // and how many skills it holds: a file by its path, or a machine's branch
 // on the account remote by the machine id and the commit that holds it.
@@ -191,32 +191,52 @@ type exportEvent struct {
 	Skills  int    `json:"skills"`
 }
 
-// defaultSnapshot is the name of the file agentx export writes when no name
+// defaultSnapshot is the name of the file agentx snapshot save writes when no name
 // is given: snapshot.json in the library, the name a machine's branch holds
 // it under too.
 const defaultSnapshot = "snapshot"
 
-func newExportCommand(inv *invocation) *cobra.Command {
+// newSnapshotCommand groups the commands that save a snapshot of this
+// machine and apply one to it.
+func newSnapshotCommand(inv *invocation) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:         "snapshot",
+		Short:       "Save or apply a snapshot: settings, skills and placements",
+		Annotations: map[string]string{annotationGroup: "true", annotationSection: "machines"},
+		Args:        cobra.NoArgs,
+		Example: examples(
+			"agentx snapshot save", "write snapshot.json to the library",
+			"agentx snapshot save --machine cloud", "seed the cloud machine with this one's skills",
+			"agentx snapshot apply --machine cloud", "apply the cloud machine's snapshot",
+		),
+		RunE: needSubcommand(inv, "no snapshot command given", "run 'agentx snapshot --help' to list commands"),
+	}
+	cmd.AddCommand(newSnapshotSaveCommand(inv))
+	cmd.AddCommand(newSnapshotApplyCommand(inv))
+	return cmd
+}
+
+func newSnapshotSaveCommand(inv *invocation) *cobra.Command {
 	var force bool
 	var machine string
 	cmd := &cobra.Command{
-		Use:         "export [<name> | --machine <id>]",
-		Short:       "Write a snapshot to the library or the account remote",
+		Use:         "save [<name> | --machine <id>]",
+		Short:       "Save a snapshot to the library or the account remote",
 		Annotations: map[string]string{annotationSection: "machines", annotationSynopsis: "[<name>]|--machine <id>"},
 		Example: examples(
-			"agentx export", "write snapshot.json to the library",
-			"agentx export work-laptop --force", "write work-laptop.json, replacing one that is there",
-			"agentx export --machine cloud", "seed the cloud machine with this one's skills",
-			"agentx export --machine <id>", "a backup on the remote; 'agentx machine' prints the id",
+			"agentx snapshot save", "write snapshot.json to the library",
+			"agentx snapshot save work-laptop --force", "write work-laptop.json, replacing one that is there",
+			"agentx snapshot save --machine cloud", "seed the cloud machine with this one's skills",
+			"agentx snapshot save --machine <id>", "a backup on the remote; 'agentx machine' prints the id",
 		),
 		Args: func(cmd *cobra.Command, args []string) error {
 			switch {
 			case len(args) > 1:
-				return fail(exitUsage, "export takes at most one argument, the snapshot's name",
-					"run 'agentx export --help' for usage")
+				return fail(exitUsage, "snapshot save takes at most one argument, the snapshot's name",
+					"run 'agentx snapshot save --help' for usage")
 			case machine != "" && len(args) == 1:
 				return fail(exitUsage, "a name and --machine cannot both be given",
-					"give the name, or --machine to export the snapshot to the account remote")
+					"give the name, or --machine to save the snapshot to the account remote")
 			case machine != "":
 				return machineArg(machine)
 			case len(args) == 1:
@@ -272,9 +292,9 @@ func (inv *invocation) exportHelp() string {
 			id = known
 		}
 	}
-	return "Write a snapshot of this machine: its settings, agent configurations, skill\n" +
+	return "Save a snapshot of this machine: its settings, agent configurations, skill\n" +
 		"list, versions and placements, and its MCP servers and plugins. Use 'agentx\n" +
-		"import' to restore from the snapshot.\n\n" +
+		"snapshot apply' to restore from the snapshot.\n\n" +
 		"The snapshot goes to the library, as snapshot.json or as <name>.json:\n" +
 		file + "\n" +
 		"With --machine <id>, it is committed to the branch machines/<id> of the account\n" +
@@ -295,7 +315,7 @@ func snapshotName(name string) error {
 		strings.ContainsAny(name, `/\`),
 		filepath.Ext(name) != "":
 		return fail(exitUsage, clipped(sanitised(name))+" is not a snapshot name",
-			"give a file name without an extension or a slash: export writes <name>.json to the library")
+			"give a file name without an extension or a slash: snapshot save writes <name>.json to the library")
 	}
 	return nil
 }
@@ -313,12 +333,12 @@ func importArgs(args []string, machine string) error {
 	switch {
 	case machine != "" && len(args) > 0:
 		return fail(exitUsage, "a file and --machine cannot both be given",
-			"give the file, or --machine to import the snapshot from the account remote")
+			"give the file, or --machine to apply the snapshot from the account remote")
 	case machine != "":
 		return machineArg(machine)
 	case len(args) != 1:
-		return fail(exitUsage, "import takes one argument, the file to read, or --machine <id>",
-			"run 'agentx import --help' for usage")
+		return fail(exitUsage, "snapshot apply takes one argument, the file to read, or --machine <id>",
+			"run 'agentx snapshot apply --help' for usage")
 	}
 	return nil
 }
@@ -343,9 +363,9 @@ func (inv *invocation) export(ctx context.Context, path string, force bool) erro
 	}
 	inv.out.emit(exportEvent{event: newEvent("export"), Path: path, Skills: len(snap.Skills)})
 	out := inv.out
-	out.done("exported the settings and " + out.paint(noteStyle, plural(len(snap.Skills), "skill")) +
+	out.done("saved the snapshot of the settings and " + out.paint(noteStyle, plural(len(snap.Skills), "skill")) +
 		" to " + out.paint(heading, path))
-	inv.summary = fmt.Sprintf("exported the settings and %s to %s", plural(len(snap.Skills), "skill"), path)
+	inv.summary = fmt.Sprintf("saved the snapshot of the settings and %s to %s", plural(len(snap.Skills), "skill"), path)
 	return nil
 }
 

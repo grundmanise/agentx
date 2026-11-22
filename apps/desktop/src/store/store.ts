@@ -89,7 +89,7 @@ export interface AppState {
   /** This machine and where agentx keeps its files, from `machine`. */
   machine: MachineEvent | undefined;
   sources: SourceEvent[];
-  /** What `adopt` would take over, from its preview. */
+  /** What `skill import` would take over, from its preview. */
   adoption: AdoptionEvent[];
   /** The controls whose command runs: label → run id. */
   pending: Record<string, string>;

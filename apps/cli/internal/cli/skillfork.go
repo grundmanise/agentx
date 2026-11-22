@@ -32,7 +32,7 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 			"as it is now, edits included, checked out as a worktree in agentx home, and the\n" +
 			"library holds a symlink to it. The fork of a skill of a shared source keeps that\n" +
 			"source as its upstream, so newer versions can be merged in. An unmanaged skill\n" +
-			"is adopted with 'agentx adopt --skill <name>'.\n\n" +
+			"is imported with 'agentx skill import <name>'.\n\n" +
 			"Without --name the fork takes the skill's place: its library directory moves\n" +
 			"into the fork's worktree and every placement stays as it was. With --name <new>\n" +
 			"the fork is made beside the skill, under the new name, which it also writes into\n" +
@@ -63,7 +63,7 @@ type forking struct {
 	src     forkSource
 	target  string   // the fork's name
 	inPlace bool     // the fork takes the source's place: its directory moves into the worktree
-	mode    forkMode // what the run is for: skill fork, the first step of skill rename, or agentx adopt
+	mode    forkMode // what the run is for: skill fork, the first step of skill rename, or agentx skill import
 	// from is the directory a fork in its source's place moves into the
 	// worktree: the library entry, or, for an adoption out of an agent
 	// client's own skills directory, that directory.
@@ -112,7 +112,7 @@ type forking struct {
 // ignore rules every fork follows: for a managed skill on its import
 // commit, so that its edits are exactly what the commit changes, for a
 // fork on its tip, so that its history is kept, and for a plugin's skill,
-// or an unmanaged one agentx adopt takes over, as a branch of its own. It
+// or an unmanaged one agentx skill import takes over, as a branch of its own. It
 // carries a new fork id
 // even when it changes nothing, but for skill rename's, which keeps the
 // id of the skill it renames when its history records one, and nothing

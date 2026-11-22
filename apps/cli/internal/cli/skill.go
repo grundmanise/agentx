@@ -126,6 +126,7 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	// The order is the display order of the help pages.
 	cmd.AddCommand(newSkillAddCommand(inv))
 	cmd.AddCommand(newSkillNewCommand(inv))
+	cmd.AddCommand(newSkillImportCommand(inv))
 	cmd.AddCommand(newSkillForkCommand(inv))
 	cmd.AddCommand(newSkillListCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))

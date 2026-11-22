@@ -58,7 +58,10 @@ test("a command line is quoted for a shell, with its credentials replaced", () =
       "agentx skill publish pdf -m 'fix it'\\''s typo'",
     ],
     // A shell expands a tilde and starts a comment at a hash.
-    [["import", "~/export.json"], "agentx import '~/export.json'"],
+    [
+      ["snapshot", "apply", "~/snapshot.json"],
+      "agentx snapshot apply '~/snapshot.json'",
+    ],
     [
       ["source", "add", "acme/skills#main"],
       "agentx source add 'acme/skills#main'",

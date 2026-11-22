@@ -167,9 +167,9 @@ export const loadInstallable = async () => {
   }
 };
 
-/** Loads what `adopt` would take over, from its preview, which writes nothing. */
+/** Loads what `skill import` would take over, from its preview, which writes nothing. */
 export const loadAdoption = async () => {
-  await load(["adopt"], (events) => ({
+  await load(["skill", "import"], (events) => ({
     adoption: events.filter((e) => e.type === "adoption"),
   }));
 };
@@ -470,7 +470,7 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   if (read) {
     return;
   }
-  if (command.startsWith("config ") || command === "import") {
+  if (command.startsWith("config ") || command === "snapshot apply") {
     void loadSettings();
   }
   if (command.startsWith("machine ")) {
@@ -483,7 +483,7 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   if (
     command.startsWith("source ") ||
     command === "skill add" ||
-    (command === "adopt" && args.length > 1)
+    (command === "skill import" && args.length > 2)
   ) {
     void loadSources();
   }
@@ -535,7 +535,7 @@ export const startLoaders = () => {
   }
   started = true;
   onFinished(afterCommand);
-  // A change to the library can change what `adopt` would take over.
+  // A change to the library can change what `skill import` would take over.
   useAppStore.subscribe((s, previous) => {
     const before = previous.inventory?.library;
     const now = s.inventory?.library;

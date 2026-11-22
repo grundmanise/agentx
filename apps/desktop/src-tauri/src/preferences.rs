@@ -1,7 +1,7 @@
 // The app's preferences (ADR 0013): what the desktop app alone decides on this machine, today the
 // editor a skill opens in. They are one JSON file, `preferences.json`, in the app's config
 // directory, which the app reads and writes itself. They are not machine settings: the CLI never
-// reads them, and an export does not carry them.
+// reads them, and a snapshot does not carry them.
 
 use std::io;
 use std::path::Path;

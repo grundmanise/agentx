@@ -150,3 +150,16 @@ func TestSkillTemplate(t *testing.T) {
 		}
 	}
 }
+
+// TestAdoptCommandKeepsANameOffTheFlags checks that a hint names a skill that
+// reads as a flag after --, so running the hint imports that skill only.
+func TestAdoptCommandKeepsANameOffTheFlags(t *testing.T) {
+	for name, want := range map[string]string{
+		"beta":  "agentx skill import beta",
+		"--all": "agentx skill import -- --all",
+	} {
+		if got := adoptCommand(name); got != want {
+			t.Errorf("adoptCommand(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
