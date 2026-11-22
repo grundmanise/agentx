@@ -13,9 +13,9 @@ const separatorVariants = cva(
     defaultVariants: { tone: "divider" },
     variants: {
       tone: {
-        // `button.split-divider`, between the buttons of a button group: as tall as the buttons.
-        // No height of its own, so the stretch sets it.
-        "button-group": "bg-button-split-divider self-stretch",
+        // Between the buttons of a button group: a 1px gap as tall as the buttons, with no fill, so
+        // the surface behind the group shows through. No height of its own, so the stretch sets it.
+        "button-group": "self-stretch",
         // `shell.divider`, the line between sections.
         divider: "bg-shell-divider data-[orientation=vertical]:h-full",
       },

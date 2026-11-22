@@ -37,7 +37,7 @@ const ButtonGroup = ({
   />
 );
 
-/** The line between two buttons of a group, in `button.split-divider`. */
+/** The 1px gap between two buttons of a group, through which the surface behind shows. */
 const ButtonGroupSeparator = ({
   orientation = "vertical",
   ...props
