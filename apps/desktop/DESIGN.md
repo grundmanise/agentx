@@ -170,7 +170,6 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `source-pill.active-text` | `on-accent` |  |
 | `source-pill.count` | `gray-400` | Skill count after the name of an inactive source pill: 4.8:1 on `source-pill.bg` |
 | `source-pill.active-count` | `gray-600` | Skill count on the active source pill: 7.5:1 on `source-pill.active-bg`, the one use of `gray-600` as text, on a light fill |
-| `button.split-divider` | `gray-800` | The 1px separator between the buttons of a button group |
 
 #### Status pills
 
@@ -1114,7 +1113,7 @@ A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.
 
 ### Button group
 
-shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side by side with no gap, read as one filled shape rounded on its outer corners only, with a 1px `button.split-divider` separator between them. An action with a menu of related actions (`src/components/split-button.tsx`) is the action's button, the separator, then a square icon button with the `MoreIcon` that opens the menu (§6 "Menu"); the trigger has its own accessible name, Enter, Space and ArrowDown open the menu, and Escape closes it and returns the focus to the trigger. The buttons keep their own sizes, as shadcn's do: a labelled action is a small button (`sm`) with a square `icon-sm` trigger, as Add in the Skills header; an icon action is an `icon` button with an `icon` trigger, as Show in Finder on a file row. Only the action shows when there is nothing to choose.
+shadcn's Button Group (`src/components/ui/button-group.tsx`): ghost buttons side by side with no gap, read as one filled shape rounded on its outer corners only, with a 1px separator between them that has no fill, so the surface behind the group shows through as a thin dark line. An action with a menu of related actions (`src/components/split-button.tsx`) is the action's button, the separator, then a square icon button with the `MoreIcon` that opens the menu (§6 "Menu"); the trigger has its own accessible name, Enter, Space and ArrowDown open the menu, and Escape closes it and returns the focus to the trigger. The buttons keep their own sizes, as shadcn's do: a labelled action is a small button (`sm`) with a square `icon-sm` trigger, as Add in the Skills header; an icon action is an `icon` button with an `icon` trigger, as Show in Finder on a file row. Only the action shows when there is nothing to choose.
 
 ### Skills header
 
