@@ -1,7 +1,7 @@
 // The wire in a browser: JSON-RPC 2.0 over the WebSocket door of `agentx serve --listen`
 // (docs/spec/cli-contract.md, The WebSocket door). The page asks its own server where the door is:
 // GET /agentx-serve.json answers the url and token of serve's `listening` event, as
-// `pnpm dev:real` does. One connection carries every run and request of the page, and stands
+// `pnpm dev:serve` does. One connection carries every run and request of the page, and stands
 // for the serve child of the Tauri window: each connection has a child id of its own, a closed one
 // is a child that ended, and the next one is its restart, with the supervisor's backoff. Serve
 // answers `refresh` and `search` with results; they reach the store as the `refresh_complete` and
@@ -185,7 +185,7 @@ const open = async (
   const door = await findDoor();
   if (door === undefined) {
     throw new Error(
-      `no agentx serve answers this page: ${DOOR_PATH} names none, so start the page with pnpm dev:real`
+      `no agentx serve answers this page: ${DOOR_PATH} names none, so start the page with pnpm dev:serve`
     );
   }
   const ws = new WebSocket(
