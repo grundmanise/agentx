@@ -10,7 +10,7 @@ export const TEAM = "https://github.com/team/skills";
 export const VENDOR = "https://github.com/vendor/skills";
 
 /** The file the user picks in the open dialog. */
-export const SNAPSHOT = "/home/me/Downloads/agentx-export.json";
+export const SNAPSHOT = "/home/me/Downloads/agentx-snapshot.json";
 
 /** This machine's sources before the import: its account remote and one shared source, both fetched. */
 export const sourcesBefore: InlineEvent[] = [
@@ -61,14 +61,14 @@ export const sourcesAfterImport: InlineEvent[] = [
 ];
 
 export const exported: InlineEvent[] = [
-  { path: `${LIBRARY}/agentx-export.json`, skills: 3, type: "export" },
+  { path: `${LIBRARY}/agentx-snapshot.json`, skills: 3, type: "export" },
 ];
 
 export const alreadyThere: InlineEvent[] = [
   {
     code: "refused",
     hint: "give another name, or pass --force to overwrite it",
-    message: `${LIBRARY}/agentx-export.json is already there`,
+    message: `${LIBRARY}/agentx-snapshot.json is already there`,
     type: "error",
   },
 ];

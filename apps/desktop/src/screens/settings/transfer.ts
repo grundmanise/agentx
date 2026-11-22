@@ -2,8 +2,8 @@
 // the Sources slice: pure functions, so that the sections show only what the CLI reports.
 import type { SourceEvent } from "#/cli/events.gen.ts";
 
-/** The name Save starts with: the snapshot is written to the library as agentx-export.json. */
-export const DEFAULT_SNAPSHOT_NAME = "agentx-export";
+/** The name Save starts with: the snapshot is written to the library as agentx-snapshot.json. */
+export const DEFAULT_SNAPSHOT_NAME = "agentx-snapshot";
 
 /**
  * Whether `snapshot save <name>` takes `name`, by the CLI's rule for a snapshot name: a file
@@ -13,7 +13,7 @@ export const DEFAULT_SNAPSHOT_NAME = "agentx-export";
 export const isSnapshotName = (name: string) =>
   name !== "" && !/[./\\]/u.test(name) && !name.startsWith("-");
 
-/** The last part of a path the open dialog returned: "agentx-export.json". */
+/** The last part of a path the open dialog returned: "agentx-snapshot.json". */
 export const fileName = (path: string) =>
   /[^/\\]+(?=[/\\]*$)/u.exec(path)?.[0] ?? path;
 

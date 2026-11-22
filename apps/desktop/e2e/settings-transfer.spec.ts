@@ -58,19 +58,19 @@ test("saves under the name given and toasts the path the CLI wrote", async ({
   cli,
   page,
 }) => {
-  cli.register(["snapshot", "save", "agentx-export"], { events: exported });
+  cli.register(["snapshot", "save", "agentx-snapshot"], { events: exported });
   await openSettings(cli, page);
   const section = saveSnapshot(page);
   await expect(section).toContainText(
     "Save your settings and library to back up or move to another device."
   );
   const name = section.getByRole("textbox", { name: "File name" });
-  await expect(name).toHaveValue("agentx-export");
+  await expect(name).toHaveValue("agentx-snapshot");
   await section.getByRole("button", { exact: true, name: "Save" }).click();
   await expect(toasts(page)).toContainText(
-    `Saved snapshot to ${LIBRARY}/agentx-export.json`
+    `Saved snapshot to ${LIBRARY}/agentx-snapshot.json`
   );
-  expect(later(cli)).toEqual([["snapshot", "save", "agentx-export", "--json"]]);
+  expect(later(cli)).toEqual([["snapshot", "save", "agentx-snapshot", "--json"]]);
 
   // A name snapshot save would refuse disables Save.
   await name.fill("snapshot.json");
@@ -90,12 +90,12 @@ test("a failed save shows the CLI's message and hint under the field, as one par
   cli,
   page,
 }) => {
-  cli.register(["snapshot", "save", "agentx-export"], {
+  cli.register(["snapshot", "save", "agentx-snapshot"], {
     events: [
       {
         code: "internal",
         hint: "check that you can write to the library",
-        message: `can't write ${LIBRARY}/agentx-export.json: permission denied`,
+        message: `can't write ${LIBRARY}/agentx-snapshot.json: permission denied`,
         type: "error",
       },
     ],
@@ -106,20 +106,20 @@ test("a failed save shows the CLI's message and hint under the field, as one par
   await section.getByRole("button", { exact: true, name: "Save" }).click();
   // The message and the hint as one sentence-cased paragraph.
   await expect(section.getByRole("alert")).toHaveText(
-    `Can't write ${LIBRARY}/agentx-export.json: permission denied. Check that you can write to the library.`
+    `Can't write ${LIBRARY}/agentx-snapshot.json: permission denied. Check that you can write to the library.`
   );
-  expect(later(cli)).toEqual([["snapshot", "save", "agentx-export", "--json"]]);
+  expect(later(cli)).toEqual([["snapshot", "save", "agentx-snapshot", "--json"]]);
 });
 
 test("asks before it replaces a file in the library, then saves with --force", async ({
   cli,
   page,
 }) => {
-  cli.register(["snapshot", "save", "agentx-export"], {
+  cli.register(["snapshot", "save", "agentx-snapshot"], {
     events: alreadyThere,
     exitCode: 6,
   });
-  cli.register(["snapshot", "save", "agentx-export", "--force"], {
+  cli.register(["snapshot", "save", "agentx-snapshot", "--force"], {
     events: exported,
   });
   await openSettings(cli, page);
@@ -127,20 +127,20 @@ test("asks before it replaces a file in the library, then saves with --force", a
     .getByRole("button", { exact: true, name: "Save" })
     .click();
   const confirm = page.getByRole("alertdialog", {
-    name: "Replace agentx-export.json?",
+    name: "Replace agentx-snapshot.json?",
   });
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText(
     "A file with this name is already in your library."
   );
-  expect(later(cli)).toEqual([["snapshot", "save", "agentx-export", "--json"]]);
+  expect(later(cli)).toEqual([["snapshot", "save", "agentx-snapshot", "--json"]]);
   await confirm.getByRole("button", { name: "Replace" }).click();
   await expect(toasts(page)).toContainText(
-    `Saved snapshot to ${LIBRARY}/agentx-export.json`
+    `Saved snapshot to ${LIBRARY}/agentx-snapshot.json`
   );
   expect(later(cli)).toEqual([
-    ["snapshot", "save", "agentx-export", "--json"],
-    ["snapshot", "save", "agentx-export", "--force", "--json"],
+    ["snapshot", "save", "agentx-snapshot", "--json"],
+    ["snapshot", "save", "agentx-snapshot", "--force", "--json"],
   ]);
 });
 
@@ -184,7 +184,7 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
   cli.register(["source", "list"], { events: sourcesAfterImport });
   await confirm.getByRole("button", { name: "Apply" }).click();
   await expect(toasts(page)).toContainText(
-    "Applied snapshot agentx-export.json"
+    "Applied snapshot agentx-snapshot.json"
   );
 
   // The sources are added one after another, with no click, and Apply… waits for the last.
