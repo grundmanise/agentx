@@ -12,7 +12,8 @@ import (
 // TestStdinClosingStopsAScan closes stdin while a scan waits, as one does
 // on the lock of a command serve started: Run returns at once rather than
 // once the scan does, which would be once that command ends, and the
-// command ends only once serve has.
+// command ends only once serve has. A request that came in during the scan,
+// which the loop cannot take yet, does not keep stdin's end from being read.
 func TestStdinClosingStopsAScan(t *testing.T) {
 	t.Parallel()
 	stdinR, stdinW, err := os.Pipe()
@@ -47,6 +48,9 @@ func TestStdinClosingStopsAScan(t *testing.T) {
 	case <-waiting:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the refresh never started a scan")
+	}
+	if _, err := stdinW.WriteString(`{"type":"refresh","request_id":"r2"}` + "\n"); err != nil {
+		t.Fatal(err)
 	}
 	stdinW.Close()
 	select {
