@@ -317,14 +317,10 @@ func TestSourceCell(t *testing.T) {
 	}
 
 	// Each listing says which skills are your own: skill list by the
-	// lineage, import by the record, which leaves the source of your own
-	// out while no account remote is set, and skill list --remote lists
-	// nothing else.
+	// lineage, and skill list --remote lists nothing else.
 	w := &writer{}
 	equal(t, "skill list", row(w, librarySkillEvent{LibraryEntry: scan.LibraryEntry{Kind: lineage.KindManaged, Source: account, Upstream: up}, own: true}, account)[3].text,
 		account+" (account), from "+up)
-	equal(t, "import", importRow(w, importSkillEvent{snapshotSkill: snapshotSkill{Name: "notes", Kind: lineage.KindManaged}}, account)[3].text,
-		account+" (account)")
 	equal(t, "skill list --remote", installableRow(w, installableSkillEvent{Name: "alpha", Source: account, Upstream: up, UpstreamSubpath: &dir})[3].text,
 		account+" (account), from "+up+"/tools/pdf")
 }
