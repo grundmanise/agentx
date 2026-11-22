@@ -40,6 +40,9 @@ const rows = (where: Locator, tool: string) =>
     .getByRole("region", { name: tool })
     .getByRole("listitem");
 const progress = (where: Locator) => where.getByRole("status");
+/** The skills the preview refused, folded under the list. */
+const refused = (where: Locator) =>
+  where.getByRole("region", { name: "Can't be adopted" });
 
 /** The command lines the screens ran: everything but the launch, the store's and the pane's reads. */
 const ran = (cli: MockCli) =>
@@ -169,13 +172,21 @@ test.describe("the Adopt skills section of Settings", () => {
     const open = dialog(page);
     await expect(open).toHaveAccessibleName("Adopt skills from Skills CLI");
     await expect(open.getByRole("paragraph")).toHaveText([
-      "Manage the 3 skills you added with Skills CLI in agentx. Skills CLI isn't affected. Edits to the copies in your library are lost. 1 skill can't be adopted.",
-      "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
+      "Manage the 3 skills you added with Skills CLI in agentx. Skills CLI isn't affected, but any custom edits to these skills in your library will be lost.",
     ]);
     await expect(rows(open, "Skills CLI")).toHaveText([
       "Waiting: commit-style",
       "Waiting: deck-outline",
       "Waiting: scratch",
+    ]);
+    // The refused skill is folded under the list, its reason shown once opened.
+    const fold = refused(open).getByRole("button", {
+      name: "1 skill can't be adopted",
+    });
+    await expect(fold).toHaveAttribute("aria-expanded", "false");
+    await expect(refused(open).getByRole("listitem")).toHaveCount(0);
+    await fold.click();
+    await expect(refused(open).getByRole("listitem")).toHaveText([
       "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     await open.getByRole("button", { name: "Cancel" }).click();
@@ -189,7 +200,7 @@ test.describe("the Adopt skills section of Settings", () => {
       .click();
     const open = dialog(page);
     await expect(open).toHaveAccessibleDescription(
-      "Manage the skill you added with Skillshare in agentx. Skillshare isn't affected. Edits to the copies in your library are lost."
+      "Manage the skill you added with Skillshare in agentx. Skillshare isn't affected, but any custom edits to this skill in your library will be lost."
     );
     await expect(rows(open, "Skillshare")).toHaveText([
       "Waiting: frontend__ui",
@@ -212,16 +223,15 @@ test.describe("the Adopt skills section of Settings", () => {
       .getByRole("button", { name: "Adopt skills from Skills CLI" })
       .click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
+    await open.getByRole("button", { exact: true, name: "Adopt" }).click();
     await run.started;
     await expect(progress(open)).toHaveText("Adopting 1 of 3");
     await expect(rows(open, "Skills CLI")).toHaveText([
       "Waiting: commit-style",
       "Adopting: deck-outline",
       "Waiting: scratch",
-      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
-    const adopt = open.getByRole("button", { name: "Adopt" });
+    const adopt = open.getByRole("button", { exact: true, name: "Adopt" });
     await expect(adopt).toBeDisabled();
     await expect(adopt).toHaveAttribute("aria-busy", "true");
     await expect(open.getByRole("button", { name: "Cancel" })).toBeDisabled();
@@ -251,14 +261,12 @@ test.describe("the Adopt skills section of Settings", () => {
       "Not adopted: commit-stylehttps://github.com/vercel/skills holds no skill at commit-style now.",
       "Adopted: deck-outline",
       "Adopted: scratch",
-      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     // Each skill the run did not adopt says why once, under its name, as the warning the CLI
     // logged for it did.
     await expect(open.getByRole("paragraph")).toHaveText([
       /^Manage the 3 skills/u,
       "https://github.com/vercel/skills holds no skill at commit-style now.",
-      "A symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     // The activity list logs the result.
     expect(await activity(page)).toEqual([
@@ -280,7 +288,7 @@ test.describe("the Adopt skills section of Settings", () => {
       .getByRole("button", { name: "Adopt skills from Skillshare" })
       .click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
+    await open.getByRole("button", { exact: true, name: "Adopt" }).click();
     await expect(progress(open)).toHaveText("Adopted 2 skills");
     await expect(rows(open, "Skillshare")).toHaveText([
       "Adopted: api-docs",
@@ -308,7 +316,7 @@ test.describe("the Adopt skills section of Settings", () => {
       .getByRole("button", { name: "Adopt skills from Skills CLI" })
       .click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
+    await open.getByRole("button", { exact: true, name: "Adopt" }).click();
     await expect(progress(open)).toHaveText("No skills were adopted");
     await expect(rows(open, "Skills CLI").first()).toHaveText(
       "Not adopted: commit-stylehttps://github.com/vercel/skills holds no skill at commit-style now."
@@ -337,7 +345,7 @@ test.describe("the Adopt skills section of Settings", () => {
       .getByRole("button", { name: "Adopt skills from Skillshare" })
       .click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
+    await open.getByRole("button", { exact: true, name: "Adopt" }).click();
     await expect(open.getByRole("alert")).toHaveText(
       "The store of Skillshare is not JSON. Fix the file, or move it aside."
     );
@@ -376,7 +384,7 @@ test.describe("Adopt all in the Unmanaged header", () => {
       "Adopt skills from Skills CLI and Skillshare"
     );
     await expect(open).toHaveAccessibleDescription(
-      "Manage the 5 skills you added with Skills CLI and Skillshare in agentx. Skills CLI and Skillshare aren't affected. Edits to the copies in your library are lost. 1 skill can't be adopted."
+      "Manage the 5 skills you added with Skills CLI and Skillshare in agentx. Skills CLI and Skillshare aren't affected, but any custom edits to these skills in your library will be lost."
     );
     await expect(open.getByRole("heading", { level: 3 })).toHaveText([
       "Skills CLI",
@@ -386,7 +394,7 @@ test.describe("Adopt all in the Unmanaged header", () => {
       "Waiting: api-docs",
       "Waiting: frontend__ui",
     ]);
-    await open.getByRole("button", { name: "Adopt" }).click();
+    await open.getByRole("button", { exact: true, name: "Adopt" }).click();
     await first.started;
     await expect(progress(open)).toHaveText("Adopting…");
     cli.register(["adopt"], {
@@ -406,8 +414,11 @@ test.describe("Adopt all in the Unmanaged header", () => {
     second.release();
     await expect(progress(open)).toHaveText("Adopted 5 skills");
     await expect(rows(open, "Skills CLI").last()).toHaveText(
-      "Can't be adopted: legacyA symlink to /home/me/work/legacy. To adopt it, move that folder to /home/me/.agents/skills/legacy."
+      "Adopted: scratch"
     );
+    await expect(
+      refused(open).getByRole("button", { name: "1 skill can't be adopted" })
+    ).toBeVisible();
     // The Skills CLI's run exits 0 and warns of the record the preview refused, whose row says why
     // already: a success.
     expect(await activity(page)).toEqual([
@@ -440,7 +451,7 @@ test.describe("Adopt all in the Unmanaged header", () => {
     });
     await unmanaged(page).getByRole("button", { name: "Adopt all" }).click();
     const open = dialog(page);
-    await open.getByRole("button", { name: "Adopt" }).click();
+    await open.getByRole("button", { exact: true, name: "Adopt" }).click();
     await expect(progress(open)).toHaveText("Adopted 4 of 5 skills");
     await open.getByRole("button", { name: "Done" }).click();
     await afterRun(cli, ["deck-outline", "scratch", ...skillshareNames]);
