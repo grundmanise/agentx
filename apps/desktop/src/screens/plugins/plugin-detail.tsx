@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
+import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { Pill } from "#/components/pill.tsx";
 import { SelectableLink } from "#/components/selectable-link.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -101,17 +102,20 @@ const ItemName = ({ name, onOpen }: { name: string; onOpen?: () => void }) => {
 /**
  * A tab's table: a name column `plugin.name-col` wide and a second one that takes the rest. A
  * skill's or server's name is a link that opens it in Skills or MCP servers; a hook opens nothing.
+ * With `markdown`, the second column renders its inline Markdown, as a skill's description does.
  */
 const ItemTable = ({
   label,
   columns,
   items,
   onOpen,
+  markdown = false,
 }: {
   label: string;
   columns: [string, string];
   items: PluginItem[];
   onOpen?: (item: PluginItem) => void;
+  markdown?: boolean;
 }) => (
   <Table aria-label={label} scroll layout="fixed">
     <colgroup>
@@ -140,7 +144,9 @@ const ItemTable = ({
             />
           </TableCell>
           <TableCell>
-            <span className="text-text-muted line-clamp-2">{item.meta}</span>
+            <span className="text-text-muted line-clamp-2">
+              {markdown ? <InlineMarkdown text={item.meta} /> : item.meta}
+            </span>
           </TableCell>
         </TableRow>
       ))}
@@ -279,6 +285,7 @@ export const PluginDetail = ({
               label="Skills"
               columns={["Skill", "Description"]}
               items={row.skills}
+              markdown
               onOpen={(item) => {
                 openSkill(item.key);
               }}
