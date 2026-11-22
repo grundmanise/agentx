@@ -1,4 +1,3 @@
-import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
 import { Spinner } from "#/components/spinner.tsx";
@@ -7,6 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { cn } from "#/lib/utils.ts";
 
 /**
  * Whether an agent client sees the skill: on, off, on through a placement that was displaced, or
@@ -14,61 +14,26 @@ import {
  */
 export type AgentChipState = "on" | "off" | "displaced" | "inherited";
 
-const chipVariants = cva(
-  "rounded-agent-chip h-agent-chip pr-agent-chip-right pl-agent-chip-left gap-agent-chip inline-flex items-center border py-0 text-left",
-  {
-    compoundVariants: [
-      {
-        class: "hover:border-agent-chip-hover-border",
-        inert: false,
-        locked: false,
-      },
-    ],
-    variants: {
-      inert: {
-        false: "",
-        true: "cursor-default",
-      },
-      locked: {
-        false: "",
-        true: "cursor-not-allowed opacity-45",
-      },
-      on: {
-        false: "border-agent-chip-off-border bg-agent-chip-off-bg",
-        true: "border-agent-chip-on-border bg-agent-chip-on-bg",
-      },
-      pending: {
-        false: "",
-        true: "cursor-wait",
-      },
-    },
-  }
+/** The chip's compact switch, drawn only: the chip is the control. */
+const ChipSwitch = ({ on, inert }: { on: boolean; inert: boolean }) => (
+  <span
+    aria-hidden
+    className={cn(
+      "rounded-switch w-switch-compact h-switch-compact p-switch flex flex-none items-center",
+      on
+        ? "bg-switch-on-track justify-end"
+        : "bg-switch-off-track justify-start",
+      inert && "opacity-50"
+    )}
+  >
+    <span
+      className={cn(
+        "rounded-switch size-switch-compact-knob block",
+        on ? "bg-switch-on-knob" : "bg-switch-off-knob"
+      )}
+    />
+  </span>
 );
-
-const switchVariants = cva(
-  "rounded-switch w-switch-compact h-switch-compact p-switch flex flex-none items-center",
-  {
-    variants: {
-      inert: {
-        false: "",
-        true: "opacity-50",
-      },
-      on: {
-        false: "bg-switch-off-track justify-start",
-        true: "bg-switch-on-track justify-end",
-      },
-    },
-  }
-);
-
-const knobVariants = cva("rounded-switch size-switch-compact-knob block", {
-  variants: {
-    on: {
-      false: "bg-switch-off-knob",
-      true: "bg-switch-on-knob",
-    },
-  },
-});
 
 /**
  * An agent client toggle chip of the detail pane (DESIGN.md §6): logo, name and a compact switch,
@@ -113,7 +78,16 @@ export const AgentChip = ({
       aria-disabled={disabled ? true : undefined}
       title={disabled ? undefined : title}
       onClick={disabled ? undefined : onClick}
-      className={chipVariants({ inert: disabled, locked, on, pending })}
+      className={cn(
+        "rounded-agent-chip h-agent-chip pr-agent-chip-right pl-agent-chip-left gap-agent-chip inline-flex items-center border py-0 text-left",
+        on
+          ? "border-agent-chip-on-border bg-agent-chip-on-bg"
+          : "border-agent-chip-off-border bg-agent-chip-off-bg",
+        disabled && "cursor-default",
+        locked && "cursor-not-allowed opacity-45",
+        pending && "cursor-wait",
+        !(disabled || locked) && "hover:border-agent-chip-hover-border"
+      )}
     >
       {logo}
       <span className="type-agent-chip text-agent-chip-text flex min-w-0 flex-col">
@@ -132,9 +106,7 @@ export const AgentChip = ({
           <Spinner />
         </span>
       ) : (
-        <span aria-hidden className={switchVariants({ inert: disabled, on })}>
-          <span className={knobVariants({ on })} />
-        </span>
+        <ChipSwitch on={on} inert={disabled} />
       )}
     </button>
   );

@@ -1,18 +1,7 @@
-import { cva } from "class-variance-authority";
 import { useId } from "react";
 import type { ReactNode } from "react";
 
-const rowVariants = cva(
-  "rounded-row py-row pr-row-right pl-row-left gap-row relative flex w-full items-start text-left",
-  {
-    variants: {
-      selected: {
-        false: "hover:bg-row-hover",
-        true: "bg-row-selected-bg before:bg-row-selected-bar before:rounded-pill before:absolute before:top-2.5 before:bottom-2.5 before:left-0 before:w-0.5",
-      },
-    },
-  }
-);
+import { cn } from "#/lib/utils.ts";
 
 /**
  * A row of a split list (DESIGN.md §4 "Lists and rows"): `row.padding`, `row.radius`, `row.hover`;
@@ -43,7 +32,12 @@ export const ListRow = ({
       aria-describedby={description === undefined ? undefined : descriptionId}
       aria-current={selected ? "true" : undefined}
       onClick={onSelect}
-      className={rowVariants({ selected })}
+      className={cn(
+        "rounded-row py-row pr-row-right pl-row-left gap-row relative flex w-full items-start text-left",
+        selected
+          ? "bg-row-selected-bg before:bg-row-selected-bar before:rounded-pill before:absolute before:top-2.5 before:bottom-2.5 before:left-0 before:w-0.5"
+          : "hover:bg-row-hover"
+      )}
     >
       {children}
       {description !== undefined && (

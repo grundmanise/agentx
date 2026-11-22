@@ -1,26 +1,4 @@
-import { cva } from "class-variance-authority";
-
-// Both words share one grid cell, so the button is as wide as the longer one and the row never
-// moves when they swap.
-const statusVariants = cva(
-  "type-secondary text-add-card-status-added col-start-1 row-start-1 font-medium group-hover/swap:opacity-0 group-focus-visible/swap:opacity-0",
-  {
-    variants: {
-      busy: { false: "", true: "opacity-0" },
-    },
-  }
-);
-
-// Remove has no fill: red text that fades in while the button is hovered or focused, and stays
-// while its command runs.
-const removeVariants = cva(
-  "type-secondary text-add-card-status-remove col-start-1 row-start-1 font-medium transition-opacity duration-150 group-hover/swap:opacity-100 group-focus-visible/swap:opacity-100",
-  {
-    variants: {
-      busy: { false: "opacity-0", true: "opacity-100" },
-    },
-  }
-);
+import { cn } from "#/lib/utils.ts";
 
 /**
  * The status of a skill a Sources card holds already, Added, that turns into a red Remove while
@@ -47,10 +25,26 @@ export const RemoveSwap = ({
     onClick={onClick}
     className="group/swap rounded-pill focus-visible:outline-shell-focus-ring grid h-8 cursor-pointer items-center justify-items-end px-1.5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-solid disabled:cursor-default"
   >
-    <span aria-hidden className={statusVariants({ busy })}>
+    {/* Both words share one grid cell, so the button is as wide as the longer one and the row
+        never moves when they swap. */}
+    <span
+      aria-hidden
+      className={cn(
+        "type-secondary text-add-card-status-added col-start-1 row-start-1 font-medium group-hover/swap:opacity-0 group-focus-visible/swap:opacity-0",
+        busy && "opacity-0"
+      )}
+    >
       {status}
     </span>
-    <span aria-hidden className={removeVariants({ busy })}>
+    {/* Remove has no fill: red text that fades in while the button is hovered or focused, and
+        stays while its command runs. */}
+    <span
+      aria-hidden
+      className={cn(
+        "type-secondary text-add-card-status-remove col-start-1 row-start-1 font-medium transition-opacity duration-150 group-hover/swap:opacity-100 group-focus-visible/swap:opacity-100",
+        busy ? "opacity-100" : "opacity-0"
+      )}
+    >
       Remove
     </span>
   </button>

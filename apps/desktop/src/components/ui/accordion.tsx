@@ -14,6 +14,7 @@ import { Accordion as AccordionPrimitive } from "radix-ui";
 import type { ReactNode } from "react";
 
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
+import { cn } from "#/lib/utils.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const accordionVariants = cva("", {
@@ -150,41 +151,6 @@ const actionVariants = cva("flex items-center", {
   },
 });
 
-// The meta text at the row's end. On a row with a control it gives way to it: it fades out while
-// the row is hovered or holds the focus, or while the control's menu is open.
-const metaVariants = cva("ml-auto flex flex-none items-center", {
-  compoundVariants: [
-    {
-      className:
-        "transition-opacity duration-150 group-focus-within:opacity-0 group-hover:opacity-0",
-      gives: true,
-      hidden: false,
-    },
-  ],
-  variants: {
-    gives: {
-      false: "",
-      true: "",
-    },
-    hidden: {
-      false: "",
-      true: "opacity-0",
-    },
-  },
-});
-
-const chevronVariants = cva(
-  "text-file-row-meta flex flex-none transition-transform duration-150",
-  {
-    variants: {
-      open: {
-        false: "",
-        true: "rotate-90",
-      },
-    },
-  }
-);
-
 const Accordion = ({
   label,
   value,
@@ -264,20 +230,31 @@ const AccordionTrigger = ({
   children: ReactNode;
 }) => {
   const list = variant === "list";
+  // On a row with a control, the meta text gives way to it: it fades out while the row is hovered
+  // or holds the focus, or while the control's menu is open.
+  const gives = action !== undefined && !list;
   // In a `list`, the row's description holds the meta text.
   const metaText = meta !== undefined && (
     <span
       aria-hidden={list || undefined}
-      className={metaVariants({
-        gives: action !== undefined && variant !== "list",
-        hidden: action !== undefined && variant !== "list" && actionShown,
-      })}
+      className={cn(
+        "ml-auto flex flex-none items-center",
+        gives &&
+          (actionShown
+            ? "opacity-0"
+            : "transition-opacity duration-150 group-focus-within:opacity-0 group-hover:opacity-0")
+      )}
     >
       {meta}
     </span>
   );
   const chevron = (
-    <span className={chevronVariants({ open })}>
+    <span
+      className={cn(
+        "text-file-row-meta flex flex-none transition-transform duration-150",
+        open && "rotate-90"
+      )}
+    >
       <ChevronIcon size="xs" />
     </span>
   );
