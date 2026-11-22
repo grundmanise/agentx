@@ -39,6 +39,10 @@ const fromAnotherMachine = (name: string, source: string): InlineEvent => ({
   upstream_commit: "",
 });
 
+/** An account remote whose short form is longer than the popover's least width leaves room for. */
+const LONG_REMOTE =
+  "git@github.com:example-org/a-rather-long-skill-remote-name.git";
+
 /** Every skill to publish on the fixture machine, as Publish all names them. */
 const OUTGOING = ["changelog", "draft", "notes"];
 
@@ -171,7 +175,7 @@ test.describe("states", () => {
 });
 
 test.describe("popover", () => {
-  test("lists what to publish and what is incoming; an incoming row opens the skill", async ({
+  test("lists what to publish and what is incoming; a row opens the skill and the popover stays open", async ({
     cli,
     page,
   }) => {
@@ -189,11 +193,81 @@ test.describe("popover", () => {
     await expect(popover(page)).toContainText("me/account");
     await expect(popover(page)).toContainText("Not checked yet");
 
+    await group(page, "To publish")
+      .getByRole("button", { name: "changelog" })
+      .click();
+    await expect(page).toHaveURL(/#\/skills\/changelog$/u);
+    await expect(pane(page, "changelog")).toBeVisible();
+    await expect(popover(page)).toBeVisible();
+
     await group(page, "Incoming")
       .getByRole("button", { name: "notes" })
       .click();
     await expect(page).toHaveURL(/#\/skills\/notes$/u);
     await expect(pane(page, "notes")).toBeVisible();
+    await expect(popover(page)).toBeVisible();
+  });
+
+  test("shows the account remote in full, Publish all at the right", async ({
+    cli,
+    page,
+  }) => {
+    launch(cli, "edited");
+    cli.register(["source", "list"], {
+      events: [
+        {
+          account: true,
+          id: "2222222222222222",
+          type: "source",
+          url: LONG_REMOTE,
+        },
+      ],
+    });
+    await page.goto("/");
+    await expect(status(page)).toHaveText("3 to publish");
+    // Checked a while ago, so the time takes the most room it can.
+    await cli.serveEmit([
+      {
+        checked_at: new Date(Date.now() - 3_000_000).toISOString(),
+        fetched: true,
+        instance_id: "instance-1",
+        ok: true,
+        scope: "account",
+        type: "update_check",
+      },
+    ]);
+    await status(page).click();
+    const remote = popover(page).getByText(
+      "example-org/a-rather-long-skill-remote-name",
+      { exact: true }
+    );
+    await expect(remote).toBeVisible();
+    const clipped = await remote.evaluate(
+      (el) => el.scrollWidth > el.clientWidth
+    );
+    expect(clipped).toBe(false);
+    // Once its open animation ends, so the sizes are its own.
+    await popover(page).evaluate(async (el) => {
+      await Promise.all(
+        el.getAnimations().map(async (a) => {
+          await a.finished;
+        })
+      );
+    });
+    const button = await popover(page)
+      .getByRole("button", { name: "Publish all" })
+      .boundingBox();
+    const checked = await popover(page)
+      .getByText(/^Checked /u)
+      .boundingBox();
+    // The time keeps its place at the right of the remote, on the same line.
+    const remoteBox = await remote.boundingBox();
+    expect(remoteBox?.height ?? 0).toBeCloseTo(checked?.height ?? 0, -1);
+    // Its right edge lines up with the footer's, which ends at the popover's right.
+    expect((button?.x ?? 0) + (button?.width ?? 0)).toBeCloseTo(
+      (checked?.x ?? 0) + (checked?.width ?? 0),
+      0
+    );
   });
 
   test("synced: says so, with when serve last checked; a failed check leaves that time", async ({
