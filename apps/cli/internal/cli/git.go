@@ -35,9 +35,11 @@ func (inv *invocation) gitVersion(ctx context.Context) (gitx.Version, error) {
 // needsGit reports whether a command runs git, so that startup refuses a
 // missing or too-old git before it. version, doctor and help stay available
 // to report the problem, and update to replace the agentx that reports it.
+// Serve checks git before each scan instead, see serveScan, so that it
+// stays up and answers the commands of the desktop app, doctor among them.
 func needsGit(name string) bool {
 	switch name {
-	case "agentx", "version", "update", "doctor", "help":
+	case "agentx", "version", "update", "doctor", "help", "serve":
 		return false
 	}
 	return true

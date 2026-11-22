@@ -126,8 +126,7 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	listening := p.next("listening")
 	inventory := p.next("inventory")
 	c := dialDoor(t, listening, "http://localhost:1420")
-	p.send(`{"type":"refresh","request_id":"r1"}`)
-	p.next("refresh_complete")
+	p.refreshed("r1")
 
 	// The inventory serve last emitted is what a new client is sent first,
 	// and the answer to stdin's refresh is not sent at all.

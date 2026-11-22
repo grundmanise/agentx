@@ -61,8 +61,6 @@ var eventTypes = []struct {
 	{"adoption", adoptionEvent{}},
 	{"reconcile", reconcileEvent{}},
 	{"drift", driftEvent{}},
-	{"refresh_complete", refreshCompleteEvent{}},
-	{"search", searchEvent{}},
 	{"update_check", updateCheckEvent{}},
 	{"listening", listeningEvent{}},
 }
@@ -420,8 +418,8 @@ func tsLiterals(values []string) []string {
 	return q
 }
 
-// eventTypeName is the TypeScript name of an event type: refresh_complete
-// is RefreshCompleteEvent.
+// eventTypeName is the TypeScript name of an event type: update_check
+// is UpdateCheckEvent.
 func eventTypeName(typ string) string {
 	var b strings.Builder
 	for _, w := range strings.Split(typ, "_") {
@@ -461,10 +459,27 @@ func eventTypesGen() (declarations, error) {
 	return d, nil
 }
 
-// declarations are the declarations of the events and of the structs they
-// carry.
+// declarations are the declarations of the events, of the results of
+// serve's methods, and of the structs they carry.
 type declarations struct {
-	events, structs []string
+	events, results, structs []string
+}
+
+// methodResults names the struct the result of each method of serve's
+// JSON-RPC is marshalled from, in the order the contract describes them.
+var methodResults = []struct {
+	method string
+	v      any
+}{
+	{"run", runResult{}},
+	{"refresh", refreshResult{}},
+	{"search", searchResult{}},
+}
+
+// methodResultName is the TypeScript name of a method's result: search's
+// is SearchMethodResult.
+func methodResultName(method string) string {
+	return strings.ToUpper(method[:1]) + method[1:] + "MethodResult"
 }
 
 func (g *tsGen) declarations() (declarations, error) {
@@ -481,6 +496,14 @@ func (g *tsGen) declarations() (declarations, error) {
 		lines = append([]string{fmt.Sprintf("  type: %q;", e.name), "  schema_version: number;"}, lines...)
 		events = append(events, iface(eventTypeName(e.name), extends, lines))
 	}
+	var results []string
+	for _, r := range methodResults {
+		extends, _, lines, err := g.members(reflect.TypeOf(r.v))
+		if err != nil {
+			return declarations{}, err
+		}
+		results = append(results, iface(methodResultName(r.method), extends, lines))
+	}
 	var structs []string
 	for i := 0; i < len(g.structs); i++ { // members can record more structs
 		t := g.structs[i]
@@ -494,7 +517,7 @@ func (g *tsGen) declarations() (declarations, error) {
 		name, _ := g.structName(t)
 		structs = append(structs, iface(name, extends, lines))
 	}
-	return declarations{events, structs}, nil
+	return declarations{events, results, structs}, nil
 }
 
 // render is the content of eventTypesFile.
@@ -524,7 +547,7 @@ func (d declarations) render() string {
 		fmt.Fprintf(&b, "  %s: %d,\n", s.code, s.exit)
 	}
 	b.WriteString("} as const;\nexport type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];\n")
-	b.WriteString("\n// The objects events carry.\n")
+	b.WriteString("\n// The objects events and method results carry.\n")
 	b.WriteString(strings.Join(d.structs, "\n"))
 	b.WriteString("\n// One type per event type.\n")
 	b.WriteString(strings.Join(d.events, "\n"))
@@ -542,19 +565,9 @@ func (d declarations) render() string {
 	b.WriteString(union("CliEvent", names))
 	b.WriteString(`export type CliEventType = CliEvent["type"];
 export type EventOf<T extends CliEventType> = Extract<CliEvent, { type: T }>;
-
-// The requests serve reads on its stdin, one JSON object a line.
-export interface RefreshRequest {
-  type: "refresh";
-  request_id: string;
-}
-export interface SearchRequest {
-  type: "search";
-  request_id: string;
-  query: string;
-}
-export type ServeRequest = RefreshRequest | SearchRequest;
 `)
+	b.WriteString("\n// The result of each method of serve's JSON-RPC.\n")
+	b.WriteString(strings.Join(d.results, "\n"))
 	return b.String()
 }
 

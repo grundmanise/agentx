@@ -253,7 +253,9 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 	default:
 		f = &failure{status: exitUsage, message: err.Error(), hint: "run 'agentx help' for usage"}
 	}
-	out.fail(f)
+	if !f.reported {
+		out.fail(f)
+	}
 	out.result(false, f.message)
 	return f.status.exit
 }

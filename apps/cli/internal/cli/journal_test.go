@@ -196,42 +196,31 @@ func TestServeRecoversAJournalOnRescan(t *testing.T) {
 	p := h.serve(t, "--json")
 	inventory := p.next("inventory")
 	equal(t, "label", inventory["machine"].(map[string]any)["label"], "one")
-	p.send(`{"type":"refresh","request_id":"idle"}`)
-	p.next("refresh_complete")
+	p.refreshed("idle")
 
 	// A mutation that stopped after staging: the rescan the refresh asks for resumes it.
 	journal, _ := writeJournal(t, h, "1000-aaaa", "staged", sha(readFile(t, live)), relabel(t, h, "two"))
-	p.send(`{"type":"refresh","request_id":"r1"}`)
+	p.refresh("r1")
 	inventory = p.next("inventory")
 	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
 	equal(t, "label", inventory["machine"].(map[string]any)["label"], "two")
-	e := p.next("refresh_complete")
-	equal(t, "request_id", e["request_id"], "r1")
-	equal(t, "ok", e["ok"], true)
+	p.answered("r1")
 	gone(t, "journal", journal)
 	equal(t, "version", readVersion(t, h), 2)
 
 	// One whose live file was edited meanwhile: no fresh inventory, the last inventory stands.
 	journal, _ = writeJournal(t, h, "2000-bbbb", "staged", sha([]byte("{}\n")), relabel(t, h, "three"))
-	p.send(`{"type":"refresh","request_id":"r2"}`)
-	e = p.next("refresh_complete")
-	equal(t, "request_id", e["request_id"], "r2")
-	equal(t, "ok", e["ok"], false)
-	contains(t, "error", e["error"].(string), journal)
-	if _, ok := e["scan_counter"]; ok {
-		t.Errorf("refresh_complete claims scan_counter %v after a failed scan", e["scan_counter"])
-	}
+	p.refresh("r2")
+	_, rpcError := p.response("r2")
+	equal(t, "error.code", rpcError["code"], float64(-32000))
+	contains(t, "error.message", rpcError["message"].(string), journal)
 	equal(t, "label", readSettingsFile(t, h)["label"], "two")
 
 	// Moving the journal aside resolves it; the inventory is unchanged.
 	if err := os.Rename(journal, journal+".aside"); err != nil {
 		t.Fatal(err)
 	}
-	p.send(`{"type":"refresh","request_id":"r3"}`)
-	e = p.next("refresh_complete")
-	equal(t, "request_id", e["request_id"], "r3")
-	equal(t, "ok", e["ok"], true)
-	equal(t, "scan_counter", e["scan_counter"], float64(2))
+	equal(t, "scan_counter", p.refreshed("r3")["scan_counter"], float64(2))
 	equal(t, "exit", p.close(), 0)
 
 	logs := h.events(p.stderr.String())

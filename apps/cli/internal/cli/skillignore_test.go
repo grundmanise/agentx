@@ -163,11 +163,9 @@ func TestServeKeepsGitsVerdictUntilTheSkillChanges(t *testing.T) {
 	if first == 0 {
 		t.Fatal("the first scan ran no git over the edited skill")
 	}
-	p.send(`{"type":"refresh","request_id":"r1"}`)
-	p.next("refresh_complete")
+	p.refreshed("r1")
 	equal(t, "git runs over the skill after a refresh", overSkills(), first)
 	writeFile(t, filepath.Join(h.library, "pdf", "a.md"), "another edit\n")
-	p.send(`{"type":"refresh","request_id":"r2"}`)
 	p.until("r2")
 	if overSkills() == first {
 		t.Error("an edit after the first verdict ran no git over the skill")

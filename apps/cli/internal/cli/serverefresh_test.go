@@ -263,7 +263,6 @@ func TestServeRefreshSpawnsBoundedGit(t *testing.T) {
 	p := h.serve(t, "--json")
 	p.next("inventory")
 	h.awaitWrite(t, before)
-	p.send(`{"type":"refresh","request_id":"settled"}`)
 	p.until("settled")
 	equal(t, "exit", p.close(), 0)
 	n := len(calls())
@@ -307,7 +306,6 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 			version := mutationVersion(t, h)
 			p := h.serve(t, "--json")
 			p.next("inventory")
-			p.send(`{"type":"refresh","request_id":"settled"}`)
 			p.until("settled")
 			// Serve stops only once the check it started at launch has
 			// ended. That the check fetches and writes once the settings
