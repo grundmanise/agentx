@@ -1,13 +1,15 @@
 // The Adopt skills section of Settings: one button per tool that installed skills agentx can
 // adopt (the adoption preview's candidates), each opening the adopt dialog for that tool's
-// skills. With none to adopt, one muted line says so, and the section stays.
-import { useState } from "react";
+// skills. With none to adopt, one muted line says so, and the section stays. Opening Settings reads
+// the preview again, so a skill another tool installed while the app ran shows up.
+import { useEffect, useState } from "react";
 
 import { Button } from "#/components/ui/button.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { AdoptDialog } from "#/screens/skills/adopt-dialog.tsx";
 import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
 import type { ToolArg } from "#/screens/skills/adopt.ts";
+import { loadAdoption } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
 
 export const AdoptSkillsSection = () => {
@@ -16,6 +18,9 @@ export const AdoptSkillsSection = () => {
   // The tool whose skills the dialog adopts. It stays while the dialog closes.
   const [adopting, setAdopting] = useState<ToolArg>();
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    void loadAdoption();
+  }, []);
   const tools = toolsToAdopt(adoption);
   return (
     <SettingsSection
