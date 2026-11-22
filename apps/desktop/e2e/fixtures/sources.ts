@@ -8,11 +8,11 @@ import type {
   Configuration,
   InstallableSkillEvent,
   LibraryEntry,
+  SearchResult,
   SkillFileEvent,
   SourceEvent,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
-import type { SearchResult } from "#/cli/transport.ts";
 
 import { configuration } from "../harness/cli.ts";
 import type { InlineEvent } from "../harness/cli.ts";

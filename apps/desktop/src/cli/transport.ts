@@ -5,7 +5,7 @@
 // `agentx serve --listen` in a browser (socket-wire.ts). Events are typed by events.gen.ts, which
 // is generated from the CLI of this app's own release, so no schema_version is checked here. An
 // event of a type the app does not know is passed on as it came.
-import type { CliEvent, LogEvent } from "#/cli/events.gen.ts";
+import type { CliEvent, LogEvent, SearchResult } from "#/cli/events.gen.ts";
 import { socketWire } from "#/cli/socket-wire.ts";
 import { tauriWire } from "#/cli/tauri-wire.ts";
 import {
@@ -59,15 +59,6 @@ export interface Resolution {
    * of the serve whose door the path is.
    */
   found: "bundled" | "path" | "serve" | null;
-}
-
-/** A skill a search found in a source. */
-export interface SearchResult {
-  source: string;
-  subpath: string;
-  name: string;
-  description: string;
-  tree: string;
 }
 
 /**

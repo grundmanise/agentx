@@ -7,10 +7,10 @@ import type {
   Configuration,
   InstallableSkillEvent,
   LibraryEntry,
+  SearchResult,
   SourceEvent,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
-import type { SearchResult } from "#/cli/transport.ts";
 import { formatAgo } from "#/lib/dates.ts";
 import { hostAndPath, shortSource } from "#/screens/skills/projection.ts";
 

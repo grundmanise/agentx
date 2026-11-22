@@ -4,11 +4,16 @@
 // results; they reach the store as `refresh_complete` and `search` events of the child
 // (transport.ts), so the store reads every wire alike.
 import { SCHEMA_VERSION } from "#/cli/events.gen.ts";
-import type { CliEvent, LogEvent } from "#/cli/events.gen.ts";
+import type {
+  CliEvent,
+  LogEvent,
+  RefreshMethodResult,
+  RunMethodResult,
+  SearchMethodResult,
+} from "#/cli/events.gen.ts";
 import type {
   RunLine,
   RunResult,
-  SearchResult,
   ServeExit,
   ServeLine,
   ServeRequest,
@@ -77,28 +82,18 @@ const isRpcError = (
   typeof value.code === "number" &&
   typeof value.message === "string";
 
-const isRunAnswer = (
-  value: unknown
-): value is {
-  exit_code: number | null;
-  cancelled: boolean;
-  timed_out: boolean;
-} =>
+const isRunAnswer = (value: unknown): value is RunMethodResult =>
   isObject(value) &&
   (value.exit_code === null || typeof value.exit_code === "number") &&
   typeof value.cancelled === "boolean" &&
   typeof value.timed_out === "boolean";
 
-const isRefreshAnswer = (
-  value: unknown
-): value is { instance_id: string; scan_counter: number } =>
+const isRefreshAnswer = (value: unknown): value is RefreshMethodResult =>
   isObject(value) &&
   typeof value.instance_id === "string" &&
   typeof value.scan_counter === "number";
 
-const isSearchAnswer = (
-  value: unknown
-): value is { instance_id: string; query: string; results: SearchResult[] } =>
+const isSearchAnswer = (value: unknown): value is SearchMethodResult =>
   isObject(value) &&
   typeof value.instance_id === "string" &&
   typeof value.query === "string" &&

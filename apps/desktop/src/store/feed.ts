@@ -7,12 +7,16 @@
 // `update_check` events say when the last update check ended, which the title bar shows. The
 // activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
 // exit of the active child.
-import type { DriftEvent, InventoryEvent, LogEvent } from "#/cli/events.gen.ts";
+import type {
+  DriftEvent,
+  InventoryEvent,
+  LogEvent,
+  SearchResult,
+} from "#/cli/events.gen.ts";
 import { serve } from "#/cli/transport.ts";
 import type {
   RefreshCompleteEvent,
   SearchEvent,
-  SearchResult,
   ServeEvent,
   ServeExit,
   ServeLine,

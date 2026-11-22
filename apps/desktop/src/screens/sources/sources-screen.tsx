@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from "react";
 
 import type {
   LibraryEntry,
+  SearchResult,
   SourceEvent,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
-import type { SearchResult } from "#/cli/transport.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
 import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
