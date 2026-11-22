@@ -2,7 +2,7 @@ import { useRef } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
-import { SortToggle } from "#/components/filter-controls.tsx";
+import { ExpandToggle, SortToggle } from "#/components/filter-controls.tsx";
 import { LIST_GUIDE } from "#/components/list-guide.ts";
 import { ListRow } from "#/components/list-row.tsx";
 import { Pill } from "#/components/pill.tsx";
@@ -126,8 +126,8 @@ const PluginItem = ({
 };
 
 /**
- * The Plugins list column: the title and count, Search, the Filter button with its agents chip and
- * the sort toggle, then the plugins grouped by agent configuration.
+ * The Plugins list column: the title and count, Search, the Filter button with its agents chip,
+ * the expand toggle and the sort toggle, then the plugins grouped by agent configuration.
  */
 export const PluginList = ({
   rows,
@@ -141,6 +141,8 @@ export const PluginList = ({
   onSelect,
   collapsed,
   onToggleGroup,
+  anyOpen,
+  onToggleAll,
 }: {
   /** Every row, before the filters. */
   rows: PluginRow[];
@@ -157,6 +159,10 @@ export const PluginList = ({
   /** The agent configurations whose groups are collapsed. */
   collapsed: ReadonlySet<string>;
   onToggleGroup: (configuration: string) => void;
+  /** Whether any group the filters list is open. */
+  anyOpen: boolean;
+  /** Collapses every group while any is open, else opens every group. */
+  onToggleAll: () => void;
 }) => (
   <section
     aria-label="Plugins list"
@@ -204,6 +210,11 @@ export const PluginList = ({
           />
         )}
         <span className="flex-1" />
+        <ExpandToggle
+          open={anyOpen}
+          disabled={groups.length === 0}
+          onToggle={onToggleAll}
+        />
         <SortToggle
           order={order}
           onToggle={() => {

@@ -286,6 +286,38 @@ test("an agent's group collapses from its header, and opens for a plugin selecte
   ).toHaveAttribute("aria-current", "true");
 });
 
+test("one toggle collapses and expands every agent's group", async ({
+  cli,
+  page,
+}) => {
+  await openPlugins(cli, page, moreInventory);
+  const headers = (expanded: boolean) =>
+    list(page).locator("h2").getByRole("button", { expanded });
+  await expect(headers(true)).toHaveCount(3);
+
+  // While any group is open, the toggle reads Collapse all: it collapses every group to its
+  // header, and the detail pane keeps the open plugin.
+  await page.getByRole("button", { name: "Collapse all" }).click();
+  await expect(headers(false)).toHaveCount(3);
+  await expect(list(page).getByRole("listitem")).toHaveCount(0);
+  await expect(
+    detail(page).getByRole("heading", { level: 1, name: "aaa-off" })
+  ).toBeVisible();
+
+  // With all collapsed it reads Expand all: it opens every group.
+  await page.getByRole("button", { name: "Expand all" }).click();
+  await expect(headers(true)).toHaveCount(3);
+  await expect(list(page).getByRole("listitem")).not.toHaveCount(0);
+
+  // Disabled while the filters list no plugin.
+  await list(page)
+    .getByRole("searchbox", { name: "Filter plugins by name" })
+    .fill("no-such-plugin");
+  await expect(
+    page.getByRole("button", { name: /^(?:Collapse|Expand) all$/u })
+  ).toBeDisabled();
+});
+
 test("a machine with no plugin shows the empty state", async ({
   cli,
   page,

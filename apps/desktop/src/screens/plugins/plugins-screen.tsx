@@ -50,6 +50,13 @@ export const PluginsScreen = () => {
     });
   };
   const groups = groupPlugins(rows, configurations, filters, order);
+  // Collapse all collapses every group the filters list; Expand all opens every group.
+  const anyOpen = groups.some((g) => !collapsed.has(g.configuration.id));
+  const toggleAll = () => {
+    setCollapsed(
+      anyOpen ? new Set(groups.map((g) => g.configuration.id)) : new Set()
+    );
+  };
   const shown = groups.flatMap((g) => g.rows);
   // The plugin opened last while the filters show it, else the first one shown.
   const selected = shown.find((r) => r.key === selectedKey) ?? shown[0];
@@ -72,6 +79,8 @@ export const PluginsScreen = () => {
         }}
         collapsed={collapsed}
         onToggleGroup={toggleGroup}
+        anyOpen={anyOpen}
+        onToggleAll={toggleAll}
       />
       <section
         aria-label="Plugin details"
