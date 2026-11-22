@@ -8,16 +8,16 @@ import { Separator as SeparatorPrimitive } from "radix-ui";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const separatorVariants = cva(
-  "shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
+  "shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:w-px",
   {
     defaultVariants: { tone: "divider" },
     variants: {
       tone: {
-        // `button.split-divider`, between the buttons of a button group.
-        "button-group":
-          "bg-button-split-divider self-stretch data-[orientation=vertical]:h-auto",
+        // Between the buttons of a button group: a 1px gap as tall as the buttons, with no fill, so
+        // the surface behind the group shows through. No height of its own, so the stretch sets it.
+        "button-group": "self-stretch",
         // `shell.divider`, the line between sections.
-        divider: "bg-shell-divider",
+        divider: "bg-shell-divider data-[orientation=vertical]:h-full",
       },
     },
   }
