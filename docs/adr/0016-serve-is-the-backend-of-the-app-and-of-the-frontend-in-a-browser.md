@@ -47,7 +47,7 @@ The WebSocket door takes no environment and no working directory from a request:
 
 Serve does not serve the frontend. In development the frontend's own server does, which is what a change to it is checked on. One command, `pnpm dev:serve` in `apps/desktop`, starts the development server and `agentx serve --listen` with that server's origin, reads the `listening` event, and has the development server hand the address and token to the page, so that opening a browser is all that is left to do.
 
-One serve runs per agentx home, so `agentx serve --listen` exits with code 6 while the desktop app is open. A debug build of the app starts its own serve with `--listen` when asked to, and the browser then shares it.
+One serve runs per agentx home, so `agentx serve --listen` cannot serve while the desktop app is open: it reports that another serve holds the lock and scans nothing. A debug build of the app starts its own serve with `--listen` when asked to, and the browser then shares it.
 
 A door that listens beyond this machine, for a phone, is not part of this decision. It needs pairing, a scope that only reads by default, transport security, a way to serve the frontend, and a layout for a small screen. It also works only while this machine is awake and reachable, so whether it is worth building is weighed against a web app that reads the snapshot on the account remote, and it gets an ADR of its own.
 
