@@ -1,7 +1,6 @@
 // The Skills screen's rows outside the Skills screen: the title bar's sync status and the
 // palette read every skill through the same projection (src/screens/skills/projection.ts), so
 // they count and name skills as the list does.
-import { useMemo } from "react";
 
 import { projectRows } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
@@ -27,8 +26,5 @@ export const useSkillRows = () => {
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
-  return useMemo(
-    () => rowsOf({ adoption, inventory, updates }),
-    [inventory, updates, adoption]
-  );
+  return rowsOf({ adoption, inventory, updates });
 };
