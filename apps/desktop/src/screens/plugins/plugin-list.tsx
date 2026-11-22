@@ -162,7 +162,7 @@ export const PluginList = ({
     aria-label="Plugins list"
     className="w-split-list bg-shell-content-bg border-shell-divider flex flex-none flex-col border-r"
   >
-    <div className="pt-split-header-top pr-split-header-right pl-split-header-left flex items-end gap-3 pb-0">
+    <div className="pt-split-header-top px-split-header flex items-end gap-3 pb-0">
       <div className="flex items-baseline gap-3">
         <h1 className="type-page-title text-text-primary m-0">Plugins</h1>
         <span
@@ -173,7 +173,7 @@ export const PluginList = ({
         </span>
       </div>
     </div>
-    <div className="pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left gap-split-toolbar flex flex-col">
+    <div className="pt-split-toolbar-top px-split-toolbar pb-split-toolbar-bottom gap-split-toolbar flex flex-col">
       <SearchField
         label="Filter plugins by name"
         placeholder="Search"
