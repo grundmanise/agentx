@@ -4,7 +4,7 @@ import type { Page, WebSocketRoute } from "@playwright/test";
 // The transport in a browser: no Tauri runtime, so it talks JSON-RPC to serve's WebSocket door
 // (docs/spec/cli-contract.md, The WebSocket door). This file imports Playwright's own `test`, so no
 // mocked Rust shell is installed; the test stands in for serve with a routed WebSocket, and for
-// `pnpm dev:browser` by answering /agentx-serve.json. The page loads only the harness module that
+// `pnpm dev:real` by answering /agentx-serve.json. The page loads only the harness module that
 // calls the transport and writes what it receives, as in transport.spec.ts.
 
 const DOOR = { token: "t0k/en", url: "ws://127.0.0.1:4999/" };
