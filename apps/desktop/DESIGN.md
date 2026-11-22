@@ -713,6 +713,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `filter-tags.max-height` | 112 | `max-h-filter-tags` | The tags in that panel: three rows and half of a fourth, cut through its names at the panel's bottom edge; they scroll past it |
 | `agent-list.max-height` | 240 | `max-h-agent-list` | The list of agents in an agent list card, running to the card's top and bottom edges; it scrolls past it |
 | `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
+| `key-hint.gap` | 2 | `gap-key-hint` | Between the keys of a combination (`⌘` `K`) |
 | `toast.offset` | 24 | none: `--inset-toast`, passed to Sonner's `offset` in `Toaster` (`src/components/ui/sonner.tsx`) | Below the title bar (`shell.titlebar-height` + `toast.offset` from the top edge) and from the right edge |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
@@ -1206,7 +1207,7 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, one row per file: `file
 
 ### Key hint
 
-A key such as `esc` or `⌘K` (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg`, `type.key-hint` `text.muted`.
+A key or key combination such as `esc` or `⌘K` (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg`, `type.key-hint` `text.muted`. Each key of a combination is its own nested `kbd`, `key-hint.gap` apart, so `⌘K` and `Ctrl K` space their keys the same way. `⌘` is the `3xs` command-key icon (§7), since the mono font lacks the glyph and each system draws its fallback at its own size and height.
 
 ### Inputs
 
@@ -1273,7 +1274,7 @@ Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps and joins. Fil
 
 An icon is a hand-written React component that takes the text colour; an illustration (such as the agentx mark) is an SVG file in `src/assets` shown as `<img>`.
 
-Sizes: `2xs` 12px (in a pill), `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
+Sizes: `3xs` 10px (in a key hint), `2xs` 12px (in a pill), `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
 
 The product mark is `shell.logo-mark` on `shell.logo-bg` with a 1px `shell.logo-ring` ring: 30px with `shell.logo-radius` in the sidebar (the height of the product name and machine label beside it), 40px with `startup.logo-radius` on the startup layer. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 

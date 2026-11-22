@@ -737,6 +737,7 @@
   --max-height-agent-list: 240px;
   --padding-key-hint: 8px;
   --padding-key-hint-y: 3px;
+  --gap-key-hint: 2px;
   --max-width-tooltip-text: 280px;
   --height-stale-bar: 36px;
   --padding-stale-bar: 16px;
