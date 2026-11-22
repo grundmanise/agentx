@@ -600,7 +600,27 @@ test("a serve exit with code 8 after launch brings the checks back", async ({
   expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
 });
 
-test("a one-shot exiting with code 8 brings the checks back", async ({
+test("an account repo error serve reports after launch brings the checks back", async ({
+  cli,
+  page,
+}) => {
+  await page.goto("/");
+  await expect(skills(page)).toBeVisible();
+  await launched(cli);
+
+  cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
+  await cli.serveEmit([
+    {
+      code: "account_repo",
+      message: "the account repo is not a git repository",
+      type: "error",
+    },
+  ]);
+  await expect(title(page)).toHaveText("agentx can't open its account repo");
+  expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
+});
+
+test("a run exiting with code 8 brings the checks back", async ({
   cli,
   page,
 }) => {

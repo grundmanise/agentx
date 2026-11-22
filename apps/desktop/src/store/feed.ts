@@ -295,7 +295,7 @@ const apply = (childId: number, event: ServeEvent) => {
         ? { message: event.message }
         : { hint: event.hint, message: event.message };
     errors.set(childId, problem);
-    set({ serveError: { childId, problem } });
+    set({ serveError: { childId, code: event.code, problem } });
   }
 };
 

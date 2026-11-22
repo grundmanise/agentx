@@ -337,12 +337,17 @@ const accountRepoLost = () => {
   void sequence();
 };
 
-/** Runs the checks again whenever a serve child or a run exits with code 8. */
+/**
+ * Runs the checks again whenever a serve child exits with code 8, reports an `account_repo` error
+ * while it keeps running, or a run exits with code 8.
+ */
 const listen = async () => {
-  useAppStore.subscribe(({ serveEnd }, previous) => {
+  useAppStore.subscribe(({ serveEnd, serveError }, previous) => {
     if (
-      serveEnd !== previous.serveEnd &&
-      serveEnd?.exitCode === EXIT_CODES.account_repo
+      (serveEnd !== previous.serveEnd &&
+        serveEnd?.exitCode === EXIT_CODES.account_repo) ||
+      (serveError !== previous.serveError &&
+        serveError?.code === "account_repo")
     ) {
       accountRepoLost();
     }
