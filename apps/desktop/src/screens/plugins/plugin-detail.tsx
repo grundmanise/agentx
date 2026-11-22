@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -21,7 +21,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "#/components/ui/tabs.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
+import { cn } from "#/lib/utils.ts";
 import { PluginTile } from "#/screens/plugins/plugin-tile.tsx";
 import type { PluginItem, PluginRow } from "#/screens/plugins/projection.ts";
 import { openServer } from "#/screens/servers/open.ts";
@@ -52,8 +58,49 @@ const Agent = ({ configuration }: { configuration: Configuration }) => (
 );
 
 /**
- * A tab's table: a name column and a second one. A skill's or server's name is a link that opens
- * it in Skills or MCP servers; a hook opens nothing.
+ * A name in a tab's table, on at most two lines: a longer one ends in an ellipsis, and pointing at
+ * it shows the whole name in a tooltip, which a name that fits does not get. A skill's or server's name is
+ * a link that opens it; a hook's opens nothing.
+ */
+const ItemName = ({ name, onOpen }: { name: string; onOpen?: () => void }) => {
+  const [open, setOpen] = useState(false);
+  const text = useRef<HTMLSpanElement>(null);
+  const label = (
+    <span
+      ref={text}
+      className={cn(
+        "text-text-primary line-clamp-2 min-w-0 wrap-anywhere",
+        onOpen === undefined ? "type-technical" : "type-row-name"
+      )}
+    >
+      {name}
+    </span>
+  );
+  return (
+    <Tooltip
+      open={open}
+      onOpenChange={(next) => {
+        const el = text.current;
+        setOpen(next && el !== null && el.scrollHeight > el.clientHeight);
+      }}
+    >
+      <TooltipTrigger asChild>
+        {onOpen === undefined ? (
+          label
+        ) : (
+          <Button variant="link" size="inline" onClick={onOpen}>
+            {label}
+          </Button>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>{name}</TooltipContent>
+    </Tooltip>
+  );
+};
+
+/**
+ * A tab's table: a name column `plugin.name-col` wide and a second one that takes the rest. A
+ * skill's or server's name is a link that opens it in Skills or MCP servers; a hook opens nothing.
  */
 const ItemTable = ({
   label,
@@ -66,7 +113,11 @@ const ItemTable = ({
   items: PluginItem[];
   onOpen?: (item: PluginItem) => void;
 }) => (
-  <Table aria-label={label} scroll>
+  <Table aria-label={label} scroll layout="fixed">
+    <colgroup>
+      <col className="w-plugin-name-col" />
+      <col />
+    </colgroup>
     <TableHeader>
       <TableRow tone="header">
         <TableHead sticky>{columns[0]}</TableHead>
@@ -77,26 +128,19 @@ const ItemTable = ({
       {items.map((item) => (
         <TableRow key={item.key}>
           <TableCell scope="row">
-            {onOpen === undefined ? (
-              <span className="type-technical text-text-primary">
-                {item.name}
-              </span>
-            ) : (
-              <Button
-                variant="link"
-                size="inline"
-                onClick={() => {
-                  onOpen(item);
-                }}
-              >
-                <span className="type-row-name text-text-primary">
-                  {item.name}
-                </span>
-              </Button>
-            )}
+            <ItemName
+              name={item.name}
+              onOpen={
+                onOpen === undefined
+                  ? undefined
+                  : () => {
+                      onOpen(item);
+                    }
+              }
+            />
           </TableCell>
           <TableCell>
-            <span className="text-text-muted">{item.meta}</span>
+            <span className="text-text-muted line-clamp-2">{item.meta}</span>
           </TableCell>
         </TableRow>
       ))}
