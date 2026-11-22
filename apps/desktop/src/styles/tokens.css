@@ -709,6 +709,7 @@
   --max-height-dialog: calc(100vh - 64px);
   --gap-popover: 16px;
   --width-popover: 360px;
+  --max-width-popover: 360px;
   --min-width-menu: 240px;
   --padding-menu: 6px;
   --width-sheet: 1120px;
