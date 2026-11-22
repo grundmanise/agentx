@@ -1,5 +1,5 @@
-// adoptArgs, as a table: the `adopt` command line that takes over each unmanaged skill, or none
-// for a skill `adopt` has no way to take.
+// adoptArgs, as a table: the `skill import` command line that takes over each unmanaged skill, or
+// none for a skill `skill import` has no way to take.
 import { expect, test } from "@playwright/test";
 
 import type {
@@ -57,6 +57,8 @@ const inProject = inCursor("project-notes", {
   resolved_path: "/home/me/work/app/.cursor/skills/project-notes",
   scope: "project",
 });
+/** Cursor's own directory whose name reads as a flag. */
+const dashed = inCursor("--all", {});
 
 /** The row `key` names on the fixture machine with `more` skills, by the adoption preview `records`. */
 const rowOf = (
@@ -97,12 +99,12 @@ const table: [string, ReturnType<typeof rowOf>, string[] | undefined][] = [
   [
     "a library skill another tool recorded",
     rowOf("scratch", [record("scratch", "candidate")]),
-    ["adopt", "--skill", "scratch"],
+    ["skill", "import", "scratch"],
   ],
   [
     "a library skill no tool recorded",
     rowOf("scratch", []),
-    ["adopt", "--skill", "scratch"],
+    ["skill", "import", "scratch"],
   ],
   [
     "a library skill whose record the CLI refuses",
@@ -117,12 +119,17 @@ const table: [string, ReturnType<typeof rowOf>, string[] | undefined][] = [
   [
     "a directory in a client's own skills directory",
     rowOf("skill:h-notes", []),
-    ["adopt", "--skill", "notes"],
+    ["skill", "import", "notes"],
   ],
   [
     "a directory whose name is not the skill's frontmatter name",
     rowOf("skill:h-meeting", [], inventory, [meetingNotes]),
-    ["adopt", "--skill", "meeting-notes"],
+    ["skill", "import", "meeting-notes"],
+  ],
+  [
+    "a directory whose name starts with a dash, after --",
+    rowOf("skill:h-own---all", [], inventory, [dashed]),
+    ["skill", "import", "--", "--all"],
   ],
   [
     "a directory under a name the library holds another skill by",

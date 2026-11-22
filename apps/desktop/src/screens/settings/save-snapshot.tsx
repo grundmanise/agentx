@@ -1,7 +1,7 @@
-// The Export settings section of Settings: saves this machine's settings and the list of its
-// skills to `<name>.json` in the library, a snapshot in the CLI's words
-// (docs/help-center/cli/export.mdx). It runs `export <name>`, and `export <name> --force` once the
-// user confirms an overwrite. The app writes no file: the CLI writes the snapshot.
+// The Save snapshot section of Settings: saves this machine's settings and the list of its skills
+// to `<name>.json` in the library, a snapshot (docs/help-center/cli/snapshot.mdx). It runs
+// `snapshot save <name>`, and `snapshot save <name> --force` once the user confirms an overwrite.
+// The app writes no file: the CLI writes the snapshot.
 import { useId, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -9,7 +9,7 @@ import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
-import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
+import { revealInFinder } from "#/lib/reveal.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import {
@@ -19,39 +19,41 @@ import {
 import { agentx, usePending } from "#/store/runner.ts";
 import type { Problem } from "#/store/store.ts";
 
-const EXPORT_LABEL = "export settings";
+const SAVE_LABEL = "save snapshot";
 
-/** The file's name, and Export, which writes `<name>.json` to the library. */
-const ExportForm = () => {
+/** The file's name, and Save, which writes `<name>.json` to the library. */
+const SaveForm = () => {
   const [name, setName] = useState(DEFAULT_SNAPSHOT_NAME);
   const [problem, setProblem] = useState<Problem | undefined>();
   const [overwrite, setOverwrite] = useState(false);
-  const pending = usePending(EXPORT_LABEL);
+  const pending = usePending(SAVE_LABEL);
   const hintId = useId();
   const valid = isSnapshotName(name);
 
-  const exportAs = async (force: boolean) => {
+  const save = async (force: boolean) => {
     setProblem(undefined);
-    const args = force ? ["export", name, "--force"] : ["export", name];
+    const args = force
+      ? ["snapshot", "save", name, "--force"]
+      : ["snapshot", "save", name];
     const outcome = await agentx(args, {
-      // The toast shows where the file went.
+      // The toast shows where the file went, and Show opens it in the file manager.
       action: (events) => {
         const written = events.find((e) => e.type === "export");
         const path = written?.type === "export" ? written.path : undefined;
         return path === undefined
           ? undefined
           : {
-              label: showInLabel(),
+              label: "Show",
               onClick: () => {
                 void revealInFinder(path);
               },
             };
       },
-      label: EXPORT_LABEL,
+      label: SAVE_LABEL,
       ownFailure: true,
       success: (events) => {
         const written = events.find((e) => e.type === "export");
-        return `Exported settings to ${written?.path ?? `${name}.json`}`;
+        return `Saved snapshot to ${written?.path ?? `${name}.json`}`;
       },
     });
     if (outcome.exitCode === EXIT_CODES.ok) {
@@ -68,7 +70,7 @@ const ExportForm = () => {
         ? {
             message:
               outcome.startError ??
-              `agentx export exited with code ${outcome.exitCode ?? "none"}`,
+              `agentx snapshot save exited with code ${outcome.exitCode ?? "none"}`,
           }
         : { hint: error.hint, message: error.message }
     );
@@ -77,11 +79,11 @@ const ExportForm = () => {
   return (
     <form
       className="flex flex-col gap-2"
-      aria-label="Export settings"
+      aria-label="Save snapshot"
       onSubmit={(e) => {
         e.preventDefault();
         if (valid && !pending) {
-          void exportAs(false);
+          void save(false);
         }
       }}
     >
@@ -99,7 +101,7 @@ const ExportForm = () => {
         />
         <Button type="submit" variant="secondary" disabled={!valid || pending}>
           {pending && <Spinner />}
-          Export
+          Save
         </Button>
       </div>
       {!valid && (
@@ -116,18 +118,18 @@ const ExportForm = () => {
         action="Replace"
         onConfirm={() => {
           setOverwrite(false);
-          void exportAs(true);
+          void save(true);
         }}
       />
     </form>
   );
 };
 
-export const ExportSettingsSection = () => (
+export const SaveSnapshotSection = () => (
   <SettingsSection
-    title="Export settings"
-    description="Save your settings and library to back up or import on another device."
+    title="Save snapshot"
+    description="Save your settings and library to back up or move to another device."
   >
-    <ExportForm />
+    <SaveForm />
   </SettingsSection>
 );

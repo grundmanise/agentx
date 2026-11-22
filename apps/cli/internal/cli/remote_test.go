@@ -282,7 +282,7 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	file := a.exportSnapshot("export")
 	fresh := newHarness(t)
 	fresh.setAccount(remote)
-	ev := fresh.one(fresh.mustRun("--json", "import", file, "--yes").stdout, "import_skill")
+	ev := fresh.one(fresh.mustRun("--json", "snapshot", "apply", file, "--yes").stdout, "import_skill")
 	equal(t, "the fresh machine's notes", ev["state"], restorePresent)
 	equal(t, "its kind", ev["kind"], lineage.KindManaged)
 	equal(t, "its source", ev["source"], "file://"+remote)
@@ -294,7 +294,7 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	follows := editedExport(t, a, file, "follows.json", func(doc map[string]any) {
 		delete(doc["skills"].([]any)[0].(map[string]any), "commit")
 	})
-	ev = fresh.one(fresh.mustRun("--json", "import", follows, "--yes").stdout, "import_skill")
+	ev = fresh.one(fresh.mustRun("--json", "snapshot", "apply", follows, "--yes").stdout, "import_skill")
 	equal(t, "the entry that follows", ev["action"], importUpdated)
 	equal(t, "the fresh machine's notes", fresh.ref(lineage.ForkRef("notes")), a.ref(lineage.ForkRef("notes")))
 

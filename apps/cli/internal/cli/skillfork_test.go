@@ -277,7 +277,7 @@ func TestSkillForkOfAFork(t *testing.T) {
 }
 
 // TestSkillForkRefusals refuses, in one home and changing nothing, a skill
-// nothing provides, an unmanaged one, which is sent to agentx adopt, a
+// nothing provides, an unmanaged one, which is sent to agentx skill import, a
 // name another branch holds, a library entry that is a symlink of the
 // user's, a worktree path that is taken, a skill holding a repository git
 // would record as a link, a skill that is itself a repository, which its
@@ -324,7 +324,7 @@ func TestSkillForkRefusals(t *testing.T) {
 		e := h.one(out.stdout, "error")
 		contains(t, strings.Join(tc.args, " ")+": error", e["message"].(string), tc.says)
 		if tc.args[0] == "loose" {
-			equal(t, "an unmanaged skill: hint", e["hint"], "adopt it first with 'agentx adopt --skill loose'")
+			equal(t, "an unmanaged skill: hint", e["hint"], "import it first with 'agentx skill import loose'")
 		}
 	}
 	if err := os.MkdirAll(filepath.Join(h.agentx, "merges", "alpha"), 0o755); err != nil {
@@ -504,7 +504,7 @@ func TestAdoptRecoversWhereItWasKilled(t *testing.T) {
 	for _, client := range []string{".claude", ".snowflake/cortex"} {
 		writeFile(t, mkdirs(t, filepath.Join(h.home, client, "skills", "jot"), "SKILL.md"), skill("jot", "Jot things down"))
 	}
-	out := killedChild(t, h, "TestForkChildProcess", forkChildEnv, "adopt --skill jot", `
+	out := killedChild(t, h, "TestForkChildProcess", forkChildEnv, "skill import jot", `
 case " $* " in
 *" worktree add "*)
 	%GIT% "$@"

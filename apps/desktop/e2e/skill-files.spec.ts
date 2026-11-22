@@ -91,7 +91,7 @@ const openSkills = async (
   machine: typeof inventory = inventory
 ) => {
   cli.onServeStart({ events: [machine] });
-  cli.register(["adopt"], { events: adoption });
+  cli.register(["skill", "import"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });

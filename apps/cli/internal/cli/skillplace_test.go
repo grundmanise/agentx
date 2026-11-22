@@ -156,7 +156,7 @@ func TestSkillAddAdoptsTheLibraryDirectory(t *testing.T) {
 	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
-	contains(t, "the result", out.stdout, "adopted alpha")
+	contains(t, "the result", out.stdout, "imported alpha")
 
 	// A library directory holding something else is a refusal, not an
 	// overwrite: the user's content is never replaced by an install.

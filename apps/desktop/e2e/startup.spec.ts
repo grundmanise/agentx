@@ -26,9 +26,12 @@ const row = (page: Page, label: string) =>
   rows(page).filter({ hasText: label });
 const skills = (page: Page) => page.getByRole("heading", { name: "Skills" });
 
-/** The command lines, but the reads of the skill the Skills screen selects, which e2e/skills.spec.ts covers. */
+/**
+ * The command lines, but the reads of the skill the Skills screen selects, which
+ * e2e/skills.spec.ts covers. `skill import` is the store's adoption preview, a read of the launch.
+ */
 const launchCommands = (cli: MockCli) =>
-  cli.commands.filter((l) => l[0] !== "skill");
+  cli.commands.filter((l) => l[0] !== "skill" || l[1] === "import");
 
 /**
  * Waits for the launch and the store's reads once the checks pass, so that the commands a test

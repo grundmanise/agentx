@@ -100,15 +100,16 @@ export const inventory = {
 } satisfies InlineEvent;
 
 /**
- * What `adopt` would take over: the candidate of the Skills fixture, and one entry it refuses, in
- * the CLI's words. That one names no source: the CLI gives one only where it can install from it.
+ * What `skill import` would take over: the candidate of the Skills fixture, and one entry it
+ * refuses, in the CLI's words. That one names no source: the CLI gives one only where it can
+ * install from it.
  */
 export const adoption: AdoptionEvent[] = [
   ...skillsAdoption,
   {
     file: "/home/me/.agents/.skill-lock.json",
     name: "legacy",
-    reason: `a symlink to /home/me/work/legacy. To adopt it, move that folder to ${LIBRARY}/legacy`,
+    reason: `a symlink to /home/me/work/legacy. To import it, move that folder to ${LIBRARY}/legacy`,
     schema_version: 4,
     state: "refused",
     tool: "vercel",

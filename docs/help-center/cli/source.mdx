@@ -78,7 +78,7 @@ git config --global credential.helper store
 
 ### Write access
 
-agentx checks whether you can push to a source each time it adds one, with `agentx source add`, `agentx skill add` or `agentx adopt`, and each time you run `agentx source fetch`. `agentx source list` shows the answer in its access column:
+agentx checks whether you can push to a source each time it adds one, with `agentx source add`, `agentx skill add` or `agentx skill import`, and each time you run `agentx source fetch`. `agentx source list` shows the answer in its access column:
 
 | Access | Means |
 |---|---|
@@ -254,7 +254,7 @@ Add the source again to fetch it anew and clear the state:
 agentx source add anthropics/skills
 ```
 
-Your skills and their placements stay as they are. You can add the source at any [pin](#pin-a-source). Installing a skill from the source by its URL, or adopting one with [`agentx adopt`](/cli/adopt), also adds the source again.
+Your skills and their placements stay as they are. You can add the source at any [pin](#pin-a-source). Installing a skill from the source by its URL, or importing one with [`agentx skill import`](/cli/skill-import), also adds the source again.
 
 After you remove a source, commands no longer accept its id, because agentx needs the URL to fetch it. While a skill still records the source, the error names the command to run:
 
@@ -273,7 +273,7 @@ Removing your [account remote](#add-your-account-remote) clears it from this mac
 
 ## Add your account remote
 
-The account remote is a Git repository you own. You [publish](/cli/skill#publish-a-skill) your own skills to it: the skills you create with `agentx skill new`, fork with `agentx skill fork` or adopt as they are with `agentx adopt`. Your [other machines install them](/cli/skill#install-your-skills-on-another-machine) from it. For why you need one and what to choose when you create it, see [Account remote](/account-remote).
+The account remote is a Git repository you own. You [publish](/cli/skill#publish-a-skill) your own skills to it: the skills you create with `agentx skill new`, fork with `agentx skill fork` or import as they are with `agentx skill import`. Your [other machines install them](/cli/skill#install-your-skills-on-another-machine) from it. For why you need one and what to choose when you create it, see [Account remote](/account-remote).
 
 Create a repository on your Git host, then add it with `--account`:
 

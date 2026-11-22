@@ -227,8 +227,8 @@ const titleOf = (tools: readonly { name: string }[]) =>
   `Import skills from ${namesOf(tools)}`;
 
 /**
- * The adopt dialog for `tools`, the arguments of `adopt` it covers, in the app's order. Before the
- * run it reads the preview; from Adopt on, the run's own rows.
+ * The adopt dialog for `tools`, the `--from` values of `skill import` it covers, in the app's
+ * order. Before the run it reads the preview; from Adopt on, the run's own rows.
  */
 export const AdoptDialog = ({
   tools: wanted,

@@ -1,0 +1,362 @@
+---
+title: "agentx skill import"
+description: "Import the unmanaged skills on this machine: the ones the Vercel skills CLI or Skillshare installed, and the ones no tool installed."
+---
+
+`agentx skill import` makes agentx manage the skills on this machine that it does not manage yet. How a skill is imported depends on where it came from:
+
+- **A skill another tool installed from a git source.** The Vercel skills CLI and Skillshare both record where each skill they installed came from. agentx installs the skill from that source, the way [`agentx skill add`](/cli/skill#install-a-skill) does. Afterwards agentx knows the source and can update the skill. See [Skills installed from a git source](#skills-installed-from-a-git-source).
+- **Any other skill.** A skill no tool installed, or one another tool installed from a place agentx cannot install from, such as a local folder, is imported with its files as they are. It becomes [one of your own skills](/cli/fork) and gets no updates. See [Skills imported as they are](#skills-imported-as-they-are).
+
+agentx only reads the other tool's files. They stay as they are.
+
+## See what can be imported
+
+```sh
+agentx skill import
+```
+
+```text
+Found 6 unmanaged skills.
+
+Ready to import (4)
+  jot, notes, pdf, scraper
+
+Cannot import (2)
+  cloned    a Git repository of its own. To import it, move /home/me/.agents/skills/cloned/.git out of the folder
+  shortcut  a symlink to /home/me/work/shortcut. To import it, move that folder to /home/me/.agents/skills/shortcut
+
+Already managed by agentx (1)
+  xlsx
+
+To import:
+  agentx skill import --all   all 4 skills
+  agentx skill import <name>  one skill
+```
+
+With no arguments, the command only shows what it found. It writes nothing and makes no network calls.
+
+The preview lists every unmanaged skill on this machine:
+
+- the skills the Vercel skills CLI and Skillshare installed, such as `pdf` from GitHub and `scraper` from a local folder above;
+- the skills in your library, `~/.agents/skills`, that agentx does not manage, such as `notes`;
+- the folders with a `SKILL.md` in a client's own skills folder, such as `jot` in `~/.claude/skills`.
+
+The first line counts the skills in the first two groups:
+
+| Group | What it means |
+|---|---|
+| Ready to import | agentx can import the skill. `agentx skill import --all` imports every skill in this group |
+| Cannot import | agentx cannot import the skill yet. The row says why and what to do. See [Skills agentx cannot import](#skills-agentx-cannot-import) |
+| Already managed by agentx | Another tool installed the skill, and agentx already manages it. There is nothing to do |
+
+When skills of both tools are on this machine, each `Cannot import` row also names the tool that installed the skill, `vercel` or `skillshare`. That column is empty for a skill no tool installed.
+
+When there is nothing to import, the last line says so: `Nothing to import.` when the preview lists skills it cannot import, and otherwise a line such as `Nothing to import: this machine has no unmanaged skill.`
+
+To look at the skills of one tool only, name it with `--from`: `skills-cli` for the Vercel skills CLI, or `skillshare`. The preview then leaves out the skills no tool installed. This works with `--all` and with skill names too:
+
+```sh
+agentx skill import --from skillshare
+agentx skill import --from skillshare --all
+```
+
+## Import skills
+
+Import every skill under `Ready to import`:
+
+```sh
+agentx skill import --all
+```
+
+```text
+✓ imported jot from /home/me/.claude/skills/jot: 1 placement
+  claude-code  symlink  /home/me/.claude/skills/jot -> /home/me/.agents/skills/jot
+  always available to universal clients: codex, cursor, gemini-cli
+✓ imported notes
+✓ imported scraper
+✓ imported pdf from https://github.com/anthropics/skills under skills/pdf: 4 placements
+  claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
+  codex        library  /home/me/.agents/skills/pdf
+  cursor       library  /home/me/.agents/skills/pdf
+  gemini-cli   library  /home/me/.agents/skills/pdf
+  always available to universal clients: codex, cursor, gemini-cli
+Imported skills stay on this machine until you publish them: run 'agentx source add <url> --account', then 'agentx skill publish <name>'.
+
+Could not import (2)
+  cloned    a Git repository of its own. To import it, move /home/me/.agents/skills/cloned/.git out of the folder
+  shortcut  a symlink to /home/me/work/shortcut. To import it, move that folder to /home/me/.agents/skills/shortcut
+
+Imported 4 skills; 2 could not be imported.
+```
+
+- agentx first imports the skills it keeps as they are, in alphabetical order, then installs the others from their sources.
+- `--all` lists the skills it could not import under `Could not import`, with the same reasons as the preview, and exits with code 0. Do what each row says, then run `agentx skill import --all` again.
+- If something else goes wrong, such as a source agentx cannot fetch, agentx still imports the other skills, names the one that failed and exits with a non-zero code. See [When a run stops](#when-a-run-stops).
+- The line about publishing shows while no [account remote](/account-remote) is set. See [Publish an imported skill](#publish-an-imported-skill).
+- With `--from`, `--all` imports the skills that tool installed and nothing else.
+- When every skill is imported already and none is left that agentx cannot import, agentx prints `Already imported.`
+
+Or name the skills:
+
+```sh
+agentx skill import pdf scraper
+```
+
+A skill you name that agentx cannot import stops with exit code 6 and says what to do:
+
+```text
+error: cloned is a Git repository of its own, which agentx cannot import
+hint: move /home/me/.agents/skills/cloned/.git out of the folder, then run 'agentx skill import cloned' again
+```
+
+Afterwards the skills are managed:
+
+```sh
+agentx skill list
+```
+
+```text
+7 skills
+  cloned    unmanaged  -                                (none)                                            2 placements
+  jot       managed    current, missing, not published  account remote not set                            4 placements
+  notes     managed    current, missing, not published  account remote not set                            2 placements
+  pdf       managed    current                          https://github.com/anthropics/skills/skills/pdf   4 placements
+  scraper   managed    current, missing, not published  account remote not set                            2 placements
+  shortcut  unmanaged  -                                (none)                                            2 placements
+  xlsx      managed    current                          https://github.com/anthropics/skills/skills/xlsx  4 placements
+```
+
+`missing` means that some of your clients do not have the skill yet: see [Skills imported as they are](#skills-imported-as-they-are).
+
+## Skills installed from a git source
+
+When another tool's record names a git source, agentx:
+
+1. Adds the source if you do not have it yet, as [`agentx source add`](/cli/source#pin-a-source) does, pinned to the ref the record names. This also brings back a source you removed.
+2. Installs the skill from that source at the version the source holds now, and places it in every enabled client, as `agentx skill add` does.
+
+The installed version replaces what the other tool left in the library: the folder the Vercel skills CLI copied, the symlink Skillshare puts in `~/.agents/skills`, and any edit you made in there.
+
+### Keep an edit
+
+agentx has no flag that keeps an edit. To keep one, copy the skill under a new name before you import it. This works when the library entry is a folder, as the Vercel skills CLI leaves it:
+
+1. Copy the folder: `cp -R ~/.agents/skills/pdf ~/.agents/skills/my-pdf`. The new name must follow the [naming rule](/cli/fork#choose-a-name).
+2. Set `name` in `~/.agents/skills/my-pdf/SKILL.md` to `my-pdf`. agentx imports the copy without this step too, but `agentx scan` then lists both skills as `pdf`.
+3. Import the copy, then the skill:
+
+   ```sh
+   agentx skill import my-pdf
+   agentx skill import pdf
+   ```
+
+`my-pdf` is now one of your own skills and holds your edit. `pdf` holds the version its source holds.
+
+Skillshare keeps its own copy of each skill in its folder, `~/.config/skillshare/skills` by default. agentx never touches that folder, so your edits there stay.
+
+## Skills imported as they are
+
+agentx imports a skill with its files as they are when there is nothing to install it from:
+
+- no tool installed it: you put the folder in your library, or in a client's own skills folder, yourself;
+- another tool installed it from a place agentx cannot install from, such as a local folder, and this machine holds the skill's folder in your library or in a client's own skills folder.
+
+```sh
+agentx skill import notes
+```
+
+```text
+✓ imported notes
+No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish notes' to publish it.
+```
+
+- The skill becomes [one of your own skills](/cli/fork), with its files as they are, your edits included. agentx records them as the first commit of the skill's history.
+- agentx installs and fetches nothing. The skill gets no updates from anywhere else: `agentx skill update` only takes what your other machines published.
+- [Files that stay local](/cli/fork#files-that-stay-local), such as a `.DS_Store`, move with the skill and are never published.
+- When another tool installed the skill, its record stays, since agentx never changes that tool's files. The preview then lists the skill under `Already managed by agentx`.
+
+`agentx skill import <name>` looks for the name in this order:
+
+1. The skills the other tools installed.
+2. Your library.
+3. Each client's own skills folder.
+
+If you name a tool, such as `agentx skill import notes --from skillshare`, agentx looks at the skills that tool installed and nowhere else.
+
+### From your library
+
+agentx imports a skill in your library in its place:
+
+- The folder moves to `~/.agentx/worktrees/<name>`, and your library holds a symlink to it. See [Where your skills live](/cli/fork#where-your-skills-live).
+- Every client that saw the skill still sees it.
+- A client's own skills folder that holds a copy of the skill, such as `~/.claude/skills/<name>`, follows the imported skill. For a client that gets symlinks, a symlink to your library takes the copy's place. For a client that gets copies (see [`agentx config placement`](/cli/config)), the copy stays and becomes agentx's copy, which updates refresh. A copy counts when it holds the same files, a system file such as `.DS_Store` aside. A folder that agentx cannot replace stops the import, and nothing changes. Fix it, then import again:
+  - it contains files that differ from the skill: remove or rename it, or run `agentx skill import <name> --force` to replace it with the imported skill. The folder's own files are lost;
+  - clients that get copies and clients that get symlinks share it: give them the same placement with [`agentx config placement`](/cli/config);
+  - agentx cannot write to the folder it is in: let agentx write there;
+  - agentx cannot read it: make it readable, or remove it.
+- To place the skill in your other clients, run [`agentx skill place <name>`](/cli/skill#place-a-skill-you-already-have).
+
+### From a client's folder
+
+When your library has no skill of that name, agentx imports the folder of that name in a client's own skills folder:
+
+```sh
+agentx skill import jot
+```
+
+```text
+✓ imported jot from /home/me/.claude/skills/jot: 1 placement
+  claude-code  symlink  /home/me/.claude/skills/jot -> /home/me/.agents/skills/jot
+  always available to universal clients: codex, cursor, gemini-cli
+No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish jot' to publish it.
+```
+
+- The folder moves into your library, and a symlink to the library takes its place. The client sees the skill as before.
+- Clients that read the library directly, such as Codex, Cursor and Gemini CLI, now see the skill too. See [Clients that see every skill](/cli/skill#clients-that-see-every-skill).
+- If several clients hold a folder of that name with the same files, agentx moves the first one and replaces each of the others with a symlink. A client that reads the library directly gets no symlink: it sees the skill in the library.
+- A client that held no folder of that name gets no placement. Run [`agentx skill place <name>`](/cli/skill#place-a-skill-you-already-have) to place the skill there.
+- agentx reads each client's own skills folder for your user, enabled or not. The folder must hold a `SKILL.md`. A skill inside a project is left alone, and so is a plugin's skill: [fork a plugin's skill](/cli/fork#fork-a-plugins-skill) instead.
+
+### Publish an imported skill
+
+A skill you import as it is stays on this machine until you publish it. [Publish it](/cli/fork#create-a-skill) as you publish a skill you create. While no account remote is set, agentx says so after each skill you name, and once after `--all`:
+
+```text
+Imported skills stay on this machine until you publish them: run 'agentx source add <url> --account', then 'agentx skill publish <name>'.
+```
+
+## Skills agentx cannot import
+
+The preview lists a skill under `Cannot import` with the reason and what to do. `agentx skill import --all` lists it under `Could not import` in the same words. Do what the row says, then run `agentx skill import` again.
+
+| The row says | What it means |
+|---|---|
+| `a symlink to <folder>. To import it, move that folder to <path>` | Your library, or a client's skills folder, holds a link to the skill. agentx imports folders only. Move the folder the link points to into its place |
+| `a Git repository of its own. To import it, move <path>/.git out of the folder` | The skill's folder holds its own `.git`. Move the `.git` somewhere else |
+| `not a valid skill name. To import it, rename <folder>` | The name breaks the [naming rule](/cli/fork#choose-a-name), such as `My_Skill`. Rename the folder |
+| `<folder> has the name of a skill agentx already manages. To import it, rename that folder` | A client's skills folder holds a skill with the name of a skill agentx manages. A name that differs only by capital letters counts as the same |
+| `<path> is in the way and is not a skill. To import it, move <path> somewhere else` | The skill is in a client's skills folder, and your library holds something else under its name |
+| `only in <folder>, where no agent looks for skills. To import it, move that folder to <path>` | Another tool installed the skill from a place agentx cannot install from, and keeps it in a folder of its own. Move it into your library |
+| `a whole repository that Skillshare tracks. Add it with 'agentx source add <url>', then install its skills` | Skillshare tracks the whole repository, as a `_name` folder with skills inside. Add the repository with `agentx source add` and install its skills with `agentx skill add` |
+| `a file, and a skill is a folder. To import it, put the skill's folder at <path>` | Your library holds a file under the skill's name |
+| `a folder with no SKILL.md file. To import it, add a SKILL.md to <path>` | The folder is not a skill yet |
+| `agentx already manages a skill of this name, whose folder <path> is missing. To import this one, first run 'agentx skill remove <name>'` | agentx manages a skill of this name that is gone from your library |
+
+The last five reasons apply to skills another tool installed from a place agentx cannot install from.
+
+`agentx skill import <name>` on such a skill stops with exit code 6 and gives the same advice:
+
+```text
+error: shortcut is a symlink to /home/me/work/shortcut, and agentx imports folders only
+hint: move /home/me/work/shortcut to /home/me/.agents/skills/shortcut, then run 'agentx skill import shortcut' again
+```
+
+A skill under `Cannot import` stays where it is and keeps working in every client that sees it.
+
+### When a run stops
+
+Some causes show only when agentx imports the skill. For one of these, `agentx skill import <name>` stops with exit code 6, and `agentx skill import --all` lists the skill under `Could not import` and still exits with code 0. A skill no tool installed that you name is checked first: if agentx cannot import it, the run stops and changes nothing.
+
+| Cause | What to do |
+|---|---|
+| Several clients hold a folder of that name with different files | Keep one, remove or rename the others. |
+| The folder holds another Git repository inside it | Add that folder to the skill's `.gitignore` to keep it on this machine only, or remove it. |
+| A client's skills folder holds a link, and no folder, under that name | Replace the link with the folder it points to. |
+| Something is in the way at `~/.agentx/worktrees/<name>`, where agentx keeps the skill | Move it somewhere else. |
+| The folder and `~/.agentx` are on different disks | Keep your library and `~/.agentx` on one disk. For a client's folder, move the folder into your library yourself, then import it. |
+| agentx cannot write to the client's skills folder | Make the folder writable. |
+| A plugin provides the skill | [Fork the plugin's skill](/cli/fork#fork-a-plugins-skill). |
+| The skill changed while the command ran | Run the command again. |
+
+These causes stop a run that names the skill, and `--all` too. agentx still imports the other skills, names the one that failed and exits with the code below:
+
+| Cause | Exit code | What to do |
+|---|---|---|
+| agentx cannot fetch the source | 3 | Check the URL and your credentials, then run the command again. |
+| The source no longer holds the skill at the path the record names | 5 | Leave the skill unmanaged, or install another skill with `agentx skill add`. |
+
+A name agentx cannot find stops with exit code 5:
+
+| Cause | What to do |
+|---|---|
+| No skill of that name is on this machine | Check the name with `agentx skill import`. |
+| You named a tool, and that tool did not install the skill | Drop `--from`, or check the name with `agentx skill import`. |
+
+### When the name is taken
+
+If another skill already has the name, agentx cannot import the skill. A run that names the skill stops with exit code 6, and the message says which skill holds the name. `--all` lists the skill under `Could not import`:
+
+| What holds the name | What to do |
+|---|---|
+| A managed skill in your library, with nothing else of that name in a client's folder | Nothing: agentx already manages the skill. |
+| A managed skill in your library, while a client's folder holds another folder of that name | Rename the folder and import it under the new name. Or follow the hint to put the library's skill in its place, which discards what the folder holds. |
+| A skill agentx manages whose library folder is gone | Rename the folder and import it under the new name. Or follow the hint: put your own skill back with `agentx skill place <name>`, or stop managing the other skill with `agentx skill remove <name>`. |
+| A skill you already published, when you import from a client's folder | Move the folder aside and install the published skill with `agentx skill add --name <name>`. Or rename the folder and import it under the new name. |
+
+## After importing from the Vercel skills CLI
+
+The Vercel skills CLI installs into `~/.agents/skills`, the library itself, and links your clients' folders to it, so after importing nothing else moves: the library directory is agentx's, and the links are the placements. Stop using that CLI for the imported skills. Good to know: `skills update` rewrites the library directory with the newest upstream version, which agentx then shows as `modified` against the version it installed; `skills remove` deletes the directory and its lock entry, and `agentx skill list` then names the `agentx skill add` command that installs the skill again.
+
+## After importing from Skillshare
+
+Importing moves a skill to agentx completely: the library gets a real directory, and Skillshare's links in your clients' folders, such as `~/.claude/skills/pdf`, become links to the library. You are done with Skillshare for that skill. Uninstall Skillshare, or stop running it, and leave its folder as it is or delete it.
+
+Good to know: Skillshare does not know about the import. If you run `skillshare sync` afterwards, it puts its own links back, or removes the imported directory once you uninstalled the skill there, and your clients read Skillshare's copy again. Running `agentx skill import --all` again repairs that: agentx installs each such skill again and the import is whole. A skill you also uninstalled from Skillshare is no longer in its records, so `agentx skill import` cannot see it; `agentx skill list` then names the `agentx skill add` command that installs it again.
+
+### Skills from one source at different refs
+
+agentx keeps one ref for each source, its pin. The records name a ref for each skill, so skills from the same source can have different refs. When a run adds a source, agentx pins it to the ref of the first skill the run imports from it, in alphabetical order. If those skills have different refs, agentx warns you:
+
+```text
+warning: https://github.com/anthropics/skills was installed at more than one ref (v1.2.0, main); it is added pinned to v1.2.0. To change the pin, run 'agentx source add https://github.com/anthropics/skills#<ref>' and import again
+```
+
+A source you already have keeps its pin. To choose the pin yourself, add the source at that ref before you import. If you already have the source, this changes its pin:
+
+```sh
+agentx source add https://github.com/anthropics/skills#main
+agentx skill import --all
+```
+
+## Grouped Skillshare skills
+
+Skillshare can install a skill into a group, such as `frontend/ui`. In every tool's skills folder it names that skill `frontend__ui`, with two underscores. agentx imports it under that name. To shorten it, rename the skill afterwards:
+
+```sh
+agentx skill rename frontend__ui ui
+```
+
+## Exit codes
+
+For what each code means, see [Exit codes](/cli/output#exit-codes). These causes are special to `agentx skill import`:
+
+| Code | Cause | What to do |
+|---|---|---|
+| 0 | The preview ran; every skill you named was imported; `--all` imported every skill it could and listed the others; or there was nothing left to import. | Nothing, or do what each `Could not import` row says. |
+| 1 | `--all` is given with a skill name, or `--from` is not `skills-cli` or `skillshare`. | Fix the command line. |
+| 3 | agentx cannot fetch a skill's source. | Check the URL and your credentials, then run the command again. |
+| 5 | A skill you named is not on this machine, or its source no longer holds it. | See [When a run stops](#when-a-run-stops). |
+| 6 | A skill you named cannot be imported. With several skills, the others are imported, and the code is 6 when the failures differ. If a skill you named that no tool installed is refused, the run stops and imports none. | Read the message, then see [Skills agentx cannot import](#skills-agentx-cannot-import). |
+| 7 | Another agentx command is running. | Retry when it finishes. |
+| 10 | agentx cannot read a file the other tool keeps its records in. | Fix the file or move it aside. See [Where agentx reads the records](#where-agentx-reads-the-records). |
+
+## Where agentx reads the records
+
+For the Vercel skills CLI, agentx reads both lock files:
+
+- `$XDG_STATE_HOME/skills/.skill-lock.json`, or `~/.local/state/skills/.skill-lock.json` when that variable is unset
+- `~/.agents/.skill-lock.json`
+
+If both files list a skill differently, agentx warns you and uses the file the Vercel skills CLI writes to now: the `$XDG_STATE_HOME` one when that variable is set, and `~/.agents/.skill-lock.json` otherwise.
+
+For Skillshare, agentx reads `.metadata.json` in the folder Skillshare installs into:
+
+- `~/.config/skillshare/skills` by default, or under `$XDG_CONFIG_HOME` when that variable is set
+- the folder `sources.skills` names in `~/.config/skillshare/config.yaml`, or the older `source` key, when either is set
+
+Skillshare migrates its older `registry.yaml` and the `.skillshare-meta.json` files beside each skill into `.metadata.json` the next time it runs. If agentx finds nothing to import, run a Skillshare command such as `skillshare list` first.
+
+If a record file is unreadable JSON, or a configuration file is unreadable YAML, agentx stops. Fix the file or move it aside.
+
+agentx skips an entry that is not an object or names no source. If one field has the wrong type of value, agentx warns you, drops that field and reads the rest of the entry. A skill both tools recorded is imported from the Vercel skills CLI's record, with a warning.

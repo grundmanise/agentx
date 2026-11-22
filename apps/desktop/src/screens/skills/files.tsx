@@ -1,4 +1,3 @@
-import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -22,6 +21,7 @@ import {
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
+import { cn } from "#/lib/utils.ts";
 import { useKeptRead } from "#/screens/skills/kept-read.ts";
 import {
   filesRequestOf,
@@ -107,14 +107,11 @@ const rowsOf = (read: FilesRead & { failed?: undefined }): FileRow[] => {
   return rows;
 };
 
-const pathVariants = cva("type-technical min-w-0 truncate", {
-  variants: {
-    open: {
-      false: "text-file-row-path",
-      true: "text-file-row-path-open",
-    },
-  },
-});
+const pathClass = (open: boolean) =>
+  cn(
+    "type-technical min-w-0 truncate",
+    open ? "text-file-row-path-open" : "text-file-row-path"
+  );
 
 /** The pane of one row: the file, with its edits tinted, or the placeholder for what is not shown. */
 const Pane = ({ row }: { row: FileRow }) => {
@@ -340,38 +337,6 @@ A short paragraph that says what this skill is for and when to reach for it.
 Anything else the agent should keep in mind while it works.
 `;
 
-const loadingVariants = cva("bg-code-bg overflow-hidden", {
-  compoundVariants: [
-    { className: "h-code", height: "capped", leaving: false },
-    {
-      className: "flex min-h-0 flex-col",
-      height: "fill",
-      leaving: false,
-    },
-  ],
-  defaultVariants: { height: "capped" },
-  variants: {
-    height: {
-      capped: "",
-      fill: "",
-    },
-    leaving: {
-      false: "relative",
-      true: "animate-code-loading-out pointer-events-none absolute inset-0 flex flex-col",
-    },
-  },
-});
-
-/** The pane of a row, faded in while the loading pane over it fades out. */
-const revealVariants = cva("", {
-  variants: {
-    revealing: {
-      false: "",
-      true: "animate-code-reveal",
-    },
-  },
-});
-
 /**
  * The SKILL.md pane while the files are read: a stand-in file blurred like frosted glass with a
  * spinner on top, at the Code pane's full height. `leaving`, it lies over the real SKILL.md as
@@ -397,7 +362,13 @@ export const LoadingPane = ({
     aria-busy={leaving ? undefined : true}
     aria-hidden={leaving ? true : undefined}
     inert={leaving}
-    className={loadingVariants({ height, leaving })}
+    className={cn(
+      "bg-code-bg overflow-hidden",
+      leaving &&
+        "animate-code-loading-out pointer-events-none absolute inset-0 flex flex-col",
+      !leaving && height === "capped" && "h-code relative",
+      !leaving && height === "fill" && "relative flex min-h-0 flex-col"
+    )}
     onAnimationEnd={(event) => {
       // The spinner turns inside; only the pane's own fade ends it.
       if (event.target === event.currentTarget) {
@@ -441,9 +412,7 @@ const Reading = ({
   <Accordion label="Files" value={open} onValueChange={onOpenChange}>
     <AccordionItem value={SKILL_MD}>
       <AccordionTrigger label={SKILL_MD} open={open.includes(SKILL_MD)}>
-        <span className={pathVariants({ open: open.includes(SKILL_MD) })}>
-          {SKILL_MD}
-        </span>
+        <span className={pathClass(open.includes(SKILL_MD))}>{SKILL_MD}</span>
       </AccordionTrigger>
       <AccordionContent>
         <LoadingPane />
@@ -534,9 +503,7 @@ export const FilesSection = ({
                     ) : undefined
                   }
                 >
-                  <span className={pathVariants({ open: isOpen })}>
-                    {file.path}
-                  </span>
+                  <span className={pathClass(isOpen)}>{file.path}</span>
                   {file.diff !== undefined && (
                     <span className="type-technical-sm text-file-row-edited-label flex-none">
                       {fileStatusLabels[file.diff.status]}
@@ -548,9 +515,11 @@ export const FilesSection = ({
                       fade ends and a selection made during it stays. */}
                   <div className="relative">
                     <div
-                      className={revealVariants({
-                        revealing: revealing && file.path === SKILL_MD,
-                      })}
+                      className={cn(
+                        revealing &&
+                          file.path === SKILL_MD &&
+                          "animate-code-reveal"
+                      )}
                     >
                       <Pane row={file} />
                     </div>

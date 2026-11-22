@@ -80,7 +80,7 @@ const openSkills = async (
   machine: InlineEvent = inventory
 ) => {
   cli.onServeStart({ events: [machine] });
-  cli.register(["adopt"], { events: adoption });
+  cli.register(["skill", "import"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });
@@ -938,7 +938,7 @@ test.describe("the detail pane", () => {
     page,
   }) => {
     cli.onServeStart({ events: [inventory] });
-    cli.register(["adopt"], { events: adoption });
+    cli.register(["skill", "import"], { events: adoption });
     cli.register(["skill", "history", "draft"], { events: [] });
     for (const name of ["gone", "draft", "scratch"]) {
       cli.register(["skill", "files", name], { events: filesOf(name) });
@@ -1012,7 +1012,7 @@ const ran = (cli: MockCli) =>
 /** Opens the Skills screen with `key` selected, on the machine with a skill to adopt, one whose source was removed and one the CLI refuses to adopt. */
 const openStates = async (cli: MockCli, page: Page, key: string) => {
   cli.onServeStart({ events: [statesInventory] });
-  cli.register(["adopt"], { events: statesAdoption });
+  cli.register(["skill", "import"], { events: statesAdoption });
   for (const name of ["scratch", "lint", "gone"]) {
     cli.register(["skill", "files", name], { events: filesOf(name) });
   }
@@ -1035,7 +1035,7 @@ test.describe("settling a skill", () => {
       "title",
       "old/skills was removed"
     );
-    cli.register(["adopt", "--skill", "scratch"]);
+    cli.register(["skill", "import", "scratch"]);
     const adoptBanner = pane(page, "scratch").getByRole("note", {
       name: "Added by Skills CLI",
     });
@@ -1047,7 +1047,7 @@ test.describe("settling a skill", () => {
 
     // A skill no tool recorded, here one Cursor holds in its own folder.
     await row(page, "notes").click();
-    cli.register(["adopt", "--skill", "notes"]);
+    cli.register(["skill", "import", "notes"]);
     const unmanagedBanner = pane(page, "notes").getByRole("note", {
       name: "Not managed by agentx",
     });
@@ -1071,8 +1071,8 @@ test.describe("settling a skill", () => {
     ).toBeVisible();
 
     expect(ran(cli)).toEqual([
-      ["adopt", "--skill", "scratch", "--json"],
-      ["adopt", "--skill", "notes", "--json"],
+      ["skill", "import", "scratch", "--json"],
+      ["skill", "import", "notes", "--json"],
       ["source", "add", OLD, "--json"],
     ]);
   });

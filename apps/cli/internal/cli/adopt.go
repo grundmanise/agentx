@@ -20,7 +20,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/vercel"
 )
 
-// The tools whose install records agentx adopt reads.
+// The tools whose install records agentx skill import reads.
 const (
 	toolVercel     = "vercel"     // the Vercel skills CLI, which installs into the library and keeps a lock file
 	toolSkillshare = "skillshare" // Skillshare, which installs into a folder of its own and keeps a metadata store
@@ -51,11 +51,11 @@ type adoptionEvent struct {
 }
 
 // phaseFetch is the step a run reports for one source it fetches: the one
-// agentx adopt adds, and the ones source fetch, check-updates, publish and
+// agentx skill import adds, and the ones source fetch, check-updates, publish and
 // the account commands fetch.
 const phaseFetch = "fetch"
 
-// adoptSelection is what one run of agentx adopt was asked to do: nothing
+// adoptSelection is what one run of agentx skill import was asked to do: nothing
 // but look, adopt the skills named, or adopt every one recorded, of one tool
 // or of both.
 type adoptSelection struct {
@@ -65,21 +65,22 @@ type adoptSelection struct {
 	force bool // replace a client's folder of a named skill that holds other files
 }
 
-// adoptTools maps the argument that names a tool to that tool.
+// adoptTools maps the value of --from that names a tool to that tool.
 var adoptTools = map[string]string{"skills-cli": toolVercel, "skillshare": toolSkillshare}
 
-// adoptTool is the tool the argument names. Anything else is a usage
-// error, and one that looks like a skill name is pointed at --skill.
+// adoptTool is the tool the value of --from names. Anything else is a
+// usage error, and one that looks like a skill name is pointed at the
+// argument that names a skill.
 func adoptTool(arg string) (string, error) {
 	if tool, ok := adoptTools[arg]; ok {
 		return tool, nil
 	}
-	return "", fail(exitUsage, fmt.Sprintf("%q is not a tool agentx adopts from", sanitised(arg)),
-		"name skills-cli or skillshare; to adopt a skill by name, run 'agentx adopt --skill "+shellWord(sanitised(arg))+"'")
+	return "", fail(exitUsage, fmt.Sprintf("%q is not a tool agentx imports from", sanitised(arg)),
+		"name skills-cli or skillshare; to import a skill by name, run 'agentx skill import "+shellWord(sanitised(arg))+"'")
 }
 
-// toolArg is the argument that names tool, for the commands a preview
-// suggests.
+// toolArg is the value of --from that names tool, for the commands a
+// preview suggests.
 func toolArg(tool string) string {
 	for arg, t := range adoptTools {
 		if t == tool {
@@ -89,70 +90,74 @@ func toolArg(tool string) string {
 	return ""
 }
 
-func newAdoptCommand(inv *invocation) *cobra.Command {
+func newSkillImportCommand(inv *invocation) *cobra.Command {
 	var sel adoptSelection
+	var from string
 	cmd := &cobra.Command{
-		Use:         "adopt [skills-cli|skillshare]",
-		Short:       "Adopt skills another tool installed, and unmanaged skills",
-		Annotations: map[string]string{annotationSection: "diagnostics"},
+		Use:         "import [<name>...] [--from skills-cli|skillshare]",
+		Short:       "Import skills another tool installed, and unmanaged skills",
+		Annotations: map[string]string{annotationSection: "skills", annotationSynopsis: "[<name>...]"},
 		Example: examples(
-			"agentx adopt", "preview what would be adopted; nothing is written",
-			"agentx adopt --all", "adopt every unmanaged skill",
-			"agentx adopt skillshare --all", "adopt every skill Skillshare installed",
-			"agentx adopt --skill pdf --skill xlsx", "adopt two skills by name",
-			"agentx adopt --skill notes", "adopt an unmanaged skill no tool installed",
+			"agentx skill import", "preview what would be imported; nothing is written",
+			"agentx skill import --all", "import every unmanaged skill",
+			"agentx skill import --from skillshare --all", "import every skill Skillshare installed",
+			"agentx skill import pdf xlsx", "import two skills by name",
+			"agentx skill import notes", "import an unmanaged skill no tool installed",
 		),
-		Long: "Adopt the unmanaged skills on this machine, so that agentx manages them: the\n" +
+		Long: "Import the unmanaged skills on this machine, so that agentx manages them: the\n" +
 			"skills the Vercel skills CLI or Skillshare installed, and those no tool installed.\n" +
-			"Run it with no flags to see what it would adopt; nothing is written and the other\n" +
-			"tool's files are never touched. Name skills-cli or skillshare to look at the\n" +
-			"skills of that tool alone.\n\n" +
-			"Adopting a skill installs it from its source, as 'agentx skill add' does, at the\n" +
-			"version the source holds now, and places it in every enabled configuration.\n" +
+			"Run it with no arguments to see what it would import; nothing is written and the\n" +
+			"other tool's files are never touched. With --from skills-cli or --from\n" +
+			"skillshare, look at the skills of that tool alone.\n\n" +
+			"Importing a skill installs it from its source, as 'agentx skill add' does, at\n" +
+			"the version the source holds now, and places it in every enabled configuration.\n" +
 			"Whatever the library holds under the skill's name gives way to that version, so\n" +
 			"an edit made to the other tool's copy is gone. A skill installed from a place\n" +
-			"agentx cannot install from, such as a local folder, is adopted with its files\n" +
+			"agentx cannot install from, such as a local folder, is imported with its files\n" +
 			"as they are: it becomes one of your own skills and gets no updates.\n\n" +
-			"An unmanaged skill no tool installed is adopted too, unless a tool is named:\n" +
+			"An unmanaged skill no tool installed is imported too, unless --from is given:\n" +
 			"one the library holds, or a folder in an agent client's own skills directory.\n" +
-			"It is adopted with its files as they are and becomes one of your own skills: a\n" +
+			"It is imported with its files as they are and becomes one of your own skills: a\n" +
 			"branch of its own, skills/<name>, in the account repo, checked out as a\n" +
 			"worktree in agentx home, and a symlink to it in the library. A folder in a\n" +
 			"client's skills directory moves there and a symlink to the library takes its\n" +
 			"place, so every client that reads the library sees the skill too.\n\n" +
 			"A skill in the library whose folder in an agent client's skills directory holds\n" +
-			"other files is not adopted; --force replaces that folder with the adopted skill.\n\n" +
-			"--all adopts every skill that can be adopted, and lists the ones that cannot,\n" +
+			"other files is not imported; --force replaces that folder with the imported\n" +
+			"skill.\n\n" +
+			"--all imports every skill that can be imported, and lists the ones that cannot,\n" +
 			"each with what to do about it.",
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 1 {
-				tool, err := adoptTool(args[0])
+			if cmd.Flags().Changed("from") {
+				tool, err := adoptTool(from)
 				if err != nil {
 					return err
 				}
 				sel.tool = tool
 			}
+			sel.names = args
 			return inv.adopt(cmd.Context(), sel)
 		},
 	}
-	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to adopt, by its name in the library or in an agent client's skills directory; give it again for each")
-	cmd.Flags().BoolVar(&sel.all, "all", false, "adopt every unmanaged skill that can be adopted; with a tool named, every skill that tool installed")
-	cmd.Flags().BoolVar(&sel.force, "force", false, "with --skill, replace an agent's folder of the skill that holds other files with the adopted skill; its files are lost")
+	cmd.Flags().StringVar(&from, "from", "", "read the install records of this tool alone: skills-cli or skillshare")
+	cmd.Flags().BoolVar(&sel.all, "all", false, "import every unmanaged skill that can be imported; with --from, every skill that tool installed")
+	cmd.Flags().BoolVar(&sel.force, "force", false, "with a skill named, replace an agent's folder of the skill that holds other files with the imported skill; its files are lost")
 	return cmd
 }
 
 // adopting reports whether the run was asked to change anything.
 func (s adoptSelection) adopting() bool { return s.all || len(s.names) > 0 }
 
-// check refuses a combination of flags that asks for two things at once.
+// check refuses a combination of flags and arguments that asks for two
+// things at once.
 func (s adoptSelection) check() error {
 	if s.all && len(s.names) > 0 {
-		return fail(exitUsage, "--all and --skill cannot both be given",
-			"--all adopts every skill that can be adopted; drop it to adopt the ones you name")
+		return fail(exitUsage, "--all and a skill name cannot both be given",
+			"--all imports every skill that can be imported; drop it to import the ones you name")
 	}
 	if s.force && len(s.names) == 0 {
-		return fail(exitUsage, "--force needs --skill",
+		return fail(exitUsage, "--force needs a skill name",
 			"name the skills whose agents' folders --force may replace")
 	}
 	return nil
@@ -163,8 +168,8 @@ func (s adoptSelection) check() error {
 // covers the unmanaged skills no tool recorded, see looseSkills: the
 // preview lists them and --all adopts them with the recorded ones. With
 // --all, a skill that cannot be adopted is listed and fails nothing, see
-// adoptChosen; one named with --skill is the run's to answer for. A skill
-// named with --skill that no record covers is one of those, adopted as one
+// adoptChosen; one named as an argument is the run's to answer for. A skill
+// named as an argument that no record covers is one of those, adopted as one
 // of the user's own with its files as they are, see planAdoption; every
 // one named is planned before anything changes and made first, so that
 // the answer of the batch, which may adopt some and refuse others, is the
@@ -469,7 +474,7 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 		// Managed, but the library no longer holds it as a directory: the
 		// other tool took it back, or the user removed it. Adopting again
 		// installs it again, and moves the branch when the source moved on.
-		c.reason = "agentx manages it but the library no longer holds it; adopting installs it again"
+		c.reason = "agentx manages it but the library no longer holds it; importing installs it again"
 	}
 }
 
@@ -490,7 +495,7 @@ func (inv *invocation) judgeAsItIs(c *candidate, managed bool) {
 // reasonNotAdded is the reason of a candidate whose source the settings do
 // not hold. The adoption event carries it; the preview leaves it out, since
 // adding the source is part of every adoption.
-const reasonNotAdded = "its source is not added yet; adopting adds and fetches it"
+const reasonNotAdded = "its source is not added yet; importing adds and fetches it"
 
 // isRealDirectory reports whether path is a real directory: what the library
 // holds for a managed skill, as against nothing or another tool's link.
@@ -537,7 +542,7 @@ func adoptSource(r record) (source.Source, *failure) {
 }
 
 // chooseAdoptions picks what a run covers: every candidate with --all, or
-// exactly those --skill names. A name a candidate holds is chosen. Any
+// exactly the names given as arguments. A name a candidate holds is chosen. Any
 // other name is own: an unmanaged skill no record names, looked for once
 // every name is sorted. With a tool named, only that tool's records are
 // read, and a name none of them holds fails the run before anything is
@@ -572,30 +577,30 @@ func (inv *invocation) chooseAdoptions(cands []*candidate, records []record, sel
 	return chosen, own, nil
 }
 
-// goneRecord answers a --skill a record names for a directory that is
+// goneRecord answers a name a record names for a directory that is
 // gone, nil when no record names it.
 func goneRecord(name string, records []record) error {
 	for _, r := range records {
 		if r.name == name {
 			return fail(exitNotFound, fmt.Sprintf("%s says %q was installed, and this machine no longer holds it", r.file, name),
-				"run 'agentx adopt' to see what can be adopted")
+				"run 'agentx skill import' to see what can be imported")
 		}
 	}
 	return nil
 }
 
-// notAdoptable answers a --skill that names nothing this machine holds to
+// notAdoptable answers a name that names nothing this machine holds to
 // adopt: a record may name it for a directory that is gone, or nothing may
 // name or hold it at all, which are different things to fix.
 func notAdoptable(name string, records []record) error {
 	if err := goneRecord(name, records); err != nil {
 		return err
 	}
-	return fail(exitNotFound, fmt.Sprintf("no skill called %q can be adopted: no record names it, and neither the library nor an agent client's skills directory holds it", sanitised(name)),
-		"run 'agentx adopt' to see what another tool installed, and 'agentx skill list' to see the library")
+	return fail(exitNotFound, fmt.Sprintf("no skill called %q can be imported: no record names it, and neither the library nor an agent client's skills directory holds it", sanitised(name)),
+		"run 'agentx skill import' to see what another tool installed, and 'agentx skill list' to see the library")
 }
 
-// noAdoptionNamed answers a --skill the records of the tool named do not
+// noAdoptionNamed answers a name the records of the tool named do not
 // place: none may name it, or one may name it for a directory that is
 // gone, which are different things to fix.
 func noAdoptionNamed(name string, cands []*candidate, records []record, tool string) error {
@@ -606,7 +611,7 @@ func noAdoptionNamed(name string, cands []*candidate, records []record, tool str
 	for _, c := range cands {
 		names = append(names, sanitised(c.rec.name))
 	}
-	hint := "run 'agentx adopt' to see what can be adopted"
+	hint := "run 'agentx skill import' to see what can be imported"
 	if len(names) > 0 {
 		if len(names) > namesInAHint {
 			names = append(names[:namesInAHint], "...")
@@ -674,15 +679,15 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, lo
 	if selected == 0 {
 		inv.reportAdopted(nil, covered, nil)
 		if len(left) == 0 {
-			inv.out.print("Already adopted.")
-			inv.summary = "already adopted"
+			inv.out.print("Already imported.")
+			inv.summary = "already imported"
 			return nil
 		}
 		inv.reportUnadopted(left, 0, mixed)
 		return nil
 	}
 	b := newBatch(inv, selected)
-	b.verb, b.mixed = "adopted", "run 'agentx adopt' to see what is left, and adopt the rest one at a time"
+	b.verb, b.mixed = "imported", "run 'agentx skill import' to see what is left, and import the rest one at a time"
 	b.listsRefused = all
 	inv.publishHintOnce = all
 	for _, c := range judged {
@@ -702,7 +707,7 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, lo
 	inv.summary = strings.Join(summaries, "; ")
 	if inv.publishHintDue {
 		out := inv.out
-		out.print("Adopted skills stay on this machine until you publish them: run ", out.paint(label, "'agentx source add <url> --account'"),
+		out.print("Imported skills stay on this machine until you publish them: run ", out.paint(label, "'agentx source add <url> --account'"),
 			", then ", out.paint(label, "'agentx skill publish <name>'"), ".")
 	}
 	inv.reportAdopted(b, covered, kept)
@@ -740,7 +745,7 @@ func adoptRow(f *failure) string {
 	case f.hint == "":
 		return f.message
 	}
-	return f.message + ". To adopt it, " + f.hint
+	return f.message + ". To import it, " + f.hint
 }
 
 // toolsOf are the tools whose records cands are.
@@ -764,20 +769,20 @@ func (inv *invocation) reportUnadopted(left []unadopted, adopted int, mixed bool
 	if adopted > 0 {
 		out.print()
 	}
-	out.print(out.paint(heading, fmt.Sprintf("Could not adopt (%d)", len(left))))
+	out.print(out.paint(heading, fmt.Sprintf("Could not import (%d)", len(left))))
 	t := &table{wrap: out.columns(out.stdout)}
 	for _, u := range left {
 		t.add(refusedRow(u.name, u.tool, u.reason, mixed)...)
 		if out.json {
-			out.warn(sanitised(u.name) + " could not be adopted: " + u.reason)
+			out.warn(sanitised(u.name) + " could not be imported: " + u.reason)
 		}
 	}
 	out.render(t, "  ")
-	inv.summary = "adopted " + plural(adopted, "skill")
+	inv.summary = "imported " + plural(adopted, "skill")
 	if adopted == 0 {
-		inv.summary = "no skills adopted"
+		inv.summary = "no skills imported"
 	}
-	inv.summary += fmt.Sprintf("; %d could not be adopted", len(left))
+	inv.summary += fmt.Sprintf("; %d could not be imported", len(left))
 	out.print()
 	out.print(strings.ToUpper(inv.summary[:1]), inv.summary[1:], ".")
 }
@@ -844,7 +849,7 @@ func (inv *invocation) adoptFromSources(ctx context.Context, b *batch, ready []*
 	if err := inv.reportInstalled(ctx, b, dones); err != nil {
 		return false, err
 	}
-	inv.summary = "adopted " + strings.TrimPrefix(strings.TrimPrefix(inv.summary, "installed "), "adopted ")
+	inv.summary = "imported " + strings.TrimPrefix(strings.TrimPrefix(inv.summary, "installed "), "imported ")
 	return true, nil
 }
 
@@ -935,7 +940,7 @@ func (inv *invocation) adoptListing(ctx context.Context, b *batch, url string, c
 			// One source has one pin on a machine, and it governs every
 			// later install from it, so records of two refs of it cannot
 			// be answered in silence.
-			inv.out.warn(fmt.Sprintf("%s was installed at more than one ref (%s); it is added pinned to %s. To change the pin, run 'agentx source add %s#<ref>' and adopt again",
+			inv.out.warn(fmt.Sprintf("%s was installed at more than one ref (%s); it is added pinned to %s. To change the pin, run 'agentx source add %s#<ref>' and import again",
 				url, strings.Join(pinNames(recorded), ", "), pinName(pin), url))
 		}
 		b.total++ // the fetch step of the source
@@ -1099,10 +1104,10 @@ func (inv *invocation) previewAdoption(cands []*candidate, loose []looseSkill, r
 	if unmanaged > 0 {
 		out.print("Found ", out.paint(heading, plural(unmanaged, "unmanaged skill")), installed, ".")
 	}
-	inv.printNames("Ready to adopt", ready, plain, unmanaged > 0)
+	inv.printNames("Ready to import", ready, plain, unmanaged > 0)
 	if len(refused) > 0 {
 		out.print()
-		out.print(out.paint(heading, fmt.Sprintf("Cannot adopt (%d)", len(refused))))
+		out.print(out.paint(heading, fmt.Sprintf("Cannot import (%d)", len(refused))))
 		t := &table{wrap: out.columns(out.stdout)}
 		for _, row := range refused {
 			t.add(row...)
@@ -1120,23 +1125,23 @@ func (inv *invocation) previewAdoption(cands []*candidate, loose []looseSkill, r
 		if n == 1 {
 			all = "the one skill"
 		}
-		out.print("To adopt:")
-		command := "agentx adopt "
+		out.print("To import:")
+		from := ""
 		if tool != "" {
-			command += toolArg(tool) + " "
+			from = " --from " + toolArg(tool)
 		}
 		t := &table{}
-		t.add(cell{text: command + "--all", style: label}, cell{text: all, style: muted})
-		t.add(cell{text: command + "--skill <name>", style: label}, cell{text: "one skill", style: muted})
+		t.add(cell{text: "agentx skill import" + from + " --all", style: label}, cell{text: all, style: muted})
+		t.add(cell{text: "agentx skill import <name>" + from, style: label}, cell{text: "one skill", style: muted})
 		out.render(t, "  ")
 	case len(refused) > 0:
-		out.print("Nothing to adopt.")
+		out.print("Nothing to import.")
 	case tool == "":
-		out.print("Nothing to adopt: this machine has no unmanaged skill.")
+		out.print("Nothing to import: this machine has no unmanaged skill.")
 	case len(managed) > 0:
-		out.print("Nothing to adopt: agentx already manages every skill ", toolNames(toolSet(tool), "or"), " installed.")
+		out.print("Nothing to import: agentx already manages every skill ", toolNames(toolSet(tool), "or"), " installed.")
 	default:
-		out.print("Nothing to adopt: no skill installed by ", toolNames(toolSet(tool), "or"), " is on this machine.")
+		out.print("Nothing to import: no skill installed by ", toolNames(toolSet(tool), "or"), " is on this machine.")
 	}
 }
 
@@ -1208,8 +1213,8 @@ func previewSummary(ready, refused, managed, gone int) string {
 		n    int
 		text string
 	}{
-		{ready, "to adopt"},
-		{refused, "that cannot be adopted"},
+		{ready, "to import"},
+		{refused, "that cannot be imported"},
 		{managed, "already managed"},
 		{gone, "no longer on this machine"},
 	} {
@@ -1218,7 +1223,7 @@ func previewSummary(ready, refused, managed, gone int) string {
 		}
 	}
 	if len(parts) == 1 && ready+refused == 0 {
-		return "nothing to adopt"
+		return "nothing to import"
 	}
 	return strings.Join(parts, ", ")
 }

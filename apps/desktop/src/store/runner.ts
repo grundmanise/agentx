@@ -36,9 +36,9 @@ export interface CommandOptions {
   /** Names the control: it shows as pending while the command runs, and Cancel stops it. */
   label: string;
   /**
-   * False for a command that only reads, such as `skill diff` or the preview that `adopt` with no
-   * flag is: no scan follows it, and it adds no activity entry. Leave it out for a command that
-   * may change something, and for one of unknown kind.
+   * False for a command that only reads, such as `skill diff` or the preview that `skill import`
+   * with no argument is: no scan follows it, and it adds no activity entry. Leave it out for a
+   * command that may change something, and for one of unknown kind.
    */
   sideEffect?: boolean;
   /**

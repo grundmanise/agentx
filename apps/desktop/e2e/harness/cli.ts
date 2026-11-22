@@ -16,8 +16,8 @@
 // The app checks the machine on launch (src/startup/startup.ts), so the mock starts out with a
 // passing launch: `version` and `doctor` replies, and a serve child that writes its first inventory
 // when it starts. Once the checks pass the store loads its slices (src/store/loaders.ts), so the
-// mock answers `config list`, `source list`, `adopt` and `machine` too. A test replaces any of them with
-// register() and onServeStart().
+// mock answers `config list`, `source list`, `skill import` and `machine` too. A test replaces any
+// of them with register() and onServeStart().
 //
 // The mock also answers the native open dialog of Tauri's dialog plugin with the path a test gives
 // answerOpenDialog(), or with null, a Cancel, until one does, and records every Tauri call in `calls`.
@@ -151,7 +151,7 @@ export const passingDoctor: InlineEvent[] = [
 export const loadLines = [
   ["config", "list", "--json"],
   ["source", "list", "--json"],
-  ["adopt", "--json"],
+  ["skill", "import", "--json"],
   ["machine", "--json"],
 ];
 
@@ -350,7 +350,7 @@ export class MockCli {
     this.register(["doctor"], { events: passingDoctor });
     this.register(["config", "list"], { events: [{ type: "settings" }] });
     this.register(["source", "list"]);
-    this.register(["adopt"]);
+    this.register(["skill", "import"]);
     this.register(["machine"], {
       events: [
         {

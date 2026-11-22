@@ -1,9 +1,7 @@
-import { clsx } from "clsx";
-import type { ClassValue } from "clsx";
 import type { ComponentProps, ElementType } from "react";
-import { twMerge } from "tailwind-merge";
 
-export const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs));
+/** Joins classes like clsx and drops the ones a later class overrides, like tailwind-merge. */
+export { cn } from "cn";
 
 /**
  * The props of an element or component without `className` and `style`: what a component of

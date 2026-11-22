@@ -1,7 +1,7 @@
 // The Skills fixture's machine with more skills other tools installed: three the Skills CLI added
 // (the Skills fixture's scratch among them), two Skillshare added, and one the CLI refuses to
-// adopt. Its adoption preview, the `adopt <tool> --all` runs the adopt dialog is tested against,
-// and the machine as each run leaves it.
+// adopt. Its adoption preview, the `skill import --from <tool> --all` runs the adopt dialog is
+// tested against, and the machine as each run leaves it.
 import type {
   AdoptionEvent,
   LibraryEntry,
@@ -118,7 +118,7 @@ const record = (
  * Why the CLI refuses legacy, the same in the preview and in a run of every skill: its record
  * names nowhere to install it from, and the library holds a symlink of it.
  */
-const legacyReason = `a symlink to /home/me/work/legacy. To adopt it, move that folder to ${LIBRARY}/legacy`;
+const legacyReason = `a symlink to /home/me/work/legacy. To import it, move that folder to ${LIBRARY}/legacy`;
 
 /** The record of legacy: refused, with no source, since it names none agentx can install from. */
 const legacyRecord: AdoptionEvent = {
@@ -132,13 +132,13 @@ const legacyRecord: AdoptionEvent = {
 };
 
 /** The warning a run of every skill logs for legacy, which it cannot adopt. */
-const legacyWarning = `legacy could not be adopted: ${legacyReason}`;
+const legacyWarning = `legacy could not be imported: ${legacyReason}`;
 
 /** The hint of a run that failed because the source no longer holds a skill. */
 const movedHint =
   "the source moved or removed it; leave the skill unmanaged, or install another with 'agentx skill add'";
 
-/** What `adopt` would take over with `managed` adopted: every record, in name order. */
+/** What `skill import` would take over with `managed` adopted: every record, in name order. */
 export const previewWith = (managed: string[] = []): AdoptionEvent[] =>
   [
     record("api-docs", "skillshare", "candidate"),
@@ -173,8 +173,8 @@ const progress = (
 });
 
 /**
- * `adopt <tool> --all`'s progress: the fetch of each source it adds, the three steps of an install
- * per skill, then the rescan.
+ * `skill import --from <tool> --all`'s progress: the fetch of each source it adds, the three
+ * steps of an install per skill, then the rescan.
  */
 const progressOf = (sources: string[], names: string[]): InlineEvent[] => {
   const total = sources.length + 3 * names.length + 1;
@@ -189,7 +189,10 @@ const progressOf = (sources: string[], names: string[]): InlineEvent[] => {
   ];
 };
 
-/** `adopt skillshare --all`, which adds Skillshare's source, adopts both its skills and exits 0. */
+/**
+ * `skill import --from skillshare --all`, which adds Skillshare's source, adopts both its skills
+ * and exits 0.
+ */
 export const skillshareRun: InlineEvent[] = [
   ...progressOf([TEAM], skillshareNames),
   ...skillshareNames.map((name): InlineEvent => ({
@@ -197,13 +200,13 @@ export const skillshareRun: InlineEvent[] = [
     type: "library_skill",
   })),
   ...skillshareNames.map((name) => record(name, "skillshare", "adopted")),
-  { ok: true, summary: "adopted 2 skills", type: "result" },
+  { ok: true, summary: "imported 2 skills", type: "result" },
 ];
 
 /**
- * `adopt skills-cli --all`, which adds the Skills CLI's source and adopts two of its three
- * skills: the source no longer holds the third, so it exits 5. It covers the record the preview
- * refuses as well.
+ * `skill import --from skills-cli --all`, which adds the Skills CLI's source and adopts two of
+ * its three skills: the source no longer holds the third, so it exits 5. It covers the record the
+ * preview refuses as well.
  */
 export const skillsCliRun: InlineEvent[] = [
   ...progressOf([VERCEL], ["deck-outline", "scratch"]),
@@ -215,7 +218,7 @@ export const skillsCliRun: InlineEvent[] = [
   record("scratch", "vercel", "adopted"),
   {
     hint: movedHint,
-    message: `1 of 3 skills could not be adopted: commit-style: ${movedReason}`,
+    message: `1 of 3 skills could not be imported: commit-style: ${movedReason}`,
     type: "error",
   },
 ];
@@ -227,8 +230,8 @@ export const skillsCliWarnings = [
 ];
 
 /**
- * `adopt skills-cli --all`, which adopts all three of the Skills CLI's skills and exits 0: the
- * record the preview refuses is a skill it cannot adopt, which it logs as a warning.
+ * `skill import --from skills-cli --all`, which adopts all three of the Skills CLI's skills and
+ * exits 0: the record the preview refuses is a skill it cannot adopt, which it logs as a warning.
  */
 export const skillsCliAllRun: InlineEvent[] = [
   ...progressOf([VERCEL], skillsCliNames),
@@ -242,7 +245,7 @@ export const skillsCliAllRun: InlineEvent[] = [
   record("scratch", "vercel", "adopted"),
   {
     ok: true,
-    summary: "adopted 3 skills; 1 could not be adopted",
+    summary: "imported 3 skills; 1 could not be imported",
     type: "result",
   },
 ];
@@ -253,7 +256,10 @@ export const skillsCliAllWarnings = [legacyWarning];
 /** Why a run that finds none of the Skills CLI's skills in the source fails `name`. */
 const goneReason = (name: string) => `${VERCEL} holds no skill at ${name} now`;
 
-/** `adopt skills-cli --all` on a machine where the source holds none of the three: it exits 5. */
+/**
+ * `skill import --from skills-cli --all` on a machine where the source holds none of the three: it
+ * exits 5.
+ */
 export const skillsCliNoneRun: InlineEvent[] = [
   record("commit-style", "vercel", "refused", goneReason("commit-style")),
   record("deck-outline", "vercel", "refused", goneReason("deck-outline")),
@@ -261,7 +267,7 @@ export const skillsCliNoneRun: InlineEvent[] = [
   record("scratch", "vercel", "refused", goneReason("scratch")),
   {
     hint: movedHint,
-    message: `3 of 3 skills could not be adopted: ${[
+    message: `3 of 3 skills could not be imported: ${[
       "commit-style",
       "deck-outline",
       "scratch",

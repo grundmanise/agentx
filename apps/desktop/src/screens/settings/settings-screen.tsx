@@ -6,18 +6,19 @@
 // `SettingsSection` (`section.tsx`) with its label, the line under it and its content, or nothing
 // when it has nothing to show; the page draws the hairlines between them. To add a section, write
 // it in its own file in this folder and add it to `sections` at its slot below, in this order:
-// This machine, Account remote, Adopt skills, Comparing edits, Editor, Storage, Command
-// line, Activity log, Export settings, Import settings. Insert the new entry under its slot's comment and keep the comment.
+// This machine, Account remote, Adopt skills, Comparing edits, Editor, Storage, Command line,
+// Activity log, Save snapshot, Apply snapshot. Insert the new entry under its slot's comment and
+// keep the comment.
 import type { ComponentType } from "react";
 
 import { AccountRemoteSection } from "#/screens/settings/account-remote.tsx";
 import { ActivityLogSection } from "#/screens/settings/activity-log.tsx";
 import { AdoptSkillsSection } from "#/screens/settings/adopt-skills.tsx";
+import { ApplySnapshotSection } from "#/screens/settings/apply-snapshot.tsx";
 import { CommandLineSection } from "#/screens/settings/command-line.tsx";
 import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
 import { EditorSection } from "#/screens/settings/editor.tsx";
-import { ExportSettingsSection } from "#/screens/settings/export-settings.tsx";
-import { ImportSettingsSection } from "#/screens/settings/import-settings.tsx";
+import { SaveSnapshotSection } from "#/screens/settings/save-snapshot.tsx";
 import { StorageSection } from "#/screens/settings/storage.tsx";
 import { ThisMachineSection } from "#/screens/settings/this-machine.tsx";
 
@@ -38,9 +39,9 @@ const sections: Section[] = [
   { Section: StorageSection, id: "storage" },
   { Section: CommandLineSection, id: "command-line" },
   { Section: ActivityLogSection, id: "activity-log" },
-  // Slot: Export settings, Import settings.
-  { Section: ExportSettingsSection, id: "export-settings" },
-  { Section: ImportSettingsSection, id: "import-settings" },
+  // Slot: Save snapshot, Apply snapshot.
+  { Section: SaveSnapshotSection, id: "save-snapshot" },
+  { Section: ApplySnapshotSection, id: "apply-snapshot" },
 ];
 
 export const SettingsScreen = () => (
