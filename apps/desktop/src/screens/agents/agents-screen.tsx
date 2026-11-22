@@ -384,6 +384,9 @@ export const AgentsScreen = () => {
       <h1 className="type-page-title text-text-primary m-0">Agents</h1>
       {inventory !== undefined && (
         <div className="flex flex-col gap-7">
+          {universal.length > 0 && (
+            <UniversalCard universal={universal} inventory={inventory} />
+          )}
           {direct.length > 0 && (
             <section
               aria-label="Direct agents"
@@ -393,9 +396,6 @@ export const AgentsScreen = () => {
                 <AgentCard key={c.id} c={c} inventory={inventory} />
               ))}
             </section>
-          )}
-          {universal.length > 0 && (
-            <UniversalCard universal={universal} inventory={inventory} />
           )}
           {configurations.length === 0 && (
             <p className="type-secondary text-text-hint m-0">

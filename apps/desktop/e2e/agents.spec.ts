@@ -36,7 +36,7 @@ const openAgents = async (cli: MockCli, page: Page) => {
   await expect(card(page, "Claude Code")).toBeVisible();
 };
 
-test("lists the direct agents and the Universal card with their counts", async ({
+test("lists the Universal card first, then the direct agents, with their counts", async ({
   cli,
   page,
 }) => {
@@ -80,6 +80,12 @@ test("lists the direct agents and the Universal card with their counts", async (
   await expect(
     universal.getByRole("region", { name: "Gemini CLI" })
   ).toContainText("7 skills · 0 servers");
+  // The Universal card comes first, above the grid of direct agents.
+  const universalBox = await universal.boundingBox();
+  const gridBox = await page
+    .getByRole("region", { name: "Direct agents" })
+    .boundingBox();
+  expect(universalBox?.y).toBeLessThan(gridBox?.y ?? 0);
 });
 
 test("turning an agent on runs config enable, and Place all places the library there", async ({
