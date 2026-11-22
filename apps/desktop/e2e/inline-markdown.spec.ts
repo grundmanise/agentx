@@ -36,6 +36,8 @@ const table: [string, InlineNode[]][] = [
   ["A <tag> stays", ["A <tag> stays"]],
   ["**unclosed", ["**unclosed"]],
   ["# Not a heading", ["# Not a heading"]],
+  ["See ![the logo](logo.png) here", ["See the logo here"]],
+  ["Docs at https://x.dev now", ["Docs at https://x.dev now"]],
 ];
 
 for (const [text, nodes] of table) {

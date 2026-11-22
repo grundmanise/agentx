@@ -1188,7 +1188,7 @@ The sheet frame (§6 "Sheet") (`src/app/activity-log.tsx`): the last lines of wh
 
 ### Inline Markdown
 
-A skill's description is one line of Markdown from its SKILL.md, so wherever it shows (a Skills row, the detail header, the Sources rows, the Add skill dialog) it renders its inline Markdown with `InlineMarkdown` (`src/components/inline-markdown.tsx`). It renders inline elements only, so the line keeps its own type, colour, truncation or line clamp. A code span is `type.markdown-code` in `markdown.code-text` on `markdown.code-bg`, `markdown.code-radius`, 4px side padding; strong text is 600 in `markdown.strong`; emphasis is italic and strikethrough is struck. A link shows its text, as the line sits in a row that opens on a click. Block syntax stays as written. Accessible names and descriptions use the text without its Markdown (`markdownText`).
+A skill's description is one line of Markdown from its SKILL.md, so wherever it shows (a Skills row, the detail header, the Sources rows, the Add skill dialog) it renders its inline Markdown with `InlineMarkdown` (`src/components/inline-markdown.tsx`), read by marked's inline lexer. It renders inline elements only, so the line keeps its own type, colour, truncation or line clamp. A code span is `type.markdown-code` in `markdown.code-text` on `markdown.code-bg`, `markdown.code-radius`, 4px side padding; strong text is 600 in `markdown.strong`; emphasis is italic and strikethrough is struck. A link shows its text, as the line sits in a row that opens on a click. Block syntax stays as written. Accessible names and descriptions use the text without its Markdown (`markdownText`).
 
 ### File list (detail pane FILES)
 
