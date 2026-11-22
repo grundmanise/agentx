@@ -1,3 +1,4 @@
+import { useInterval } from "@mantine/hooks";
 import { useEffect, useRef, useState } from "react";
 
 import type {
@@ -198,13 +199,14 @@ export const SourcesScreen = () => {
   // The sources are read again when the screen opens, and the fetch labels keep time.
   useEffect(() => {
     void loadSources();
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, 60_000);
-    return () => {
-      clearInterval(timer);
-    };
   }, []);
+  useInterval(
+    () => {
+      setNow(Date.now());
+    },
+    60_000,
+    { autoInvoke: true }
+  );
 
   useFetchedListings(sources);
 
