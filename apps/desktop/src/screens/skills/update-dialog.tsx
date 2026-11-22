@@ -31,10 +31,10 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { formatAgo, formatDate } from "#/lib/dates.ts";
+import { useNow } from "#/lib/now.ts";
 import { plural } from "#/lib/plural.ts";
 import { problemSentence } from "#/lib/problem-text.ts";
 import { cn } from "#/lib/utils.ts";
-import { useNow } from "#/screens/settings/clock.ts";
 import { shortSource, updateVersions } from "#/screens/skills/projection.ts";
 import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
 import {

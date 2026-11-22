@@ -139,7 +139,7 @@ const (
 // when watching fails, at start or later, wrapped in ErrWatch; a cancelled
 // ctx is a clean end.
 func Run(ctx context.Context, o Options) error {
-	ctx, cancel := context.WithCancel(ctx) // ends the stdin reader when Run returns for another reason
+	ctx, cancel := context.WithCancel(ctx) // ends the stdin reader when Run returns for another reason, and the scan in progress when stdin closes
 	l := &loop{Options: o}
 	var refreshes chan func(counter int, err error) // nil without Requests: never ready
 	if o.Requests != nil {
@@ -171,7 +171,7 @@ func Run(ctx context.Context, o Options) error {
 	if err := l.initial(ctx); err != nil {
 		return err
 	}
-	reqs := readRequests(ctx, o.Stdin, l.answer)
+	reqs := readRequests(ctx, cancel, o.Stdin, l.answer)
 
 	// The update check and every other job run off this goroutine, since a
 	// check waits on the network for as long as its sources take and a
@@ -400,15 +400,25 @@ type request struct {
 	err       error
 }
 
-// readRequests parses stdin line by line into a channel that is closed at
-// EOF; a request answer takes is answered there and not sent on. Blank lines
+// readRequests parses stdin line by line into a channel that is closed
+// once ctx is done, which EOF makes it; a request answer takes is answered there and not sent on. Blank lines
 // are skipped. Once ctx is done nothing more is delivered, but a read
 // blocked on stdin cannot be interrupted: that goroutine outlives Run until
 // stdin closes, which for the serve process means until it exits.
-func readRequests(ctx context.Context, stdin io.Reader, answer func(request) bool) <-chan request {
+//
+// At EOF it also calls end, which cancels ctx: a scan in progress is not
+// waited for, since it can wait on the lock of a command that serve, once
+// it ends, stops. Without that the scan waits for the command and the
+// command for serve to end. So stdin is read to its end whatever the loop
+// is doing: the requests it cannot take yet wait in a queue, in order, and
+// another goroutine hands them on.
+func readRequests(ctx context.Context, end context.CancelFunc, stdin io.Reader, answer func(request) bool) <-chan request {
 	reqs := make(chan request)
+	var mu sync.Mutex
+	var queue []request
+	queued := make(chan struct{}, 1) // the queue has requests
 	go func() {
-		defer close(reqs)
+		defer end()
 		r := bufio.NewReader(stdin)
 		for {
 			line, err := r.ReadBytes('\n')
@@ -418,15 +428,38 @@ func readRequests(ctx context.Context, stdin io.Reader, answer func(request) boo
 					return
 				}
 				if !answer(req) {
+					mu.Lock()
+					queue = append(queue, req)
+					mu.Unlock()
 					select {
-					case reqs <- req:
-					case <-ctx.Done():
-						return
+					case queued <- struct{}{}:
+					default:
 					}
 				}
 			}
 			if err != nil {
 				return // EOF, or stdin is broken: either way serve is done
+			}
+		}
+	}()
+	go func() {
+		defer close(reqs)
+		for {
+			select {
+			case <-queued:
+			case <-ctx.Done():
+				return
+			}
+			mu.Lock()
+			next := queue
+			queue = nil
+			mu.Unlock()
+			for _, req := range next {
+				select {
+				case reqs <- req:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()

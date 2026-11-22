@@ -38,8 +38,8 @@ export const forkArgs = (target: string, newName?: string): string[] =>
 /** What the Fork dialog says forking `row` does: a plugin's skill is forked beside the plugin's. */
 export const forkText = (row: SkillRow): string =>
   row.kind === "plugin"
-    ? "A copy will be created in your skill library. The plugin keeps its own skill."
-    : "A copy will be created in your skill library. Keep the same name to use it in place of this skill, or choose a new name to use both. You can still get updates from the original.";
+    ? "A new copy will be created. Pick a different name, or agents with the plugin will see two skills with that name."
+    : "A new copy will be created. Keep the same name to replace this skill, or pick a different name to keep both.";
 
 /**
  * Whether Use a different name starts on: for a plugin's skill, whose fork under its own name
@@ -83,7 +83,7 @@ export const formAfter = (
 /** What is left to do to fork beside the skill, as the form stands, or nothing once a name is typed. */
 const besideWays: Record<ForkFields, string | undefined> = {
   named: undefined,
-  off: "turn on Use a different name",
+  off: "use a different name",
   on: "type a new name",
 };
 
@@ -104,8 +104,8 @@ const inPlaceHint = (
   target: string,
   form: ForkFields
 ): string | undefined => {
-  if (message.startsWith(`${target} is itself a Git repository, at `)) {
-    return orBeside("move its .git out of the skill", form);
+  if (message.startsWith(`${target} has a Git repository at `)) {
+    return orBeside("move .git out of the skill", form);
   }
   if (/^.+ is a symlink to .+; forking .+ in its place /u.test(message)) {
     return orBeside(

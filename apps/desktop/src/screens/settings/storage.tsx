@@ -1,5 +1,5 @@
-// Storage: where agentx keeps its files, as the `machine` event reports them – the library, agentx
-// home and the account repo with its size on disk. The app computes nothing about the machine.
+// Storage: where the library is and how much disk the account repo takes, as the `machine` event
+// reports them. The app computes nothing about the machine.
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { useAppStore } from "#/store/store.ts";
 
@@ -33,25 +33,19 @@ export const StorageSection = () => {
   if (machine === undefined) {
     return null;
   }
-  const repo =
-    machine.account_repo === undefined
-      ? "Not created yet"
-      : `${machine.account_repo}${
-          machine.account_repo_bytes === undefined
-            ? ""
-            : ` · ${sizeText(machine.account_repo_bytes)}`
-        }`;
+  let repo = "Not created yet";
+  if (machine.account_repo !== undefined) {
+    repo =
+      machine.account_repo_bytes === undefined
+        ? "Size unknown"
+        : sizeText(machine.account_repo_bytes);
+  }
   return (
     <SettingsSection title="Storage">
       <dl className="gap-settings-section m-0 flex flex-col">
         <Place name="Library" value={machine.library} />
-        <Place name="Home" value={machine.home} />
         <Place name="Account repo" value={repo} />
       </dl>
-      <p className="type-secondary text-text-muted m-0">
-        There is no cache to clear; what agentx fetched lives in the account
-        repo.
-      </p>
     </SettingsSection>
   );
 };

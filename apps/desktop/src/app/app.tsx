@@ -1,3 +1,4 @@
+import { useWindowEvent } from "@mantine/hooks";
 import { Activity, useEffect, useState } from "react";
 import type { ReactElement } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
@@ -121,19 +122,13 @@ export const App = () => {
   }, [navigate]);
 
   // ⌘K / Ctrl+K toggles the palette from anywhere but the startup layer, once the checks pass.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const shortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
-      if (shortcut && startup.ready && !startup.open) {
-        e.preventDefault();
-        setPaletteOpen((open) => !open);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [startup.open, startup.ready]);
+  useWindowEvent("keydown", (e) => {
+    const shortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
+    if (shortcut && startup.ready && !startup.open) {
+      e.preventDefault();
+      setPaletteOpen((open) => !open);
+    }
+  });
 
   return (
     <div className="bg-shell-bg text-text-primary flex h-full flex-col">
