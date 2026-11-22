@@ -69,7 +69,7 @@ const CommandInput = ({
       className="type-palette-input h-full flex-1 border-0 bg-transparent outline-none focus-visible:outline-none"
       {...props}
     />
-    {escapeHint && <KeyHint>esc</KeyHint>}
+    {escapeHint && <KeyHint keys={["esc"]} />}
   </div>
 );
 

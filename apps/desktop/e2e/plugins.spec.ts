@@ -197,6 +197,27 @@ test("the name column is 200px: a name past two lines ends in an ellipsis, with 
   await expect(page.getByRole("tooltip")).toHaveText(long);
 });
 
+test("a skill's description renders its inline Markdown", async ({
+  cli,
+  page,
+}) => {
+  await openPlugins(cli, page, {
+    ...inventory,
+    skills: inventory.skills.map((s) =>
+      s.name === "commit-helper"
+        ? { ...s, description: "Write **commit messages** with `git commit`" }
+        : s
+    ),
+  });
+  const table = detail(page).getByRole("table", { name: "Skills" });
+  const description = table
+    .getByRole("row", { name: /^commit-helper/u })
+    .getByRole("cell");
+  await expect(description).toHaveText("Write commit messages with git commit");
+  await expect(description.locator("strong")).toHaveText("commit messages");
+  await expect(description.locator("code")).toHaveText("git commit");
+});
+
 test("Search, the agent filter and the sort toggle", async ({ cli, page }) => {
   await openPlugins(cli, page, moreInventory);
   // A to Z by name at first: the plugin turned off sorts with the rest.
