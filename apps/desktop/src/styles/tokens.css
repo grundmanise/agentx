@@ -368,6 +368,9 @@
   --color-code-prose: var(--gray-250);
   --color-code-strong: var(--gray-100);
   --color-code-context: var(--gray-500);
+  --color-markdown-code-bg: var(--gray-850);
+  --color-markdown-code-text: var(--gray-200);
+  --color-markdown-strong: var(--gray-150);
   --color-file-row-hover: var(--gray-920);
   --color-file-row-divider: var(--gray-890);
   --color-file-row-path: var(--gray-200);
@@ -518,6 +521,7 @@
   --radius-check-hint: 8px;
   --radius-startup-logo: 12px;
   --radius-tooltip: 8px;
+  --radius-markdown-code: 4px;
 
   /* Font weights, for the few places a variant sets the weight and the type role does not. */
   --font-weight-normal: 400;
@@ -699,6 +703,7 @@
   --size-plugin-row-tile: 28px;
   --gap-plugin-details: 40px;
   --gap-plugin-details-y: 12px;
+  --width-plugin-name-col: 200px;
   --padding-add-card: 6px;
 
   /* Overlays */
@@ -709,7 +714,7 @@
   --max-height-dialog: calc(100vh - 64px);
   --gap-popover: 16px;
   --width-popover: 360px;
-  --max-width-popover: 360px;
+  --min-width-popover: var(--width-popover);
   --min-width-menu: 240px;
   --padding-menu: 6px;
   --width-sheet: 1120px;
@@ -875,6 +880,11 @@
   font-weight: 400;
   line-height: 1.75;
 }
+/* A code span in inline Markdown takes its size from the text around it. */
+@utility type-markdown-code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
 @utility type-brand {
   font-family: var(--font-sans);
   font-size: 14px;
@@ -1027,6 +1037,21 @@
 /* popover.max-height: the room between the popover's anchor and the window's edge. */
 @utility max-h-popover {
   max-height: var(--radix-popover-content-available-height);
+}
+/* popover.max-width: the room the window has for a popover that fits its content across. */
+@utility max-w-popover {
+  max-width: var(--radix-popover-content-available-width);
+}
+/* A hover card that fits a list across: at most popover.width, and no wider than the window allows. */
+@utility max-w-hover-card {
+  max-width: min(
+    var(--width-popover),
+    var(--radix-hover-card-content-available-width)
+  );
+}
+/* popover.origin: the point on the popover nearest its anchor, so it zooms from there. */
+@utility origin-popover {
+  transform-origin: var(--radix-popover-content-transform-origin);
 }
 /* hover-card.max-height: the room between the hover card's trigger and the window's edge. */
 @utility max-h-hover-card {

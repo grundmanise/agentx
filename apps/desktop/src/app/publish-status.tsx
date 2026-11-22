@@ -191,7 +191,7 @@ export const PublishStatus = () => {
             onRimSettled={settlePublishRim}
           />
         </PopoverTrigger>
-        <PopoverContent aria-label="Sync" align="end">
+        <PopoverContent aria-label="Sync" align="end" width="fit">
           {outgoing.length === 0 && incoming.length === 0 && (
             <SyncNote>Everything is synced</SyncNote>
           )}
@@ -203,10 +203,13 @@ export const PublishStatus = () => {
                     key={skill.name}
                     name={skill.name}
                     meta={skill.kind}
+                    onOpen={() => {
+                      openSkill(skill.name);
+                    }}
                   />
                 ))}
               </SyncRows>
-              <div className="mt-2 flex px-2">
+              <div className="mt-2 flex justify-end px-2">
                 <Button
                   variant="primary"
                   size="sm"
@@ -230,7 +233,6 @@ export const PublishStatus = () => {
                     key={update.name}
                     name={update.name}
                     onOpen={() => {
-                      setOpen(false);
                       openSkill(update.name);
                     }}
                   />

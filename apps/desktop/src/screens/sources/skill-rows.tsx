@@ -2,6 +2,7 @@
 import { useId } from "react";
 import type { ReactNode } from "react";
 
+import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import { statusLabels } from "#/screens/sources/projection.ts";
 import type { SkillCard } from "#/screens/sources/projection.ts";
@@ -39,7 +40,7 @@ const SkillRow = ({
           id={descriptionId}
           className="type-secondary text-text-muted line-clamp-2 pl-6"
         >
-          {card.description}
+          <InlineMarkdown text={card.description} />
         </span>
       )}
     </span>

@@ -40,7 +40,7 @@ const hoverCardContentVariants = cva(
         // No top or bottom padding: a list that scrolls runs to the card's edges, its own
         // padding at the start and the end of the scroll. As wide as the list, so its right
         // padding matches its left.
-        list: "max-w-popover w-max px-3.5",
+        list: "max-w-hover-card w-max px-3.5",
       },
     },
   }

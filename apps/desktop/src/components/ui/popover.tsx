@@ -25,17 +25,25 @@ const PopoverAnchor = ({
 );
 
 // `popover.width`, `popover.radius`, `overlay.bg` with `overlay.border` and `popover.shadow`. No
-// taller than `popover.max-height`, the room the window has for it: past that it scrolls.
+// taller than `popover.max-height`, the room the window has for it: past that it scrolls. It opens
+// and closes with shadcn's own classes (DESIGN.md §8), and takes no clicks while it closes.
 const popoverContentVariants = cva(
-  "rounded-popover border-overlay-border bg-overlay-bg shadow-popover w-popover max-h-popover z-40 flex flex-col overflow-y-auto border outline-none",
+  "rounded-popover border-overlay-border bg-overlay-bg shadow-popover max-h-popover data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-popover z-40 flex flex-col overflow-y-auto border outline-none data-[state=closed]:pointer-events-none!",
   {
-    defaultVariants: { padding: "groups" },
+    defaultVariants: { padding: "groups", width: "fixed" },
     variants: {
       // `popover.padding`: 14 for grouped content, with `popover.gap` between the groups; 8 for
       // a list of rows.
       padding: {
         groups: "gap-popover p-3.5",
         rows: "p-2",
+      },
+      // `popover.width`; with `fit`, at least that and as wide as its content needs, up to
+      // `popover.max-width`, so a line that must show in full, such as the sync popover's account
+      // remote, widens it.
+      width: {
+        fit: "min-w-popover max-w-popover w-max",
+        fixed: "w-popover",
       },
     },
   }
@@ -44,6 +52,7 @@ const popoverContentVariants = cva(
 /** Below its anchor, aligned to its start, `popover.offset` away, `popover.window-inset` from the window's edges. */
 const PopoverContent = ({
   padding,
+  width,
   align = "start",
   // popover.offset
   sideOffset = 8,
@@ -58,7 +67,7 @@ const PopoverContent = ({
       align={align}
       sideOffset={sideOffset}
       collisionPadding={collisionPadding}
-      className={popoverContentVariants({ padding })}
+      className={popoverContentVariants({ padding, width })}
       {...props}
     />
   </PopoverPrimitive.Portal>
