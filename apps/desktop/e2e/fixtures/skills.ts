@@ -296,6 +296,7 @@ const historyEvent = (
   author: "Me <me@example.com>",
   commit,
   files,
+  kind: "git",
   message: subject,
   name: "pdf-letters",
   parents: [],

@@ -38,6 +38,17 @@ export type HandshakeReason =
   | "timeout"
   | "failed";
 export type OriginKind = "plugin" | "source" | "skill";
+export type HistoryKind =
+  | "upstream"
+  | "fork"
+  | "create"
+  | "adopt"
+  | "rename"
+  | "edit"
+  | "update"
+  | "sync"
+  | "git"
+  | (string & Record<never, never>);
 export type FileStatus = "added" | "modified" | "deleted";
 export type DoctorStatus = "ok" | "warn" | "fail" | "info";
 export type UpdateState = "current" | "available" | "updated";
@@ -153,6 +164,15 @@ export interface ForkOrigin {
   marketplace?: string;
   source?: string;
   path?: string;
+  url?: string;
+  skill_url?: string;
+}
+
+export interface HistoryUpstream {
+  source: string;
+  path?: string;
+  commit: string;
+  time: string;
   url?: string;
   skill_url?: string;
 }
@@ -455,6 +475,11 @@ export interface HistoryEvent {
   machine?: string;
   files: ChangedFile[];
   origin?: ForkOrigin;
+  kind: HistoryKind;
+  generated?: boolean;
+  machine_label?: string;
+  renamed_from?: string;
+  upstream?: HistoryUpstream;
 }
 
 export interface UpdateAvailableEvent {

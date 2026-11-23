@@ -187,7 +187,7 @@ e07d5b2  2026-10-01 09:12  Create release-notes  1 file
 
 - Commits are listed newest first, each with the number of files it changes in the skill. Add `--json` to see the file names.
 - An upstream version, the one the fork started from or one an update merged in, is dated by its upstream commit.
-- With `--json`, each commit is a `history` event with its full message, its author and the machine that wrote it. A commit with no machine was made with Git. A file outside the skill folder, such as a `README.md` at the root of the worktree, starts with `../`.
+- With `--json`, each commit is a `history` event with its full message, its author and the machine that wrote it. Its `kind` says what the commit did: `fork`, `create`, `adopt`, `rename`, `edit`, `update` (a newer upstream version merged), `sync` (edits from another machine merged), `git` (made with Git) or `upstream` (a version of the source's skill that agentx stored). A commit with no machine was made with Git. A file outside the skill folder, such as a `README.md` at the root of the worktree, starts with `../`.
 
 In the desktop app, select one of your own skills in **Skills**. **History** lists its latest commits; select **Show all** to see every commit and the files each one changed. When agentx knows the web page of the skill a fork came from, such as a plugin's repository, the name of the plugin, source or skill in the commit that created the fork is a link: select it to open the page in your browser. For a fork of a source's skill on GitHub, GitLab or Bitbucket, the fork's name is a link too: it opens the skill's folder at the commit you forked. A fork made with an earlier version of agentx has no link.
 
