@@ -1,14 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cva } from "class-variance-authority";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 
 import type { Configuration, Install } from "#/cli/events.gen.ts";
@@ -32,6 +24,7 @@ import { formatDate } from "#/lib/dates.ts";
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
+import { openSkill, skillPath } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
 import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
@@ -44,6 +37,7 @@ import type {
   CardGroup,
   SkillCard,
   SkillMdRef,
+  TakenReason,
 } from "#/screens/sources/projection.ts";
 import { loadSkillMd } from "#/store/loaders.ts";
 import { useSettling } from "#/store/settle.ts";
@@ -135,8 +129,7 @@ export const statusVariants = cva("type-secondary flex-none font-medium", {
     status: {
       added: "text-add-card-status-added",
       forked: "text-add-card-status-forked",
-      "name-in-use": "text-add-card-status-in-use",
-      "on-disk": "text-add-card-status-disk",
+      "name-taken": "text-add-card-status-taken",
     },
   },
 });
@@ -208,6 +201,24 @@ const ViewSkill = ({ page }: { page: string }) => (
   </a>
 );
 
+/** Why a card's name is taken, the skill that holds it a link that opens it in Skills. */
+const TakenText = ({ taken }: { taken: TakenReason }) => (
+  <>
+    {taken.before}
+    <a
+      href={`#${skillPath(taken.skill)}`}
+      className="text-text-primary underline underline-offset-2"
+      onClick={(e) => {
+        e.preventDefault();
+        openSkill(taken.skill);
+      }}
+    >
+      {taken.skill}
+    </a>
+    {taken.after}
+  </>
+);
+
 /**
  * What an open row shows: why a skill that cannot be selected cannot be, and its SKILL.md, whose
  * frontmatter holds the description. One of your skills on the hub has no SKILL.md to
@@ -230,7 +241,11 @@ const Details = ({ card }: { card: SkillCard }) => {
           )}
           {card.title !== undefined && (
             <p className="type-secondary text-text-hint m-0 text-pretty">
-              {card.title}
+              {card.taken === undefined ? (
+                card.title
+              ) : (
+                <TakenText taken={card.taken} />
+              )}
             </p>
           )}
         </div>
@@ -535,14 +550,16 @@ const PLACED_CARD = "pt-add-card absolute top-0 left-0 w-full";
 /**
  * Where the list starts in the scroller's content, in px, for the virtualizer's scroll margin. It
  * changes whenever something above it in the scroller changes size, comes or goes, such as the
- * card of the open source or the select-all row.
+ * card of the open source or the select-all row. It is measured in an effect, not a layout
+ * effect: the scroller belongs to a component above, and when both mount at once, as on a launch
+ * that draws the kept sources, React sets its ref only after the list's layout effects ran.
  */
 const useOffsetIn = (
   list: RefObject<HTMLElement | null>,
   scroller: RefObject<HTMLElement | null>
 ) => {
   const [offset, setOffset] = useState(0);
-  useLayoutEffect(() => {
+  useEffect(() => {
     const element = list.current;
     const parent = scroller.current;
     const measure = () => {
@@ -666,6 +683,12 @@ export const SkillList = ({
     overscan: OVERSCAN,
     scrollMargin: offset,
   });
+
+  // A row that changes height moves the scroll only when it lies wholly above what shows, so a
+  // row that opens keeps the scroll. By default the list also moves it for a row whose top is
+  // above, so a row opened with its top hidden pushed the list up by all it revealed.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) =>
+    item.end <= (virtualizer.scrollOffset ?? 0);
 
   const drawn = virtualizer.getVirtualItems().flatMap((v) => {
     const item = items[v.index];
