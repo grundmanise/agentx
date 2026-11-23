@@ -735,10 +735,10 @@ test.describe("the detail pane", () => {
           - heading "History" [level=2]
           - list "History":
             - listitem: /Tighten the examples\\s+Oct 2(, 2026)?\\s+· 1 file/
-            - listitem: /pdf-letters:\\sedit SKILL\\.md and add examples\\.md \\(studio-mac\\)\\s+Oct 2(, 2026)?\\s+· 2 files/
-            - listitem: /pdf-letters:\\sedit SKILL\\.md \\(studio-mac\\)\\s+Oct 1(, 2026)?\\s+· 1 file/
+            - listitem: /pdf-letters:\\sedit SKILL\\.md and add examples\\.md \\(studio-mac\\)\\s+Oct 2(, 2026)?\\s+· this (machine|Mac) · 2 files/
+            - listitem: /pdf-letters:\\sedit SKILL\\.md \\(laptop\\)\\s+Oct 1(, 2026)?\\s+· 7c41e09b · 1 file/
             - listitem:
-              - button "Show all 5"
+              - button "Show all 4"
     `);
 
     // A URL opens in the browser, the skill's files show in the file manager.
@@ -791,14 +791,15 @@ test.describe("the detail pane", () => {
       )
     ).toBeVisible();
 
-    await article.getByRole("button", { name: "Show all 5" }).click();
+    await article.getByRole("button", { name: "Show all 4" }).click();
     const sheet = page.getByRole("dialog", { name: "History" });
     await expect(sheet).toContainText("pdf-letters");
     const entries = sheet
       .getByRole("list", { name: "All history" })
       .getByRole("listitem");
-    await expect(entries).toHaveCount(5);
-    await expect(entries.last()).toContainText("Import pdf from acme/skills");
+    // The upstream version agentx stored is left out: the fork's creation comes last.
+    await expect(entries).toHaveCount(4);
+    await expect(entries.last()).toContainText("Fork pdf-letters from");
     // Dragged to its narrowest, a long subject wraps inside the sheet; the sheet never scrolls
     // sideways.
     const handle = sheet.getByRole("separator", { name: "Resize" });
@@ -827,13 +828,6 @@ test.describe("the detail pane", () => {
     ).toBeVisible();
     expect(await sideways()).toBe(0);
     await long.click();
-    await sheet
-      .getByRole("button", { name: "Import pdf from acme/skills" })
-      .click();
-    const files = sheet
-      .getByRole("list", { name: "Files of Import pdf from acme/skills" })
-      .getByRole("listitem");
-    await expect(files).toHaveText(["addedSKILL.md", "addedreference.md"]);
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
     // The history was read once: selecting the skill again does not read it again.

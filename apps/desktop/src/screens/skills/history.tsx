@@ -12,6 +12,7 @@ import {
 } from "#/components/ui/sheet.tsx";
 import { formatDate } from "#/lib/dates.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
+import { isMac } from "#/lib/platform.ts";
 import { useKeptRead } from "#/screens/skills/kept-read.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
@@ -22,9 +23,24 @@ const SHOWN = 3;
 
 const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
 
-/** What the meta line of an entry says: the date and the number of files. */
-const metaOf = (e: HistoryEvent) =>
-  [formatDate(e.time), files(e.files.length)].join(" · ");
+/** What this machine is called in an entry's meta line. */
+const HERE = isMac ? "this Mac" : "this machine";
+
+/**
+ * What the meta line of an entry says: the date, the machine that wrote the commit when known (this
+ * one by name, another by the start of its id) and the number of files.
+ */
+export const metaOf = (e: HistoryEvent, here: string | undefined) => {
+  const parts = [formatDate(e.time)];
+  if (e.machine !== undefined) {
+    parts.push(e.machine === here ? HERE : e.machine.slice(0, 8));
+  }
+  parts.push(files(e.files.length));
+  return parts.join(" · ");
+};
+
+/** Whether History lists a commit: every one but the upstream versions agentx stored. */
+export const isShown = (e: HistoryEvent) => e.import !== true;
 
 /** The version a skill's history is read for: a new read when the skill changed. */
 const versionOf = (row: SkillRow) =>
@@ -187,6 +203,7 @@ const Entry = ({
   expandable?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
+  const here = useAppStore((s) => s.inventory?.machine.id);
   const linked = hasLink(entry);
   return (
     <li
@@ -247,7 +264,7 @@ const Entry = ({
         }
       >
         <span className="type-timeline-meta text-timeline-meta">
-          {metaOf(entry)}
+          {metaOf(entry, here)}
         </span>
         {expandable && open && (
           <ul
@@ -338,7 +355,7 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
       </p>
     );
   }
-  const { entries } = read;
+  const entries = read.entries.filter(isShown);
   if (entries.length === 0) {
     return <p className="type-secondary text-text-hint m-0">No history yet</p>;
   }

@@ -291,12 +291,11 @@ const historyEvent = (
   time: string,
   subject: string,
   files: HistoryEvent["files"],
-  flags: Partial<Pick<HistoryEvent, "machine" | "origin">> = {}
+  flags: Partial<Pick<HistoryEvent, "import" | "machine" | "origin">> = {}
 ): HistoryEvent => ({
   author: "Me <me@example.com>",
   commit,
   files,
-  kind: "git",
   message: subject,
   name: "pdf-letters",
   parents: [],
@@ -309,7 +308,8 @@ const historyEvent = (
 
 /**
  * The history of pdf-letters, newest first: a commit made with Git, three of agentx's, the last
- * of them the fork's creation with the skill of acme/skills it came from, then the import.
+ * of them the fork's creation with the skill of acme/skills it came from, then the import, which
+ * History leaves out. One of agentx's commits was made on another machine.
  */
 export const history: HistoryEvent[] = [
   historyEvent("9b41c07aaaa", "2026-10-02T14:03:00Z", "Tighten the examples", [
@@ -328,9 +328,9 @@ export const history: HistoryEvent[] = [
   historyEvent(
     "e07d5b2cccc",
     "2026-10-01T09:12:00Z",
-    "pdf-letters: edit SKILL.md (studio-mac)",
+    "pdf-letters: edit SKILL.md (laptop)",
     [{ path: "SKILL.md", status: "modified" }],
-    { machine: "machine-1" }
+    { machine: "7c41e09b5a2d4f6e8b1c3d5e7f9a0b2c" }
   ),
   historyEvent(
     "51f3a8edddd",
@@ -356,7 +356,8 @@ export const history: HistoryEvent[] = [
     [
       { path: "SKILL.md", status: "added" },
       { path: "reference.md", status: "added" },
-    ]
+    ],
+    { import: true }
   ),
 ];
 

@@ -4,12 +4,15 @@
 // editor the app found and a command line the user typed are the Rust side's `editor_open`, which
 // takes only the file, opens it with the editor the preferences hold, refuses a file outside the
 // library and agentx home, and runs no shell. The preference is the app's own, in its config directory, never a machine
-// setting. Screens call this and never the plugin, and the tests' mocked CLI answers every call.
+// setting. A browser can open no editor and keeps no preferences, so there opening a file copies
+// its path, and saving the editor says it can't. Screens call this and never the plugin, and the
+// tests' mocked CLI answers every call.
 import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 
 import { notifyFailure } from "#/components/toast.tsx";
-import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
+import { inApp } from "#/lib/platform.ts";
+import { copyPathInstead, revealInFinder, showInLabel } from "#/lib/reveal.ts";
 
 /** The editor a skill opens in, as the app's preferences keep it. */
 export type EditorChoice =
@@ -43,6 +46,10 @@ export const readEditor = async (): Promise<EditorChoice> => {
 
 /** Saves the editor the user chose. False when it could not be saved, which a toast says. */
 export const saveEditor = async (editor: EditorChoice): Promise<boolean> => {
+  if (!inApp) {
+    notifyFailure("Couldn't save the editor. A browser can't keep it");
+    return false;
+  }
   try {
     await invoke("preferences_write", { preferences: { editor } });
     return true;
@@ -87,9 +94,14 @@ const fileName = (path: string) => path.split("/").at(-1) ?? path;
 
 /**
  * Opens the file at `absolutePath` in the editor the user chose. When it cannot be opened, a
- * toast says so and offers to show the file in Finder, or the file manager, instead.
+ * toast says so and offers to show the file in Finder, or the file manager, instead. In a
+ * browser, copies the path instead.
  */
 export const openInEditor = async (absolutePath: string) => {
+  if (!inApp) {
+    await copyPathInstead(absolutePath, "A browser can't open an editor");
+    return;
+  }
   const editor = await readEditor();
   try {
     await (editor.kind === "system"

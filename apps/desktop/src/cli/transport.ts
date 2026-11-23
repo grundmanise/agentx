@@ -8,6 +8,7 @@
 import type { CliEvent, LogEvent, SearchResult } from "#/cli/events.gen.ts";
 import { socketWire } from "#/cli/socket-wire.ts";
 import { tauriWire } from "#/cli/tauri-wire.ts";
+import { inApp } from "#/lib/platform.ts";
 import {
   logCommandEnd,
   logCommandStart,
@@ -151,7 +152,7 @@ export interface Wire {
  * Inside the Tauri window, and under the end-to-end tests' mocked Rust shell, the serve child's
  * stdin and stdout, through the Rust shell; in a browser, serve's WebSocket door.
  */
-const wire: Wire = "__TAURI_INTERNALS__" in globalThis ? tauriWire : socketWire;
+const wire: Wire = inApp ? tauriWire : socketWire;
 
 /** A stream and the functions that feed it. Nothing waits on its reader: it holds every chunk. */
 const channel = <T>() => {
