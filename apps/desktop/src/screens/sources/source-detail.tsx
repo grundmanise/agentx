@@ -2,7 +2,7 @@
 // tile, its name, a Read-only tag when access is limited, its full URL with its pin beneath,
 // which opens the repository in the browser, Refresh and Remove, and a strip of facts from
 // `source list` and its listing. The name, the URL and the facts' values are selectable.
-// The card of Personal, the account remote, has no Remove: Settings manages the account remote.
+// The Hub card has no Remove: Settings manages the hub.
 import type { Ref } from "react";
 
 import type { SourceEvent } from "#/cli/events.gen.ts";
@@ -96,7 +96,7 @@ export const SourceDetail = ({
   onRefresh: () => void;
   /** The source is being removed. */
   removing?: boolean;
-  /** Opens the Remove dialog; absent for the account remote. */
+  /** Opens the Remove dialog; absent for the hub. */
   onRemove?: () => void;
   /** The Remove button, which focus returns to when its dialog closes. */
   removeRef?: Ref<HTMLButtonElement>;

@@ -713,7 +713,7 @@ func TestScanSpawnBudget(t *testing.T) {
 		equal(t, "occurrences per skill", len(s.(map[string]any)["occurrences"].([]any)), 5) // codex, gemini-cli, and cursor through the library and through Claude Code's directory
 	}
 	// The startup gate runs `git --version` once; the scan itself spawns
-	// nothing, this machine having no account repo to read lineage from.
+	// nothing, this machine having no store to read lineage from.
 	b, _ := os.ReadFile(counter)
 	if got := strings.TrimSpace(string(b)); got != "--version" {
 		t.Errorf("git spawned with:\n%s\nwant exactly one --version", b)
@@ -724,7 +724,7 @@ func TestScanSpawnBudget(t *testing.T) {
 // it as skill list lists it, lineage, state and placements alike, since the
 // inventory is what the desktop app shows and a one-shot listing may not
 // tell a script anything else. The lineage costs the scan one for-each-ref
-// after the check of the account repo, however many skills the library
+// after the check of the store, however many skills the library
 // holds.
 func TestScanListsTheLibrary(t *testing.T) {
 	t.Parallel()
@@ -761,7 +761,7 @@ func TestScanListsTheLibrary(t *testing.T) {
 
 	// Without --json nothing prints the library, so a text scan and a text
 	// serve read none of its lineage: the startup gate's --version is the
-	// one git either spawns, and neither can fail on the account repo.
+	// one git either spawns, and neither can fail on the store.
 	for what, run := range map[string]func() outcome{
 		"scan":         func() outcome { return h.run("scan") },
 		"serve --once": func() outcome { return h.serveOnce() },
@@ -776,32 +776,32 @@ func TestScanListsTheLibrary(t *testing.T) {
 	}
 }
 
-// accountRepoWarning ends the one warning an inventory carries when git
-// cannot read the account repo: the library is left out, and the reader is
+// storeWarning ends the one warning an inventory carries when git
+// cannot read the store: the library is left out, and the reader is
 // sent to doctor and to the repo, whose error the warning begins with.
-const accountRepoWarning = "; the library is not listed, run 'agentx doctor' and check the account repo it names"
+const storeWarning = "; the library is not listed, run 'agentx doctor' and check the store it names"
 
-// TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead breaks the account
+// TestScanListsNoLibraryWhenTheStoreCannotBeRead breaks the home
 // repo under a managed skill. Neither scan nor serve reads it for anything
 // in the inventory but the library's lineage, so each still inventories the
 // machine and exits 0: the library is listed empty, rather than with every
-// skill in it called unmanaged, and one warning names the account repo and
+// skill in it called unmanaged, and one warning names the store and
 // the command that looks into it. skill list, which is there to report the
 // lineage, still refuses.
-func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
+func TestScanListsNoLibraryWhenTheStoreCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
-	account := gitx.AccountRepoPath(h.agentx)
-	writeFile(t, filepath.Join(account, "HEAD"), "garbage\n")
+	store := gitx.StorePath(h.agentx)
+	writeFile(t, filepath.Join(store, "HEAD"), "garbage\n")
 
 	inventory := h.inventory(t)
 	equal(t, "configurations", len(inventory["configurations"].([]any)), 4)
 	equal(t, "skills", strings.Join(skillNames(inventory), " "), "alpha")
 	equal(t, "library", len(inventory["library"].([]any)), 0)
 	warnings := inventory["warnings"].([]any)
-	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) || !strings.HasSuffix(warnings[0].(string), accountRepoWarning) {
-		t.Errorf("warnings = %q, want one naming %s and ending %q", warnings, account, accountRepoWarning)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), store) || !strings.HasSuffix(warnings[0].(string), storeWarning) {
+		t.Errorf("warnings = %q, want one naming %s and ending %q", warnings, store, storeWarning)
 	}
 
 	served := h.serveOnce("--json")
@@ -817,12 +817,12 @@ func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
 
 	list := h.run("--json", "skill", "list")
 	equal(t, "skill list exit", list.exit, 8)
-	equal(t, "skill list code", h.one(list.stdout, "error")["code"], "account_repo")
+	equal(t, "skill list code", h.one(list.stdout, "error")["code"], "store")
 }
 
-// TestScanWarnsOfABranchDoctorDoesNotRead breaks the account repo in a way
+// TestScanWarnsOfABranchDoctorDoesNotRead breaks the store in a way
 // doctor does not see: the commit a managed skill's import branch points at
-// is gone. The repo still opens, which is what doctor's account_repo row
+// is gone. The repo still opens, which is what doctor's store row
 // asks of it, and only reading the branches fails. So the inventory's
 // warning carries git's error, which says what is wrong, and sends the
 // reader to the repo it names as well as to doctor, which on its own would
@@ -831,9 +831,9 @@ func TestScanWarnsOfABranchDoctorDoesNotRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
-	account := gitx.AccountRepoPath(h.agentx)
-	tip := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-	object := filepath.Join(account, "objects", tip[:2], tip[2:])
+	store := gitx.StorePath(h.agentx)
+	tip := strings.TrimSpace(h.storeGit("rev-parse", "refs/heads/managed/alpha"))
+	object := filepath.Join(store, "objects", tip[:2], tip[2:])
 	if err := os.Rename(object, object+".gone"); err != nil {
 		t.Fatalf("the import commit is not a loose object: %v", err)
 	}
@@ -841,13 +841,13 @@ func TestScanWarnsOfABranchDoctorDoesNotRead(t *testing.T) {
 	inventory := h.inventory(t)
 	equal(t, "library", len(inventory["library"].([]any)), 0)
 	warnings := inventory["warnings"].([]any)
-	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) ||
-		!strings.Contains(warnings[0].(string), "missing object") || !strings.HasSuffix(warnings[0].(string), accountRepoWarning) {
-		t.Errorf("warnings = %q, want one naming %s and the missing object, ending %q", warnings, account, accountRepoWarning)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), store) ||
+		!strings.Contains(warnings[0].(string), "missing object") || !strings.HasSuffix(warnings[0].(string), storeWarning) {
+		t.Errorf("warnings = %q, want one naming %s and the missing object, ending %q", warnings, store, storeWarning)
 	}
 	equal(t, "skill list exit", h.run("skill", "list").exit, 8)
 	rows, _ := doctorRows(t, h.events(h.run("--json", "doctor").stdout))
-	equal(t, "doctor's account_repo row", rows["account_repo"]["status"], "ok")
+	equal(t, "doctor's store row", rows["store"]["status"], "ok")
 }
 
 // secrets lists every distinctive secret value a fixture's config files hold,
