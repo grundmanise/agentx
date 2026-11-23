@@ -355,7 +355,16 @@ func (inv *invocation) installOne(ctx context.Context, gitDir, remote, name stri
 	inv.addForkSource(ctx, name, in.there)
 	var done placements
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		return inv.applyAccountInstall(ctx, in, targets, asCopy, &done)
+		if err := inv.applyAccountInstall(ctx, in, targets, asCopy, &done); err != nil {
+			return err
+		}
+		// A managed skill the install took the place of left the library.
+		var replaced []home.Install
+		if in.managed != nil {
+			replaced = append(replaced, recordedInstall(*in.managed))
+		}
+		inv.recordInstalls([]home.Install{home.ForkInstall(name, in.there.ID)}, replaced)
+		return nil
 	})
 	switch {
 	case errors.Is(err, home.ErrMovedBeforeApply):

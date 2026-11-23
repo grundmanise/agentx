@@ -961,6 +961,8 @@ warning: adal shares /home/me/.augment/skills with augment, so removing pdf from
   augment  symlink  /home/me/.augment/skills/pdf
 ```
 
+agentx records when each skill last entered your library and when it last left it, in `installs.json` in agentx home (`~/.agentx` by default). Removing a skill from some clients with `--from` changes neither date. `agentx scan --json` lists the dates under `installs`.
+
 ### Your own skills
 
 Removing one of your own skills from the machine also deletes its local history. Add `--remote` to delete it from your account remote too. See [Remove a skill of your own](/cli/fork#remove-a-skill-of-your-own).
