@@ -736,7 +736,7 @@ test.describe("the detail pane", () => {
           - list "History":
             - listitem: /Tighten the examples\\s+Oct 2(, 2026)?\\s+· 1 file/
             - listitem: /Edited SKILL\\.md, added examples\\.md and 2 more files\\s+Oct 2(, 2026)?\\s+· this machine · 4 files/
-            - listitem: /Synced edits from another machine\\s+Oct 1(, 2026)?\\s+· laptop · 1 file/
+            - listitem: /Synced edits from another machine\\s+Oct 1(, 2026)?\\s+· 7c41e09b · 1 file/
             - listitem:
               - button "Show all 4"
     `);

@@ -31,6 +31,9 @@ const HERE = isMac ? "this Mac" : "this machine";
 const https = (url: string | undefined) =>
   url?.startsWith("https://") === true ? url : undefined;
 
+/** How a machine other than this one is named: the start of its id, until labels are known. */
+const shortMachine = (id: string) => id.slice(0, 8);
+
 /**
  * What the meta line of an entry says: the date, the machine it was made on when known, the date
  * of the upstream version a fork or an update took in, and the number of files, except on a fork
@@ -40,8 +43,8 @@ export const metaOf = (e: HistoryEvent, here: string | undefined) => {
   const parts = [formatDate(e.time)];
   if (e.machine !== undefined && e.machine === here) {
     parts.push(HERE);
-  } else if (e.machine_label !== undefined) {
-    parts.push(e.machine_label);
+  } else if (e.machine !== undefined) {
+    parts.push(shortMachine(e.machine));
   }
   if (e.upstream !== undefined) {
     parts.push(`version of ${formatDate(e.upstream.time)}`);

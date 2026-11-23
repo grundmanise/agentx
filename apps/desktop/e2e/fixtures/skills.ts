@@ -292,10 +292,7 @@ const historyEvent = (
   subject: string,
   files: HistoryEvent["files"],
   flags: Partial<
-    Pick<
-      HistoryEvent,
-      "generated" | "kind" | "machine" | "machine_label" | "origin" | "upstream"
-    >
+    Pick<HistoryEvent, "generated" | "kind" | "machine" | "origin" | "upstream">
   > = {}
 ): HistoryEvent => ({
   author: "Me <me@example.com>",
@@ -345,7 +342,6 @@ export const history: HistoryEvent[] = [
       generated: true,
       kind: "edit",
       machine: "machine-1",
-      machine_label: "studio-mac",
     }
   ),
   historyEvent(
@@ -356,8 +352,7 @@ export const history: HistoryEvent[] = [
     {
       generated: true,
       kind: "sync",
-      machine: "machine-2",
-      machine_label: "laptop",
+      machine: "7c41e09b5a2d4f6e8b1c3d5e7f9a0b2c",
     }
   ),
   historyEvent(
