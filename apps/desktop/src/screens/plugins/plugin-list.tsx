@@ -3,11 +3,16 @@ import { useRef } from "react";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
 import { ExpandToggle, SortToggle } from "#/components/filter-controls.tsx";
+import { SearchIcon } from "#/components/icons/search.tsx";
 import { LIST_GUIDE } from "#/components/list-guide.ts";
 import { ListRow } from "#/components/list-row.tsx";
 import { Pill } from "#/components/pill.tsx";
-import { SearchField } from "#/components/search-field.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group.tsx";
 import { useOnNewKey } from "#/lib/new-key.ts";
 import { plural } from "#/lib/plural.ts";
 import { PluginFilterPopover } from "#/screens/plugins/filter-popover.tsx";
@@ -180,14 +185,21 @@ export const PluginList = ({
       </div>
     </div>
     <div className="pt-split-toolbar-top px-split-toolbar pb-split-toolbar-bottom gap-split-toolbar flex flex-col">
-      <SearchField
-        label="Filter plugins by name"
-        placeholder="Search"
-        value={filters.name}
-        onChange={(name) => {
-          onFilters({ ...filters, name });
-        }}
-      />
+      <InputGroup>
+        <InputGroupAddon>
+          <SearchIcon size="xs" />
+        </InputGroupAddon>
+        <InputGroupInput
+          kind="list-search"
+          type="search"
+          aria-label="Filter plugins by name"
+          placeholder="Search"
+          value={filters.name}
+          onChange={(e) => {
+            onFilters({ ...filters, name: e.target.value });
+          }}
+        />
+      </InputGroup>
       <div className="gap-split-filter flex min-w-0 items-center">
         <PluginFilterPopover
           configurations={configurations}

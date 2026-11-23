@@ -8,8 +8,8 @@ import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
 import { LockMark } from "#/components/check-mark.tsx";
 import { HelpTerm } from "#/components/help-term.tsx";
+import { SearchIcon } from "#/components/icons/search.tsx";
 import { PillTip } from "#/components/pill.tsx";
-import { SearchField } from "#/components/search-field.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
@@ -20,6 +20,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group.tsx";
 
 /** What universal agents are, in the tooltip of the subtitle's term and of the Universal pill. */
 const universalTip = (
@@ -161,13 +166,22 @@ export const AgentPickerDialog = ({
             )}
           </DialogDescription>
         </DialogHeader>
-        <SearchField
-          ref={search}
-          label="Search agents"
-          placeholder="Search agents"
-          value={query}
-          onChange={setQuery}
-        />
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon size="xs" />
+          </InputGroupAddon>
+          <InputGroupInput
+            ref={search}
+            kind="list-search"
+            type="search"
+            aria-label="Search agents"
+            placeholder="Search agents"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+            }}
+          />
+        </InputGroup>
         {rows.length === 0 ? (
           <p className="type-secondary text-text-muted m-0 py-2 text-center">
             No agents match
