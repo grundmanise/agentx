@@ -404,7 +404,7 @@ test("opening a row reads its SKILL.md once, then opens, and links to the skill"
   await expect(
     opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
   ).toContainText("# Word documents");
-  await page.getByRole("link", { name: "View skill" }).click();
+  await page.getByRole("link", { name: "See full skill" }).click();
   expect(cli.openedUrls).toEqual([`${ACME}/tree/3f2a9c1e8d7b6a/skills/docx`]);
   // The row opens and closes on a click; the check alone selects.
   await expect(bar(page)).toHaveCount(0);
