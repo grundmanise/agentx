@@ -379,6 +379,34 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   ]);
 });
 
+test("a row that opens scrolls into view, its header first", async ({
+  cli,
+  page,
+}) => {
+  await page.setViewportSize({ height: 420, width: 1100 });
+  await openSources(cli, page);
+  const lines = Array.from({ length: 80 }, (_, i) => `line ${i}`).join("\n");
+  for (const name of ["pdf", "docx"]) {
+    cli.register(["source", "read", ACME_ID, `skills/${name}`], {
+      events: [skillMd(name, `---\nname: ${name}\n---\n${lines}\n`)],
+    });
+  }
+  // pdf is below the fold: once open, its header and as much of its SKILL.md as fits show.
+  await expect(row(page, "pdf")).not.toBeInViewport();
+  await row(page, "pdf").dispatchEvent("click");
+  await expect(row(page, "pdf")).toHaveAttribute("aria-expanded", "true");
+  await expect(row(page, "pdf")).toBeInViewport({ ratio: 1 });
+  await expect(
+    opened(page, "pdf").getByRole("region", { name: "SKILL.md of pdf" })
+  ).toBeInViewport({ ratio: 0.5 });
+  // In a taller window the whole open row shows.
+  await page.setViewportSize({ height: 800, width: 1100 });
+  await row(page, "docx").dispatchEvent("click");
+  await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
+  await expect(opened(page, "docx")).toBeInViewport({ ratio: 1 });
+  await expect(row(page, "docx")).toBeInViewport({ ratio: 1 });
+});
+
 test("opening a row reads its SKILL.md once, then opens, and links to the skill", async ({
   cli,
   page,

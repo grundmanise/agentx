@@ -609,6 +609,27 @@ export const SkillList = ({
     scrollMargin: offset,
   });
 
+  // A row that has just opened scrolls into view: as little as it takes to show all of it, or,
+  // when it is taller than the scroller, its header at the top. The list scrolls to it, as it
+  // measures the open row's new height first.
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    const opened = open.find((key) => !wasOpen.current.includes(key));
+    wasOpen.current = open;
+    if (opened === undefined) {
+      return;
+    }
+    const index = items.findIndex((item) => item.key === opened);
+    const element = list.current?.querySelector(`[data-index="${index}"]`);
+    const height = scroller.current?.clientHeight;
+    if (!element || height === undefined) {
+      return;
+    }
+    virtualizer.scrollToIndex(index, {
+      align: element.getBoundingClientRect().height > height ? "start" : "auto",
+    });
+  });
+
   const drawn = virtualizer.getVirtualItems().flatMap((v) => {
     const item = items[v.index];
     return item === undefined ? [] : [{ index: v.index, item }];
