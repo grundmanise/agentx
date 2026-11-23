@@ -2,11 +2,11 @@ import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
-import { PillButton } from "#/components/pill.tsx";
 import { SelectableLink } from "#/components/selectable-link.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
-import { Spinner } from "#/components/spinner.tsx";
+import { BadgeButton } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { openInEditor } from "#/lib/editor.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
@@ -139,7 +139,7 @@ const EditButton = ({ row }: { row: SkillRow }) => {
  * The right pane: what the CLI reports about one skill. Header: the title row with the name, origin
  * (unless the banner says where the skill came from), a pill per fork made from it under a new
  * name, which opens that fork, and at its right end the action row (Edit for a skill the user may
- * write to, Fork for a skill of a source or a plugin's, Rename for one of your own, Remove for a
+ * write to, Fork for a skill of a source or a plugin's, Rename for a hub skill, Remove for a
  * library skill; the other actions come with the changes that add them); then the description. No
  * status pill: the banner is the status. One banner, with its button; AGENTS, whose chips add and
  * remove placements, and, when some agent sees more than one skill of this name, a notice under the
@@ -202,27 +202,25 @@ export const SkillDetail = ({
             </span>
           )}
           {forks.map((fork) => (
-            <PillButton
+            <BadgeButton
               key={fork.key}
               tone="neutral"
               size="detail"
-              label={`Forked as ${fork.name}`}
+              aria-label={`Forked as ${fork.name}`}
               title={`Forked as ${fork.name}`}
-              icon={
-                <SkillGlyph
-                  shape="fork"
-                  size={12}
-                  tone="inherit"
-                  title={`Forked as ${fork.name}`}
-                  decorative
-                />
-              }
               onClick={() => {
                 openSkill(fork.key);
               }}
             >
+              <SkillGlyph
+                shape="fork"
+                size={12}
+                tone="inherit"
+                title={`Forked as ${fork.name}`}
+                decorative
+              />
               {fork.name}
-            </PillButton>
+            </BadgeButton>
           ))}
           {/* The action row, at the title row's right end: Publish and the rest come with the
               changes that add them. */}
@@ -295,8 +293,8 @@ export const SkillDetail = ({
             ))}
           </dl>
         </section>
-        {/* Only your own skills keep a history; other skills show no section. */}
-        {row.kind === "yours" && (
+        {/* Only hub skills keep a history; other skills show no section. */}
+        {row.kind === "hub" && (
           <section aria-label="History" className="flex flex-col gap-3">
             <Caption>History</Caption>
             <HistorySection row={row} />

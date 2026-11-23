@@ -103,7 +103,7 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
     machine: true,
   },
   "source add": {
-    account: false,
+    hub: false,
   },
   "source fetch": {
     all: false,

@@ -3,7 +3,6 @@ import { useState } from "react";
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { SourceEvent } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Dialog,
@@ -14,21 +13,22 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
-import { count, YOUR_SKILLS_LABEL } from "#/screens/sources/projection.ts";
+import { count, HUB_LABEL } from "#/screens/sources/projection.ts";
 import { agentx, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /**
- * The hints of `source add` that name a command, in the app's words: the account remote's skills
- * are the ones under Personal.
+ * The hints of `source add` that name a command, in the app's words: the hub's skills
+ * are the ones under Hub.
  */
 export const addSourceHintRules: HintRule[] = [
   {
-    app: () => `see and install its skills under ${YOUR_SKILLS_LABEL}`,
+    app: () => `see and install its skills under ${HUB_LABEL}`,
     cli: /^run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one$/u,
   },
 ];

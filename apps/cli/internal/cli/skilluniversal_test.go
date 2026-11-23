@@ -26,7 +26,7 @@ func universalHarness(t *testing.T, extra ...string) (*harness, *sourceRepo) {
 }
 
 // universalHome is the machine of universalHarness with no source added,
-// for a test whose library skill is the user's own.
+// for a test whose library skill is a hub skill.
 func universalHome(t *testing.T, extra ...string) *harness {
 	t.Helper()
 	h := newHarness(t)
@@ -150,15 +150,15 @@ func TestSkillRemoveFromUniversalIsTheWholeRemoval(t *testing.T) {
 	h, s := universalHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--copy").exit, 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code")
-	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-	h.accountGit("update-ref", "refs/agentx/candidate/alpha", head)
+	head := strings.TrimSpace(h.storeGit("rev-parse", "refs/heads/managed/alpha"))
+	h.storeGit("update-ref", "refs/agentx/candidate/alpha", head)
 	before := mutationVersion(t, h)
 
 	out := h.run("--json", "skill", "remove", "alpha", "--from", "universal", "--from", "universal")
 	equal(t, "exit", out.exit, 0)
 	nothingAt(t, "the copy placement", filepath.Join(h.home, ".claude", "skills", "alpha"))
 	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
-	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
+	if _, err := h.storeGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
 		t.Error("the import branch is still there")
 	}
 	equal(t, "refs under refs/agentx", h.agentxRefs(), source.Ref(source.ID(s.url)))
@@ -222,15 +222,15 @@ const standsAloneHint = "hint: --from universal asks for the removal without --f
 //   - --from naming a client that is not universal takes that placement
 //     alone, and the fork's branch stays.
 //   - --from universal is the whole removal, which removes the fork, here
-//     one the account repo holds both an import branch and a fork branch
+//     one the store holds both an import branch and a fork branch
 //     of, as a fork of a managed skill stopped part way leaves before a
 //     recovery: the library directory and both branches go.
 func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-	h.accountGit("update-ref", "refs/heads/skills/alpha", head)
+	head := strings.TrimSpace(h.storeGit("rev-parse", "refs/heads/managed/alpha"))
+	h.storeGit("update-ref", "refs/heads/skills/alpha", head)
 	before := mutationVersion(t, h)
 
 	for _, from := range [][]string{{"codex"}, {"claude-code", "codex"}, {"universal", "codex"}} {
@@ -251,13 +251,13 @@ func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 	one := h.run("skill", "remove", "alpha", "--from", "claude-code")
 	equal(t, "exit of --from claude-code", one.exit, 0)
 	nothingAt(t, "the claude-code placement", filepath.Join(h.home, ".claude", "skills", "alpha"))
-	equal(t, "the fork branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/skills/alpha")), head)
+	equal(t, "the fork branch", strings.TrimSpace(h.storeGit("rev-parse", "refs/heads/skills/alpha")), head)
 
 	whole := h.run("skill", "remove", "alpha", "--from", "universal")
 	equal(t, "exit of --from universal", whole.exit, 0)
 	contains(t, "the text", whole.stdout, "  deleted "+filepath.Join(h.library, "alpha")+", refs/heads/skills/alpha and refs/heads/managed/alpha\n")
 	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
-	equal(t, "the branches", h.accountGit("for-each-ref", "--format=%(refname)", "refs/heads/"), "")
+	equal(t, "the branches", h.storeGit("for-each-ref", "--format=%(refname)", "refs/heads/"), "")
 }
 
 // TestSkillRemoveFromASymlinkedClient: --from naming a client that is not
@@ -268,7 +268,7 @@ func TestSkillRemoveFromASymlinkedClient(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	head := h.storeGit("rev-parse", "refs/heads/managed/alpha")
 
 	out := h.run("--json", "skill", "remove", "alpha", "--from", "claude-code")
 	equal(t, "exit", out.exit, 0)
@@ -276,7 +276,7 @@ func TestSkillRemoveFromASymlinkedClient(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
 		t.Errorf("the library directory was removed by a --from removal: %v", err)
 	}
-	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
+	equal(t, "the import branch", h.storeGit("rev-parse", "refs/heads/managed/alpha"), head)
 	ev := h.one(out.stdout, "library_skill")
 	equal(t, "placements left in claude-code", len(placementsOf(t, ev)), 0)
 	equal(t, "universal", universalOf(t, ev), "codex,gemini-cli")
@@ -336,8 +336,8 @@ func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 				t.Fatal(err)
 			}
 			writeFile(t, filepath.Join(mine, "SKILL.md"), "---\nname: alpha\ndescription: mine\n---\n\nmine\n")
-			head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-			h.accountGit("update-ref", "refs/agentx/candidate/alpha", head)
+			head := strings.TrimSpace(h.storeGit("rev-parse", "refs/heads/managed/alpha"))
+			h.storeGit("update-ref", "refs/agentx/candidate/alpha", head)
 			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 
 			var settings string
@@ -381,8 +381,8 @@ func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 				equal(t, c.what+": journals", journalCount(t, h), 0)
 			}
 			// And the refs, read once for every run.
-			equal(t, "the import branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha")), head)
-			equal(t, "the candidate ref", strings.TrimSpace(h.accountGit("rev-parse", "refs/agentx/candidate/alpha")), head)
+			equal(t, "the import branch", strings.TrimSpace(h.storeGit("rev-parse", "refs/heads/managed/alpha")), head)
+			equal(t, "the candidate ref", strings.TrimSpace(h.storeGit("rev-parse", "refs/agentx/candidate/alpha")), head)
 		})
 	}
 }
@@ -584,13 +584,13 @@ func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 	equal(t, "drift of the inventory", drift(entry), "source removed")
 	equal(t, "universal of the inventory", universalOf(t, entry), "codex,gemini-cli")
 
-	branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	branch := h.storeGit("rev-parse", "refs/heads/managed/alpha")
 	refused := h.run("skill", "remove", "alpha", "--from", "codex")
 	equal(t, "exit of --from codex", refused.exit, 6)
 	contains(t, "stderr", refused.stderr, "hint: take alpha off the machine with 'agentx skill remove alpha --from universal', "+
 		"which removes it from claude-code, codex, cortex, gemini-cli\n")
 	contains(t, "the library directory", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), "name: alpha")
-	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
+	equal(t, "the import branch", h.storeGit("rev-parse", "refs/heads/managed/alpha"), branch)
 
 	// While alpha records the source, its id is refused with the command
 	// that adds the source again.
@@ -604,7 +604,7 @@ func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 	equal(t, "summary of --from universal", h.one(out.stdout, "result")["summary"],
 		"removed alpha from the library, 4 placements and its import branch")
 	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
-	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
+	if _, err := h.storeGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
 		t.Error("the import branch is still there")
 	}
 

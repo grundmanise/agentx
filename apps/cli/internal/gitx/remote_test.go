@@ -48,7 +48,7 @@ func TestParsePushPorcelain(t *testing.T) {
 }
 
 // TestUnsetRemoteTakesOutOnlyTheRemoteItNames: two remotes of fork
-// branches in one account repo, each with a fork branch tracking it and a
+// branches in one store, each with a fork branch tracking it and a
 // remote-tracking branch, and unsetting one leaves the other's
 // configuration, tracking and remote-tracking branch as they were.
 func TestUnsetRemoteTakesOutOnlyTheRemoteItNames(t *testing.T) {
@@ -57,7 +57,7 @@ func TestUnsetRemoteTakesOutOnlyTheRemoteItNames(t *testing.T) {
 		t.Skip("git is not installed")
 	}
 	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "account.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	r := New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
 	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
 		t.Fatal(err)
@@ -111,7 +111,7 @@ func TestUnsetRemoteTakesOutOnlyTheRemoteItNames(t *testing.T) {
 
 // TestProbeRemoteSaysWhetherForksAreHeld: the probe reports a repository
 // holding a skills/* branch as holding forks and one with only other
-// branches as not. addAccount asks git for a refetch on that answer alone,
+// branches as not. addHub asks git for a refetch on that answer alone,
 // and a refetch of a repository with no fork branch waits for good.
 func TestProbeRemoteSaysWhetherForksAreHeld(t *testing.T) {
 	t.Parallel()

@@ -28,10 +28,10 @@ type doctorEvent struct {
 func newDoctorCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:         "doctor",
-		Short:       "Check that agentx can run: git, home and the account repo",
+		Short:       "Check that agentx can run: git, home and the store",
 		Annotations: map[string]string{annotationSection: "diagnostics"},
 		Args:        cobra.NoArgs,
-		Example:     examples("agentx doctor", "check git, agentx home and the account repo"),
+		Example:     examples("agentx doctor", "check git, agentx home and the store"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			d := &doctor{inv: inv}
 			err := d.run(cmd.Context())
@@ -58,7 +58,7 @@ var doctorSections = []struct {
 	checks []string
 }{
 	{"System", []string{"git", "fork_merges", "commit_identity", "home"}},
-	{"App", []string{"lock", "mutations", "settings", "account_repo", "source_remotes", "staged_imports", "library"}},
+	{"App", []string{"lock", "mutations", "settings", "store", "source_remotes", "staged_imports", "library"}},
 	{"Clients", nil}, // client:<id> and clients
 }
 
@@ -167,8 +167,8 @@ func sectionOf(check string) int {
 
 // run performs the checks in a fixed order and changes nothing in agentx
 // home: it creates neither the directory, nor the lock file, nor the
-// account repo. A missing or too-old git ends the run with exit 2, since
-// nothing after it can be checked; an unusable account repo is exit 8 after
+// store. A missing or too-old git ends the run with exit 2, since
+// nothing after it can be checked; an unusable store is exit 8 after
 // every row; anything else is reported and exits 0.
 func (d *doctor) run(ctx context.Context) error {
 	inv := d.inv
@@ -184,11 +184,11 @@ func (d *doctor) run(ctx context.Context) error {
 	commit, mergeErr, probeErr := gitx.Probe(ctx, inv.git)
 	switch {
 	case probeErr != nil:
-		d.row("fork_merges", rowFail, "cannot merge upstream changes into your own skills: cannot set up the probe repository: "+probeErr.Error(), verbose)
+		d.row("fork_merges", rowFail, "cannot merge upstream changes into hub skills: cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case mergeErr != nil:
-		d.row("fork_merges", rowFail, "cannot merge upstream changes into your own skills: "+mergeErr.Error(), verbose)
+		d.row("fork_merges", rowFail, "cannot merge upstream changes into hub skills: "+mergeErr.Error(), verbose)
 	default:
-		d.row("fork_merges", rowOK, "upstream changes can be merged into your own skills", "")
+		d.row("fork_merges", rowOK, "upstream changes can be merged into hub skills", "")
 	}
 	switch {
 	case commit == "":
@@ -252,15 +252,15 @@ func (d *doctor) run(ctx context.Context) error {
 	}
 
 	var repoErr error
-	switch gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home); {
+	switch gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home); {
 	case err != nil:
-		d.row("account_repo", rowFail, err.Error(), "")
-		repoErr = fail(exitAccountRepo, err.Error(), "check that "+gitDir+" is a bare repository this git can read, or move it aside")
+		d.row("store", rowFail, err.Error(), "")
+		repoErr = fail(exitStore, err.Error(), "check that "+gitDir+" is a bare repository this git can read, or move it aside")
 	case !exists:
-		d.row("account_repo", rowOK, "not created yet: "+gitDir, "")
+		d.row("store", rowOK, "not created yet: "+gitDir, "")
 	default:
-		d.row("account_repo", rowOK, gitDir+" opens", "")
-		// These read the account repo, so they follow the row that says it
+		d.row("store", rowOK, gitDir+" opens", "")
+		// These read the store, so they follow the row that says it
 		// can be read and are left out when it cannot.
 		d.sourceRemotes(ctx, gitDir)
 		d.stagedImports(ctx, gitDir)

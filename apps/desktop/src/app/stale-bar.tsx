@@ -1,10 +1,10 @@
-import { Spinner } from "#/components/spinner.tsx";
 import {
   Alert,
   AlertAction,
   AlertDescription,
 } from "#/components/ui/alert.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { retryRefresh } from "#/store/feed.ts";
 import { useAppStore } from "#/store/store.ts";
 

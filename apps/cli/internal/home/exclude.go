@@ -32,7 +32,7 @@ func IsSystemFile(name string) bool {
 	return false
 }
 
-// SyncExclude makes the info/exclude file of the account repo at gitDir
+// SyncExclude makes the info/exclude file of the store at gitDir
 // hold SystemFiles, one per line, while on is true, and nothing otherwise.
 // It writes only when the file holds something else. Nothing else is ever
 // written there: the file follows the setting, and every git run over a

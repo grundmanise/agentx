@@ -175,13 +175,13 @@ func TestAdoptAllAdoptsFoldersAsTheyAre(t *testing.T) {
 	h.lockUnchanged(h.lockPath(), lock)
 	equal(t, "stdout", out.stdout, "✓ imported alpha\n"+
 		"✓ imported notes\n"+
-		"Imported skills stay on this machine until you publish them: run 'agentx source add <url> --account', then 'agentx skill publish <name>'.\n\n"+
+		"Imported skills stay on this machine until you publish them: run 'agentx source add <url> --hub', then 'agentx skill publish <name>'.\n\n"+
 		"Could not import (2)\n"+
 		"  cloned    "+cloned+"\n"+
 		"  shortcut  "+shortcut+"\n\n"+
 		"Imported 2 skills; 2 could not be imported.\n")
 	equal(t, "the notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes\n")
-	if _, err := h.accountGitErr("rev-parse", "--verify", "-q", "refs/heads/managed/alpha"); err == nil {
+	if _, err := h.storeGitErr("rev-parse", "--verify", "-q", "refs/heads/managed/alpha"); err == nil {
 		t.Error("alpha has an import branch")
 	}
 
@@ -197,7 +197,7 @@ func TestAdoptAllAdoptsFoldersAsTheyAre(t *testing.T) {
 }
 
 // TestAdoptDropsACredentialInTheURL: a token someone put in the lock file's
-// URL never reaches the settings, an event, the account repo or a line of
+// URL never reaches the settings, an event, the store or a line of
 // output, exactly as it does not for 'agentx source add'.
 func TestAdoptDropsACredentialInTheURL(t *testing.T) {
 	t.Parallel()
@@ -220,8 +220,8 @@ func TestAdoptDropsACredentialInTheURL(t *testing.T) {
 		"stdout":            out.stdout,
 		"stderr":            out.stderr,
 		"the settings":      string(settings),
-		"the import commit": h.accountGit("cat-file", "commit", "refs/heads/managed/alpha"),
-		"the git config":    h.accountGit("config", "--list"),
+		"the import commit": h.storeGit("cat-file", "commit", "refs/heads/managed/alpha"),
+		"the git config":    h.storeGit("config", "--list"),
 	} {
 		if strings.Contains(text, "s3cr3t") || strings.Contains(text, "carol") {
 			t.Errorf("%s carries the credential from the lock file:\n%s", what, text)
@@ -312,10 +312,10 @@ func TestAdoptOneSkillOfSeveral(t *testing.T) {
 		events = append(events, ev["name"].(string)+" "+ev["state"].(string))
 	}
 	equal(t, "the adoption events", strings.Join(events, ", "), "alpha "+adoptAdopted+", beta "+adoptRefused)
-	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/beta"); err == nil {
+	if _, err := h.storeGitErr("rev-parse", "--verify", "refs/heads/managed/beta"); err == nil {
 		t.Error("beta was imported although the source holds no skill at its subpath")
 	}
-	if h.accountGit("rev-parse", "--verify", "refs/heads/managed/alpha") == "" {
+	if h.storeGit("rev-parse", "--verify", "refs/heads/managed/alpha") == "" {
 		t.Error("alpha was not imported although the source holds it")
 	}
 	list := h.run("--json", "skill", "list")

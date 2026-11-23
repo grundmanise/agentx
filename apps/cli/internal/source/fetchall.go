@@ -23,7 +23,7 @@ type Result struct {
 	Err     error
 }
 
-// FetchAll fetches every source of srcs into the account repo, at most
+// FetchAll fetches every source of srcs into the store, at most
 // Fetchers at a time, and returns one Result per source in the order they
 // were given: the work is parallel, what a caller reports from it is not.
 // A source that fails carries its error and stops no other.

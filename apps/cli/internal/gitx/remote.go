@@ -22,7 +22,7 @@ func ForkRefspec(remote string) string {
 // it holds, every ref under it this remote's.
 func TrackingPrefix(remote string) string { return "refs/remotes/" + remote + "/" }
 
-// RemoteURL is the URL of the remote called remote as the account repo
+// RemoteURL is the URL of the remote called remote as the store
 // records it, "" when no such remote is set.
 func (r *Runner) RemoteURL(ctx context.Context, gitDir, remote string) (string, error) {
 	out, _, err := r.IsolatedStatus(ctx, gitDir, 1, "config", "--get", "remote."+remote+".url")
@@ -30,7 +30,7 @@ func (r *Runner) RemoteURL(ctx context.Context, gitDir, remote string) (string, 
 }
 
 // SetRemote records url as the remote of fork branches called remote, with
-// its ForkRefspec as its one fetch refspec and tags off, in the account
+// its ForkRefspec as its one fetch refspec and tags off, in the home
 // repo's own configuration. It is written key by key with git config rather
 // than git remote add, which would refuse a remote that is there already
 // and write the default refspec, which fetches every branch. It runs under
@@ -69,7 +69,7 @@ func (r *Runner) SetTracking(ctx context.Context, gitDir, remote, branch string)
 }
 
 // UnsetTracking takes the tracking configuration of branch out of the
-// account repo, the section SetTracking wrote, for a removal that deletes
+// store, the section SetTracking wrote, for a removal that deletes
 // the branch: a later branch of the name would otherwise track the
 // remote branch of another. A branch with none has nothing to take out.
 func (r *Runner) UnsetTracking(ctx context.Context, gitDir, branch string) error {
@@ -82,7 +82,7 @@ func (r *Runner) UnsetTracking(ctx context.Context, gitDir, branch string) error
 	return err
 }
 
-// UnsetRemote takes the remote called remote out of the account repo: its
+// UnsetRemote takes the remote called remote out of the store: its
 // configuration section, the tracking configuration of every fork branch
 // that names it, and every remote-tracking branch a fetch of it wrote. No
 // local branch is touched. Under the lock, as SetRemote. The remote-tracking
@@ -140,11 +140,11 @@ func (r *Runner) dropRemoteRefs(ctx context.Context, gitDir, remote string) erro
 	return err
 }
 
-// networkConfig is what every git agentx runs against the account remote
+// networkConfig is what every git agentx runs against the hub
 // sets on top of the user's environment, whose credential helpers, SSH
 // configuration and URL rewrites apply as for any git of theirs: no hook of
 // theirs runs. A hooks path set in the user's global configuration belongs
-// to their projects, not to the account repo, and a hook that waits for
+// to their projects, not to the store, and a hook that waits for
 // input would hang the serve child.
 func networkConfig() []string { return []string{"-c", "core.hooksPath=" + os.DevNull} }
 
@@ -173,7 +173,7 @@ func (r *Runner) ProbeRemote(ctx context.Context, url string) (forks bool, err e
 // no hook of theirs, see networkConfig. It is one ls-remote, which brings
 // no object and writes nothing, so that a caller can tell whether a fetch
 // would bring anything before it fetches. It runs where no repository is,
-// as ProbeRemote does, so that it needs no remote set up in the account
+// as ProbeRemote does, so that it needs no remote set up in the home
 // repo and no configuration but the user's applies.
 func (r *Runner) ForkTips(ctx context.Context, url string) (map[string]string, error) {
 	const prefix = "refs/heads/skills/"
@@ -203,17 +203,17 @@ func parseForkTips(out string) map[string]string {
 // FetchRemote fetches the fork branches of the remote called remote into
 // their remote-tracking branches, in the user's environment: quiet, no
 // tags, no FETCH_HEAD, no submodules, and a remote-tracking branch whose
-// fork branch the remote no longer holds is deleted. An object the account
+// fork branch the remote no longer holds is deleted. An object the home
 // repo lacks is never fetched lazily from a source along the way. The
 // remote's ForkRefspec is given on the command line, with --refmap=, so
 // that it is the only refspec the fetch follows and prunes: the user's
 // environment merges every remote.<name>.fetch their configuration holds,
 // a global one meant for their projects included. refetch fetches every
 // object the fork branches reach again, as a fresh clone would, telling
-// the remote of nothing this repository holds. Only the first fetch of an
-// account remote on this machine asks for it: a shared source of the same
+// the remote of nothing this repository holds. Only the first fetch of a
+// hub on this machine asks for it: a shared source of the same
 // repository, removed before, may have left commits fetched without their
-// blobs, which would otherwise let the remote leave out blobs the account
+// blobs, which would otherwise let the remote leave out blobs the home
 // repo never received. A refetch with no fork branch to fetch waits on the
 // remote for good, git asking for nothing and still waiting for a pack, so
 // it is asked for only when the remote was just seen holding one.

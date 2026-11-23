@@ -16,9 +16,9 @@ import type {
 import { formatDate } from "#/lib/dates.ts";
 
 /** Where a skill comes from, which decides its group, glyph, origin and Details. */
-export type SkillKindName = "yours" | "source" | "plugin" | "disk";
+export type SkillKindName = "hub" | "source" | "plugin" | "disk";
 
-/** A row's one status pill: one of your own skills not yet published. */
+/** A row's one status pill: a hub skill not yet published. */
 export type PillKind = "not-published";
 
 export interface Pill {
@@ -42,7 +42,7 @@ export interface SkillRow {
   enabled: boolean;
   /** Edited since its base version, or edits not yet published. */
   modified: boolean;
-  /** One of your own skills whose branch the account remote holds. */
+  /** A hub skill whose branch the hub holds. */
   published: boolean;
   pills: Pill[];
   /** The configurations that see the skill, in inventory order. */
@@ -138,7 +138,7 @@ export const shortSource = (url: string): string => {
 export const shortId = (id: string) => id.slice(0, 7);
 
 /**
- * Whether an update is what another of your machines published to one of your own skills: the
+ * Whether an update is what another of your machines published to a hub skill: the
  * CLI leaves its base version empty (docs/spec/cli-contract.md, `update_available`).
  */
 export const fromAnotherMachine = (update: UpdateAvailableEvent) =>
@@ -178,7 +178,7 @@ export const toolName = (adoption: AdoptionEvent): string => {
   }
 };
 
-export const GROUP_YOURS = "yours";
+export const GROUP_HUB = "hub";
 export const GROUP_PLUGINS = "plugins";
 export const GROUP_DISK = "disk";
 const SOURCE_PREFIX = "source:";
@@ -186,7 +186,7 @@ const SOURCE_PREFIX = "source:";
 const groupNames: Record<string, string> = {
   [GROUP_DISK]: "Unmanaged",
   [GROUP_PLUGINS]: "Plugins",
-  [GROUP_YOURS]: "Personal",
+  [GROUP_HUB]: "Hub",
 };
 
 /** The name of a group: a source's short form, or the fixed ones, which SHOW offers as choices. */
@@ -200,12 +200,12 @@ const kindOf = (entry: LibraryEntry): SkillKindName => {
   if (entry.kind === "unmanaged") {
     return "disk";
   }
-  return entry.subpath === undefined ? "yours" : "source";
+  return entry.subpath === undefined ? "hub" : "source";
 };
 
 const groupOf = (kind: SkillKindName, entry: LibraryEntry) => {
-  if (kind === "yours") {
-    return GROUP_YOURS;
+  if (kind === "hub") {
+    return GROUP_HUB;
   }
   if (kind === "disk") {
     return GROUP_DISK;
@@ -219,7 +219,7 @@ const uniqueInOrder = (ids: string[], order: string[]) =>
 const pillsOf = (entry: LibraryEntry, kind: SkillKindName): Pill[] => {
   const drift = entry.drift ?? [];
   const pills: Pill[] = [];
-  if (kind === "yours" && drift.includes("not published")) {
+  if (kind === "hub" && drift.includes("not published")) {
     pills.push({ kind: "not-published", label: "Not published" });
   }
   return pills;
@@ -284,7 +284,7 @@ const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
     name: entry.name,
     occurrences: node?.occurrences ?? [],
     pills: pillsOf(entry, kind),
-    published: kind === "yours" && !drift.includes("not published"),
+    published: kind === "hub" && !drift.includes("not published"),
     universal: true,
   };
   if (node !== undefined) {
@@ -303,7 +303,7 @@ const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
     row.adoption = adopted;
   }
   const original =
-    kind === "yours" ? originalOf(entry, c.inventory.library) : undefined;
+    kind === "hub" ? originalOf(entry, c.inventory.library) : undefined;
   if (original !== undefined) {
     row.forkedFrom = original.name;
   }
@@ -467,7 +467,7 @@ const pluginSubgroups = (rows: SkillRow[]): Subgroup[] => {
 };
 
 /**
- * The rows in groups: PERSONAL, each source A to Z by its short form, PLUGINS, then UNMANAGED,
+ * The rows in groups: HUB, each source A to Z by its short form, PLUGINS, then UNMANAGED,
  * each sorted in `order`. PLUGINS holds one subgroup per plugin. A group with no row is left out.
  */
 export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
@@ -476,7 +476,7 @@ export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
     keys.filter((k) => k.startsWith(SOURCE_PREFIX)),
     (a, b) => groupLabel(a).localeCompare(groupLabel(b))
   );
-  const ordered = [GROUP_YOURS, ...sources, GROUP_PLUGINS, GROUP_DISK].filter(
+  const ordered = [GROUP_HUB, ...sources, GROUP_PLUGINS, GROUP_DISK].filter(
     (k) => keys.includes(k)
   );
   return ordered.map((key) => {
@@ -503,7 +503,7 @@ export const forksOf = (row: Pick<SkillRow, "name">, rows: SkillRow[]) =>
     compareNames
   );
 
-export type Show = "all" | "yours" | "plugins" | "unmanaged" | "updates";
+export type Show = "all" | "hub" | "plugins" | "unmanaged" | "updates";
 export type State = "all" | "enabled" | "disabled";
 /** The id of the Universal choice among the agent filters. */
 export const UNIVERSAL = "universal";
@@ -532,9 +532,9 @@ export const filterCount = (f: Filters) =>
 
 /** The group each SHOW choice keeps, for the choices that keep one group. */
 const showGroups: Partial<Record<Show, string>> = {
+  hub: GROUP_HUB,
   plugins: GROUP_PLUGINS,
   unmanaged: GROUP_DISK,
-  yours: GROUP_YOURS,
 };
 
 const matchesShow = (row: SkillRow, show: Show) => {
@@ -590,10 +590,10 @@ export const showCounts = (
   const count = (show: Show) => filterRows(rows, { ...f, show }).length;
   return {
     all: count("all"),
+    hub: count("hub"),
     plugins: count("plugins"),
     unmanaged: count("unmanaged"),
     updates: count("updates"),
-    yours: count("yours"),
   };
 };
 
@@ -603,10 +603,10 @@ export const originOf = (row: SkillRow): string => {
     case "source": {
       return shortSource(row.entry?.source ?? "");
     }
-    case "yours": {
+    case "hub": {
       const upstream = row.entry?.upstream;
       return upstream === undefined
-        ? "personal skill"
+        ? "hub skill"
         : `from ${shortSource(upstream)}`;
     }
     case "plugin": {
@@ -625,9 +625,9 @@ export const originOf = (row: SkillRow): string => {
 
 const kindWords: Record<SkillKindName, string> = {
   disk: "Unmanaged",
+  hub: "Hub skill",
   plugin: "Plugin skill",
   source: "Skill",
-  yours: "Personal skill",
 };
 
 /** What the glyph's title says: the skill's kind and whether an agent client sees it. */
@@ -644,7 +644,7 @@ export const glyphOf = (row: SkillRow): Glyph => {
   if (row.modified) {
     return "pencil";
   }
-  return row.kind === "yours" ? "fork" : "dot";
+  return row.kind === "hub" ? "fork" : "dot";
 };
 
 /** The reads that show a skill's files; see FilesRequest in src/store/loaders.ts. */
@@ -658,8 +658,8 @@ export interface FilesRequest {
  * name, a plugin's as `<plugin>:<directory>`, and a skill a client holds in its own skills
  * directory, which is neither, by its directory with `--configuration`. The CLI finds a plugin's
  * or a configuration's skill by its directory's name, not the name its frontmatter gives, so the
- * occurrence `occurrenceOf` chooses names it. Only a modified skill of a source or one of your
- * own with edits not published has a diff. Undefined when the CLI has no way to name it.
+ * occurrence `occurrenceOf` chooses names it. Only a modified skill of a source or a hub
+ * skill with edits not published has a diff. Undefined when the CLI has no way to name it.
  */
 export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
   if (row.entry !== undefined && row.kind !== "plugin") {

@@ -36,13 +36,13 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 			"anything else, the command stops and changes nothing: --force replaces the\n" +
 			"directory with the placement and deletes what it held. To keep that content,\n" +
 			"move the directory elsewhere first.\n\n" +
-			"For one of your own skills, it first puts back what it needs on this machine:\n" +
+			"For a hub skill, it first puts back what it needs on this machine:\n" +
 			"its worktree, checked out again from its branch, and its library symlink. A\n" +
 			"directory in the way of either stops the command: --force adopts it, keeping\n" +
 			"every file as an unpublished edit of the skill.\n\n" +
 			"With --machine cloud, place the skill on the cloud machine instead: the skill's\n" +
 			"entry, which follows the latest version, is committed to the branch\n" +
-			"machines/cloud of the account remote and pushed, and nothing on this machine's\n" +
+			"machines/cloud of the hub and pushed, and nothing on this machine's\n" +
 			"disk changes. Without --to, it is placed in every configuration this machine\n" +
 			"enables. With --copy, the snapshot's copy_mode records a copy in those\n" +
 			"configurations, so the cloud machine places a copy there. --force is refused.",
@@ -60,11 +60,11 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 			return inv.skillPlace(cmd.Context(), args[0], to, asCopy, force)
 		},
 	}
-	cmd.Flags().StringVar(&machine, "machine", "", "place the skill on this machine instead, by its branch on the account remote; only cloud is accepted")
+	cmd.Flags().StringVar(&machine, "machine", "", "place the skill on this machine instead, by its branch on the hub; only cloud is accepted")
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place the skill in, instead of every enabled one; give it again for each")
 	cmd.Flags().BoolVar(&asCopy, "copy", false, "place a copy instead of a symlink")
 	cmd.Flags().BoolVar(&force, "force", false,
-		"replace a displaced directory whose content differs from the library with the expected placement, deleting what the directory holds; for one of your own skills, adopt what is in the way of its worktree or library symlink")
+		"replace a displaced directory whose content differs from the library with the expected placement, deleting what the directory holds; for a hub skill, adopt what is in the way of its worktree or library symlink")
 	return cmd
 }
 
@@ -253,7 +253,7 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 	if err := plan.refusal(force); err != nil {
 		return err
 	}
-	gitDir := gitx.AccountRepoPath(inv.dirs.Home)
+	gitDir := gitx.StorePath(inv.dirs.Home)
 	again := "run " + plan.command() + " again"
 	var done placements
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
@@ -697,7 +697,7 @@ func (inv *invocation) reportPlaced(ctx context.Context, name string, targets []
 }
 
 // skillContext is what a report about library skills reads once: the
-// lineage branches of the account repo, the copy modes, the sources and the
+// lineage branches of the store, the copy modes, the sources and the
 // disabled configurations of the settings, and the configurations detected.
 // Reading them per skill would cost a git process per skill, which a run
 // over the whole library may not.
@@ -705,13 +705,13 @@ type skillContext struct {
 	records  map[string]lineage.Record
 	modes    map[string][]string
 	sources  map[string]bool        // the canonical URL of every source the settings hold
-	account  string                 // the account remote's URL, "" when none is set
+	hub      string                 // the hub's URL, "" when none is set
 	disabled []string               // the configurations the settings disable
 	targets  []placeTarget          // every detected configuration a placement can be made in
 	observed map[string]observation // read ahead of the report, by skill name; see observeAll
 	merges   map[string]bool        // the skills an update left a merge pending for, see pendingMerges
-	// published is the tip of each of your own skills' branch on the
-	// account remote as last fetched, by name, see publishedTips.
+	// published is the tip of each hub skill's branch on the
+	// hub as last fetched, by name, see publishedTips.
 	published map[string]string
 	// publishedRead is false when published could not be read, so that no
 	// skill is judged not published, see publishedTips.
@@ -735,7 +735,7 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 }
 
 // librarySkillEventFor builds the library_skill event of one library directory from the
-// lineage the account repo holds and the placements the rescan found in the
+// lineage the store holds and the placements the rescan found in the
 // configurations the command covered. A nil covered reports every placement,
 // which is what a listing of the whole library does. The universal clients
 // are every one the rescan detected, covered or not: they see the skill
@@ -746,21 +746,21 @@ func (sc skillContext) librarySkillEventFor(ctx context.Context, inv *invocation
 		places = filterPlacements(places, covered)
 	}
 	rec, managed := sc.records[lib.Name]
-	return skillFromLibrary(lib, rec, managed, sc.sources, sc.account, places, universalClients(inventory), sc.observationOf(ctx, inv, lib))
+	return skillFromLibrary(lib, rec, managed, sc.sources, sc.hub, places, universalClients(inventory), sc.observationOf(ctx, inv, lib))
 }
 
-// lineageRecords are the branches of the account repo by skill name, a
+// lineageRecords are the branches of the store by skill name, a
 // fork's with the lineage its history holds, see lineage.ReadForks, empty
-// when this machine has no account repo yet: a listing never creates one.
+// when this machine has no store yet: a listing never creates one.
 // Serve keeps the lineages it read by branch tip, so a rescan walks only the
 // forks whose branch moved.
-// Either failure names the account repo, as the check of it does, since
+// Either failure names the store, as the check of it does, since
 // what git says of refs it cannot read need not, and the hint and a scan's
 // warning both send the reader to that repo.
 func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.Record, error) {
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	if !exists {
 		return map[string]lineage.Record{}, nil
@@ -770,7 +770,7 @@ func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.R
 		err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
 	}
 	if err != nil {
-		return nil, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
+		return nil, storeFailure(fmt.Errorf("store %s: %w", gitDir, err))
 	}
 	return records, nil
 }

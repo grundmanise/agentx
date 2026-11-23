@@ -17,7 +17,7 @@ import (
 
 // A pending merge is what an update of a modified skill leaves when its
 // edits and its update conflict: an ordinary git merge in progress, in a
-// linked worktree of the account repo at <agentx home>/merges/<name>, the
+// linked worktree of the store at <agentx home>/merges/<name>, the
 // skill's checkout. It is detached at mine, the library directory as git
 // records it committed on the base version, with the update candidate as
 // MERGE_HEAD, the merged files, conflict markers and all, in its work tree
@@ -232,9 +232,9 @@ func (inv *invocation) readMerge(ctx context.Context, dir string) (pendingState,
 // anything prunes, see pruneMerges. The skill is reported as it now
 // stands.
 func (inv *invocation) abortMerge(ctx context.Context, name string) error {
-	gitDir, _, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	fork := false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
@@ -244,13 +244,13 @@ func (inv *invocation) abortMerge(ctx context.Context, name string) error {
 		}
 		values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{lineage.ForkRef(name)})
 		if err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 		fork = values[lineage.ForkRef(name)] != ""
 		path := inv.checkoutPath(name)
 		inv.leaveCheckout(path)
 		if err := inv.git.RemoveCheckout(ctx, gitDir, path); err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 		return nil
 	})
@@ -328,7 +328,7 @@ func updateMergeMessage(name string, from, to lineage.Record) string {
 // the merges directory that is no checkout git knows, its .git file gone
 // or naming a git directory that is not there, and git's registration of a
 // checkout locked with agentx's reason whose directory is gone, its
-// directory under the account repo's worktrees, as git's own pruning
+// directory under the store's worktrees, as git's own pruning
 // removes one. A checkout agentx did not lock, a fork's worktree say, is
 // never touched. The registration of a fork's worktree goes only when the
 // fork is gone too, its directory and its branch, as a removal killed

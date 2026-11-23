@@ -12,7 +12,6 @@ import { useId, useRef, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { DiffEvent, ProgressEvent } from "#/cli/events.gen.ts";
-import { Spinner } from "#/components/spinner.tsx";
 import { notify, notifySuccess } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -26,17 +25,23 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
+import { WithReason } from "#/components/with-reason.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
-import { accountRemoteOf, notPublished } from "#/screens/skills/banners.ts";
+import {
+  hubOf,
+  notPublished,
+  readOnlyHubReason,
+} from "#/screens/skills/banners.ts";
 import { fileStatusLabels } from "#/screens/skills/files.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import {
   alreadyPublished,
   changedElsewhere,
-  notifyNoAccountRemote,
+  notifyNoHub,
   publishFailure,
-  refusedForAccountRemote,
+  refusedForHub,
 } from "#/screens/skills/publish.ts";
 import { agentx } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
@@ -99,13 +104,9 @@ export const changeSummary = (files: FilesState) => {
 
 /**
  * The toast of a publish that ended, when the outcome has one of its own. A failure with none
- * keeps the toast the runner showed. `accountRemoteSet` is whether the store knows of one.
+ * keeps the toast the runner showed. `hubSet` is whether the store knows of one.
  */
-const reportPublish = (
-  row: SkillRow,
-  outcome: Outcome,
-  accountRemoteSet: boolean
-) => {
+const reportPublish = (row: SkillRow, outcome: Outcome, hubSet: boolean) => {
   const { name } = row;
   const event = outcome.events.find(
     (e) => e.type === "publish" && e.name === name
@@ -146,8 +147,8 @@ const reportPublish = (
     addActivity("success", text);
     return;
   }
-  if (refusedForAccountRemote(outcome, accountRemoteSet)) {
-    notifyNoAccountRemote();
+  if (refusedForHub(outcome, hubSet)) {
+    notifyNoHub();
   }
 };
 
@@ -281,7 +282,7 @@ const PublishForm = ({
     reportPublish(
       row,
       outcome,
-      accountRemoteOf(useAppStore.getState().sources) !== undefined
+      hubOf(useAppStore.getState().sources) !== undefined
     );
     onClose();
   };
@@ -332,12 +333,12 @@ const PublishForm = ({
   );
 };
 
-/** Where the publish goes: the account remote for one of your own, else the skill's source. */
+/** Where the publish goes: the hub for a hub skill, else the skill's source. */
 const Subtitle = ({ row }: { row: SkillRow }) => {
-  if (row.kind === "yours") {
+  if (row.kind === "hub") {
     return (
       <DialogDescription>
-        {`The ${row.name} skill will be published to your account remote.`}
+        {`The ${row.name} skill will be published to your hub.`}
       </DialogDescription>
     );
   }
@@ -390,6 +391,11 @@ export const PublishButton = ({
   // The read of the latest opening: an earlier one that ends later does not replace it.
   const opening = useRef(0);
   const pending = useSettling(publishLabel(row.name));
+  // A hub skill cannot be published while the hub is read-only; a source's skill shows
+  // Publish only while its source is writable.
+  const readOnly = useAppStore((s) =>
+    row.kind === "hub" ? readOnlyHubReason(s.sources) : undefined
+  );
   const openDialog = async () => {
     opening.current += 1;
     const mine = opening.current;
@@ -402,18 +408,25 @@ export const PublishButton = ({
   };
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={pending}
-        aria-busy={pending ? true : undefined}
-        onClick={() => {
-          void openDialog();
-        }}
-      >
-        {pending && <Spinner />}
-        {label}
-      </Button>
+      <WithReason reason={readOnly}>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          aria-busy={pending ? true : undefined}
+          aria-disabled={readOnly === undefined ? undefined : true}
+          onClick={
+            readOnly === undefined
+              ? () => {
+                  void openDialog();
+                }
+              : undefined
+          }
+        >
+          {pending && <Spinner />}
+          {label}
+        </Button>
+      </WithReason>
       <PublishDialog
         row={row}
         files={files}
@@ -424,7 +437,7 @@ export const PublishButton = ({
   );
 };
 
-/** Open Settings, where an account remote is set. */
+/** Open Settings, where a hub is set. */
 export const OpenSettingsButton = () => (
   <Button
     variant="ghost"

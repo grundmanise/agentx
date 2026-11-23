@@ -43,7 +43,7 @@ const BACKOFF_FIRST: Duration = Duration::from_millis(500);
 const BACKOFF_CAP: Duration = Duration::from_secs(30);
 const BACKOFF_RESET: Duration = Duration::from_secs(60);
 /// Exit codes after which serve is not restarted: git missing (2), serve refused (6: another
-/// serve holds `serve.lock`, or the watch limit), and the account repo unusable (8). Serve reports
+/// serve holds `serve.lock`, or the watch limit), and the store unusable (8). Serve reports
 /// these as `error` events and stays up to answer requests; should it still exit with one of
 /// them, a restart cannot fix it, so the startup screen shows it and offers Retry, which starts
 /// serve again.
