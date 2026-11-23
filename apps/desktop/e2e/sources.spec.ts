@@ -10,6 +10,7 @@ import {
   webUrl,
 } from "#/screens/sources/projection.ts";
 
+import { filesOf } from "./fixtures/skills.ts";
 import {
   ACME,
   ACME_ID,
@@ -262,6 +263,9 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   await expect(opened(page, "scratch")).toContainText(
     "Your library has a scratch folder that agentx doesn't manage. Import or remove it to add this skill."
   );
+  await expect(
+    opened(page, "scratch").getByRole("link", { exact: true, name: "scratch" })
+  ).toHaveAttribute("href", "#/skills/scratch");
 
   // Opening another pill reads that source's listing.
   await pill(page, "zeta/tools").click();
@@ -272,6 +276,22 @@ test("a source listing: the skills A to Z, each state with its label and, once o
     `source read ${ACME_ID} skills/scratch`,
     `source skills ${ZETA_ID}`,
   ]);
+});
+
+test("the name of the skill that holds a Name taken card's name opens it in Skills", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  cli.register(["source", "read", ACME_ID, "skills/xlsx"], {
+    events: [skillMd("xlsx", "# xlsx\n")],
+  });
+  await row(page, "xlsx").click();
+  cli.register(["skill", "files", "xlsx"], { events: filesOf("xlsx") });
+  await opened(page, "xlsx")
+    .getByRole("link", { exact: true, name: "xlsx" })
+    .click();
+  await expect(page).toHaveURL(/#\/skills\/xlsx$/u);
 });
 
 /**

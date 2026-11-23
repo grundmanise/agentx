@@ -236,6 +236,14 @@ export interface SkillMdRef {
   tree: string;
 }
 
+/** Why a card's name is taken, as the text before and after the library skill that holds it. */
+export interface TakenReason {
+  before: string;
+  /** The name of the library skill that holds the name. */
+  skill: string;
+  after: string;
+}
+
 export interface SkillCard {
   /**
    * The card's own key: its source and name, and for a skill read from a source, its subpath, as
@@ -250,6 +258,8 @@ export interface SkillCard {
   status?: CardStatus;
   /** Why a card that cannot be selected cannot be. */
   title?: string;
+  /** For a name a library skill holds: `title` around that skill's name, which opens it in Skills. */
+  taken?: TakenReason;
   /** Where its SKILL.md is read from; absent for your skills on the account remote. */
   skillMd?: SkillMdRef;
   /** The skill's directory on its source's web page, when agentx knows the host's pages. */
@@ -276,14 +286,32 @@ interface CardState {
 }
 
 /** Why a card whose name `holder` holds cannot be added, and how to free the name. */
-const takenWhy = ({ kind, name, source, subpath }: LibraryEntry): string => {
+const takenWhy = ({
+  kind,
+  name,
+  source,
+  subpath,
+}: LibraryEntry): TakenReason => {
   if (kind === "unmanaged") {
-    return `Your library has a ${name} folder that agentx doesn't manage. Import or remove it to add this skill.`;
+    return {
+      after:
+        " folder that agentx doesn't manage. Import or remove it to add this skill.",
+      before: "Your library has a ",
+      skill: name,
+    };
   }
   if (subpath === undefined || source === undefined) {
-    return `Your library has your own ${name}. Remove or rename it to add this skill.`;
+    return {
+      after: ". Remove or rename it to add this skill.",
+      before: "Your library has your own ",
+      skill: name,
+    };
   }
-  return `Your library has ${name} from ${shortSource(source)}. Remove or rename it to add this skill.`;
+  return {
+    after: ` from ${shortSource(source)}. Remove or rename it to add this skill.`,
+    before: "Your library has ",
+    skill: name,
+  };
 };
 
 const card = (
@@ -309,7 +337,8 @@ const card = (
   if (state !== undefined) {
     c.status = state.status;
     if (state.holder !== undefined) {
-      c.title = takenWhy(state.holder);
+      c.taken = takenWhy(state.holder);
+      c.title = `${c.taken.before}${c.taken.skill}${c.taken.after}`;
     }
   }
   return c;

@@ -32,6 +32,7 @@ import { formatDate } from "#/lib/dates.ts";
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
+import { openSkill, skillPath } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
 import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
@@ -44,6 +45,7 @@ import type {
   CardGroup,
   SkillCard,
   SkillMdRef,
+  TakenReason,
 } from "#/screens/sources/projection.ts";
 import { loadSkillMd } from "#/store/loaders.ts";
 import { useSettling } from "#/store/settle.ts";
@@ -207,6 +209,24 @@ const ViewSkill = ({ page }: { page: string }) => (
   </a>
 );
 
+/** Why a card's name is taken, the skill that holds it a link that opens it in Skills. */
+const TakenText = ({ taken }: { taken: TakenReason }) => (
+  <>
+    {taken.before}
+    <a
+      href={`#${skillPath(taken.skill)}`}
+      className="text-text-primary underline underline-offset-2"
+      onClick={(e) => {
+        e.preventDefault();
+        openSkill(taken.skill);
+      }}
+    >
+      {taken.skill}
+    </a>
+    {taken.after}
+  </>
+);
+
 /**
  * What an open row shows: why a skill that cannot be selected cannot be, and its SKILL.md, whose
  * frontmatter holds the description. One of your skills on the account remote has no SKILL.md to
@@ -229,7 +249,11 @@ const Details = ({ card }: { card: SkillCard }) => {
           )}
           {card.title !== undefined && (
             <p className="type-secondary text-text-hint m-0 text-pretty">
-              {card.title}
+              {card.taken === undefined ? (
+                card.title
+              ) : (
+                <TakenText taken={card.taken} />
+              )}
             </p>
           )}
         </div>
