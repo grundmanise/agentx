@@ -961,7 +961,7 @@ warning: adal shares /home/me/.augment/skills with augment, so removing pdf from
   augment  symlink  /home/me/.augment/skills/pdf
 ```
 
-agentx records when each skill last entered your library and when it last left it, in `installs.json` in agentx home (`~/.agentx` by default). Removing a skill from some clients with `--from` changes neither date. `agentx scan --json` lists the dates under `installs`.
+agentx records when each skill last entered your library and when it last left it, in `installs.json` in agentx home (`~/.agentx` by default). Removing a skill from some clients with `--from` changes neither date; `--from universal` takes it from the library and records when it left. `agentx scan --json` lists the dates under `installs`.
 
 ### Your own skills
 
