@@ -379,32 +379,57 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   ]);
 });
 
-test("a row that opens scrolls into view, its header first", async ({
+test("a row that opens keeps the scroll, unless its top is hidden", async ({
   cli,
   page,
 }) => {
-  await page.setViewportSize({ height: 420, width: 1100 });
+  await page.setViewportSize({ height: 600, width: 1100 });
   await openSources(cli, page);
-  const lines = Array.from({ length: 80 }, (_, i) => `line ${i}`).join("\n");
+  const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n");
   for (const name of ["pdf", "docx"]) {
     cli.register(["source", "read", ACME_ID, `skills/${name}`], {
       events: [skillMd(name, `---\nname: ${name}\n---\n${lines}\n`)],
     });
   }
-  // pdf is below the fold: once open, its header and as much of its SKILL.md as fits show.
-  await expect(row(page, "pdf")).not.toBeInViewport();
+  const scroller = page
+    .locator(".overflow-auto")
+    .filter({ has: row(page, "pdf") });
+  const top = async (name: string) => {
+    const box = await rowLine(page, name).boundingBox();
+    return box?.y ?? Number.NaN;
+  };
+  const scrollerTop = async () => {
+    const box = await scroller.boundingBox();
+    return box?.y ?? Number.NaN;
+  };
+
+  // pdf opens at the bottom edge: nothing moves, and its SKILL.md shows below the fold.
+  await scroller.evaluate((el, y) => {
+    el.scrollTop = y;
+  }, 0);
+  const pdfBefore = await top("pdf");
   await row(page, "pdf").dispatchEvent("click");
   await expect(row(page, "pdf")).toHaveAttribute("aria-expanded", "true");
-  await expect(row(page, "pdf")).toBeInViewport({ ratio: 1 });
-  await expect(
-    opened(page, "pdf").getByRole("region", { name: "SKILL.md of pdf" })
-  ).toBeInViewport({ ratio: 0.5 });
-  // In a taller window the whole open row shows.
-  await page.setViewportSize({ height: 800, width: 1100 });
+  expect(await top("pdf")).toBe(pdfBefore);
+
+  // docx, its top 20px above the scroller's, scrolls down just enough to show its top.
+  const offset = (await top("docx")) - (await scrollerTop()) + 20;
+  await scroller.evaluate((el, by) => {
+    el.scrollTop += by;
+  }, offset);
+  const scrolled = await scroller.evaluate((el) => el.scrollTop);
   await row(page, "docx").dispatchEvent("click");
   await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
-  await expect(opened(page, "docx")).toBeInViewport({ ratio: 1 });
-  await expect(row(page, "docx")).toBeInViewport({ ratio: 1 });
+  await expect
+    .poll(async () => await scroller.evaluate((el) => el.scrollTop))
+    .toBeLessThan(scrolled);
+  const card = page
+    .locator("[data-slot=accordion-item]")
+    .filter({ has: row(page, "docx") });
+  const cardBox = await card.boundingBox();
+  expect(Math.round(cardBox?.y ?? Number.NaN)).toBe(
+    Math.round(await scrollerTop())
+  );
 });
 
 test("opening a row reads its SKILL.md once, then opens, and links to the skill", async ({
