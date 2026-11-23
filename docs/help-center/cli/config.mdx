@@ -34,6 +34,7 @@ schema_version           1
 label                    my-laptop
 accept_operations        false
 ignore_system_files      true
+report_inventory         false
 disabled_configurations  (none)
 copy_configurations      (none)
 sources                  []
@@ -48,6 +49,7 @@ An empty `disabled_configurations` or `copy_configurations` shows as `(none)`. `
 | `label` | The name of this machine. It is the hostname until you set it. [`agentx machine rename`](/cli/machine) also sets it. |
 | `accept_operations` | Reserved for a later version. agentx does not use it yet. |
 | `ignore_system_files` | Whether agentx ignores files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups. On by default. See [Files that do not count](/cli/skill#files-that-do-not-count) and [Files that stay local](/cli/fork#files-that-stay-local). |
+| `report_inventory` | Whether this machine writes its [inventory report](/cli/machine#see-the-skills-of-your-other-machines) to your hub on its own. Off by default. Reserved for a later version: agentx does not use it yet. To write the report, run `agentx machine report`. |
 | `disabled_configurations` | The configurations agentx skips when you install or place a skill without `--to`. See [Enable or disable a configuration](#enable-or-disable-a-configuration). |
 | `copy_configurations` | The configurations that get a copy of each new skill instead of a symlink. See [Choose symlink or copy](#choose-symlink-or-copy). |
 | `sources` | The sources skills are installed from, managed with [`agentx source`](/cli/source). |
@@ -72,9 +74,9 @@ agentx config set ignore_system_files false
 ✓ label is now work laptop
 ```
 
-You can set `label`, `accept_operations` and `ignore_system_files`:
+You can set `label`, `accept_operations`, `ignore_system_files` and `report_inventory`:
 
-- `accept_operations` and `ignore_system_files` take `true` or `false`.
+- `accept_operations`, `ignore_system_files` and `report_inventory` take `true` or `false`.
 - A label is one non-empty line of at most 256 bytes with no control character in it.
 
 agentx exits with code 1 for an invalid value, an unknown key, or a key you cannot set. For a key, the error lists the keys you can set.

@@ -115,6 +115,7 @@ export interface Settings {
   label?: string;
   accept_operations: boolean;
   ignore_system_files: boolean;
+  report_inventory: boolean;
   disabled_configurations: string[];
   copy_configurations: string[];
   sources: SettingsSource[];
