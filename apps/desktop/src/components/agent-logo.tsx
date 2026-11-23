@@ -292,8 +292,9 @@ export const AgentListCard = ({
 /**
  * Logos stacked with `logo.overlap`, each ringed in the parent's background, the first on top of
  * the next. `hidden` adds a "+n" count of the clients not drawn after the last logo
- * (`text.hint`). Then the stack is an `AgentListCard` of every client, drawn and hidden, and its
- * logos name no client in a Tooltip of their own.
+ * (`text.hint`), hidden from assistive tech with the logos when they are `decorative`. Then the
+ * stack is an `AgentListCard` of every client, drawn and hidden, and its logos name no client in a
+ * Tooltip of their own.
  */
 export const LogoStack = ({
   clients,
@@ -336,7 +337,10 @@ export const LogoStack = ({
     <AgentListCard clients={[...clients, ...hidden]} side={listSide}>
       <span className="flex items-center">
         {stack}
-        <span className={countVariants({ size })}>{`+${hidden.length}`}</span>
+        <span
+          className={countVariants({ size })}
+          aria-hidden={decorative ? true : undefined}
+        >{`+${hidden.length}`}</span>
       </span>
     </AgentListCard>
   );

@@ -535,6 +535,10 @@ test.describe("filters", () => {
         - checkbox "OpenCode"
         - button "Show 20 more"
     `);
+    // Universal draws a few logos and a count, which opens the list of every client it stands for.
+    await agents.getByText("+2", { exact: true }).hover();
+    await expect(page.getByRole("list", { name: "Agents" })).toBeVisible();
+    await page.mouse.move(0, 0);
 
     await agents.getByRole("button", { name: "Show 20 more" }).click();
     await expect(agents.getByRole("checkbox")).toHaveCount(26);
