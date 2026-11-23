@@ -223,7 +223,18 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 			m.Discard()
 			return err
 		}
-		return m.Apply(inv.refs(ctx))
+		// What the skill was is read from its import commit before the
+		// journal deletes the branch; an unmanaged skill names no source
+		// and leaves no date.
+		var left []home.Install
+		if plan.managed != "" {
+			left = append(left, inv.importedInstall(ctx, gitDir, name, plan.managed))
+		}
+		if err := m.Apply(inv.refs(ctx)); err != nil {
+			return err
+		}
+		inv.recordInstalls(nil, left)
+		return nil
 	})
 	if err != nil {
 		return mutationFailure(err)
@@ -384,7 +395,11 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 			m.Discard()
 			return err
 		}
-		return m.Apply(inv.refs(ctx))
+		if err := m.Apply(inv.refs(ctx)); err != nil {
+			return err
+		}
+		inv.recordInstalls(nil, []home.Install{recordedInstall(rec)})
+		return nil
 	})
 	if err != nil {
 		return mutationFailure(err)

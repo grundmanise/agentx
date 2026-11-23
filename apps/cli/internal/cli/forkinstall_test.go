@@ -104,6 +104,9 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 		t.Errorf("the library entry leads to %q, %v", real, err)
 	}
 	equal(t, "the result", b.one(out.stdout, "result")["summary"], "installed alpha from the account remote in 1 configuration")
+	if storedInstall(t, b, "", "", alpha["fork_id"].(string)).Added == "" {
+		t.Error("no date alpha entered b's library")
+	}
 
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")

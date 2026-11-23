@@ -30,7 +30,8 @@ type Inventory struct {
 	Machine        Machine         `json:"machine"`
 	Configurations []Configuration `json:"configurations"`
 	Skills         []Skill         `json:"skills"`
-	Library        []LibraryEntry  `json:"library"` // filled in by the caller, which reads the lineage
+	Library        []LibraryEntry  `json:"library"`  // filled in by the caller, which reads the lineage
+	Installs       []home.Install  `json:"installs"` // filled in by the caller, as installs.json holds them
 	MCPServers     []Server        `json:"mcp_servers"`
 	Plugins        []Plugin        `json:"plugins"`
 	Edges          []Edge          `json:"edges"`
@@ -231,6 +232,7 @@ func Read(o Options) *Scan {
 			Configurations: []Configuration{},
 			Skills:         []Skill{},
 			Library:        []LibraryEntry{},
+			Installs:       []home.Install{},
 			MCPServers:     []Server{},
 			Plugins:        []Plugin{},
 			Edges:          []Edge{},

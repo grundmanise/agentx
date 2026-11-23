@@ -359,9 +359,17 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 			m.Discard()
 			return err
 		}
+		// The fork's id is read from its history before the journal
+		// deletes the branch. Skill rename's removal leaves no date: the
+		// renamed skill is the same one, under its new name.
+		var left []home.Install
+		if !r.quiet {
+			left = append(left, inv.forkInstall(ctx, r.gitDir, r.name, r.tip))
+		}
 		if err := m.Apply(inv.refs(ctx)); err != nil {
 			return err
 		}
+		inv.recordInstalls(nil, left)
 		// Still under the lock, so that no worktree another command makes
 		// at root meanwhile goes with it. What is left of the registration
 		// goes with the next mutation, see pruneMerges; the tracking
