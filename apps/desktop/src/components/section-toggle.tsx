@@ -2,6 +2,7 @@ import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
+import { CollapsibleTrigger } from "#/components/ui/collapsible.tsx";
 import {
   Tooltip,
   TooltipContent,
@@ -9,7 +10,7 @@ import {
 } from "#/components/ui/tooltip.tsx";
 
 const toggleVariants = cva(
-  "rounded-row gap-group focus-visible:outline-shell-focus-ring flex min-w-0 items-center text-left focus-visible:outline-2",
+  "group/toggle rounded-row gap-group focus-visible:outline-shell-focus-ring flex min-w-0 items-center text-left focus-visible:outline-2",
   {
     variants: {
       // With an action, the row that holds the toggle and the action tints instead.
@@ -53,11 +54,13 @@ const countVariants = cva("type-technical-sm", {
  * The header of a section that collapses, within a list (DESIGN.md §6 "Group header (lists)"):
  * a flat, full-width row with no fill at rest, a chevron that turns down while the section is
  * open, the section's caption, its count and, at the right end, a dim detail such as a plugin's
- * marketplace. It tints on hover. A click collapses or expands the section, which
- * `aria-expanded` reports. It is named by its caption, count and detail. An action, such as a
- * text button, sits at the row's right end, beside the toggle, so that a click on it toggles
- * nothing. A `group` header heads a top-level group of a list, with the group's padding and
- * colours; a `subgroup` header heads a section inside one, such as a plugin's skills.
+ * marketplace. It tints on hover. It is the `CollapsibleTrigger` of the shadcn `Collapsible`
+ * that holds it, which holds the open state: a click collapses or expands the section, which
+ * `aria-expanded` reports, and the chevron follows the trigger's `data-state`. It is named by its
+ * caption, count and detail. An action, such as a text button, sits at the row's right end,
+ * beside the toggle, so that a click on it toggles nothing. A `group` header heads a top-level
+ * group of a list, with the group's padding and colours; a `subgroup` header heads a section
+ * inside one, such as a plugin's skills.
  */
 export const SectionToggle = ({
   label,
@@ -65,8 +68,6 @@ export const SectionToggle = ({
   title,
   count,
   detail,
-  open,
-  onToggle,
   action,
   level = "subgroup",
 }: {
@@ -84,8 +85,6 @@ export const SectionToggle = ({
    * tooltip shows it in full.
    */
   detail?: string;
-  open: boolean;
-  onToggle: () => void;
   /** A control at the row's right end, outside the toggle. */
   action?: ReactNode;
   /** A top-level group's header, or a section's inside one. */
@@ -94,45 +93,41 @@ export const SectionToggle = ({
   const hasAction = action !== undefined && action !== null;
   const caption = <span className={labelVariants({ level })}>{label}</span>;
   const toggle = (
-    <button
-      type="button"
-      aria-expanded={open}
-      onClick={onToggle}
-      className={toggleVariants({
-        action: hasAction,
-        level,
-      })}
-    >
-      <span
-        className={
-          open ? "text-text-caption flex rotate-90" : "text-text-caption flex"
-        }
+    <CollapsibleTrigger asChild>
+      <button
+        type="button"
+        className={toggleVariants({
+          action: hasAction,
+          level,
+        })}
       >
-        <ChevronIcon size="xs" />
-      </span>
-      {icon !== undefined && <span className="flex flex-none">{icon}</span>}
-      {title === undefined ? (
-        caption
-      ) : (
-        <Tooltip>
-          <TooltipTrigger asChild>{caption}</TooltipTrigger>
-          <TooltipContent side="top" align="start">
-            {title}
-          </TooltipContent>
-        </Tooltip>
-      )}
-      {count !== undefined && (
-        <span className={countVariants({ level })}>{count}</span>
-      )}
-      {detail !== undefined && (
-        <span
-          title={detail}
-          className="type-technical-sm text-subgroup-source min-w-0 flex-1 truncate text-right"
-        >
-          {detail}
+        <span className="text-text-caption flex group-data-[state=open]/toggle:rotate-90">
+          <ChevronIcon size="xs" />
         </span>
-      )}
-    </button>
+        {icon !== undefined && <span className="flex flex-none">{icon}</span>}
+        {title === undefined ? (
+          caption
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>{caption}</TooltipTrigger>
+            <TooltipContent side="top" align="start">
+              {title}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {count !== undefined && (
+          <span className={countVariants({ level })}>{count}</span>
+        )}
+        {detail !== undefined && (
+          <span
+            title={detail}
+            className="type-technical-sm text-subgroup-source min-w-0 flex-1 truncate text-right"
+          >
+            {detail}
+          </span>
+        )}
+      </button>
+    </CollapsibleTrigger>
   );
   if (!hasAction) {
     return toggle;

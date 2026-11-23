@@ -21,6 +21,10 @@ import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
+  Collapsible,
+  CollapsibleContent,
+} from "#/components/ui/collapsible.tsx";
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -575,23 +579,21 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
         {/* Once the run ended with nothing to say about any skill, the footer says it all. */}
         {shown.length > 0 && (
           <div className="max-h-update-skills-list -mx-3 flex flex-col gap-3 overflow-auto">
-            {shown.map((group) => {
-              const open = !collapsed.has(group.key);
-              return (
+            {shown.map((group) => (
+              <Collapsible
+                key={group.key}
+                asChild
+                open={!collapsed.has(group.key)}
+                onOpenChange={() => {
+                  toggleSection(group.key);
+                }}
+              >
                 <section
-                  key={group.key}
                   aria-label={group.label}
                   className="flex flex-col gap-0.5"
                 >
-                  <SectionToggle
-                    label={group.label}
-                    title={group.url}
-                    open={open}
-                    onToggle={() => {
-                      toggleSection(group.key);
-                    }}
-                  />
-                  {open && (
+                  <SectionToggle label={group.label} title={group.url} />
+                  <CollapsibleContent asChild>
                     <ul className="pl-subgroup-indent m-0 flex list-none flex-col gap-0.5 py-0 pr-0">
                       {group.rows.map((row) => (
                         <Row
@@ -608,10 +610,10 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
                         />
                       ))}
                     </ul>
-                  )}
+                  </CollapsibleContent>
                 </section>
-              );
-            })}
+              </Collapsible>
+            ))}
           </div>
         )}
         {run?.failure !== undefined && <ProblemText problem={run.failure} />}
