@@ -690,7 +690,7 @@
   --padding-banner-right: 16px;
   --gap-banner: 14px;
   --gap-banner-text: 3px;
-  /* The narrowest a callout's text gets before its buttons wrap under it. */
+  /* The narrowest an alert banner's text gets before its buttons wrap under it. */
   --container-banner-text: 240px;
   --padding-agent-card: 22px;
   --gap-agent-card: 12px;

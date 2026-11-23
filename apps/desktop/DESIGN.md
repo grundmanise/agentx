@@ -655,7 +655,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `card.row-padding` | 10 0 | `py-card-row px-0` | Sub-rows inside the Updates card |
 | `banner.padding` | 14 16 14 14 | `py-banner pr-banner-right pl-banner` |  |
 | `banner.gap` | 14 | `gap-banner` | Tile → text → actions |
-| `banner.text-width` | 240 | `min-w-banner-text basis-banner-text` | The narrowest a callout's text gets; narrower, its buttons wrap under it |
+| `banner.text-width` | 240 | `min-w-banner-text basis-banner-text` | The narrowest an alert banner's text gets; narrower, its buttons wrap under it |
 | `banner.tile` | 32–34 |  |  |
 | `banner.text-gap` | 3 | `gap-banner-text` | Title → text |
 | `agent-card.padding` | 22 | `p-agent-card` | Agents page cards |
@@ -940,13 +940,15 @@ The PLUGINS group holds one subgroup per plugin, A to Z by the plugin's name; a 
 
 The section toggle also heads a source in the Update skills dialog (§6 "Update skills dialog"), with no count. There it can end with one control at its right end, `subgroup.padding` from the edge, beside the toggle and outside it, so a click on the control toggles nothing; the whole row then takes `subgroup.hover`.
 
-### Callout
+### Alert
 
-`src/components/callout.tsx`: `banner.radius`, `banner.padding`, `tone.*.bg` with a 1px `tone.*.border`; a `banner.tile` icon tile in `tone.*.fg` (the `RefreshIcon` for an update, the `AlertIcon` otherwise); title `type.banner-title` `banner.title`, text `type.secondary` `banner.text`; its buttons on the right, vertically centred, wrapping to a line of their own under the text, still on the right, when they would leave the text narrower than `banner.text-width` (240px). The detail pane's banner and the notice under AGENTS when an agent sees more than one skill of a name are callouts; nothing else draws a box like it.
+shadcn's Alert (`src/components/ui/alert.tsx`): `Alert` with its `tone` (`attention`, `danger`, `neutral`, `primary`, `yours`), `AlertTile`, `AlertContent` holding `AlertTitle` and `AlertDescription`, and `AlertAction`. In its `banner` layout, a box: `banner.radius`, `banner.padding`, `tone.*.bg` with a 1px `tone.*.border`; a `banner.tile` icon tile in `tone.*.fg` (the `RefreshIcon` for an update, the `AlertIcon` otherwise); title `type.banner-title` `banner.title`, text `type.secondary` `banner.text`; its buttons on the right, vertically centred, wrapping to a line of their own under the text, still on the right, when they would leave the text narrower than `banner.text-width` (240px). That wrap is why the box is a wrapping flex row and not shadcn's grid. The detail pane's banner and the notice under AGENTS when an agent sees more than one skill of a name are alert banners; nothing else draws a box like it.
+
+A banner's role is `note`, named by its title, not shadcn's `alert`: a screen reader would announce an alert each time a skill opens. In its `bar` layout, the stale bar (§6 "Stale bar"), it is an `<output>`, a polite status region.
 
 ### Banner (detail pane)
 
-A callout (§6 "Callout").
+An alert banner (§6 "Alert").
 
 - The detail pane shows one banner, the first that applies in the ordered table in `src/screens/skills/banners.ts`. The header shows no status pills: the banner is the status.
 - A banner that says where the skill came from sets `coversOrigin`, and the header then leaves out the origin text beside the name. Today only the banner of a skill another tool added does.
@@ -989,7 +991,7 @@ Rename is a secondary small button in the action row, before Remove, for one of 
 
 Where the agents find a skill of the selected skill's name, from the inventory alone: which places hold one, and which agents see each. It never says which of two skills an agent uses, since that is the agent's own rule.
 
-- When some agent sees more than one skill of the name, a callout (§6 "Callout") under the chips in `attention`: its title says how many skills of the name there are, and its line that agents seeing more than one may pick the wrong skill, ending with Details: the line's type and colour with a dashed underline, plain text that opens a hover card (§6 "Hover card") on hover. The callout has no button, and the hover card only explains: Rename is in the action row. With no agent seeing more than one, AGENTS shows nothing of this.
+- When some agent sees more than one skill of the name, an alert banner (§6 "Alert") under the chips in `attention`: its title says how many skills of the name there are, and its line that agents seeing more than one may pick the wrong skill, ending with Details: the line's type and colour with a dashed underline, plain text that opens a hover card (§6 "Hover card") on hover. The banner has no button, and the hover card only explains: Rename is in the action row. With no agent seeing more than one, AGENTS shows nothing of this.
 - The hover card: its title in `type.secondary` `text.primary` 500, then a table (`src/components/ui/table.tsx`). A column for each place, the library first, then each plugin, then each agent's own folder, its caption in `table.header-text`; a check in `tone.primary.fg` where the row's agents see the skill, an en dash in `text.hint` where they do not. The agents that see more than one skill come first, a row each on `tone.attention.bg`; then the agents that see one, a row for those that see the same one, their names joined. Rows are `type.secondary` `text.secondary`, a 1px `shell.divider` rule above each. While some row is highlighted, a `text.muted` line under the table says what the highlight means.
 
 ### Edit (detail pane)
@@ -1107,7 +1109,7 @@ A command that fails for a reason the app does not handle itself (`src/store/run
 
 ### Stale bar
 
-A bar across the top of the main panel while the screens show an inventory that may be out of date (`src/app/stale-bar.tsx`): `stale-bar.height`, `stale-bar.padding`, a 1px bottom border, text `type.notice` `text.secondary`. While serve restarts: `tone.attention` with a `Spinner`. When a scan fails or serve stops for good: `tone.danger`, the reason, and a small ghost retry on the right. Nothing shows while the inventory is fresh.
+A bar across the top of the main panel while the screens show an inventory that may be out of date (`src/app/stale-bar.tsx`), the Alert's `bar` layout (§6 "Alert"), an `<output>`: `stale-bar.height`, `stale-bar.padding`, a 1px bottom border, text `type.notice` `text.secondary`. While serve restarts: `tone.attention` with a `Spinner`. When a scan fails or serve stops for good: `tone.danger`, the reason on one line with an ellipsis, and a small ghost retry on the right. Nothing shows while the inventory is fresh.
 
 ### Machine label
 
