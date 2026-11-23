@@ -720,8 +720,6 @@ test.describe("the detail pane", () => {
           - term: Forked from
           - definition:
             - link "https://github.com/acme/skills/pdf"
-          - term: Based on
-          - definition: 3f2a9c1
           - term: Published to
           - definition: git@github.com:me/account.git
           - term: Files
@@ -763,8 +761,11 @@ test.describe("the detail pane", () => {
       await page.evaluate(() => window.getSelection()?.toString() ?? "")
     ).toContain("acme/skills/pdf");
     expect(cli.openedUrls).toEqual([]);
+    // It opens the skill's directory at the commit it was forked from, as its name in History does.
     await forkedFrom.click();
-    expect(cli.openedUrls).toEqual(["https://github.com/acme/skills"]);
+    expect(cli.openedUrls).toEqual([
+      "https://github.com/acme/skills/tree/3f2a9c1e8d7b6a/pdf",
+    ]);
     await details
       .getByRole("link", {
         name: "/home/me/.agentx/worktrees/pdf-letters/pdf-letters",
@@ -973,6 +974,13 @@ test.describe("the detail pane", () => {
     await expect(
       row(page, "draft").getByText("Not published", { exact: true })
     ).toBeVisible();
+    // Details says so too, in place of a remote.
+    await expect(
+      pane(page, "draft")
+        .getByRole("region", { name: "Details" })
+        .getByRole("definition")
+        .first()
+    ).toHaveText("Not published");
   });
 
   test("a pending merge comes first: its banner in place of any other", async ({
