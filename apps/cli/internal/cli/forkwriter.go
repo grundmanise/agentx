@@ -119,12 +119,12 @@ func gitDate(t time.Time, tz string) string {
 func creationSubject(name string) string { return "Create " + name }
 
 // mergeMessage is the message of a merge commit on a fork's branch: subject
-// and the trailers of a merge, base, the import commit the merge records as
+// and the trailers of a merge, its kind when agentx wrote the subject, base, the import commit the merge records as
 // the fork's base, when it records one, and the machine. A merge that
 // conflicts is left pending with it as its MERGE_MSG, and the commit that
 // completes it carries it as it is, see commitText.
-func (w *forkWriter) mergeMessage(subject, base string) (string, error) {
-	return lineage.ForkMessage(subject, "", lineage.ForkTrailers{Base: base, Machine: w.machine})
+func (w *forkWriter) mergeMessage(subject, kind, base string) (string, error) {
+	return lineage.ForkMessage(subject, "", lineage.ForkTrailers{Kind: kind, Base: base, Machine: w.machine})
 }
 
 // commitText is commit for a message written already, mergeMessage's as a
@@ -146,7 +146,7 @@ func (w *forkWriter) keptMessage(message, base string) (string, error) {
 	if kept, err := lineage.ForkMessage(subject, body, lineage.ForkTrailers{Base: base, Machine: w.machine}); err == nil {
 		return kept, nil
 	}
-	return w.mergeMessage(subject, base)
+	return w.mergeMessage(subject, "", base)
 }
 
 // upstreamMergeSubject is the subject of the commit that merges an update

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -116,6 +117,11 @@ func TestSkillHistoryListsEveryCommit(t *testing.T) {
 		} else {
 			equal(t, ev["subject"].(string)+": machine_label", ev["machine_label"], want.label)
 		}
+	}
+	// The commits agentx wrote name their kind, so the kind is read, not
+	// guessed from the subject.
+	for _, i := range []int{1, 2} {
+		contains(t, fmt.Sprintf("event %d's message", i), events[i]["message"].(string), lineage.TrailerKind+": "+events[i]["kind"].(string)+"\n")
 	}
 	upstream := events[2]["upstream"].(map[string]any)
 	equal(t, "the fork's upstream commit", upstream["commit"], h.trailer(imported, lineage.TrailerCommit))
@@ -280,6 +286,20 @@ func TestDescribeHistory(t *testing.T) {
 			files: edited, kind: historyEdit, label: "laptop", generated: true},
 		{name: "edits with the user's message", subject: "Tighten the examples (draft)", t: machine, parents: []string{"t"}, first: tip,
 			files: edited, kind: historyEdit},
+		// A commit that names its kind is told by it, whatever its subject.
+		{name: "an edit by its kind", subject: "pdf-letters: edit SKILL.md (old) (laptop)", t: kinded(machine, historyEdit), parents: []string{"t"}, first: tip,
+			files: edited, kind: historyEdit, label: "laptop", generated: true},
+		{name: "an update by its kind", subject: "pdf-letters: merge upstream aaaaaaa (laptop)", t: kinded(machine, historyUpdate), parents: []string{"t", "i"},
+			first: tip, second: imported, kind: historyUpdate, label: "laptop", generated: true, upstream: wantUpstream},
+		{name: "a sync by its kind", subject: "pdf-letters: merge the account remote (studio mac)", t: kinded(machine, historySync), parents: []string{"t", "o"},
+			first: tip, kind: historySync, label: "studio mac", generated: true},
+		{name: "a fork by its kind", subject: "Fork pdf-letters from https://github.com/acme/skills/pdf at aaaaaaa", t: kinded(created, historyFork),
+			parents: []string{"i"}, first: imported, kind: historyFork, generated: true, upstream: wantUpstream},
+		{name: "an import from disk by its kind", subject: "Adopt notes", t: kinded(created, historyAdopt), kind: historyAdopt, generated: true},
+		{name: "a rename by its kind", subject: "Rename notes to jot", t: kinded(machine, historyRename), parents: []string{"t"}, first: tip,
+			kind: historyRename, generated: true, renamedFrom: "notes"},
+		{name: "a kind this agentx does not know", subject: "Pick from main", t: kinded(machine, "cherry-pick"), parents: []string{"t"}, first: tip,
+			kind: "cherry-pick", generated: true},
 	} {
 		ev := historyEvent{Name: "pdf-letters", Subject: tc.subject, Message: tc.subject, Parents: tc.parents, Files: tc.files, Origin: tc.origin}
 		describeHistory(&ev, tc.t, tc.first, tc.second)
@@ -291,4 +311,10 @@ func TestDescribeHistory(t *testing.T) {
 			t.Errorf("%s: upstream %+v, want %+v", tc.name, ev.Upstream, tc.upstream)
 		}
 	}
+}
+
+// kinded is t with the kind the Agentx-Kind trailer names.
+func kinded(t lineage.ForkTrailers, kind string) lineage.ForkTrailers {
+	t.Kind = kind
+	return t
 }

@@ -26,6 +26,9 @@ func TestParseForkAndForkMessage(t *testing.T) {
 	}{
 		{"all three", "s\n\nAgentx-Base: " + commitID + "\nAgentx-Fork-ID: " + aForkID + "\nAgentx-Machine: " + aMachine + "\n",
 			ForkTrailers{Base: commitID, ForkID: aForkID, Machine: aMachine}, false},
+		{"a kind", "s\n\nAgentx-Kind: edit\nAgentx-Machine: " + aMachine + "\n", ForkTrailers{Kind: "edit", Machine: aMachine}, false},
+		{"a kind a later agentx writes", "s\n\nAgentx-Kind: cherry-pick\n", ForkTrailers{Kind: "cherry-pick"}, false},
+		{"a kind of the wrong shape", "s\n\nAgentx-Kind: Edit Files\n", ForkTrailers{}, true},
 		{"one paragraph has no trailers", "Agentx-Machine: " + aMachine + "\n", ForkTrailers{}, false},
 		{"quoted in the body, not the last paragraph", "s\n\nAgentx-Fork-ID: " + aForkID + "\n\nSigned-off-by: me\n", ForkTrailers{}, false},
 		{"an import's trailers and unknown ones are ignored", message("https://github.com/example/skills", ".", commitID, hashID) + "Agentx-Later: x\n", ForkTrailers{}, false},
@@ -62,6 +65,7 @@ func TestParseForkAndForkMessage(t *testing.T) {
 		err                 bool
 	}{
 		{"creation", "Create pdf", "", ForkTrailers{ForkID: aForkID, Machine: aMachine}, false},
+		{"an update", "pdf: merge upstream 1a2b3c4 (laptop)", "", ForkTrailers{Kind: "update", Base: commitID, Machine: aMachine}, false},
 		{"merge with a body", "pdf: merge", "two lines\nof body", ForkTrailers{Base: commitID, Machine: aMachine}, false},
 		{"a body ending in a trailer of its own", "s", "Agentx-Machine: " + aMachine, ForkTrailers{}, true},
 		{"a body ending in the user's trailers", "s", "why\n\nSigned-off-by: Ada <ada@example.com>\n  continued", ForkTrailers{Machine: aMachine}, false},
@@ -82,7 +86,7 @@ func TestParseForkAndForkMessage(t *testing.T) {
 			t.Errorf("%s: %q reads back as %+v, %v", tc.name, m, got, err)
 		}
 	}
-	if m, _ := ForkMessage("Create pdf", "", ForkTrailers{ForkID: aForkID, Machine: aMachine}); m != "Create pdf\n\nAgentx-Fork-ID: "+aForkID+"\nAgentx-Machine: "+aMachine+"\n" {
+	if m, _ := ForkMessage("Create pdf", "", ForkTrailers{Kind: "create", ForkID: aForkID, Machine: aMachine}); m != "Create pdf\n\nAgentx-Kind: create\nAgentx-Fork-ID: "+aForkID+"\nAgentx-Machine: "+aMachine+"\n" {
 		t.Errorf("a creation message reads %q", m)
 	}
 	if m, _ := ForkMessage("s", "", ForkTrailers{ForkID: aForkID, Origin: Origin{Skill: "f", Plugin: "p", Marketplace: "m", URL: "https://example.com/p"}, Machine: aMachine}); m != "s\n\nAgentx-Fork-ID: "+aForkID+

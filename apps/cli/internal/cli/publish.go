@@ -130,7 +130,7 @@ func checkMessage(message string) error {
 // trailerInMessage is the usage error of a message -m gives that ends in a
 // trailer agentx writes itself.
 func trailerInMessage() error {
-	return fail(exitUsage, "-m may not end in a trailer agentx writes itself: "+lineage.TrailerBase+", "+lineage.TrailerForkID+", "+lineage.TrailerMachine+" or one of the Agentx-Origin- trailers",
+	return fail(exitUsage, "-m may not end in a trailer agentx writes itself: "+lineage.TrailerKind+", "+lineage.TrailerBase+", "+lineage.TrailerForkID+", "+lineage.TrailerMachine+" or one of the Agentx-Origin- trailers",
 		"leave those lines out of the message, or move them out of its last paragraph")
 }
 
@@ -690,11 +690,12 @@ func (inv *invocation) writeCommits(ctx context.Context, w *forkWriter, gitDir s
 			f.Path = strings.TrimPrefix(f.Path, prefix)
 			files = append(files, f)
 		}
-		subject, body := commitSubject(c.site.name, w.label, files), ""
+		m := forkMessage{subject: commitSubject(c.site.name, w.label, files), trailers: lineage.ForkTrailers{Kind: historyEdit}}
 		if text := strings.TrimSpace(message); text != "" {
-			subject, body, _ = strings.Cut(text, "\n")
+			m.subject, m.body, _ = strings.Cut(text, "\n")
+			m.trailers.Kind = ""
 		}
-		c.commit, err = w.commit(ctx, c.root, []string{parent(c)}, forkMessage{subject: subject, body: body})
+		c.commit, err = w.commit(ctx, c.root, []string{parent(c)}, m)
 		switch {
 		case err != nil && strings.TrimSpace(message) != "" && errors.Is(err, lineage.ErrForkTrailer):
 			// Only a message the user gave can carry a trailer of agentx's;

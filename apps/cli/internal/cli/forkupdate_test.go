@@ -186,7 +186,7 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	equal(t, "the checkout's HEAD", head, tip)
 	equal(t, "the checkout's MERGE_HEAD", mergeHead, candidate)
 	equal(t, "the checkout's ORIG_HEAD", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "ORIG_HEAD")), tip)
-	contains(t, "the checkout's MERGE_MSG", msg, "alpha: merge upstream "+short(second)+" (test-host)\n\nAgentx-Base: "+candidate+"\nAgentx-Machine: ")
+	contains(t, "the checkout's MERGE_MSG", msg, "alpha: merge upstream "+short(second)+" (test-host)\n\nAgentx-Kind: update\nAgentx-Base: "+candidate+"\nAgentx-Machine: ")
 	merged := fileBody(t, filepath.Join(pendingCheckout(h, "alpha"), "alpha", "notes.md"))
 	contains(t, "the sized markers", merged, "four\n=======\nsix\n<<<<<<<< "+tip+"\nseven, mine\n|||||||| "+base+"\nseven\n========\nseven, upstream\n>>>>>>>> "+candidate+"\n")
 	equal(t, "the clean file", fileBody(t, filepath.Join(pendingCheckout(h, "alpha"), "alpha", "SKILL.md")), skill("alpha", "The first skill, revised"))

@@ -101,7 +101,7 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	commit, err := w.commit(ctx, tree, nil, forkMessage{subject: creationSubject(name), trailers: lineage.ForkTrailers{ForkID: lineage.NewForkID()}})
+	commit, err := w.commit(ctx, tree, nil, forkMessage{subject: creationSubject(name), trailers: lineage.ForkTrailers{Kind: historyCreate, ForkID: lineage.NewForkID()}})
 	if err != nil {
 		return accountRepoFailure(err)
 	}

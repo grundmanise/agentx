@@ -44,6 +44,12 @@ const (
 	// TrailerOriginURL is an http or https URL where the skill a fork was
 	// made from can be seen, beside TrailerOriginSkill, when it is known.
 	TrailerOriginURL = "Agentx-Origin-URL"
+	// TrailerKind names what agentx did in the commit, such as edit,
+	// update or fork, on every commit whose subject agentx wrote for that
+	// kind; a commit whose subject the user gave carries none. Readers take
+	// a kind they do not know as a commit of its own, so a later agentx
+	// may add kinds.
+	TrailerKind = "Agentx-Kind"
 )
 
 // Origin is where a fork made of a skill with no import commit came from,
@@ -77,6 +83,7 @@ type ForkTrailers struct {
 	ForkID  string // the fork's id, on its creation commit
 	Origin  Origin // where the fork came from, on its creation commit
 	Machine string // the machine that wrote the commit
+	Kind    string // what agentx did in the commit, when it wrote the subject
 }
 
 // ErrForkTrailer is the error of a message whose fork trailers agentx
@@ -86,6 +93,7 @@ var ErrForkTrailer = errors.New("unreadable fork trailers")
 var (
 	forkID    = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	machineID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	kind      = regexp.MustCompile(`^[a-z][a-z-]{0,31}$`)
 	// trailerLine is a line git reads as a trailer, "<token>: <value>".
 	trailerLine = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*:[ \t]`)
 )
@@ -129,6 +137,8 @@ func ParseFork(message string) (ForkTrailers, error) {
 			field, shape = &t.Origin.Marketplace, IsOriginName
 		case TrailerOriginURL:
 			field, shape = &t.Origin.URL, weburl.Is
+		case TrailerKind:
+			field, shape = &t.Kind, kind.MatchString
 		default:
 			continue
 		}
@@ -155,7 +165,7 @@ func ParseFork(message string) (ForkTrailers, error) {
 
 // ForkMessage is the message of a commit agentx writes on a fork's branch:
 // the subject, the body when there is one, and the trailers it carries in
-// the order Base, Fork-ID, Origin-Skill, Origin-Plugin,
+// the order Kind, Base, Fork-ID, Origin-Skill, Origin-Plugin,
 // Origin-Marketplace, Origin-URL, Machine. A body that ends in trailers of its
 // own, such as a Signed-off-by a user gave, has agentx's added to that
 // block, so that git still reads the user's as trailers. A message
@@ -171,7 +181,7 @@ func ForkMessage(subject, body string, t ForkTrailers) (string, error) {
 	}
 	var trailers []string
 	for _, kv := range [][2]string{
-		{TrailerBase, t.Base}, {TrailerForkID, t.ForkID},
+		{TrailerKind, t.Kind}, {TrailerBase, t.Base}, {TrailerForkID, t.ForkID},
 		{TrailerOriginSkill, t.Origin.Skill}, {TrailerOriginPlugin, t.Origin.Plugin},
 		{TrailerOriginMarketplace, t.Origin.Marketplace}, {TrailerOriginURL, t.Origin.URL},
 		{TrailerMachine, t.Machine},

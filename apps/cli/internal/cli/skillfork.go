@@ -233,7 +233,10 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 			return err
 		}
 	}
-	message := forkMessage{subject: forkSubject(src, fk.target, fk.mode), trailers: lineage.ForkTrailers{ForkID: lineage.NewForkID()}}
+	message := forkMessage{subject: forkSubject(src, fk.target, fk.mode), trailers: lineage.ForkTrailers{Kind: historyFork, ForkID: lineage.NewForkID()}}
+	if fk.mode == modeAdopt {
+		message.trailers.Kind = historyAdopt
+	}
 	if !fk.inPlace {
 		// A fork in its source's place is that skill from now on, so it
 		// records no origin; a managed skill's import commit records one.
@@ -247,13 +250,13 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 		// renamed skill publishes as a fork of its own. It records no
 		// origin either: the renamed skill is the old one, not a copy of it.
 		message.subject = lineage.RenameSubject(sanitised(src.name), fk.target)
-		message.trailers.Origin = lineage.Origin{}
+		message.trailers.Origin, message.trailers.Kind = lineage.Origin{}, historyRename
 		recs := map[string]lineage.Record{src.name: src.rec}
 		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
 			return accountRepoFailure(err)
 		}
 		if l := recs[src.name].Fork; l != nil && l.ID != "" {
-			message.trailers = lineage.ForkTrailers{}
+			message.trailers = lineage.ForkTrailers{Kind: historyRename}
 		}
 	}
 	if fk.commit, err = w.commit(ctx, root, parents, message); err != nil {

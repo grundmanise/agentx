@@ -209,7 +209,7 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 	if u.merged.conflicted {
 		files, err := conflictFiles(u.merged.stages, site.dir)
 		if err == nil {
-			u.fork.message, err = w.mergeMessage(subject, next.Commit)
+			u.fork.message, err = w.mergeMessage(subject, historyUpdate, next.Commit)
 		}
 		if err != nil {
 			return nil, failureOf(accountRepoFailure(err))
@@ -217,7 +217,7 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 		u.conflict, u.fork.start = conflictOfSkill(name, u.merge, files), true
 		return u, nil
 	}
-	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, next.Commit}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Base: next.Commit}})
+	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, next.Commit}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Kind: historyUpdate, Base: next.Commit}})
 	if err != nil {
 		return nil, failureOf(accountRepoFailure(err))
 	}

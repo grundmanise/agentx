@@ -230,7 +230,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	if u.merged.conflicted {
 		files, err := conflictFiles(u.merged.stages, site.dir)
 		if err == nil {
-			fork.message, err = w.mergeMessage(subject, fork.base)
+			fork.message, err = w.mergeMessage(subject, historySync, fork.base)
 		}
 		if err != nil {
 			return "", nil, failureOf(accountRepoFailure(err))
@@ -241,7 +241,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	// The base the merge records is the fork's own or the remote's, which
 	// is the one that can pass the candidate.
 	fork.stale = inv.staleCandidate(ctx, gitDir, rec, fork.base, there.Import)
-	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, theirs}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Base: fork.base}})
+	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, theirs}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Kind: historySync, Base: fork.base}})
 	if err != nil {
 		return "", nil, failureOf(accountRepoFailure(err))
 	}

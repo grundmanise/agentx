@@ -270,7 +270,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	if u.merged.conflicted {
 		files, err := conflictFiles(u.merged.stages, site.dir)
 		if err == nil {
-			u.fork.message, err = w.mergeMessage(subject, u.fork.base)
+			u.fork.message, err = w.mergeMessage(subject, "", u.fork.base)
 		}
 		if err != nil {
 			return nil, failureOf(accountRepoFailure(err))
