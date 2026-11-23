@@ -161,7 +161,7 @@ test("turning an agent on runs config enable, and Place all places the library t
 
   // Seven library skills, none placed in Windsurf.
   const warning =
-    "windsurf: /home/me/.windsurf/skills/scratch is a directory of yours and was left as it is";
+    "windsurf: /home/me/.windsurf/skills/scratch is not a placement agentx made and was left as it is";
   cli.register(["config", "enable", "windsurf", "--place-all"], {
     events: [
       { type: "settings" },

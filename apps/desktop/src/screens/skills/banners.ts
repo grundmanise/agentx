@@ -44,7 +44,7 @@ export type BannerAction =
   | { kind: "add-source"; source: string }
   /** Opens the Publish dialog, which runs `skill publish <name>`. */
   | { kind: "publish" }
-  /** Goes to Settings, where an account remote is set. */
+  /** Goes to Settings, where a hub is set. */
   | { kind: "open-settings" }
   /**
    * The button of an edited skill of a source whose source this machine can write to: Publish to
@@ -71,7 +71,7 @@ type Conflicts = Record<string, ConflictEvent>;
 
 /** What the banners read besides the row: the store's sources, conflicts and the skill's diff. */
 export interface BannerFacts {
-  /** The added sources, from `source list`: the account remote, and each source's access. */
+  /** The added sources, from `source list`: the hub, and each source's access. */
   sources: SourceEvent[];
   /** How many files `skill diff <name>` reports changed; undefined until it was read. */
   changedFiles?: number;
@@ -88,19 +88,19 @@ interface BannerRule {
   ) => Banner;
 }
 
-/** The account remote, the one source added with `--account`, when one is set. */
+/** The hub, the one source added with `--hub`, when one is set. */
 export const accountRemoteOf = (sources: SourceEvent[]) =>
   sources.find((s) => s.account === true);
 
 /**
- * One of your own skills edited since it was published: what a bare `skill publish` covers, and
+ * A hub skill edited since it was published: what a bare `skill publish` covers, and
  * what the title bar's status counts as edited.
  */
 export const hasEditsToPublish = (row: SkillRow) =>
   row.kind === "yours" && row.modified && row.published;
 
 /**
- * One of your own skills the account remote holds no branch of: a publish sends every file, and
+ * A hub skill the hub holds no branch of: a publish sends every file, and
  * the title bar counts it as new.
  */
 export const notPublished = (row: SkillRow) =>
@@ -120,7 +120,7 @@ const changedFiles = (row: SkillRow) =>
   ].join(" · ");
 
 /**
- * Where an update comes from: its source, or for one of your own skills with an upstream, the
+ * Where an update comes from: its source, or for a hub skill with an upstream, the
  * upstream.
  */
 const updateOrigin = (row: SkillRow) => {
@@ -266,7 +266,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "open-settings" },
-      text: "Set an account remote to publish it.",
+      text: "Set a hub to publish it.",
       title: "Not published",
       tone: "yours",
     }),

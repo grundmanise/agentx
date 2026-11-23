@@ -25,7 +25,7 @@ type Settings struct {
 }
 
 // Source is one entry of the sources list: a source by its canonical URL,
-// whether it is the account remote, what git lets this machine do there,
+// whether it is the hub, what git lets this machine do there,
 // the ref it is pinned to and when it was last fetched. A source is fetched
 // from and pushed to at its canonical URL.
 //
@@ -35,7 +35,7 @@ type Settings struct {
 type Source struct {
 	URL           string `json:"url"`
 	Alias         string `json:"alias,omitempty"`
-	Account       bool   `json:"account,omitempty"` // the account remote, which holds one branch per fork and is fetched whole; every other source is shared
+	Account       bool   `json:"account,omitempty"` // the hub, which holds one branch per fork and is fetched whole; every other source is shared
 	Pin           string `json:"pin,omitempty"`
 	Access        string `json:"access,omitempty"`         // AccessWritable or AccessReadOnly, absent while unknown
 	AccessChecked string `json:"access_checked,omitempty"` // RFC 3339, when access was last checked, whatever the answer
@@ -71,7 +71,7 @@ func (s Source) AccessName() string {
 // or replaced as a pair with the time of its check, so that an add whose
 // check could not decide records that it looked and does not bring back
 // an answer it no longer has. The account flag is the add's own: source
-// add --account sets it, and only the account remote is added that way.
+// add --hub sets it, and only the hub is added that way.
 func (s Source) Merge(prev Source) Source {
 	if s.Alias == "" {
 		s.Alias = prev.Alias

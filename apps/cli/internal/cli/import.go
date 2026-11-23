@@ -65,20 +65,20 @@ func newSnapshotApplyCommand(inv *invocation) *cobra.Command {
 			"lacks, move each one it holds forward to the version the snapshot names, and\n" +
 			"place each one in the configurations the snapshot records, in those detected\n" +
 			"here.\n\n" +
-			"A skill of a source is installed from that source, and one of your own from the\n" +
-			"account remote. An entry with no version takes the latest one. A skill is only\n" +
+			"A skill of a source is installed from that source, and a hub skill from the\n" +
+			"hub. An entry with no version takes the latest one. A skill is only\n" +
 			"ever moved forward: one that is ahead is kept, and one that holds edits or\n" +
 			"whose history diverged is left as it is and reported, for 'agentx skill update'.\n" +
 			"A skill that cannot be installed, such as an unmanaged one, is skipped with\n" +
 			"the reason. A skill the snapshot does not list is left as it is, and MCP\n" +
-			"servers and plugins are not applied. Settings whose account remote is this\n" +
+			"servers and plugins are not applied. Settings whose hub is this\n" +
 			"machine's repository, by another URL, keep this machine's URL of it.\n\n" +
-			"Every source the settings name that this machine has not added, the account\n" +
-			"remote included, is added as 'agentx source add' adds it, at the pin the\n" +
+			"Every source the settings name that this machine has not added, the hub\n" +
+			"included, is added as 'agentx source add' adds it, at the pin the\n" +
 			"settings hold. A source that cannot be reached is a warning, and the snapshot\n" +
 			"is applied without it.\n\n" +
 			"With --machine <id>, read the snapshot from the branch machines/<id> of the\n" +
-			"account remote instead of a file, fetching that one branch and pushing\n" +
+			"hub instead of a file, fetching that one branch and pushing\n" +
 			"nothing, so a credential that can only read is enough, and apply it as a\n" +
 			"file's.\n\n" +
 			"The command asks once before it changes anything. Pass --yes to apply without\n" +
@@ -96,13 +96,13 @@ func newSnapshotApplyCommand(inv *invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "apply the snapshot without asking")
-	cmd.Flags().StringVar(&machine, "machine", "", "read the snapshot from the branch machines/<id> of the account remote instead of a file: cloud, or a computer's machine id")
+	cmd.Flags().StringVar(&machine, "machine", "", "read the snapshot from the branch machines/<id> of the hub instead of a file: cloud, or a computer's machine id")
 	return cmd
 }
 
 // importSnapshot reads a snapshot and applies it, see applySnapshot. The
 // snapshot is the file at path, or, when machine names one, what that
-// machine's branch on the account remote holds, see importMachine, whose
+// machine's branch on the hub holds, see importMachine, whose
 // name, machines/<id>, then stands for the file in every line.
 //
 // The snapshot is read and validated whole before anything is locked, so
@@ -186,9 +186,9 @@ func readExport(path string) (snapshot, error) {
 }
 
 // decodeSnapshot reads b, the snapshot path names, a file or a machine's
-// branch on the account remote, as readExport describes. A snapshot is one
+// branch on the hub, as readExport describes. A snapshot is one
 // machine's whole state, so it always holds that machine's settings, and
-// the entries of your own skills are read against the account remote they
+// the entries of hub skills are read against the hub they
 // set.
 func decodeSnapshot(path string, b []byte) (snapshot, error) {
 	// The version is read first and on its own: a document of a schema this
@@ -428,42 +428,42 @@ func badCopyMode(s home.Settings) string {
 	return ""
 }
 
-// documentAccount is the URL of the account remote the settings of a
+// documentAccount is the URL of the hub the settings of a
 // document set, "" when they set none.
 func documentAccount(s home.Settings) string {
 	entry, _ := accountEntry(s)
 	return entry.URL
 }
 
-// ownRecord reports whether e is one of your own skills, which a fork
+// ownRecord reports whether e is a hub skill, which a fork
 // branch holds: a managed entry whose source names the repository of the
-// account remote the snapshot is read against, account, or that has no
-// source at all, as your own skills have none while no account remote is
+// hub the snapshot is read against, account, or that has no
+// source at all, as hub skills have none while no hub is
 // set. Every other managed entry is a skill of a shared source, whose
 // import branch holds it. The repository decides and not its spelling,
 // every host read as itself, see accountRepository: a computer that
-// reaches the account remote over SSH and the cloud machine that reaches
+// reaches the hub over SSH and the cloud machine that reaches
 // it over HTTPS name one repository.
 func ownRecord(e snapshotSkill, account string) bool {
 	return e.Kind != lineage.KindUnmanaged && (e.Source == "" || accountRepository(e.Source, account))
 }
 
 // accountRepository reports whether url names the repository of the
-// account remote account: its URL, or another of the same host and path,
+// hub account: its URL, or another of the same host and path,
 // over HTTPS or over SSH, see sameRepository. Every host is read as
 // itself, as a snapshot is read on whatever machine, with no SSH
 // configuration of its own: no alias resolves. An account of "" is no
-// account remote, which no URL names. Pure.
+// hub, which no URL names. Pure.
 func accountRepository(url, account string) bool {
 	return account != "" && (url == account || sameRepository(url, account, nil))
 }
 
-// keepAccountRemote puts the account remote of here, this machine's
+// keepAccountRemote puts the hub of here, this machine's
 // settings, in place of the one the settings s an import writes set, when
 // both name one repository, see accountRepository: the URL is how this
 // machine reaches it, over SSH or over HTTPS, with its own credential, and
 // what it found it can do there is this machine's too. Settings that set
-// an account remote of another repository, or none, keep theirs, as every
+// a hub of another repository, or none, keep theirs, as every
 // other field of them is kept. The sources stay sorted by URL. Pure.
 func keepAccountRemote(s *home.Settings, here home.Settings) {
 	mine, ok := accountEntry(here)
@@ -481,7 +481,7 @@ func keepAccountRemote(s *home.Settings, here home.Settings) {
 
 // recordedImport is the upstream version an entry names, see
 // snapshotSkill: the source's for a skill of a shared source, the
-// upstream's for one of your own, and whether it names any field of one.
+// upstream's for a hub skill, and whether it names any field of one.
 func recordedImport(e snapshotSkill, own bool) (lineage.Import, bool) {
 	source, subpath := e.Source, e.Subpath
 	if own {
@@ -499,8 +499,8 @@ func recordedImport(e snapshotSkill, own bool) (lineage.Import, bool) {
 // twice, a kind other than managed and unmanaged, placements that are not
 // configuration ids as agentx writes them, a commit that is not an object
 // id, or lineage that the trailer reader would not accept. account is the
-// account remote the snapshot is read against, which tells your own skills
-// from a shared source's, see ownRecord: one of your own carries no
+// hub the snapshot is read against, which tells hub skills
+// from a shared source's, see ownRecord: a hub skill carries no
 // subpath and names its upstream version, if any, in its upstream fields;
 // a shared source's carries its subpath and no upstream, and names its
 // version in its source fields. An unmanaged skill carries no source and
@@ -543,11 +543,11 @@ func validEntries(path string, skills []snapshotSkill, account string) error {
 		own := ownRecord(e, account)
 		switch {
 		case own && e.Subpath != nil:
-			return refuse(e.Name + " is one of your own skills, which have no subpath")
+			return refuse(e.Name + " is a hub skill, and hub skills have no subpath")
 		case !own && (e.Upstream != "" || e.UpstreamSubpath != nil):
-			return refuse(e.Name + " names an upstream, which only your own skills have")
+			return refuse(e.Name + " names an upstream, which only hub skills have")
 		case !own && e.ForkID != "":
-			return refuse(e.Name + " names a fork id, which only your own skills have")
+			return refuse(e.Name + " names a fork id, which only hub skills have")
 		case e.ForkID != "" && !lineage.IsForkID(e.ForkID):
 			return refuse(e.Name + " names a fork id that is not one")
 		case !own && e.Subpath == nil:
@@ -599,22 +599,21 @@ func placementsRefusal(e snapshotSkill) string {
 
 // restoreStates compares every entry of the snapshot with what the account
 // repo of this machine holds under that name, in the namespace the entry
-// belongs in: your own skills, see ownRecord, under skills/, and a shared
-// source's under managed/. A branch in that namespace at the same commit
-// is the version the entry names, and at any commit for an entry that
-// follows the latest version, which only an update can tell apart; a name
-// the repo does not hold at all is missing; a name it holds otherwise, at
-// another commit or in the other namespace, is different, and the commit
-// it holds is reported beside it. One of your own skills the repo holds no
-// branch of is also held when the account remote holds it, as remote lists
-// the remote-tracking branches by name: a machine that set the account
-// remote and fetched it holds every skill published there, so such an
-// entry reads present when its remote-tracking branch is at its commit and
-// different when that is at another. An unmanaged skill has no branch
-// anywhere: it is different when the repo holds a branch of its name and
-// missing otherwise. A machine with no account repo holds nothing, and
-// creating one is not this command's to do, so every entry is then
-// missing.
+// belongs in: hub skills, see ownRecord, under skills/, and a shared
+// source's under managed/. A branch in that namespace at the same commit is
+// the version the entry names, and at any commit for an entry that follows
+// the latest version, which only an update can tell apart; a name the repo
+// does not hold at all is missing; a name it holds otherwise, at another
+// commit or in the other namespace, is different, and the commit it holds
+// is reported beside it. A hub skill the repo holds no branch of is also
+// held when the hub holds it, as remote lists the remote-tracking branches
+// by name: a machine that set the hub and fetched it holds every skill
+// published there, so such an entry reads present when its remote-tracking
+// branch is at its commit and different when that is at another. An
+// unmanaged skill has no branch anywhere: it is different when the repo
+// holds a branch of its name and missing otherwise. A machine with no
+// account repo holds nothing, and creating one is not this command's to do,
+// so every entry is then missing.
 func restoreStates(skills []snapshotSkill, records map[string]lineage.Record, remote map[string]string, account string) []importSkillEvent {
 	states := make([]importSkillEvent, 0, len(skills))
 	for _, e := range skills {
@@ -646,9 +645,9 @@ func restoreStates(skills []snapshotSkill, records map[string]lineage.Record, re
 	return states
 }
 
-// remoteTips is what the account remote held of every fork as the last
+// remoteTips is what the hub held of every fork as the last
 // fetch left it, see lineage.ListRemote: none on a machine with no account
-// repo, or with no account remote set.
+// repo, or with no hub set.
 func (inv *invocation) remoteTips(ctx context.Context) (map[string]string, error) {
 	_, remote, ok, err := inv.accountSource()
 	if err != nil || !ok {
@@ -769,7 +768,7 @@ func (inv *invocation) printImported(states []importSkillEvent, settings home.Se
 		for _, ev := range added {
 			kind := c("", muted)
 			if ev.Account {
-				kind = c("account", muted)
+				kind = c("hub", muted)
 			}
 			t.add(c(sanitised(ev.URL), plain), kind)
 		}
@@ -831,7 +830,7 @@ func printSkillSection(out *writer, title string, states []importSkillEvent, nam
 // that this machine has not added: those the account repo holds no remote
 // of, or a remote that is not the one the entry wants, as an import of
 // settings naming another pin leaves it, and those it never fetched, whose
-// source ref it does not hold or, for the account remote, of which it holds
+// source ref it does not hold or, for the hub, of which it holds
 // no remote-tracking branch and no record of a fetch, see forkCount. An
 // import restores the settings entry of a source alone, so on the machine
 // an import makes every source is one of these, and the import adds each
@@ -874,7 +873,7 @@ func (inv *invocation) unadded(ctx context.Context, settings home.Settings) ([]h
 func sourceAddLine(src home.Source) string {
 	line := "agentx source add " + sourceAddArg(src.URL, src.Pin)
 	if src.Account {
-		line = "agentx source add " + shellWord(sanitised(src.URL)) + " --account"
+		line = "agentx source add " + shellWord(sanitised(src.URL)) + " --hub"
 	}
 	return line
 }

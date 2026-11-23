@@ -19,7 +19,7 @@ import (
 // stops part way loses nothing a recovery cannot put back. The worktree's
 // registration in the account repo goes once the journal is applied, see
 // pruneMerges for what an interrupted removal leaves of it. With --remote
-// the account remote's branch is deleted as well, after the removal here,
+// the hub's branch is deleted as well, after the removal here,
 // and nothing on any other machine changes either way: a machine that
 // installed the fork keeps it until it is removed there too.
 
@@ -28,12 +28,12 @@ type forkRemoval struct {
 	name   string
 	gitDir string
 	tip    string // what the fork's branch held when it was judged; "" when this machine has no fork of the name
-	remote bool   // the account remote's branch goes too
-	url    string // the account remote's, with remote
-	// account is the account remote's git remote in the account repo,
+	remote bool   // the hub's branch goes too
+	url    string // the hub's, with remote
+	// account is the hub's git remote in the account repo,
 	// with remote.
 	account string
-	there   string // what the account remote's branch held at the fetch; "" when it holds none
+	there   string // what the hub's branch held at the fetch; "" when it holds none
 	// guard is the fork's skill directory as it was judged clean, when the
 	// removal must find it still clean under its lock: skill rename
 	// removes the fork it has just forked, and an edit made in between
@@ -67,12 +67,12 @@ func (inv *invocation) removeFork(ctx context.Context, name string, remote bool)
 
 // judgeForkRemoval runs every refusal of a fork's removal before anything
 // changes: a merge pending for the fork, exit code 4, and with remote a
-// skill here that is no fork, see notOfTheAccountRemote, and no account
-// remote, both exit code 6, an account remote git cannot reach, exit
-// code 3, a name that is no fork here or there, and an account remote
-// whose branch of the name is another fork, by its fork id, exit code 6,
-// which a removal of this fork must not delete. It returns nil and no
-// error when name is no fork of this machine and remote is not asked for.
+// skill here that is no fork, see notOfTheAccountRemote, and no hub, both
+// exit code 6, a hub git cannot reach, exit code 3, a name that is no fork
+// here or there, and a hub whose branch of the name is another fork, by its
+// fork id, exit code 6, which a removal of this fork must not delete. It
+// returns nil and no error when name is no fork of this machine and remote
+// is not asked for.
 func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote bool) (*forkRemoval, error) {
 	gitDir, hasRepo, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -125,7 +125,7 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 	r.there = tips[name]
 	switch {
 	case r.tip == "" && r.there == "":
-		return nil, fail(exitNotFound, "neither this machine nor the account remote holds a skill called "+sanitised(name),
+		return nil, fail(exitNotFound, "neither this machine nor the hub holds a skill called "+sanitised(name),
 			"run 'agentx skill list --remote' to see the skills of both")
 	case r.tip != "" && r.there != "" && r.there != r.tip:
 		records, err := inv.forkRecords(ctx, gitDir)
@@ -136,7 +136,7 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 		if err != nil {
 			return nil, accountRepoFailure(err)
 		}
-		if f := sameForkRefusal(records[name], walked[r.there], "removed from the account remote"); f != nil {
+		if f := sameForkRefusal(records[name], walked[r.there], "removed from the hub"); f != nil {
 			f.hint = "remove it from this machine alone with '" + skillCommand("remove", name) + "'"
 			return nil, f
 		}
@@ -145,28 +145,28 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 }
 
 // notOfTheAccountRemote refuses --remote for a skill this machine holds
-// that is not one of the account remote's, exit code 6, before the account
-// remote is looked up or fetched: a managed skill of a shared source, whose
-// branch's tip is managed, which agentx never deletes anything from, named
-// by the source that commit records, or an unmanaged skill, managed empty,
-// which has no source at all. A tip whose message git cannot read or that
-// records no source is still refused, naming no source.
+// that is not one of the hub's, exit code 6, before the hub is looked up or
+// fetched: a managed skill of a shared source, whose branch's tip is
+// managed, which agentx never deletes anything from, named by the source
+// that commit records, or an unmanaged skill, managed empty, which has no
+// source at all. A tip whose message git cannot read or that records no
+// source is still refused, naming no source.
 func (inv *invocation) notOfTheAccountRemote(ctx context.Context, gitDir, name, managed string) error {
 	alone := "remove it from this machine with '" + skillCommand("remove", name) + "'"
 	if managed == "" {
 		return fail(exitRefused, sanitised(name)+" has no source, so there is nothing to delete remotely", alone)
 	}
-	from := "a source other than the account remote"
+	from := "a source other than the hub"
 	if message, err := inv.git.Isolated(ctx, gitDir, "log", "-1", "--format=%B", managed); err == nil {
 		if imported, err := lineage.Parse(message); err == nil && imported.Source != "" {
 			from = shownURL(imported.Source)
 		}
 	}
-	return fail(exitRefused, sanitised(name)+" comes from "+from+", and agentx deletes skills only from the account remote", alone)
+	return fail(exitRefused, sanitised(name)+" comes from "+from+", and agentx deletes skills only from the hub", alone)
 }
 
 // runForkRemoval removes the fork here, when this machine has one, then,
-// with remote, deletes the account remote's branch, and reports both. A
+// with remote, deletes the hub's branch, and reports both. A
 // remote deletion that fails after the removal here says the removal came
 // first.
 func (inv *invocation) runForkRemoval(ctx context.Context, r *forkRemoval) error {
@@ -192,8 +192,8 @@ func (inv *invocation) runForkRemoval(ctx context.Context, r *forkRemoval) error
 		}
 	} else if deleted == nil {
 		branch := forkBranch(r.name)
-		inv.summary = "removed " + branch + " from the account remote; this machine has no skill called " + sanitised(r.name)
-		inv.out.done("deleted " + inv.out.paint(heading, branch) + " from the account remote; this machine has no skill called " + sanitised(r.name))
+		inv.summary = "removed " + branch + " from the hub; this machine has no skill called " + sanitised(r.name)
+		inv.out.done("deleted " + inv.out.paint(heading, branch) + " from the hub; this machine has no skill called " + sanitised(r.name))
 	}
 	return deleted
 }
@@ -359,9 +359,17 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 			m.Discard()
 			return err
 		}
+		// The fork's id is read from its history before the journal
+		// deletes the branch. Skill rename's removal leaves no date: the
+		// renamed skill is the same one, under its new name.
+		var left []home.Install
+		if !r.quiet {
+			left = append(left, inv.forkInstall(ctx, r.gitDir, r.name, r.tip))
+		}
 		if err := m.Apply(inv.refs(ctx)); err != nil {
 			return err
 		}
+		inv.recordInstalls(nil, left)
 		// Still under the lock, so that no worktree another command makes
 		// at root meanwhile goes with it. What is left of the registration
 		// goes with the next mutation, see pruneMerges; the tracking
@@ -422,7 +430,7 @@ func libraryKept(libPath, state, name string, targets []placeTarget) string {
 	return line + "; " + andList(readers) + " still see it"
 }
 
-// deleteRemoteFork deletes the account remote's branch of the fork r
+// deleteRemoteFork deletes the hub's branch of the fork r
 // judged, leased on what the fetch read it at, see
 // gitx.DeleteRemoteBranch. done is what was already done, which the
 // failure says first. A push git could not make, and a deletion the remote
@@ -439,17 +447,17 @@ func (inv *invocation) deleteRemoteFork(ctx context.Context, r *forkRemoval, don
 	return nil
 }
 
-// remoteStillHolds says that the account remote still holds the branch of
+// remoteStillHolds says that the hub still holds the branch of
 // the fork called name, after done, when something was.
 func remoteStillHolds(name, done string) string {
 	if done == "" {
-		return "the account remote still holds " + forkBranch(name)
+		return "the hub still holds " + forkBranch(name)
 	}
-	return done + ", but the account remote still holds " + forkBranch(name)
+	return done + ", but the hub still holds " + forkBranch(name)
 }
 
 // remoteDeleteRefusal is the answer to a deletion of the fork called
-// name's branch that the account remote rejected, s being what git push
+// name's branch that the hub rejected, s being what git push
 // reported of it, after done. A hosting service refuses to delete a
 // repository's default branch, and a remote that only ever received fork
 // branches has the first of them as its default, so running the command
@@ -462,9 +470,9 @@ func remoteDeleteRefusal(name, done string, s gitx.PushStatus) *failure {
 	hint := again
 	switch {
 	case strings.Contains(reason, "current branch"):
-		hint = "make another branch the account remote's default branch on its hosting service, then " + again
+		hint = "make another branch the hub's default branch on its hosting service, then " + again
 	case strings.Contains(reason, "stale info"):
 		hint = "another machine moved it since the fetch; " + again + " to delete what it holds now"
 	}
-	return refuse(exitSource, remoteStillHolds(name, done)+": the account remote rejected its deletion: "+sanitised(reason), hint)
+	return refuse(exitSource, remoteStillHolds(name, done)+": the hub rejected its deletion: "+sanitised(reason), hint)
 }

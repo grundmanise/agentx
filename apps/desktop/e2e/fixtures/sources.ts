@@ -1,7 +1,7 @@
 // The machine the Sources tests run against: two shared sources (one pinned and read-only here,
-// fetched three days ago, one never fetched) and an account remote; the listing of the first source; a library that puts one of
+// fetched three days ago, one never fetched) and a hub; the listing of the first source; a library that puts one of
 // its skills in each state a card can be in; three configurations that take placements (two
-// enabled) and two universal ones; your skills on the account remote; a search answer; and the
+// enabled) and two universal ones; your skills on the hub; a search answer; and the
 // SKILL.md `source read` gives for a skill.
 // Inline events with only the fields the tests check, typed by the generated event types.
 import type {
@@ -41,7 +41,7 @@ export const acme: SourceEvent = {
   url: ACME,
 };
 
-/** The sources `source list` reports: acme, zeta never fetched, the account remote two hours ago. */
+/** The sources `source list` reports: acme, zeta never fetched, the hub two hours ago. */
 export const sources: SourceEvent[] = [
   acme,
   {
@@ -158,7 +158,7 @@ export const inventory = {
   type: "inventory",
 } satisfies InlineEvent;
 
-/** Your skills on the account remote: one forked from acme's pdf, one made from scratch. */
+/** Your skills on the hub: one forked from acme's pdf, one made from scratch. */
 export const installable: InstallableSkillEvent[] = [
   {
     base_hash: "h-pdf",

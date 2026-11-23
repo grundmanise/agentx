@@ -178,7 +178,7 @@ func TestServeRefreshesEverySource(t *testing.T) {
 // but the second source is no different from one rebuild to the next: the
 // index warns once that it has not been fetched, and the check at launch
 // warns that it could not fetch it and leaves its last_fetched as it was.
-// The account remote, which is never fetched as a shared source, is warned
+// The hub, which is never fetched as a shared source, is warned
 // about by neither.
 func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	t.Parallel()
@@ -379,15 +379,15 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 }
 
 // TestServeChecksTheAccountRemoteWhileItRuns runs serve on machine b of
-// two that share an account remote, with the account check it repeats
+// two that share a hub, with the account check it repeats
 // made a few milliseconds apart. The check at launch ends in an
-// update_check of scope all that fetched. Then, while the account remote
+// update_check of scope all that fetched. Then, while the hub
 // holds what b's remote-tracking branches hold, each account check is one
 // ls-remote, fetches nothing and writes nothing, and ends in an
 // update_check of scope account that did not fetch. Once machine a
 // publishes alpha, the next account check fetches, announces the update a
 // published as the check at launch would, with this serve's instance id,
-// and ends in an update_check that fetched. With the account remote out of
+// and ends in an update_check that fetched. With the hub out of
 // reach, the checks warn once, however many fail, each ending in an
 // update_check that is not ok, until one reaches it again.
 func TestServeChecksTheAccountRemoteWhileItRuns(t *testing.T) {
@@ -442,7 +442,7 @@ func TestServeChecksTheAccountRemoteWhileItRuns(t *testing.T) {
 		return e["type"] == "update_check" && e["scope"] == checkScopeAccount && e["ok"] == false
 	})
 	for range 2 {
-		equal(t, "an account remote out of reach: ok", checked(checkScopeAccount)["ok"], false)
+		equal(t, "a hub out of reach: ok", checked(checkScopeAccount)["ok"], false)
 	}
 	if err := os.Rename(away, remote); err != nil {
 		t.Fatal(err)
@@ -453,11 +453,11 @@ func TestServeChecksTheAccountRemoteWhileItRuns(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 	var unreached []string
 	for _, w := range warnings(b, p.stderr.String()) {
-		if strings.HasPrefix(w, "update check: the account remote "+url+": cannot reach it") {
+		if strings.HasPrefix(w, "update check: the hub "+url+": cannot reach it") {
 			unreached = append(unreached, w)
 		}
 	}
-	equal(t, "warnings of the account remote out of reach", len(unreached), 1)
+	equal(t, "warnings of the hub out of reach", len(unreached), 1)
 }
 
 // TestReportServeCheck: what serve's check could not check and each note

@@ -13,21 +13,21 @@ Usage:
 
 SKILLS
   skill add <source>                     Install skills from a source and place them
-  skill new <name>                       Create a skill of your own from the template
+  skill new <name>                       Create a hub skill from the template
   skill import [<name>...]               Import skills another tool installed, and unmanaged skills
-  skill fork <name>                      Fork a skill into one of your own, with a history
+  skill fork <name>                      Fork a skill into a hub skill, with a history
   skill list                             List the library: sources, states and placements
   skill place <name>                     Place a skill, or put its placements back
   skill remove <name>                    Remove a skill from a client or from the machine
-  skill rename <old> <new>               Rename one of your own skills
+  skill rename <old> <new>               Rename a hub skill
   skill diff <name>                      Show unpublished edits, or what an update changes
-  skill history <name>                   List the commits of one of your own skills
+  skill history <name>                   List the commits of a hub skill
   skill files <name>                     Read every file of a skill, with its content
 
 UPDATES AND PUBLISHING
   skill check-updates                    Look for upstream updates and other machines' edits
   skill update <name>...                 Apply the update the last check found
-  skill publish [<name>...]              Publish edits to the source or the account remote
+  skill publish [<name>...]              Publish edits to the source or the hub
 
 SOURCES
   source add <url>                       Fetch a git repository and add it as a source
@@ -41,7 +41,7 @@ MACHINES
   machine                                Print this machine's id, label and agentx's paths
   machine rename <label>                 Change this machine's label
   machine reset-id                       Replace this machine's id with a new random one
-  snapshot save [<name>]|--machine <id>  Save a snapshot to the library or the account remote
+  snapshot save [<name>]|--machine <id>  Save a snapshot to the library or the hub
   snapshot apply <file>|--machine <id>   Apply a snapshot: settings, skills and placements
 
 SETTINGS
@@ -62,7 +62,7 @@ INVENTORY AND DIAGNOSTICS
 
 Examples:
   agentx skill add anthropics/skills --name pdf  install one skill into every enabled client
-  agentx skill new release-notes                 create a skill of your own
+  agentx skill new release-notes                 create a hub skill
   agentx skill check-updates                     see what changed upstream before you update
   agentx snapshot save --machine cloud           seed the cloud machine with this one's skills
 

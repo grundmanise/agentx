@@ -35,7 +35,7 @@ func (inv *invocation) accountRecord(ctx context.Context, name string) (string, 
 // managedRefusal refuses a skill with no base version to read, rec being
 // its branch and ok whether it has one, each for its own reason: an
 // unmanaged skill has none, and a branch whose trailers agentx cannot read
-// records none it can trust. Callers send one of your own skills elsewhere
+// records none it can trust. Callers send a hub skill elsewhere
 // first, since its versions are its own history.
 func managedRefusal(name string, rec lineage.Record, ok bool) error {
 	switch {
@@ -56,10 +56,10 @@ func managedRefusal(name string, rec lineage.Record, ok bool) error {
 // unmanaged one.
 func notAForkRefusal(name string, ok bool) error {
 	if ok {
-		return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no commit of its own to compare with",
+		return fail(exitRefused, sanitised(name)+" is not a skill of the hub, so it has no commit of its own to compare with",
 			"run '"+skillCommand("diff", name)+"' to compare with its base version")
 	}
-	return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no commit to compare with",
+	return fail(exitRefused, sanitised(name)+" is not a skill of the hub, so it has no commit to compare with",
 		"import it first with '"+adoptCommand(name)+"'")
 }
 

@@ -332,12 +332,12 @@ const PublishForm = ({
   );
 };
 
-/** Where the publish goes: the account remote for one of your own, else the skill's source. */
+/** Where the publish goes: the hub for a hub skill, else the skill's source. */
 const Subtitle = ({ row }: { row: SkillRow }) => {
   if (row.kind === "yours") {
     return (
       <DialogDescription>
-        {`The ${row.name} skill will be published to your account remote.`}
+        {`The ${row.name} skill will be published to your hub.`}
       </DialogDescription>
     );
   }
@@ -424,7 +424,7 @@ export const PublishButton = ({
   );
 };
 
-/** Open Settings, where an account remote is set. */
+/** Open Settings, where a hub is set. */
 export const OpenSettingsButton = () => (
   <Button
     variant="ghost"

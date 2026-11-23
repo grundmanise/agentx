@@ -28,7 +28,7 @@ func (h *harness) trailer(rev, key string) string {
 // relative library symlink to the skill's directory, a symlink in each
 // client with a skills directory of its own and none in the clients that
 // read the library. The listing calls it a managed skill with no source,
-// since no account remote is set, and no upstream, by its fork id, and the
+// since no hub is set, and no upstream, by its fork id, and the
 // two machines' ids differ. One machine's user set a git identity, which
 // the commit carries; the other's did not, and the machine's label stands
 // in.
@@ -46,7 +46,7 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 		equal(t, "kind", ev["kind"], lineage.KindManaged)
 		for _, key := range []string{"source", "upstream"} {
 			if _, ok := ev[key]; ok {
-				t.Errorf("a new skill with no account remote set lists a %s: %v", key, ev[key])
+				t.Errorf("a new skill with no hub set lists a %s: %v", key, ev[key])
 			}
 		}
 		ids[h] = h.trailer("refs/heads/skills/notes", lineage.TrailerForkID)
@@ -108,10 +108,10 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 	}
 	text := a.mustRun("skill", "new", "other")
 	contains(t, "the text output", text.stdout, "✓ created other in "+filepath.Join(a.library, "other")+": 4 placements\n")
-	// With no account remote set the skill is created all the same, with one
+	// With no hub set the skill is created all the same, with one
 	// line saying how to publish it. That skill publish refuses until then is
 	// TestTheAccountRemoteIsSetReplacedAndDetached's.
-	contains(t, "the hint", text.stdout, "No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish other' to publish it.")
+	contains(t, "the hint", text.stdout, "No hub is set: run 'agentx source add <url> --hub', then 'agentx skill publish other' to publish it.")
 	if link, _ := os.Readlink(filepath.Join(a.library, "other")); link != "../../../agentx/worktrees/other/other" {
 		t.Errorf("the dangling library symlink was left as %q", link)
 	}

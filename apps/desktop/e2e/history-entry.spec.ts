@@ -1,8 +1,10 @@
-// The History sheet of one of your own skills: each entry expands to the files its commit changed
+// The History sheet of a hub skill: each entry expands to the files its commit changed
 // and collapses again, and the subject of the commit that created a fork links to its origin's page.
 import type { Page } from "@playwright/test";
 
 import {
+  isShown,
+  metaOf,
   originPage,
   originParts,
   subjectSegments,
@@ -38,11 +40,11 @@ const start = (cli: MockCli) => {
   }
 };
 
-/** Opens pdf-letters, one of your own skills, and its History sheet. */
+/** Opens pdf-letters, a hub skill, and its History sheet. */
 const openSheet = async (cli: MockCli, page: Page) => {
   start(cli);
   await page.goto("/#/skills/pdf-letters");
-  await details(page).getByRole("button", { name: "Show all 5" }).click();
+  await details(page).getByRole("button", { name: "Show all 4" }).click();
   await expect(sheet(page)).toBeVisible();
 };
 
@@ -139,4 +141,21 @@ test("a fork's origin links its name, and only to an https page", () => {
     originPage({ ...fork, origin: { ...origin, url: "http://example.com" } })
   ).toBeUndefined();
   expect(originPage(first)).toBeUndefined();
+});
+
+test("the meta line names the machine, and stored upstream versions are left out", () => {
+  const at = {
+    ...history[0],
+    files: [{ path: "SKILL.md", status: "modified" as const }],
+    time: "2026-10-02T14:03:00Z",
+  };
+  expect(metaOf({ ...at, machine: "m-1" }, "m-1")).toMatch(
+    /· this (?:machine|Mac) · 1 file$/u
+  );
+  expect(
+    metaOf({ ...at, machine: "7c41e09b5a2d4f6e8b1c3d5e7f9a0b2c" }, "m-1")
+  ).toMatch(/· 7c41e09b · 1 file$/u);
+  expect(metaOf(at, "m-1")).toMatch(/^Oct 2(?:, 2026)? · 1 file$/u);
+  expect(isShown({ ...at, import: true })).toBe(false);
+  expect(isShown(at)).toBe(true);
 });

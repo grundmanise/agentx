@@ -43,19 +43,19 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"warns.\n\n" +
 			"A managed skill whose library directory was deleted outside agentx can still be\n" +
 			"removed without --from: its import branch and the placements agentx made go.\n\n" +
-			"Removing one of your own skills also deletes its worktree, with any unpublished\n" +
+			"Removing a hub skill also deletes its worktree, with any unpublished\n" +
 			"edits and files git ignores, its branch and its update candidate. --remote deletes\n" +
-			"its branch on the account remote too, also when this machine no longer has it.\n" +
+			"its branch on the hub too, also when this machine no longer has it.\n" +
 			"Other machines keep it until it is removed there.\n\n" +
 			"With --machine cloud, remove the skill from the cloud machine instead: the\n" +
 			"configurations --from names are taken out of the skill's entry on the branch\n" +
-			"machines/cloud of the account remote, or, with --from universal or without\n" +
+			"machines/cloud of the hub, or, with --from universal or without\n" +
 			"--from, the entry is deleted, and the commit is pushed. Nothing on this\n" +
 			"machine's disk changes.",
 		Example: examples(
 			"agentx skill remove pdf", "take the skill off this machine",
 			"agentx skill remove pdf --from windsurf", "remove only its placement in one client",
-			"agentx skill remove release-notes --remote", "also delete its branch on the account remote",
+			"agentx skill remove release-notes --remote", "also delete its branch on the hub",
 			"agentx skill remove pdf --machine cloud", "remove it from the cloud machine",
 		),
 		Args: cobra.ExactArgs(1),
@@ -66,10 +66,10 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			return inv.skillRemove(cmd.Context(), args[0], from, remote)
 		},
 	}
-	cmd.Flags().StringVar(&machine, "machine", "", "remove the skill from this machine instead, by its branch on the account remote; only cloud is accepted")
+	cmd.Flags().StringVar(&machine, "machine", "", "remove the skill from this machine instead, by its branch on the hub; only cloud is accepted")
 	cmd.Flags().StringArrayVar(&from, "from", nil,
 		"remove only the placement in this configuration, or give universal to take the skill off the machine; give it again for each")
-	cmd.Flags().BoolVar(&remote, "remote", false, "remove one of your own skills from the account remote too")
+	cmd.Flags().BoolVar(&remote, "remote", false, "remove a hub skill from the hub too")
 	return cmd
 }
 
@@ -105,7 +105,7 @@ type removalPlan struct {
 	dropped []string // the configurations taken out of copy_mode
 	absent  bool     // the library held no directory for the skill, only its import branch was left
 	// A fork's removal: the commit its branch held, whether its worktree
-	// was there to delete, and whether the account remote's branch was
+	// was there to delete, and whether the hub's branch was
 	// deleted too.
 	fork     bool
 	branch   string
@@ -120,7 +120,7 @@ type removalPlan struct {
 // modes. --from universal is not a second way to do that but the same run:
 // it only names the removal by what it does to the universal clients. A
 // fork taken off the machine is removed by removeFork, which with remote
-// deletes its branch on the account remote too.
+// deletes its branch on the hub too.
 //
 // The rule the whole command turns on: a placement is deleted only when it
 // is a symlink into the library or a copy this machine recorded in
@@ -132,7 +132,7 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 	named := namedConfigurations(from)
 	if len(named) > 0 && remote {
 		return fail(exitUsage, "--remote and --from "+named[0]+" cannot both be given",
-			"--remote removes one of your own skills from the machine and from the account remote; drop --from to remove it whole, or --remote to remove only the placements you name")
+			"--remote removes a hub skill from the machine and from the hub; drop --from to remove it whole, or --remote to remove only the placements you name")
 	}
 	if len(named) == 0 {
 		if handled, err := inv.removeFork(ctx, name, remote); handled {
@@ -173,7 +173,7 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 			if whole && values[lineage.ForkRef(name)] != "" {
 				// A fork made since it was judged: removing it is the
 				// removal of a fork, which this run did not plan.
-				return fail(exitRefused, sanitised(name)+" became one of your own skills while it was being removed, so nothing was removed",
+				return fail(exitRefused, sanitised(name)+" became a hub skill while it was being removed, so nothing was removed",
 					"run '"+skillCommand("remove", name)+"' again")
 			}
 			// A merge an update left pending holds the library directory
@@ -223,7 +223,18 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 			m.Discard()
 			return err
 		}
-		return m.Apply(inv.refs(ctx))
+		// What the skill was is read from its import commit before the
+		// journal deletes the branch; an unmanaged skill names no source
+		// and leaves no date.
+		var left []home.Install
+		if plan.managed != "" {
+			left = append(left, inv.importedInstall(ctx, gitDir, name, plan.managed))
+		}
+		if err := m.Apply(inv.refs(ctx)); err != nil {
+			return err
+		}
+		inv.recordInstalls(nil, left)
+		return nil
 	})
 	if err != nil {
 		return mutationFailure(err)
@@ -384,7 +395,11 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 			m.Discard()
 			return err
 		}
-		return m.Apply(inv.refs(ctx))
+		if err := m.Apply(inv.refs(ctx)); err != nil {
+			return err
+		}
+		inv.recordInstalls(nil, []home.Install{recordedInstall(rec)})
+		return nil
 	})
 	if err != nil {
 		return mutationFailure(err)
@@ -943,7 +958,7 @@ func (inv *invocation) printRemoved(plan removalPlan) {
 		out.print("  ", out.paint(muted, "deleted "+andList(gone)))
 	}
 	if plan.remote {
-		out.done("deleted " + out.paint(heading, forkBranch(plan.name)) + " from the account remote")
+		out.done("deleted " + out.paint(heading, forkBranch(plan.name)) + " from the hub")
 	}
 }
 
@@ -986,7 +1001,7 @@ func removeSummary(plan removalPlan) string {
 		summary += ", " + plural(len(plan.kept), "placement") + " left in place"
 	}
 	if plan.remote {
-		summary += "; deleted " + forkBranch(plan.name) + " from the account remote"
+		summary += "; deleted " + forkBranch(plan.name) + " from the hub"
 	}
 	return summary
 }

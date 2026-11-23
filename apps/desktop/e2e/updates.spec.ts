@@ -282,7 +282,7 @@ test.describe("banners", () => {
       text: "SKILL.md · Your local edits are kept.",
       title: "New version from acme/skills",
     },
-    // One of your own skills: the update comes from the upstream it was forked from.
+    // A hub skill: the update comes from the upstream it was forked from.
     {
       name: "pdf-letters",
       text: "SKILL.md · examples.md · Your local edits are kept.",

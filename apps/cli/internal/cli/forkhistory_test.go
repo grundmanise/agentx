@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -97,6 +98,9 @@ func TestSkillHistoryListsEveryCommit(t *testing.T) {
 	equal(t, "the foreign commit's author", events[0]["author"], h.accountGit("log", "-1", "--format=%an <%ae>", foreign))
 	equal(t, "the foreign commit's message", events[0]["message"], "By hand\n\nWith a body.")
 	equal(t, "the result", h.one(out.stdout, "result")["summary"], "alpha has 4 commits")
+	for i, want := range []bool{false, false, false, true} {
+		equal(t, fmt.Sprintf("event %d: import", i), events[i]["import"] == true, want)
+	}
 
 	lines := strings.Split(strings.TrimSuffix(h.mustRun("skill", "history", "alpha").stdout, "\n"), "\n")
 	equal(t, "text lines", len(lines), 4)
@@ -109,8 +113,8 @@ func TestSkillHistoryListsEveryCommit(t *testing.T) {
 		name, message string
 		exit          int
 	}{
-		{"beta", "beta is not a skill of the account remote, so it has no history of its own", 6},
-		{"mine", "mine is not a skill of the account remote, so it has no history", 6},
+		{"beta", "beta is not a skill of the hub, so it has no history of its own", 6},
+		{"mine", "mine is not a skill of the hub, so it has no history", 6},
 		{"nowhere", `the library holds no skill called "nowhere"`, 5},
 	} {
 		out := h.run("--json", "skill", "history", c.name)

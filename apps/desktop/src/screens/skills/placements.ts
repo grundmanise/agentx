@@ -158,8 +158,8 @@ const adoptLine = (name: string): string[] =>
  * `skill import` has no way to take it:
  *
  * - a skill another tool recorded, which the CLI can adopt (`candidate`), is installed from its
- *   source, or becomes one of your own with its files as they are when the record names none;
- * - a library skill no tool recorded becomes one of your own in its place;
+ *   source, or becomes a hub skill with its files as they are when the record names none;
+ * - a library skill no tool recorded becomes a hub skill in its place;
  * - a skill a client holds as a real directory in its own skills directory is named by that
  *   directory, which moves into the library, unless the library holds another skill under that
  *   name.

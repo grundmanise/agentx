@@ -128,9 +128,9 @@ export const loadListing = async (id: string) => {
 };
 
 /**
- * Loads your skills the account remote holds that this machine has not installed:
- * `skill list --remote`, which fetches the account remote. The Add screen calls it when the Your
- * skills pill opens. The list kept from an earlier launch for the same account remote shows while
+ * Loads your skills the hub holds that this machine has not installed:
+ * `skill list --remote`, which fetches the hub. The Add screen calls it when the Your
+ * skills pill opens. The list kept from an earlier launch for the same hub shows while
  * it runs.
  */
 export const loadInstallable = async () => {
@@ -204,7 +204,7 @@ export const loadAdoption = async ({ afterWrite = false } = {}) => {
 const historyVersions = new Map<string, string>();
 
 /**
- * Loads the history of one of your own skills: `skill history <name>`, a read. `version` names
+ * Loads the history of a hub skill: `skill history <name>`, a read. `version` names
  * what the history is of, such as the skill's content and state from the inventory: the same
  * version is read once, however often the skill is selected, and a change to it reads again.
  */

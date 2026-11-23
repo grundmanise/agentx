@@ -91,8 +91,8 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 //
 //   - A skill this machine lacks is installed: a skill of a shared source
 //     from that source, at the version the entry names or, for one that
-//     follows, at the source's current one; one of your own from the
-//     account remote, at its branch there, which must hold the commit an
+//     follows, at the source's current one; a hub skill from the
+//     hub, at its branch there, which must hold the commit an
 //     exact entry names. It is placed in the configurations the snapshot
 //     records.
 //   - A skill this machine holds moves forward only: to the version the
@@ -118,7 +118,7 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 // plugins are not applied.
 type applyRun struct {
 	inv     *invocation
-	account string // the account remote the snapshot's settings set, which the snapshot is read against
+	account string // the hub the snapshot's settings set, which the snapshot is read against
 	gitDir  string
 	records map[string]lineage.Record    // the branches of the account repo by name, before the run
 	library map[string]scan.LibrarySkill // the library before the run
@@ -126,10 +126,10 @@ type applyRun struct {
 	targets []placeTarget                // every detected configuration a placement can be made in
 	reads   map[string][]string          // the skills directories each detected configuration reads, by id
 	sources map[string]*sharedFetch      // the shared sources the run fetched, by canonical URL
-	fetched map[string]bool              // the canonical URLs of the sources the run fetched, the account remote included
-	// The account remote as the run fetched it: its git remote, the tip of
-	// each of your own skills it holds, and why it could not be fetched,
-	// which every entry of your own is skipped for.
+	fetched map[string]bool              // the canonical URLs of the sources the run fetched, the hub included
+	// The hub as the run fetched it: its git remote, the tip of
+	// each hub skill it holds, and why it could not be fetched,
+	// which every entry of a hub skill is skipped for.
 	remote  string
 	tips    map[string]string
 	missing *failure
@@ -145,7 +145,7 @@ type applyRun struct {
 }
 
 // newApplyRun is the application of a snapshot whose settings set the
-// account remote account, adding the sources in adding.
+// hub account, adding the sources in adding.
 func newApplyRun(inv *invocation, account string, adding []home.Source) *applyRun {
 	r := &applyRun{inv: inv, account: account, fetched: map[string]bool{}, sources: map[string]*sharedFetch{},
 		adding: map[string]bool{}, added: map[string]sourceEvent{}, failed: map[string]*failure{}, total: len(adding)}
@@ -245,7 +245,7 @@ func (r *applyRun) read(ctx context.Context, states []importSkillEvent) error {
 // fetch fetches, once each and before any skill is applied, every source an
 // entry needs: the shared source of each entry of one that this machine
 // lacks, that follows or that is held at another commit, as skill add
-// --fetch fetches it, and the account remote for such an entry of your own,
+// --fetch fetches it, and the hub for such an entry of a hub skill,
 // as skill add with no source fetches it. An entry held at the commit it
 // names needs no source, so a second import of an unchanged snapshot
 // reaches no remote. A source that cannot be fetched skips its entries; it
@@ -304,10 +304,10 @@ func (r *applyRun) fetchShared(ctx context.Context, url string) (*sharedFetch, e
 	return fx, nil
 }
 
-// fetchAccount fetches the account remote, as skill add with no source does,
-// and reads the tip of each of your own skills it holds. An account remote
+// fetchAccount fetches the hub, as skill add with no source does,
+// and reads the tip of each hub skill it holds. A hub
 // this machine has not added, see unadded, is added instead, as source add
-// --account adds it, which fetches it as well.
+// --hub adds it, which fetches it as well.
 func (r *applyRun) fetchAccount(ctx context.Context) error {
 	inv := r.inv
 	entry, remote, ok, err := inv.accountSource()
@@ -349,7 +349,7 @@ func (r *applyRun) fetchAccount(ctx context.Context) error {
 // addRest adds, once the entries' sources are fetched, every source of the
 // settings this machine had not added, see unadded, that no entry needed:
 // a shared source by the steps of source add, at the pin the settings
-// hold, and the account remote by those of source add --account. A source
+// hold, and the hub by those of source add --hub. A source
 // fetched for an entry, or that could not be, is not reached again.
 func (r *applyRun) addRest(ctx context.Context) error {
 	inv := r.inv
@@ -466,7 +466,7 @@ func (r *applyRun) gone(e snapshotSkill) *failure {
 		return nil
 	}
 	if rec.Kind == lineage.KindFork {
-		return skip(e.Name + " is one of your own skills, and the library holds no skill directory for it; check it out again from its branch with '" + skillCommand("place", e.Name) + "'")
+		return skip(e.Name + " is a hub skill, and the library holds no skill directory for it; check it out again from its branch with '" + skillCommand("place", e.Name) + "'")
 	}
 	what, wayOut := skillContext{records: r.records}.absentNotice(r.inv, e.Name)
 	return skip(what + "; " + wayOut)
@@ -488,7 +488,7 @@ func (r *applyRun) unmanaged(ctx context.Context, e snapshotSkill) (string, erro
 	return r.place(ctx, e, importKept)
 }
 
-// ownSkill applies an entry of one of your own skills, see applyRun.
+// ownSkill applies an entry of a hub skill, see applyRun.
 func (r *applyRun) ownSkill(ctx context.Context, e snapshotSkill) (string, error) {
 	if r.missing != nil {
 		return "", r.missing
@@ -506,7 +506,7 @@ func (r *applyRun) ownSkill(ctx context.Context, e snapshotSkill) (string, error
 		return r.place(ctx, e, importKept) // the latest version is here already
 	}
 	if e.Commit != "" && !r.remoteHolds(ctx, e.Commit, tip) {
-		return "", skip("the account remote's skills/" + e.Name + " does not hold the version the snapshot names")
+		return "", skip("the hub's skills/" + e.Name + " does not hold the version the snapshot names")
 	}
 	target := e.Commit
 	if target == "" {
@@ -515,7 +515,7 @@ func (r *applyRun) ownSkill(ctx context.Context, e snapshotSkill) (string, error
 	if !r.ancestor(ctx, local, target) {
 		return "", skip(e.Name + " on this machine and the version the snapshot names have diverged; merge them with '" + skillCommand("update", e.Name) + "'")
 	}
-	// The update fast-forwards the branch to the account remote's tip, which
+	// The update fast-forwards the branch to the hub's tip, which
 	// holds the version the entry names.
 	if f := r.movable(e.Name, rec); f != nil {
 		return "", f
@@ -524,20 +524,20 @@ func (r *applyRun) ownSkill(ctx context.Context, e snapshotSkill) (string, error
 		return "", err
 	}
 	if now, err := r.branchAt(ctx, lineage.ForkRef(e.Name)); err != nil || now != tip {
-		return "", skip(e.Name + " could not be moved forward to the account remote's version; run '" + skillCommand("update", e.Name) + "'")
+		return "", skip(e.Name + " could not be moved forward to the hub's version; run '" + skillCommand("update", e.Name) + "'")
 	}
 	return r.place(ctx, e, importUpdated)
 }
 
-// installOwn installs one of your own skills this machine lacks from the
-// account remote, whose branch of it is at tip, as skill add --name does,
+// installOwn installs a hub skill this machine lacks from the
+// hub, whose branch of it is at tip, as skill add --name does,
 // placing it in the configurations the snapshot records.
 func (r *applyRun) installOwn(ctx context.Context, e snapshotSkill, tip string) (string, error) {
 	switch {
 	case tip == "":
-		return "", skip("the account remote holds no skill called " + e.Name)
+		return "", skip("the hub holds no skill called " + e.Name)
 	case e.Commit != "" && !r.remoteHolds(ctx, e.Commit, tip):
-		return "", skip("the account remote's skills/" + e.Name + " does not hold the version the snapshot names")
+		return "", skip("the hub's skills/" + e.Name + " does not hold the version the snapshot names")
 	}
 	targets := r.placeInto(e.Placements)
 	err := r.inv.quietly(func() error {
@@ -553,7 +553,7 @@ func (r *applyRun) sharedSkill(ctx context.Context, e snapshotSkill) (string, er
 	rec, ok := r.records[e.Name]
 	switch {
 	case ok && rec.Kind == lineage.KindFork:
-		return "", skip(e.Name + " on this machine is one of your own skills, and the snapshot lists a skill of " + e.Source)
+		return "", skip(e.Name + " on this machine is a hub skill, and the snapshot lists a skill of " + e.Source)
 	case ok && (!rec.HasImport || rec.Import.Source != e.Source || rec.Import.Path != subpathOf(e)):
 		return "", skip(e.Name + " on this machine comes from another source or folder than the one the snapshot names")
 	case ok && e.Commit != "" && rec.Commit == e.Commit:
@@ -648,7 +648,7 @@ func subpathOf(e snapshotSkill) string {
 
 // movable refuses to move forward a skill that holds what an update would
 // merge rather than replace, which an import never does: edits not yet
-// published, a merge pending, or, for one of your own, an update from its
+// published, a merge pending, or, for a hub skill, an update from its
 // upstream besides.
 func (r *applyRun) movable(name string, rec lineage.Record) *failure {
 	ev := r.held[name]
@@ -795,7 +795,7 @@ func (r *applyRun) ancestor(ctx context.Context, a, b string) bool {
 	return err == nil && status == 0
 }
 
-// remoteHolds reports whether the account remote's branch of a skill, at
+// remoteHolds reports whether the hub's branch of a skill, at
 // tip, holds commit.
 func (r *applyRun) remoteHolds(ctx context.Context, commit, tip string) bool {
 	return tip != "" && r.ancestor(ctx, commit, tip)

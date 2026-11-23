@@ -15,9 +15,9 @@ import (
 func newSkillHistoryCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:         "history <name>",
-		Short:       "List the commits of one of your own skills",
+		Short:       "List the commits of a hub skill",
 		Annotations: map[string]string{annotationSection: "skills"},
-		Long: "List every commit of <name>, one of your own skills, newest first: the commits\n" +
+		Long: "List every commit of <name>, a hub skill, newest first: the commits\n" +
 			"agentx wrote, those made with git in its worktree, and the upstream imports it\n" +
 			"was forked from or merged.\n" +
 			"Each names the files it changes in the skill's directory, a merge against its\n" +
@@ -45,6 +45,9 @@ type historyEvent struct {
 	Machine string        `json:"machine,omitempty"`
 	Files   []changedFile `json:"files"`
 	Origin  *forkOrigin   `json:"origin,omitempty"`
+	// Import is true on an import commit: a version of the source's skill
+	// agentx stored, which a view of the skill's own edits may leave out.
+	Import bool `json:"import,omitempty"`
 }
 
 // forkOrigin is where a fork came from, on the event of the commit that
@@ -130,10 +133,10 @@ func (inv *invocation) skillHistory(ctx context.Context, name string) error {
 	}
 	switch _, inLibrary := librarySkill(inv.dirs.Library, name); {
 	case held && rec.Kind != lineage.KindFork:
-		return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no history of its own",
+		return fail(exitRefused, sanitised(name)+" is not a skill of the hub, so it has no history of its own",
 			"a skill of a shared source is at the version it was installed at or last published; fork it with '"+skillCommand("fork", name)+"' to give its edits a history")
 	case !held && inLibrary:
-		return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no history",
+		return fail(exitRefused, sanitised(name)+" is not a skill of the hub, so it has no history",
 			"import it with '"+adoptCommand(name)+"' to give its edits a history")
 	case !held:
 		return inv.noLibrarySkill(name)
@@ -215,6 +218,7 @@ func (inv *invocation) reportHistory(name, dir string, commits []forkLogCommit) 
 			Message: strings.TrimRight(c.message, "\n"), Files: []changedFile{}}
 		ev.Subject, _, _ = strings.Cut(ev.Message, "\n")
 		imported := lineage.IsImport(lineage.Commit{ID: c.id, Parents: c.parents, Message: c.message})
+		ev.Import = imported
 		if t, err := lineage.ParseFork(c.message); err == nil && !imported {
 			ev.Machine = t.Machine
 			var parent *lineage.Commit

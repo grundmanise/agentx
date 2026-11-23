@@ -23,8 +23,8 @@ import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /**
- * The hints of `source add` that name a command, in the app's words: the account remote's skills
- * are the ones under Personal.
+ * The hints of `source add` that name a command, in the app's words: the hub's skills
+ * are the ones under Hub.
  */
 export const addSourceHintRules: HintRule[] = [
   {

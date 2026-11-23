@@ -76,7 +76,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	if !exists {
 		// Settings that name sources the account repo has nothing of, as an
 		// import leaves them: a shared source is refused as not fetched, with
-		// the add that fetches it as the hint, and the account remote, which
+		// the add that fetches it as the hint, and the hub, which
 		// this command writes the remote of when it is missing, is fetched
 		// into an account repo created for it.
 		for _, t := range targets {
@@ -144,7 +144,7 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 		return nil, accountRepoFailure(err)
 	}
 	// Shared sources are fetched in parallel, without blobs, see
-	// source.FetchAll; the account remote whole, once those are done, see
+	// source.FetchAll; the hub whole, once those are done, see
 	// fetchForks. results keeps the order of targets, and then and the
 	// progress events count both alike.
 	var srcs []source.Source
@@ -194,7 +194,7 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 	// the user wrote; the truth is that the source is not on this machine,
 	// which is what source skills says of the same state. Only a shared
 	// source that failed is checked, so a run that works spawns nothing for
-	// it: the account remote's remote is always written before its fetch,
+	// it: the hub's remote is always written before its fetch,
 	// and one a failed first fetch took out again, see fetchForks, was
 	// still unreachable.
 	for i, res := range results {
@@ -233,7 +233,7 @@ func (inv *invocation) holdLock(ctx context.Context, wait, signal bool, fn func(
 // A shared source with no remote at all, which an interrupted removal
 // leaves, is left alone: writing one for it would build a remote out of an
 // entry nothing can fetch. The fetch that follows fails, and the run says
-// what it is: a source this machine does not hold. The account remote's
+// what it is: a source this machine does not hold. The hub's
 // remote is written whenever it is missing, as settings an import wrote leave it:
 // its forks are fetched whole from the repository and need nothing else.
 // One written over a remote never fetched whole is fetched with --refetch
@@ -488,7 +488,7 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 }
 
 // sharedSources are the entries of sources the update check and serve's
-// search index cover: every one but the account remote, which holds no
+// search index cover: every one but the hub, which holds no
 // skill on one branch to check or list. Its forks are fetched whole by the
 // commands that read them, see fetchForks; fetching it as a shared source
 // would bring its objects in without their blobs, which its forks' history

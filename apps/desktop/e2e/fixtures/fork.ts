@@ -19,7 +19,7 @@ const libraryPlacement = (configurationId: string, name: string) => ({
   path: `${LIBRARY}/${name}`,
 });
 
-/** One of your own skills as `skill fork` leaves it: its branch's worktree, in Claude Code too. */
+/** A hub skill as `skill fork` leaves it: its branch's worktree, in Claude Code too. */
 const ownEntry = (
   name: string,
   hash: string,
@@ -81,7 +81,7 @@ const fromPdf: Partial<LibraryEntry> = {
   upstream_subpath: "pdf",
 };
 
-/** After `skill fork pdf`: pdf is one of your own skills, in its place. */
+/** After `skill fork pdf`: pdf is a hub skill, in its place. */
 export const pdfForkedInPlace = {
   ...inventory,
   library: inventory.library.map((e) =>

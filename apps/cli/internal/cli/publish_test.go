@@ -39,7 +39,7 @@ func (h *harness) invocation() *invocation {
 // record records the edits of h's skill called name on its branch, as a
 // publish records them before its push, without pushing, and returns the
 // branch's new tip. It is how a test gives a skill a commit of its own
-// that the account remote lacks, in the test's own process.
+// that the hub lacks, in the test's own process.
 func (h *harness) record(name string) string {
 	h.t.Helper()
 	ctx := context.Background()
@@ -67,21 +67,21 @@ func (h *harness) record(name string) string {
 
 // TestSkillPublishRecordsEditsAndPushes publishes two skills made with
 // skill new and one forked from a shared source, all three edited and
-// their branches on the account remote already, in one bare publish with
+// their branches on the hub already, in one bare publish with
 // -m: each skill's edits become one commit on the tip
 // it found, by the user's own identity, carrying the machine and the
 // message -m gives, a file git ignores stays on disk and out of the
-// commit, every branch goes to the account remote, each worktree's status
+// commit, every branch goes to the hub, each worktree's status
 // is clean, and every skill reads current; the shared source is never
 // pushed to, though its managed beta is edited too. Before that, in the
 // same home and changing nothing, a named skill a publish cannot cover is
 // refused: an empty -m, a trailer of agentx's in -m, refused before the name is looked up,
 // a name the machine does not hold, an unmanaged skill, a skill holding a
-// Git repository its ignore rules do not cover, and an account remote git
+// Git repository its ignore rules do not cover, and a hub git
 // cannot reach; a .gitignore then lets jot be recorded without the
 // repository. notes's tip holds a file beside its skill directory that a
 // commit made with git put there, which the publish keeps. Last, an edit
-// of a skill whose tip the account remote holds already is recorded with
+// of a skill whose tip the hub holds already is recorded with
 // the message agentx writes and pushed, not reported up to date, and -m
 // with nothing to record warns, for a named and a bare publish and for
 // the first publish of a skill. Then two skills named in one run, one never
@@ -140,7 +140,7 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 		equal(t, what+": exit", out.exit, tc.exit.exit)
 		contains(t, what+": error", h.one(out.stdout, "error")["message"].(string), tc.says)
 	}
-	// An account remote git cannot reach records nothing either.
+	// A hub git cannot reach records nothing either.
 	away := remote + ".away"
 	if err := os.Rename(remote, away); err != nil {
 		t.Fatal(err)
@@ -191,7 +191,7 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	equal(t, "the remote's notes", remoteGit(t, h, remote, "rev-parse", "refs/heads/skills/notes"), tip)
 	out = h.mustRun("skill", "publish", "notes", "-m", "unused")
 	contains(t, "-m with nothing to record", out.stderr, "notes has no edits to record, so -m was not used")
-	contains(t, "its line", out.stdout, "notes is up to date on the account remote")
+	contains(t, "its line", out.stdout, "notes is up to date on the hub")
 	out = h.mustRun("skill", "publish", "-m", "unused")
 	contains(t, "a bare publish: -m with nothing to record", out.stderr, "no skill has edits to record, so -m was not used")
 	// A first publish with nothing to record has nothing to fold either.
@@ -286,7 +286,7 @@ exec `+real+` "$@"
 	h.env["PATH"] = path
 	equal(t, "exit", out.exit, exitSource.exit)
 	contains(t, "hint", h.one(out.stdout, "error")["hint"].(string),
-		"the edits were recorded, so run 'agentx skill publish notes' again once the account remote can be reached")
+		"the edits were recorded, so run 'agentx skill publish notes' again once the hub can be reached")
 	equal(t, "library_skill events", len(h.eventsOfType(out.stdout, "library_skill")), 1)
 	equal(t, "the event's skill", h.librarySkill(out.stdout, "notes")["name"], "notes")
 	recorded := h.ref(lineage.ForkRef("notes"))
@@ -404,10 +404,10 @@ func TestPublishCommand(t *testing.T) {
 	}
 }
 
-// TestRemoteSelection: a bare publish covers your own skills whose branch
-// the account remote holds, under their name or, renamed here, under an
+// TestRemoteSelection: a bare publish covers hub skills whose branch
+// the hub holds, under their name or, renamed here, under an
 // old name whose branch is the same skill by its fork id or holds the
-// skill's own commit, and skips the rest of your own; a managed skill of a
+// skill's own commit, and skips the other hub skills; a managed skill of a
 // shared source is neither.
 func TestRemoteSelection(t *testing.T) {
 	t.Parallel()

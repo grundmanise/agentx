@@ -39,9 +39,9 @@ const UpstreamRemovedPrefix = "refs/agentx/upstream-removed/"
 // UpstreamRemovedRef is the upstream-removed marker of the skill called name.
 func UpstreamRemovedRef(name string) string { return UpstreamRemovedPrefix + name }
 
-// The kinds of lineage record a skill has. KindFork is one of the user's
-// own skills, on a skills/ branch, which events list as managed (see
-// eventKind in package cli).
+// The kinds of lineage record a skill has. KindFork is a hub skill, on a
+// skills/ branch, which events list as managed (see eventKind in package
+// cli).
 const (
 	KindManaged   = "managed"
 	KindFork      = "fork"
