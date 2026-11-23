@@ -53,7 +53,7 @@ The type decides the release notes section: `feat` for something new, `change` f
 
 For PR descriptions, follow the PR skill in `.agents/skills/pr/SKILL.md`.
 
-Write commit descriptions in an imperative style. Focus on how the change affects users, what changed and why, and describe the implementation only where it's needed to understand the change.
+Write commit descriptions in an imperative style. Focus on how the change affects users, what changed and why, and describe the implementation where it's needed to understand the change.
 
 ### Branches
 
