@@ -8,7 +8,6 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import { Pill } from "#/components/pill.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import {
@@ -20,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "#/components/ui/alert-dialog.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
@@ -236,7 +236,7 @@ const AccountRemoteRow = ({
       {/* Baseline, not center: the mono URL then sits on the middle of the pill. */}
       <div className="flex min-w-0 flex-wrap items-baseline gap-2">
         <p className="type-technical text-text-primary m-0 break-all">{url}</p>
-        {readOnly && <Pill tone="neutral">Read-only</Pill>}
+        {readOnly && <Badge tone="neutral">Read-only</Badge>}
       </div>
       {changing ? (
         <RemoteForm

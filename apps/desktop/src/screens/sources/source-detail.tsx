@@ -7,9 +7,9 @@ import type { Ref } from "react";
 
 import type { SourceEvent } from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
-import { Pill } from "#/components/pill.tsx";
 import { SelectableLink } from "#/components/selectable-link.tsx";
 import { Spinner } from "#/components/spinner.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { cn } from "#/lib/utils.ts";
@@ -118,7 +118,7 @@ export const SourceDetail = ({
             {shortSource(source.url)}
           </h2>
           {source.access === "read-only" && (
-            <Pill tone="neutral">Read-only</Pill>
+            <Badge tone="neutral">Read-only</Badge>
           )}
         </div>
         <SourceUrl source={source} />

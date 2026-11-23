@@ -5,9 +5,9 @@ import { AgentLogo } from "#/components/agent-logo.tsx";
 import { ExpandToggle, SortToggle } from "#/components/filter-controls.tsx";
 import { LIST_GUIDE } from "#/components/list-guide.ts";
 import { ListRow } from "#/components/list-row.tsx";
-import { Pill } from "#/components/pill.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { useOnNewKey } from "#/lib/new-key.ts";
 import { plural } from "#/lib/plural.ts";
 import { PluginFilterPopover } from "#/screens/plugins/filter-popover.tsx";
@@ -66,7 +66,7 @@ const PluginRowView = ({
           <span className="type-row-name text-row-name truncate">
             {row.name}
           </span>
-          {row.disabled && <Pill tone="disabled">Disabled</Pill>}
+          {row.disabled && <Badge tone="disabled">Disabled</Badge>}
           <span className="flex-1" />
           <span className="type-technical-sm text-text-caption whitespace-nowrap">
             {row.version}

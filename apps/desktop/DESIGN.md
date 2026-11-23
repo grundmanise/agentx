@@ -842,7 +842,7 @@ A primary button whose command can be stopped, such as Add on the Add skills bar
 
 ### Pills (status)
 
-Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version takes `type.version-pill`.
+shadcn's Badge (`src/components/ui/badge.tsx`); a pill that is a button is `BadgeButton`, the Badge on a `<button>`. Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version takes `type.version-pill`.
 
 - Not published: `pill.neutral-*`. The only status pill a skill row carries.
 - Disabled (plugin): `pill.disabled-*`.
