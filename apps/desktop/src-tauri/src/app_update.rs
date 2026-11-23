@@ -6,6 +6,7 @@
 // channel and finds nothing. This is the one place the Rust side reaches the network.
 
 use std::sync::Mutex;
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -16,6 +17,10 @@ const STABLE: &str = "https://github.com/grundmanise/agentx/releases/latest/down
 /// The manifest nightlies publish: an asset of the rolling `nightly-updates` prerelease.
 const NIGHTLY: &str =
     "https://github.com/grundmanise/agentx/releases/download/nightly-updates/latest.json";
+
+/// How long a check may take, and a download: a stalled server ends in an error the user can retry.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// The event that carries the download's progress while an update installs.
 pub const PROGRESS_EVENT: &str = "app-update-progress";
@@ -63,6 +68,7 @@ pub async fn app_update_check(
     let update = app
         .updater_builder()
         .endpoints(vec![url.parse().map_err(|err| format!("{err}"))?])
+        .map(|builder| builder.timeout(CHECK_TIMEOUT))
         .and_then(|builder| builder.build())
         .map_err(|err| err.to_string())?
         .check()
@@ -81,12 +87,14 @@ pub async fn app_update_check(
 /// restarts.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn app_update_install(app: AppHandle, found: State<'_, Found>) -> Result<(), String> {
-    let update = found
+    let mut update = found
         .0
         .lock()
         .unwrap_or_else(|err| err.into_inner())
         .clone()
         .ok_or("no update was found to install")?;
+    // The update does not take the check's timeout.
+    update.timeout = Some(DOWNLOAD_TIMEOUT);
     let mut downloaded: u64 = 0;
     let mut sent_percent = None;
     update

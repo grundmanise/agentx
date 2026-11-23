@@ -78,6 +78,11 @@ const check = async (manual: boolean) => {
   }
   try {
     const found = await invoke<Available | null>("app_update_check");
+    // An install that started meanwhile keeps its state.
+    const now = useAppUpdateStore.getState().update;
+    if (now !== undefined && now.phase !== "available") {
+      return;
+    }
     useAppUpdateStore.setState({
       update:
         found === null
@@ -159,21 +164,22 @@ export const installAppUpdate = async () => {
     rim: { fraction: 0, state: "running" },
     update: { phase: "installing", version },
   });
-  const stop = await listen<Progress>("app-update-progress", ({ payload }) => {
-    if (payload.total === null || payload.total === 0) {
-      return;
-    }
-    const fraction = payload.downloaded / payload.total;
-    useAppUpdateStore.setState({
-      rim: { fraction, state: "running" },
-      update: {
-        percent: Math.floor(fraction * 100),
-        phase: "installing",
-        version,
-      },
-    });
-  });
+  let stop: (() => void) | undefined;
   try {
+    stop = await listen<Progress>("app-update-progress", ({ payload }) => {
+      if (payload.total === null || payload.total === 0) {
+        return;
+      }
+      const fraction = payload.downloaded / payload.total;
+      useAppUpdateStore.setState({
+        rim: { fraction, state: "running" },
+        update: {
+          percent: Math.floor(fraction * 100),
+          phase: "installing",
+          version,
+        },
+      });
+    });
     await invoke("app_update_install");
     useAppUpdateStore.setState({
       rim: { fraction: 1, state: "done" },
@@ -186,7 +192,7 @@ export const installAppUpdate = async () => {
     });
     notifyFailure(`Couldn't install agentx ${version}`);
   } finally {
-    stop();
+    stop?.();
   }
 };
 

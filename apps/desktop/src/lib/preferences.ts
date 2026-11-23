@@ -27,8 +27,23 @@ export const readPreferences = async (): Promise<Preferences> => {
   }
 };
 
-/** Saves `change` over the preferences as saved. Throws when they could not be saved. */
-export const savePreferences = async (change: Partial<Preferences>) => {
+// The save going on, which the next one waits for, so two at once never write over each other's
+// change.
+let saving: Promise<void> = Promise.resolve();
+
+const save = async (previous: Promise<void>, change: Partial<Preferences>) => {
+  try {
+    await previous;
+  } catch {
+    // A failed save leaves the next one to run; its caller heard of the failure.
+  }
   const preferences = { ...(await readPreferences()), ...change };
   await invoke("preferences_write", { preferences });
+};
+
+/** Saves `change` over the preferences as saved. Throws when they could not be saved. */
+export const savePreferences = async (change: Partial<Preferences>) => {
+  const current = save(saving, change);
+  saving = current;
+  await current;
 };
