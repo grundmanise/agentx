@@ -267,9 +267,9 @@ async fn serve_takes_requests_reports_and_logs_its_stderr_and_stops_with_the_win
 
     // A JSON-RPC request and a notification each go to serve as one line.
     let request = r#"{"jsonrpc":"2.0","id":1,"method":"run","params":{"args":["version"]}}"#;
-    f.sup.serve_request(request).await.unwrap();
+    f.sup.serve_request(child, request).await.unwrap();
     let cancel = r#"{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":1}}"#;
-    f.sup.serve_request(cancel).await.unwrap();
+    f.sup.serve_request(child, cancel).await.unwrap();
     let events = f.wait_for_serve("event", 3).await;
     assert_eq!(
         events[1].1["event"]["request"],
@@ -279,8 +279,8 @@ async fn serve_takes_requests_reports_and_logs_its_stderr_and_stops_with_the_win
         events[2].1["event"]["request"],
         json!({"jsonrpc": "2.0", "method": "$/cancelRequest", "params": {"id": 1}})
     );
-    assert!(f.sup.serve_request("not json").await.is_err());
-    assert!(f.sup.serve_request("[1]").await.is_err());
+    assert!(f.sup.serve_request(child, "not json").await.is_err());
+    assert!(f.sup.serve_request(child, "[1]").await.is_err());
 
     f.sup.shutdown().await;
     let exits = f.wait_for(SERVE_EXIT, 1).await;
@@ -291,7 +291,10 @@ async fn serve_takes_requests_reports_and_logs_its_stderr_and_stops_with_the_win
     assert_eq!(f.serve_lines("log").len(), 1, "the one debug line");
     let log = fs::read_to_string(f.dir.join("logs/serve.log")).unwrap();
     assert!(log.contains("serve started"), "{log}");
-    assert!(f.sup.serve_request(request).await.is_err(), "serve is gone");
+    assert!(
+        f.sup.serve_request(child, request).await.is_err(),
+        "serve is gone"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -454,7 +457,10 @@ async fn serve_start_during_the_restart_wait_starts_the_next_child_at_once() {
     assert_eq!(f.emitted(SERVE_EXIT).len(), 1);
     assert_eq!(inventories(), [json!(first), json!(second)]);
     let request = r#"{"jsonrpc":"2.0","id":1,"method":"run","params":{"args":["version"]}}"#;
-    f.sup.serve_request(request).await.unwrap();
+    // A request meant for the child that ended is not written to the next one.
+    let refused = f.sup.serve_request(first, request).await;
+    assert!(refused.is_err(), "{refused:?}");
+    f.sup.serve_request(second, request).await.unwrap();
     f.wait_for_serve("event", 3).await;
 
     f.sup.shutdown().await;

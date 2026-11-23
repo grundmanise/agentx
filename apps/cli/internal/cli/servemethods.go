@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"slices"
 	"time"
@@ -105,6 +106,10 @@ type runResult struct {
 	TimedOut  bool `json:"timed_out"`
 }
 
+// maxDeadlineMS is the longest deadline a run takes, in milliseconds: a
+// longer one would overflow a time.Duration and run with no deadline at all.
+const maxDeadlineMS = int64(math.MaxInt64 / time.Millisecond)
+
 // run is the method run: one agentx command line as a child process, the
 // same executable with serve's environment and working directory, each
 // line it writes sent on as an event notification with the request's id.
@@ -120,7 +125,7 @@ func (m *serveMethods) run(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
 		Args       []string `json:"args"`
 		DeadlineMS int64    `json:"deadline_ms"`
 	}
-	if err := json.Unmarshal(c.Params, &p); err != nil || len(p.Args) == 0 || p.DeadlineMS < 0 {
+	if err := json.Unmarshal(c.Params, &p); err != nil || len(p.Args) == 0 || p.DeadlineMS < 0 || p.DeadlineMS > maxDeadlineMS {
 		return nil, &rpc.Error{Code: rpc.CodeInvalidParams, Message: `run takes {"args": ["<word>", ...]}, with "deadline_ms" for a deadline`}
 	}
 	res, err := proc.Run(ctx, proc.Command{

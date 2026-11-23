@@ -39,11 +39,12 @@ async fn serve_start(sup: Sup<'_>) -> Result<u64, String> {
     sup.inner().serve_start().await
 }
 
-/// Writes one JSON-RPC message, a request or a notification, to the serve child's stdin as one
-/// line. Its answers arrive as `serve-event` events.
+/// Writes one JSON-RPC message, a request or a notification, to the stdin of serve child
+/// `child_id` as one line, and refuses when that child is no longer the one running. Its answers
+/// arrive as `serve-event` events.
 #[tauri::command(rename_all = "snake_case")]
-async fn serve_request(sup: Sup<'_>, line: String) -> Result<(), String> {
-    sup.serve_request(&line).await
+async fn serve_request(sup: Sup<'_>, child_id: u64, line: String) -> Result<(), String> {
+    sup.serve_request(child_id, &line).await
 }
 
 /// The path of the serve log file, which holds everything serve wrote to stderr.

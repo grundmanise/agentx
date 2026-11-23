@@ -460,13 +460,19 @@ impl Supervisor {
     /// Writes one message to the serve child's stdin, as one line. Any JSON object is written, so
     /// that JSON-RPC requests and notifications both pass; serve answers one it cannot take with
     /// a JSON-RPC error. What is not a JSON object, a JSON-RPC batch included, is refused here.
-    pub async fn serve_request(&self, line: &str) -> Result<(), String> {
+    /// It is written only to child `child_id`, the one the caller sent the request to: once that
+    /// child has ended, a command meant for it must not run on the next one, whose answer the
+    /// caller would never read.
+    pub async fn serve_request(&self, child_id: u64, line: &str) -> Result<(), String> {
         let request: Value =
             serde_json::from_str(line).map_err(|err| format!("not a JSON request: {err}"))?;
         if !request.is_object() {
             return Err("a serve request is a JSON object".to_owned());
         }
         let mut state = self.serve.lock().await;
+        if state.child_id != child_id {
+            return Err(format!("serve child {child_id} has ended"));
+        }
         let stdin = state.stdin.as_mut().ok_or("serve is not running")?;
         let mut bytes = request.to_string().into_bytes();
         bytes.push(b'\n');

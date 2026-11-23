@@ -52,9 +52,13 @@ let latest = 0;
 /** The children that ended, by child id. */
 const ended = new Set<number>();
 
-/** Writes one message to the child's stdin, as one line. It fails when no child runs. */
-const send = async (message: object): Promise<void> => {
+/**
+ * Writes one message to the stdin of child `childId`, as one line. It fails when that child is no
+ * longer the one running, so that a request never runs on a child whose answers its peer drops.
+ */
+const send = async (childId: number, message: object): Promise<void> => {
   await invoke("serve_request", {
+    child_id: childId,
     line: JSON.stringify({ jsonrpc: "2.0", ...message }),
   });
 };
@@ -64,7 +68,14 @@ const peerOf = (childId: number): Connected => {
   if (known !== undefined) {
     return known;
   }
-  const created = peer(childId, send, started, events.emitLine);
+  const created = peer(
+    childId,
+    async (message) => {
+      await send(childId, message);
+    },
+    started,
+    events.emitLine
+  );
   peers.set(childId, created);
   latest = Math.max(latest, childId);
   return created;

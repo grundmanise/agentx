@@ -166,6 +166,10 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	c.send(7, "search", map[string]any{})
 	_, rpcError, _, _ = c.answer(7)
 	equal(t, "error.code", rpcError["code"], float64(-32602))
+	// A deadline too long for a time.Duration would run with none.
+	c.send(8, "run", map[string]any{"args": []string{"version"}, "deadline_ms": int64(9223372036855)})
+	_, rpcError, _, _ = c.answer(8)
+	equal(t, "error.code", rpcError["code"], float64(-32602))
 
 	// Nothing of the door reaches stdout but where it is.
 	equal(t, "exit", p.close(), 0)

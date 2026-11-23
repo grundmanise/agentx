@@ -115,6 +115,16 @@ func (d *serveDoor) own(ev any) {
 	if _, ok := ev.(logEvent); ok {
 		stream = proc.Stderr
 	}
-	_, inventory := ev.(inventoryEvent)
-	d.rpc.Notify("event", eventParams{Stream: stream, Event: ev}, inventory)
+	// The inventory is the first thing a client that connects later is
+	// sent, and a problem serve reported since, such as the serve lock
+	// another serve holds, follows it: a client that connects after serve
+	// refused to scan still learns why no inventory comes.
+	keep := rpc.Passing
+	switch ev.(type) {
+	case inventoryEvent:
+		keep = rpc.Retained
+	case errorEvent:
+		keep = rpc.Note
+	}
+	d.rpc.Notify("event", eventParams{Stream: stream, Event: ev}, keep)
 }

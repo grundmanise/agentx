@@ -185,7 +185,11 @@ export const peer = (
       }
     } else if (
       method === undefined &&
-      (typeof id === "string" || typeof id === "number")
+      message.jsonrpc === "2.0" &&
+      (typeof id === "string" || typeof id === "number") &&
+      // A response carries a result or an error, never both: anything else is no answer, and the
+      // request keeps waiting for its own.
+      "result" in message !== isRpcError(message.error)
     ) {
       const waiting = pending.get(id);
       pending.delete(id);
@@ -396,8 +400,9 @@ export const rpcCalls = ({
       }
     } finally {
       runs.delete(runId);
+      // A run that failed, as on a closed connection, ends too, with no exit code.
+      onRunEnd({ exitCode: result.exitCode, runId });
     }
-    onRunEnd({ exitCode: result.exitCode, runId });
     return result;
   };
 

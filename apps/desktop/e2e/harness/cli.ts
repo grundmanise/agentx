@@ -694,6 +694,11 @@ export class MockCli {
         if (!this.serving) {
           throw new Error("serve is not running");
         }
+        if (field(args, "child_id") !== this.childId) {
+          throw new Error(
+            `serve child ${String(field(args, "child_id"))} has ended`
+          );
+        }
         const written = String(field(args, "line"));
         this.stdin.push(written);
         this.read(JSON.parse(written));

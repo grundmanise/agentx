@@ -88,6 +88,7 @@ type Server struct {
 	mu       sync.Mutex
 	conns    map[*socket]struct{}
 	retained []byte // the notification every new client is sent first
+	note     []byte // the one sent after it, until the next retained one
 	closed   bool
 	serving  sync.WaitGroup // one per connection
 	queue    int            // messages that may wait for one client
@@ -166,22 +167,43 @@ func (s *Server) add(c *socket) bool {
 	}
 	s.conns[c] = struct{}{}
 	s.serving.Add(1)
-	if s.retained != nil {
-		c.offer(s.retained)
+	for _, b := range [][]byte{s.retained, s.note} {
+		if b != nil {
+			c.offer(b)
+		}
 	}
 	return true
 }
 
+// Keep says whether a notification is also sent to the clients that
+// connect later.
+type Keep int
+
+const (
+	// Passing is sent to the clients connected now and no others.
+	Passing Keep = iota
+	// Retained is the first thing every later client is sent, until another
+	// one is retained. It drops the note.
+	Retained
+	// Note is sent to every later client after the retained one, until
+	// another note or another retained notification replaces it: a problem
+	// that a client connecting late must still learn of.
+	Note
+)
+
 // Notify sends a notification to every client. It never waits: a client
-// with a full queue is behind for good and is disconnected. With retain,
-// the notification is also the first thing every later client is sent,
-// until another one is retained.
-func (s *Server) Notify(method string, params any, retain bool) {
+// with a full queue is behind for good and is disconnected. keep says
+// whether later clients are sent it too.
+func (s *Server) Notify(method string, params any, keep Keep) {
 	b := Notification(method, params)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if retain {
-		s.retained = b
+	switch keep {
+	case Retained:
+		s.retained, s.note = b, nil
+	case Note:
+		s.note = b
+	case Passing:
 	}
 	for c := range s.conns {
 		c.offer(b)
