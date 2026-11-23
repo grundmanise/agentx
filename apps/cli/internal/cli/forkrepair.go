@@ -77,8 +77,8 @@ func noForkSkill(f forkSite, plan forkPlacing, dir string, flags []string) error
 // on this machine, as reconciliation at serve start does: a worktree whose
 // pointers moved with agentx home is repaired with git, and a missing
 // worktree, skill directory or library symlink is put back from the
-// branch, the tip laid out as the account repo holds it. A fork never
-// placed on this machine, whose branch the account repo holds, is checked
+// branch, the tip laid out as the store holds it. A fork never
+// placed on this machine, whose branch the store holds, is checked
 // out the same way. Then each configuration of targets gets its placement,
 // as an install places one, skipping what it finds at a place that is not
 // the placement.
@@ -94,7 +94,7 @@ func noForkSkill(f forkSite, plan forkPlacing, dir string, flags []string) error
 // holds nothing, and --force replaces it. --force with nothing in the way
 // is refused, as it always was for a fork.
 func (inv *invocation) placeFork(ctx context.Context, rec lineage.Record, targets []placeTarget, asCopy, force bool, flags []string) error {
-	gitDir := gitx.AccountRepoPath(inv.dirs.Home)
+	gitDir := gitx.StorePath(inv.dirs.Home)
 	f := inv.forkPlace(gitDir, rec)
 	if err := inv.findForkDir(ctx, &f); err != nil {
 		return err
@@ -116,7 +116,7 @@ func (inv *invocation) placeFork(ctx context.Context, rec lineage.Record, target
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{rec.Ref})
 		if err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 		if values[rec.Ref] != rec.Commit {
 			return fail(exitRefused, rec.Name+" changed while it was being placed, so nothing was changed", "run '"+skillCommand("place", rec.Name, flags...)+"' again")
@@ -301,7 +301,7 @@ func (inv *invocation) retirable(ctx context.Context, f forkSite, again string) 
 	}
 	j, err := inv.judgeTip(ctx, f, t, true)
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return "", storeFailure(err)
 	}
 	ignored := j.ignored
 	if inv.systemFilesIgnored() {

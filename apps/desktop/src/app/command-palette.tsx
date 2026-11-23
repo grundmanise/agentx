@@ -111,10 +111,11 @@ export const CommandPalette = ({
   }
   const rows = useSkillRows();
   const sync = useSyncState();
-  const outgoing = sync?.kind === "account-remote" ? sync.outgoing : [];
+  const outgoing = sync?.kind === "hub" ? sync.outgoing : [];
 
   const actions: PaletteItem[] = [];
-  if (outgoing.length > 0) {
+  const readOnly = sync?.kind === "hub" ? sync.readOnly : undefined;
+  if (outgoing.length > 0 && readOnly === undefined) {
     actions.push({
       group: "ACTIONS",
       hint: skillsWord(outgoing.length),

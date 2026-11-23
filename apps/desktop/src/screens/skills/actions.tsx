@@ -7,7 +7,6 @@ import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LibraryPlacement } from "#/cli/events.gen.ts";
-import { Spinner } from "#/components/spinner.tsx";
 import { dismissToast } from "#/components/toast.tsx";
 import type { ErrorToast } from "#/components/toast.tsx";
 import {
@@ -20,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "#/components/ui/alert-dialog.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { revealIfThere, revealInFinder } from "#/lib/reveal.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
@@ -49,7 +49,7 @@ const reconnectLabel = (row: SkillRow, placement: LibraryPlacement) =>
 
 const addSourceLabel = (source: string) => `add source ${source}`;
 
-/** The name the CLI reports for the skill a `skill import` run took over as one of your own. */
+/** The name the CLI reports for the skill a `skill import` run took over as a hub skill. */
 const adoptedName = (events: CliEvent[]) =>
   events.find((e) => e.type === "library_skill")?.name;
 

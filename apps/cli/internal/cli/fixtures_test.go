@@ -252,7 +252,7 @@ func buildExecutable(s *sourceRepo) []string {
 // once per test binary as well, and every later test gets a copy of it.
 //
 // A home names the path it was built at in two places. The source's URL
-// is recorded in the settings, in the account repo's remote and in the
+// is recorded in the settings, in the store's remote and in the
 // trailer of every import commit, so a fixture source is added under a
 // URL of its own, fixtureURL, the same in every test, which the harness
 // user's git configuration maps to the local repository, as h.rewrite

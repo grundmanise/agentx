@@ -13,7 +13,7 @@ import (
 
 // TestSkillAddPointsAtSkillPlaceForALibrarySkill: skill add installs from a
 // source, and a bare name is no source. When the library holds a skill of
-// exactly that name, one agentx installed or one of the user's own, the
+// exactly that name, one agentx installed or a hub skill, the
 // refusal says so and its hint is the skill place command that puts it in
 // more clients, carrying the --to and --copy that were given, which runs as
 // it is printed. The exit code is the one any other argument that is no
@@ -28,7 +28,7 @@ func TestSkillAddPointsAtSkillPlaceForALibrarySkill(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
-	ownLibrarySkill(t, h, "-mine")
+	hubLibrarySkill(t, h, "-mine")
 	for _, c := range []struct {
 		name string   // the library skill
 		args []string // after skill add
@@ -84,7 +84,7 @@ func TestSkillAddReadsASourceFormAsASource(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	id := source.ID(s.url)
-	ownLibrarySkill(t, h, id)
+	hubLibrarySkill(t, h, id)
 
 	out := h.run("--json", "skill", "add", id, "--name", "alpha", "--to", "cortex")
 	equal(t, "exit", out.exit, 0)
@@ -94,9 +94,9 @@ func TestSkillAddReadsASourceFormAsASource(t *testing.T) {
 	}
 }
 
-// ownLibrarySkill makes a library skill of the user's own called name,
+// hubLibrarySkill makes a library hub skill called name,
 // which no source holds.
-func ownLibrarySkill(t *testing.T, h *harness, name string) {
+func hubLibrarySkill(t *testing.T, h *harness, name string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Join(h.library, name), 0o755); err != nil {
 		t.Fatal(err)

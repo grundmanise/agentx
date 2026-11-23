@@ -1,4 +1,4 @@
-import { Spinner } from "#/components/spinner.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { useNow } from "#/lib/now.ts";
 import { CHECK_DEADLINE_MS } from "#/startup/startup.ts";
 import type { Step } from "#/startup/startup.ts";

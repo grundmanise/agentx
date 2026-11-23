@@ -2,15 +2,15 @@
 // tile, its name, a Read-only tag when access is limited, its full URL with its pin beneath,
 // which opens the repository in the browser, Refresh and Remove, and a strip of facts from
 // `source list` and its listing. The name, the URL and the facts' values are selectable.
-// The card of Personal, the account remote, has no Remove: Settings manages the account remote.
+// The Hub card has no Remove: Settings manages the hub.
 import type { Ref } from "react";
 
 import type { SourceEvent } from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
-import { Pill } from "#/components/pill.tsx";
 import { SelectableLink } from "#/components/selectable-link.tsx";
-import { Spinner } from "#/components/spinner.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { cn } from "#/lib/utils.ts";
 import { shortId, shortSource } from "#/screens/skills/projection.ts";
@@ -96,7 +96,7 @@ export const SourceDetail = ({
   onRefresh: () => void;
   /** The source is being removed. */
   removing?: boolean;
-  /** Opens the Remove dialog; absent for the account remote. */
+  /** Opens the Remove dialog; absent for the hub. */
   onRemove?: () => void;
   /** The Remove button, which focus returns to when its dialog closes. */
   removeRef?: Ref<HTMLButtonElement>;
@@ -118,7 +118,7 @@ export const SourceDetail = ({
             {shortSource(source.url)}
           </h2>
           {source.access === "read-only" && (
-            <Pill tone="neutral">Read-only</Pill>
+            <Badge tone="neutral">Read-only</Badge>
           )}
         </div>
         <SourceUrl source={source} />

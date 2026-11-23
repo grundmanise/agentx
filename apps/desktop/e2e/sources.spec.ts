@@ -10,6 +10,7 @@ import {
   webUrl,
 } from "#/screens/sources/projection.ts";
 
+import { filesOf } from "./fixtures/skills.ts";
 import {
   ACME,
   ACME_ID,
@@ -127,7 +128,7 @@ const openSources = async (
 const commandLines = (cli: MockCli) =>
   later(cli).map((line) => line.slice(0, -1).join(" "));
 
-test("the sources row: one pill per shared source, Personal, the counts and the stale dots", async ({
+test("the sources row: one pill per shared source, Hub, the counts and the stale dots", async ({
   cli,
   page,
 }) => {
@@ -135,16 +136,16 @@ test("the sources row: one pill per shared source, Personal, the counts and the 
   expect(await names(sourcesRow(page))).toEqual([
     "acme/skills",
     "zeta/tools",
-    "Personal",
+    "Hub",
   ]);
   await expect(pill(page, "acme/skills")).toHaveAttribute(
     "aria-pressed",
     "true"
   );
-  // A count once the listing is read; Personal's from `source list`.
+  // A count once the listing is read; Hub's from `source list`.
   await expect(pill(page, "acme/skills")).toHaveText("acme/skills8");
   await expect(pill(page, "zeta/tools")).toHaveText("zeta/tools");
-  await expect(pill(page, "Personal")).toHaveText("Personal2");
+  await expect(pill(page, "Hub")).toHaveText("Hub2");
   await expect(
     pill(page, "acme/skills").getByTitle("Not checked in 3 days")
   ).toBeAttached();
@@ -191,10 +192,10 @@ test("the open source's card: its name, its full URL linking to the repository, 
   await pill(page, "zeta/tools").click();
   await expect(fact(page, "Fetched")).toHaveText("Not yet");
 
-  // The account remote is managed in Settings: its card has no Remove.
-  await pill(page, "Personal").click();
+  // The hub is managed in Settings: its card has no Remove.
+  await pill(page, "Hub").click();
   await expect(
-    details(page).getByRole("heading", { name: "me/account" })
+    details(page).getByRole("heading", { name: "me/hub" })
   ).toBeVisible();
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
@@ -202,7 +203,7 @@ test("the open source's card: its name, its full URL linking to the repository, 
   // A search answers across every source: the card stays.
   await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
   await expect(
-    details(page).getByRole("heading", { name: "me/account" })
+    details(page).getByRole("heading", { name: "me/hub" })
   ).toBeVisible();
 });
 
@@ -234,8 +235,8 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   const states: [string, string][] = [
     ["letters", "Forked"],
     ["pdf", "Added"],
-    ["scratch", "Already in library"],
-    ["xlsx", "Name in use"],
+    ["scratch", "Name taken"],
+    ["xlsx", "Name taken"],
   ];
   await Promise.all(
     states.flatMap(([name, label]) => [
@@ -257,11 +258,14 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   await row(page, "xlsx").click();
   await row(page, "scratch").click();
   await expect(opened(page, "xlsx")).toContainText(
-    "Remove or rename xlsx first"
+    "Your library has xlsx skill from zeta/tools. Remove or rename it to add this skill."
   );
   await expect(opened(page, "scratch")).toContainText(
-    "A folder named scratch is already in your library, added outside agentx. Import it in Skills to manage it, or remove it to add this one."
+    "Your library has a scratch folder that agentx doesn't manage. Import or remove it to add this skill."
   );
+  await expect(
+    opened(page, "scratch").getByRole("link", { exact: true, name: "scratch" })
+  ).toHaveAttribute("href", "#/skills/scratch");
 
   // Opening another pill reads that source's listing.
   await pill(page, "zeta/tools").click();
@@ -272,6 +276,22 @@ test("a source listing: the skills A to Z, each state with its label and, once o
     `source read ${ACME_ID} skills/scratch`,
     `source skills ${ZETA_ID}`,
   ]);
+});
+
+test("the name of the skill that holds a Name taken card's name opens it in Skills", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  cli.register(["source", "read", ACME_ID, "skills/xlsx"], {
+    events: [skillMd("xlsx", "# xlsx\n")],
+  });
+  await row(page, "xlsx").click();
+  cli.register(["skill", "files", "xlsx"], { events: filesOf("xlsx") });
+  await opened(page, "xlsx")
+    .getByRole("link", { exact: true, name: "xlsx" })
+    .click();
+  await expect(page).toHaveURL(/#\/skills\/xlsx$/u);
 });
 
 /**
@@ -368,7 +388,7 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
 
   // The later skill of a name cannot be selected, and says why once open.
   const second = rowLine(page, "skill-89").last();
-  await expect(second.getByText("Name in use", { exact: true })).toBeVisible();
+  await expect(second.getByText("Name taken", { exact: true })).toBeVisible();
   await expect(
     second.getByRole("button", { name: "Select skill-89" })
   ).toHaveCount(0);
@@ -377,12 +397,65 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   });
   await row(page, "skill-89").last().click();
   await expect(opened(page, "skill-89")).toContainText(
-    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added"
+    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added."
   );
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
     `source read ${ACME_ID} beta/skills/skill-89`,
   ]);
+});
+
+test("a row that opens keeps the scroll, its top hidden or not", async ({
+  cli,
+  page,
+}) => {
+  await page.setViewportSize({ height: 600, width: 1100 });
+  await openSources(cli, page);
+  // A later launch draws the kept sources at once, so the list mounts with the scroller it
+  // scrolls in.
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(() => localStorage.getItem("agentx.launch"))
+    )
+    .not.toBeNull();
+  cli.restart();
+  await page.reload();
+  await expect(row(page, "pdf")).toBeVisible();
+  const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n");
+  for (const name of ["pdf", "docx"]) {
+    cli.register(["source", "read", ACME_ID, `skills/${name}`], {
+      events: [skillMd(name, `---\nname: ${name}\n---\n${lines}\n`)],
+    });
+  }
+  const scroller = page
+    .locator(".overflow-auto")
+    .filter({ has: row(page, "pdf") });
+  const scrollTop = async () => await scroller.evaluate((el) => el.scrollTop);
+  const top = async (name: string) => {
+    const box = await rowLine(page, name).boundingBox();
+    return box?.y ?? Number.NaN;
+  };
+
+  // pdf opens at the bottom edge: nothing moves, and its SKILL.md shows below the fold.
+  const pdfBefore = await top("pdf");
+  await row(page, "pdf").dispatchEvent("click");
+  await expect(row(page, "pdf")).toHaveAttribute("aria-expanded", "true");
+  expect(await top("pdf")).toBe(pdfBefore);
+
+  // docx, its top 20px above the scroller's, opens in place too.
+  const scrollerBox = await scroller.boundingBox();
+  const offset = (await top("docx")) - (scrollerBox?.y ?? Number.NaN) + 20;
+  await scroller.evaluate((el, by) => {
+    el.scrollTop += by;
+  }, offset);
+  const scrolled = await scrollTop();
+  await row(page, "docx").dispatchEvent("click");
+  await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
+  ).toBeVisible();
+  expect(await scrollTop()).toBe(scrolled);
 });
 
 test("opening a row reads its SKILL.md once, then opens, and links to the skill", async ({
@@ -410,7 +483,7 @@ test("opening a row reads its SKILL.md once, then opens, and links to the skill"
   await expect(
     opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
   ).toContainText("# Word documents");
-  await page.getByRole("link", { name: "View skill" }).click();
+  await page.getByRole("link", { name: "See full skill" }).click();
   expect(cli.openedUrls).toEqual([`${ACME}/tree/3f2a9c1e8d7b6a/skills/docx`]);
   // The row opens and closes on a click; the check alone selects.
   await expect(bar(page)).toHaveCount(0);
@@ -1137,13 +1210,13 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
     ],
     exitCode: 3,
   });
-  cli.register(["source", "add", "me/account"], {
+  cli.register(["source", "add", "me/hub"], {
     events: [
       {
         code: "refused",
         hint: "run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one",
         message:
-          "https://github.com/me/account is the account remote: it holds one branch per skill rather than skills on one branch",
+          "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch",
         type: "error",
       },
     ],
@@ -1158,34 +1231,34 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
     "Couldn't reach bad/repo. Check that the repository exists and that you can read it."
   );
 
-  await urlField(page).fill("me/account");
+  await urlField(page).fill("me/hub");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   // The CLI's hint names commands: the dialog names the place in the app instead.
   await expect(alert).toHaveText(
-    "https://github.com/me/account is the account remote: it holds one branch per skill rather than skills on one branch. See and install its skills under Personal."
+    "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub."
   );
   await expect(dialog(page)).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([
     "source add bad/repo",
-    "source add me/account",
+    "source add me/hub",
   ]);
 });
 
-test("Personal lists the account remote's installable skills and adds by name", async ({
+test("Hub lists the hub's installable skills and adds by name", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
-  await pill(page, "Personal").click();
+  await pill(page, "Hub").click();
   await expect(row(page, "release-notes")).toBeVisible();
-  expect(await skillNames(grid(page, "Personal"))).toEqual([
+  expect(await skillNames(grid(page, "Hub"))).toEqual([
     "my-pdf",
     "release-notes",
   ]);
   await expect(rowLine(page, "my-pdf")).toContainText("from acme/skills");
-  // Your skills on the account remote open to their description alone.
+  // Your skills on the hub open to their description alone.
   await row(page, "release-notes").click();
-  await expect(opened(page, "release-notes")).toHaveText("personal skill");
+  await expect(opened(page, "release-notes")).toHaveText("hub skill");
 
   const add = cli.register(["skill", "add", "--name", "release-notes"], {
     events: [{ name: "release-notes", type: "library_skill" }],
@@ -1462,7 +1535,7 @@ test("the page of a skill in its source", () => {
   ).toEqual(cases);
 });
 
-test("the dates of a card's skill: a source's by its source and subpath, yours by its fork id", () => {
+test("the dates of a card's skill: a source's by its source and subpath, a hub skill's by its fork id", () => {
   const added = "2026-10-02T09:00:00Z";
   const installs: Install[] = [
     { added, fork_id: "a1a1a1a1a1a1", name: "my-pdf" },

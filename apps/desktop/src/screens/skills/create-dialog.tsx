@@ -1,5 +1,5 @@
 // The Create skill dialog: a name and a one-line description, which `skill new` turns into a
-// skill of your own, placed in every enabled agent (docs/help-center/cli/fork.mdx). The Skills and
+// hub skill, placed in every enabled agent (docs/help-center/cli/fork.mdx). The Skills and
 // Add skills headers open it. Its Create and edit selects the new skill once the inventory that
 // follows lists it, and opens its SKILL.md in the editor the user chose (Settings, Editor); a name
 // the CLI refuses (exit 6: taken, or outside the grammar) shows its message under Name.
@@ -8,7 +8,6 @@ import type { RefObject } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Dialog,
@@ -20,6 +19,7 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import { openInEditor } from "#/lib/editor.ts";
 import {

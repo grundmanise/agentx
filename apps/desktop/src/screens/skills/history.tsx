@@ -4,6 +4,11 @@ import type { ForkOrigin, HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "#/components/ui/collapsible.tsx";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -205,7 +210,7 @@ const Entry = ({
   const [open, setOpen] = useState(false);
   const here = useAppStore((s) => s.inventory?.machine.id);
   const linked = hasLink(entry);
-  return (
+  const item = (
     <li
       className={
         last
@@ -224,34 +229,27 @@ const Entry = ({
       {expandable && linked && (
         // A link cannot sit inside the button, so the button holds the chevron alone.
         <div className="flex items-start gap-2">
-          <Button
-            variant="plain"
-            size="inline"
-            aria-expanded={open}
-            aria-label={`Show the files of ${entry.subject}`}
-            onClick={() => {
-              setOpen((o) => !o);
-            }}
-          >
-            <Chevron open={open} />
-          </Button>
+          <CollapsibleTrigger asChild>
+            <Button
+              variant="plain"
+              size="inline"
+              aria-label={`Show the files of ${entry.subject}`}
+            >
+              <Chevron open={open} />
+            </Button>
+          </CollapsibleTrigger>
           <Subject entry={entry} />
         </div>
       )}
       {expandable && !linked && (
         // A block, so the button shrinks to fit the list and its subject wraps inside it.
         <div>
-          <Button
-            variant="plain"
-            size="inline"
-            aria-expanded={open}
-            onClick={() => {
-              setOpen((o) => !o);
-            }}
-          >
-            <Chevron open={open} />
-            <Subject entry={entry} />
-          </Button>
+          <CollapsibleTrigger asChild>
+            <Button variant="plain" size="inline">
+              <Chevron open={open} />
+              <Subject entry={entry} />
+            </Button>
+          </CollapsibleTrigger>
         </div>
       )}
       {!expandable && <Subject entry={entry} />}
@@ -266,25 +264,35 @@ const Entry = ({
         <span className="type-timeline-meta text-timeline-meta">
           {metaOf(entry, here)}
         </span>
-        {expandable && open && (
-          <ul
-            aria-label={`Files of ${entry.subject}`}
-            className="m-0 mt-2 flex list-none flex-col gap-1 p-0"
-          >
-            {entry.files.map((f) => (
-              <li key={f.path} className="flex items-baseline gap-2">
-                <span className="type-technical-sm text-text-caption flex-none">
-                  {f.status}
-                </span>
-                <span className="type-technical-sm text-text-secondary break-all">
-                  {f.path}
-                </span>
-              </li>
-            ))}
-          </ul>
+        {expandable && (
+          <CollapsibleContent asChild>
+            <ul
+              aria-label={`Files of ${entry.subject}`}
+              className="m-0 mt-2 flex list-none flex-col gap-1 p-0"
+            >
+              {entry.files.map((f) => (
+                <li key={f.path} className="flex items-baseline gap-2">
+                  <span className="type-technical-sm text-text-caption flex-none">
+                    {f.status}
+                  </span>
+                  <span className="type-technical-sm text-text-secondary break-all">
+                    {f.path}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CollapsibleContent>
         )}
       </div>
     </li>
+  );
+  // An entry that expands is a Collapsible: its chevron opens the files its commit changed.
+  return expandable ? (
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
+      {item}
+    </Collapsible>
+  ) : (
+    item
   );
 };
 
@@ -327,7 +335,7 @@ const HistorySheet = ({
 );
 
 /**
- * HISTORY in the detail pane, for one of your own skills: the latest commits of its branch from
+ * HISTORY in the detail pane, for a hub skill: the latest commits of its branch from
  * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. In the
  * subject of the commit that created a fork, the origin's name links to its page, when the CLI
  * knows one. Other skills have no history of their own, and the pane shows no section for them.

@@ -27,15 +27,15 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 			"file turned into a symlink included. Files git ignores do not. Nothing is\n" +
 			"written to the library. With --update, show instead what the update\n" +
 			"'" + checkUpdatesCommand + "' found changes in the base version.\n\n" +
-			"For one of your own skills, show its unpublished edits: how its skill directory\n" +
+			"For a hub skill, show its unpublished edits: how its skill directory\n" +
 			"differs from its last published version, the newest commit of its branch the\n" +
-			"account remote holds as last fetched, or from the commit that created it when the\n" +
-			"account remote holds none, so edits an update or a fork recorded show until they\n" +
+			"hub holds as last fetched, or from the commit that created it when the\n" +
+			"hub holds none, so edits an update or a fork recorded show until they\n" +
 			"are published; or, with --commit <id>, how it differs from that commit.",
 		Example: examples(
 			"agentx skill diff pdf", "edits not yet published",
 			"agentx skill diff pdf --update", "what the update the last check found changes",
-			"agentx skill diff release-notes --commit e07d5b2", "one of your own against a commit",
+			"agentx skill diff release-notes --commit e07d5b2", "a hub skill against a commit",
 		),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -51,7 +51,7 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&update, "update", false, "compare the base version with the update the last check found")
-	cmd.Flags().StringVar(&commit, "commit", "", "compare one of your own skills with this commit instead of its last published version")
+	cmd.Flags().StringVar(&commit, "commit", "", "compare a hub skill with this commit instead of its last published version")
 	return cmd
 }
 
@@ -91,10 +91,10 @@ type fileDiff struct {
 // modified: a directory holding something git cannot record is not the
 // base version, even when every path git can record is.
 //
-// One of your own skills is compared with its last published version, or
+// A hub skill is compared with its last published version, or
 // with the commit given, see forkDiff.
 func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error {
-	gitDir, rec, held, err := inv.accountRecord(ctx, name)
+	gitDir, rec, held, err := inv.hubRecord(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -127,12 +127,12 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 	}
 	wt, err := inv.openWorkTree(ctx, gitDir, lib.ResolvedPath)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	defer wt.Close()
 	written, err := writeWorkTree(ctx, wt, base)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	var files []fileDiff
 	if !base.holds(written) {
@@ -141,7 +141,7 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 			files, err = parseDiff(status, patch)
 		}
 		if err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 	}
 	inv.reportDiff(subject, name, against, files, len(tree.Unrecordable))
@@ -152,7 +152,7 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 // managed skill does to its base version: the base's directory against the
 // candidate's, each the upstream directory of its import commit, so that
 // every path is relative to the skill's directory. Both trees are in the
-// account repo already, so this reads nothing else, writes nothing and
+// store already, so this reads nothing else, writes nothing and
 // never reaches the network: the candidate is what the check pinned, not
 // what the source holds now. A skill with no candidate, or with one its
 // branch already holds, has nothing to show, and the refusal says how to
@@ -166,7 +166,7 @@ func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
 		return inv.noLibrarySkill(name)
 	}
-	gitDir, rec, held, err := inv.accountRecord(ctx, name)
+	gitDir, rec, held, err := inv.hubRecord(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	}
 	files, err := diffTrees(ctx, inv.git, gitDir, rec.Commit+":"+rec.Import.Dir(), c.Commit+":"+c.Import.Dir())
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	at := " at " + short(c.Import.Commit)
 	subject := diffSubject{plain: "the update of " + name + at, painted: "the update of " + inv.out.paint(heading, sanitised(name)) + at}
@@ -283,7 +283,7 @@ func patchLine(line string) string {
 	return b.String()
 }
 
-// diffTrees is the diff between two trees of the account repo, read as
+// diffTrees is the diff between two trees of the store, read as
 // parseDiff reads it. Two reads that do not depend on each other, run at
 // once: the status of every file and the diff itself.
 func diffTrees(ctx context.Context, r *gitx.Runner, gitDir, from, to string) ([]fileDiff, error) {
