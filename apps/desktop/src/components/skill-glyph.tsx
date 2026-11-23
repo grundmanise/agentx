@@ -35,7 +35,7 @@ const toneOf = (shape: GlyphShape, update: boolean, tone: GlyphTone) => {
 
 /**
  * The glyph leading a skill row and the detail header: a filled dot for a skill of a source or an
- * unmanaged one, a pencil when it was edited, a fork for one of your own. The dot and fork say
+ * unmanaged one, a pencil when it was edited, a fork for a hub skill. The dot and fork say
  * whether there is something to do: `glyph.update`, the accent, for a skill with an update to
  * apply, else `glyph.idle`, a quiet gray. Whether the skill is enabled shows on the row, not the
  * glyph. The pencil is always `glyph.edited`. The title says what the glyph means, as a tooltip and to a

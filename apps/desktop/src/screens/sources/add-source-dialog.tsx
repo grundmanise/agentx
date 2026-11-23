@@ -16,19 +16,19 @@ import {
 import { Input } from "#/components/ui/input.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
-import { count, YOUR_SKILLS_LABEL } from "#/screens/sources/projection.ts";
+import { count, HUB_LABEL } from "#/screens/sources/projection.ts";
 import { agentx, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /**
- * The hints of `source add` that name a command, in the app's words: the account remote's skills
- * are the ones under Personal.
+ * The hints of `source add` that name a command, in the app's words: the hub's skills
+ * are the ones under Hub.
  */
 export const addSourceHintRules: HintRule[] = [
   {
-    app: () => `see and install its skills under ${YOUR_SKILLS_LABEL}`,
+    app: () => `see and install its skills under ${HUB_LABEL}`,
     cli: /^run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one$/u,
   },
 ];

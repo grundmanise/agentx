@@ -49,7 +49,7 @@ const groups: Record<2 | 3 | 4, readonly string[]> = {
   2: ["git", "fork_merges", "commit_identity"],
   3: ["home", "library"],
   4: [
-    "account_repo",
+    "store",
     "settings",
     "lock",
     "mutations",
@@ -62,7 +62,7 @@ const labels = [
   "agentx command line",
   "git 2.40 or newer",
   "Home folder is writable",
-  "Account repo opens",
+  "Store opens",
   "Watching this machine",
 ] as const;
 
@@ -70,7 +70,7 @@ const titles = [
   "Reinstall agentx",
   "Update git to continue",
   "agentx can't write to your home folder",
-  "agentx can't open its account repo",
+  "agentx can't open its store",
   "agentx can't watch this machine",
 ] as const;
 
@@ -90,16 +90,16 @@ const problemLine = (problem: Problem): CheckLine =>
     ? { text: problem.message }
     : { hint: problem.hint, text: problem.message };
 
-/** Your own skills and those from sources, as the library of the first inventory holds them. */
+/** Hub skills and those from sources, as the library of the first inventory holds them. */
 const counts = (inventory: InventoryEvent) => {
   const managed = inventory.library.filter((s) => s.kind === "managed");
-  // Your own skills carry a fork id, or have no source while no account remote is set.
+  // Hub skills carry a fork id, or have no source while no hub is set.
   const own = managed.filter(
     (s) => s.fork_id !== undefined || s.source === undefined
   ).length;
   return managed.length === 0
     ? "No skills yet"
-    : `${own} of your skills, ${managed.length - own} from sources`;
+    : `${plural(own, "hub skill", "hub skills")}, ${managed.length - own} from sources`;
 };
 
 /** A check read from doctor rows. */
@@ -178,13 +178,9 @@ const doctorChecks = ({ doctor, serve }: Findings): Check[] => {
       status: "fail",
     };
   }
-  const account = checks.at(2);
-  if (
-    account?.status === "pass" &&
-    serve !== undefined &&
-    "inventory" in serve
-  ) {
-    checks[2] = { ...account, lines: [{ text: counts(serve.inventory) }] };
+  const store = checks.at(2);
+  if (store?.status === "pass" && serve !== undefined && "inventory" in serve) {
+    checks[2] = { ...store, lines: [{ text: counts(serve.inventory) }] };
   }
   return checks;
 };

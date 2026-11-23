@@ -54,15 +54,15 @@ type forkUpdate struct {
 	message string // the message of the commit that completes a merge left pending, its MERGE_MSG
 	// theirsRef is the ref the commit the fork takes in was read from, which
 	// has to hold theirs still under the lock: the update candidate for an
-	// update, the remote-tracking branch for the account step; "" for a
+	// update, the remote-tracking branch for the hub step; "" for a
 	// merge pending being completed, which takes in what it merged,
 	// whatever the ref holds now.
 	theirsRef, theirs string
 	// with is what a merge left pending merges, as the line that reports it
 	// names it, see updating.conflictsWith; "" for an update from upstream.
 	with string
-	// pull is set for the account step of an update, which takes in what
-	// the account remote holds and says so in its refusals; an update from
+	// pull is set for the hub step of an update, which takes in what
+	// the hub holds and says so in its refusals; an update from
 	// upstream leaves it unset.
 	pull bool
 	// stale is the update candidate the fork's new base passed: when the
@@ -98,7 +98,7 @@ func (inv *invocation) staleCandidate(ctx context.Context, gitDir string, rec li
 
 // forkBaseRecord is the record of the fork rec's base version, see
 // lineage.Record.ForkBase, refusing a fork that has none to update from:
-// one whose history does not say, which is the account repo's to sort
+// one whose history does not say, which is the store's to sort
 // out, exit code 8, and one with no upstream at all, exit code 6.
 func forkBaseRecord(rec lineage.Record) (lineage.Record, *failure) {
 	if base, ok := rec.ForkBase(); ok {
@@ -106,8 +106,8 @@ func forkBaseRecord(rec lineage.Record) (lineage.Record, *failure) {
 	}
 	name := sanitised(rec.Name)
 	if rec.Fork != nil && rec.Fork.Problem != "" {
-		return lineage.Record{}, refuse(exitAccountRepo, "the history of "+name+" does not say which upstream version it is based on: "+sanitised(rec.Fork.Problem),
-			"run '"+skillCommand("history", rec.Name)+"' to read it, and 'agentx doctor' to check the account repo")
+		return lineage.Record{}, refuse(exitStore, "the history of "+name+" does not say which upstream version it is based on: "+sanitised(rec.Fork.Problem),
+			"run '"+skillCommand("history", rec.Name)+"' to read it, and 'agentx doctor' to check the store")
 	}
 	return lineage.Record{}, refuse(exitRefused, name+" has no upstream to update from",
 		"a skill created with 'agentx skill new', imported with 'agentx skill import', or forked from a plugin's skill, has no upstream version; its versions are its own commits")
@@ -119,7 +119,7 @@ func (inv *invocation) forkBaseOf(ctx context.Context, gitDir string, rec lineag
 	if rec.Fork == nil {
 		recs := map[string]lineage.Record{rec.Name: rec}
 		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
-			return lineage.Record{}, accountRepoFailure(err)
+			return lineage.Record{}, storeFailure(err)
 		}
 		rec = recs[rec.Name]
 	}
@@ -137,7 +137,7 @@ func (inv *invocation) forkBaseOf(ctx context.Context, gitDir string, rec lineag
 // forkBaseRecord; one whose base came from a source removed from this
 // machine, exit code 5 as for a managed skill; a candidate that holds the
 // skill under another source or upstream directory than the base, which
-// the account repo's check never pins, exit code 8; a worktree git cannot
+// the store's check never pins, exit code 8; a worktree git cannot
 // work in, see worktreeHealth; and a skill directory holding a repository
 // no ignore rule covers, or what git cannot record that the new layout
 // would discard, exit code 6. A fork with no candidate, or with its base
@@ -168,7 +168,7 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 		return nil, nil
 	}
 	if next.Import.Source != base.Import.Source || next.Import.Path != base.Import.Path {
-		return nil, refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(name)+" holds "+sanitised(name)+" under another source or directory than its base version",
+		return nil, refuse(exitStore, "the update candidate "+lineage.CandidateRef(name)+" holds "+sanitised(name)+" under another source or directory than its base version",
 			"run '"+checkUpdatesCommand+"' to pin the update again")
 	}
 	site, err := inv.forkSiteOf(ctx, gitDir, rec)
@@ -176,7 +176,7 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 		return nil, failureOf(err)
 	}
 	if site.dir != base.Import.Dir() {
-		return nil, refuse(exitAccountRepo, "the branch "+rec.Ref+" holds "+sanitised(name)+" under "+quotedPath(site.dir)+", not under "+quotedPath(base.Import.Dir())+" as its base version does",
+		return nil, refuse(exitStore, "the branch "+rec.Ref+" holds "+sanitised(name)+" under "+quotedPath(site.dir)+", not under "+quotedPath(base.Import.Dir())+" as its base version does",
 			"run '"+skillCommand("history", name)+"' and 'agentx doctor' to see how it got there")
 	}
 	// The writer reads the user's core.excludesFile with their identity,
@@ -203,7 +203,7 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 		fork:  fork,
 	}
 	if u.merged, err = mergeVersions(ctx, inv.git, gitDir, u.merge); err != nil {
-		return nil, failureOf(accountRepoFailure(err))
+		return nil, failureOf(storeFailure(err))
 	}
 	subject := upstreamMergeSubject(name, w.label, next.Import.Commit)
 	if u.merged.conflicted {
@@ -212,14 +212,14 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 			u.fork.message, err = w.mergeMessage(subject, next.Commit)
 		}
 		if err != nil {
-			return nil, failureOf(accountRepoFailure(err))
+			return nil, failureOf(storeFailure(err))
 		}
 		u.conflict, u.fork.start = conflictOfSkill(name, u.merge, files), true
 		return u, nil
 	}
 	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, next.Commit}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Base: next.Commit}})
 	if err != nil {
-		return nil, failureOf(accountRepoFailure(err))
+		return nil, failureOf(storeFailure(err))
 	}
 	if f := inv.layFork(ctx, u, commit); f != nil {
 		return nil, f
@@ -269,7 +269,7 @@ func (inv *invocation) layFork(ctx context.Context, u *updating, commit string) 
 	var err error
 	u.fork.commit = commit
 	if u.fork.laid, u.fork.lay, err = inv.forkLayout(ctx, u.fork.site.gitDir, commit, u.fork.site.dir); err != nil {
-		return failureOf(accountRepoFailure(err))
+		return failureOf(storeFailure(err))
 	}
 	return nil
 }
@@ -332,7 +332,7 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 	}
 	values, err := inv.git.Refs(ctx).RefValues(gitDir, refs)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	if values[site.rec.Ref] != site.rec.Commit {
 		return refuse(exitRefused, sanitised(name)+" changed while it was being updated, so nothing was changed",
@@ -344,7 +344,7 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 		return refuse(exitRefused, "the update candidate "+candidate+" moved while "+sanitised(name)+" was being updated, so nothing was changed",
 			"run '"+skillCommand("update", name)+"' again to apply the update the last check found")
 	default:
-		return refuse(exitRefused, "the account remote's "+site.branch+" moved while "+sanitised(name)+" was being updated, so nothing was changed",
+		return refuse(exitRefused, "the hub's "+site.branch+" moved while "+sanitised(name)+" was being updated, so nothing was changed",
 			"run '"+skillCommand("update", name)+"' again to update it as it is now")
 	}
 	if err := worktreeHealth(name, site.root, site.branch); err != nil {
@@ -380,7 +380,7 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 			for _, tip := range tips {
 				sub, err := inv.git.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", tip+":"+site.dir)
 				if err != nil {
-					return nil, accountRepoFailure(err)
+					return nil, storeFailure(err)
 				}
 				held = append(held, treeVersion(strings.TrimSpace(sub)))
 			}

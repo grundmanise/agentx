@@ -29,7 +29,7 @@ const place = (
 });
 
 const readers = [cursor, codex, copilot, gemini, opencode, cline];
-const yours = place("library", [claude, ...readers]);
+const hubSkill = place("library", [claude, ...readers]);
 const devtools = place(
   "plugin",
   [claude, codex, gemini],
@@ -73,7 +73,7 @@ const cases: {
     name: "your fork of a plugin's skill under its name",
     notice:
       "Found 2 skills named a11y-debugging. Agents that see more than one may pick the wrong skill.",
-    sights: sights([yours, devtools], [yours]),
+    sights: sights([hubSkill, devtools], [hubSkill]),
     table: [
       "Agent | Your skill | chrome-devtools-mcp",
       "! Claude Code | ✓ | ✓",
@@ -85,7 +85,7 @@ const cases: {
   {
     footer:
       "The highlighted agent sees more than one skill and decides which one to use. To avoid clashes, make sure each agent sees only one, for example by renaming your skill.",
-    name: "the plugin's skill, seen beside yours by one agent",
+    name: "the plugin's skill, seen beside a hub skill by one agent",
     notice: "Found 2 skills named a11y-debugging.",
     sights: sights(
       [place("library", [claude, codex]), place("plugin", [claude], "acme")],
@@ -102,7 +102,7 @@ const cases: {
       "To avoid clashes, make sure each agent sees only one, for example by renaming your skill.",
     name: "three skills: an agent's own copy too",
     notice: "Found 3 skills named a11y-debugging.",
-    sights: sights([yours, devtools, codexFolder], [yours]),
+    sights: sights([hubSkill, devtools, codexFolder], [hubSkill]),
     table: [
       "Agent | Your skill | chrome-devtools-mcp | Codex's folder",
       "! Claude Code | ✓ | ✓ | –",
@@ -114,7 +114,7 @@ const cases: {
   {
     footer:
       "To avoid clashes, make sure each agent sees only one, for example by uninstalling one of the plugins.",
-    name: "two plugins, none of yours",
+    name: "two plugins, no hub skills",
     notice: "Found 2 skills named a11y-debugging.",
     sights: sights(
       [place("plugin", [claude], "alpha"), place("plugin", [claude], "beta")],
@@ -125,15 +125,15 @@ const cases: {
   {
     footer:
       "To avoid clashes, make sure each agent sees only one, for example by renaming your skill.",
-    name: "three skills: yours and two plugins",
+    name: "three skills: a hub skill and two plugins",
     notice: "Found 3 skills named a11y-debugging.",
     sights: sights(
       [
-        yours,
+        hubSkill,
         place("plugin", [claude], "alpha"),
         place("plugin", [claude], "beta"),
       ],
-      [yours]
+      [hubSkill]
     ),
     table: [
       "Agent | Your skill | alpha | beta",
@@ -225,7 +225,7 @@ test("sightsOf: a fork with the plugin's content still shows the plugin's copy",
         placements: [],
         universal: [],
       },
-      kind: "yours",
+      kind: "hub",
     }
   );
   const s = sightsOf(fork, [], [claudeAt]);
@@ -251,7 +251,7 @@ test("sightsOf: an agent with only the plugin's copy does not see the library's"
       placements: [],
       universal: [],
     },
-    kind: "yours",
+    kind: "hub",
   });
   const s = sightsOf(fork, [], [claudeAt, codexReads]);
   expect(

@@ -48,7 +48,7 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "pdf is already one of your own skills",
+      "pdf is already a hub skill",
       "fork it under a new name with 'agentx skill fork pdf --name <new>'"
     ),
     "on",
@@ -64,7 +64,7 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "the account repo already holds notes as one of your own skills",
+      "the store already holds notes as a hub skill",
       "choose another name with --name <new>"
     ),
     "named",
@@ -72,7 +72,7 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "the account repo already holds pdf as one of your own skills",
+      "the store already holds pdf as a hub skill",
       "choose another name with --name <new>"
     ),
     "on",
@@ -89,10 +89,10 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   [
     refused(
       "the import branch refs/heads/managed/pdf records no version agentx can read",
-      "run 'agentx doctor' and check the account repo it names"
+      "run 'agentx doctor' and check the store it names"
     ),
     "on",
-    "use Run checks in Settings to check the account repo",
+    "use Run checks in Settings to check the store",
   ],
   [
     refused(

@@ -11,7 +11,7 @@ import (
 // logical asset: a removal leaves the add as it was, an add again
 // overwrites the add and leaves the removal, the name is the last one
 // given, an entry that names no logical asset is passed over, and the
-// entries are stored sorted, the user's own skills first. A file that
+// entries are stored sorted, hub skills first. A file that
 // cannot be parsed is replaced.
 func TestRecordInstalls(t *testing.T) {
 	t.Parallel()

@@ -23,13 +23,13 @@ func newSkillNewCommand(inv *invocation) *cobra.Command {
 	var description string
 	cmd := &cobra.Command{
 		Use:         "new <name>",
-		Short:       "Create a skill of your own from the template",
+		Short:       "Create a hub skill from the template",
 		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "Create a skill called <name> from agentx's template: a SKILL.md with the name\n" +
 			"and the description in its frontmatter. It is a managed skill whose source is\n" +
-			"your account remote: 'agentx skill publish <name>' publishes it there, and no\n" +
-			"account remote needs to be set until then. The skill gets its own branch,\n" +
-			"skills/<name>, in the account repo, checked out as a worktree in agentx home, and\n" +
+			"your hub: 'agentx skill publish <name>' publishes it there, and no\n" +
+			"hub needs to be set until then. The skill gets its own branch,\n" +
+			"skills/<name>, in the store, checked out as a worktree in agentx home, and\n" +
 			"the library holds a symlink to it. It is placed into every enabled configuration,\n" +
 			"as an install places a skill, and listed as managed with no upstream.\n\n" +
 			"The name must be 1 to 64 lowercase letters, digits and hyphens, with no hyphen at\n" +
@@ -51,8 +51,8 @@ func newSkillNewCommand(inv *invocation) *cobra.Command {
 // frontmatter allows.
 const descriptionLimit = 1024
 
-// skillNew creates one of your own skills from the template: a branch of
-// its own in the account repo, whose first commit holds the template
+// skillNew creates a hub skill from the template: a branch of
+// its own in the store, whose first commit holds the template
 // SKILL.md under a directory named after the skill and carries the skill's
 // new fork id, checked out as a worktree in agentx home, with the library's
 // symlink to the skill's directory and a placement in every enabled
@@ -66,7 +66,7 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 		return fail(exitUsage, fmt.Sprintf("--description must be one line of at most %d bytes with no control character", descriptionLimit),
 			"say in one line what the skill does and when an agent should use it")
 	}
-	// The name is checked before anything is created, the account repo
+	// The name is checked before anything is created, the store
 	// included, so that a name agentx refuses leaves the machine as it was.
 	if refusal := forkNameRefusal(name); refusal != "" {
 		return fail(exitRefused, refusal, "choose a name such as my-skill")
@@ -75,20 +75,20 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 	if err := inv.newSkillRoom(libPath, root); err != nil {
 		return err
 	}
-	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err := gitx.OpenStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
-	// The account repo's info/exclude is brought in line with
+	// The store's info/exclude is brought in line with
 	// ignore_system_files before any fork command, so that git applies the
-	// list to the new worktree as the setting says, even in an account repo
+	// list to the new worktree as the setting says, even in a store
 	// created before the setting existed.
 	if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	if err := inv.checkForkName(ctx, records, name, "", "choose another name"); err != nil {
 		return err
@@ -99,12 +99,12 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 	}
 	tree, err := inv.git.EditTree(ctx, gitDir, "", []gitx.TreeEdit{{Path: name + "/SKILL.md", Mode: treeid.FileMode, Content: skillTemplate(name, description)}})
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	id := lineage.NewForkID()
 	commit, err := w.commit(ctx, tree, nil, forkMessage{subject: creationSubject(name), trailers: lineage.ForkTrailers{ForkID: id}})
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	targets, err := inv.placementTargets(nil)
 	if err != nil {
@@ -157,7 +157,7 @@ func (inv *invocation) newSkillRoom(libPath, root string) error {
 func (inv *invocation) createFork(ctx context.Context, gitDir, name, dir, commit, copiesOf string, targets []placeTarget, done *placements) error {
 	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	if err := takenRefusal(records, name, "", "choose another name"); err != nil {
 		return err
@@ -200,7 +200,7 @@ func (inv *invocation) createFork(ctx context.Context, gitDir, name, dir, commit
 	fingerprint, err := inv.stageForkContent(ctx, gitDir, commit, dir, staged, "", nil)
 	if err != nil {
 		os.RemoveAll(staged)
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	m.Ref(gitDir, lineage.ForkRef(name), "", commit)
 	m.Worktree(gitDir, root, strings.TrimPrefix(lineage.ForkRef(name), "refs/heads/"))
@@ -269,7 +269,7 @@ func (inv *invocation) reportCreated(ctx context.Context, name string, targets [
 	out.done(line)
 	inv.printPlacementRows(name, rows)
 	inv.printUniversal(ev.Universal)
-	inv.noAccountRemoteHint(ev)
+	inv.noHubRemoteHint(ev)
 	inv.summary = "created " + name + " in " + plural(len(done.placed), "configuration")
 	if n := len(done.skipped); n > 0 {
 		inv.summary += ", " + plural(n, "placement") + " skipped"
@@ -278,14 +278,13 @@ func (inv *invocation) reportCreated(ctx context.Context, name string, targets [
 	return nil
 }
 
-// noAccountRemoteHint says, in one line, that the skill ev reports, one of
-// your own just created, cannot be published until an account remote is
-// set, when none is: its source, the account remote, is then empty, and
-// names the publish of the skill, since a bare publish never publishes it
-// for the first time. skill publish refuses it until one is set; nothing
-// else needs one. A run over many skills says it once they are done, see
-// publishHintOnce.
-func (inv *invocation) noAccountRemoteHint(ev librarySkillEvent) {
+// noHubRemoteHint says, in one line, that the skill ev reports, a hub
+// skill just created, cannot be published until a hub is set, when none is:
+// its source, the hub, is then empty, and names the publish of the skill,
+// since a bare publish never publishes it for the first time. skill publish
+// refuses it until one is set; nothing else needs one. A run over many
+// skills says it once they are done, see publishHintOnce.
+func (inv *invocation) noHubRemoteHint(ev librarySkillEvent) {
 	if ev.Kind != lineage.KindManaged || ev.Source != "" {
 		return
 	}
@@ -294,7 +293,7 @@ func (inv *invocation) noAccountRemoteHint(ev librarySkillEvent) {
 		return
 	}
 	out := inv.out
-	out.print("No account remote is set: run ", out.paint(label, "'agentx source add <url> --account'"), ", then ", out.paint(label, "'"+publishCommand(ev.Name)+"'"), " to publish it.")
+	out.print("No hub is set: run ", out.paint(label, "'agentx source add <url> --hub'"), ", then ", out.paint(label, "'"+publishCommand(ev.Name)+"'"), " to publish it.")
 }
 
 // plainScalar is a value the template can write as a plain YAML scalar
