@@ -417,7 +417,7 @@ func TestPlaceAndRemoveInASnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	equal(t, "the snapshot", string(b), `{"schema_version":4,`+
-		`"settings":{"schema_version":1,"accept_operations":false,"ignore_system_files":true,"report_inventory":false,"disabled_configurations":[],"copy_configurations":[],"sources":[],"copy_mode":{}},`+
+		`"settings":{"schema_version":1,"accept_operations":false,"ignore_system_files":true,"disabled_configurations":[],"copy_configurations":[],"sources":[],"copy_mode":{}},`+
 		`"configurations":[],"skills":[`+
 		`{"name":"alpha","kind":"managed","source":"https://github.com/example/skills","subpath":"skills/alpha","placements":["cursor"]},`+
 		`{"name":"pdf","kind":"managed","source":"https://github.com/example/skills","subpath":"skills/pdf","placements":["codex","cursor"]}],`+

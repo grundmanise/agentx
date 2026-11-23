@@ -231,7 +231,7 @@ _Avoid_: original, parent, snapshot
 The ~/.agentx directory holding the store clone with its worktrees, the machine settings, local mutation journals and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
 
 **Machine settings**:
-The one file in agentx home holding what only this machine decides: its label, enabled configurations, the placement mode of each configuration, sources and their pins, copy modes, and whether it reports its inventory to the hub. Leaves the machine only inside a snapshot.
+The one file in agentx home holding what only this machine decides: its label, enabled configurations, the placement mode of each configuration, sources and their pins, and copy modes. Leaves the machine only inside a snapshot.
 _Avoid_: config, preferences, local state
 
 **App preference**:

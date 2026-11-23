@@ -19,7 +19,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
-const settableKeys = "label, accept_operations, ignore_system_files, report_inventory"
+const settableKeys = "label, accept_operations, ignore_system_files"
 
 type settingsEvent struct {
 	event
@@ -83,7 +83,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:         "set <key> <value>",
-		Short:       "Change the label, or a setting that is true or false",
+		Short:       "Change label, accept_operations or ignore_system_files",
 		Annotations: map[string]string{annotationSection: "settings"},
 		Args:        cobra.ExactArgs(2),
 		Example: examples(
@@ -303,9 +303,6 @@ func settingSetter(key, value string) (func(*home.Settings), error) {
 	case "ignore_system_files":
 		b, err := parseBool(key, value)
 		return func(s *home.Settings) { s.IgnoreSystemFiles = b }, err
-	case "report_inventory":
-		b, err := parseBool(key, value)
-		return func(s *home.Settings) { s.ReportInventory = b }, err
 	case "schema_version", "disabled_configurations", "copy_configurations", "sources", "copy_mode":
 		return nil, fail(exitUsage, key+" cannot be changed with config set", "settable keys: "+settableKeys)
 	}
@@ -429,7 +426,6 @@ func (inv *invocation) settingRows(s home.Settings) []settingRow {
 		{"label", inv.label(s)},
 		{"accept_operations", strconv.FormatBool(s.AcceptOperations)},
 		{"ignore_system_files", strconv.FormatBool(s.IgnoreSystemFiles)},
-		{"report_inventory", strconv.FormatBool(s.ReportInventory)},
 		{"disabled_configurations", strings.Join(s.DisabledConfigurations, ", ")},
 		{"copy_configurations", strings.Join(s.CopyConfigurations, ", ")},
 		{"sources", compactValue(s.Sources)},
