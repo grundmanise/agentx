@@ -9,7 +9,6 @@ import type {
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { CodePane, codeLines } from "#/components/code-pane.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
-import { Pill } from "#/components/pill.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import {
   Accordion,
@@ -17,6 +16,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
@@ -183,7 +183,7 @@ const captionOf = (location: SkillLocation) =>
 /** A place's caption: a neutral pill (§6 "Pills (status)") at the right of its first line. */
 const Caption = ({ children }: { children: string }) => (
   <span className="ml-auto flex">
-    <Pill tone="neutral">{children}</Pill>
+    <Badge tone="neutral">{children}</Badge>
   </span>
 );
 
