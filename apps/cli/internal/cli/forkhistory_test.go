@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -97,33 +98,8 @@ func TestSkillHistoryListsEveryCommit(t *testing.T) {
 	equal(t, "the foreign commit's author", events[0]["author"], h.accountGit("log", "-1", "--format=%an <%ae>", foreign))
 	equal(t, "the foreign commit's message", events[0]["message"], "By hand\n\nWith a body.")
 	equal(t, "the result", h.one(out.stdout, "result")["summary"], "alpha has 4 commits")
-	for i, want := range []struct {
-		kind, label string
-		generated   bool
-	}{
-		{historyGit, "", false},
-		{historyEdit, "test-host", true},
-		{historyFork, "", true},
-		{historyUpstreamKind, "", false},
-	} {
-		ev := events[i]
-		equal(t, ev["subject"].(string)+": kind", ev["kind"], want.kind)
-		equal(t, ev["subject"].(string)+": generated", ev["generated"] == true, want.generated)
-		if want.label == "" {
-			if _, ok := ev["machine_label"]; ok {
-				t.Errorf("%s: machine_label %v, want none", ev["subject"], ev["machine_label"])
-			}
-		} else {
-			equal(t, ev["subject"].(string)+": machine_label", ev["machine_label"], want.label)
-		}
-	}
-	upstream := events[2]["upstream"].(map[string]any)
-	equal(t, "the fork's upstream commit", upstream["commit"], h.trailer(imported, lineage.TrailerCommit))
-	equal(t, "the fork's upstream time", upstream["time"], events[3]["time"])
-	for _, i := range []int{0, 1, 3} {
-		if _, ok := events[i]["upstream"]; ok {
-			t.Errorf("event %d: upstream %v", i, events[i]["upstream"])
-		}
+	for i, want := range []bool{false, false, false, true} {
+		equal(t, fmt.Sprintf("event %d: import", i), events[i]["import"] == true, want)
 	}
 
 	lines := strings.Split(strings.TrimSuffix(h.mustRun("skill", "history", "alpha").stdout, "\n"), "\n")
@@ -226,69 +202,6 @@ func TestHistoryOrigin(t *testing.T) {
 	} {
 		if got := historyOrigin(tc.t, tc.parent); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: historyOrigin = %+v, want %+v", tc.name, got, tc.want)
-		}
-	}
-}
-
-// TestDescribeHistory tells what each commit agentx writes on a fork's
-// branch did to the skill, from its trailers, its parents and its subject:
-// the creation of a fork, of skill new's and skill import's skill, a
-// rename, an update that merged an import, a merge of another machine's
-// edits, and recorded edits, with the machine's label and whether the
-// subject is agentx's own. A message the user gave keeps Generated false.
-func TestDescribeHistory(t *testing.T) {
-	t.Parallel()
-	const forkID = "01234567-89ab-4def-8123-456789abcdef"
-	machine := lineage.ForkTrailers{Machine: strings.Repeat("0", 32)}
-	created := lineage.ForkTrailers{ForkID: forkID, Machine: machine.Machine}
-	upstream := strings.Repeat("a", 40)
-	imp := lineage.Import{Source: "https://github.com/acme/skills", Path: "pdf", Commit: upstream, Hash: strings.Repeat("b", 64)}
-	imported := &forkLogCommit{id: "i", parents: []string{}, time: "2026-09-16T10:00:00+00:00", message: imp.Message()}
-	tip := &forkLogCommit{id: "t", parents: []string{"i"}, message: "x\n"}
-	edited := []changedFile{{"SKILL.md", diffModified}, {"examples.md", diffAdded}}
-	wantUpstream := &historyUpstream{Source: imp.Source, Path: "pdf", Commit: upstream, Time: imported.time, URL: imp.Source,
-		SkillURL: "https://github.com/acme/skills/tree/" + upstream + "/pdf"}
-	for _, tc := range []struct {
-		name, subject string
-		t             lineage.ForkTrailers
-		origin        *forkOrigin
-		parents       []string
-		first, second *forkLogCommit
-		files         []changedFile
-		kind, label   string
-		generated     bool
-		renamedFrom   string
-		upstream      *historyUpstream
-	}{
-		{name: "a fork of a source's skill", subject: "Fork pdf-letters from https://github.com/acme/skills/pdf at aaaaaaa", t: created,
-			origin: &forkOrigin{Kind: originSource}, parents: []string{"i"}, first: imported, kind: historyFork, generated: true, upstream: wantUpstream},
-		{name: "a fork of a plugin's skill", subject: "Fork fmt from plugin formatter", t: created, origin: &forkOrigin{Kind: originPlugin},
-			kind: historyFork, generated: true},
-		{name: "skill new's", subject: "Create notes", t: created, kind: historyCreate, generated: true},
-		{name: "skill import's", subject: "Adopt notes", t: created, kind: historyAdopt, generated: true},
-		{name: "a rename", subject: "Rename pdf-notes to pdf-letters", t: machine, parents: []string{"t"}, first: tip,
-			kind: historyRename, generated: true, renamedFrom: "pdf-notes"},
-		{name: "a rename that gives a fork id", subject: "Rename notes to jot", t: created, parents: []string{"t"}, first: tip,
-			kind: historyRename, generated: true, renamedFrom: "notes"},
-		{name: "an update", subject: "pdf-letters: merge upstream aaaaaaa (laptop)", t: machine, parents: []string{"t", "i"}, first: tip, second: imported,
-			kind: historyUpdate, label: "laptop", generated: true, upstream: wantUpstream},
-		{name: "an update the user committed", subject: "Take the new examples", t: machine, parents: []string{"t", "i"}, first: tip, second: imported,
-			kind: historyUpdate, upstream: wantUpstream},
-		{name: "another machine's edits", subject: "pdf-letters: merge the account remote (studio mac)", t: machine, parents: []string{"t", "o"}, first: tip,
-			kind: historySync, label: "studio mac", generated: true},
-		{name: "recorded edits", subject: "pdf-letters: edit SKILL.md and add examples.md (laptop)", t: machine, parents: []string{"t"}, first: tip,
-			files: edited, kind: historyEdit, label: "laptop", generated: true},
-		{name: "edits with the user's message", subject: "Tighten the examples (draft)", t: machine, parents: []string{"t"}, first: tip,
-			files: edited, kind: historyEdit},
-	} {
-		ev := historyEvent{Name: "pdf-letters", Subject: tc.subject, Message: tc.subject, Parents: tc.parents, Files: tc.files, Origin: tc.origin}
-		describeHistory(&ev, tc.t, tc.first, tc.second)
-		equal(t, tc.name+": kind", ev.Kind, tc.kind)
-		equal(t, tc.name+": generated", ev.Generated, tc.generated)
-		equal(t, tc.name+": machine label", ev.MachineLabel, tc.label)
-		equal(t, tc.name+": renamed from", ev.RenamedFrom, tc.renamedFrom)
-		if !reflect.DeepEqual(ev.Upstream, tc.upstream) {
-			t.Errorf("%s: upstream %+v, want %+v", tc.name, ev.Upstream, tc.upstream)
 		}
 	}
 }

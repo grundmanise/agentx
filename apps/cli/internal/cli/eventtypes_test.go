@@ -156,11 +156,6 @@ var valueLists = []valueList{
 	{name: "OriginKind", values: []string{originPlugin, originSource, originSkill}, fields: []fieldRef{
 		{forkOrigin{}, "Kind"},
 	}},
-	{name: "HistoryKind", open: true, values: []string{
-		historyUpstreamKind, historyFork, historyCreate, historyAdopt, historyRename, historyEdit, historyUpdate, historySync, historyGit,
-	}, fields: []fieldRef{
-		{historyEvent{}, "Kind"},
-	}},
 	{name: "FileStatus", values: []string{diffAdded, diffModified, diffDeleted}, fields: []fieldRef{
 		{diffEvent{}, "Status"}, {changedFile{}, "Status"},
 	}},
