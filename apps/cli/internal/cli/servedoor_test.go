@@ -208,6 +208,10 @@ exec git "$@"
 	}
 	p := h.serve(t, "--json", "--listen", "127.0.0.1")
 	c := dialDoor(t, p.next("listening"), "")
+	// Serve answers a run while it reconciles, which holds the lock, and
+	// source add gives up on a held lock before it runs any git. The first
+	// inventory comes once serve has reconciled.
+	p.next("inventory")
 	c.send(1, "run", map[string]any{"args": []string{"source", "add", "https://never.invalid/skills.git"}})
 	waitingGit()
 	c.send(nil, "$/cancelRequest", map[string]any{"id": 1})
