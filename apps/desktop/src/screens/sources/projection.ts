@@ -302,13 +302,13 @@ const takenWhy = ({
   }
   if (subpath === undefined || source === undefined) {
     return {
-      after: ". Remove or rename it to add this skill.",
-      before: "Your library has your own ",
+      after: " skill. Remove or rename it to add this skill.",
+      before: "Your library has ",
       skill: name,
     };
   }
   return {
-    after: ` from ${shortSource(source)}. Remove or rename it to add this skill.`,
+    after: ` skill from ${shortSource(source)}. Remove or rename it to add this skill.`,
     before: "Your library has ",
     skill: name,
   };

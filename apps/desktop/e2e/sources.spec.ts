@@ -258,7 +258,7 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   await row(page, "xlsx").click();
   await row(page, "scratch").click();
   await expect(opened(page, "xlsx")).toContainText(
-    "Your library has xlsx from zeta/tools. Remove or rename it to add this skill."
+    "Your library has xlsx skill from zeta/tools. Remove or rename it to add this skill."
   );
   await expect(opened(page, "scratch")).toContainText(
     "Your library has a scratch folder that agentx doesn't manage. Import or remove it to add this skill."
