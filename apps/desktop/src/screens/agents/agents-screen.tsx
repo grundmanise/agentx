@@ -134,7 +134,6 @@ const PlacementControl = ({
         )}
       </span>
       <Segmented
-        group={`placement-${c.id}`}
         options={placements}
         value={value}
         onChange={onChange}

@@ -2,7 +2,9 @@
 // (status)". It keeps shadcn's shape (a `<span>`, or with `asChild` the child element with the
 // badge's look, through Slot; `data-slot="badge"`) with our tones in place of shadcn's variants.
 // 20px high in list rows, 22 in the detail header. A plugin's version is in mono
-// (`type.version-pill`); every other pill is `type.pill`. `BadgeButton` is a Badge on a
+// (`type.version-pill`); every other pill is `type.pill`. A count badge is a 16px round badge
+// with its digits in `type.key-hint` (`size` and `tone` `filter-count` on the Filter button,
+// `picker-count` on the agent picker's "+n" button); its `face` does not apply. `BadgeButton` is a Badge on a
 // `<button>` (`asChild`), for a pill that opens something or explains itself in a Tooltip: the
 // app builds a native button only in `src/components`.
 import { cva } from "class-variance-authority";
@@ -13,9 +15,15 @@ import { cn } from "#/lib/utils.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const badgeVariants = cva(
-  "rounded-pill inline-flex flex-none items-center gap-1 px-2 whitespace-nowrap",
+  "rounded-pill inline-flex flex-none items-center gap-1 whitespace-nowrap",
   {
     compoundVariants: [
+      { className: "type-pill", face: "sans", size: ["row", "detail"] },
+      {
+        className: "type-version-pill",
+        face: "mono",
+        size: ["row", "detail"],
+      },
       {
         className: "hover:bg-pill-neutral-hover",
         clickable: true,
@@ -33,17 +41,22 @@ const badgeVariants = cva(
         false: "",
         true: "",
       },
+      // The pill's type, in its `compoundVariants`: a count badge's is its size's.
       face: {
-        mono: "type-version-pill",
-        sans: "type-pill",
+        mono: "",
+        sans: "",
       },
       size: {
-        detail: "h-5.5",
-        row: "h-5",
+        detail: "h-5.5 px-2",
+        "filter-count": "size-filter-badge type-key-hint justify-center",
+        "picker-count": "size-agent-picker-badge type-key-hint justify-center",
+        row: "h-5 px-2",
       },
       tone: {
         disabled: "bg-pill-disabled-bg text-pill-disabled-text",
+        "filter-count": "bg-filter-badge-bg text-on-accent",
         neutral: "bg-pill-neutral-bg text-pill-neutral-text",
+        "picker-count": "bg-agent-picker-badge-bg text-on-accent",
         removed: "bg-pill-removed-bg text-pill-removed-text",
         universal: "bg-pill-universal-bg text-pill-universal-text",
         update: "bg-pill-update-bg text-pill-update-text",
@@ -66,7 +79,10 @@ export type BadgeProps = OwnProps<"span"> &
     asChild?: boolean;
   };
 
-/** A status pill that only shows: "Not published" on a skill row, a plugin's "Disabled" or its version. */
+/**
+ * A status pill that only shows: "Not published" on a skill row, a plugin's "Disabled" or its
+ * version; or a count badge, such as the Filter button's.
+ */
 const Badge = ({
   tone,
   size,
