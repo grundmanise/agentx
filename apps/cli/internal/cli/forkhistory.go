@@ -45,7 +45,43 @@ type historyEvent struct {
 	Machine string        `json:"machine,omitempty"`
 	Files   []changedFile `json:"files"`
 	Origin  *forkOrigin   `json:"origin,omitempty"`
+	// Kind is what the commit did to the skill, read off its trailers and
+	// parents, see historyKindOf. Generated, MachineLabel, RenamedFrom and
+	// Upstream are the facts a reader needs to say it in words.
+	Kind         string           `json:"kind"`
+	Generated    bool             `json:"generated,omitempty"`
+	MachineLabel string           `json:"machine_label,omitempty"`
+	RenamedFrom  string           `json:"renamed_from,omitempty"`
+	Upstream     *historyUpstream `json:"upstream,omitempty"`
 }
+
+// historyUpstream is the version of a source's skill a commit took in: the
+// import commit a fork was made from, or the one an update merged. Source
+// and Path are its canonical URL and directory, Path "" for the root;
+// Commit the upstream commit and Time its committer time, the date the
+// import commit carries. URL and SkillURL are as a forkOrigin's: the
+// source's web page and the skill directory's page at Commit, when known.
+type historyUpstream struct {
+	Source   string `json:"source"`
+	Path     string `json:"path,omitempty"`
+	Commit   string `json:"commit"`
+	Time     string `json:"time"`
+	URL      string `json:"url,omitempty"`
+	SkillURL string `json:"skill_url,omitempty"`
+}
+
+// The kinds of a history event: what its commit did to the skill.
+const (
+	historyUpstreamKind = "upstream" // an import commit: a version of the source's skill agentx stored
+	historyFork         = "fork"     // the commit that made the fork of another skill
+	historyCreate       = "create"   // the commit skill new wrote
+	historyAdopt        = "adopt"    // the commit skill import wrote of a skill on disk
+	historyRename       = "rename"   // the commit skill rename wrote
+	historyEdit         = "edit"     // edits agentx recorded, on a publish or before a fork, update or rename
+	historyUpdate       = "update"   // a merge of a newer version of the source's skill
+	historySync         = "sync"     // a merge of the edits another machine published
+	historyGit          = "git"      // a commit made with git directly, by the user or an agent
+)
 
 // forkOrigin is where a fork came from, on the event of the commit that
 // created it: kind "plugin" for a plugin's skill, "source" for a skill of a
@@ -206,34 +242,114 @@ func parseForkLog(out string) ([]forkLogCommit, error) {
 // subject and how many files it changes.
 func (inv *invocation) reportHistory(name, dir string, commits []forkLogCommit) {
 	out := inv.out
-	byID := make(map[string]lineage.Commit, len(commits))
+	byID := make(map[string]forkLogCommit, len(commits))
 	for _, c := range commits {
-		byID[c.id] = lineage.Commit{ID: c.id, Parents: c.parents, Message: c.message}
+		byID[c.id] = c
 	}
 	for _, c := range commits {
 		ev := historyEvent{event: newEvent("history"), Name: name, Commit: c.id, Parents: c.parents, Time: c.time, Author: c.author,
-			Message: strings.TrimRight(c.message, "\n"), Files: []changedFile{}}
+			Message: strings.TrimRight(c.message, "\n"), Files: []changedFile{}, Kind: historyGit}
 		ev.Subject, _, _ = strings.Cut(ev.Message, "\n")
-		imported := lineage.IsImport(lineage.Commit{ID: c.id, Parents: c.parents, Message: c.message})
-		if t, err := lineage.ParseFork(c.message); err == nil && !imported {
-			ev.Machine = t.Machine
-			var parent *lineage.Commit
-			if len(c.parents) > 0 {
-				if p, ok := byID[c.parents[0]]; ok {
-					parent = &p
-				}
-			}
-			ev.Origin = historyOrigin(t, parent)
-		}
 		for _, f := range c.files {
 			f.Path = historyPath(f.Path, dir)
 			ev.Files = append(ev.Files, f)
+		}
+		parent := func(i int) *forkLogCommit {
+			if i < len(c.parents) {
+				if p, ok := byID[c.parents[i]]; ok {
+					return &p
+				}
+			}
+			return nil
+		}
+		if c.isImport() {
+			ev.Kind = historyUpstreamKind
+		} else if t, err := lineage.ParseFork(c.message); err == nil {
+			ev.Machine = t.Machine
+			var first *lineage.Commit
+			if p := parent(0); p != nil {
+				first = &lineage.Commit{ID: p.id, Parents: p.parents, Message: p.message}
+			}
+			ev.Origin = historyOrigin(t, first)
+			if t.Machine != "" {
+				// A commit with no machine was made with git directly.
+				describeHistory(&ev, t, parent(0), parent(1))
+			}
 		}
 		out.emit(ev)
 		out.print(out.paint(noteStyle, short(c.id)), "  ", historyDate(c.time), "  ", sanitised(ev.Subject),
 			"  ", out.paint(muted, plural(len(ev.Files), "file")))
 	}
 	inv.summary = sanitised(name) + " has " + plural(len(commits), "commit")
+}
+
+// isImport reports whether c is an import commit, see lineage.IsImport.
+func (c forkLogCommit) isImport() bool {
+	return lineage.IsImport(lineage.Commit{ID: c.id, Parents: c.parents, Message: c.message})
+}
+
+// upstreamOf is the version of a source's skill the import commit c
+// stores, nil when c is none.
+func upstreamOf(c *forkLogCommit) *historyUpstream {
+	if c == nil || !c.isImport() {
+		return nil
+	}
+	imp, err := lineage.Parse(c.message)
+	if err != nil {
+		return nil
+	}
+	web := weburl.Of(imp.Source)
+	return &historyUpstream{Source: imp.Source, Path: imp.Path, Commit: imp.Commit, Time: c.time, URL: web,
+		SkillURL: weburl.Tree(web, imp.Commit, imp.Path)}
+}
+
+// describeHistory sets the kind of ev, a commit agentx wrote, whose
+// trailers are t and whose first and second parents, as the history holds
+// them, are first and second, nil for none, and the facts that kind is
+// told with. A commit is a rename when its subject is the one skill rename
+// writes, then a fork's creation when it carries a fork id: of another
+// skill when it records an origin or its subject is skill fork's, else
+// skill import's, by its subject, or skill new's. A merge is an update
+// when it took in an import commit, and the edits of another machine
+// otherwise; every other commit records edits. Generated says the subject
+// is the one agentx writes for the kind, which, for edits and merges, also
+// names the label of the machine they were made on. Pure.
+func describeHistory(ev *historyEvent, t lineage.ForkTrailers, first, second *forkLogCommit) {
+	name, label, labelled := subjectLabel(ev.Subject)
+	switch {
+	case lineage.RenamedFrom(ev.Message) != "":
+		ev.Kind, ev.Generated, ev.RenamedFrom = historyRename, true, lineage.RenamedFrom(ev.Message)
+	case t.ForkID != "" && (ev.Origin != nil || strings.HasPrefix(ev.Subject, "Fork ")):
+		ev.Kind, ev.Generated, ev.Upstream = historyFork, true, upstreamOf(first)
+	case t.ForkID != "" && strings.HasPrefix(ev.Subject, "Adopt "):
+		ev.Kind, ev.Generated = historyAdopt, true
+	case t.ForkID != "":
+		ev.Kind, ev.Generated = historyCreate, true
+	case second != nil && second.isImport():
+		ev.Kind, ev.Upstream = historyUpdate, upstreamOf(second)
+		ev.Generated = labelled && upstreamMergeSubject(name, label, ev.Upstream.Commit) == ev.Subject
+	case len(ev.Parents) > 1:
+		ev.Kind = historySync
+		ev.Generated = labelled && accountMergeSubject(name, label) == ev.Subject
+	default:
+		ev.Kind = historyEdit
+		ev.Generated = labelled && commitSubject(name, label, ev.Files) == ev.Subject
+	}
+	if ev.Generated && labelled && (ev.Kind == historyEdit || ev.Kind == historyUpdate || ev.Kind == historySync) {
+		ev.MachineLabel = label
+	}
+}
+
+// subjectLabel splits a subject agentx writes for edits and merges,
+// "<name>: <what> (<label>)", into the name and the label; ok is false
+// for a subject of another shape. Pure.
+func subjectLabel(subject string) (name, label string, ok bool) {
+	name, _, found := strings.Cut(subject, ": ")
+	open := strings.LastIndex(subject, " (")
+	if !found || open == -1 || !strings.HasSuffix(subject, ")") {
+		return "", "", false
+	}
+	return name, subject[open+len(" (") : len(subject)-1], true
 }
 
 // historyPath is the path p of a commit's tree relative to the skill
