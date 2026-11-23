@@ -108,12 +108,12 @@ export interface AppState {
   pending: Record<string, string>;
   /** Newest first, at most ACTIVITY_LIMIT entries. */
   activity: ActivityEntry[];
-  /** The history of each of your own skills read so far, by name. */
+  /** The history of each hub skill read so far, by name. */
   histories: Record<string, HistoryRead>;
   /** The skills of each source listed so far, by source id, from `source skills <id>`. */
   listings: Record<string, SourceSkillEvent[]>;
   /**
-   * Your skills on the account remote that this machine has not installed, from
+   * Your skills on the hub that this machine has not installed, from
    * `skill list --remote`; undefined until read.
    */
   installable: InstallableSkillEvent[] | undefined;

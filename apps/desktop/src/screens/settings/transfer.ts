@@ -20,7 +20,7 @@ export const fileName = (path: string) =>
 /**
  * The sources of the settings this machine has not fetched, as `source list` reports them: a
  * shared source whose event carries no `commit` (the account repo holds no ref for it), and an
- * account remote whose event carries no `skills` (this machine has not fetched it). Applying a
+ * hub whose event carries no `skills` (this machine has not fetched it). Applying a
  * snapshot restores the settings entry of such a source and nothing of the source itself.
  */
 export const notFetched = (sources: readonly SourceEvent[]) =>
@@ -30,11 +30,11 @@ export const notFetched = (sources: readonly SourceEvent[]) =>
 
 /**
  * The `source add` that adds `source` again as the settings hold it: the URL with `#<pin>` when it
- * is pinned, and `--account` for the account remote, which is a whole repository and has no pin.
+ * is pinned, and `--hub` for the hub, which is a whole repository and has no pin.
  */
 export const sourceAddArgs = (source: SourceEvent): string[] => {
   if (source.account === true) {
-    return ["source", "add", source.url, "--account"];
+    return ["source", "add", source.url, "--hub"];
   }
   const pin = source.pin ?? "";
   return ["source", "add", pin === "" ? source.url : `${source.url}#${pin}`];

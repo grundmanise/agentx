@@ -30,19 +30,19 @@ type updateCheckEvent struct {
 	InstanceID string `json:"instance_id"`
 	Scope      string `json:"scope"`      // checkScopeAll or checkScopeAccount
 	CheckedAt  string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
-	OK         bool   `json:"ok"`         // false when the check failed as a whole or could not reach the account remote
+	OK         bool   `json:"ok"`         // false when the check failed as a whole or could not reach the hub
 	Fetched    bool   `json:"fetched"`    // whether the check fetched anything
 }
 
 // The scopes of an update_check event: the full check serve runs at start,
-// and the check of the account remote alone it repeats while it runs.
+// and the check of the hub alone it repeats while it runs.
 const (
 	checkScopeAll     = "all"
 	checkScopeAccount = "account"
 )
 
 // accountCheckInterval is how long the serve child waits, once the report
-// of one check is made, before it checks the account remote again, see
+// of one check is made, before it checks the hub again, see
 // serveChecks.account. accountCheckEvery is what serve waits, which a test
 // shortens.
 const accountCheckInterval = 10 * time.Minute
@@ -326,19 +326,19 @@ func (inv *invocation) serveFailed(err error) {
 
 // serveChecks are the update checks of the serve child: the full check it
 // runs once, as soon as its initial inventory is out, see startup, and the
-// check of the account remote alone it repeats while it runs, see account.
+// check of the hub alone it repeats while it runs, see account.
 // serve runs one at a time and makes each report on its loop's goroutine,
 // so failing needs no lock.
 type serveChecks struct {
 	inv *invocation
-	// failing is set while the checks fail to reach the account remote, or
+	// failing is set while the checks fail to reach the hub, or
 	// fail as a whole: the check that starts failing warns, and those after
 	// it stay quiet until one succeeds again.
 	failing bool
 }
 
 // startup is the serve child's update check at start: the check skill
-// check-updates runs, the account remote included, over every source of
+// check-updates runs, the hub included, over every source of
 // the settings rather than only the sources a managed skill came from, so
 // that one pass fetches each source once, whether or not a skill was
 // installed from it, and the source index follows what they hold now. It
@@ -369,15 +369,15 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 }
 
 // account is the check the serve child repeats while it runs, see
-// accountCheckEvery: what another machine published to your own skills
-// since the last fetch of the account remote. With no account remote set,
+// accountCheckEvery: what another machine published to hub skills
+// since the last fetch of the hub. With no hub set,
 // or no account repo, it runs no git and reports nothing. Otherwise one
-// git ls-remote asks the account remote for its fork branches, see
+// git ls-remote asks the hub for its fork branches, see
 // gitx.Runner.ForkTips, and when they are what the remote-tracking
 // branches the last fetch left hold, read in one for-each-ref, it fetches
 // nothing, takes no lock and writes nothing. When they differ, it runs the
-// update check of the account remote alone, see checkUpdates: one fetch of
-// it, outside the lock, the comparison of your own skills placed here with
+// update check of the hub alone, see checkUpdates: one fetch of
+// it, outside the lock, the comparison of hub skills placed here with
 // what it holds, and one write of its last_fetched, under the lock, waited
 // for as the check at start waits. Its report is that check's: one
 // update_available per update, then its update_check. A failure is a
@@ -413,12 +413,12 @@ func (c *serveChecks) account(ctx context.Context) func() {
 }
 
 // checkAccountRemote is the account check of the serve child, see
-// serveChecks.account, of the account remote at url, the git remote
+// serveChecks.account, of the hub at url, the git remote
 // called remote in the account repo: an empty report, neither idle nor
-// fetched, when the account remote holds the fork branches its
+// fetched, when the hub holds the fork branches its
 // remote-tracking branches hold, and otherwise the report of the update
-// check of the account remote alone. An ls-remote that fails is reported
-// as a fetch of the account remote that failed.
+// check of the hub alone. An ls-remote that fails is reported
+// as a fetch of the hub that failed.
 func (inv *invocation) checkAccountRemote(ctx context.Context, url, remote string) (checkReport, error) {
 	theirs, err := inv.git.ForkTips(ctx, url)
 	if err != nil {
@@ -490,7 +490,7 @@ func (inv *invocation) reportUpdateCheck(scope string, at time.Time, ok, fetched
 // only in the account repo, where it appends to its branch's reflog, so
 // that is how serve learns the fork moved. So are the reflogs of the
 // remote-tracking branches: a publish with nothing to record, as of a
-// commit made with git, moves only the account remote's branch as the
+// commit made with git, moves only the hub's branch as the
 // account repo tracks it, which is what a fork's state is judged against,
 // see unpublished. Those reflog trees appear with the first ref of their
 // kind, a skill's first publish creating logs/refs/remotes and every
@@ -523,7 +523,7 @@ func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx
 		if err != nil {
 			return err
 		}
-		// The account remote holds forks rather than skills on one branch,
+		// The hub holds forks rather than skills on one branch,
 		// and is never fetched as a shared source, so it has nothing to
 		// search.
 		shared := sharedSources(s.Sources)

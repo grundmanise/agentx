@@ -753,11 +753,10 @@ func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 }
 
 // TestSourceAddRefusesBeforeWriting is every refusal source add gives
-// before it writes anything, on one home whose settings hold the account
-// remote: a shared source naming the account remote's repository, exit 6,
-// which source skills gives for the account remote too, and skill add of
-// it; and an account remote URL with a token or a ref, exit 1. None of
-// them creates the account repo.
+// before it writes anything, on one home whose settings hold the hub: a
+// shared source naming the hub's repository, exit 6, which source skills
+// gives for the hub too, and skill add of it; and a hub URL with a token or
+// a ref, exit 1. None of them creates the account repo.
 func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -781,13 +780,13 @@ func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 		message string
 		hint    string
 	}{
-		{"the account remote's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main"}, 6,
-			"ssh://git@example.invalid/me/forks names the repository of the account remote " + forks + ": it holds one branch per skill", "agentx skill add --name <name>"},
-		{"a listing of the account remote", []string{"source", "skills", source.ID(forks)}, 6, forks + " is the account remote", "agentx skill list --remote"},
-		{"an install from the account remote", []string{"skill", "add", forks + "#skills/notes"}, 6, forks + " is the account remote", "agentx skill add --name <name>"},
-		{"an account remote with a token", []string{"source", "add", "https://me:s3cret@example.invalid/me/other", "--account"}, 1, "the URL carries a password or a token", "credential helper"},
-		{"an account remote with a ref", []string{"source", "add", "https://example.invalid/me/other#main", "--account"}, 1, "names a folder or a ref, and the account remote is a whole repository", "the repository alone"},
-		{"the account remote again with a ref", []string{"source", "add", forks + "#skills/notes"}, 1, "names a folder or a ref", "the repository alone"},
+		{"the hub's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main"}, 6,
+			"ssh://git@example.invalid/me/forks names the repository of the hub " + forks + ": it holds one branch per skill", "agentx skill add --name <name>"},
+		{"a listing of the hub", []string{"source", "skills", source.ID(forks)}, 6, forks + " is the hub", "agentx skill list --remote"},
+		{"an install from the hub", []string{"skill", "add", forks + "#skills/notes"}, 6, forks + " is the hub", "agentx skill add --name <name>"},
+		{"a hub with a token", []string{"source", "add", "https://me:s3cret@example.invalid/me/other", "--hub"}, 1, "the URL carries a password or a token", "credential helper"},
+		{"a hub with a ref", []string{"source", "add", "https://example.invalid/me/other#main", "--hub"}, 1, "names a folder or a ref, and the hub is a whole repository", "the repository alone"},
+		{"the hub again with a ref", []string{"source", "add", forks + "#skills/notes"}, 1, "names a folder or a ref", "the repository alone"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := h.run(append([]string{"--json"}, tc.args...)...)

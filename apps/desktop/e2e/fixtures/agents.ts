@@ -1,7 +1,7 @@
 // The machine the placement and Agents tests run against: the Skills fixture's library and skills
 // on four configurations that place skills in their own directories and two that read the
 // library, with MCP servers and the inventory's edges, which the Agents page counts from, and an
-// account remote among the sources.
+// hub among the sources.
 import type {
   Configuration,
   Edge,
@@ -187,7 +187,7 @@ export const manyAgentsInventory = (pdfIn: string[] = []) =>
 /** The library's path on this machine, as its occurrences show it. */
 export const LIBRARY = "/home/me/.agents/skills";
 
-/** What `source list` answers: one shared source and the account remote. */
+/** What `source list` answers: one shared source and the hub. */
 export const sources: InlineEvent[] = [
   {
     id: "1111111111111111",

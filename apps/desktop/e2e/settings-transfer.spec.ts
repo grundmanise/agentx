@@ -159,7 +159,7 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
 }) => {
   cli.answerOpenDialog(SNAPSHOT);
   cli.register(["snapshot", "apply", SNAPSHOT, "--yes"], { events: imported });
-  const accountAdd = cli.register(["source", "add", NEW_ACCOUNT, "--account"], {
+  const accountAdd = cli.register(["source", "add", NEW_ACCOUNT, "--hub"], {
     events: [
       { account: true, id: "s-new-account", type: "source", url: NEW_ACCOUNT },
     ],
@@ -201,7 +201,7 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
     .poll(() => later(cli))
     .toEqual([
       ["snapshot", "apply", SNAPSHOT, "--yes", "--json"],
-      ["source", "add", NEW_ACCOUNT, "--account", "--json"],
+      ["source", "add", NEW_ACCOUNT, "--hub", "--json"],
     ]);
   await expect(applyButton).toBeDisabled();
   await expect(applyButton).toHaveAttribute("aria-busy", "true");
@@ -225,7 +225,7 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
   await expect(applyButton).toBeEnabled();
   expect(later(cli)).toEqual([
     ["snapshot", "apply", SNAPSHOT, "--yes", "--json"],
-    ["source", "add", NEW_ACCOUNT, "--account", "--json"],
+    ["source", "add", NEW_ACCOUNT, "--hub", "--json"],
     ["source", "add", `${TEAM}#v2`, "--json"],
   ]);
   // A skipped skill carries the CLI's reason as its tooltip and description.

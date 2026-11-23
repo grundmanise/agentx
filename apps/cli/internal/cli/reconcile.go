@@ -44,7 +44,7 @@ const (
 	outcomeModified = "modified"
 	// outcomeInstallable is a skill the account repo holds and the library
 	// does not: a managed skill whose library directory is gone, a fork
-	// never placed on this machine, and a fork only the account remote's
+	// never placed on this machine, and a fork only the hub's
 	// branches hold.
 	outcomeInstallable = "installable"
 	// outcomeUnmanaged is a skill of the library no branch names.
@@ -514,7 +514,7 @@ func verdictPath(f forkSite, v forkVerdict) string {
 }
 
 // prepareWorktrees readies git's worktrees of the account repo at gitDir
-// for reconciliation, and, while an account remote is set, reads the fork
+// for reconciliation, and, while a hub is set, reads the fork
 // branches it holds, by name: registrations whose directory is gone are
 // pruned, which every locked worktree survives, and the pointers of every
 // fork's worktree of roots that no longer meet, as moving agentx home

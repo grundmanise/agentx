@@ -1,6 +1,6 @@
 // The sync status at the right of the title bar: its states from the inventory, the Sources slice
 // and the updates serve found, the popover it opens with what there is to publish and what is
-// incoming, Publish all from that popover, and when the account remote was last checked. Every
+// incoming, Publish all from that popover, and when the hub was last checked. Every
 // click's command line is asserted as the mocked CLI recorded it.
 import type { Page } from "@playwright/test";
 
@@ -39,7 +39,7 @@ const fromAnotherMachine = (name: string, source: string): InlineEvent => ({
   upstream_commit: "",
 });
 
-/** An account remote whose short form is longer than the popover's least width leaves room for. */
+/** A hub whose short form is longer than the popover's least width leaves room for. */
 const LONG_REMOTE =
   "git@github.com:example-org/a-rather-long-skill-remote-name.git";
 
@@ -143,7 +143,7 @@ test.describe("states", () => {
     await expect(status(page)).toHaveText("Synced");
   });
 
-  test("no account remote: Set up sync, and a click goes to Settings, Account remote", async ({
+  test("no hub: Set up sync, and a click goes to Settings, Hub", async ({
     cli,
     page,
   }) => {
@@ -154,9 +154,7 @@ test.describe("states", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Settings" })
     ).toBeVisible();
-    await expect(
-      page.getByRole("region", { name: "Account remote" })
-    ).toBeInViewport();
+    await expect(page.getByRole("region", { name: "Hub" })).toBeInViewport();
   });
 
   test("is hidden while the startup layer shows", async ({ cli, page }) => {
@@ -208,7 +206,7 @@ test.describe("popover", () => {
     await expect(popover(page)).toBeVisible();
   });
 
-  test("shows the account remote in full, Publish all at the right", async ({
+  test("shows the hub in full, Publish all at the right", async ({
     cli,
     page,
   }) => {
@@ -299,7 +297,7 @@ test.describe("popover", () => {
     ]);
     await status(page).hover();
     await expect(page.getByRole("tooltip")).toHaveText(
-      "Synced with your account remote · checked 5 minutes ago"
+      "Synced with your hub · checked 5 minutes ago"
     );
     await status(page).click();
     await expect(popover(page)).toContainText("Everything is synced");
@@ -308,7 +306,7 @@ test.describe("popover", () => {
 });
 
 test.describe("publish", () => {
-  test("Publish all runs one skill publish naming every skill to publish, shows its progress, then names the skill with a newer version on the account remote, with Update", async ({
+  test("Publish all runs one skill publish naming every skill to publish, shows its progress, then names the skill with a newer version on the hub, with Update", async ({
     cli,
     page,
   }) => {
@@ -324,7 +322,7 @@ test.describe("publish", () => {
         {
           code: "refused",
           message:
-            "1 of 3 skills could not be published: the account remote holds changes to notes that this machine lacks, published from another machine",
+            "1 of 3 skills could not be published: the hub holds changes to notes that this machine lacks, published from another machine",
           type: "error",
         },
       ],
@@ -345,7 +343,7 @@ test.describe("publish", () => {
 
     const toast = toasts(page);
     await expect(toast).toContainText(
-      "There is a newer version of notes skill on the account remote. Update it first, then publish your changes."
+      "There is a newer version of notes skill on the hub. Update it first, then publish your changes."
     );
     expect(ran(cli, ["skill", "publish", ...OUTGOING])).toBe(true);
     // Until the inventory that follows arrives, the pill keeps the last count.
@@ -394,41 +392,41 @@ test.describe("publish, refused: the hint in the app's words", () => {
   }[] = [
     {
       exitCode: 6,
-      hint: "once the account remote takes it, run 'agentx skill publish changelog draft notes' again",
-      message: "the account remote declined skills/notes: protected branch",
+      hint: "once the hub takes it, run 'agentx skill publish changelog draft notes' again",
+      message: "the hub declined skills/notes: protected branch",
       name: "declined",
       outcomes: [["notes", "declined"]],
       shown:
-        "The account remote declined skills/notes: protected branch. Publish again once the account remote takes it.",
+        "The hub declined skills/notes: protected branch. Publish again once the hub takes it.",
     },
     {
       exitCode: 3,
       hint: "check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then run 'agentx skill publish changelog draft notes' again",
-      message: `the account remote ${ACCOUNT} did not let this machine push skills/notes: permission denied`,
+      message: `the hub ${ACCOUNT} did not let this machine push skills/notes: permission denied`,
       name: "denied",
       outcomes: [["notes", "denied"]],
-      shown: `The account remote ${ACCOUNT} did not let this machine push skills/notes: permission denied. Check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then publish again.`,
+      shown: `The hub ${ACCOUNT} did not let this machine push skills/notes: permission denied. Check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then publish again.`,
     },
     {
       exitCode: 6,
       hint: "run 'agentx skill list' to see the state of each skill, then publish the rest one at a time",
       message:
-        "2 of 3 skills could not be published: the account remote declined skills/changelog: protected branch; notes: the account remote did not let this machine push skills/notes: permission denied",
+        "2 of 3 skills could not be published: the hub declined skills/changelog: protected branch; notes: the hub did not let this machine push skills/notes: permission denied",
       name: "several causes",
       outcomes: [
         ["changelog", "declined"],
         ["notes", "denied"],
       ],
       shown:
-        "2 of 3 skills could not be published: the account remote declined skills/changelog: protected branch; notes: the account remote did not let this machine push skills/notes: permission denied. See the state of each skill in Skills, then publish the rest one at a time.",
+        "2 of 3 skills could not be published: the hub declined skills/changelog: protected branch; notes: the hub did not let this machine push skills/notes: permission denied. See the state of each skill in Skills, then publish the rest one at a time.",
     },
     {
       exitCode: 3,
-      hint: "check your network; the edits were recorded, so run 'agentx skill publish changelog draft notes' again once the account remote can be reached",
+      hint: "check your network; the edits were recorded, so run 'agentx skill publish changelog draft notes' again once the hub can be reached",
       message: `cannot reach ${ACCOUNT}: connection refused`,
-      name: "the account remote cannot be reached",
+      name: "the hub cannot be reached",
       outcomes: [],
-      shown: `Cannot reach ${ACCOUNT}: connection refused. Check your network; the edits were recorded, so publish again once the account remote can be reached.`,
+      shown: `Cannot reach ${ACCOUNT}: connection refused. Check your network; the edits were recorded, so publish again once the hub can be reached.`,
     },
   ];
   for (const c of cases) {

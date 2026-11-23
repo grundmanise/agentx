@@ -55,7 +55,7 @@ apps/cli/internal/
 sequenceDiagram
     participant User
     participant CLI as agentx
-    participant Remote as Account remote
+    participant Remote as Hub
     User->>CLI: skill publish
     CLI->>Remote: push the fork's branch
     Remote-->>CLI: new branch tip

@@ -121,7 +121,7 @@ test.describe("banners", () => {
     await expect(note.getByRole("button")).toHaveText(["Publish"]);
   });
 
-  test("your skill, never published, with an account remote: Not published, with Publish", async ({
+  test("your skill, never published, with a hub: Not published, with Publish", async ({
     cli,
     page,
   }) => {
@@ -132,14 +132,14 @@ test.describe("banners", () => {
     await expect(note.getByRole("button")).toHaveText(["Publish"]);
   });
 
-  test("your skill, never published, with no account remote: Open Settings", async ({
+  test("your skill, never published, with no hub: Open Settings", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "draft", sourcesWithoutAccount);
     const note = banner(pane(page, "draft"));
     await expect(note).toHaveAccessibleName("Not published");
-    await expect(note).toContainText("Set an account remote to publish it.");
+    await expect(note).toContainText("Set a hub to publish it.");
     await expect(note.getByRole("button")).toHaveText(["Open Settings"]);
     await note.getByRole("button", { name: "Open Settings" }).click();
     await expect(page).toHaveURL(/#\/settings$/u);
@@ -214,7 +214,7 @@ test.describe("the Publish dialog", () => {
     const shown = await openDialog(page, "changelog");
     expect(diffReads(cli, "changelog")).toBe(2);
     await expect(shown).toContainText(
-      "The changelog skill will be published to your account remote."
+      "The changelog skill will be published to your hub."
     );
     const field = shown.getByRole("textbox", { name: "What changed" });
     await expect(field).toHaveValue("Edit SKILL.md and add examples.md");
@@ -325,7 +325,7 @@ test.describe("the Publish dialog", () => {
     await openSkill(cli, page, "draft");
     const shown = await openDialog(page, "draft");
     await expect(shown).toContainText(
-      "The draft skill will be published to your account remote."
+      "The draft skill will be published to your hub."
     );
     // Never published: every file goes, even of a fork that matches the commit that created it.
     await expect(shown.getByRole("listitem")).toHaveText([
@@ -389,7 +389,7 @@ test.describe("outcomes", () => {
     ["behind", 0],
     ["moved", 6],
   ] as const) {
-    test(`${outcome}: a newer version on the account remote, and Update runs skill update <name>`, async ({
+    test(`${outcome}: a newer version on the hub, and Update runs skill update <name>`, async ({
       cli,
       page,
     }) => {
@@ -405,7 +405,7 @@ test.describe("outcomes", () => {
                   {
                     level: "warn",
                     message:
-                      "changelog has nothing to publish; the account remote holds changes published from another machine",
+                      "changelog has nothing to publish; the hub holds changes published from another machine",
                   },
                 ],
               }
@@ -422,7 +422,7 @@ test.describe("outcomes", () => {
       );
       await shown.getByRole("button", { name: "Publish" }).click();
       const toast = toasts(page).getByText(
-        "There is a newer version of changelog skill on the account remote. Update it first, then publish your changes."
+        "There is a newer version of changelog skill on the hub. Update it first, then publish your changes."
       );
       await expect(toast).toBeVisible();
       cli.register(["skill", "update", "changelog"], {
@@ -474,17 +474,17 @@ test.describe("outcomes", () => {
       "declined",
       6,
       "refused",
-      "the account remote declined skills/changelog: protected branch",
-      "once the account remote takes it, run 'agentx skill publish changelog' again",
-      "The account remote declined skills/changelog: protected branch. Publish again once the account remote takes it.",
+      "the hub declined skills/changelog: protected branch",
+      "once the hub takes it, run 'agentx skill publish changelog' again",
+      "The hub declined skills/changelog: protected branch. Publish again once the hub takes it.",
     ],
     [
       "denied",
       3,
       "source",
-      `the account remote ${ACCOUNT} did not let this machine push skills/changelog: permission denied`,
+      `the hub ${ACCOUNT} did not let this machine push skills/changelog: permission denied`,
       "check that the git credential helper or SSH key used for it may push there",
-      `The account remote ${ACCOUNT} did not let this machine push skills/changelog: permission denied. Check that the git credential helper or SSH key used for it may push there.`,
+      `The hub ${ACCOUNT} did not let this machine push skills/changelog: permission denied. Check that the git credential helper or SSH key used for it may push there.`,
     ],
   ] as const) {
     test(`${outcome} (exit ${exitCode}): the CLI's message, and its hint in the app's words`, async ({
@@ -599,7 +599,7 @@ test.describe("outcomes", () => {
     ).toBeVisible();
   });
 
-  test("exit 6 with no account remote: Set an account remote, with Open Settings", async ({
+  test("exit 6 with no hub: Set a hub, with Open Settings", async ({
     cli,
     page,
   }) => {
@@ -610,17 +610,15 @@ test.describe("outcomes", () => {
       publishReply("changelog", undefined, {
         error: {
           code: "refused",
-          hint: "run 'agentx source add <url> --account' to attach a Git repository you own",
-          message: "no account remote is set",
+          hint: "run 'agentx source add <url> --hub' to set your hub",
+          message: "no hub is set",
           type: "error",
         },
         exitCode: 6,
       })
     );
     await shown.getByRole("button", { name: "Publish" }).click();
-    await expect(
-      toasts(page).getByText("Set an account remote to publish")
-    ).toBeVisible();
+    await expect(toasts(page).getByText("Set a hub to publish")).toBeVisible();
     await toasts(page).getByRole("button", { name: "Open Settings" }).click();
     await expect(page).toHaveURL(/#\/settings$/u);
   });

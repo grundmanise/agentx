@@ -89,12 +89,12 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 
 // sourceRemotesHint is the source_remotes hint for the orphan remotes
 // orphans and the orphan remotes of fork branches forks, account being the
-// URL of the account remote the settings hold, "" when none. A remote of
+// URL of the hub the settings hold, "" when none. A remote of
 // fork branches added back as a shared source would have its forks fetched
-// without blobs. With no account remote set, it is one the settings lost,
-// and only one remote can be made the account remote again. With one set,
-// it is what a replaced account remote left, and adding it back with
-// --account would replace the account remote the user chose, so it is
+// without blobs. With no hub set, it is one the settings lost,
+// and only one remote can be made the hub again. With one set,
+// it is what a replaced hub left, and adding it back with
+// --hub would replace the hub the user chose, so it is
 // only cleared.
 func sourceRemotesHint(orphans, forks []string, account string) string {
 	plain := "run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"
@@ -104,11 +104,11 @@ func sourceRemotesHint(orphans, forks []string, account string) string {
 	var held string
 	switch {
 	case account != "":
-		held = "run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --account' would replace the account remote " + account
+		held = "run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --hub' would replace the hub " + account
 	case len(forks) == 1:
-		held = "run 'agentx source add <url> --account' to make it the account remote again and take the remote with it, or 'agentx source remove <id>' to clear it"
+		held = "run 'agentx source add <url> --hub' to make it the hub again and take the remote with it, or 'agentx source remove <id>' to clear it"
 	default:
-		held = "run 'agentx source add <url> --account' for the one to make the account remote again, and 'agentx source remove <id>' for the rest"
+		held = "run 'agentx source add <url> --hub' for the one to make the hub again, and 'agentx source remove <id>' for the rest"
 	}
 	if len(orphans) == 0 && (len(forks) == 1 || account != "") {
 		return "for each, " + held

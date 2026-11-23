@@ -1,6 +1,6 @@
-// Publishing your own skills: what the Publish dialog of one skill (publish-dialog.tsx) and the
+// Publishing hub skills: what the Publish dialog of one skill (publish-dialog.tsx) and the
 // publish of every skill at once share. Publish all, which the title bar's sync popover and the
-// palette run, is one `skill publish <name>…` naming every skill to publish: your own skills
+// palette run, is one `skill publish <name>…` naming every skill to publish: hub skills
 // edited since they were published and those never published (docs/spec/cli-contract.md,
 // "Publishing"). One toast says how it went, in the words the dialog uses for one skill; the list
 // redraws from the inventory that follows.
@@ -65,8 +65,8 @@ const publishHintRules: HintRule[] = [
   },
   {
     app: ({ first }) =>
-      `${first ?? ""}; the edits were recorded, so publish again once the account remote can be reached`,
-    cli: /^(?<first>.+); the edits were recorded, so run 'agentx skill publish(?: .+)?' again once the account remote can be reached$/u,
+      `${first ?? ""}; the edits were recorded, so publish again once the hub can be reached`,
+    cli: /^(?<first>.+); the edits were recorded, so run 'agentx skill publish(?: .+)?' again once the hub can be reached$/u,
   },
   {
     app: ({ what }) => `publish again once ${what ?? ""} takes it`,
@@ -114,11 +114,11 @@ export const publishFailure = (
 
 /**
  * The toast of a skill whose newer version is where it publishes to: it needs an update before a
- * publish. For one of your own skills that is the account remote; for a skill of a source, the
+ * publish. For a hub skill that is the hub; for a skill of a source, the
  * source, which `source` names by its URL.
  */
 export const changedElsewhere = (name: string, source?: string) =>
-  `There is a newer version of ${name} skill ${source === undefined ? "on the account remote" : `in ${shortSource(source)}`}. Update it first, then publish your changes.`;
+  `There is a newer version of ${name} skill ${source === undefined ? "on the hub" : `in ${shortSource(source)}`}. Update it first, then publish your changes.`;
 
 /** The toast of a publish that sent nothing: the skill already matches what is published. */
 export const alreadyPublished = (name: string) =>
@@ -131,7 +131,7 @@ const nonePublished = (judged: number) =>
     : "No skills were published. They already match the published versions.";
 
 /**
- * Whether a publish was refused for want of an account remote: refused before any skill was
+ * Whether a publish was refused for want of a hub: refused before any skill was
  * judged, with none set or with the CLI saying so.
  */
 export const refusedForAccountRemote = (
@@ -143,14 +143,14 @@ export const refusedForAccountRemote = (
   return (
     outcome.exitCode === EXIT_CODES.refused &&
     !judged &&
-    (!accountRemoteSet || error?.message === "no account remote is set")
+    (!accountRemoteSet || error?.message === "no hub is set")
   );
 };
 
-/** "Set an account remote to publish", with Open Settings. */
+/** "Set a hub to publish", with Open Settings. */
 export const notifyNoAccountRemote = () => {
   notify(
-    "Set an account remote to publish",
+    "Set a hub to publish",
     {
       label: "Open Settings",
       onClick: () => {
@@ -161,15 +161,15 @@ export const notifyNoAccountRemote = () => {
   );
 };
 
-/** One of your own skills to publish: edited since it was published, or never published. */
+/** A hub skill to publish: edited since it was published, or never published. */
 export interface ToPublish {
   name: string;
   kind: "edited" | "new";
 }
 
 /**
- * What Publish all publishes, in name order: each of your own skills edited since it was
- * published (edited) or never published (new). Read only while an account remote is set.
+ * What Publish all publishes, in name order: each hub skill edited since it was
+ * published (edited) or never published (new). Read only while a hub is set.
  */
 export const toPublish = (rows: SkillRow[]): ToPublish[] => {
   const skills = rows.flatMap((row): ToPublish[] => {
@@ -220,7 +220,7 @@ const updateAction = (name: string): ToastAction | undefined => {
 };
 
 /**
- * The toast of a Publish all that ended. A skill the account remote declined, or one this machine
+ * The toast of a Publish all that ended. A skill the hub declined, or one this machine
  * may not push, keeps the runner's error toast, in the CLI's words; so does any other failure.
  */
 const reportPublishAll = (outcome: Outcome) => {

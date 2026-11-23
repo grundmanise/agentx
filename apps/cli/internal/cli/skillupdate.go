@@ -39,18 +39,18 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"version replaced is refreshed; a copy edited on its own is kept and named.\n\n" +
 			"A forked skill's update is always merged, with the upstream version it was last\n" +
 			"forked or updated from as the merge base, so its own commits are kept, and the\n" +
-			"merge is committed on its branch. The unpublished edits of one of your own\n" +
-			"skills are recorded on its branch first, and stay unpublished until\n" +
+			"merge is committed on its branch. The unpublished edits of a hub skill are\n" +
+			"recorded on its branch first, and stay unpublished until\n" +
 			"'agentx skill publish <name>'. A conflict waits as for a skill of a shared\n" +
-			"source, and its worktree and branch stay as they are until it is applied. With an\n" +
-			"account remote set, it is fetched first, and the skill is first updated to the\n" +
+			"source, and its worktree and branch stay as they are until it is applied. With a\n" +
+			"hub set, it is fetched first, and the skill is first updated to the\n" +
 			"latest version your other machines published, as a commit of its own. A skill\n" +
 			"made with 'agentx skill new' has no upstream: its update only brings it to the\n" +
 			"latest published version.\n\n" +
 			"Name several skills to update them in one run, under one hold of the lock: the\n" +
 			"run goes on past a skill it cannot update, as --all does, and reports each skill\n" +
 			"as it is done with it. Pass --all instead of names to update every managed skill\n" +
-			"the last check found an update for, and every skill of your own placed here that\n" +
+			"the last check found an update for, and every hub skill placed here that\n" +
 			"your other machines published to. Read an update before you apply it with\n" +
 			"'agentx skill diff <name> --update'.",
 		Example: examples(
@@ -76,10 +76,10 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			return inv.skillUpdate(cmd.Context(), names)
 		},
 	}
-	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill the last check found an update for, and every skill of your own another machine published to")
+	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill the last check found an update for, and every hub skill another machine published to")
 	cmd.Flags().BoolVar(&resume, "continue", false, "apply the merge pending for the skill with the files of its worktree as you left them, once no conflict marker is left")
 	cmd.Flags().BoolVar(&theirs, "theirs", false, "drop your edits and apply the update the merge pending for the skill merges, as published")
-	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory, or the worktree and branch of one of your own, stay as they are")
+	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory, or the worktree and branch of a hub skill, stay as they are")
 	cmd.MarkFlagsMutuallyExclusive("continue", "theirs", "abort")
 	return cmd
 }
@@ -206,13 +206,13 @@ type updateRun struct {
 	bodies     map[string]string // what the files of every version staged hold, by blob id
 	applied    []*updating       // the skills whose update the mutation applied, by name
 	pending    []*updating       // the skills whose merge the mutation left pending, by name
-	account    *accountFetch     // the account remote as the run fetched it; nil when it did not, see fetchAccount
+	account    *accountFetch     // the hub as the run fetched it; nil when it did not, see fetchAccount
 }
 
-// accountFetch is the account remote as a run of skill update fetched it,
+// accountFetch is the hub as a run of skill update fetched it,
 // once, before it selected anything, see updateRun.fetchAccount.
 type accountFetch struct {
-	entry  home.Source       // the account remote's settings entry
+	entry  home.Source       // the hub's settings entry
 	remote string            // its git remote in the account repo
 	tips   map[string]string // the tip of each skill it holds, by name, as its remote-tracking branches hold them
 	err    error             // why git could not fetch it, which leaves the tips of the fetch before; nil when it fetched
@@ -394,8 +394,8 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 		fork := managed && rec.Kind == lineage.KindFork
 		if fork && r.account != nil && rec.Fork != nil && rec.Fork.NoUpstream && !inv.mergePending(n) {
 			// A fork with no upstream is up to date once its account step
-			// took in what the account remote held, or found nothing to take
-			// in; one the account remote holds no branch of has nothing to
+			// took in what the hub held, or found nothing to take
+			// in; one the hub holds no branch of has nothing to
 			// take in until it is published. One with a merge pending goes
 			// on to judgeForkUpdate, the one way that completes it.
 			switch {
@@ -403,12 +403,12 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 				inv.summary = "updated " + n + " to the latest published version; it has no upstream to update from"
 				continue // ended once it is reported, see reportForks
 			case !r.all && r.account.tips[n] == "":
-				inv.summary = n + " has no branch on the account remote; run '" + publishCommand(n) + "' to publish it"
-				inv.out.print(inv.out.paint(heading, sanitised(n)), " has no branch on the account remote; run ",
+				inv.summary = n + " has no branch on the hub; run '" + publishCommand(n) + "' to publish it"
+				inv.out.print(inv.out.paint(heading, sanitised(n)), " has no branch on the hub; run ",
 					inv.out.paint(label, publishCommand(n)), " to publish it")
 			case !r.all:
-				inv.summary = n + " is up to date with the account remote"
-				inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date with the account remote")
+				inv.summary = n + " is up to date with the hub"
+				inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date with the hub")
 			}
 			r.end(n)
 			continue
@@ -482,7 +482,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 		inv.out.print(inv.summary)
 	}
 	for _, n := range r.names {
-		r.end(n) // a skill the run said nothing more of, a fork up to date with the account remote say
+		r.end(n) // a skill the run said nothing more of, a fork up to date with the hub say
 	}
 	return r.failure()
 }
@@ -491,7 +491,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 // the account step ran, see accountStep: the skills it selected but for
 // the forks that have no update from upstream, a candidate other than
 // their base version, and no merge pending. Those were selected for the
-// account step alone, since the account remote held another tip of them,
+// account step alone, since the hub held another tip of them,
 // and it already took in what there was: a fork with no upstream is up to
 // date then, and one the remote is behind, with commits not yet published,
 // was up to date all along, so nothing is said of either. The forks the
@@ -514,12 +514,12 @@ func (r *updateRun) afterAccountStep(names []string, records map[string]lineage.
 	return kept
 }
 
-// fetchAccount fetches the account remote once for the run, before it
+// fetchAccount fetches the hub once for the run, before it
 // selects anything, when one is set and the run needs it: for names, when
-// one is a fork, a skill of the account remote, with no merge pending; with
+// one is a fork, a skill of the hub, with no merge pending; with
 // --all, when any fork is placed on this machine, a worktree or a library
 // entry of its there. A run that needs no fork, the update of a skill of a
-// shared source say, never fetches the account remote, so one git cannot
+// shared source say, never fetches the hub, so one git cannot
 // reach neither warns nor fails it. The remote-tracking branches are read
 // once, after the fetch: --all selects from them, see selection, and the
 // account step takes in what they hold, see accountStep. A fetch that fails
@@ -561,7 +561,7 @@ func (r *updateRun) fetchAccount(ctx context.Context, records map[string]lineage
 }
 
 // accountStep is the first step of a fork's update when the run fetched
-// the account remote, see fetchAccount: what another machine published of
+// the hub, see fetchAccount: what another machine published of
 // the fork is taken in first, see syncFork, as a commit of its own, before
 // the update from upstream merges on top of it. With --all that covers
 // every fork placed here that another machine published to, see selection,
@@ -608,9 +608,9 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 			if len(upstream) > 1 {
 				what = "your skills are"
 			}
-			inv.out.warn("could not fetch the account remote " + shownURL(a.entry.URL) + ", so " + what + " updated from upstream only" + why)
+			inv.out.warn("could not fetch the hub " + shownURL(a.entry.URL) + ", so " + what + " updated from upstream only" + why)
 		case len(dropped) == 0:
-			inv.out.warn("could not fetch the account remote " + shownURL(a.entry.URL) + ", so nothing was updated to the latest published version" + why)
+			inv.out.warn("could not fetch the hub " + shownURL(a.entry.URL) + ", so nothing was updated to the latest published version" + why)
 		}
 		return nil, dropped, nil
 	}
@@ -684,17 +684,17 @@ func (inv *invocation) finishJournals(ctx context.Context) error {
 // selection is the skills a run sets out to update, in name order, with
 // what the library holds of each: the names it was given, or with --all
 // every managed skill with an update, a candidate agentx can read that its
-// branch does not already hold (see lineage.Record.AtCandidate), every
-// fork with one, a candidate other than its base version (see
-// lineage.Record.ForkCandidate), and, when the run fetched the account
-// remote, every fork placed on this machine whose branch there differs
-// from its own, or whose merge is pending, see accountStep: one the remote
-// is behind is judged up to date there, with nothing said, see
-// afterAccountStep. A remote git could not reach selects, of those, the
-// forks with no upstream it held at the last fetch, which then fail, and
-// those with a merge pending. A skill with no
-// candidate has nothing to update, an upstream-removed one included, since
-// the check that marks a skill deletes its candidate.
+// branch does not already hold (see lineage.Record.AtCandidate), every fork
+// with one, a candidate other than its base version (see
+// lineage.Record.ForkCandidate), and, when the run fetched the hub, every
+// fork placed on this machine whose branch there differs from its own, or
+// whose merge is pending, see accountStep: one the remote is behind is
+// judged up to date there, with nothing said, see afterAccountStep. A
+// remote git could not reach selects, of those, the forks with no upstream
+// it held at the last fetch, which then fail, and those with a merge
+// pending. A skill with no candidate has nothing to update, an
+// upstream-removed one included, since the check that marks a skill deletes
+// its candidate.
 func (r *updateRun) selection(records map[string]lineage.Record) ([]string, map[string]scan.LibrarySkill) {
 	libs := map[string]scan.LibrarySkill{}
 	if !r.all {
@@ -721,11 +721,11 @@ func (r *updateRun) selection(records map[string]lineage.Record) ([]string, map[
 }
 
 // published reports whether rec, the record of the skill called name, is a
-// fork placed on this machine whose merge is pending, or that the account
-// remote, as the run fetched it, holds another tip of. When git could not
-// fetch it, nothing is taken in from the tips the fetch before left, and a
-// fork it held is selected only when it has no upstream, for the account
-// step to fail it, see accountStep.
+// fork placed on this machine whose merge is pending, or that the hub, as
+// the run fetched it, holds another tip of. When git could not fetch it,
+// nothing is taken in from the tips the fetch before left, and a fork it
+// held is selected only when it has no upstream, for the account step to
+// fail it, see accountStep.
 func (r *updateRun) published(name string, rec lineage.Record) bool {
 	if r.account == nil || rec.Kind != lineage.KindFork || !r.inv.forkPlaced(name) {
 		return false
@@ -1242,7 +1242,7 @@ func (r *updateRun) report(ctx context.Context) error {
 // conflictsWith is what the merge left pending for u's skill merged the
 // skill with, as the line that reports it names it: its update, from the
 // upstream commit of its base to the candidate's; for a fork's merge with
-// the account remote, what forkUpdate.with names it; or, for a fork whose
+// the hub, what forkUpdate.with names it; or, for a fork whose
 // completed merge was merged again with commits made while it was pending,
 // those commits.
 func (u *updating) conflictsWith() string {

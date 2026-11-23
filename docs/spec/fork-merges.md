@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-09-19; updated 2026-10-02 to plain Git merges. This replaces inferred import ancestry in ADR 0003.
 
-A fork takes in two kinds of change: a newer version of its upstream, and what another machine of the same user published of it to the account remote. Both are Git merges. Nothing is classified, nothing is selected in place of a merge, and no record of a choice is kept beside the history: the branch's commits and their trailers are the whole record.
+A fork takes in two kinds of change: a newer version of its upstream, and what another machine of the same user published of it to the hub. Both are Git merges. Nothing is classified, nothing is selected in place of a merge, and no record of a choice is kept beside the history: the branch's commits and their trailers are the whole record.
 
 ## Required behavior
 
@@ -18,7 +18,7 @@ An upstream update is always a three-way merge with the accepted import as the e
 
 ## The account step and publishing
 
-The account step of `skill update`, which takes in what another machine published of a fork before the update from upstream, is a plain Git merge on ordinary ancestry. It is the only step that merges what the account remote holds: a publish never does.
+The account step of `skill update`, which takes in what another machine published of a fork before the update from upstream, is a plain Git merge on ordinary ancestry. It is the only step that merges what the hub holds: a publish never does.
 
 The account step:
 
@@ -26,7 +26,7 @@ The account step:
 - A fast-forward when the local tip is an ancestor of the remote tip. No commit is written.
 - Otherwise `merge-tree --write-tree` of the two tips, with the merge base git finds. A clean result is committed with the local tip and the remote tip as parents and the base below; a conflict becomes a pending merge, resolved in its worktree like any other conflict. A binary file or a symlink both sides changed conflicts whole, as Git merges it: the pending merge holds the local side's version and the other side's as its own stage, with no markers.
 
-Publishing records the fork's edits as one commit on its branch, then pushes the branch, never forced, and only the fork's own branch: import branches, update candidates, upstream-removed markers and source refs never travel. Recorded edits are part of the tip, and the fork's skill directory holds its tip again; they stay unpublished until the push. A push the remote rejects or its host declines is reported, never retried with force. When the account remote holds commits the fork lacks, the publish records nothing and does not push it: a fork the remote is only ahead of, holding no edits, has nothing to publish, and one whose history or edits diverged from the remote's is refused until `skill update` takes the remote's commits in.
+Publishing records the fork's edits as one commit on its branch, then pushes the branch, never forced, and only the fork's own branch: import branches, update candidates, upstream-removed markers and source refs never travel. Recorded edits are part of the tip, and the fork's skill directory holds its tip again; they stay unpublished until the push. A push the remote rejects or its host declines is reported, never retried with force. When the hub holds commits the fork lacks, the publish records nothing and does not push it: a fork the remote is only ahead of, holding no edits, has nothing to publish, and one whose history or edits diverged from the remote's is refused until `skill update` takes the remote's commits in.
 
 ## The recorded base
 

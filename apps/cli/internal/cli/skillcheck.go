@@ -35,7 +35,7 @@ func newSkillCheckUpdatesCommand(inv *invocation) *cobra.Command {
 			"included, and report which skills have a newer upstream version, with the files\n" +
 			"each one changes; skills from a source you removed are skipped. A forked skill is\n" +
 			"compared by the upstream version it was last forked or updated from, whatever its\n" +
-			"own commits changed. With an account remote set, your own skills placed here are\n" +
+			"own commits changed. With a hub set, hub skills placed here are\n" +
 			"also compared with what your other machines published to it. Nothing is applied:\n" +
 			"apply an update with 'agentx skill update <name>', or read an upstream one first\n" +
 			"with 'agentx skill diff <name> --update'.",
@@ -50,7 +50,7 @@ func newSkillCheckUpdatesCommand(inv *invocation) *cobra.Command {
 
 // updateAvailableEvent is one managed skill whose source, or for a forked
 // skill whose upstream, holds a newer version than its base version, or
-// whose branch another machine published to the account remote: where it
+// whose branch another machine published to the hub: where it
 // is published to and where it came from, the version it
 // is at, a fork's being the last import merged into it, the version the
 // check pinned as its candidate and every file that version changes, each
@@ -71,22 +71,21 @@ type updateAvailableEvent struct {
 	Candidate               string        `json:"candidate"`
 	CandidateHash           string        `json:"candidate_hash"`
 	CandidateUpstreamCommit string        `json:"candidate_upstream_commit"`
-	CandidateUpstreamTime   string        `json:"candidate_upstream_time,omitempty"` // when the newer version was made, RFC 3339 in UTC: its upstream commit's time, or the account remote tip's
+	CandidateUpstreamTime   string        `json:"candidate_upstream_time,omitempty"` // when the newer version was made, RFC 3339 in UTC: its upstream commit's time, or the hub tip's
 	Files                   []changedFile `json:"files"`
 	UpstreamName            string        `json:"upstream_name,omitempty"` // present when the upstream names the skill otherwise
 
-	local string // an account-remote update's: the commit the skill's branch holds here
+	local string // a hub update's: the commit the skill's branch holds here
 }
 
-// fromAccount reports whether ev is what the account remote holds for one
-// of the user's own skills, which another machine published, rather than a
-// newer upstream version: it names the account remote as its source and
-// carries none of the upstream fields.
+// fromAccount reports whether ev is what the hub holds for a hub skill,
+// which another machine published, rather than a newer upstream version: it
+// names the hub as its source and carries none of the upstream fields.
 func (ev updateAvailableEvent) fromAccount() bool { return ev.local != "" }
 
 // versions are the two commits an update goes from and to, as a line of
 // text names them: the upstream's for an upstream update, the skill's own
-// branch here and the account remote's for one published from another
+// branch here and the hub's for one published from another
 // machine.
 func (ev updateAvailableEvent) versions() (from, to string) {
 	if ev.fromAccount() {
@@ -173,7 +172,7 @@ type checkReport struct {
 	removed   []removedSkill
 	failures  []checkFailure
 	notes     []string // what a candidate the check moved leaves out or calls otherwise
-	// accountFetched is set when the check fetched the account remote, and
+	// accountFetched is set when the check fetched the hub, and
 	// accountFailed when it set out to and could not reach it.
 	accountFetched, accountFailed bool
 }
@@ -315,14 +314,14 @@ func checkRefusal(failures []checkFailure) error {
 // records what it found in one mutation: the candidate and upstream-removed
 // refs and last_fetched. Nothing is applied to the library.
 //
-// The account remote is checked too, see accountDue and checkAccount: the
-// user's own skills placed here against what their other machines
-// published. It is one more target of the same fetch, fetched once the
-// shared sources are and counted with them, see fetchSources; its
-// last_fetched is stamped with the others' and a fetch of it that fails is
-// a failure in the report as a shared source's is. An
-// update found there is reported only for a skill whose branch, read again
-// under the lock, is still the commit it was compared with.
+// The hub is checked too, see accountDue and checkAccount: hub skills
+// placed here against what their other machines published. It is one more
+// target of the same fetch, fetched once the shared sources are and counted
+// with them, see fetchSources; its last_fetched is stamped with the others'
+// and a fetch of it that fails is a failure in the report as a shared
+// source's is. An update found there is reported only for a skill whose
+// branch, read again under the lock, is still the commit it was compared
+// with.
 //
 // serving is the serve child's check, which differs in three ways. It
 // fetches every source of the settings, a source no skill was installed
@@ -344,10 +343,10 @@ func checkRefusal(failures []checkFailure) error {
 // only, when it is not "", is the canonical URL of the one source the
 // check covers, as a publish to that source runs it, see publishShared:
 // that source alone is fetched, whether or not a skill of it is held, and
-// the account remote is neither fetched nor checked, so it can neither
-// fail nor slow that run. The account remote's URL is the account remote
+// the hub is neither fetched nor checked, so it can neither
+// fail nor slow that run. The hub's URL is the hub
 // alone, as the serve child's periodic check runs it, see
-// serveChecks.account: it is fetched whether or not one of your own skills
+// serveChecks.account: it is fetched whether or not a hub skill
 // is placed here, no shared source is, and a machine with no account repo
 // is idle. "" is every source, as above.
 func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only string) (checkReport, error) {
@@ -531,10 +530,10 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	return rep, nil
 }
 
-// accountCheck is what an update check found on the account remote for the
-// user's own skills placed on this machine, see accountDue and checkAccount.
+// accountCheck is what an update check found on the hub for hub skills
+// placed on this machine, see accountDue and checkAccount.
 type accountCheck struct {
-	entry    home.Source      // the account remote's entry; its URL is "" when nothing is checked there
+	entry    home.Source      // the hub's entry; its URL is "" when nothing is checked there
 	placed   []lineage.Record // the skills compared with it, by name
 	fetched  bool             // the fetch of it succeeded
 	skills   []string         // the skills it checked, by name: placed but those failures name
@@ -543,11 +542,11 @@ type accountCheck struct {
 }
 
 // accountDue is what checkAccount will check, read before anything is
-// fetched: the user's own skills, the forks of own placed on this machine,
-// and the account remote's entry, whose fetch is then one target of the
+// fetched: hub skills, the forks of own placed on this machine,
+// and the hub's entry, whose fetch is then one target of the
 // check's, after the shared sources, see fetchSources. Nothing is due when
-// no account remote is set, or, unless always, none of those skills is
-// placed here: a check of the account remote alone fetches it all the same,
+// no hub is set, or, unless always, none of those skills is
+// placed here: a check of the hub alone fetches it all the same,
 // so that its remote-tracking branches hold what it holds.
 func (inv *invocation) accountDue(own map[string]lineage.Record, always bool) (accountCheck, error) {
 	var ac accountCheck
@@ -568,8 +567,8 @@ func (inv *invocation) accountDue(own map[string]lineage.Record, always bool) (a
 	return ac, nil
 }
 
-// checkAccount is the update check of the user's own skills placed on this
-// machine, see accountDue, against what the account remote holds of them,
+// checkAccount is the update check of hub skills placed on this
+// machine, see accountDue, against what the hub holds of them,
 // which is what their other machines published, once the fetch of it, res,
 // has ended. A fetch that failed is the failure of an unreachable source,
 // naming every skill it left unchecked, and costs the check nothing else.
@@ -583,12 +582,12 @@ func (inv *invocation) accountDue(own map[string]lineage.Record, always bool) (a
 // on from does, is none, and neither is one that shares no commit with it,
 // which skill update refuses to merge and says so. A skill that cannot be
 // compared, a merge-base that fails or a branch whose directory cannot be
-// told, is a failure naming that skill alone. The event names the account
-// remote as its source and the remote branch's tip as its candidate, and
-// leaves every upstream field empty: that is what tells it from an
-// upstream's newer version. Nothing is written for it: the fetch's
-// remote-tracking branches are what skill update takes in, and the caller
-// stamps the account remote's last_fetched with the shared sources'.
+// told, is a failure naming that skill alone. The event names the hub as
+// its source and the remote branch's tip as its candidate, and leaves every
+// upstream field empty: that is what tells it from an upstream's newer
+// version. Nothing is written for it: the fetch's remote-tracking branches
+// are what skill update takes in, and the caller stamps the hub's
+// last_fetched with the shared sources'.
 func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *accountCheck, res source.Result) error {
 	url := ac.entry.URL
 	if res.Err != nil {
@@ -686,12 +685,12 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 
 // uncheckedAccount is unreachableRemote as a check reports it, in the shape
 // of a shared source's failure, the remote named first, so that the
-// refusal reads "could not check the account remote <url>: ...". err is
+// refusal reads "could not check the hub <url>: ...". err is
 // the fetch's, as fetchSources wraps it.
 func uncheckedAccount(url string, err error) *failure {
 	f := unreachableRemote(url, err)
 	reason := strings.TrimPrefix(err.Error(), source.ErrUnreachable.Error()+": ")
-	return refuse(f.status, "the account remote "+shownURL(url)+": cannot reach it: "+trimGit(reason), f.hint)
+	return refuse(f.status, "the hub "+shownURL(url)+": cannot reach it: "+trimGit(reason), f.hint)
 }
 
 // checkLineage is the lineage an update check works from, read in the one
@@ -704,9 +703,9 @@ func uncheckedAccount(url string, err error) *failure {
 // unmanaged or a plugin's skill, has no upstream to check and is left out,
 // as is one whose history does not say which import is its base.
 //
-// own are the user's own skills, every fork, by name, each with its branch
-// and its tip as the account repo holds them, which is what the account
-// remote's branch of it is compared with, see checkAccount.
+// own are hub skills, every fork, by name, each with its branch and its tip
+// as the account repo holds them, which is what the hub's branch of it is
+// compared with, see checkAccount.
 func (inv *invocation) checkLineage(ctx context.Context, gitDir string) (records, own map[string]lineage.Record, err error) {
 	records, err = inv.listLineage(ctx, gitDir)
 	if err == nil {
@@ -940,7 +939,7 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 
 // recordCheck writes what the check found in one mutation under the lock,
 // the only hold of it after the network, and returns the lineage as the
-// mutation left it, the user's own skills as that read found them, see
+// mutation left it, hub skills as that read found them, see
 // checkLineage, the sources the settings hold once the fetches are done,
 // and the skills whose candidate it moved. When every fetch failed it reads
 // no lineage and returns no own skills.

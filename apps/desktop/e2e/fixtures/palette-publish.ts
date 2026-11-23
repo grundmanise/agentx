@@ -1,7 +1,7 @@
-// The machine the title bar's sync status and the palette tests run against: two of your own
+// The machine the title bar's sync status and the palette tests run against: two hub
 // skills edited since they were published, one never published, and two skills of a source, one
-// with an update serve found. `source list` answers with the account remote and the source, or
-// without the account remote. Variants: nothing to publish, and no account remote; serve can also
+// with an update serve found. `source list` answers with the hub and the source, or
+// without the hub. Variants: nothing to publish, and no hub; serve can also
 // find what another of your machines published. Inline events with only the fields the tests
 // check.
 import type { LibraryEntry, LibraryPlacement } from "#/cli/events.gen.ts";
@@ -106,13 +106,13 @@ export const notesFromAnotherMachine: InlineEvent = {
   upstream_commit: "",
 };
 
-/** What `source list` answers: the account remote and the source. */
+/** What `source list` answers: the hub and the source. */
 export const sources: InlineEvent[] = [
   { account: true, id: "2222222222222222", type: "source", url: ACCOUNT },
   { access: "read-only", id: "1111111111111111", type: "source", url: ACME },
 ];
 
-/** What `source list` answers on a machine with no account remote. */
+/** What `source list` answers on a machine with no hub. */
 export const sourcesWithoutAccount: InlineEvent[] = sources.filter(
   (s) => s.type === "source" && s.account !== true
 );
@@ -153,7 +153,7 @@ export const launch = (
     });
     cli.register(["skill", "diff", entry.name], { events: [] });
   }
-  // What the Add skills screen reads when it opens: your skills on the account remote and the source's.
+  // What the Add skills screen reads when it opens: your skills on the hub and the source's.
   cli.register(["skill", "list", "--remote"], { events: [] });
   cli.register(["source", "skills", "1111111111111111"], { events: [] });
 };

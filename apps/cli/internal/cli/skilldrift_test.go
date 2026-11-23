@@ -632,7 +632,7 @@ func (p *serveProc) nextOf(typ string) jsonEvent {
 // published, skill publish makes it current and published, and, after
 // another edit, a commit made with git in the fork's worktree leaves it
 // modified, since nothing published it, until a publish that has nothing
-// to record but pushes the commit, which moves only the account remote's
+// to record but pushes the commit, which moves only the hub's
 // branch as the account repo tracks it. Serve itself never commits an
 // edit.
 func TestServeReportsForkDrift(t *testing.T) {
@@ -666,9 +666,9 @@ func TestServeReportsForkDrift(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 }
 
-// TestUnpublished is when one of your own skills reads modified: its skill
+// TestUnpublished is when a hub skill reads modified: its skill
 // directory differs from its tip, or the tip is not the version skill diff
-// compares with: the merge base of the tip and the account remote's branch
+// compares with: the merge base of the tip and the hub's branch
 // as last fetched, which git is asked only when the two tips differ, or,
 // with no remote branch or one that shares no commit, the commit that
 // created it, and the tip itself when its history names none.
@@ -699,7 +699,7 @@ func TestUnpublished(t *testing.T) {
 }
 
 // TestPublishedName: a skill compares with its own name's branch on the
-// account remote, and a renamed one not yet published under its new name
+// hub, and a renamed one not yet published under its new name
 // with the nearest old name's branch there.
 func TestPublishedName(t *testing.T) {
 	t.Parallel()

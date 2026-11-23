@@ -80,7 +80,7 @@ test.describe("ACTIONS", () => {
     ]);
   });
 
-  test("with no account remote: no Publish all", async ({ cli, page }) => {
+  test("with no hub: no Publish all", async ({ cli, page }) => {
     launch(cli, "no-account-remote");
     await openPalette(page);
     // Once the skills show, the inventory is in.
@@ -189,9 +189,9 @@ test.describe("SKILLS", () => {
     await openPalette(page);
     const rows = group(page, "SKILLS").getByRole("option");
     await expect(rows).toHaveText([
-      "changelogpersonal skill",
-      "draftpersonal skill",
-      "notespersonal skill",
+      "changeloghub skill",
+      "drafthub skill",
+      "noteshub skill",
       "pdfacme/skills",
     ]);
   });

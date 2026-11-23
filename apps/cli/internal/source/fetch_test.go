@@ -69,7 +69,7 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 }
 
 // TestConfigureWritesTheRemoteOfEachKind configures one source's remote
-// as a shared source and as the account remote, in turn, and reads each
+// as a shared source and as the hub, in turn, and reads each
 // back as the entry wants it: a key the remote does not have goes, and a
 // key a user gave a second value is set to one again. A key git cannot
 // unset fails the write.
@@ -87,7 +87,7 @@ func TestConfigureWritesTheRemoteOfEachKind(t *testing.T) {
 		want  source.Remote
 	}{
 		{"a shared source", home.Source{URL: url, Pin: "v1"}, source.Remote{URL: url, Refspec: "+v1:" + source.StagingRef(id), Promisor: "true", Filter: "blob:none"}},
-		{"the account remote", account, source.Remote{URL: url, Refspec: gitx.ForkRefspec(source.RemoteName(id))}},
+		{"the hub", account, source.Remote{URL: url, Refspec: gitx.ForkRefspec(source.RemoteName(id))}},
 	} {
 		if _, err := git.Isolated(ctx, gitDir, "config", "--add", key+"fetch", "+refs/heads/x:refs/x"); err != nil {
 			t.Fatal(err)

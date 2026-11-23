@@ -65,7 +65,7 @@ const noCards: SkillCard[] = [];
 type Selection = ReadonlyMap<string, SkillCard>;
 const noSelection: Selection = new Map();
 
-/** Loads what a pill shows: a source's listing, or your skills on the account remote. */
+/** Loads what a pill shows: a source's listing, or your skills on the hub. */
 const loadPill = async (key: string) => {
   await (key === YOUR_SKILLS ? loadInstallable() : loadListing(key));
 };
@@ -104,7 +104,7 @@ const useOpenPill = (
 
 /**
  * Loads the open pill when the user did not open it, such as the first one, unless
- * `useFetchedListings` reads its listing: Personal, or a source never fetched.
+ * `useFetchedListings` reads its listing: Hub, or a source never fetched.
  */
 const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
   const key = pill?.key;
@@ -122,8 +122,8 @@ const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
 
 /**
  * Refresh all: one `source fetch --all`, after which the screen reads again the listing of each
- * source `source list` reports a new fetch for. Personal lists your skills from
- * `skill list --remote`, so they are read again too, whenever there is an account remote.
+ * source `source list` reports a new fetch for. Hub lists your skills from
+ * `skill list --remote`, so they are read again too, whenever there is a hub.
  */
 const refreshAll = async () => {
   const outcome = await agentx(["source", "fetch", "--all"], {
@@ -515,7 +515,7 @@ export const SourcesScreen = () => {
     }
     if (activePill.key === YOUR_SKILLS) {
       return installable !== undefined && shown.length === 0
-        ? "Every skill on your account remote is on this machine"
+        ? "Every skill on your hub is on this machine"
         : undefined;
     }
     return listing !== undefined && shown.length === 0
