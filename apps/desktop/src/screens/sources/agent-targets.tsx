@@ -7,6 +7,7 @@ import { useState } from "react";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { LockMark } from "#/components/check-mark.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import {
@@ -185,9 +186,9 @@ export const AgentTargets = ({
           >
             {`+${hidden.length}`}
             {hiddenChosen > 0 && (
-              <span className="rounded-pill bg-agent-picker-badge-bg type-key-hint text-on-accent size-agent-picker-badge inline-flex items-center justify-center self-center">
+              <Badge tone="picker-count" size="picker-count">
                 {hiddenChosen}
-              </span>
+              </Badge>
             )}
           </Button>
         )}
