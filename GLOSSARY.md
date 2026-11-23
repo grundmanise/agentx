@@ -64,6 +64,10 @@ _Avoid_: cache entry, offline data
 An inventory saved with the machine settings, in a file or on the hub, where each machine has at most one. Leaves out what only describes the machine it was taken on: absolute paths, state and drift, scan counters and physical ids. `agentx snapshot save` saves it, and `agentx snapshot apply` applies it: it installs and places the skills it lists, each at its version or, for an entry with no version, which follows, at the latest; it skips a skill it cannot install, such as an unmanaged skill, and ignores MCP servers and plugins for now. A computer takes its own as a backup, with every entry exact; the cloud machine's is written by `skill place` and `skill remove` naming it, from the desktop app or the CLI, or by the web app, and may be partial. A scan's inventory is always complete.
 _Avoid_: machine snapshot, machine document, export file, profile, manifest, pinned (for an entry's version)
 
+**Inventory report**:
+What a machine's last scan found, without what only describes that machine's disk, written to the hub so that the user's other machines can show it: the machine, its agent configurations, each skill an agent client sees with its content hash, each library skill with its logical asset, version and placements, and each plugin. One file, `inventory.json`, on the branch `reports/<machine id>`. Leaves out paths, the machine settings, MCP servers and the content of every skill. `agentx machine report` writes it, and so does serve after a change while the machine setting `report_inventory` is on, which it is only once the user turns it on. Read by every machine with that hub, and never applied. The cloud machine has none: its snapshot is shown in its place.
+_Avoid_: fleet snapshot, heartbeat, sync, upload
+
 **Cloud machine**:
 The one machine that stands for every agent client the user runs in the cloud, such as Claude Code on the web, Codex cloud or Cursor's cloud agents. It has no computer of its own: its snapshot is its only state. Its skills are turned on and off with the same `skill place` and `skill remove` as a computer's, naming the machine, which commit to its snapshot instead of changing a disk. Each session applies it when it starts and never writes it.
 _Avoid_: cloud, cloud environment, virtual machine, remote machine
@@ -140,7 +144,7 @@ Something of the user's where a fork placed on this machine belongs: a directory
 _Avoid_: orphan, stray directory
 
 **Hub**:
-The source whose settings entry carries the hub flag, added with `agentx source add <url> --hub`: the repository stores push forks to and fetch them from. In the MVP it is a Git repository: the user's own, one the user's machines share, or one someone else keeps to distribute skills, which may be read-only; later, hosted by agentx once the machine is signed in. Only hub skills' branches and snapshots travel through it.
+The source whose settings entry carries the hub flag, added with `agentx source add <url> --hub`: the repository stores push forks to and fetch them from. In the MVP it is a Git repository: the user's own, one the user's machines share, or one someone else keeps to distribute skills, which may be read-only; later, hosted by agentx once the machine is signed in. Only hub skills' branches, snapshots and inventory reports travel through it.
 _Avoid_: account remote (old name), personal, own, cloud, server, origin, fork source
 
 **Hub skill**:
