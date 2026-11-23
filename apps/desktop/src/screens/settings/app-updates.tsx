@@ -61,6 +61,7 @@ export const AppUpdatesSection = () => {
         <Button
           variant="secondary"
           aria-busy={checking ? true : undefined}
+          disabled={checking}
           onClick={() => {
             void checkAppUpdateNow();
           }}
