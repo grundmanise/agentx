@@ -1211,7 +1211,7 @@ A key or key combination such as `esc` or `⌘K` (`src/components/key-hint.tsx`)
 
 ### Inputs
 
-`input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, `type.input`; focus `input.border-focus`. `type.input-mono` for URLs and commands. List search field, shadcn's Input Group (`src/components/ui/input-group.tsx`) around the Input's `list-search` kind: `input.search-height`, `input.search-radius`, `input.search-padding`, type `type.secondary`, the magnifier on the left and the placeholder in `input.placeholder`.
+`input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, `type.input`; focus `input.border-focus`. `type.input-mono` for URLs and commands. Search fields are shadcn's Input Group (`src/components/ui/input-group.tsx`): the magnifier on the left, in `input.placeholder` like the placeholder. List search field (Input `list-search`): `input.search-height`, `input.search-radius`, `input.search-padding`, `type.secondary`, the `xs` magnifier. Sources search (Input `search`): `add-search.height`, the same radius and padding, `type.input`, the `sm` magnifier.
 
 ### Settings
 
