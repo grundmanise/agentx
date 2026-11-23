@@ -1,4 +1,4 @@
-// The History sheet of one of your own skills: each entry expands to the files its commit changed
+// The History sheet of a hub skill: each entry expands to the files its commit changed
 // and collapses again, and the subject of the commit that created a fork links to its origin's page.
 import type { Page } from "@playwright/test";
 
@@ -38,7 +38,7 @@ const start = (cli: MockCli) => {
   }
 };
 
-/** Opens pdf-letters, one of your own skills, and its History sheet. */
+/** Opens pdf-letters, a hub skill, and its History sheet. */
 const openSheet = async (cli: MockCli, page: Page) => {
   start(cli);
   await page.goto("/#/skills/pdf-letters");

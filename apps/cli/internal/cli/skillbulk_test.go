@@ -228,7 +228,7 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 	equal(t, "current", last["current"], last["total"])
 
 	// The hint's way to keep what was in the way works as it says: the
-	// adoption makes beta one of the user's own in its place, so the rename
+	// adoption makes beta a hub skill in its place, so the rename
 	// is what frees the name for the install.
 	equal(t, "the hint", lastError(t, h.events(out.stdout))["hint"],
 		"remove it with 'agentx skill remove beta', then install again; or, to keep it, import it with 'agentx skill import beta' and rename it with 'agentx skill rename beta <new>', then install again")
@@ -240,12 +240,12 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 		t.Error("beta installed from the source has no import branch")
 	}
 
-	// One of your own skills in the way is renamed instead: its branch
+	// A hub skill in the way is renamed instead: its branch
 	// would keep the name if only its directory were removed.
 	h.mustRun("skill", "fork", "gamma")
 	writeFile(t, filepath.Join(h.library, "gamma", "SKILL.md"), "---\nname: gamma\ndescription: mine\n---\n\nmine\n")
 	out = h.run("--json", "skill", "add", s.url, "--name", "gamma")
-	equal(t, "the install over your own gamma: exit", out.exit, 6)
+	equal(t, "the install over hub skill gamma: exit", out.exit, 6)
 	e := lastError(t, h.events(out.stdout))
 	contains(t, "its message", e["message"].(string), "the library already holds gamma")
 	equal(t, "its hint", e["hint"],

@@ -9,7 +9,7 @@ import (
 )
 
 // TestRenamedDrops: a publish deletes the old name's branch of each
-// skill it pushed whose branch it created on the account remote, once per
+// skill it pushed whose branch it created on the hub, once per
 // old name, by the first skill by name renamed from it, and none of a
 // skill it found up to date, of one whose name the remote held already,
 // as every later publish finds it, or of one whose old name this machine
@@ -57,7 +57,7 @@ func TestRenamedDrops(t *testing.T) {
 }
 
 // TestRenameDeleteWarning: a deletion of the old name's branch the
-// account remote rejected says why, as a removal does, and names the
+// hub rejected says why, as a removal does, and names the
 // removal that deletes it, since no later publish retries it: once the
 // default branch is another one when that is why, and with the install
 // beside the renamed skill when another machine moved it.
@@ -71,8 +71,8 @@ func TestRenameDeleteWarning(t *testing.T) {
 	}{
 		{"the default branch",
 			gitx.PushStatus{Flag: '!', Summary: "[remote rejected]", Reason: "refusing to delete the current branch: refs/heads/skills/old"},
-			"the account remote still holds skills/old: the account remote rejected its deletion: refusing to delete the current branch",
-			"make another branch the account remote's default branch on its hosting service, then delete it with 'agentx skill remove old --remote'"},
+			"the hub still holds skills/old: the hub rejected its deletion: refusing to delete the current branch",
+			"make another branch the hub's default branch on its hosting service, then delete it with 'agentx skill remove old --remote'"},
 		{"moved since the fetch",
 			gitx.PushStatus{Flag: '!', Summary: "[rejected]", Reason: "stale info"},
 			"rejected its deletion: stale info",

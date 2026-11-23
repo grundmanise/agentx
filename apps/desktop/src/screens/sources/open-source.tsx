@@ -1,6 +1,6 @@
 // The open source on the Sources screen: its card, what Refresh runs and the Remove dialog.
 // Refresh fetches a shared source, `source fetch <id>`, whose listing the screen reads again once
-// `source list` reports the new fetch; for Personal it reads your skills on the account remote
+// `source list` reports the new fetch; for Hub it reads your skills on the hub
 // again, `skill list --remote`, which fetches it.
 import { useRef, useState } from "react";
 import type { RefObject } from "react";
@@ -19,7 +19,7 @@ import { agentx, usePending } from "#/store/runner.ts";
 /** The pending label of Refresh on a shared source. */
 export const REFRESH_LABEL = "refresh source";
 
-/** The pending label of what Refresh runs: on Personal, the read of your skills. */
+/** The pending label of what Refresh runs: on Hub, the read of your skills. */
 const refreshLabel = (pill: SourcePill) =>
   pill.key === YOUR_SKILLS
     ? loadLabel(["skill", "list", "--remote"])
@@ -53,7 +53,7 @@ export const OpenSource = ({
   const onRefresh = () => {
     refresh(pill);
   };
-  // The account remote is set, changed and detached in Settings.
+  // The hub is set, changed and detached in Settings.
   if (pill.key === YOUR_SKILLS) {
     return (
       <SourceDetail

@@ -1,5 +1,5 @@
 // The machine the Skills tests run against: an inventory with a skill of every kind the screen
-// shows, the configurations that see them, and the history of one of your own skills. Inline
+// shows, the configurations that see them, and the history of a hub skill. Inline
 // events with only the fields the tests check, typed by the generated event types.
 import type {
   AdoptionEvent,
@@ -483,7 +483,7 @@ export const reviewDiffs: DiffEvent[] = [
   ),
 ];
 
-/** The edits of `release-notes`, one of your own skills: SKILL.md edited since the last publish. */
+/** The edits of `release-notes`, a hub skill: SKILL.md edited since the last publish. */
 export const releaseNotesDiffs: DiffEvent[] = [
   diffEvent(
     "release-notes",

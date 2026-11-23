@@ -1,9 +1,9 @@
 ---
-title: "Your own skills"
-description: "Create skills of your own, or fork installed ones, each with a history in the account repo."
+title: "Your hub skills"
+description: "Create hub skills, or fork installed ones, each with a history in the account repo."
 ---
 
-Your own skills are the skills you create with `agentx skill new`, fork with `agentx skill fork` or [import as they are](/cli/skill-import#skills-imported-as-they-are) with `agentx skill import`. agentx keeps the history of each one in the [account repo](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) on this machine, `~/.agentx/account.git`. To use them on your other machines, publish them to your [account remote](/account-remote), a Git repository you own. You need an account remote only when you publish. Every client sees your own skills like any other skill.
+Your hub skills are the skills you create with `agentx skill new`, fork with `agentx skill fork` or [import as they are](/cli/skill-import#skills-imported-as-they-are) with `agentx skill import`. agentx keeps the history of each one in the [account repo](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) on this machine, `~/.agentx/account.git`. To use them on your other machines, publish them to your [hub](/hub), a Git repository that may be kept by someone else. You need a hub only when you publish. Every client sees your hub skills like any other skill.
 
 A skill you fork from an installed skill keeps its upstream, the skill it came from, so you can take in newer versions later. A skill you create or import has no upstream.
 
@@ -20,7 +20,7 @@ agentx skill new release-notes --description "Write release notes from the merge
   cursor       library  /home/me/.agents/skills/release-notes
   gemini-cli   library  /home/me/.agents/skills/release-notes
   always available to universal clients: codex, cursor, gemini-cli
-No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish release-notes' to publish it.
+No hub is set: run 'agentx source add <url> --hub', then 'agentx skill publish release-notes' to publish it.
 ```
 
 The skill starts from a template: a `SKILL.md` with the name and the description in its frontmatter and a line that asks for the instructions. Open `~/.agents/skills/release-notes/SKILL.md` in your library and write the instructions. Leave out `--description` to fill it in later.
@@ -29,12 +29,12 @@ agentx links the skill into every enabled client, as [`agentx skill add`](/cli/s
 
 To publish the skill:
 
-1. Set an account remote once: `agentx source add <url> --account`. The last output line shows only while none is set.
+1. Set a hub once: `agentx source add <url> --hub`. The last output line shows only while none is set.
 2. Publish the skill by name: `agentx skill publish release-notes`.
 
 Until you publish it, `agentx skill list` shows the skill as `not published`. `agentx skill publish` with no name skips skills that you never published.
 
-`agentx skill list` shows the skill as `managed`. Its source column shows your account remote URL with `(account)`, or `account remote not set`.
+`agentx skill list` shows the skill as `managed`. Its source column shows your hub URL with `(hub)`, or `hub not set`.
 
 ### Choose a name
 
@@ -48,7 +48,7 @@ agentx refuses the name, and changes nothing, when:
 
 ## Fork a skill
 
-Fork a skill to edit it with a history of your own. You can fork a skill agentx installed, a [plugin's skill](#fork-a-plugins-skill) or [one of your own skills](#fork-one-of-your-own-skills). An installed skill is replaced by its fork:
+Fork a skill to edit it with a history of your own. You can fork a skill agentx installed, a [plugin's skill](#fork-a-plugins-skill) or [a hub skill](#fork-a-hub-skill). An installed skill is replaced by its fork:
 
 ```sh
 agentx skill fork pdf
@@ -60,7 +60,7 @@ agentx skill fork pdf
 
 - The fork takes the skill's place in your library, under the same name. Each client that reads the library, or has a link to the skill, now sees the fork. See [What each client sees after a fork](#what-each-client-sees-after-a-fork).
 - The fork keeps the skill's files as they are now, your edits included.
-- The fork is one of your own skills. [Publish it](#create-a-skill) as you publish a skill you create.
+- The fork is a hub skill. [Publish it](#create-a-skill) as you publish a skill you create.
 - A fork of an installed skill remembers the version it came from, so `agentx skill list` shows its upstream after `from`, and you can update it to newer versions later.
 - [Files that stay local](#files-that-stay-local), such as a `.DS_Store`, move with the skill and are never published.
 
@@ -71,7 +71,7 @@ error: notes is not managed by agentx, so it cannot be forked
 hint: import it first with 'agentx skill import notes'
 ```
 
-Importing makes it one of your own skills, with its files as they are. See [Skills imported as they are](/cli/skill-import#skills-imported-as-they-are).
+Importing makes it a hub skill, with its files as they are. See [Skills imported as they are](/cli/skill-import#skills-imported-as-they-are).
 
 agentx cannot fork a skill in its place, and stops with exit code 6, when:
 
@@ -101,9 +101,9 @@ agentx skill fork pdf --name my-pdf
 - The fork goes into the same clients as the skill, with a copy wherever the skill has a copy.
 - Use a new name to fork a skill whose own name breaks the [naming rule](#choose-a-name), such as `My_Skill`.
 
-### Fork one of your own skills
+### Fork a hub skill
 
-One of your own skills already owns its name, so fork it under a new one: `agentx skill fork my-pdf --name pdf-letters`. The new skill starts from the last commit of the one you fork and keeps its history. The new skill includes your unpublished edits. Publish it to put it on your account remote. See [Unpublished edits are kept](#unpublished-edits-are-kept).
+A hub skill already owns its name, so fork it under a new one: `agentx skill fork my-pdf --name pdf-letters`. The new skill starts from the last commit of the one you fork and keeps its history. The new skill includes your unpublished edits. Publish it to put it on your hub. See [Unpublished edits are kept](#unpublished-edits-are-kept).
 
 The new skill holds the skill's folder alone. A file you committed with Git next to the folder, such as a `README.md` at the root of the worktree, stays with the skill you forked. If the original skill is missing from your library, agentx does not place the new skill in any client. Place it with [`agentx skill place`](/cli/skill#place-a-skill-you-already-have).
 
@@ -144,13 +144,13 @@ When a client has more than one skill with the same name, the client decides whi
 
 ## Publish your edits
 
-Edit one of your own skills in any editor or agent, through your library. `agentx skill list` shows it as `modified` until you publish the edits. agentx publishes only when you run `agentx skill publish`.
+Edit a hub skill in any editor or agent, through your library. `agentx skill list` shows it as `modified` until you publish the edits. agentx publishes only when you run `agentx skill publish`.
 
 ```sh
 agentx skill publish release-notes -m "Cover reverted pull requests"
 ```
 
-Publishing records your edits as one commit and pushes it to your account remote. See [Publish a skill](/cli/skill#publish-a-skill). You can also commit with Git in `~/.agentx/worktrees/<name>`. The next publish pushes your commits. With `-m`, it combines them into one commit with your message.
+Publishing records your edits as one commit and pushes it to your hub. See [Publish a skill](/cli/skill#publish-a-skill). You can also commit with Git in `~/.agentx/worktrees/<name>`. The next publish pushes your commits. With `-m`, it combines them into one commit with your message.
 
 ### Unpublished edits are kept
 
@@ -189,7 +189,7 @@ e07d5b2  2026-10-01 09:12  Create release-notes  1 file
 - An upstream version, the one the fork started from or one an update merged in, is dated by its upstream commit.
 - With `--json`, each commit is a `history` event with its full message, its author and the machine that wrote it. Its `kind` says what the commit did: `fork`, `create`, `adopt`, `rename`, `edit`, `update` (a newer upstream version merged), `sync` (edits from another machine merged), `git` (made with Git) or `upstream` (a version of the source's skill that agentx stored). A commit with no machine was made with Git. A file outside the skill folder, such as a `README.md` at the root of the worktree, starts with `../`.
 
-In the desktop app, select one of your own skills in **Skills**. **History** lists its latest commits; select **Show all** to see every commit and the files each one changed. When agentx knows the web page of the skill a fork came from, such as a plugin's repository, the name of the plugin, source or skill in the commit that created the fork is a link: select it to open the page in your browser. For a fork of a source's skill on GitHub, GitLab or Bitbucket, the fork's name is a link too: it opens the skill's folder at the commit you forked. A fork made with an earlier version of agentx has no link.
+In the desktop app, select a hub skill in **Skills**. **History** lists its latest commits; select **Show all** to see every commit and the files each one changed. When agentx knows the web page of the skill a fork came from, such as a plugin's repository, the name of the plugin, source or skill in the commit that created the fork is a link: select it to open the page in your browser. For a fork of a source's skill on GitHub, GitLab or Bitbucket, the fork's name is a link too: it opens the skill's folder at the commit you forked. A fork made with an earlier version of agentx has no link.
 
 ## See what changed
 
@@ -220,11 +220,11 @@ agentx skill update release-notes
 
 - agentx merges the new version into your fork. Your changes are kept, and upstream changes to lines you did not touch come in.
 - The merge is committed on the skill's branch, as `release-notes: merge upstream 5d6e7f8 (laptop)`. Nothing is pushed: the fork shows as `modified` until you [publish](/cli/skill#publish-a-skill) it.
-- With an [account remote](/account-remote) set, agentx first [updates the fork to what your other machines published](/cli/skill#update-to-what-another-machine-published), then merges the new version on top, as two commits. If Git cannot reach the remote, agentx warns and takes the upstream version alone.
+- With a [hub](/hub) set, agentx first [updates the fork to what your other machines published](/cli/skill#update-to-what-another-machine-published), then merges the new version on top, as two commits. If Git cannot reach the remote, agentx warns and takes the upstream version alone.
 - Your unpublished edits are kept. See [Unpublished edits are kept](#unpublished-edits-are-kept).
 - [Files that stay local](#files-that-stay-local) are kept. If the new version holds a file at a path your ignore rules cover, that file replaces your local one, as `git checkout` does.
-- `agentx skill update --all` updates every managed skill with an update, your own skills included.
-- A skill you created or imported, or forked from a plugin's skill, has no upstream. For such a skill, `skill update` only takes what your other machines published. Without an account remote, it stops with exit code 6.
+- `agentx skill update --all` updates every managed skill with an update, your hub skills included.
+- A skill you created or imported, or forked from a plugin's skill, has no upstream. For such a skill, `skill update` only takes what your other machines published. Without a hub, it stops with exit code 6.
 - If two machines took different upstream versions, run `agentx source fetch` before you update.
 
 ### Resolve a conflict
@@ -244,7 +244,7 @@ To skip Git, edit the files in the folder, save them, and run `agentx skill upda
 - If you edit the skill while the merge waits, agentx keeps the edits. If they conflict, resolve them the same way.
 - Give the merge up with `agentx skill update <name> --abort`. Your skill, its branch and the update stay as they were.
 
-A conflict with what another machine published waits the same way. The first line then reads `release-notes conflicts with the account remote in 1 file`. See [Update to what another machine published](/cli/skill#update-to-what-another-machine-published).
+A conflict with what another machine published waits the same way. The first line then reads `release-notes conflicts with the hub in 1 file`. See [Update to what another machine published](/cli/skill#update-to-what-another-machine-published).
 
 - A binary file or a symlink that both machines changed conflicts as a whole, with no markers: the waiting merge holds this machine's version. Keep it, or take the other machine's with `git checkout --theirs <file>`, then `git add` it.
 - If two machines take the same upstream version, publish from one and update the other before you edit again. Otherwise the next update can conflict. Resolve it and keep the lines you want.
@@ -265,11 +265,11 @@ agentx writes commits with your Git `user.name` and `user.email`. If you have no
 
 ### Files that stay local
 
-Publishing one of your own skills records what Git would record in any repository: files your `.gitignore`, your global Git ignore file or the [`ignore_system_files`](/cli/config) list cover stay on your machine and are never published. If the skill holds a Git repository, agentx refuses to publish it. To publish anyway, list that repository in the skill's `.gitignore`.
+Publishing a hub skill records what Git would record in any repository: files your `.gitignore`, your global Git ignore file or the [`ignore_system_files`](/cli/config) list cover stay on your machine and are never published. If the skill holds a Git repository, agentx refuses to publish it. To publish anyway, list that repository in the skill's `.gitignore`.
 
-## Recover a skill of your own
+## Recover a hub skill
 
-agentx puts one of your own skills back from its branch when something on disk went missing. `agentx skill list` names what is wrong, and so does the desktop app; any other `agentx skill` command warns about it once before its own output. Fix it with `skill place`:
+agentx puts a hub skill back from its branch when something on disk went missing. `agentx skill list` names what is wrong, and so does the desktop app; any other `agentx skill` command warns about it once before its own output. Fix it with `skill place`:
 
 ```sh
 agentx skill place release-notes
@@ -313,9 +313,9 @@ If the folder has no `SKILL.md`, `skill place` stops with exit code 5 and change
 
 What you adopt shows up as unpublished edits. Keep them with `agentx skill publish <name>`. `--force` on a skill with nothing in the way stops with exit code 6.
 
-## Rename a skill of your own
+## Rename a hub skill
 
-Rename one of your own skills with `skill rename`:
+Rename a hub skill with `skill rename`:
 
 ```sh
 agentx skill rename release-notes changelog
@@ -331,13 +331,13 @@ A rename works on this machine alone. The old name's folder, worktree and branch
 - The renamed skill is the same skill: it keeps its id and every commit of the old one. Its `SKILL.md` carries the new name.
 - It is placed where the old one was, as a copy wherever the old one was a copy.
 - If the new name is taken or a merge is waiting, the rename stops and nothing changes. Your unpublished edits move to the renamed skill. See [Unpublished edits are kept](#unpublished-edits-are-kept).
-- Only your own skills can be renamed. A skill you installed from a shared source, or one agentx does not manage, stops with exit code 6. [Import](/cli/skill-import#skills-imported-as-they-are) an unmanaged skill first.
+- Only your hub skills can be renamed. A skill you installed from a shared source, or one agentx does not manage, stops with exit code 6. [Import](/cli/skill-import#skills-imported-as-they-are) an unmanaged skill first.
 - Only the skill folder moves. Files Git ignores, such as a local `.env`, and files beside the skill folder in the worktree are deleted. Copy the ones you want first.
 - The renamed skill shows as `modified` until you publish it under its new name.
 
-In the desktop app, open one of your own skills and select **Rename**, type the new name, then select **Rename**.
+In the desktop app, open a hub skill and select **Rename**, type the new name, then select **Rename**.
 
-The first publish of the new name renames it on the account remote:
+The first publish of the new name renames it on the hub:
 
 ```sh
 agentx skill publish changelog
@@ -345,20 +345,20 @@ agentx skill publish changelog
 
 ```text
 ✓ published changelog as 3f2a9c1
-✓ deleted skills/release-notes from the account remote (renamed to changelog)
+✓ deleted skills/release-notes from the hub (renamed to changelog)
 ```
 
-- The first publish under the new name removes the old name from your account remote. If it cannot, it warns once. Then remove the old name with `agentx skill remove <old> --remote`.
+- The first publish under the new name removes the old name from your hub. If it cannot, it warns once. Then remove the old name with `agentx skill remove <old> --remote`.
 - Your other machines keep the old name until you remove it there. To get the new name there, run `agentx skill add --name <new>`, then `agentx skill remove <old>`.
-- If the account remote refuses because the old branch is its default branch, make another branch the default, then run `agentx skill remove <old> --remote`.
+- If the hub refuses because the old branch is its default branch, make another branch the default, then run `agentx skill remove <old> --remote`.
 
 If the removal fails after the renamed skill was made, the error says so. Finish the rename with the `agentx skill remove <old>` command it names.
 
 If you edited or committed to the old skill while the rename ran, the removal stops, since the renamed skill lacks that work. To keep it, remove the renamed skill with `agentx skill remove <new>` and run the rename again, which records the edits. To drop it, run `agentx skill remove <old>`.
 
-## Remove a skill of your own
+## Remove a hub skill
 
-Remove one of your own skills from this machine with `skill remove`:
+Remove a hub skill from this machine with `skill remove`:
 
 ```sh
 agentx skill remove release-notes
@@ -367,38 +367,38 @@ agentx skill remove release-notes
 - agentx removes the skill from every client, your library and `~/.agentx`.
 - Unpublished edits are deleted. Publish them first to keep them.
 - If a merge is waiting, or Git is running in the worktree, agentx does not remove the skill. Finish or abort first.
-- The skill's branch stays on the account remote, and every other machine keeps the skill until you remove it there.
+- The skill's branch stays on the hub, and every other machine keeps the skill until you remove it there.
 
-Add `--remote` to delete the skill's branch from the account remote as well:
+Add `--remote` to delete the skill's branch from the hub as well:
 
 ```sh
 agentx skill remove release-notes --remote
 ```
 
-- Run it again if the account remote could not be reached. With the skill gone from this machine, it deletes the branch on the account remote alone.
+- Run it again if the hub could not be reached. With the skill gone from this machine, it deletes the branch on the hub alone.
 - A hosting service refuses to delete a repository's default branch. If the first skill you published became the default branch, make another branch the default on the hosting service, then run the command again.
-- If the account remote's branch of that name is [another skill](/cli/skill#two-skills-with-one-name), agentx refuses to delete it.
+- If the hub's branch of that name is [another skill](/cli/skill#two-skills-with-one-name), agentx refuses to delete it.
 
-Your other machines keep the skill. The next time one of them fetches the account remote, it shows the skill as `not published`, as it shows a skill you never published:
+Your other machines keep the skill. The next time one of them fetches the hub, it shows the skill as `not published`, as it shows a skill you never published:
 
 - With no published version left to compare with, that machine compares the skill with the commit that created it, so it also shows as `modified` if it changed since then.
 - A bare `agentx skill publish` there skips the skill and names it, so it does not bring the branch back.
-- Remove it there with `agentx skill remove <name>`. To keep it on the account remote after all, publish it by name from that machine with `agentx skill publish <name>`, which puts its branch back.
+- Remove it there with `agentx skill remove <name>`. To keep it on the hub after all, publish it by name from that machine with `agentx skill publish <name>`, which puts its branch back.
 
-To take one of your own skills out of one configuration only, use `--from`, as for any skill: see [Remove a skill](/cli/skill#remove-a-skill).
+To take a hub skill out of one configuration only, use `--from`, as for any skill: see [Remove a skill](/cli/skill#remove-a-skill).
 
 ## Exit codes
 
-For what each code means, see [Exit codes](/cli/output#exit-codes). For `agentx skill publish`, see the [`agentx skill` exit codes](/cli/skill#exit-codes). These causes are special to your own skills:
+For what each code means, see [Exit codes](/cli/output#exit-codes). For `agentx skill publish`, see the [`agentx skill` exit codes](/cli/skill#exit-codes). These causes are special to your hub skills:
 
 | Code | Cause | What to do |
 |---|---|---|
 | 1 | `skill remove` is given both `--remote` and `--from`; `skill rename` is given the skill's own name; the description is more than one line, holds a control character or is longer than 1024 bytes; `skill diff` is given both `--update` and `--commit`, or an empty `--commit`. | Fix the command line. |
-| 3 | `skill remove --remote` cannot reach the account remote, or the remote refused to delete the skill's branch. `skill update` cannot reach the account remote for a skill with no upstream. | Check your network and credentials, then run the command again. |
+| 3 | `skill remove --remote` cannot reach the hub, or the remote refused to delete the skill's branch. `skill update` cannot reach the hub for a skill with no upstream. | Check your network and credentials, then run the command again. |
 | 4 | The skill you fork, rename or remove has a merge pending, or `skill update` left a merge for you to [resolve](#resolve-a-conflict). | Finish the merge, or give it up with `agentx skill update <name> --abort`. |
-| 5 | agentx cannot find the skill you named in your library or in a plugin. For `skill remove --remote`, the account remote does not hold it either. `skill place` finds no `SKILL.md`. `skill update` names a forked skill whose upstream source you removed. | Check the name. Add a `SKILL.md`, or add the source again. |
+| 5 | agentx cannot find the skill you named in your library or in a plugin. For `skill remove --remote`, the hub does not hold it either. `skill place` finds no `SKILL.md`. `skill update` names a forked skill whose upstream source you removed. | Check the name. Add a `SKILL.md`, or add the source again. |
 | 6 | The name breaks the [naming rule](#choose-a-name), or a skill or folder already has it. | Choose another name. |
-| 6 | The skill cannot be forked, renamed, updated or removed as it is. For example: it is not one of your own skills; agentx does not manage it, in which case [import it](/cli/skill-import#skills-imported-as-they-are) first; an installed skill is missing from the library, so there is nothing to fork; several plugins provide the name; the skill holds a Git repository its `.gitignore` does not cover; Git is running in its worktree; the account remote holds [another skill](/cli/skill#two-skills-with-one-name) of that name; or the skill has no upstream and no account remote is set. | Read the message, then see the section for that command. |
+| 6 | The skill cannot be forked, renamed, updated or removed as it is. For example: it is not a hub skill; agentx does not manage it, in which case [import it](/cli/skill-import#skills-imported-as-they-are) first; an installed skill is missing from the library, so there is nothing to fork; several plugins provide the name; the skill holds a Git repository its `.gitignore` does not cover; Git is running in its worktree; the hub holds [another skill](/cli/skill#two-skills-with-one-name) of that name; or the skill has no upstream and no hub is set. | Read the message, then see the section for that command. |
 | 6 | A folder is in the way, or `--force` is given with nothing in the way. | See [Something in the way](#something-in-the-way). |
 | 6 | The skill changed while the command ran. | Run the command again. |
 | 7 | Another agentx command is running. | Retry when it finishes. |

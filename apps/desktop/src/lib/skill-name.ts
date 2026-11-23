@@ -1,4 +1,4 @@
-// The name a skill of your own can take: the Agent Skills name grammar the CLI checks for
+// The name a hub skill can take: the Agent Skills name grammar the CLI checks for
 // `skill new` and `skill fork --name` (docs/spec/cli-contract.md, "Creating a skill"). A field
 // checks a name here before it runs the command; the CLI still has the last word, since only it
 // knows which names are taken.

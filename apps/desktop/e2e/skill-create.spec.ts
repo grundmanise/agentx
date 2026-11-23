@@ -1,6 +1,6 @@
 // The Create skill dialog, from the Skills header: the name checked as the CLI
 // checks it, `skill new` with `--description` only when one is given, the new skill selected under
-// PERSONAL once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
+// HUB once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
 // Settings, and a refused name's message under Name. And the Add skill dialog, which Add opens:
 // Find skills runs `source skills` on the pasted link, the skills picked go to the agents chosen
 // with one `skill add`, which adds the source, the first is selected once the inventory lists it,
@@ -59,8 +59,7 @@ const later = (cli: MockCli) =>
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
 const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
-const yours = (page: Page) =>
-  list(page).getByRole("region", { name: /^PERSONAL/u });
+const yours = (page: Page) => list(page).getByRole("region", { name: /^HUB/u });
 const pane = (page: Page, name: string) =>
   page
     .getByRole("region", { name: "Skill details" })
@@ -461,8 +460,7 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
     events: [
       {
         hint: "choose another name",
-        message:
-          "the account repo already holds release-notes as one of your own skills",
+        message: "the account repo already holds release-notes as a hub skill",
         type: "error",
       },
     ],
@@ -473,7 +471,7 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
   const alert = dialog(page).getByRole("alert");
   // The message and the hint as one sentence-cased paragraph.
   await expect(alert).toHaveText(
-    "The account repo already holds release-notes as one of your own skills. Choose another name."
+    "The account repo already holds release-notes as a hub skill. Choose another name."
   );
   await expect(nameField(page)).toHaveAttribute("aria-invalid", "true");
   await expect(dialog(page)).toBeVisible();

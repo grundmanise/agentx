@@ -27,7 +27,7 @@ The desktop app runs serve with [`--json`](/cli/output#json-output) and talks to
 
 Serve watches agentx home (`~/.agentx`), the library and the skills directory of every agent client agentx knows, such as `~/.claude/skills`. It does not watch the clients' MCP configuration files: a change there shows at the next rescan.
 
-Serve sees a skill added, removed or edited, whatever tool made the change. The next inventory shows it. A skill of your own shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits for you.
+Serve sees a skill added, removed or edited, whatever tool made the change. The next inventory shows it. A hub skill shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits for you.
 
 ## What serve repairs at start
 
@@ -41,14 +41,14 @@ inventory 1: 3 configurations, 6 skills
 
 | Outcome | What it means | What to do |
 |---|---|---|
-| `repaired` | One of your own skills had a missing or broken [worktree](/cli/fork#where-your-skills-live) or library symlink, for example after you moved `~/.agentx`. Serve checked it out again from its branch. | Nothing. |
-| `worktree missing` | Serve could not repair one of your own skills. A Git command you ran in its worktree, such as a merge, is unfinished, or the worktree is on another branch. | Finish or abort the Git command, or switch the worktree back to the skill's branch. Then run [`agentx skill place <name>`](/cli/fork#recover-a-skill-of-your-own). |
-| `adopt candidate` | A folder of yours is where one of your own skills belongs. Serve leaves it as it is. | Adopt it with [`agentx skill place <name> --force`](/cli/fork#something-in-the-way). |
+| `repaired` | A hub skill had a missing or broken [worktree](/cli/fork#where-your-skills-live) or library symlink, for example after you moved `~/.agentx`. Serve checked it out again from its branch. | Nothing. |
+| `worktree missing` | Serve could not repair a hub skill. A Git command you ran in its worktree, such as a merge, is unfinished, or the worktree is on another branch. | Finish or abort the Git command, or switch the worktree back to the skill's branch. Then run [`agentx skill place <name>`](/cli/fork#recover-a-hub-skill). |
+| `adopt candidate` | A folder of yours is where a hub skill belongs. Serve leaves it as it is. | Adopt it with [`agentx skill place <name> --force`](/cli/fork#something-in-the-way). |
 | `modified` | You edited a skill you installed from a source. | Nothing. |
-| `installable` | A skill you installed whose folder is gone, or one of your own skills that is not placed on this machine. | Install a skill of a source again with `agentx skill add <source> --name <name>`, or stop managing it with `agentx skill remove <name>`. Place one of your own skills with `agentx skill place <name>`, or install it from your account remote with `agentx skill add --name <name>`. |
+| `installable` | A skill you installed whose folder is gone, or a hub skill that is not placed on this machine. | Install a skill of a source again with `agentx skill add <source> --name <name>`, or stop managing it with `agentx skill remove <name>`. Place a hub skill with `agentx skill place <name>`, or install it from your hub with `agentx skill add --name <name>`. |
 | `unmanaged` | A folder in your library that no source manages. | Nothing. |
 
-An edited skill of your own prints no line here. [`agentx skill list`](/cli/skill#list-your-skills) shows it as `modified` until you publish your edits.
+An edited hub skill prints no line here. [`agentx skill list`](/cli/skill#list-your-skills) shows it as `modified` until you publish your edits.
 
 Serve repairs only what is missing or broken. It does not delete or overwrite your files.
 
@@ -59,11 +59,11 @@ When serve starts, it checks your [managed skills](/cli/skill#list-your-skills) 
 The check also:
 
 - Fetches every source you added, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) does, including sources you have not installed from.
-- Fetches your account remote when one of your own skills is placed on this machine, and reports what your other machines published to it.
+- Fetches your hub when a hub skill is placed on this machine, and reports what your other machines published to it.
 
 The check only records what it found. Apply an update with [`agentx skill update`](/cli/skill#update-a-skill).
 
-While serve runs, it also checks your [account remote](/account-remote) every 10 minutes for what your other machines published. This check is light: it asks the remote which versions it holds, and fetches only when they differ from what this machine last fetched. If the account remote cannot be reached, serve warns once and stays quiet until a check succeeds again.
+While serve runs, it also checks your [hub](/hub) every 10 minutes for what your other machines published. This check is light: it asks the remote which versions it holds, and fetches only when they differ from what this machine last fetched. If the hub cannot be reached, serve warns once and stays quiet until a check succeeds again.
 
 A source that cannot be fetched, because you are offline or the repository moved, is a warning starting `update check:` that names it and any skills it left unchecked:
 

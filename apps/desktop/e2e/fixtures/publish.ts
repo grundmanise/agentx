@@ -1,8 +1,8 @@
-// The machine the Publish tests run against: one of your own skills edited since it was
+// The machine the Publish tests run against: a hub skill edited since it was
 // published, one never published, an edited skill of a source this machine can write to, an
 // edited skill of a read-only source and a skill of a source as it was installed. `source list`
-// answers with the account remote and both sources, or, on the second machine, without the
-// account remote. Inline events with only the fields the tests check.
+// answers with the hub and both sources, or, on the second machine, without the
+// hub. Inline events with only the fields the tests check.
 import type {
   DiffEvent,
   LibraryEntry,
@@ -91,10 +91,10 @@ const shared: InlineEvent[] = [
   { access: "read-only", id: "3333333333333333", type: "source", url: ZETA },
 ];
 
-/** What `source list` answers: the account remote and two shared sources. */
+/** What `source list` answers: the hub and two shared sources. */
 export const sources: InlineEvent[] = [accountRemote, ...shared];
 
-/** What `source list` answers on a machine with no account remote set. */
+/** What `source list` answers on a machine with no hub set. */
 export const sourcesWithoutAccount: InlineEvent[] = shared;
 
 const diff = (

@@ -137,8 +137,8 @@ func TestSkillHistoryListsEveryCommit(t *testing.T) {
 		name, message string
 		exit          int
 	}{
-		{"beta", "beta is not a skill of the account remote, so it has no history of its own", 6},
-		{"mine", "mine is not a skill of the account remote, so it has no history", 6},
+		{"beta", "beta is not a skill of the hub, so it has no history of its own", 6},
+		{"mine", "mine is not a skill of the hub, so it has no history", 6},
 		{"nowhere", `the library holds no skill called "nowhere"`, 5},
 	} {
 		out := h.run("--json", "skill", "history", c.name)
@@ -274,7 +274,7 @@ func TestDescribeHistory(t *testing.T) {
 			kind: historyUpdate, label: "laptop", generated: true, upstream: wantUpstream},
 		{name: "an update the user committed", subject: "Take the new examples", t: machine, parents: []string{"t", "i"}, first: tip, second: imported,
 			kind: historyUpdate, upstream: wantUpstream},
-		{name: "another machine's edits", subject: "pdf-letters: merge the account remote (studio mac)", t: machine, parents: []string{"t", "o"}, first: tip,
+		{name: "another machine's edits", subject: "pdf-letters: merge the hub (studio mac)", t: machine, parents: []string{"t", "o"}, first: tip,
 			kind: historySync, label: "studio mac", generated: true},
 		{name: "recorded edits", subject: "pdf-letters: edit SKILL.md and add examples.md (laptop)", t: machine, parents: []string{"t"}, first: tip,
 			files: edited, kind: historyEdit, label: "laptop", generated: true},

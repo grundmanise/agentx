@@ -22,12 +22,12 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 	var newName string
 	cmd := &cobra.Command{
 		Use:         "fork <name>",
-		Short:       "Fork a skill into one of your own, with a history",
+		Short:       "Fork a skill into a hub skill, with a history",
 		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "Fork the skill called <name>: a skill of a shared source, a skill a plugin\n" +
-			"provides, or one of your own. The fork is one of your own skills: a managed\n" +
-			"skill whose source is your account remote, which 'agentx skill publish <name>'\n" +
-			"publishes it to; no account remote needs to be set until then. It gets its own\n" +
+			"provides, or a hub skill. The fork is a hub skill: a managed\n" +
+			"skill whose source is your hub, which 'agentx skill publish <name>'\n" +
+			"publishes it to; no hub needs to be set until then. It gets its own\n" +
 			"branch, skills/<name>, in the account repo, whose first commit holds the skill\n" +
 			"as it is now, edits included, checked out as a worktree in agentx home, and the\n" +
 			"library holds a symlink to it. The fork of a skill of a shared source keeps that\n" +
@@ -37,8 +37,8 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 			"into the fork's worktree and every placement stays as it was. With --name <new>\n" +
 			"the fork is made beside the skill, under the new name, which it also writes into\n" +
 			"SKILL.md, and placed into the configurations the skill is placed in; the skill\n" +
-			"stays as it was. One of your own skills, and a plugin's skill, is always forked\n" +
-			"beside it. The unpublished edits of one of your own are recorded on its branch\n" +
+			"stays as it was. A hub skill, and a plugin's skill, is always forked\n" +
+			"beside it. The unpublished edits of a hub skill are recorded on its branch\n" +
 			"first, so the new skill holds them too; the skill you fork keeps showing them as\n" +
 			"unpublished until 'agentx skill publish <name>', while the new one starts from\n" +
 			"them and reads current.\n\n" +
@@ -308,7 +308,7 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 		if named {
 			return fail(exitRefused, "the fork is already called "+sanitised(src.name), fk.takenHint(records))
 		}
-		return fail(exitRefused, sanitised(src.name)+" is already one of your own skills",
+		return fail(exitRefused, sanitised(src.name)+" is already a hub skill",
 			"fork it under a new name with '"+skillCommand("fork", src.name, "--name", "<new>")+"'")
 	}
 	if refusal := forkNameRefusal(fk.target); refusal != "" {

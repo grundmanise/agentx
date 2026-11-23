@@ -56,8 +56,8 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 	equal(t, "state", h.eventsOfType(after.stdout, "library_skill")[0]["state"], "modified")
 
 	// The text says where each skill is published to: a skill of a shared
-	// source its source's URL and directory; one of your own, made by skill
-	// new or skill fork, the account remote, marked as source list marks
+	// source its source's URL and directory; a hub skill, made by skill
+	// new or skill fork, the hub, marked as source list marks
 	// it, and a forked one the upstream it came from too; an unmanaged one
 	// none. Neither command publishes, so both read not published.
 	remote := newAccountRemote(t, h)
@@ -73,8 +73,8 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 		cells[fields[0]] = fields[1:]
 	}
 	equal(t, "alpha's row", cells["alpha"][0]+"|"+cells["alpha"][2], "managed|"+upstream)
-	equal(t, "gamma's row", strings.Join(cells["gamma"], "|"), "managed|current, not published|"+account+" (account)|4 placements")
-	equal(t, "delta's row", strings.Join(cells["delta"], "|"), "managed|current, not published|"+account+" (account), from "+upstream+"|4 placements")
+	equal(t, "gamma's row", strings.Join(cells["gamma"], "|"), "managed|current, not published|"+account+" (hub)|4 placements")
+	equal(t, "delta's row", strings.Join(cells["delta"], "|"), "managed|current, not published|"+account+" (hub), from "+upstream+"|4 placements")
 	equal(t, "mine's row", strings.Join(cells["mine"], "|"), "unmanaged|-|(none)|2 placements")
 }
 
@@ -110,7 +110,7 @@ func TestSkillListReadsLineageFromTheBranchesAlone(t *testing.T) {
 }
 
 // TestSkillListReportsAFork reads the fork namespace too, so that a branch
-// written there is listed as a managed skill (one of your own) rather
+// written there is listed as a managed skill (a hub skill) rather
 // than as an unmanaged directory. The branch is made with plain git and
 // the library holds a directory of its own under its name, not the
 // symlink into the fork's worktree, so the directory is not the fork's
@@ -152,8 +152,8 @@ func TestSkillListWithoutALibrary(t *testing.T) {
 // of a listing and of an inventory over skills that differ every way drift
 // reads: alpha edited, a file of it made executable, with a candidate and a
 // pending merge; beta displaced in one configuration, missing from another,
-// removed upstream, and holding a file the system-file list names; a skill
-// of the user's own; and a managed branch with no library directory and no
+// removed upstream, and holding a file the system-file list names; a hub
+// skill; and a managed branch with no library directory and no
 // lineage, which a warning names; and two skills made by skill new, whose lineage
 // their own history holds, one as its tip records it and one edited. All
 // of it comes from one for-each-ref, one walk of the forks' histories and
@@ -284,7 +284,7 @@ func TestSkillListSanitisesTheName(t *testing.T) {
 }
 
 // TestSourceCell is the source column of every listing over each kind of
-// skill and each state of the account remote, then each listing's row
+// skill and each state of the hub, then each listing's row
 // passing it what its event says.
 func TestSourceCell(t *testing.T) {
 	t.Parallel()
@@ -300,27 +300,27 @@ func TestSourceCell(t *testing.T) {
 		account, want   string
 	}{
 		{"unmanaged, or an import agentx cannot read", false, "", nil, "", nil, account, "(none)"},
-		{"unmanaged, no account remote", false, "", nil, "", nil, "", "(none)"},
+		{"unmanaged, no hub", false, "", nil, "", nil, "", "(none)"},
 		{"a shared source at its root", false, shared, &root, "", nil, account, shared},
 		{"a shared source's directory", false, shared, &dir, "", nil, account, shared + "/tools/pdf"},
-		{"a shared source, no account remote", false, shared, nil, "", nil, "", shared},
-		{"your own", true, account, nil, "", nil, account, account + " (account)"},
-		{"your own, forked", true, account, nil, up, &dir, account, account + " (account), from " + up + "/tools/pdf"},
-		{"your own, forked from a root", true, account, nil, up, &root, account, account + " (account), from " + up},
-		{"your own, no account remote", true, "", nil, "", nil, "", "account remote not set"},
-		{"your own, forked, no account remote", true, "", nil, up, nil, "", "account remote not set, from " + up},
+		{"a shared source, no hub", false, shared, nil, "", nil, "", shared},
+		{"a hub skill", true, account, nil, "", nil, account, account + " (hub)"},
+		{"a hub skill, forked", true, account, nil, up, &dir, account, account + " (hub), from " + up + "/tools/pdf"},
+		{"a hub skill, forked from a root", true, account, nil, up, &root, account, account + " (hub), from " + up},
+		{"a hub skill, no hub", true, "", nil, "", nil, "", "hub not set"},
+		{"a hub skill, forked, no hub", true, "", nil, up, nil, "", "hub not set, from " + up},
 		{"a shared source, sanitised", false, shared, &nasty, "", nil, account, shared + "/na [31msty"},
-		{"your own, sanitised", true, account + "\x1b[1m", nil, up, &nasty, account + "\x1b[1m", account + " [1m (account), from " + up + "/na [31msty"},
+		{"a hub skill, sanitised", true, account + "\x1b[1m", nil, up, &nasty, account + "\x1b[1m", account + " [1m (hub), from " + up + "/na [31msty"},
 	} {
 		got := sourceCell(c.own, c.source, c.subpath, c.upstream, c.upstreamSubpath, c.account).text
 		equal(t, c.name, got, c.want)
 	}
 
-	// Each listing says which skills are your own: skill list by the
+	// Each listing says which skills are hub skills: skill list by the
 	// lineage, and skill list --remote lists nothing else.
 	w := &writer{}
 	equal(t, "skill list", row(w, librarySkillEvent{LibraryEntry: scan.LibraryEntry{Kind: lineage.KindManaged, Source: account, Upstream: up}, own: true}, account)[3].text,
-		account+" (account), from "+up)
+		account+" (hub), from "+up)
 	equal(t, "skill list --remote", installableRow(w, installableSkillEvent{Name: "alpha", Source: account, Upstream: up, UpstreamSubpath: &dir})[3].text,
-		account+" (account), from "+up+"/tools/pdf")
+		account+" (hub), from "+up+"/tools/pdf")
 }

@@ -24,7 +24,7 @@
       {
         "group": "Get started",
         "icon": "rocket",
-        "pages": ["index", "install", "account-remote", "cloud"]
+        "pages": ["index", "install", "hub", "cloud"]
       },
       {
         "group": "Inventory",
@@ -54,6 +54,12 @@
   "contextual": {
     "options": ["copy", "view", "claude", "chatgpt", "cursor"]
   },
+  "redirects": [
+    {
+      "source": "/account-remote",
+      "destination": "/hub"
+    }
+  ],
   "navbar": {
     "links": [
       {

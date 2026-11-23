@@ -121,7 +121,7 @@ const openSources = async (cli: MockCli, page: Page, first = inventory) => {
 const commandLines = (cli: MockCli) =>
   later(cli).map((line) => line.slice(0, -1).join(" "));
 
-test("the sources row: one pill per shared source, Personal, the counts and the stale dots", async ({
+test("the sources row: one pill per shared source, Hub, the counts and the stale dots", async ({
   cli,
   page,
 }) => {
@@ -129,16 +129,16 @@ test("the sources row: one pill per shared source, Personal, the counts and the 
   expect(await names(sourcesRow(page))).toEqual([
     "acme/skills",
     "zeta/tools",
-    "Personal",
+    "Hub",
   ]);
   await expect(pill(page, "acme/skills")).toHaveAttribute(
     "aria-pressed",
     "true"
   );
-  // A count once the listing is read; Personal's from `source list`.
+  // A count once the listing is read; Hub's from `source list`.
   await expect(pill(page, "acme/skills")).toHaveText("acme/skills8");
   await expect(pill(page, "zeta/tools")).toHaveText("zeta/tools");
-  await expect(pill(page, "Personal")).toHaveText("Personal2");
+  await expect(pill(page, "Hub")).toHaveText("Hub2");
   await expect(
     pill(page, "acme/skills").getByTitle("Not checked in 3 days")
   ).toBeAttached();
@@ -185,8 +185,8 @@ test("the open source's card: its name, its full URL linking to the repository, 
   await pill(page, "zeta/tools").click();
   await expect(fact(page, "Fetched")).toHaveText("Not yet");
 
-  // The account remote is managed in Settings: its card has no Remove.
-  await pill(page, "Personal").click();
+  // The hub is managed in Settings: its card has no Remove.
+  await pill(page, "Hub").click();
   await expect(
     details(page).getByRole("heading", { name: "me/account" })
   ).toBeVisible();
@@ -1095,7 +1095,7 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
         code: "refused",
         hint: "run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one",
         message:
-          "https://github.com/me/account is the account remote: it holds one branch per skill rather than skills on one branch",
+          "https://github.com/me/account is the hub: it holds one branch per skill rather than skills on one branch",
         type: "error",
       },
     ],
@@ -1114,7 +1114,7 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
   await dialog(page).getByRole("button", { name: "Add" }).click();
   // The CLI's hint names commands: the dialog names the place in the app instead.
   await expect(alert).toHaveText(
-    "https://github.com/me/account is the account remote: it holds one branch per skill rather than skills on one branch. See and install its skills under Personal."
+    "https://github.com/me/account is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub."
   );
   await expect(dialog(page)).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([
@@ -1123,21 +1123,21 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
   ]);
 });
 
-test("Personal lists the account remote's installable skills and adds by name", async ({
+test("Hub lists the hub's installable skills and adds by name", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
-  await pill(page, "Personal").click();
+  await pill(page, "Hub").click();
   await expect(row(page, "release-notes")).toBeVisible();
-  expect(await skillNames(grid(page, "Personal"))).toEqual([
+  expect(await skillNames(grid(page, "Hub"))).toEqual([
     "my-pdf",
     "release-notes",
   ]);
   await expect(rowLine(page, "my-pdf")).toContainText("from acme/skills");
-  // Your skills on the account remote open to their description alone.
+  // Your skills on the hub open to their description alone.
   await row(page, "release-notes").click();
-  await expect(opened(page, "release-notes")).toHaveText("personal skill");
+  await expect(opened(page, "release-notes")).toHaveText("hub skill");
 
   const add = cli.register(["skill", "add", "--name", "release-notes"], {
     events: [{ name: "release-notes", type: "library_skill" }],

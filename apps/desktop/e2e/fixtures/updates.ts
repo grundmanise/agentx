@@ -10,7 +10,7 @@ import { ACCOUNT, ACME, inventory, library } from "./skills.ts";
 export { ACME, ZETA } from "./skills.ts";
 
 /**
- * The Skills library, where pdf-letters, one of your own, holds edits not published, and draft
+ * The Skills library, where pdf-letters, a hub skill, holds edits not published, and draft
  * has a pending merge: pdf is an unmodified skill of a source, review a modified one.
  */
 export const updatesLibrary: LibraryEntry[] = library.map((entry) => {

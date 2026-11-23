@@ -216,7 +216,7 @@ func TestImportRestoresAMachine(t *testing.T) {
 
 // TestImportSkipsASkillTheLibraryLost: an entry whose branch the account
 // repo holds and whose library directory is gone is skipped with the way
-// back, skill place for one of your own, which checks it out again; any
+// back, skill place for a hub skill, which checks it out again; any
 // other entry is applied.
 func TestImportSkipsASkillTheLibraryLost(t *testing.T) {
 	t.Parallel()
@@ -232,7 +232,7 @@ func TestImportSkipsASkillTheLibraryLost(t *testing.T) {
 		entry snapshotSkill
 		why   string
 	}{
-		{snapshotSkill{Name: "notes", Kind: lineage.KindManaged}, "notes is one of your own skills, and the library holds no skill directory for it; check it out again from its branch with 'agentx skill place notes'"},
+		{snapshotSkill{Name: "notes", Kind: lineage.KindManaged}, "notes is a hub skill, and the library holds no skill directory for it; check it out again from its branch with 'agentx skill place notes'"},
 		{snapshotSkill{Name: "alpha", Kind: lineage.KindManaged}, ""},
 		{snapshotSkill{Name: "gamma", Kind: lineage.KindManaged}, ""},
 		{snapshotSkill{Name: "notes", Kind: lineage.KindUnmanaged}, ""},
@@ -498,8 +498,8 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		}
 	}
 	edited := func(change func(map[string]any)) string { return editedSound(t, change) }
-	// ownSkill turns the record into one of your own skills, a fork of
-	// alpha, with no account remote set: no source, and the upstream fields
+	// ownSkill turns the record into a hub skill, a fork of
+	// alpha, with no hub set: no source, and the upstream fields
 	// in place of the source's.
 	ownSkill := func(record map[string]any) {
 		delete(record, "source")
@@ -565,15 +565,15 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 			}
 			e["source"] = credentialed
 		}), "canonical URL of a source"},
-		{"a fork id on a shared source's entry", recordWith("fork_id", "0b3f6c9e-2d4a-4f1e-9a7b-1c2d3e4f5a6b"), "only your own skills have"},
+		{"a fork id on a shared source's entry", recordWith("fork_id", "0b3f6c9e-2d4a-4f1e-9a7b-1c2d3e4f5a6b"), "only hub skills have"},
 		{"a fork id that is not one", ownWith("fork_id", "nonsense"), "not one"},
-		{"one of your own skills with a subpath", edited(func(doc map[string]any) {
+		{"a hub skill with a subpath", edited(func(doc map[string]any) {
 			delete(doc["skills"].([]any)[0].(map[string]any), "source")
-		}), "which have no subpath"},
-		{"a record of a shared source with an upstream", recordWith("upstream", "https://github.com/example/other"), "only your own skills have"},
+		}), "and hub skills have no subpath"},
+		{"a record of a shared source with an upstream", recordWith("upstream", "https://github.com/example/other"), "only hub skills have"},
 		{"a record with no commit", recordWith("commit", "HEAD"), "does not name the commit"},
 		{"a record with a bad hash", recordWith("base_hash", "nonsense"), "one upstream version"},
-		{"one of your own skills with a bad hash", ownWith("base_hash", "nonsense"), "one upstream version"},
+		{"a hub skill with a bad hash", ownWith("base_hash", "nonsense"), "one upstream version"},
 		{"a record that walks out", recordWith("name", "../evil"), "not a name the library and a branch can both hold"},
 		{"a record named for a nested branch", recordWith("name", "nested/deeper"), "not a name the library and a branch can both hold"},
 		{"a record given twice", edited(func(doc map[string]any) {
@@ -781,10 +781,10 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 }
 
 // TestRestoreStates: a record is looked up in the namespace it belongs in,
-// your own skills, with the account remote or no source at all, under
+// hub skills, with the hub or no source at all, under
 // skills/, and a shared source's under managed/. A branch of the name
-// decides the state whatever the account remote holds, and the remote's
-// branch stands in only for one of your own skills the account repo holds
+// decides the state whatever the hub holds, and the remote's
+// branch stands in only for a hub skill the account repo holds
 // no branch of, never for a shared source's.
 func TestRestoreStates(t *testing.T) {
 	t.Parallel()
@@ -810,10 +810,10 @@ func TestRestoreStates(t *testing.T) {
 		{"own, held as a shared source's", "", "c1", account, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restoreDifferent, "c1"},
 		{"own that follows, at any commit", "", "", account, account, map[string]lineage.Record{"notes": fork("c2")}, nil, restorePresent, "c2"},
 		{"shared, its import branch", "", "c1", shared, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restorePresent, "c1"},
-		{"shared, held as one of your own", "", "c1", shared, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
+		{"shared, held as a hub skill", "", "c1", shared, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
 		{"shared, not matched against the remote", "", "c1", shared, account, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
-		{"shared that follows, held as one of your own", "", "", shared, account, map[string]lineage.Record{"notes": fork("c2")}, nil, restoreDifferent, "c2"},
-		{"the account remote's URL with no account remote set", "", "c1", account, "", nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"shared that follows, held as a hub skill", "", "", shared, account, map[string]lineage.Record{"notes": fork("c2")}, nil, restoreDifferent, "c2"},
+		{"the hub's URL with no hub set", "", "c1", account, "", nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
 		{"neither", "", "c1", account, account, nil, nil, restoreMissing, ""},
 		{"unmanaged, not matched against the remote", lineage.KindUnmanaged, "", "", account, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
 		{"unmanaged, a branch of its name", lineage.KindUnmanaged, "", "", account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
@@ -829,10 +829,10 @@ func TestRestoreStates(t *testing.T) {
 }
 
 // TestAccountRepository is when a source names the repository of the
-// account remote: by its repository, over HTTPS and over SSH alike, and
+// hub: by its repository, over HTTPS and over SSH alike, and
 // never through a host alias, since a snapshot is read with no SSH
-// configuration. An entry of your own skills is one whose source does, so
-// a snapshot written where the account remote is an SSH URL reads the same
+// configuration. An entry of hub skills is one whose source does, so
+// a snapshot written where the hub is an SSH URL reads the same
 // on the cloud machine, which reaches it over HTTPS.
 func TestAccountRepository(t *testing.T) {
 	t.Parallel()
@@ -855,12 +855,12 @@ func TestAccountRepository(t *testing.T) {
 	} {
 		equal(t, c.url+" names the repository of "+c.account, accountRepository(c.url, c.account), c.want)
 		e := snapshotSkill{Name: "notes", Kind: lineage.KindManaged, Source: c.url}
-		equal(t, c.url+" is one of your own against "+c.account, ownRecord(e, c.account), c.want || c.url == "")
+		equal(t, c.url+" is a hub skill against "+c.account, ownRecord(e, c.account), c.want || c.url == "")
 	}
 }
 
 // TestKeepAccountRemote: settings an import writes keep this machine's
-// account remote, its URL and what it found it can do there, when theirs
+// hub, its URL and what it found it can do there, when theirs
 // names the same repository, and keep their own otherwise.
 func TestKeepAccountRemote(t *testing.T) {
 	t.Parallel()
@@ -881,7 +881,7 @@ func TestKeepAccountRemote(t *testing.T) {
 			sort.Slice(s.Sources, func(i, j int) bool { return s.Sources[i].URL < s.Sources[j].URL })
 			keepAccountRemote(&s, here)
 			entry, _ := accountEntry(s)
-			equal(t, "the account remote", entry.URL, c.want)
+			equal(t, "the hub", entry.URL, c.want)
 			if c.want == cloud.URL {
 				equal(t, "its access", entry.Access, cloud.Access)
 			} else {
@@ -899,15 +899,15 @@ func TestKeepAccountRemote(t *testing.T) {
 
 // TestImportOntoAMachineWithNoAccountRepo: everything the export lists is
 // missing, and the repo is not created to find that out, also when the
-// machine's settings name an account remote, as an earlier import leaves
+// machine's settings name a hub, as an earlier import leaves
 // them, since no fetch of it has happened there yet.
 func TestImportOntoAMachineWithNoAccountRepo(t *testing.T) {
 	t.Parallel()
 	_, file := plainExport(t)
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
-	for _, settings := range []string{"no account remote", "an account remote"} {
-		if settings == "an account remote" {
+	for _, settings := range []string{"no hub", "a hub"} {
+		if settings == "a hub" {
 			s, err := home.LoadSettings(to.agentx)
 			if err != nil {
 				t.Fatal(err)
@@ -1103,7 +1103,7 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 // entry of every source, and then adds each one this machine has not
 // added, whether a skill of the snapshot comes from it or not, so that the
 // user never adds one again by hand: here the source the skills come from,
-// a pinned source no skill comes from and the account remote. Each is
+// a pinned source no skill comes from and the hub. Each is
 // added at the pin the settings hold, reported by the source event its
 // add emits and a progress event of phase fetch, and a skill of each can
 // be installed at once. A second import of the same snapshot finds every
@@ -1150,7 +1150,7 @@ func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 	}
 	equal(t, "the pinned source's event", added[pinned.URL]["pin"], pinned.Pin)
 	equal(t, "its skills", added[pinned.URL]["skills"], float64(1))
-	equal(t, "the account remote's event", added["file://"+remote]["account"], true)
+	equal(t, "the hub's event", added["file://"+remote]["account"], true)
 	if len(added) != 3 {
 		t.Errorf("the sources added are %v, want the three of the settings", added)
 	}
@@ -1176,7 +1176,7 @@ func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 // cannot be added is a warning with git's reason, and costs no other
 // source and no skill: the import adds the others, installs the skills and
 // exits 0. The add of each is taken back as source add takes it back: the
-// account remote leaves no remote, and a shared source, which the settings
+// hub leaves no remote, and a shared source, which the settings
 // name, keeps the remote they want and nothing fetched. The text ends with
 // the source add of each one that could not be added, with its pin, and a
 // second import tries them again, with a warning and a progress event each.
@@ -1211,18 +1211,18 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 		"Skills added (1)\n  alpha  Claude Code\n\n"+
 		"Sources added (2)\n  "+other.url+"\n  "+s.url+"\n\n"+
 		"Sources not added (2)\n"+
-		"  agentx source add "+account+" --account\n"+
+		"  agentx source add "+account+" --hub\n"+
 		"  agentx source add "+shared+"#v1\n\n"+
 		"Agents enabled\n  Claude Code\n")
 	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: "+shared+": git ")
-	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: cannot reach the account remote "+account+": ")
+	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: cannot reach the hub "+account+": ")
 	if !lexists(filepath.Join(to.home, ".claude", "skills", "alpha")) {
 		t.Error("alpha is not placed in claude-code")
 	}
 
 	remotes := source.Remotes(context.Background(), gitx.New(to.env, false, func(string, ...any) {}), gitx.AccountRepoPath(to.agentx))
 	if r, ok := remotes[source.ID(account)]; ok {
-		t.Errorf("the account remote that could not be added left a remote: %+v", r)
+		t.Errorf("the hub that could not be added left a remote: %+v", r)
 	}
 	equal(t, "the remote of the shared source not added", remotes[source.ID(shared)], source.RemoteOf(home.Source{URL: shared, Pin: "v1"}))
 	if refs := to.agentxRefs(); strings.Contains(refs, source.ID(shared)) {
@@ -1421,7 +1421,7 @@ func TestImportWithNoSkillsStillAddsTheSources(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "Sources added (1)\n  "+kept.url+"\n")
 	contains(t, "stdout", out.stdout, "Sources not added (2)\n"+
-		"  agentx source add "+account+" --account\n"+
+		"  agentx source add "+account+" --hub\n"+
 		"  agentx source add "+shared+"#release\n")
 
 	restored, err := home.LoadSettings(to.agentx)

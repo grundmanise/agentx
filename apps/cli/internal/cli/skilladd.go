@@ -50,7 +50,7 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 			"with --except. A path that holds one skill needs no --name, so a link to a\n" +
 			"skill's folder or to its SKILL.md, copied from GitHub or GitLab, installs it;\n" +
 			"a link at the source's default branch pins nothing.\n\n" +
-			"With no source, install your own skills from the account remote, which is\n" +
+			"With no source, install hub skills from the hub, which is\n" +
 			"fetched every time: the ones you name with --name, or with --all every one this\n" +
 			"machine lacks. Each is the same skill, with its history, that you publish back\n" +
 			"to the same branch. 'agentx skill list --remote' lists them. A managed copy of\n" +
@@ -62,7 +62,7 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 			"agentx skill add anthropics/skills --all --except pdf", "install every other skill of the source",
 			"agentx skill add owner/repo#v2 --name pdf --to cursor", "install from a pinned tag, into one client",
 			"agentx skill add anthropics/skills --name pdf --fetch", "fetch the source again first",
-			"agentx skill add --name release-notes", "install one of your own from the account remote",
+			"agentx skill add --name release-notes", "install a hub skill from the hub",
 		),
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -77,8 +77,8 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 			return inv.skillAdd(cmd.Context(), args[0], sel, to, asCopy, fetch)
 		},
 	}
-	cmd.Flags().StringArrayVar(&sel.names, "name", nil, "the skill to install, by its name in the source or on the account remote; give it again for each")
-	cmd.Flags().BoolVar(&sel.all, "all", false, "install every skill the source holds, or with no source every one of the account remote this machine lacks")
+	cmd.Flags().StringArrayVar(&sel.names, "name", nil, "the skill to install, by its name in the source or on the hub; give it again for each")
+	cmd.Flags().BoolVar(&sel.all, "all", false, "install every skill the source holds, or with no source every hub skill this machine lacks")
 	cmd.Flags().StringArrayVar(&sel.except, "except", nil, "with --all, a skill to leave out; give it again for each")
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place them in, instead of every enabled one")
 	cmd.Flags().BoolVar(&asCopy, "copy", false, "place copies instead of symlinks")
@@ -1176,7 +1176,7 @@ func libraryFailure(library string, err error) error {
 // agentx worktrees directory counts as absent: it is a fork's placement
 // whose worktree is gone. An adoption displaces whatever another tool put
 // there instead, the one case a library entry gives way without a word. The refusal's hint frees the name with skill
-// rename for one of your own skills, and with skill remove for anything else,
+// rename for a hub skill, and with skill remove for anything else,
 // which a fork under another name keeps first, or, for an unmanaged skill,
 // an adoption and a rename.
 func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Record, libPath, state string) (libraryAction, *failure) {
@@ -1209,7 +1209,7 @@ func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Recor
 	return libraryAction{}, refuse(exitRefused, fmt.Sprintf("the library already holds %s at %s", v.name, inv.dirs.Library), hint)
 }
 
-// ownSkillHint frees a name one of your own skills holds: by its branch,
+// ownSkillHint frees a name a hub skill holds: by its branch,
 // which a removal of its library directory alone leaves claiming the name.
 func ownSkillHint(name string) string {
 	return "rename yours with '" + skillCommand("rename", name, "<new>") + "', or remove it with '" + skillCommand("remove", name) + "', then install again"
@@ -1233,7 +1233,7 @@ func refPlan(v *imported, records map[string]lineage.Record, libPath string, abs
 	case !ok:
 		return true, nil
 	case rec.Kind == lineage.KindFork:
-		return false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the account remote on this machine", v.name), ownSkillHint(v.name))
+		return false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the hub on this machine", v.name), ownSkillHint(v.name))
 	case rec.Commit == v.commit: // the same version again: nothing to move
 		return false, nil
 	case v.replace:

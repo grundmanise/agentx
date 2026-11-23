@@ -8,8 +8,8 @@ import (
 )
 
 // placeHome is the machine of placementHarness with no source added: the
-// six configurations and nothing else, for a test that places a library
-// skill of the user's own and installs nothing.
+// six configurations and nothing else, for a test that places a library hub
+// skill and installs nothing.
 func placeHome(t *testing.T) *harness {
 	t.Helper()
 	h := newHarness(t)
@@ -291,8 +291,8 @@ func editCopy(t *testing.T, place string) {
 	writeFile(t, filepath.Join(place, "mine.md"), "a file of my own\n")
 }
 
-// placeOwnCopy is a machine with no source whose library holds a skill of
-// the user's own called name, a copy of it placed in Cortex Code.
+// placeOwnCopy is a machine with no source whose library holds a hub skill
+// called name, a copy of it placed in Cortex Code.
 func placeOwnCopy(name string) func(t *testing.T) *harness {
 	return func(t *testing.T) *harness {
 		h := placeHome(t)

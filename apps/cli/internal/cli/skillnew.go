@@ -23,12 +23,12 @@ func newSkillNewCommand(inv *invocation) *cobra.Command {
 	var description string
 	cmd := &cobra.Command{
 		Use:         "new <name>",
-		Short:       "Create a skill of your own from the template",
+		Short:       "Create a hub skill from the template",
 		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "Create a skill called <name> from agentx's template: a SKILL.md with the name\n" +
 			"and the description in its frontmatter. It is a managed skill whose source is\n" +
-			"your account remote: 'agentx skill publish <name>' publishes it there, and no\n" +
-			"account remote needs to be set until then. The skill gets its own branch,\n" +
+			"your hub: 'agentx skill publish <name>' publishes it there, and no\n" +
+			"hub needs to be set until then. The skill gets its own branch,\n" +
 			"skills/<name>, in the account repo, checked out as a worktree in agentx home, and\n" +
 			"the library holds a symlink to it. It is placed into every enabled configuration,\n" +
 			"as an install places a skill, and listed as managed with no upstream.\n\n" +
@@ -51,7 +51,7 @@ func newSkillNewCommand(inv *invocation) *cobra.Command {
 // frontmatter allows.
 const descriptionLimit = 1024
 
-// skillNew creates one of your own skills from the template: a branch of
+// skillNew creates a hub skill from the template: a branch of
 // its own in the account repo, whose first commit holds the template
 // SKILL.md under a directory named after the skill and carries the skill's
 // new fork id, checked out as a worktree in agentx home, with the library's
@@ -273,13 +273,12 @@ func (inv *invocation) reportCreated(ctx context.Context, name string, targets [
 	return nil
 }
 
-// noAccountRemoteHint says, in one line, that the skill ev reports, one of
-// your own just created, cannot be published until an account remote is
-// set, when none is: its source, the account remote, is then empty, and
-// names the publish of the skill, since a bare publish never publishes it
-// for the first time. skill publish refuses it until one is set; nothing
-// else needs one. A run over many skills says it once they are done, see
-// publishHintOnce.
+// noAccountRemoteHint says, in one line, that the skill ev reports, a hub
+// skill just created, cannot be published until a hub is set, when none is:
+// its source, the hub, is then empty, and names the publish of the skill,
+// since a bare publish never publishes it for the first time. skill publish
+// refuses it until one is set; nothing else needs one. A run over many
+// skills says it once they are done, see publishHintOnce.
 func (inv *invocation) noAccountRemoteHint(ev librarySkillEvent) {
 	if ev.Kind != lineage.KindManaged || ev.Source != "" {
 		return
@@ -289,7 +288,7 @@ func (inv *invocation) noAccountRemoteHint(ev librarySkillEvent) {
 		return
 	}
 	out := inv.out
-	out.print("No account remote is set: run ", out.paint(label, "'agentx source add <url> --account'"), ", then ", out.paint(label, "'"+publishCommand(ev.Name)+"'"), " to publish it.")
+	out.print("No hub is set: run ", out.paint(label, "'agentx source add <url> --hub'"), ", then ", out.paint(label, "'"+publishCommand(ev.Name)+"'"), " to publish it.")
 }
 
 // plainScalar is a value the template can write as a plain YAML scalar

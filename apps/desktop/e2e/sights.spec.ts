@@ -114,7 +114,7 @@ const cases: {
   {
     footer:
       "To avoid clashes, make sure each agent sees only one, for example by uninstalling one of the plugins.",
-    name: "two plugins, none of yours",
+    name: "two plugins, no hub skills",
     notice: "Found 2 skills named a11y-debugging.",
     sights: sights(
       [place("plugin", [claude], "alpha"), place("plugin", [claude], "beta")],

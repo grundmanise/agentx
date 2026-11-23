@@ -1,6 +1,6 @@
 // What the Sources screen shows, projected from the store and nothing else: the source pills
 // from the Sources slice, the facts of the open source, the cards of a listing, of your skills on
-// the account remote or of a search answer, each card's state from the inventory's library, and
+// the hub or of a search answer, each card's state from the inventory's library, and
 // the `skill add` command lines a selection produces. Pure functions, so that every part of the screen reads a skill the
 // same way and the tests pin the command lines.
 import type {
@@ -14,23 +14,23 @@ import type {
 import { formatAgo } from "#/lib/dates.ts";
 import { hostAndPath, shortSource } from "#/screens/skills/projection.ts";
 
-/** The key of the Personal pill and the source of its cards, beside the source ids and URLs. */
+/** The key of the Hub pill and the source of its cards, beside the source ids and URLs. */
 export const YOUR_SKILLS = "your-skills";
 
-/** The label of the Personal pill and of its cards' group. */
-export const YOUR_SKILLS_LABEL = "Personal";
+/** The label of the Hub pill and of its cards' group. */
+export const YOUR_SKILLS_LABEL = "Hub";
 
 export interface SourcePill {
   /** The source id, or YOUR_SKILLS. */
   key: string;
-  /** The source's short form, or "Personal". */
+  /** The source's short form, or "Hub". */
   label: string;
-  /** The canonical URL; absent for Personal. */
+  /** The canonical URL; absent for Hub. */
   url?: string;
   lastFetched?: string;
-  /** How many skills it holds: its listing's length, or your skills on the account remote. */
+  /** How many skills it holds: its listing's length, or your skills on the hub. */
   skills?: number;
-  /** The entry `source list` gave: the shared source, or the account remote for Personal. */
+  /** The entry `source list` gave: the shared source, or the hub for Hub. */
   source: SourceEvent;
 }
 
@@ -38,7 +38,7 @@ const compareLabels = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "base" });
 
 /**
- * One pill per shared source, A to Z by short form, then Personal when an account remote is
+ * One pill per shared source, A to Z by short form, then Hub when a hub is
  * set. A shared source's skill count is the length of its listing, once read: `source list`
  * reports none for a shared source.
  */
@@ -247,7 +247,7 @@ export interface SkillCard {
   status?: CardStatus;
   /** Why a card that cannot be selected cannot be. */
   title?: string;
-  /** Where its SKILL.md is read from; absent for your skills on the account remote. */
+  /** Where its SKILL.md is read from; absent for your skills on the hub. */
   skillMd?: SkillMdRef;
   /** The skill's directory on its source's web page, when agentx knows the host's pages. */
   page?: string;
@@ -381,7 +381,7 @@ export const listingCards = (
   );
 
 /**
- * The state of one of your skills on the account remote, by its name: a library entry of the
+ * The state of one of your skills on the hub, by its name: a library entry of the
  * name is in the way, unless it is the same skill installed from its upstream without edits,
  * which the install replaces.
  */
@@ -403,7 +403,7 @@ const installableStatus = (
   return sameUpstream && named.state === "current" ? undefined : "name-in-use";
 };
 
-/** The cards of your skills on the account remote, as `skill list --remote` gave them. */
+/** The cards of your skills on the hub, as `skill list --remote` gave them. */
 export const installableCards = (
   installable: InstallableSkillEvent[],
   library: LibraryEntry[]
@@ -413,7 +413,7 @@ export const installableCards = (
       YOUR_SKILLS,
       s.name,
       s.upstream === undefined
-        ? "personal skill"
+        ? "hub skill"
         : `from ${shortSource(s.upstream)}`,
       installableStatus(s, library)
     )
@@ -483,7 +483,7 @@ export const addedName = (
 export interface CardGroup {
   /** The source URL, or YOUR_SKILLS. */
   source: string;
-  /** The source's short form, or "Personal". */
+  /** The source's short form, or "Hub". */
   label: string;
   cards: SkillCard[];
 }

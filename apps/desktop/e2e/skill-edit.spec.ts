@@ -1,4 +1,4 @@
-// Edit in the Skills detail pane: offered for one of your own skills and an edited skill of a
+// Edit in the Skills detail pane: offered for a hub skill and an edited skill of a
 // source. It opens the skill's SKILL.md in the editor chosen in Settings; when the editor cannot
 // be opened, a toast offers to show the file in the file manager instead, which is Finder on
 // macOS.

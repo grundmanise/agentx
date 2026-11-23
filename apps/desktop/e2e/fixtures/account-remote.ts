@@ -1,5 +1,5 @@
-// The machine the Settings tests of the account remote run against: an account remote with three
-// of your skills, fetched two hours ago, that this machine can write to; a shared source pinned to
+// The machine the Settings tests of the hub run against: a hub with three
+// hub skills, fetched two hours ago, that this machine can write to; a shared source pinned to
 // v2, fetched three days ago, read-only here; and a shared source never fetched, whose access is
 // unknown. Inline events with only the fields the tests check, typed by the generated event types.
 import type { SourceEvent } from "#/cli/events.gen.ts";
@@ -44,8 +44,8 @@ const zeta: SourceEvent = {
   url: ZETA,
 };
 
-/** What `source list` reports: the account remote and both shared sources. */
+/** What `source list` reports: the hub and both shared sources. */
 export const sources: SourceEvent[] = [acme, zeta, account];
 
-/** What `source list` reports on a machine with no account remote. */
+/** What `source list` reports on a machine with no hub. */
 export const sharedOnly: SourceEvent[] = [acme, zeta];

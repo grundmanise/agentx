@@ -15,23 +15,23 @@ import (
 // TestInstallAForkFromTheAccount lists on machine b, which installed
 // nothing and added no source, the skills machine a published, and
 // installs one by name, then the rest with --all. skill list --remote
-// fetches the account remote and lists alpha, beta and notes, made by
+// fetches the hub and lists alpha, beta and notes, made by
 // skill new, as installable, each with the fork id and the upstream its own
 // commits record, notes with none. Two branches pushed by hand are left
 // out with a warning each: one whose name is outside the fork name
 // grammar, and zeta, whose history records no fork id, which an install
 // refuses too. Installing alpha creates b's branch at a's commit, so the
-// fork keeps its id and its history, tracking the account remote's
+// fork keeps its id and its history, tracking the hub's
 // branch, where a publish of it before was exit 5 naming the install;
 // checks its worktree out with the .gitignore a commit put beside the
 // skill directory, so git status there is clean; links the library to it
 // and places it into the enabled configuration. It adds the fork's
 // upstream source, which b lacked, so that b's update check finds the
-// source's next version for alpha. Listed again, the account remote holds
+// source's next version for alpha. Listed again, the hub holds
 // two skills b has not installed. With an unmanaged directory at notes'
 // library path, skill add --all installs beta and refuses notes, exit 6,
 // with a warning and an error naming it; once the directory is gone, the
-// next --all installs notes, with one fetch of the account remote and
+// next --all installs notes, with one fetch of the hub and
 // both hand-pushed branches left out with a warning each, and a third
 // finds nothing left to install. alpha is refused as installed already,
 // with skill place named once its worktree and library entry are gone.
@@ -70,7 +70,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 		t.Errorf("notes, made by skill new, is listed with an upstream: %v", listed["notes"])
 	}
 	text := b.mustRun("skill", "list", "--remote").stdout
-	contains(t, "the text listing", text, "3 installable skills on the account remote")
+	contains(t, "the text listing", text, "3 installable skills on the hub")
 	contains(t, "the text listing", text, "agentx skill add --name <name>")
 
 	out = b.run("--json", "skill", "add", "--name", "zeta")
@@ -103,7 +103,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	if real, err := filepath.EvalSymlinks(filepath.Join(b.library, "alpha")); err != nil || filepath.Base(filepath.Dir(real)) != "alpha" || !strings.Contains(real, "worktrees") {
 		t.Errorf("the library entry leads to %q, %v", real, err)
 	}
-	equal(t, "the result", b.one(out.stdout, "result")["summary"], "installed alpha from the account remote in 1 configuration")
+	equal(t, "the result", b.one(out.stdout, "result")["summary"], "installed alpha from the hub in 1 configuration")
 
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")
@@ -139,7 +139,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 			fetches++
 		}
 	}
-	equal(t, "fetches of the account remote", fetches, 1)
+	equal(t, "fetches of the hub", fetches, 1)
 	var all []string
 	for _, ev := range b.eventsOfType(out.stdout, "library_skill") {
 		all = append(all, ev["name"].(string))
@@ -147,7 +147,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	equal(t, "what --all installed", strings.Join(all, " "), "notes")
 	contains(t, "the warnings", out.stderr, "skills/zeta is left out, since its history records no fork id")
 	contains(t, "the warnings", out.stderr, "skills/Bad_Name is left out, since it cannot be installed")
-	contains(t, "the result", b.one(out.stdout, "result")["summary"].(string), "installed notes from the account remote")
+	contains(t, "the result", b.one(out.stdout, "result")["summary"].(string), "installed notes from the hub")
 	contains(t, "--all with nothing left", b.mustRun("skill", "add", "--all").stdout, "holds no skill this machine lacks")
 	out = b.run("--json", "skill", "add", "--name", "alpha")
 	equal(t, "installing alpha again: exit", out.exit, 6)
@@ -167,7 +167,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 }
 
 // TestFromAccountSupersedesAnUnmodifiedCopy installs alpha from the
-// account remote on machine b, which installed the same upstream version
+// hub on machine b, which installed the same upstream version
 // of alpha from the source first, removed it from Cortex Code, left a .DS_Store
 // in it, and had a check pin the source's next version for it. The copy
 // holds its base version, so the fork takes its place: the import branch,
@@ -215,10 +215,10 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, b.library), " "), "")
 }
 
-// TestAddFromAccountRefuses installs from the account remote on machine
+// TestAddFromAccountRefuses installs from the hub on machine
 // b over what its library holds. Each refusal changes nothing, the
 // settings included, which lack the skills' source: a name agentx cannot
-// use for a skill, exit 6; a skill the account remote does not hold,
+// use for a skill, exit 6; a skill the hub does not hold,
 // exit 5; an unmanaged directory at alpha's library path, exit 6, and a
 // publish of it says to move it aside; a symlink at beta's, exit 6;
 // --all over both, exit 6 naming each; an --except naming nothing to
@@ -246,7 +246,7 @@ func TestAddFromAccountRefuses(t *testing.T) {
 		says string
 	}{
 		{[]string{"--name", "Bad_Name"}, 6, "is not a valid skill name"},
-		{[]string{"--name", "gamma"}, 5, "the account remote holds no skill called gamma"},
+		{[]string{"--name", "gamma"}, 5, "the hub holds no skill called gamma"},
 		{[]string{"--name", "alpha"}, 6, "the library already holds"},
 		{[]string{"--name", "beta"}, 6, "a symlink, so beta was not installed"},
 		{[]string{"--all"}, 6, "2 of 2 skills could not be installed"},
@@ -300,7 +300,7 @@ func TestAddFromAccountRefuses(t *testing.T) {
 	}
 	out = b.run("--json", "skill", "add", "--name", "beta")
 	equal(t, "a pending merge: exit", out.exit, 4)
-	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "replaced by the account remote's skill")
+	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "replaced by the hub's skill")
 	b.mustRun("skill", "update", "beta", "--abort")
 	out = b.run("--json", "skill", "add", "--name", "beta")
 	equal(t, "an edited copy: exit", out.exit, 6)
@@ -309,7 +309,7 @@ func TestAddFromAccountRefuses(t *testing.T) {
 	equal(t, "its hint", e["hint"], "move it aside, or run 'agentx skill remove beta', then run 'agentx skill add --name beta' again")
 }
 
-// TestFromAccountPlan is what an install from the account remote does
+// TestFromAccountPlan is what an install from the hub does
 // with what the library path holds.
 func TestFromAccountPlan(t *testing.T) {
 	t.Parallel()
@@ -339,7 +339,7 @@ func TestFromAccountPlan(t *testing.T) {
 	}
 }
 
-// TestHeldUnderAnotherName: an account remote branch is a skill this
+// TestHeldUnderAnotherName: a hub branch is a skill this
 // machine holds under another name when a skill of the same fork id holds
 // its tip, as the renamed skill does of its old name's branch; one whose
 // tip is ahead of that skill's, or of another fork id, is not.
@@ -363,7 +363,7 @@ func TestHeldUnderAnotherName(t *testing.T) {
 }
 
 // TestFromAccountRecoversWhereItWasKilled kills an install from the
-// account remote with SIGKILL at two of its boundaries: once its journal
+// hub with SIGKILL at two of its boundaries: once its journal
 // is on disk, before anything changed, and right after git added the
 // worktree. Every boundary in between is the journal's, which the home
 // package replays without git. The next command finishes it: the branch at

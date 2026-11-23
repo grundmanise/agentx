@@ -87,7 +87,7 @@ func TestNamedReason(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct{ subject, message, want string }{
 		{"beta", "it conflicts with its update in 1 file", "beta: it conflicts with its update in 1 file"},
-		{"beta", "beta conflicts with the account remote in 1 file", "beta conflicts with the account remote in 1 file"},
+		{"beta", "beta conflicts with the hub in 1 file", "beta conflicts with the hub in 1 file"},
 		{"gone", "gone's worktree /w/gone is missing", "gone's worktree /w/gone is missing"},
 		{"beta", "betamax holds a file", "beta: betamax holds a file"},
 		{"beta", "the library already holds beta", "beta: the library already holds beta"},

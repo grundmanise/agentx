@@ -18,7 +18,7 @@ import { formatDate } from "#/lib/dates.ts";
 /** Where a skill comes from, which decides its group, glyph, origin and Details. */
 export type SkillKindName = "yours" | "source" | "plugin" | "disk";
 
-/** A row's one status pill: one of your own skills not yet published. */
+/** A row's one status pill: a hub skill not yet published. */
 export type PillKind = "not-published";
 
 export interface Pill {
@@ -42,7 +42,7 @@ export interface SkillRow {
   enabled: boolean;
   /** Edited since its base version, or edits not yet published. */
   modified: boolean;
-  /** One of your own skills whose branch the account remote holds. */
+  /** A hub skill whose branch the hub holds. */
   published: boolean;
   pills: Pill[];
   /** The configurations that see the skill, in inventory order. */
@@ -138,7 +138,7 @@ export const shortSource = (url: string): string => {
 export const shortId = (id: string) => id.slice(0, 7);
 
 /**
- * Whether an update is what another of your machines published to one of your own skills: the
+ * Whether an update is what another of your machines published to a hub skill: the
  * CLI leaves its base version empty (docs/spec/cli-contract.md, `update_available`).
  */
 export const fromAnotherMachine = (update: UpdateAvailableEvent) =>
@@ -186,7 +186,7 @@ const SOURCE_PREFIX = "source:";
 const groupNames: Record<string, string> = {
   [GROUP_DISK]: "Unmanaged",
   [GROUP_PLUGINS]: "Plugins",
-  [GROUP_YOURS]: "Personal",
+  [GROUP_YOURS]: "Hub",
 };
 
 /** The name of a group: a source's short form, or the fixed ones, which SHOW offers as choices. */
@@ -467,7 +467,7 @@ const pluginSubgroups = (rows: SkillRow[]): Subgroup[] => {
 };
 
 /**
- * The rows in groups: PERSONAL, each source A to Z by its short form, PLUGINS, then UNMANAGED,
+ * The rows in groups: HUB, each source A to Z by its short form, PLUGINS, then UNMANAGED,
  * each sorted in `order`. PLUGINS holds one subgroup per plugin. A group with no row is left out.
  */
 export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
@@ -606,7 +606,7 @@ export const originOf = (row: SkillRow): string => {
     case "yours": {
       const upstream = row.entry?.upstream;
       return upstream === undefined
-        ? "personal skill"
+        ? "hub skill"
         : `from ${shortSource(upstream)}`;
     }
     case "plugin": {
@@ -627,7 +627,7 @@ const kindWords: Record<SkillKindName, string> = {
   disk: "Unmanaged",
   plugin: "Plugin skill",
   source: "Skill",
-  yours: "Personal skill",
+  yours: "Hub skill",
 };
 
 /** What the glyph's title says: the skill's kind and whether an agent client sees it. */
@@ -658,8 +658,8 @@ export interface FilesRequest {
  * name, a plugin's as `<plugin>:<directory>`, and a skill a client holds in its own skills
  * directory, which is neither, by its directory with `--configuration`. The CLI finds a plugin's
  * or a configuration's skill by its directory's name, not the name its frontmatter gives, so the
- * occurrence `occurrenceOf` chooses names it. Only a modified skill of a source or one of your
- * own with edits not published has a diff. Undefined when the CLI has no way to name it.
+ * occurrence `occurrenceOf` chooses names it. Only a modified skill of a source or a hub
+ * skill with edits not published has a diff. Undefined when the CLI has no way to name it.
  */
 export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
   if (row.entry !== undefined && row.kind !== "plugin") {
