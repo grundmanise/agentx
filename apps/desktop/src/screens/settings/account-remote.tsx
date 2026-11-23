@@ -298,7 +298,7 @@ export const AccountRemoteSection = () => {
   return (
     <SettingsSection
       title="Hub"
-      description="The Git repository your hub skills publish to."
+      description="The Git repository your skills publish to."
     >
       {account === undefined ? (
         <RemoteForm />

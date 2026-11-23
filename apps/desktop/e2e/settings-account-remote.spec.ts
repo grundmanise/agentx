@@ -55,7 +55,7 @@ test("the hub with what the Sources slice reports", async ({ cli, page }) => {
   await openSettings(cli, page);
   const remote = accountRemote(page);
   await expect(remote).toContainText(
-    "The Git repository your hub skills publish to."
+    "The Git repository your skills publish to."
   );
   await expect(remote.getByText(ACCOUNT, { exact: true })).toBeVisible();
   // No line under the URL: the count was skills published there, not skills installed.
