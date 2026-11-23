@@ -117,7 +117,7 @@ Use one view, or a few when they each add something. Most PRs need only one or t
 
 ### Evidence
 
-Show that the change works, before and after. Evidence is optional unless the change affects functionality or behavior.
+Show that the change works, before and after. Evidence is required when the change impacts functionality or behavior.
 
-- For a visual change, prefer screenshots or a recording when the environment can produce them.
+- For a visual change, use screenshots or a recording.
 - For an execution-based change, display the relevant console output from before and after the change.
