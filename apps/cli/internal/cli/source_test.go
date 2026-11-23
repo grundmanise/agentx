@@ -101,15 +101,15 @@ func TestSourceAddNormalisesEveryURLForm(t *testing.T) {
 		})
 	}
 
-	// The token appears nowhere: not in the settings, the account repo
+	// The token appears nowhere: not in the settings, the store
 	// configuration, or the output of any command.
 	settings, err := os.ReadFile(filepath.Join(h.agentx, "settings.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := h.accountGit("config", "--list", "--local")
+	config := h.storeGit("config", "--list", "--local")
 	list := h.run("source", "list")
-	for what, text := range map[string]string{"settings.json": string(settings), "account repo config": config, "source list": list.stdout + list.stderr} {
+	for what, text := range map[string]string{"settings.json": string(settings), "store config": config, "source list": list.stdout + list.stderr} {
 		if strings.Contains(text, "s3cret") || strings.Contains(text, "someone") {
 			t.Errorf("%s carries the credential:\n%s", what, text)
 		}
@@ -163,14 +163,14 @@ func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 		"promisor":           "true",
 		"partialclonefilter": "blob:none",
 	} {
-		equal(t, "remote.src-"+id+"."+key, h.accountGit("config", "--get", "remote.src-"+id+"."+key), want)
+		equal(t, "remote.src-"+id+"."+key, h.storeGit("config", "--get", "remote.src-"+id+"."+key), want)
 	}
-	equal(t, "ref", h.accountGit("rev-parse", "refs/agentx/sources/"+id), head)
-	equal(t, "tags", h.accountGit("for-each-ref", "refs/tags"), "")
+	equal(t, "ref", h.storeGit("rev-parse", "refs/agentx/sources/"+id), head)
+	equal(t, "tags", h.storeGit("for-each-ref", "refs/tags"), "")
 
 	// Every SKILL.md blob is present; every other blob is absent.
 	present, missing := map[string]bool{}, map[string]bool{}
-	for _, line := range strings.Split(h.accountGit("rev-list", "--objects", "--missing=print", "refs/agentx/sources/"+id), "\n") {
+	for _, line := range strings.Split(h.storeGit("rev-list", "--objects", "--missing=print", "refs/agentx/sources/"+id), "\n") {
 		oid, path, _ := strings.Cut(line, " ")
 		if strings.HasPrefix(oid, "?") {
 			missing[oid[1:]] = true
@@ -178,7 +178,7 @@ func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 			present[path] = true
 		}
 	}
-	for _, line := range strings.Split(h.accountGit("ls-tree", "-r", head), "\n") {
+	for _, line := range strings.Split(h.storeGit("ls-tree", "-r", head), "\n") {
 		meta, path, _ := strings.Cut(line, "\t")
 		oid := strings.Fields(meta)[2]
 		if strings.HasSuffix(path, "SKILL.md") {
@@ -211,14 +211,14 @@ func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 	if _, err := time.Parse(time.RFC3339, fmt.Sprint(entry["access_checked"])); err != nil {
 		t.Errorf("access_checked %v: %v", entry["access_checked"], err)
 	}
-	equal(t, "version", readVersion(t, h), 2) // the account repo's creation, then the settings
+	equal(t, "version", readVersion(t, h), 2) // the store's creation, then the settings
 
 	// Adding again re-fetches and keeps one entry; the confirmation says so.
 	out = h.run("--verbose", "source", "add", s.url+"#v1")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "✓ re-fetched "+s.url+" pinned to v1, now at "+v1[:7]+", was "+head[:7])
 	equal(t, "fetches", fetches(out.stderr), 2)
-	equal(t, "refspec", h.accountGit("config", "--get", "remote.src-"+id+".fetch"), "+v1:"+source.StagingRef(id))
+	equal(t, "refspec", h.storeGit("config", "--get", "remote.src-"+id+".fetch"), "+v1:"+source.StagingRef(id))
 	file = readSettingsFile(t, h)
 	sources = file["sources"].([]any)
 	if len(sources) != 1 {
@@ -239,8 +239,8 @@ func TestSourceAddFallsBackToFullFetch(t *testing.T) {
 	src, _ := sourceEvents(t, h.events(out.stdout))
 	equal(t, "commit", src["commit"], head)
 	equal(t, "skills", src["skills"], float64(2))
-	equal(t, "ref", h.accountGit("rev-parse", "refs/agentx/sources/"+id), head)
-	if missing := strings.Count(h.accountGit("rev-list", "--objects", "--missing=print", "refs/agentx/sources/"+id), "\n?"); missing != 0 {
+	equal(t, "ref", h.storeGit("rev-parse", "refs/agentx/sources/"+id), head)
+	if missing := strings.Count(h.storeGit("rev-list", "--objects", "--missing=print", "refs/agentx/sources/"+id), "\n?"); missing != 0 {
 		t.Errorf("%d objects missing after a full fetch", missing)
 	}
 	// The listing is complete afterwards, offline.
@@ -278,12 +278,12 @@ func TestSourceAddRefetchesWhenTheServerRefusesSingleObjects(t *testing.T) {
 	}
 
 	// The re-fetch took everything, although the remote is still a promisor
-	// with a blob:none filter, so the account repo is whole.
-	equal(t, "ref", h.accountGit("rev-parse", "refs/agentx/sources/"+id), head)
+	// with a blob:none filter, so the store is whole.
+	equal(t, "ref", h.storeGit("rev-parse", "refs/agentx/sources/"+id), head)
 	equal(t, "missing objects", h.missingObjects("refs/agentx/sources/"+id), 0)
 
 	// The listing the add printed is the real one, and every later listing
-	// is answered from the account repo alone.
+	// is answered from the store alone.
 	out = h.run("--verbose", "--json", "source", "skills", id)
 	equal(t, "exit", out.exit, 0)
 	src, skills := sourceEvents(t, h.events(out.stdout))
@@ -292,7 +292,7 @@ func TestSourceAddRefetchesWhenTheServerRefusesSingleObjects(t *testing.T) {
 	equal(t, "skills[0]", skills[0]["name"], "alpha")
 	equal(t, "skills[1]", skills[1]["name"], "beta")
 	if n := fetches(out.stderr); n != 0 {
-		t.Errorf("source skills ran %d git fetches; it must read the account repo alone", n)
+		t.Errorf("source skills ran %d git fetches; it must read the store alone", n)
 	}
 }
 
@@ -315,8 +315,8 @@ func TestSourceAddPeelsAnAnnotatedTagPin(t *testing.T) {
 	equal(t, "skills", src["skills"], float64(1))
 
 	// The ref holds the tag object, so the peel is the code's own doing.
-	ref := h.accountGit("rev-parse", "refs/agentx/sources/"+id)
-	equal(t, "ref type", h.accountGit("cat-file", "-t", ref), "tag")
+	ref := h.storeGit("rev-parse", "refs/agentx/sources/"+id)
+	equal(t, "ref type", h.storeGit("cat-file", "-t", ref), "tag")
 	if ref == head {
 		t.Fatalf("the source ref is the commit itself; the test no longer covers peeling")
 	}
@@ -335,7 +335,7 @@ func TestSourceAddPeelsAnAnnotatedTagPin(t *testing.T) {
 // TestSourceSkills lists a source whose add was scoped to one subpath. The
 // subpath scopes that one listing: the add brings every SKILL.md of the
 // source, so every later listing, wider, narrower or by id, is answered
-// from the account repo alone and none of them fetches.
+// from the store alone and none of them fetches.
 func TestSourceSkills(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -363,7 +363,7 @@ func TestSourceSkills(t *testing.T) {
 		t.Helper()
 		out := h.run(append([]string{"--verbose"}, args...)...)
 		if n := fetches(out.stderr); n != 0 {
-			t.Errorf("source skills %v ran %d git fetches; it must read the account repo alone", args, n)
+			t.Errorf("source skills %v ran %d git fetches; it must read the store alone", args, n)
 		}
 		return out
 	}
@@ -419,7 +419,7 @@ func TestSourceSkills(t *testing.T) {
 	equal(t, "stdout", out.stdout, "1 skill in "+s.url+" under tools at "+head[:7]+"\n  gamma  tools/gamma  Outside skills\n")
 
 	// source read reads one skill's SKILL.md at the fetched commit, named
-	// by the subpath a source_skill event carries, from the account repo
+	// by the subpath a source_skill event carries, from the store
 	// alone, whatever subpath the add was scoped to.
 	out = list("--json", "source", "read", id, "skills/beta")
 	equal(t, "exit", out.exit, 0)
@@ -468,8 +468,8 @@ func TestSourceSkills(t *testing.T) {
 
 // TestSourceSkillsListsAURLNotAdded lists the skills under a subpath of a
 // repository the settings hold no source for. The listing comes from the
-// network and adds nothing: on a fresh home it creates no account repo and
-// no settings, and on a home with another source the settings, the account
+// network and adds nothing: on a fresh home it creates no store and
+// no settings, and on a home with another source the settings, the home
 // repo's remotes and its refs under refs/agentx are as they were.
 func TestSourceSkillsListsAURLNotAdded(t *testing.T) {
 	t.Parallel()
@@ -493,8 +493,8 @@ func TestSourceSkillsListsAURLNotAdded(t *testing.T) {
 	}
 	equal(t, "first skill", events[1]["name"], "alpha")
 	equal(t, "second skill", events[2]["subpath"], "skills/beta")
-	if _, err := os.Stat(gitx.AccountRepoPath(h.agentx)); err == nil {
-		t.Error("the listing created the account repo")
+	if _, err := os.Stat(gitx.StorePath(h.agentx)); err == nil {
+		t.Error("the listing created the store")
 	}
 	if _, err := os.Stat(settingsFile); err == nil {
 		t.Error("the listing wrote the settings")
@@ -508,8 +508,8 @@ func TestSourceSkillsListsAURLNotAdded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remotes := h.accountGit("remote")
-	refs := h.accountGit("for-each-ref", "refs/agentx")
+	remotes := h.storeGit("remote")
+	refs := h.storeGit("for-each-ref", "refs/agentx")
 
 	out = h.run("source", "skills", s.url+"/skills")
 	equal(t, "exit", out.exit, 0)
@@ -521,8 +521,8 @@ func TestSourceSkillsListsAURLNotAdded(t *testing.T) {
 		t.Fatal(err)
 	}
 	equal(t, "settings", string(after), string(settings))
-	equal(t, "remotes", h.accountGit("remote"), remotes)
-	equal(t, "refs", h.accountGit("for-each-ref", "refs/agentx"), refs)
+	equal(t, "remotes", h.storeGit("remote"), remotes)
+	equal(t, "refs", h.storeGit("for-each-ref", "refs/agentx"), refs)
 }
 
 func TestSourceListAndRemove(t *testing.T) {
@@ -591,10 +591,10 @@ func TestSourceListAndRemove(t *testing.T) {
 		t.Fatalf("event types = %v, want %v", got, want)
 	}
 	equal(t, "removed.url", events[0]["url"], a.url)
-	if _, err := h.accountGitErr("config", "--get", "remote.src-"+aID+".url"); err == nil {
+	if _, err := h.storeGitErr("config", "--get", "remote.src-"+aID+".url"); err == nil {
 		t.Error("the remote of the removed source is still configured")
 	}
-	equal(t, "refs", h.accountGit("for-each-ref", "--format=%(refname)", "refs/agentx/sources/"), "refs/agentx/sources/"+bID)
+	equal(t, "refs", h.storeGit("for-each-ref", "--format=%(refname)", "refs/agentx/sources/"), "refs/agentx/sources/"+bID)
 	sources := readSettingsFile(t, h)["sources"].([]any)
 	if len(sources) != 1 || sources[0].(map[string]any)["url"] != b.url {
 		t.Errorf("sources after remove = %v", sources)
@@ -605,8 +605,8 @@ func TestSourceListAndRemove(t *testing.T) {
 	out = h.run("source", "remove", b.url)
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stdout", out.stdout, "✓ removed "+b.url+"\n")
-	equal(t, "refs", h.accountGit("for-each-ref", "refs/agentx/sources/"), "")
-	equal(t, "config", strings.Contains(h.accountGit("config", "--list", "--local"), "remote.src-"), false)
+	equal(t, "refs", h.storeGit("for-each-ref", "refs/agentx/sources/"), "")
+	equal(t, "config", strings.Contains(h.storeGit("config", "--list", "--local"), "remote.src-"), false)
 	equal(t, "sources", len(readSettingsFile(t, h)["sources"].([]any)), 0)
 
 	// Removing what is not there is exit 5 and no mutation.
@@ -621,7 +621,7 @@ func TestSourceListAndRemove(t *testing.T) {
 	out = h.run("--verbose", "source", "add", a.url)
 	equal(t, "exit", out.exit, 0)
 	equal(t, "fetches", fetches(out.stderr), 2)
-	if h.accountGit("rev-parse", "refs/agentx/sources/"+aID) != a.run("rev-parse", "HEAD") {
+	if h.storeGit("rev-parse", "refs/agentx/sources/"+aID) != a.run("rev-parse", "HEAD") {
 		t.Error("the re-added source is not at the source's head")
 	}
 	out = h.run("--json", "source", "skills", aID)
@@ -676,16 +676,16 @@ func TestSourceAddErrors(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(h.agentx, "settings.json")); !os.IsNotExist(err) {
 		t.Errorf("a failed add wrote settings.json: %v", err)
 	}
-	if config := h.accountGit("config", "--list", "--local"); strings.Contains(config, "remote.") {
+	if config := h.storeGit("config", "--list", "--local"); strings.Contains(config, "remote.") {
 		t.Errorf("a failed add left a remote behind:\n%s", config)
 	}
-	equal(t, "refs", h.accountGit("for-each-ref", "refs/agentx/"), "")
+	equal(t, "refs", h.storeGit("for-each-ref", "refs/agentx/"), "")
 
 	// A failed re-fetch of a known source keeps what it had.
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
 	equal(t, "exit", h.run("--json", "source", "add", s.url+"#nope").exit, 5)
-	equal(t, "ref kept", h.accountGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), s.run("rev-parse", "HEAD"))
-	equal(t, "refspec kept", h.accountGit("config", "--get", "remote.src-"+source.ID(s.url)+".fetch"), "+HEAD:"+source.StagingRef(source.ID(s.url)))
+	equal(t, "ref kept", h.storeGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), s.run("rev-parse", "HEAD"))
+	equal(t, "refspec kept", h.storeGit("config", "--get", "remote.src-"+source.ID(s.url)+".fetch"), "+HEAD:"+source.StagingRef(source.ID(s.url)))
 	equal(t, "sources", len(readSettingsFile(t, h)["sources"].([]any)), 1)
 	equal(t, "exit", h.run("--json", "source", "skills", s.url).exit, 0)
 	out := h.run("source", "add", missing.url)
@@ -756,7 +756,7 @@ func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 // before it writes anything, on one home whose settings hold the hub: a
 // shared source naming the hub's repository, exit 6, which source skills
 // gives for the hub too, and skill add of it; and a hub URL with a token or
-// a ref, exit 1. None of them creates the account repo.
+// a ref, exit 1. None of them creates the store.
 func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -766,7 +766,7 @@ func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		settings.SetSource(home.Source{URL: forks, Account: true})
+		settings.SetSource(home.Source{URL: forks, Hub: true})
 		return home.SaveSettings(h.agentx, settings)
 	})
 	if err != nil {
@@ -805,8 +805,8 @@ func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 	if !reflect.DeepEqual(readSettingsFile(t, h), before) {
 		t.Errorf("a refusal changed the settings: %v", readSettingsFile(t, h))
 	}
-	if _, err := os.Stat(gitx.AccountRepoPath(h.agentx)); !os.IsNotExist(err) {
-		t.Errorf("a refusal created the account repo: %v", err)
+	if _, err := os.Stat(gitx.StorePath(h.agentx)); !os.IsNotExist(err) {
+		t.Errorf("a refusal created the store: %v", err)
 	}
 }
 
@@ -855,8 +855,8 @@ func TestSourceRemoveKeepsTheEntryWhenGitFails(t *testing.T) {
 	equal(t, "add", h.run("source", "add", s.url).exit, 0)
 	id := source.ID(s.url)
 
-	// git cannot write the account repo's config while this lock file exists.
-	lock := filepath.Join(h.agentx, "account.git", "config.lock")
+	// git cannot write the store's config while this lock file exists.
+	lock := filepath.Join(h.agentx, "store.git", "config.lock")
 	if err := os.WriteFile(lock, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -864,7 +864,7 @@ func TestSourceRemoveKeepsTheEntryWhenGitFails(t *testing.T) {
 	if out.exit == 0 {
 		t.Fatal("remove reported success while git could not write")
 	}
-	equal(t, "error.code", h.events(out.stdout)[0]["code"], "account_repo")
+	equal(t, "error.code", h.events(out.stdout)[0]["code"], "store")
 	if sources := readSettingsFile(t, h)["sources"].([]any); len(sources) != 1 {
 		t.Fatalf("the entry was dropped while the remote remained: %v", sources)
 	}
@@ -875,7 +875,7 @@ func TestSourceRemoveKeepsTheEntryWhenGitFails(t *testing.T) {
 	}
 	equal(t, "remove", h.run("source", "remove", s.url).exit, 0)
 	equal(t, "sources", len(readSettingsFile(t, h)["sources"].([]any)), 0)
-	equal(t, "refs", h.accountGit("for-each-ref", "refs/agentx/sources/"), "")
+	equal(t, "refs", h.storeGit("for-each-ref", "refs/agentx/sources/"), "")
 
 	// An orphan the other way round: git state with no entry, which only
 	// remove can reach.
@@ -893,15 +893,15 @@ func TestSourceRemoveKeepsTheEntryWhenGitFails(t *testing.T) {
 	}
 	out = h.run("source", "remove", id)
 	equal(t, "orphan remove exit", out.exit, 0)
-	equal(t, "refs", h.accountGit("for-each-ref", "refs/agentx/sources/"), "")
-	if config := h.accountGit("config", "--list", "--local"); strings.Contains(config, "src-"+id) {
+	equal(t, "refs", h.storeGit("for-each-ref", "refs/agentx/sources/"), "")
+	if config := h.storeGit("config", "--list", "--local"); strings.Contains(config, "src-"+id) {
 		t.Errorf("the orphaned remote is still configured:\n%s", config)
 	}
 }
 
 // TestSourceTellsALocalGitFailureFromAnUnfetchedSource covers the two ways
-// a listing can find nothing: an account repo git cannot read, which is
-// exit code 8 in every source command, and a source the account repo holds
+// a listing can find nothing: a store git cannot read, which is
+// exit code 8 in every source command, and a source the store holds
 // no ref for, which stays exit code 5. Reporting the first as the second
 // sends the reader to `source add`, which fails differently again.
 func TestSourceTellsALocalGitFailureFromAnUnfetchedSource(t *testing.T) {
@@ -912,7 +912,7 @@ func TestSourceTellsALocalGitFailureFromAnUnfetchedSource(t *testing.T) {
 	id := source.ID(s.url)
 
 	// The ref alone is gone: the source was never fetched on this machine.
-	h.accountGit("update-ref", "-d", source.Ref(id))
+	h.storeGit("update-ref", "-d", source.Ref(id))
 	out := h.run("--json", "source", "skills", s.url)
 	equal(t, "exit", out.exit, 5)
 	events := h.events(out.stdout)
@@ -921,22 +921,22 @@ func TestSourceTellsALocalGitFailureFromAnUnfetchedSource(t *testing.T) {
 	equal(t, "list exit", h.run("source", "list").exit, 0) // the settings entry is still there
 
 	// A packed-refs file git refuses to parse. rev-parse
-	// --is-bare-repository still succeeds, so the account repo check passes
+	// --is-bare-repository still succeeds, so the store check passes
 	// and each command meets the failure where it reads the refs.
-	packed := filepath.Join(gitx.AccountRepoPath(h.agentx), "packed-refs")
+	packed := filepath.Join(gitx.StorePath(h.agentx), "packed-refs")
 	if err := os.WriteFile(packed, []byte("this is not a packed-refs line\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.accountGitErr("for-each-ref", "refs/agentx/sources/"); err == nil {
-		t.Fatal("the account repo is still readable; the test proves nothing")
+	if _, err := h.storeGitErr("for-each-ref", "refs/agentx/sources/"); err == nil {
+		t.Fatal("the store is still readable; the test proves nothing")
 	}
 	for _, args := range [][]string{{"source", "list"}, {"source", "skills", s.url}} {
 		what := strings.Join(args, " ")
 		out := h.run(append([]string{"--json"}, args...)...)
 		equal(t, "exit of "+what, out.exit, 8)
 		events := h.events(out.stdout)
-		equal(t, "error.code of "+what, events[0]["code"], "account_repo")
-		hint, _ := events[0]["hint"].(string) // an account repo failure always carries one
+		equal(t, "error.code of "+what, events[0]["code"], "store")
+		hint, _ := events[0]["hint"].(string) // a store failure always carries one
 		contains(t, "error.hint of "+what, hint, "agentx doctor")
 	}
 }
@@ -1065,7 +1065,7 @@ func TestConcurrentSourceAdds(t *testing.T) {
 		t.Fatal("no add succeeded")
 	}
 	// Every remote that exists is complete, and every one has its entry.
-	config := h.accountGit("config", "--list", "--local")
+	config := h.storeGit("config", "--list", "--local")
 	entries := map[string]bool{}
 	for _, raw := range readSettingsFile(t, h)["sources"].([]any) {
 		entries[source.ID(raw.(map[string]any)["url"].(string))] = true
@@ -1200,7 +1200,7 @@ func TestAReAddAtTheSamePinThatLosesTheLockKeepsItsFetch(t *testing.T) {
 	unlock()
 
 	equal(t, "exit", p.wait().exit, 7)
-	equal(t, "the source ref after the refused re-add", h.accountGit("rev-parse", source.Ref(id)), second)
+	equal(t, "the source ref after the refused re-add", h.storeGit("rev-parse", source.Ref(id)), second)
 }
 
 // runTakingBackWithin is h.run for a source add whose take-back waits for
@@ -1239,15 +1239,15 @@ func TestSourceAddReportsTheRemoteItCouldNotTakeBack(t *testing.T) {
 	equal(t, "exit", out.exit, 7)
 	e := lastError(t, h.events(out.stdout))
 	equal(t, "error.code", e["code"], "locked")
-	contains(t, "error.message", e["message"].(string), source.RemoteName(id)+" was left in the account repo")
+	contains(t, "error.message", e["message"].(string), source.RemoteName(id)+" was left in the store")
 	contains(t, "error.hint", e["hint"].(string), "agentx source add "+s.url)
 	contains(t, "error.hint", e["hint"].(string), "agentx source remove "+id)
-	contains(t, "the remote is still configured", h.accountGit("config", "--list", "--local"), "remote."+source.RemoteName(id)+".url")
+	contains(t, "the remote is still configured", h.storeGit("config", "--list", "--local"), "remote."+source.RemoteName(id)+".url")
 
 	// The hint is true: adding the source again finishes the job.
 	unlock()
 	equal(t, "add again", h.run("source", "add", s.url).exit, 0)
-	equal(t, "ref", h.accountGit("rev-parse", source.Ref(id)), head)
+	equal(t, "ref", h.storeGit("rev-parse", source.Ref(id)), head)
 	settings, err := home.LoadSettings(h.agentx)
 	if err != nil {
 		t.Fatal(err)
@@ -1262,7 +1262,7 @@ func TestSourceAddReportsTheRemoteItCouldNotTakeBack(t *testing.T) {
 // what `source add` may never leave behind.
 func assertNoSource(t *testing.T, h *harness, id string, out outcome) {
 	t.Helper()
-	if config := h.accountGit("config", "--list", "--local"); strings.Contains(config, source.RemoteName(id)) {
+	if config := h.storeGit("config", "--list", "--local"); strings.Contains(config, source.RemoteName(id)) {
 		t.Errorf("the remote of the failed add is still configured:\n%s\nrun stderr:\n%s", config, out.stderr)
 	}
 	equal(t, "refs under refs/agentx", h.agentxRefs(), "")
@@ -1274,7 +1274,7 @@ func assertNoSource(t *testing.T, h *harness, id string, out outcome) {
 }
 
 // TestSourceAddKeepsTheRefWhenTheBlobsDoNotArrive is the other half of what
-// a staged fetch is for. The commit reaches the account repo and its
+// a staged fetch is for. The commit reaches the store and its
 // SKILL.md blobs never do, so the fetch fails; the source ref must still
 // name the commit the last complete fetch left, or `source list` would
 // report a commit no listing ever succeeded at, `source skills` would exit
@@ -1308,7 +1308,7 @@ func TestSourceAddKeepsTheRefWhenTheBlobsDoNotArrive(t *testing.T) {
 
 			// Nothing of the failed fetch is published, and nothing of it is
 			// left behind either.
-			equal(t, "ref", h.accountGit("rev-parse", source.Ref(id)), first)
+			equal(t, "ref", h.storeGit("rev-parse", source.Ref(id)), first)
 			equal(t, "refs under refs/agentx", h.agentxRefs(), source.Ref(id))
 
 			// Every reader still reads the source whole, at that commit.
@@ -1344,8 +1344,8 @@ func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
 
 	// What a fetch killed after its first step leaves: a ref on a commit
 	// whose blobs may not be here.
-	h.accountGit("update-ref", configured, head)
-	h.accountGit("update-ref", killed, head)
+	h.storeGit("update-ref", configured, head)
+	h.storeGit("update-ref", killed, head)
 	out := h.run("--json", "source", "list")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "source list", out.stdout, head)
@@ -1367,10 +1367,10 @@ func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
 		source.StagingRefPrefix + "0123456789abcdef/" + otherID,
 	}
 	for _, ref := range kept {
-		h.accountGit("update-ref", ref, otherHead)
+		h.storeGit("update-ref", ref, otherHead)
 	}
 
-	h.accountGit("update-ref", configured, head)
+	h.storeGit("update-ref", configured, head)
 	equal(t, "remove", h.run("source", "remove", s.url).exit, 0)
 	kept = append(kept, source.Ref(otherID))
 	sort.Strings(kept)

@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 import type { RefObject } from "react";
 
 import type { LibraryEntry } from "#/cli/events.gen.ts";
-import { YOUR_SKILLS } from "#/screens/sources/projection.ts";
+import { HUB_SKILLS } from "#/screens/sources/projection.ts";
 import type { SourcePill } from "#/screens/sources/projection.ts";
 import {
   RemoveSourceDialog,
@@ -21,12 +21,12 @@ export const REFRESH_LABEL = "refresh source";
 
 /** The pending label of what Refresh runs: on Hub, the read of your skills. */
 const refreshLabel = (pill: SourcePill) =>
-  pill.key === YOUR_SKILLS
+  pill.key === HUB_SKILLS
     ? loadLabel(["skill", "list", "--remote"])
     : REFRESH_LABEL;
 
 const refresh = (pill: SourcePill) => {
-  if (pill.key === YOUR_SKILLS) {
+  if (pill.key === HUB_SKILLS) {
     void loadInstallable();
   } else {
     void agentx(["source", "fetch", pill.key], { label: REFRESH_LABEL });
@@ -54,7 +54,7 @@ export const OpenSource = ({
     refresh(pill);
   };
   // The hub is set, changed and detached in Settings.
-  if (pill.key === YOUR_SKILLS) {
+  if (pill.key === HUB_SKILLS) {
     return (
       <SourceDetail
         source={pill.source}

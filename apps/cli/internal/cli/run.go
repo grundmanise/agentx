@@ -29,7 +29,7 @@ type invocation struct {
 	summary  string // what the result event says about a run that succeeded
 	// publishHintOnce says a run over many skills says once, once they are
 	// done, that the skills it made hub skills are not published, see
-	// noAccountRemoteHint; publishHintDue says one of them needs it said.
+	// noHubRemoteHint; publishHintDue says one of them needs it said.
 	publishHintOnce, publishHintDue bool
 	// adoptForce is agentx skill import --force: an adoption replaces an agent
 	// client's folder of the skill that holds other files, see readAdoptCopies.
@@ -63,7 +63,7 @@ type invocation struct {
 func (inv *invocation) refs(ctx context.Context) home.RefUpdater {
 	ctx = interrupt.Uninterruptible(ctx)
 	return journalRefs{RefUpdater: inv.git.Refs(ctx), out: inv.out,
-		prune: func() error { return inv.pruneMerges(gitx.AccountRepoPath(inv.dirs.Home)) }}
+		prune: func() error { return inv.pruneMerges(gitx.StorePath(inv.dirs.Home)) }}
 }
 
 // journalRefs is the ref updater plus the command's stderr, the journal
@@ -263,7 +263,7 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 // knownFailure is the failure a run reports for err when err is one it
 // knows: a refusal as it is, a lock another command holds, exit code 7, a
 // ref that moved before a mutation applied or a journal that could not be
-// finished, exit code 6, and an account repo git cannot use, exit code 8.
+// finished, exit code 6, and a store git cannot use, exit code 8.
 // It reports false for any other error, whose exit code depends on whether
 // the command line was parsed. dir is agentx home.
 func knownFailure(dir string, err error) (*failure, bool) {
@@ -279,11 +279,11 @@ func knownFailure(dir string, err error) (*failure, bool) {
 		f = &failure{status: exitRefused, message: err.Error() + ", so nothing was changed", hint: "run the command again"}
 	case errors.Is(err, home.ErrRecovery):
 		f = &failure{status: exitRefused, message: err.Error(), hint: "restore the file to let the change finish, or move the journal aside to keep the file as it is"}
-	case errors.Is(err, gitx.ErrAccountRepo):
-		// A journal's ref step reaches the account repo long after the
+	case errors.Is(err, gitx.ErrStore):
+		// A journal's ref step reaches the store long after the
 		// command that wrote the journal is gone, so any command can be the
 		// one that finds it unusable, and the table calls that 8.
-		f = &failure{status: exitAccountRepo, message: err.Error(), hint: "run 'agentx doctor' and check the account repo it names"}
+		f = &failure{status: exitStore, message: err.Error(), hint: "run 'agentx doctor' and check the store it names"}
 	default:
 		return nil, false
 	}

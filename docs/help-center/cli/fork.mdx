@@ -1,9 +1,9 @@
 ---
 title: "Your hub skills"
-description: "Create hub skills, or fork installed ones, each with a history in the account repo."
+description: "Create hub skills, or fork installed ones, each with a history in the store."
 ---
 
-Your hub skills are the skills you create with `agentx skill new`, fork with `agentx skill fork` or [import as they are](/cli/skill-import#skills-imported-as-they-are) with `agentx skill import`. agentx keeps the history of each one in the [account repo](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) on this machine, `~/.agentx/account.git`. To use them on your other machines, publish them to your [hub](/hub), a Git repository that may be kept by someone else. You need a hub only when you publish. Every client sees your hub skills like any other skill.
+Your hub skills are the skills you create with `agentx skill new`, fork with `agentx skill fork` or [import as they are](/cli/skill-import#skills-imported-as-they-are) with `agentx skill import`. agentx keeps the history of each one in the [store](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) on this machine, `~/.agentx/store.git`. To use them on your other machines, publish them to your [hub](/hub), a Git repository that may be kept by someone else. You need a hub only when you publish. Every client sees your hub skills like any other skill.
 
 A skill you fork from an installed skill keeps its upstream, the skill it came from, so you can take in newer versions later. A skill you create or import has no upstream.
 
@@ -252,12 +252,12 @@ A conflict with what another machine published waits the same way. The first lin
 ## Where your skills live
 
 ```text
-~/.agentx/worktrees/release-notes/.git                Git's pointer to the account repo
+~/.agentx/worktrees/release-notes/.git                Git's pointer to the store
 ~/.agentx/worktrees/release-notes/release-notes/      the skill
 ~/.agents/skills/release-notes -> ../../.agentx/worktrees/release-notes/release-notes
 ```
 
-- The branch is `skills/<name>` in the account repo. Plain `git` reads it: `git --git-dir ~/.agentx/account.git log skills/release-notes`.
+- The branch is `skills/<name>` in the store. Plain `git` reads it: `git --git-dir ~/.agentx/store.git log skills/release-notes`.
 - agentx checks the branch out in `~/.agentx/worktrees/<name>`. You can run Git there.
 - Your library holds a symlink to the skill.
 
@@ -402,4 +402,4 @@ For what each code means, see [Exit codes](/cli/output#exit-codes). For `agentx 
 | 6 | A folder is in the way, or `--force` is given with nothing in the way. | See [Something in the way](#something-in-the-way). |
 | 6 | The skill changed while the command ran. | Run the command again. |
 | 7 | Another agentx command is running. | Retry when it finishes. |
-| 8 | agentx cannot read or write the account repo, or a forked skill's history does not say which upstream version it is based on. | Run `agentx doctor`. |
+| 8 | agentx cannot read or write the store, or a forked skill's history does not say which upstream version it is based on. | Run `agentx doctor`. |

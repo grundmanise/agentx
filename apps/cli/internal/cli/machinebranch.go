@@ -59,9 +59,9 @@ func cloudOnly(id string) error {
 }
 
 // machineBranch is a machine's branch on the hub as one read
-// found it: the account repo, the hub's git remote and URL, the
+// found it: the store, the hub's git remote and URL, the
 // machine id, and the commit the branch held, "" when the remote holds no
-// such branch. A tip is in the account repo, fetched into its
+// such branch. A tip is in the store, fetched into its
 // gitx.MachineTracking ref.
 type machineBranch struct {
 	gitDir, remote, url, id string
@@ -76,7 +76,7 @@ func (b machineBranch) name() string { return gitx.MachineBranch(b.id) }
 // ref, then, when the remote holds it, one fetch of that ref alone. A
 // remote git cannot reach is exit code 3.
 func (inv *invocation) readMachineBranch(ctx context.Context, id string) (machineBranch, error) {
-	gitDir, entry, remote, err := inv.accountRemote(ctx)
+	gitDir, entry, remote, err := inv.hubRemote(ctx)
 	if err != nil {
 		return machineBranch{}, err
 	}
@@ -104,7 +104,7 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch) (sna
 	data, size, held, err := inv.git.SnapshotAt(ctx, b.gitDir, b.tip, documentLimit)
 	switch {
 	case err != nil:
-		return snapshot{}, false, accountRepoFailure(err)
+		return snapshot{}, false, storeFailure(err)
 	case !held:
 		return snapshot{}, false, fail(exitRefused, b.name()+" on the hub holds no "+gitx.SnapshotFile,
 			"write a snapshot to it with 'agentx snapshot save --machine "+b.id+"'")
@@ -165,13 +165,13 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 	}
 	tree, err := inv.git.SnapshotTree(ctx, b.gitDir, append(data, '\n'))
 	if err != nil {
-		return "", false, accountRepoFailure(err)
+		return "", false, storeFailure(err)
 	}
 	var parents []string
 	if b.tip != "" {
 		held, err := inv.git.TreeOf(ctx, b.gitDir, b.tip)
 		if err != nil {
-			return "", false, accountRepoFailure(err)
+			return "", false, storeFailure(err)
 		}
 		if held == tree {
 			return b.tip, false, nil
@@ -185,7 +185,7 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 	op.ID = lineage.NewOperationID()
 	commit, err = w.commitOperation(ctx, tree, parents, subject, op)
 	if err != nil {
-		return "", false, accountRepoFailure(err)
+		return "", false, storeFailure(err)
 	}
 	branch := b.name()
 	s, found, stderr, exit, err := inv.git.PushBranch(ctx, b.gitDir, b.remote, commit, branch, b.tip)
@@ -218,7 +218,7 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 // the scan, so that a machine with none is refused before anything is
 // read.
 func (inv *invocation) exportToMachine(ctx context.Context, id string) error {
-	if _, _, ok, err := inv.accountSource(); err != nil || !ok {
+	if _, _, ok, err := inv.hubSource(); err != nil || !ok {
 		if err == nil {
 			err = noRemoteRefusal()
 		}
@@ -328,9 +328,9 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 		return err
 	}
 	if !found {
-		account, _ := accountEntry(here) // set, or readMachineBranch had refused
+		hub, _ := hubEntry(here) // set, or readMachineBranch had refused
 		snap.Settings = home.DefaultSettings()
-		snap.Settings.SetSource(account)
+		snap.Settings.SetSource(hub)
 		forgetAccess(&snap.Settings)
 	}
 	entry, err := inv.machineEntry(sc, snap, name)
@@ -525,7 +525,7 @@ func (inv *invocation) machineEntry(sc skillContext, snap snapshot, name string)
 		}
 		return snapshotSkill{}, inv.noLibrarySkill(name)
 	case rec.Kind == lineage.KindFork:
-		e := snapshotSkill{Name: name, Kind: lineage.KindManaged, Source: sc.account, Placements: []string{}}
+		e := snapshotSkill{Name: name, Kind: lineage.KindManaged, Source: sc.hub, Placements: []string{}}
 		if rec.Fork != nil {
 			e.ForkID = rec.Fork.ID
 		}

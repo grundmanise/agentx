@@ -6,7 +6,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
-// A merge of two histories of one fork, as the account step of an update or
+// A merge of two histories of one fork, as the hub step of an update or
 // a publish makes when both this machine and the hub moved on,
 // records which import is the fork's base afterwards in its Agentx-Base
 // trailer, since the next update from upstream merges with that import as
@@ -14,7 +14,7 @@ import (
 // took different versions of the same upstream, the newer one is the base,
 // but only when the source's own history proves it newer: its upstream
 // commit descends from the other's. Anything else keeps this machine's
-// base: a version whose history the account repo never fetched, a source
+// base: a version whose history the store never fetched, a source
 // that was force pushed, two versions on diverged branches of the source,
 // or bases from two different sources or directories. A base kept that way
 // costs at most a conflict on the next update from upstream; no content is
@@ -57,7 +57,7 @@ func PickBase(ctx context.Context, r *gitx.Runner, gitDir string, local, remote 
 // the same upstream skill than older: both from one source and directory,
 // and newer's upstream commit a descendant of older's. It is proved in the
 // isolated environment, at most two git processes: one rev-list that finds
-// whether both upstream commits are in the account repo at all, without
+// whether both upstream commits are in the store at all, without
 // reaching any remote for one that is not, and, when they are, one
 // merge-base --is-ancestor. The same version, and any failure, is no
 // proof.

@@ -21,8 +21,8 @@ export const ACME = "https://github.com/acme/skills";
 export const ACME_ID = "1c9d0b7e4a2f6d38";
 export const ZETA = "https://gitlab.com/zeta/tools";
 export const ZETA_ID = "7a3b5c9e1f2d4a60";
-export const ACCOUNT = "ssh://git@github.com/me/account";
-export const ACCOUNT_ID = "5e8a1c3b7d9f2a64";
+export const HUB = "ssh://git@github.com/me/hub";
+export const HUB_ID = "5e8a1c3b7d9f2a64";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -53,13 +53,13 @@ export const sources: SourceEvent[] = [
   },
   {
     access: "writable",
-    account: true,
-    id: ACCOUNT_ID,
+    hub: true,
+    id: HUB_ID,
     last_fetched: ago(2 * HOUR),
     schema_version: 4,
     skills: 2,
     type: "source",
-    url: ACCOUNT,
+    url: HUB,
   },
 ];
 
@@ -113,7 +113,7 @@ export const library: LibraryEntry[] = [
     kind: "managed",
     name: "my-letters",
     placements: [],
-    source: ACCOUNT,
+    source: HUB,
     state: "current",
     universal,
     upstream: ACME,
@@ -166,7 +166,7 @@ export const installable: InstallableSkillEvent[] = [
     fork_id: "a1a1a1a1a1a1",
     name: "my-pdf",
     schema_version: 4,
-    source: ACCOUNT,
+    source: HUB,
     type: "installable_skill",
     upstream: ACME,
     upstream_commit: "3f2a9c1e8d7b6a",
@@ -177,7 +177,7 @@ export const installable: InstallableSkillEvent[] = [
     fork_id: "b2b2b2b2b2b2",
     name: "release-notes",
     schema_version: 4,
-    source: ACCOUNT,
+    source: HUB,
     type: "installable_skill",
   },
 ];

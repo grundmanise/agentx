@@ -296,7 +296,7 @@ export const SkillDetail = ({
           </dl>
         </section>
         {/* Only hub skills keep a history; other skills show no section. */}
-        {row.kind === "yours" && (
+        {row.kind === "hub" && (
           <section aria-label="History" className="flex flex-col gap-3">
             <Caption>History</Caption>
             <HistorySection row={row} />

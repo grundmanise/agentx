@@ -35,7 +35,7 @@ func forkNameRefusal(name string) string {
 // nameTaken finds the branch of either namespace whose name is name, or
 // differs from it only by case, other than the one called except, which is
 // the source's own branch of a fork, "" for none. The comparison ignores
-// case because the account repo may sit on a file system that does, where
+// case because the store may sit on a file system that does, where
 // two such branches would be one.
 func nameTaken(records map[string]lineage.Record, name, except string) (lineage.Record, bool) {
 	names := make([]string, 0, len(records))
@@ -54,8 +54,8 @@ func nameTaken(records map[string]lineage.Record, name, except string) (lineage.
 // checkForkName refuses, with exit code 6, a name agentx cannot give a new
 // fork or skill made by skill new: one outside the grammar, one git would
 // not take for a branch, which the grammar already rules out and git is
-// asked about all the same, and one the account repo already holds a branch
-// of, in either namespace and whatever its case. records are the account
+// asked about all the same, and one the store already holds a branch
+// of, in either namespace and whatever its case. records are the home
 // repo's branches; except is the source's own, see nameTaken; hint is what
 // the refusal of a taken name says to do.
 func (inv *invocation) checkForkName(ctx context.Context, records map[string]lineage.Record, name, except, hint string) error {
@@ -68,7 +68,7 @@ func (inv *invocation) checkForkName(ctx context.Context, records map[string]lin
 	return takenRefusal(records, name, except, hint)
 }
 
-// takenRefusal is the refusal of a name the account repo holds a branch of,
+// takenRefusal is the refusal of a name the store holds a branch of,
 // nil when it holds none. It is read again under the lock, where nothing but
 // the branches can have changed.
 func takenRefusal(records map[string]lineage.Record, name, except, hint string) error {
@@ -80,7 +80,7 @@ func takenRefusal(records map[string]lineage.Record, name, except, hint string) 
 	if rec.Kind == lineage.KindFork {
 		what = "a hub skill"
 	}
-	message := "the account repo already holds " + sanitised(rec.Name) + " as " + what
+	message := "the store already holds " + sanitised(rec.Name) + " as " + what
 	if rec.Name != name {
 		message += ", which differs from " + name + " only by case"
 	}

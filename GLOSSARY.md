@@ -98,7 +98,7 @@ Whether agentx keeps a skill: managed or unmanaged, and nothing else. Where a ma
 _Avoid_: fork, from-scratch skill, account skill (as kinds)
 
 **Managed skill**:
-A skill agentx keeps a branch of in the account repo, so it knows its source and can update it. Either a skill of a shared source, installed with `agentx skill add <source>` or adopted from another tool's record of it, whose base version is the import commit on its import branch; or a hub skill, made with `agentx skill new` or `agentx skill fork`, adopted as it is with `agentx skill import`, or installed from the hub, whose source is the hub and whose branch holds its history.
+A skill agentx keeps a branch of in the store, so it knows its source and can update it. Either a skill of a shared source, installed with `agentx skill add <source>` or adopted from another tool's record of it, whose base version is the import commit on its import branch; or a hub skill, made with `agentx skill new` or `agentx skill fork`, adopted as it is with `agentx skill import`, or installed from the hub, whose source is the hub and whose branch holds its history.
 
 **Upstream-removed skill**:
 A managed skill whose subpath no longer holds a skill in its source, as the last update check found it: no directory there, or one without a SKILL.md. Kept as it is, never updated, shown with this state until a check finds it in the source again.
@@ -120,19 +120,19 @@ An action, not a kind: `agentx skill import` brings an unmanaged skill under age
 _Avoid_: migrate, claim, convert; import is fine for this action, but do not confuse it with applying a snapshot
 
 **Fork**:
-An action, not a kind: `agentx skill fork` makes a hub skill from another skill, a managed skill whose source is the hub and whose upstream is where it came from, keeping that skill's name unless given another. In the account repo and in this glossary, fork also names the branch and worktree that hold any hub skill, one made with `agentx skill new` or adopted as it is with `agentx skill import` included. A fork of a managed skill under its own name supersedes that skill in the agent configuration; a fork under a new name, and any fork of a plugin's skill or of a fork, sits beside the skill it came from instead, so an agent with the plugin turned on sees both under one name when the fork keeps it. Skills of a shared source, plugin-owned skills and forks can all be forked with `agentx skill fork`; an unmanaged skill is adopted instead, with `agentx skill import`. Renaming one with `agentx skill rename` keeps its fork id and history under the new name on this machine; its first publish under the new name creates the new name's branch on the hub and deletes the old one's when it is the same skill and the renamed skill holds all of it. Only that publish does: an old branch it keeps or cannot delete is never retried, and `agentx skill remove <old> --remote` deletes it. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; its edits stay on this machine until it is published; a publish, or an update, fork or rename of it, records them on its branch, and only a publish pushes them.
+An action, not a kind: `agentx skill fork` makes a hub skill from another skill, a managed skill whose source is the hub and whose upstream is where it came from, keeping that skill's name unless given another. In the store and in this glossary, fork also names the branch and worktree that hold any hub skill, one made with `agentx skill new` or adopted as it is with `agentx skill import` included. A fork of a managed skill under its own name supersedes that skill in the agent configuration; a fork under a new name, and any fork of a plugin's skill or of a fork, sits beside the skill it came from instead, so an agent with the plugin turned on sees both under one name when the fork keeps it. Skills of a shared source, plugin-owned skills and forks can all be forked with `agentx skill fork`; an unmanaged skill is adopted instead, with `agentx skill import`. Renaming one with `agentx skill rename` keeps its fork id and history under the new name on this machine; its first publish under the new name creates the new name's branch on the hub and deletes the old one's when it is the same skill and the renamed skill holds all of it. Only that publish does: an old branch it keeps or cannot delete is never retried, and `agentx skill remove <old> --remote` deletes it. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the store; its edits stay on this machine until it is published; a publish, or an update, fork or rename of it, records them on its branch, and only a publish pushes them.
 _Avoid_: copy, variant, override (as names of the action or of the skill it makes; the files a fork starts from are still a copy)
 
-**Account repo**:
-The one git repository per account that holds every hub skill as one branch per skill, every managed skill's base version as an import branch, and the last fetched state of each source. Each machine has its own clone in agentx home and checks out only the forks placed on it, one worktree per fork; import branches have no worktree; a machine without an account has the clone before the remote exists. Shared upstream versions establish lineage, separately from each fork's identity.
-_Avoid_: cloud repo, library repo, fork repo
+**Store**:
+The git repository in agentx home, `~/.agentx/store.git`, that holds every hub skill as one branch per skill, every managed skill's base version as an import branch, and the last fetched state of each source, the hub's included. Each machine has its own and checks out only the forks placed on it, one worktree per fork; import branches have no worktree; a machine without a hub has one all the same. Shared upstream versions establish lineage, separately from each fork's identity.
+_Avoid_: account repo, home repo (old names), cloud repo, library repo, fork repo, cache
 
 **Import commit**:
 A commit with no parent whose tree is one upstream version of a skill and whose id is a pure function of that version and its coordinates, so every machine produces the same commit for the same version. The first commit of a fork, and every upstream version merged into it later.
 _Avoid_: base commit, snapshot commit, root
 
 **Import branch**:
-The branch `managed/<name>` in the account repo that points at a managed skill's current import commit. Never checked out; the library holds the real directory. When the skill is forked in its place, the fork's branch starts from its import commit and the import branch is deleted, so the import commit becomes the fork's base.
+The branch `managed/<name>` in the store that points at a managed skill's current import commit. Never checked out; the library holds the real directory. When the skill is forked in its place, the fork's branch starts from its import commit and the import branch is deleted, so the import commit becomes the fork's base.
 _Avoid_: managed branch, shadow branch, cache branch
 
 **Adopt candidate**:
@@ -140,15 +140,15 @@ Something of the user's where a fork placed on this machine belongs: a directory
 _Avoid_: orphan, stray directory
 
 **Hub**:
-The source whose settings entry carries the account flag, added with `agentx source add <url> --hub`: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository: the user's own, one the user's machines share, or one someone else keeps to distribute skills, which may be read-only; later, hosted by agentx once the machine is signed in. Only hub skills' branches and snapshots travel through it.
+The source whose settings entry carries the hub flag, added with `agentx source add <url> --hub`: the repository stores push forks to and fetch them from. In the MVP it is a Git repository: the user's own, one the user's machines share, or one someone else keeps to distribute skills, which may be read-only; later, hosted by agentx once the machine is signed in. Only hub skills' branches and snapshots travel through it.
 _Avoid_: account remote (old name), personal, own, cloud, server, origin, fork source
 
 **Hub skill**:
-A managed skill whose source is the hub, and whose branch in the account repo, a fork, holds its history: one made with `agentx skill new` or `agentx skill fork`, adopted as it is with `agentx skill import`, or installed from the hub. Not a kind: where a managed skill is published to is its source.
+A managed skill whose source is the hub, and whose branch in the store, a fork, holds its history: one made with `agentx skill new` or `agentx skill fork`, adopted as it is with `agentx skill import`, or installed from the hub. Not a kind: where a managed skill is published to is its source.
 _Avoid_: own skill, personal skill, the user's own skills, account skill
 
 **Publish**:
-An explicit user action, `agentx skill publish`, that records the edits of a hub skill as one commit on its branch in the account repo, then pushes the branch to its source, the hub. There is no separate commit step: edits stay on this machine until they are published. It never merges: when another machine published there first, it records and pushes nothing, and the update's account step takes that in before the next publish. With a message, it folds what the hub lacks, the edits an update recorded included, into one commit under that message, unless a rename or an update from upstream lies between. A bare publish only updates branches the hub holds: it never creates one, and leaves out each skill not published, naming it. Publishing skills by name, one or several in one run, creates the branch of each one not published. Another machine with the same remote installs it from there, and takes later versions in with an update, a plain Git merge. Publishing a managed skill of a shared source, which only `agentx skill publish <name>` does, never a bare publish, records its edits as one commit on the branch of that source it is installed from, changing the skill's folder alone, under the user's Git identity and with no fork data, and pushes it there; the published version becomes its base. It never merges either: when the source changed the skill since it was installed, it pushes nothing, and an update takes the change in first.
+An explicit user action, `agentx skill publish`, that records the edits of a hub skill as one commit on its branch in the store, then pushes the branch to its source, the hub. There is no separate commit step: edits stay on this machine until they are published. It never merges: when another machine published there first, it records and pushes nothing, and the update's hub step takes that in before the next publish. With a message, it folds what the hub lacks, the edits an update recorded included, into one commit under that message, unless a rename or an update from upstream lies between. A bare publish only updates branches the hub holds: it never creates one, and leaves out each skill not published, naming it. Publishing skills by name, one or several in one run, creates the branch of each one not published. Another machine with the same remote installs it from there, and takes later versions in with an update, a plain Git merge. Publishing a managed skill of a shared source, which only `agentx skill publish <name>` does, never a bare publish, records its edits as one commit on the branch of that source it is installed from, changing the skill's folder alone, under the user's Git identity and with no fork data, and pushes it there; the published version becomes its base. It never merges either: when the source changed the skill since it was installed, it pushes nothing, and an update takes the change in first.
 _Avoid_: sync, share, upload
 
 **Sync status**:
@@ -156,7 +156,7 @@ Whether this machine and the hub hold the same versions of hub skills, as of the
 _Avoid_: published, up to date
 
 **Installable skill**:
-A hub skill that the hub holds and this machine's account repo has no branch of, as the last fetch of the remote found it. Listed by `skill list --remote` and installed by `skill add` with no source, `--name <name>` or `--all`, which creates the local branch at the remote's commit: the same skill, with its fork id and its history. A managed copy of its upstream that still holds its base version gives way to it; any other directory of that name in the library is refused.
+A hub skill that the hub holds and this machine's store has no branch of, as the last fetch of the remote found it. Listed by `skill list --remote` and installed by `skill add` with no source, `--name <name>` or `--all`, which creates the local branch at the remote's commit: the same skill, with its fork id and its history. A managed copy of its upstream that still holds its base version gives way to it; any other directory of that name in the library is refused.
 _Avoid_: remote skill, available fork, installable fork
 
 **Update check**:
@@ -164,15 +164,15 @@ Fetching the sources the managed skills came from, a forked skill's upstream inc
 _Avoid_: sync, poll
 
 **Update candidate**:
-The import commit of the newer upstream version an update check found for a managed skill, a forked one included, pinned in the account repo until an update applies it, a later check finds another version or none, or the skill is removed. The same commit an install of that version writes.
+The import commit of the newer upstream version an update check found for a managed skill, a forked one included, pinned in the store until an update applies it, a later check finds another version or none, or the skill is removed. The same commit an install of that version writes.
 _Avoid_: pending update, available version
 
 **Update**:
-Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, keeping the files git ignores there, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement; a modified skill updates by a three-way merge of its edits with the candidate, over the base version, which applies when it is clean and leaves a pending merge when it conflicts; the next update applies a pending merge once it is resolved. The skill keeps its library name and its placements, whatever the newer version calls it. A fork always updates by a merge of its tip with the candidate, with its base version as the merge base, committed on its branch, whether or not it has commits of its own, its unpublished edits recorded on the branch first and kept, still unpublished. With a hub set, an update of a hub skill first takes in what another machine published of it there, its account step: a plain Git merge of the two histories, a fast-forward when this machine has nothing of its own, whose conflict becomes a pending merge like any other; a branch of the same name that is another fork, by its fork id, is refused. For a skill with no upstream that is the whole update.
+Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, keeping the files git ignores there, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement; a modified skill updates by a three-way merge of its edits with the candidate, over the base version, which applies when it is clean and leaves a pending merge when it conflicts; the next update applies a pending merge once it is resolved. The skill keeps its library name and its placements, whatever the newer version calls it. A fork always updates by a merge of its tip with the candidate, with its base version as the merge base, committed on its branch, whether or not it has commits of its own, its unpublished edits recorded on the branch first and kept, still unpublished. With a hub set, an update of a hub skill first takes in what another machine published of it there, its hub step: a plain Git merge of the two histories, a fast-forward when this machine has nothing of its own, whose conflict becomes a pending merge like any other; a branch of the same name that is another fork, by its fork id, is refused. For a skill with no upstream that is the whole update.
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict, or the account step of an update when a fork's commits and the hub's conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git, or by editing its files and running `skill update --continue`. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update applies the resolved merge, `skill update --theirs` drops the edits and applies the update candidate instead, or the merge is given up with `skill update --abort`. While it exists the skill is not removed. Survives restarts.
+The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict, or the hub step of an update when a fork's commits and the hub's conflict: an ordinary Git merge in progress in a Git worktree of the store under agentx home, resolved with Git, or by editing its files and running `skill update --continue`. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update applies the resolved merge, `skill update --theirs` drops the edits and applies the update candidate instead, or the merge is given up with `skill update --abort`. While it exists the skill is not removed. Survives restarts.
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:
@@ -180,11 +180,11 @@ A managed skill holding edits not yet published, whatever its source: one of a s
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:
-What ties a managed skill to its source or, for a forked one, its upstream, meaning a source, a subpath and a version, and to its base. Read from the account repo: the lineage trailers on a fork's branch or on a managed skill's import branch. There is no separate copy.
+What ties a managed skill to its source or, for a forked one, its upstream, meaning a source, a subpath and a version, and to its base. Read from the store: the lineage trailers on a fork's branch or on a managed skill's import branch. There is no separate copy.
 _Avoid_: metadata
 
 **Lineage trailers**:
-The `Agentx-` commit trailers in the account repo: source, path, upstream commit and content hash on every imported upstream version, the id of the current base on every merge agentx makes, the fork id on the commit that creates a fork, and the machine on every commit agentx writes on a fork's branch. On a machine's branch, the operation each commit made: its id, its kind, the skill and the configurations. How a fork's provenance reaches every clone by fetch, with no file in the branch tree.
+The `Agentx-` commit trailers in the store: source, path, upstream commit and content hash on every imported upstream version, the id of the current base on every merge agentx makes, the fork id on the commit that creates a fork, and the machine on every commit agentx writes on a fork's branch. On a machine's branch, the operation each commit made: its id, its kind, the skill and the configurations. How a fork's provenance reaches every clone by fetch, with no file in the branch tree.
 _Avoid_: manifest, metadata file, provenance file
 
 **Foreign commit**:
@@ -193,7 +193,7 @@ _Avoid_: external commit, manual commit
 
 **Library**:
 One machine's canonical directory for skills managed by agentx at ~/.agents/skills. Installing there makes a skill available to every agent client that reads this universal location, regardless of placement choices.
-_Avoid_: store, cache, vault
+_Avoid_: cache, vault
 
 **Placement**:
 The path inside one agent configuration's skills directory through which that client sees a library skill. The library itself for a universal client; otherwise a symlink, or a copy where the configuration's placement mode is copy or `--copy` asks for one.
@@ -220,11 +220,11 @@ An agent client that reads the library as one of its own skills directories, suc
 _Avoid_: library client, library reader
 
 **Base version**:
-The upstream content a skill was installed, forked, last updated from, or, for a skill of a shared source, last published to that source, named by its content hash. The recorded upstream version used to distinguish local edits from upstream changes. Always an import commit in the account repo that every machine reproduces identically: the tip of a managed skill's import branch, which an install, an update and a publish to a shared source move, or the last imported version on a fork's branch.
+The upstream content a skill was installed, forked, last updated from, or, for a skill of a shared source, last published to that source, named by its content hash. The recorded upstream version used to distinguish local edits from upstream changes. Always an import commit in the store that every machine reproduces identically: the tip of a managed skill's import branch, which an install, an update and a publish to a shared source move, or the last imported version on a fork's branch.
 _Avoid_: original, parent, snapshot
 
 **Agentx home**:
-The ~/.agentx directory holding the account repo clone with its worktrees, the machine settings, local mutation journals and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
+The ~/.agentx directory holding the store clone with its worktrees, the machine settings, local mutation journals and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
 
 **Machine settings**:
 The one file in agentx home holding what only this machine decides: its label, enabled configurations, the placement mode of each configuration, sources and their pins, and copy modes. Leaves the machine only inside a snapshot.
@@ -269,5 +269,5 @@ A named group of skills the user defines, to view or install together. Kept in t
 _Avoid_: collection, bundle, profile, tag group
 
 **Account metadata**:
-A branch of the account repo holding sets, tags, archived flags and descriptions as small files keyed by logical asset, merged by git like everything else. Never a file inside a skill directory.
+A branch of the store holding sets, tags, archived flags and descriptions as small files keyed by logical asset, merged by git like everything else. Never a file inside a skill directory.
 _Avoid_: metadata file, manifest, frontmatter

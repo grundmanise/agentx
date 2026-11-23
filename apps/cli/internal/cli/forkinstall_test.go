@@ -12,7 +12,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
-// TestInstallAForkFromTheAccount lists on machine b, which installed
+// TestInstallAForkFromTheHub lists on machine b, which installed
 // nothing and added no source, the skills machine a published, and
 // installs one by name, then the rest with --all. skill list --remote
 // fetches the hub and lists alpha, beta and notes, made by
@@ -35,9 +35,9 @@ import (
 // both hand-pushed branches left out with a warning each, and a third
 // finds nothing left to install. alpha is refused as installed already,
 // with skill place named once its worktree and library entry are gone.
-func TestInstallAForkFromTheAccount(t *testing.T) {
+func TestInstallAForkFromTheHub(t *testing.T) {
 	t.Parallel()
-	a, b, s, remote := accountHomes(t)
+	a, b, s, remote := hubHomes(t)
 	rootA := filepath.Join(a.agentx, "worktrees", "alpha")
 	writeFile(t, filepath.Join(rootA, ".gitignore"), "*.log\n")
 	gitIn(t, a, rootA, "add", ".gitignore")
@@ -46,8 +46,8 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	pushOwn(a, remote, "notes")
 	a.mustRun("skill", "publish")
 	tip := a.ref(lineage.ForkRef("alpha"))
-	handMade := a.accountGit("-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit-tree", "-m", "By hand", tip+"^{tree}")
-	a.accountGit("push", "-q", remote, handMade+":refs/heads/skills/zeta", handMade+":refs/heads/skills/Bad_Name")
+	handMade := a.storeGit("-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit-tree", "-m", "By hand", tip+"^{tree}")
+	a.storeGit("push", "-q", remote, handMade+":refs/heads/skills/zeta", handMade+":refs/heads/skills/Bad_Name")
 
 	out := b.mustRun("--json", "skill", "list", "--remote")
 	listed := map[string]jsonEvent{}
@@ -91,8 +91,8 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	equal(t, "upstream", ev["upstream"], s.url)
 	equal(t, "upstream subpath", ev["upstream_subpath"], "skills/alpha")
 	equal(t, "the source it added", b.one(out.stdout, "source")["url"], s.url)
-	equal(t, "tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote")+" "+b.accountGit("config", "--get", "branch.skills/alpha.merge"),
-		accountRemoteName(t, b)+" refs/heads/skills/alpha")
+	equal(t, "tracking", b.storeGit("config", "--get", "branch.skills/alpha.remote")+" "+b.storeGit("config", "--get", "branch.skills/alpha.merge"),
+		hubRemoteName(t, b)+" refs/heads/skills/alpha")
 	rootB := filepath.Join(b.agentx, "worktrees", "alpha")
 	equal(t, "the .gitignore beside the skill", fileBody(t, filepath.Join(rootB, ".gitignore")), "*.log\n")
 	writeFile(t, filepath.Join(rootB, "alpha", "build.log"), "ignored\n")
@@ -163,13 +163,13 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	if err := os.Remove(filepath.Join(b.library, "alpha")); err != nil {
 		t.Fatal(err)
 	}
-	b.accountGit("worktree", "remove", "--force", "--force", filepath.Join(b.agentx, "worktrees", "alpha"))
+	b.storeGit("worktree", "remove", "--force", "--force", filepath.Join(b.agentx, "worktrees", "alpha"))
 	out = b.run("--json", "skill", "add", "--name", "alpha")
 	equal(t, "an unplaced fork: exit", out.exit, 6)
 	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "agentx skill place alpha")
 }
 
-// TestFromAccountSupersedesAnUnmodifiedCopy installs alpha from the
+// TestFromHubSupersedesAnUnmodifiedCopy installs alpha from the
 // hub on machine b, which installed the same upstream version
 // of alpha from the source first, removed it from Cortex Code, left a .DS_Store
 // in it, and had a check pin the source's next version for it. The copy
@@ -179,9 +179,9 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 // placements are as they were, Claude Code's leading to the fork and
 // Cortex Code still without one, though the install was given --to cortex,
 // which a warning says places nothing.
-func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
+func TestFromHubSupersedesAnUnmodifiedCopy(t *testing.T) {
 	t.Parallel()
-	_, b, s, _ := accountHomes(t)
+	_, b, s, _ := hubHomes(t)
 	if err := os.MkdirAll(filepath.Join(b.home, ".snowflake/cortex"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, b.library), " "), "")
 }
 
-// TestAddFromAccountRefuses installs from the hub on machine
+// TestAddFromHubRefuses installs from the hub on machine
 // b over what its library holds. Each refusal changes nothing, the
 // settings included, which lack the skills' source: a name agentx cannot
 // use for a skill, exit 6; a skill the hub does not hold,
@@ -231,9 +231,9 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 // whose library directory is gone, exit 6; an edited managed copy of
 // beta's upstream whose update merge is pending, exit 4, and once it is
 // aborted, exit 6, with a hint that keeps the edits out of harm's way.
-func TestAddFromAccountRefuses(t *testing.T) {
+func TestAddFromHubRefuses(t *testing.T) {
 	t.Parallel()
-	_, b, s, _ := accountHomes(t)
+	_, b, s, _ := hubHomes(t)
 	alphaLib, betaLib := filepath.Join(b.library, "alpha"), filepath.Join(b.library, "beta")
 	if err := os.MkdirAll(alphaLib, 0o755); err != nil {
 		t.Fatal(err)
@@ -312,13 +312,13 @@ func TestAddFromAccountRefuses(t *testing.T) {
 	equal(t, "its hint", e["hint"], "move it aside, or run 'agentx skill remove beta', then run 'agentx skill add --name beta' again")
 }
 
-// TestFromAccountPlan is what an install from the hub does
+// TestFromHubPlan is what an install from the hub does
 // with what the library path holds.
-func TestFromAccountPlan(t *testing.T) {
+func TestFromHubPlan(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		holds   libraryHolds
-		want    accountAction
+		want    hubAction
 		refusal string // a word of the refusal, "" for none
 	}{
 		{holdsNothing, installFresh, ""},
@@ -327,7 +327,7 @@ func TestFromAccountPlan(t *testing.T) {
 		{holdsLink, 0, "a symlink"},
 		{holdsFile, 0, "neither a directory nor a symlink"},
 	} {
-		got, f := fromAccountPlan("notes", "/lib/notes", tc.holds)
+		got, f := fromHubPlan("notes", "/lib/notes", tc.holds)
 		switch {
 		case tc.refusal == "" && f != nil:
 			t.Errorf("%d: refused: %s", tc.holds, f.message)
@@ -365,14 +365,14 @@ func TestHeldUnderAnotherName(t *testing.T) {
 	}
 }
 
-// TestFromAccountRecoversWhereItWasKilled kills an install from the
+// TestFromHubRecoversWhereItWasKilled kills an install from the
 // hub with SIGKILL at two of its boundaries: once its journal
 // is on disk, before anything changed, and right after git added the
 // worktree. Every boundary in between is the journal's, which the home
 // package replays without git. The next command finishes it: the branch at
 // the remote tip, the worktree on it and clean, the library symlink and
 // the placement, nothing staged left behind.
-func TestFromAccountRecoversWhereItWasKilled(t *testing.T) {
+func TestFromHubRecoversWhereItWasKilled(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, script string }{
 		{"once the journal is on disk", killedUpdateScript},
@@ -388,7 +388,7 @@ exec %GIT% "$@"
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			a, b, _, _ := accountHomes(t)
+			a, b, _, _ := hubHomes(t)
 			b.mustRun("source", "add", a.listed("alpha")["source"].(string))
 			out := killedChild(t, b, "TestInstallChildProcess", installChildEnv, "--name\nalpha", tc.script)
 			_, kinds := journalKinds(t, b)
@@ -404,7 +404,7 @@ exec %GIT% "$@"
 				t.Errorf("claude-code's placement points at %q", target)
 			}
 			equal(t, "kind", b.listed("alpha")["kind"], lineage.KindManaged)
-			equal(t, "the branch's tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote"), accountRemoteName(t, b))
+			equal(t, "the branch's tracking", b.storeGit("config", "--get", "branch.skills/alpha.remote"), hubRemoteName(t, b))
 			for _, dir := range []string{b.library, filepath.Join(b.agentx, "worktrees")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}

@@ -14,11 +14,11 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
-// trailer is the value of one trailer of the commit the account repo holds
+// trailer is the value of one trailer of the commit the store holds
 // at rev.
 func (h *harness) trailer(rev, key string) string {
 	h.t.Helper()
-	return h.accountGit("log", "-1", "--format=%(trailers:key="+key+",valueonly)", rev)
+	return h.storeGit("log", "-1", "--format=%(trailers:key="+key+",valueonly)", rev)
 }
 
 // TestSkillNewCreatesAForkFromTheTemplate creates a skill with skill new on
@@ -53,19 +53,19 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 		equal(t, "the event's fork id", ev["fork_id"], ids[h])
 
 		tip := h.ref(lineage.ForkRef("notes"))
-		equal(t, "the branch's history", h.accountGit("rev-list", "--parents", "refs/heads/skills/notes"), tip)
-		equal(t, "the branch's tree", h.accountGit("ls-tree", "-r", "--name-only", tip), "notes/SKILL.md")
-		equal(t, "SKILL.md", h.accountGit("cat-file", "blob", tip+":notes/SKILL.md")+"\n", string(skillTemplate("notes", "Keep notes for the user.")))
+		equal(t, "the branch's history", h.storeGit("rev-list", "--parents", "refs/heads/skills/notes"), tip)
+		equal(t, "the branch's tree", h.storeGit("ls-tree", "-r", "--name-only", tip), "notes/SKILL.md")
+		equal(t, "SKILL.md", h.storeGit("cat-file", "blob", tip+":notes/SKILL.md")+"\n", string(skillTemplate("notes", "Keep notes for the user.")))
 		machine, _, err := home.MachineID(h.agentx, h.env, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		machines[h] = machine
 		equal(t, "the machine trailer", h.trailer(tip, lineage.TrailerMachine), machine)
-		equal(t, "the subject", h.accountGit("log", "-1", "--format=%s", tip), "Create notes")
+		equal(t, "the subject", h.storeGit("log", "-1", "--format=%s", tip), "Create notes")
 
 		root := filepath.Join(h.agentx, "worktrees", "notes")
-		contains(t, "the worktree list", h.accountGit("worktree", "list", "--porcelain"),
+		contains(t, "the worktree list", h.storeGit("worktree", "list", "--porcelain"),
 			"worktree "+root+"\nHEAD "+tip+"\nbranch refs/heads/skills/notes\nlocked agentx fork")
 		if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
 			t.Errorf("the worktree has no .git file: %v", err)
@@ -94,9 +94,9 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 		equal(t, "the listing's fork id", h.listed("notes")["fork_id"], ids[h])
 		equal(t, "what is left beside the worktree", strings.Join(hiddenEntries(t, filepath.Join(h.agentx, "worktrees")), " "), "")
 	}
-	equal(t, "the fallback author", a.accountGit("log", "-1", "--format=%an <%ae>", "refs/heads/skills/notes"),
+	equal(t, "the fallback author", a.storeGit("log", "-1", "--format=%an <%ae>", "refs/heads/skills/notes"),
 		"test-host <machine-"+machines[a][:12]+"@agentx.invalid>")
-	equal(t, "the user's author", b.accountGit("log", "-1", "--format=%an <%ae>|%cn <%ce>", "refs/heads/skills/notes"),
+	equal(t, "the user's author", b.storeGit("log", "-1", "--format=%an <%ae>|%cn <%ce>", "refs/heads/skills/notes"),
 		"Ada Lovelace <ada@example.com>|Ada Lovelace <ada@example.com>")
 	if ids[a] == ids[b] || !regexp.MustCompile(`^[0-9a-f-]{36}$`).MatchString(ids[a]) {
 		t.Errorf("the two machines' fork ids are %q and %q", ids[a], ids[b])
@@ -110,7 +110,7 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 	contains(t, "the text output", text.stdout, "✓ created other in "+filepath.Join(a.library, "other")+": 4 placements\n")
 	// With no hub set the skill is created all the same, with one
 	// line saying how to publish it. That skill publish refuses until then is
-	// TestTheAccountRemoteIsSetReplacedAndDetached's.
+	// TestTheHubRemoteIsSetReplacedAndDetached's.
 	contains(t, "the hint", text.stdout, "No hub is set: run 'agentx source add <url> --hub', then 'agentx skill publish other' to publish it.")
 	if link, _ := os.Readlink(filepath.Join(a.library, "other")); link != "../../../agentx/worktrees/other/other" {
 		t.Errorf("the dangling library symlink was left as %q", link)
@@ -118,26 +118,26 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 }
 
 // TestSkillNewRefusals refuses, in one home and changing nothing, a name
-// outside the grammar, a name the account repo holds a branch of in
+// outside the grammar, a name the store holds a branch of in
 // another case, a name the library holds a directory of, a name whose
 // worktree path is taken, and a description of more than one line.
 func TestSkillNewRefusals(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
-	h.accountGit("update-ref", "refs/heads/managed/Shout", h.ref(lineage.ManagedRef("alpha")))
+	h.storeGit("update-ref", "refs/heads/managed/Shout", h.ref(lineage.ManagedRef("alpha")))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "taken"), "SKILL.md"), skill("taken", "mine"))
 	if err := os.MkdirAll(filepath.Join(h.agentx, "worktrees", "held"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	refs := h.accountGit("for-each-ref")
+	refs := h.storeGit("for-each-ref")
 	for _, tc := range []struct {
 		args []string
 		exit status
 		says string
 	}{
 		{[]string{"My_Skill"}, exitRefused, "My_Skill is not a valid skill name: " + forkNameRule},
-		{[]string{"shout"}, exitRefused, "the account repo already holds Shout as a skill of a shared source, which differs from shout only by case"},
+		{[]string{"shout"}, exitRefused, "the store already holds Shout as a skill of a shared source, which differs from shout only by case"},
 		{[]string{"taken"}, exitRefused, "the library already holds"},
 		{[]string{"held"}, exitRefused, "worktrees/held already exists"},
 		{[]string{"fine", "--description", "two\nlines"}, exitUsage, "--description must be one line"},
@@ -146,7 +146,7 @@ func TestSkillNewRefusals(t *testing.T) {
 		equal(t, strings.Join(tc.args, " ")+": exit", out.exit, tc.exit.exit)
 		contains(t, strings.Join(tc.args, " ")+": error", h.one(out.stdout, "error")["message"].(string), tc.says)
 	}
-	equal(t, "the refs", h.accountGit("for-each-ref"), refs)
+	equal(t, "the refs", h.storeGit("for-each-ref"), refs)
 	if entries, _ := os.ReadDir(filepath.Join(h.agentx, "worktrees")); len(entries) != 1 {
 		t.Errorf("a refused creation left %d entries in the worktrees directory, want the one it found", len(entries))
 	}
@@ -212,7 +212,7 @@ exec %GIT% "$@"
 			if !home.WorktreeAt(root, "skills/notes") {
 				t.Error("the worktree is not on the branch after recovery")
 			}
-			equal(t, "the branch", h.accountGit("ls-tree", "-r", "--name-only", "refs/heads/skills/notes"), "notes/SKILL.md")
+			equal(t, "the branch", h.storeGit("ls-tree", "-r", "--name-only", "refs/heads/skills/notes"), "notes/SKILL.md")
 			equal(t, "git status in the worktree", gitIn(t, h, root, "status", "--porcelain"), "")
 			if b, err := os.ReadFile(filepath.Join(h.library, "notes", "SKILL.md")); err != nil || !strings.Contains(string(b), "name: notes") {
 				t.Errorf("the library symlink leads to %q, %v", b, err)
@@ -240,7 +240,7 @@ func TestForkTreeFollowsTheIgnoreRules(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	inv := h.invocation
-	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv().git, h.agentx)
+	gitDir, _, err := gitx.OpenStore(ctx, inv().git, h.agentx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,8 +262,8 @@ func TestForkTreeFollowsTheIgnoreRules(t *testing.T) {
 		if j.written == "" {
 			return j, tree
 		}
-		for _, path := range strings.Split(h.accountGit("ls-tree", "-r", "--name-only", j.written), "\n") {
-			tree[path] = h.accountGit("cat-file", "blob", j.written+":"+path)
+		for _, path := range strings.Split(h.storeGit("ls-tree", "-r", "--name-only", j.written), "\n") {
+			tree[path] = h.storeGit("cat-file", "blob", j.written+":"+path)
 		}
 		return j, tree
 	}

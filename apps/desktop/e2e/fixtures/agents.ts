@@ -13,7 +13,7 @@ import type {
 import { configuration } from "../harness/cli.ts";
 import type { InlineEvent } from "../harness/cli.ts";
 import {
-  ACCOUNT,
+  HUB,
   configurations as four,
   inventory as skillsInventory,
 } from "./skills.ts";
@@ -194,5 +194,5 @@ export const sources: InlineEvent[] = [
     type: "source",
     url: "https://github.com/acme/skills",
   },
-  { account: true, id: "2222222222222222", type: "source", url: ACCOUNT },
+  { hub: true, id: "2222222222222222", type: "source", url: HUB },
 ];

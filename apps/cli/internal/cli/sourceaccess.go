@@ -32,7 +32,7 @@ func (inv *invocation) checkSource(ctx context.Context, entry home.Source) sourc
 	if c.access.Access != home.AccessWritable {
 		inv.out.debugf("access to %s: %s: %s", entry.URL, c.access.Access, c.access.Reason)
 	}
-	if entry.Pin == "" && !entry.Account && ctx.Err() == nil {
+	if entry.Pin == "" && !entry.Hub && ctx.Err() == nil {
 		branch, err := inv.git.DefaultBranch(ctx, entry.URL)
 		switch {
 		case err != nil:
@@ -89,7 +89,7 @@ func (c sourceCheck) report(inv *invocation, url string) {
 // records, the access by its reported name.
 func entryEvent(entry home.Source) sourceEvent {
 	return sourceEvent{event: newEvent("source"), ID: source.ID(entry.URL), URL: entry.URL, Alias: entry.Alias,
-		Account: entry.Account, Pin: entry.Pin, Access: entry.AccessName(), AccessChecked: entry.AccessChecked,
+		Hub: entry.Hub, Pin: entry.Pin, Access: entry.AccessName(), AccessChecked: entry.AccessChecked,
 		DefaultBranch: entry.DefaultBranch, LastFetched: entry.LastFetched}
 }
 

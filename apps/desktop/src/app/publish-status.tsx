@@ -31,7 +31,7 @@ import {
 import { formatAgo } from "#/lib/dates.ts";
 import { navigateTo } from "#/lib/navigate.ts";
 import { useNow } from "#/lib/now.ts";
-import { accountRemoteOf } from "#/screens/skills/banners.ts";
+import { hubOf } from "#/screens/skills/banners.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
   fromAnotherMachine,
@@ -57,9 +57,9 @@ import { useAppStore } from "#/store/store.ts";
  * those incoming, each in name order.
  */
 export type SyncState =
-  | { kind: "no-account-remote" }
+  | { kind: "no-hub" }
   | {
-      kind: "account-remote";
+      kind: "hub";
       url: string;
       outgoing: ToPublish[];
       incoming: UpdateAvailableEvent[];
@@ -70,34 +70,34 @@ export const useSyncState = (): SyncState | undefined => {
   const rows = useSkillRows();
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
-  const accountRemote = useAppStore((s) => accountRemoteOf(s.sources));
+  const hub = useAppStore((s) => hubOf(s.sources));
   // The sources load once the checks pass: until their first answer, the status would guess.
   const loadingSources = usePending(loadLabel(["source", "list"]));
   const noSources = useAppStore((s) => s.sources.length === 0);
   if (inventory === undefined || (loadingSources && noSources)) {
     return undefined;
   }
-  if (accountRemote === undefined) {
-    return { kind: "no-account-remote" };
+  if (hub === undefined) {
+    return { kind: "no-hub" };
   }
   // Only what another machine published to this hub, for a hub skill still
   // in the library: a skill removed since, a plugin's or a client's skill of the same name, or an
   // update from a hub set before this one, is not incoming.
   const installed = new Set(
-    rows.filter((row) => row.kind === "yours").map((row) => row.name)
+    rows.filter((row) => row.kind === "hub").map((row) => row.name)
   );
   const incoming = Object.values(updates).filter(
     (update) =>
       fromAnotherMachine(update) &&
-      update.source === accountRemote.url &&
+      update.source === hub.url &&
       installed.has(update.name)
   );
   incoming.sort((a, b) => a.name.localeCompare(b.name));
   return {
     incoming,
-    kind: "account-remote",
+    kind: "hub",
     outgoing: toPublish(rows),
-    url: accountRemote.url,
+    url: hub.url,
   };
 };
 
@@ -158,7 +158,7 @@ export const PublishStatus = () => {
   if (state === undefined) {
     return null;
   }
-  if (state.kind === "no-account-remote") {
+  if (state.kind === "no-hub") {
     return (
       <>
         <StatusButton

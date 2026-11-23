@@ -22,14 +22,14 @@ import (
 // nothing either machine committed is ever lost on the way, either merged
 // or in a conflict the user resolves.
 
-// scenarioMachines is accountHomes with a second machine that differs from
+// scenarioMachines is hubHomes with a second machine that differs from
 // the first in what most often changes a commit: another time zone, and a
 // git configuration with line ending conversion, signing and hooks of its
 // own, which agentx keeps out of every commit it writes. b has installed
 // nothing and added no source.
 func scenarioMachines(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	t.Helper()
-	a, b, s, remote = accountHomes(t)
+	a, b, s, remote = hubHomes(t)
 	b.env["TZ"] = "Pacific/Chatham"
 	spoilTheGitConfig(t, b)
 	b.withIdentity("Machine B", "b@example.com")
@@ -62,7 +62,7 @@ func takeVersion(h *harness) {
 // merged, its second parent: the version the fork's last update took.
 func mergedImport(h *harness, name string) string {
 	h.t.Helper()
-	return h.accountGit("rev-parse", lineage.ForkRef(name)+"^2")
+	return h.storeGit("rev-parse", lineage.ForkRef(name)+"^2")
 }
 
 // forkIDOf is the fork id the listing of h gives the fork called name.
@@ -90,8 +90,8 @@ func keptInConflict(t *testing.T, h *harness, name, dir, path, mine, theirs stri
 			stages[stage] = blob
 		}
 	}
-	equal(t, path+": mine", stages["2"], h.accountGit("rev-parse", mine+":"+dir+"/"+path))
-	equal(t, path+": theirs", stages["3"], h.accountGit("rev-parse", theirs+":"+dir+"/"+path))
+	equal(t, path+": mine", stages["2"], h.storeGit("rev-parse", mine+":"+dir+"/"+path))
+	equal(t, path+": theirs", stages["3"], h.storeGit("rev-parse", theirs+":"+dir+"/"+path))
 }
 
 // noMarkers fails the test when the file at path holds a conflict marker.
@@ -152,10 +152,10 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	out := b.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "the pull", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	merged := b.ref(lineage.ForkRef("alpha"))
-	recorded := b.accountGit("rev-parse", merged+"^1")
+	recorded := b.storeGit("rev-parse", merged+"^1")
 	equal(t, "the merge's parents", b.parents(merged), recorded+"\n"+theirs)
 	equal(t, "the recorded draft's parent", b.parents(recorded), mine)
-	equal(t, "what the recorded commit changes", b.accountGit("diff-tree", "--no-commit-id", "--name-only", "-r", recorded), "alpha/draft.md")
+	equal(t, "what the recorded commit changes", b.storeGit("diff-tree", "--no-commit-id", "--name-only", "-r", recorded), "alpha/draft.md")
 	equal(t, "b's state after the update", b.listed("alpha")["state"], stateModified)
 	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
 	diff := b.mustRun("skill", "diff", "alpha").stdout
@@ -269,7 +269,7 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	equal(t, "the update: exit", out.exit, 4)
 	equal(t, "the conflicted file", conflictPaths(b.one(out.stdout, "conflict")), "notes.md")
 	keptInConflict(t, b, "alpha", "alpha", "notes.md", mine, theirs)
-	equal(t, "a's side", b.accountGit("show", theirs+":alpha/notes.md"), strings.TrimSuffix(forkNotes("seven", "seven, v2"), "\n"))
+	equal(t, "a's side", b.storeGit("show", theirs+":alpha/notes.md"), strings.TrimSuffix(forkNotes("seven", "seven, v2"), "\n"))
 	// a's side closes the conflict, its put-back line first; the merge
 	// base git writes between the sides holds those lines too, but never
 	// right before a closing marker.
@@ -296,7 +296,7 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 // version into both forks and b its third, which keeps the second's change
 // and changes other lines too. b publishes first and a updates: each merge
 // is clean and holds the third version, and records as its base the
-// version the source history proves the newer one. For alpha, a's account
+// version the source history proves the newer one. For alpha, a's home
 // repo has never fetched the third version, so nothing proves its order
 // and a's own base, the second version, stays; for beta, a fetched the
 // source first, and the merge records the third. a's next check then
@@ -345,7 +345,7 @@ func TestScenarioDifferentVersionsOtherLines(t *testing.T) {
 	a.mustRun("skill", "update", "alpha")
 	tip := a.ref(lineage.ForkRef("alpha"))
 	equal(t, "alpha's base after its update", a.trailer(tip, lineage.TrailerBase), alphaThree)
-	equal(t, "the update changed no line", a.accountGit("diff", tip+"^1", tip), "")
+	equal(t, "the update changed no line", a.storeGit("diff", tip+"^1", tip), "")
 	a.mustRun("skill", "publish")
 	b.mustRun("skill", "update", "--all")
 	writeFile(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md"), "edited\n")
@@ -376,9 +376,9 @@ func TestScenarioDifferentVersionsOtherLines(t *testing.T) {
 	}
 	equal(t, "beta's state", listed["beta"]["state"], stateModified)
 
-	for _, ref := range strings.Split(b.accountGit("for-each-ref", "--format=%(refname)", source.RefPrefix), "\n") {
+	for _, ref := range strings.Split(b.storeGit("for-each-ref", "--format=%(refname)", source.RefPrefix), "\n") {
 		if ref != "" {
-			b.accountGit("update-ref", "-d", ref)
+			b.storeGit("update-ref", "-d", ref)
 		}
 	}
 	if after := b.mustRun("--json", "skill", "list").stdout; after != before {
@@ -511,7 +511,7 @@ func TestScenarioUnprovableOrderKeepsTheLocalBase(t *testing.T) {
 	a.mustRun("skill", "update", "alpha")
 	tip := a.ref(lineage.ForkRef("alpha"))
 	equal(t, "the base after the update", a.trailer(tip, lineage.TrailerBase), rewritten)
-	equal(t, "the update changed no line", a.accountGit("diff", merged, tip), "")
+	equal(t, "the update changed no line", a.storeGit("diff", merged, tip), "")
 }
 
 // TestScenarioIgnoredFilesStayLocal has a commit and publish alpha with
@@ -596,7 +596,7 @@ func TestScenarioEdgeCases(t *testing.T) {
 	}
 	shared := 0
 	for _, ev := range b.eventsOfType(b.mustRun("--json", "source", "list").stdout, "source") {
-		if ev["account"] != true {
+		if ev["hub"] != true {
 			shared++
 		}
 	}
@@ -619,7 +619,7 @@ func TestScenarioEdgeCases(t *testing.T) {
 	equal(t, "alpha's pull", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	merged := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "alpha's base", b.trailer(merged, lineage.TrailerBase), imp)
-	equal(t, "the merged tree", b.accountGit("ls-tree", merged+":alpha", "--format=%(objectmode) %(path)"),
+	equal(t, "the merged tree", b.storeGit("ls-tree", merged+":alpha", "--format=%(objectmode) %(path)"),
 		"100644 SKILL.md\n120000 link.md\n100644 logo.png\n100755 notes.md")
 	equal(t, "b's notes", fileBody(t, filepath.Join(alphaB, "notes.md")), forkNotes("four", "four, v2", "eight", "eight, b"))
 	if info, err := os.Stat(filepath.Join(alphaB, "notes.md")); err != nil || info.Mode().Perm()&0o100 == 0 {

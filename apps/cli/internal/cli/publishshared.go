@@ -69,7 +69,7 @@ func sharedPublishRefusal(st sharedPublishState) *failure {
 			"run 'agentx skill list' to see what the library holds")
 	case !st.readable:
 		return refuse(exitRefused, "the import branch "+lineage.ManagedRef(st.name)+" records no version agentx can read",
-			"run 'agentx doctor' and check the account repo it names")
+			"run 'agentx doctor' and check the store it names")
 	case !st.added:
 		return refuse(exitNotFound, st.name+" was installed from "+shownURL(st.url)+", which was removed from this machine, so it cannot be published",
 			"run 'agentx source add "+sourceAddArg(st.url, "")+"' to add it again, then publish again").wrap(errSourceRemoved)
@@ -128,10 +128,10 @@ func (inv *invocation) publishShared(ctx context.Context, name, message string) 
 	if err := inv.finishJournals(ctx); err != nil {
 		return err
 	}
-	p := &sharedPublish{name: name, message: strings.TrimSpace(message), gitDir: gitx.AccountRepoPath(inv.dirs.Home)}
+	p := &sharedPublish{name: name, message: strings.TrimSpace(message), gitDir: gitx.StorePath(inv.dirs.Home)}
 	records, err := lineage.List(ctx, inv.git, p.gitDir)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	rec, ok := records[name]
 	switch {
@@ -172,7 +172,7 @@ func (inv *invocation) publishShared(ctx context.Context, name, message string) 
 	}
 	j, err := inv.judgeDir(ctx, p.gitDir, lib.ResolvedPath, tree, baseVersion(rec), false)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	if j.holds {
 		if p.message != "" {
@@ -224,7 +224,7 @@ func (inv *invocation) judgeShared(ctx context.Context, p *sharedPublish) *failu
 	}
 	records, err := lineage.List(ctx, inv.git, p.gitDir)
 	if err != nil {
-		return inv.sharedFailure(accountRepoFailure(err))
+		return inv.sharedFailure(storeFailure(err))
 	}
 	switch rec := records[p.name]; {
 	case rec.Commit != p.rec.Commit:
@@ -237,13 +237,13 @@ func (inv *invocation) judgeShared(ctx context.Context, p *sharedPublish) *failu
 	src := source.Source{URL: url, Ref: p.entry.Pin}
 	out, err := inv.git.Isolated(ctx, p.gitDir, "rev-parse", "--verify", "--end-of-options", source.Ref(src.ID())+"^{commit}")
 	if err != nil {
-		return inv.sharedFailure(accountRepoFailure(err))
+		return inv.sharedFailure(storeFailure(err))
 	}
 	p.tip = strings.TrimSpace(out)
 	subpath := p.rec.Import.Path
 	theirs, err := inv.subtree(ctx, p.gitDir, p.tip, subpath)
 	if err != nil {
-		return inv.sharedFailure(accountRepoFailure(err))
+		return inv.sharedFailure(storeFailure(err))
 	}
 	if theirs == "" {
 		return refuse(exitRefused, shownURL(url)+" no longer holds "+p.name+", so it cannot be published",
@@ -334,7 +334,7 @@ func (inv *invocation) writeShared(ctx context.Context, p *sharedPublish, src so
 		return refuse(exitRefused, what+", which a publish never pushes, so "+p.name+" was not published",
 			"replace it with the file it leads to, or remove it, then run '"+publishCommand(p.name)+"' again")
 	case err != nil:
-		return inv.sharedFailure(accountRepoFailure(err))
+		return inv.sharedFailure(storeFailure(err))
 	}
 	message := p.message
 	if message == "" {
@@ -346,11 +346,11 @@ func (inv *invocation) writeShared(ctx context.Context, p *sharedPublish, src so
 	}
 	p.commit, err = inv.git.CommitTreeAs(ctx, p.gitDir, p.ident, gitDate(time.Now(), inv.env["TZ"]), root, []string{p.tip}, message+"\n")
 	if err != nil {
-		return inv.sharedFailure(accountRepoFailure(err))
+		return inv.sharedFailure(storeFailure(err))
 	}
 	out, err := inv.git.Isolated(ctx, p.gitDir, "diff-tree", "-r", "-z", "--no-renames", "--name-only", p.tip, p.commit)
 	if err != nil {
-		return inv.sharedFailure(accountRepoFailure(err))
+		return inv.sharedFailure(storeFailure(err))
 	}
 	if path := outside(out, subpath); path != "" {
 		return refuse(exitInternal, "the commit that publishes "+p.name+" would change "+quotedPath(path)+", outside "+quotedPath(subpath)+", so nothing was published",
@@ -381,7 +381,7 @@ func (inv *invocation) importShared(ctx context.Context, p *sharedPublish, src s
 	subpath, dir := p.rec.Import.Path, p.rec.Import.Dir()
 	tree, err := inv.subtree(ctx, p.gitDir, commit, subpath)
 	if err != nil {
-		return inv.sharedFailure(accountRepoFailure(err))
+		return inv.sharedFailure(storeFailure(err))
 	}
 	versions, missing, err := inv.listVersions(ctx, p.gitDir, src, commit, []source.Skill{{Subpath: subpath, Name: p.name, Tree: tree}})
 	if err != nil {
@@ -404,7 +404,7 @@ func (inv *invocation) importShared(ctx context.Context, p *sharedPublish, src s
 	p.run = lineage.NewRun()
 	commits, trees, err := lineage.WriteAll(ctx, inv.git, p.gitDir, p.run, []lineage.Version{v.version()})
 	if err != nil {
-		return inv.sharedFailure(accountRepoFailure(err))
+		return inv.sharedFailure(storeFailure(err))
 	}
 	p.imp = commits[0]
 	if trees[0] == treeid.Wrap(dir, p.written) {
@@ -504,7 +504,7 @@ func (inv *invocation) finishShared(ctx context.Context, p *sharedPublish, outco
 	err := home.MutateWaiting(waiting, inv.dirs.Home, inv.refs(undo), func() error {
 		candidate, err := inv.git.Refs(undo).RefValues(p.gitDir, []string{lineage.CandidateRef(name)})
 		if err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 		m := home.NewMutation(inv.dirs.Home)
 		m.Ref(p.gitDir, lineage.ManagedRef(name), p.rec.Commit, p.imp)

@@ -72,7 +72,7 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			if len(args) == 0 {
-				return inv.addFromAccount(cmd.Context(), sel, to, asCopy, fetch)
+				return inv.addFromHub(cmd.Context(), sel, to, asCopy, fetch)
 			}
 			return inv.skillAdd(cmd.Context(), args[0], sel, to, asCopy, fetch)
 		},
@@ -96,7 +96,7 @@ type selection struct {
 
 // skillAdd installs the skills of a source the selection names: it adds or
 // fetches the source when it has to, reads their versions out of the
-// account repo, writes their import commits through one fast-import, then
+// store, writes their import commits through one fast-import, then
 // publishes the library directories, the import branches and the
 // placements as one journaled mutation, and reads the affected
 // configurations again.
@@ -112,7 +112,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	add := false
 	switch {
 	case err == nil:
-		if entry.Account {
+		if entry.Hub {
 			return forkSourceIs(entry.URL, entry)
 		}
 		src = inv.linkPin(ctx, src, entry)
@@ -157,9 +157,9 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	// out, and source add writes the pin its argument names.
 	pinned := src
 	pinned.Ref = entry.Pin
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	if !exists {
 		return sourceFailure(source.NotFetched(src.URL), pinned)
@@ -187,7 +187,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 
 // installSkills is the install of skill add once the source is fetched and
 // the skills are chosen: it reads their versions at tip, a commit of the
-// source the account repo holds, out of the account repo, writes their
+// source the store holds, out of the store, writes their
 // import commits through one fast-import, then publishes the library
 // directories, the import branches and the placements in targets as one
 // journaled mutation, and reads the affected configurations again. fetched
@@ -221,7 +221,7 @@ func (inv *invocation) installSkills(ctx context.Context, gitDir string, src sou
 	if err != nil {
 		if !journaled {
 			// Nothing was written that recovery could need, so the run takes
-			// its staging refs with it and leaves the account repo as it was.
+			// its staging refs with it and leaves the store as it was.
 			inv.dropImporting(ctx, gitDir, run, len(versions))
 		}
 		return err
@@ -331,7 +331,7 @@ func (b *batch) abandon() error {
 // several skills answers the same way; see refusals.
 func (b *batch) failure() *failure { return b.refusals.failure(b.selected, len(b.done)) }
 
-// imported is one upstream version read out of the account repo, in
+// imported is one upstream version read out of the store, in
 // memory: the skill as the source lists it, its files and the coordinates
 // the import commit records.
 type imported struct {
@@ -438,15 +438,15 @@ func (inv *invocation) listVersions(ctx context.Context, gitDir string, src sour
 	reads := append([][]string{source.TreeArgs(tip), source.MissingArgs(trees...)}, upstreamReads(tip, subpaths)...)
 	out, err := inv.git.IsolatedAll(ctx, gitDir, reads)
 	if err != nil {
-		return nil, nil, accountRepoFailure(err)
+		return nil, nil, storeFailure(err)
 	}
 	listed, err := source.ParseTree(out[0])
 	if err != nil {
-		return nil, nil, accountRepoFailure(err)
+		return nil, nil, storeFailure(err)
 	}
 	ups, err := upstreams(tip, subpaths, out[2:])
 	if err != nil {
-		return nil, nil, accountRepoFailure(err)
+		return nil, nil, storeFailure(err)
 	}
 	versions := make([]*imported, 0, len(skills))
 	for _, sk := range skills {
@@ -647,7 +647,7 @@ func foundUpstreams(tip string, at []treeRequest, out []string) (map[treeRequest
 			}
 			epoch, ok := epochs[r.commit]
 			if !ok {
-				return nil, fmt.Errorf("the account repo does not date the commit %s", r.commit)
+				return nil, fmt.Errorf("the store does not date the commit %s", r.commit)
 			}
 			if err := add(r, r.commit, epoch); err != nil {
 				return nil, err
@@ -658,7 +658,7 @@ func foundUpstreams(tip string, at []treeRequest, out []string) (map[treeRequest
 }
 
 // usable refuses a skill the machine cannot hold before anything is read
-// for it: a name the library or the account repo cannot take, a directory
+// for it: a name the library or the store cannot take, a directory
 // the import commit cannot record, an entry whose path would lay it out
 // outside the skill's directory and a directory with no regular file in it
 // at all.
@@ -683,7 +683,7 @@ func (inv *invocation) importable(v *imported, src source.Source) *failure {
 	// checked before the entries under it, so that a refusal of one of
 	// those names a directory it can print as it is.
 	if !lineage.ValidPath(v.skill.Subpath) {
-		return refuse(exitRefused, fmt.Sprintf("%s comes from %q, which is not a directory the account repo can record", v.name, v.skill.Subpath),
+		return refuse(exitRefused, fmt.Sprintf("%s comes from %q, which is not a directory the store can record", v.name, v.skill.Subpath),
 			"the import commit that records where a skill came from carries the directory on one line of a trailer, so it can hold no control character and no surrounding space; rename the directory upstream, or install another skill")
 	}
 	// Every path is checked before any of it is read or written: an entry
@@ -716,7 +716,7 @@ func (v *imported) fill(bodies map[string]string, url string) *failure {
 		}
 		body, ok := bodies[e.OID]
 		if !ok {
-			// The same answer a listing gives for a source the account repo
+			// The same answer a listing gives for a source the store
 			// holds incompletely, and for this skill alone: another skill of
 			// the run whose blobs did arrive still installs.
 			return refuse(exitNotFound, fmt.Sprintf("%s holds a file the source did not serve: %s", v.name, e.Path),
@@ -745,7 +745,7 @@ func (v *imported) fill(bodies map[string]string, url string) *failure {
 }
 
 // readBlobs reads the file contents of every selected version from the
-// account repo, which holds the trees of a source but only its SKILL.md
+// store, which holds the trees of a source but only its SKILL.md
 // blobs, fetching in one batch the blobs of this whole run that are not
 // here yet. A version whose blobs are all here, which is how the same
 // version installed twice looks, costs no network at all.
@@ -774,7 +774,7 @@ func (inv *invocation) readBlobs(ctx context.Context, gitDir string, src source.
 	bodies, err := source.ReadBlobs(ctx, inv.git, gitDir, ids)
 	if err != nil {
 		// A blob the source did not serve is not reported as missing: the
-		// account repo is a partial clone, so cat-file dies on the first
+		// store is a partial clone, so cat-file dies on the first
 		// object it cannot get rather than printing a "missing" line for
 		// it. Which ones they are is asked of rev-list, which walks what is
 		// here and never reaches for the network, and the rest are read
@@ -792,7 +792,7 @@ func (inv *invocation) readBlobs(ctx context.Context, gitDir string, src source.
 	return bodies, nil
 }
 
-// present are the ids of versions the account repo really holds, or nil
+// present are the ids of versions the store really holds, or nil
 // when rev-list finds nothing missing and so does not explain the read that
 // failed.
 func (inv *invocation) present(ctx context.Context, gitDir string, versions []*imported, ids []string) []string {
@@ -834,7 +834,7 @@ func (inv *invocation) writeImports(ctx context.Context, b *batch, gitDir, run s
 	}
 	commits, trees, err := lineage.WriteAll(ctx, inv.git, gitDir, run, list)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	for i, v := range versions {
 		v.commit, v.tree = commits[i], trees[i]
@@ -1050,7 +1050,7 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 		}
 		records, err := inv.listLineage(ctx, gitDir)
 		if err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 		// The copy modes the settings record decide what each placement is,
 		// so they are read before any is planned, and the run's own copies
@@ -1082,7 +1082,7 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 		}
 		// After the apply, not before it: a journal that could not be
 		// written leaves nothing for recovery to need, and calling it
-		// journaled would keep this run's staging refs in the account repo
+		// journaled would keep this run's staging refs in the store
 		// for good.
 		applied := m.Apply(inv.refs(ctx))
 		journaled = m.Journaled()
@@ -1125,7 +1125,7 @@ var errNothingInstalled = errors.New("no skill of the run could be installed")
 
 // stageSkill records everything one skill of the batch does. What can be
 // refused is decided first, from the live state and the branches the
-// account repo holds, so that a skill the run gives up on leaves no step of
+// store holds, so that a skill the run gives up on leaves no step of
 // its own in the journal: a branch without its library directory would be a
 // version this machine claims to hold and does not.
 func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, records map[string]lineage.Record, targets []placeTarget, asCopy bool, recordedCopies []string) (*installed, *failure, error) {
@@ -1144,7 +1144,7 @@ func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, 
 	}
 	done := &installed{v: v, adopted: lib.adopt}
 	if write {
-		// From nothing for a name the account repo does not know, and from
+		// From nothing for a name the store does not know, and from
 		// the commit it holds for one an adoption moves.
 		m.Ref(gitDir, lineage.ManagedRef(v.name), records[v.name].Commit, v.commit)
 	}
@@ -1221,16 +1221,16 @@ func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Recor
 		// the rename is what frees the name.
 		hint += "or, to keep it, import it with '" + adoptCommand(v.name) + "' and rename it with '" + skillCommand("rename", v.name, "<new>") + "', then install again"
 	case rec.Kind == lineage.KindFork:
-		hint = ownSkillHint(v.name)
+		hint = hubSkillHint(v.name)
 	default:
 		hint += "to keep it, first fork it with '" + skillCommand("fork", v.name, "--name", "<new>") + "'"
 	}
 	return libraryAction{}, refuse(exitRefused, fmt.Sprintf("the library already holds %s at %s", v.name, inv.dirs.Library), hint)
 }
 
-// ownSkillHint frees a name a hub skill holds: by its branch,
+// hubSkillHint frees a name a hub skill holds: by its branch,
 // which a removal of its library directory alone leaves claiming the name.
-func ownSkillHint(name string) string {
+func hubSkillHint(name string) string {
 	return "rename yours with '" + skillCommand("rename", name, "<new>") + "', or remove it with '" + skillCommand("remove", name) + "', then install again"
 }
 
@@ -1252,7 +1252,7 @@ func refPlan(v *imported, records map[string]lineage.Record, libPath string, abs
 	case !ok:
 		return true, nil
 	case rec.Kind == lineage.KindFork:
-		return false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the hub on this machine", v.name), ownSkillHint(v.name))
+		return false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the hub on this machine", v.name), hubSkillHint(v.name))
 	case rec.Commit == v.commit: // the same version again: nothing to move
 		return false, nil
 	case v.replace:
@@ -1410,10 +1410,10 @@ func mutationFailure(err error) error {
 		return err
 	case errors.Is(err, home.ErrRecovery), errors.Is(err, home.ErrLocked), errors.Is(err, home.ErrMovedBeforeApply):
 		return err
-	case errors.Is(err, gitx.ErrAccountRepo):
-		return accountRepoFailure(err)
+	case errors.Is(err, gitx.ErrStore):
+		return storeFailure(err)
 	}
-	return fail(exitInternal, err.Error(), "run 'agentx doctor' and check the library and the account repo it names")
+	return fail(exitInternal, err.Error(), "run 'agentx doctor' and check the library and the store it names")
 }
 
 // progress reports one finished step of the run.

@@ -25,7 +25,7 @@ func newEvent(typ string) event { return event{Type: typ, SchemaVersion: schemaV
 // eventKind is the kind an event reports for a skill whose lineage record
 // is of kind k: managed for a skill with a branch in either namespace, a
 // fork's included, and unmanaged for one with none. A fork branch is how
-// the account repo keeps hub skills, not a kind of skill: what tells
+// the store keeps hub skills, not a kind of skill: what tells
 // them from the skills of a shared source is their source, see
 // skillOrigin. The commands themselves decide on the record's kind.
 func eventKind(k string) string {
@@ -36,7 +36,7 @@ func eventKind(k string) string {
 }
 
 // skillOrigin is what every event that names a skill's origin reports of
-// the skill whose lineage record is rec, account being the URL of the
+// the skill whose lineage record is rec, hub being the URL of the
 // hub, "" when none is set: its kind, see eventKind; its
 // source, where it is published to, with the directory there; and its
 // upstream, where a forked skill came from and takes its updates from,
@@ -51,7 +51,7 @@ func eventKind(k string) string {
 // version that Record.ForkBase builds, the record's own import. A skill
 // made by skill new, or forked from a skill with no upstream, has none. An
 // unmanaged skill has neither.
-func skillOrigin(rec lineage.Record, account string) (kind, source string, subpath *string, upstream string, upstreamSubpath *string) {
+func skillOrigin(rec lineage.Record, hub string) (kind, source string, subpath *string, upstream string, upstreamSubpath *string) {
 	kind = eventKind(rec.Kind)
 	switch rec.Kind {
 	case lineage.KindManaged:
@@ -59,7 +59,7 @@ func skillOrigin(rec lineage.Record, account string) (kind, source string, subpa
 			source, subpath = rec.Import.Source, ptr(rec.Import.Path)
 		}
 	case lineage.KindFork:
-		source = account
+		source = hub
 		switch {
 		case rec.Fork != nil:
 			if rec.Fork.Base != "" {

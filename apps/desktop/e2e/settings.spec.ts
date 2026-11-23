@@ -1,7 +1,7 @@
 // The Settings page: This machine (the label, saved with `config set label`, and the machine id),
-// Comparing edits (`config set ignore_system_files`), Storage (the library's path and the account
-// repo's size from `machine`) and Command line (the versions and Run checks). Every row reads the store,
-// and every control runs exactly its command.
+// Comparing edits (`config set ignore_system_files`), Storage (the library's path and the home
+// repo's size from `machine`) and Command line (the versions and Run checks). Every row reads the
+// store, and every control runs exactly its command.
 import type { Page } from "@playwright/test";
 
 import { MACHINE_ID, machine, settings } from "./fixtures/settings.ts";
@@ -89,7 +89,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
       - heading "Storage" [level=2]
       - term: Library
       - definition: ${libraryPath}
-      - term: Account repo
+      - term: Store
       - definition: 1.5 MiB
   `);
 
@@ -98,13 +98,11 @@ test("each section shows what the store holds", async ({ cli, page }) => {
   );
 });
 
-test("an account repo not created yet says so", async ({ cli, page }) => {
-  const { account_repo: _, account_repo_bytes: __, ...fresh } = machine();
+test("a store not created yet says so", async ({ cli, page }) => {
+  const { store: _, store_bytes: __, ...fresh } = machine();
   cli.register(["machine"], { events: [fresh] });
   await page.goto("/#/settings");
-  await expect(section(page, "Storage")).toContainText(
-    "Account repoNot created yet"
-  );
+  await expect(section(page, "Storage")).toContainText("StoreNot created yet");
 });
 
 test("Enter with a new label runs config set label and toasts; the field shows the label read again", async ({

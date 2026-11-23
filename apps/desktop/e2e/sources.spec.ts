@@ -195,7 +195,7 @@ test("the open source's card: its name, its full URL linking to the repository, 
   // The hub is managed in Settings: its card has no Remove.
   await pill(page, "Hub").click();
   await expect(
-    details(page).getByRole("heading", { name: "me/account" })
+    details(page).getByRole("heading", { name: "me/hub" })
   ).toBeVisible();
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
@@ -203,7 +203,7 @@ test("the open source's card: its name, its full URL linking to the repository, 
   // A search answers across every source: the card stays.
   await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
   await expect(
-    details(page).getByRole("heading", { name: "me/account" })
+    details(page).getByRole("heading", { name: "me/hub" })
   ).toBeVisible();
 });
 
@@ -403,6 +403,59 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
     `source skills ${ACME_ID}`,
     `source read ${ACME_ID} beta/skills/skill-89`,
   ]);
+});
+
+test("a row that opens keeps the scroll, its top hidden or not", async ({
+  cli,
+  page,
+}) => {
+  await page.setViewportSize({ height: 600, width: 1100 });
+  await openSources(cli, page);
+  // A later launch draws the kept sources at once, so the list mounts with the scroller it
+  // scrolls in.
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(() => localStorage.getItem("agentx.launch"))
+    )
+    .not.toBeNull();
+  cli.restart();
+  await page.reload();
+  await expect(row(page, "pdf")).toBeVisible();
+  const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n");
+  for (const name of ["pdf", "docx"]) {
+    cli.register(["source", "read", ACME_ID, `skills/${name}`], {
+      events: [skillMd(name, `---\nname: ${name}\n---\n${lines}\n`)],
+    });
+  }
+  const scroller = page
+    .locator(".overflow-auto")
+    .filter({ has: row(page, "pdf") });
+  const scrollTop = async () => await scroller.evaluate((el) => el.scrollTop);
+  const top = async (name: string) => {
+    const box = await rowLine(page, name).boundingBox();
+    return box?.y ?? Number.NaN;
+  };
+
+  // pdf opens at the bottom edge: nothing moves, and its SKILL.md shows below the fold.
+  const pdfBefore = await top("pdf");
+  await row(page, "pdf").dispatchEvent("click");
+  await expect(row(page, "pdf")).toHaveAttribute("aria-expanded", "true");
+  expect(await top("pdf")).toBe(pdfBefore);
+
+  // docx, its top 20px above the scroller's, opens in place too.
+  const scrollerBox = await scroller.boundingBox();
+  const offset = (await top("docx")) - (scrollerBox?.y ?? Number.NaN) + 20;
+  await scroller.evaluate((el, by) => {
+    el.scrollTop += by;
+  }, offset);
+  const scrolled = await scrollTop();
+  await row(page, "docx").dispatchEvent("click");
+  await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
+  ).toBeVisible();
+  expect(await scrollTop()).toBe(scrolled);
 });
 
 test("opening a row reads its SKILL.md once, then opens, and links to the skill", async ({
@@ -1157,13 +1210,13 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
     ],
     exitCode: 3,
   });
-  cli.register(["source", "add", "me/account"], {
+  cli.register(["source", "add", "me/hub"], {
     events: [
       {
         code: "refused",
         hint: "run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one",
         message:
-          "https://github.com/me/account is the hub: it holds one branch per skill rather than skills on one branch",
+          "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch",
         type: "error",
       },
     ],
@@ -1178,16 +1231,16 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
     "Couldn't reach bad/repo. Check that the repository exists and that you can read it."
   );
 
-  await urlField(page).fill("me/account");
+  await urlField(page).fill("me/hub");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   // The CLI's hint names commands: the dialog names the place in the app instead.
   await expect(alert).toHaveText(
-    "https://github.com/me/account is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub."
+    "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub."
   );
   await expect(dialog(page)).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([
     "source add bad/repo",
-    "source add me/account",
+    "source add me/hub",
   ]);
 });
 

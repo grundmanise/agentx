@@ -7,7 +7,7 @@ import type { Page } from "@playwright/test";
 import type { PublishOutcome } from "#/cli/events.gen.ts";
 
 import { launch, syncedLibrary } from "./fixtures/palette-publish.ts";
-import { ACCOUNT, configurations, skills } from "./fixtures/skills.ts";
+import { HUB, configurations, skills } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
@@ -79,7 +79,7 @@ const progress = (current: number, subject: string): InlineEvent => ({
 const published = (name: string, outcome: PublishOutcome): InlineEvent => ({
   name,
   outcome,
-  source: ACCOUNT,
+  source: HUB,
   type: "publish",
 });
 
@@ -124,8 +124,8 @@ test.describe("states", () => {
         skills: pluginSkill === undefined ? [] : [pluginSkill],
         type: "inventory",
       },
-      fromAnotherMachine("gone", ACCOUNT),
-      fromAnotherMachine("commit-helper", ACCOUNT),
+      fromAnotherMachine("gone", HUB),
+      fromAnotherMachine("commit-helper", HUB),
       fromAnotherMachine("notes", "https://github.com/me/old-skills.git"),
     ]);
     await expect(status(page)).toHaveText("Synced");
@@ -147,7 +147,7 @@ test.describe("states", () => {
     cli,
     page,
   }) => {
-    launch(cli, "no-account-remote");
+    launch(cli, "no-hub");
     await page.goto("/");
     await expect(status(page)).toHaveText("Set up sync");
     await status(page).click();
@@ -188,7 +188,7 @@ test.describe("popover", () => {
     await expect(
       group(page, "To publish").getByRole("button", { name: "Publish all" })
     ).toBeVisible();
-    await expect(popover(page)).toContainText("me/account");
+    await expect(popover(page)).toContainText("me/hub");
     await expect(popover(page)).toContainText("Not checked yet");
 
     await group(page, "To publish")
@@ -214,7 +214,7 @@ test.describe("popover", () => {
     cli.register(["source", "list"], {
       events: [
         {
-          account: true,
+          hub: true,
           id: "2222222222222222",
           type: "source",
           url: LONG_REMOTE,
@@ -230,7 +230,7 @@ test.describe("popover", () => {
         fetched: true,
         instance_id: "instance-1",
         ok: true,
-        scope: "account",
+        scope: "hub",
         type: "update_check",
       },
     ]);
@@ -283,7 +283,7 @@ test.describe("popover", () => {
         fetched: true,
         instance_id: "instance-1",
         ok: true,
-        scope: "account",
+        scope: "hub",
         type: "update_check",
       },
       {
@@ -291,7 +291,7 @@ test.describe("popover", () => {
         fetched: false,
         instance_id: "instance-1",
         ok: false,
-        scope: "account",
+        scope: "hub",
         type: "update_check",
       },
     ]);
@@ -402,10 +402,10 @@ test.describe("publish, refused: the hint in the app's words", () => {
     {
       exitCode: 3,
       hint: "check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then run 'agentx skill publish changelog draft notes' again",
-      message: `the hub ${ACCOUNT} did not let this machine push skills/notes: permission denied`,
+      message: `the hub ${HUB} did not let this machine push skills/notes: permission denied`,
       name: "denied",
       outcomes: [["notes", "denied"]],
-      shown: `The hub ${ACCOUNT} did not let this machine push skills/notes: permission denied. Check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then publish again.`,
+      shown: `The hub ${HUB} did not let this machine push skills/notes: permission denied. Check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then publish again.`,
     },
     {
       exitCode: 6,
@@ -423,10 +423,10 @@ test.describe("publish, refused: the hint in the app's words", () => {
     {
       exitCode: 3,
       hint: "check your network; the edits were recorded, so run 'agentx skill publish changelog draft notes' again once the hub can be reached",
-      message: `cannot reach ${ACCOUNT}: connection refused`,
+      message: `cannot reach ${HUB}: connection refused`,
       name: "the hub cannot be reached",
       outcomes: [],
-      shown: `Cannot reach ${ACCOUNT}: connection refused. Check your network; the edits were recorded, so publish again once the hub can be reached.`,
+      shown: `Cannot reach ${HUB}: connection refused. Check your network; the edits were recorded, so publish again once the hub can be reached.`,
     },
   ];
   for (const c of cases) {
