@@ -209,33 +209,16 @@ const ViewSkill = ({ page }: { page: string }) => (
 );
 
 /**
- * What an open row shows: why a skill that cannot be selected cannot be, when it last entered and
- * left this machine's library, and its SKILL.md, whose frontmatter holds the description. One of
- * your skills on the account remote has no SKILL.md to read here, so its row shows its description.
+ * What an open row shows: why a skill that cannot be selected cannot be, and its SKILL.md, whose
+ * frontmatter holds the description. One of your skills on the account remote has no SKILL.md to
+ * read here, so its row shows its description.
  */
-const Details = ({
-  card,
-  install,
-}: {
-  card: SkillCard;
-  install: Install | undefined;
-}) => {
+const Details = ({ card }: { card: SkillCard }) => {
   const description =
     card.skillMd === undefined && card.description !== ""
       ? card.description
       : undefined;
-  const dates = [
-    install?.added === undefined
-      ? undefined
-      : `Added ${formatDate(install.added)}`,
-    install?.removed === undefined
-      ? undefined
-      : `Removed ${formatDate(install.removed)}`,
-  ]
-    .filter((part) => part !== undefined)
-    .join(" · ");
-  const header =
-    description !== undefined || card.title !== undefined || dates !== "";
+  const header = description !== undefined || card.title !== undefined;
   return (
     <>
       {header && (
@@ -249,9 +232,6 @@ const Details = ({
             <p className="type-secondary text-text-hint m-0 text-pretty">
               {card.title}
             </p>
-          )}
-          {dates !== "" && (
-            <p className="type-technical-sm text-text-caption m-0">{dates}</p>
           )}
         </div>
       )}
@@ -355,8 +335,8 @@ const AddedRemove = ({
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its
  * description while closed, View skill beside the name while open) and, at its end, the round
  * check that selects it, or for a skill this machine holds already its status, which for an Added
- * skill turns into Remove on hover; before either, while closed, the date of the last add or
- * removal when this machine recorded it. The row is named
+ * skill turns into Remove on hover; before either, the date of its last add or removal when this
+ * machine recorded it. The row is named
  * by the skill alone; its status and description are read as its description. A row asked to
  * open reads its SKILL.md first, with a spinner in the description's place, and opens once the
  * read ends.
@@ -430,7 +410,7 @@ const SkillItemView = ({
         description={description === "" ? undefined : descriptionId}
         open={open}
         busy={loading}
-        meta={rowMeta(card, open ? undefined : date)}
+        meta={rowMeta(card, date)}
         action={action}
       >
         {/* The name and View skill share a baseline, as their sizes differ. */}
@@ -461,7 +441,7 @@ const SkillItemView = ({
         )}
       </AccordionTrigger>
       <AccordionContent>
-        <Details card={card} install={install} />
+        <Details card={card} />
       </AccordionContent>
     </AccordionItem>
   );

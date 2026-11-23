@@ -614,9 +614,10 @@ test("an Added skill shows when it was added, a removed one when it was removed,
     events: [skillMd("pdf", "# pdf\n")],
   });
   await row(page, "pdf").click();
-  await expect(opened(page, "pdf")).toContainText(
-    "Added Oct 2 · Removed Sep 20"
-  );
+  await expect(opened(page, "pdf")).not.toContainText("Removed");
+  await expect(
+    rowLine(page, "pdf").getByText("Oct 2", { exact: true })
+  ).toBeVisible();
 });
 
 test("many agents: five logos and +n, the agent picker toggles a target, two-letter monograms", async ({
