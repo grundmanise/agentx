@@ -94,7 +94,7 @@ test("Rename with a name another skill has: the dialog stays open with the CLI's
       {
         code: "refused",
         hint: "choose another name with 'agentx skill rename commit-helper <new>'",
-        message: "the account repo already holds release-notes as a hub skill",
+        message: "the store already holds release-notes as a hub skill",
         type: "error",
       },
     ],
@@ -106,7 +106,7 @@ test("Rename with a name another skill has: the dialog stays open with the CLI's
   await dialog.getByRole("button", { name: "Rename" }).click();
   const alert = dialog.getByRole("alert");
   await expect(alert).toHaveText(
-    "The account repo already holds release-notes as a hub skill. Choose another name."
+    "The store already holds release-notes as a hub skill. Choose another name."
   );
   // The field takes edits again once the inventory that follows the refusal has arrived.
   await expect(field).toBeDisabled();

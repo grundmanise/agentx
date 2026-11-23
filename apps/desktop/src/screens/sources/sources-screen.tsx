@@ -30,7 +30,7 @@ import {
   planAdds,
   resultCards,
   sourcePills,
-  YOUR_SKILLS,
+  HUB_SKILLS,
 } from "#/screens/sources/projection.ts";
 import type {
   AddPlan,
@@ -67,13 +67,13 @@ const noSelection: Selection = new Map();
 
 /** Loads what a pill shows: a source's listing, or your skills on the hub. */
 const loadPill = async (key: string) => {
-  await (key === YOUR_SKILLS ? loadInstallable() : loadListing(key));
+  await (key === HUB_SKILLS ? loadInstallable() : loadListing(key));
 };
 
 /** The label of the read that fills a pill, for `usePending`. */
 const loadingLabel = (key: string) =>
   loadLabel(
-    key === YOUR_SKILLS
+    key === HUB_SKILLS
       ? ["skill", "list", "--remote"]
       : ["source", "skills", key]
   );
@@ -113,7 +113,7 @@ const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
     if (
       key !== undefined &&
       key !== opened &&
-      (key === YOUR_SKILLS || fetched === undefined)
+      (key === HUB_SKILLS || fetched === undefined)
     ) {
       void loadPill(key);
     }
@@ -130,7 +130,7 @@ const refreshAll = async () => {
     label: REFRESH_ALL_LABEL,
   });
   const { sources } = useAppStore.getState();
-  if (outcome.exitCode !== null && sources.some((s) => s.account === true)) {
+  if (outcome.exitCode !== null && sources.some((s) => s.hub === true)) {
     await loadInstallable();
   }
 };
@@ -246,14 +246,14 @@ export const SourcesScreen = () => {
   };
 
   const listing =
-    activePill === undefined || activePill.key === YOUR_SKILLS
+    activePill === undefined || activePill.key === HUB_SKILLS
       ? undefined
       : listings[activePill.key];
   const shownCards = (): SkillCard[] => {
     if (activePill === undefined) {
       return noCards;
     }
-    if (activePill.key === YOUR_SKILLS) {
+    if (activePill.key === HUB_SKILLS) {
       return installable === undefined
         ? noCards
         : nameOrder(installableCards(installable, library));
@@ -294,7 +294,7 @@ export const SourcesScreen = () => {
           {
             cards: shown,
             label: activePill.label,
-            source: activePill.url ?? YOUR_SKILLS,
+            source: activePill.url ?? HUB_SKILLS,
           },
         ]);
   const allCards = groups.flatMap((g) => g.cards);
@@ -476,7 +476,7 @@ export const SourcesScreen = () => {
     const plans = planAdds({
       allOf:
         allMode && activePill !== undefined && results === undefined
-          ? { cards: shown, source: activePill.url ?? YOUR_SKILLS }
+          ? { cards: shown, source: activePill.url ?? HUB_SKILLS }
           : undefined,
       enabled,
       selected: [...selection.values()],
@@ -513,7 +513,7 @@ export const SourcesScreen = () => {
     if (loading || activePill === undefined) {
       return undefined;
     }
-    if (activePill.key === YOUR_SKILLS) {
+    if (activePill.key === HUB_SKILLS) {
       return installable !== undefined && shown.length === 0
         ? "Every skill on your hub is on this machine"
         : undefined;

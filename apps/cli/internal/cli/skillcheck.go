@@ -78,17 +78,17 @@ type updateAvailableEvent struct {
 	local string // a hub update's: the commit the skill's branch holds here
 }
 
-// fromAccount reports whether ev is what the hub holds for a hub skill,
+// fromHub reports whether ev is what the hub holds for a hub skill,
 // which another machine published, rather than a newer upstream version: it
 // names the hub as its source and carries none of the upstream fields.
-func (ev updateAvailableEvent) fromAccount() bool { return ev.local != "" }
+func (ev updateAvailableEvent) fromHub() bool { return ev.local != "" }
 
 // versions are the two commits an update goes from and to, as a line of
 // text names them: the upstream's for an upstream update, the skill's own
 // branch here and the hub's for one published from another
 // machine.
 func (ev updateAvailableEvent) versions() (from, to string) {
-	if ev.fromAccount() {
+	if ev.fromHub() {
 		return ev.local, ev.Candidate
 	}
 	return ev.UpstreamCommit, ev.CandidateUpstreamCommit
@@ -163,7 +163,7 @@ type checkReport struct {
 	// idle is a check with nothing to fetch: no managed skill or fork comes
 	// from a source this machine has, no source at all for the serve child,
 	// or every one the check set out to fetch was removed while it ran. A
-	// serve child whose settings name sources it has no account repo for is
+	// serve child whose settings name sources it has no store for is
 	// not idle, each of them being a failure.
 	idle      bool
 	refreshed map[string]bool // the sources that were fetched and that the settings still hold, by canonical URL
@@ -172,9 +172,9 @@ type checkReport struct {
 	removed   []removedSkill
 	failures  []checkFailure
 	notes     []string // what a candidate the check moved leaves out or calls otherwise
-	// accountFetched is set when the check fetched the hub, and
-	// accountFailed when it set out to and could not reach it.
-	accountFetched, accountFailed bool
+	// hubFetched is set when the check fetched the hub, and
+	// hubFailed when it set out to and could not reach it.
+	hubFetched, hubFailed bool
 }
 
 // skillCheckUpdates is agentx skill check-updates: the update check,
@@ -240,7 +240,7 @@ func (inv *invocation) printCheck(rep checkReport) {
 	upstream := false
 	for _, ev := range rep.updates {
 		state := updateAvailable
-		if ev.fromAccount() {
+		if ev.fromHub() {
 			state = publishedElsewhere
 		} else {
 			upstream = true
@@ -298,7 +298,7 @@ func checkRefusal(failures []checkFailure) error {
 	}
 	hint := "the warnings name each failure"
 	switch st {
-	case exitSource, exitNotFound, exitAccountRepo: // what a run of several sources that failed that way says
+	case exitSource, exitNotFound, exitStore: // what a run of several sources that failed that way says
 		if sources {
 			hint += "; " + refusalHint(st)
 		}
@@ -314,7 +314,7 @@ func checkRefusal(failures []checkFailure) error {
 // records what it found in one mutation: the candidate and upstream-removed
 // refs and last_fetched. Nothing is applied to the library.
 //
-// The hub is checked too, see accountDue and checkAccount: hub skills
+// The hub is checked too, see hubDue and checkHub: hub skills
 // placed here against what their other machines published. It is one more
 // target of the same fetch, fetched once the shared sources are and counted
 // with them, see fetchSources; its last_fetched is stamped with the others'
@@ -327,7 +327,7 @@ func checkRefusal(failures []checkFailure) error {
 // fetches every source of the settings, a source no skill was installed
 // from included, so that its one check refreshes them all in this pass,
 // each fetched once, and the source index serve answers searches from
-// follows them; on a machine with no account repo, where nothing can be
+// follows them; on a machine with no store, where nothing can be
 // fetched, each is reported as not fetched rather than passed over. It
 // takes the lock as the serve child does, waiting for a holder. And it
 // reports no progress, where skill check-updates reports a progress event
@@ -346,8 +346,8 @@ func checkRefusal(failures []checkFailure) error {
 // the hub is neither fetched nor checked, so it can neither
 // fail nor slow that run. The hub's URL is the hub
 // alone, as the serve child's periodic check runs it, see
-// serveChecks.account: it is fetched whether or not a hub skill
-// is placed here, no shared source is, and a machine with no account repo
+// serveChecks.hub: it is fetched whether or not a hub skill
+// is placed here, no shared source is, and a machine with no store
 // is idle. "" is every source, as above.
 func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only string) (checkReport, error) {
 	var rep checkReport
@@ -359,19 +359,19 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 		rep.idle = true
 		return rep, nil
 	}
-	account, _ := accountEntry(s)
-	accountOnly := only != "" && only == account.URL
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	hub, _ := hubEntry(s)
+	hubOnly := only != "" && only == hub.URL
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return rep, accountRepoFailure(err)
+		return rep, storeFailure(err)
 	}
-	if !exists && (!serving || accountOnly) { // no managed skill, and nothing a source was fetched into
+	if !exists && (!serving || hubOnly) { // no managed skill, and nothing a source was fetched into
 		rep.idle = true
 		return rep, nil
 	}
 	if !exists {
 		// Settings that name sources on a machine that has fetched none,
-		// as an import leaves them: nothing can be fetched into an account
+		// as an import leaves them: nothing can be fetched into a home
 		// repo that source add has not created yet, and each source is the
 		// failure a fetch of it gives there, which the serve child warns
 		// about. Nothing is fetched or written, and no git is run.
@@ -382,7 +382,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 		}
 		return rep, nil
 	}
-	records, own, err := inv.checkLineage(ctx, gitDir)
+	records, hubSkills, err := inv.checkLineage(ctx, gitDir)
 	if err != nil {
 		return rep, err
 	}
@@ -395,9 +395,9 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 			targets = append(targets, target(entry))
 		}
 	}
-	var acc accountCheck
-	if only == "" || accountOnly {
-		if acc, err = inv.accountDue(own, accountOnly); err != nil {
+	var acc hubCheck
+	if only == "" || hubOnly {
+		if acc, err = inv.hubDue(hubSkills, hubOnly); err != nil {
 			return rep, err
 		}
 	}
@@ -417,7 +417,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	if acc.entry.URL != "" {
 		res := results[len(results)-1]
 		results = results[:len(results)-1]
-		if err := inv.checkAccount(ctx, gitDir, &acc, res); err != nil {
+		if err := inv.checkHub(ctx, gitDir, &acc, res); err != nil {
 			return rep, err
 		}
 		if acc.fetched { // stamped with the shared sources, under the one lock the check takes
@@ -441,7 +441,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	if err := run.writeCandidates(ctx, importing); err != nil {
 		return rep, err
 	}
-	live, ownLive, added, moved, journaled, err := inv.recordCheck(ctx, gitDir, serving, run.findings, fetched, records)
+	live, hubLive, added, moved, journaled, err := inv.recordCheck(ctx, gitDir, serving, run.findings, fetched, records)
 	if !journaled || err == nil {
 		// Recovery of a journal that could not be finished needs the
 		// commits the staging refs hold; otherwise they are what the
@@ -466,8 +466,8 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 			rep.failures = append(rep.failures, cf)
 		}
 	}
-	rep.accountFetched = acc.fetched && added[acc.entry.URL]
-	rep.accountFailed = acc.entry.URL != "" && !acc.fetched && added[acc.entry.URL]
+	rep.hubFetched = acc.fetched && added[acc.entry.URL]
+	rep.hubFailed = acc.entry.URL != "" && !acc.fetched && added[acc.entry.URL]
 	if len(rep.refreshed) == 0 && len(rep.failures) == 0 { // every source it set out to check was removed meanwhile
 		rep.idle = true
 		return rep, nil
@@ -494,7 +494,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	rep.checked = len(checked)
 	if acc.fetched && added[acc.entry.URL] { // a skill both sources checked is counted once
 		for _, name := range acc.skills {
-			if _, ok := ownLive[name]; ok && !checked[name] {
+			if _, ok := hubLive[name]; ok && !checked[name] {
 				rep.checked++
 			}
 		}
@@ -508,7 +508,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	}
 	sort.Slice(announced, func(i, j int) bool { return announced[i].Name < announced[j].Name })
 	sort.Slice(rep.removed, func(i, j int) bool { return rep.removed[i].name < rep.removed[j].name })
-	if rep.updates, err = inv.describeCandidates(ctx, gitDir, account.URL, announced); err != nil {
+	if rep.updates, err = inv.describeCandidates(ctx, gitDir, hub.URL, announced); err != nil {
 		return rep, err
 	}
 	for _, ev := range rep.updates {
@@ -521,7 +521,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 			// The branch moved, by an update that took the remote's commits
 			// in, or the skill went, while the check ran: what it found is
 			// no longer what the branch here lacks.
-			if rec, ok := ownLive[ev.Name]; ok && rec.Commit == ev.local {
+			if rec, ok := hubLive[ev.Name]; ok && rec.Commit == ev.local {
 				rep.updates = append(rep.updates, ev)
 			}
 		}
@@ -530,9 +530,9 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	return rep, nil
 }
 
-// accountCheck is what an update check found on the hub for hub skills
-// placed on this machine, see accountDue and checkAccount.
-type accountCheck struct {
+// hubCheck is what an update check found on the hub for hub skills
+// placed on this machine, see hubDue and checkHub.
+type hubCheck struct {
 	entry    home.Source      // the hub's entry; its URL is "" when nothing is checked there
 	placed   []lineage.Record // the skills compared with it, by name
 	fetched  bool             // the fetch of it succeeded
@@ -541,20 +541,20 @@ type accountCheck struct {
 	failures []checkFailure // the fetch that failed, with the skills it left unchecked, or a skill it could not compare
 }
 
-// accountDue is what checkAccount will check, read before anything is
-// fetched: hub skills, the forks of own placed on this machine,
+// hubDue is what checkHub will check, read before anything is
+// fetched: hub skills, the forks of hubSkills placed on this machine,
 // and the hub's entry, whose fetch is then one target of the
 // check's, after the shared sources, see fetchSources. Nothing is due when
 // no hub is set, or, unless always, none of those skills is
 // placed here: a check of the hub alone fetches it all the same,
 // so that its remote-tracking branches hold what it holds.
-func (inv *invocation) accountDue(own map[string]lineage.Record, always bool) (accountCheck, error) {
-	var ac accountCheck
-	entry, _, ok, err := inv.accountSource()
+func (inv *invocation) hubDue(hubSkills map[string]lineage.Record, always bool) (hubCheck, error) {
+	var ac hubCheck
+	entry, _, ok, err := inv.hubSource()
 	if err != nil || !ok {
 		return ac, err
 	}
-	for name, rec := range own {
+	for name, rec := range hubSkills {
 		if inv.forkPlaced(name) {
 			ac.placed = append(ac.placed, rec)
 		}
@@ -567,8 +567,8 @@ func (inv *invocation) accountDue(own map[string]lineage.Record, always bool) (a
 	return ac, nil
 }
 
-// checkAccount is the update check of hub skills placed on this
-// machine, see accountDue, against what the hub holds of them,
+// checkHub is the update check of hub skills placed on this
+// machine, see hubDue, against what the hub holds of them,
 // which is what their other machines published, once the fetch of it, res,
 // has ended. A fetch that failed is the failure of an unreachable source,
 // naming every skill it left unchecked, and costs the check nothing else.
@@ -588,16 +588,16 @@ func (inv *invocation) accountDue(own map[string]lineage.Record, always bool) (a
 // version. Nothing is written for it: the fetch's remote-tracking branches
 // are what skill update takes in, and the caller stamps the hub's
 // last_fetched with the shared sources'.
-func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *accountCheck, res source.Result) error {
+func (inv *invocation) checkHub(ctx context.Context, gitDir string, ac *hubCheck, res source.Result) error {
 	url := ac.entry.URL
 	if res.Err != nil {
-		ac.failures = append(ac.failures, checkFailure{source: url, fetch: true, skills: skillNamesOf(ac.placed), f: uncheckedAccount(url, res.Err)})
+		ac.failures = append(ac.failures, checkFailure{source: url, fetch: true, skills: skillNamesOf(ac.placed), f: uncheckedHub(url, res.Err)})
 		return nil
 	}
 	ac.fetched = true
 	tips, err := lineage.ListRemoteTips(ctx, inv.git, gitDir, source.RemoteName(source.ID(url)))
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	unchecked := func(rec lineage.Record, err error) error {
 		var f *failure
@@ -622,7 +622,7 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 		out, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", rec.Commit, tip)
 		base := strings.TrimSpace(out)
 		if err != nil {
-			if err := unchecked(rec, accountRepoFailure(err)); err != nil {
+			if err := unchecked(rec, storeFailure(err)); err != nil {
 				return err
 			}
 			continue
@@ -650,11 +650,11 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 	}
 	out, err := inv.git.Isolated(ctx, gitDir, args...)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	trees := strings.Fields(out)
 	if len(trees) != 2*len(behind) {
-		return accountRepoFailure(fmt.Errorf("git rev-parse answered %d of %d trees", len(trees), 2*len(behind)))
+		return storeFailure(fmt.Errorf("git rev-parse answered %d of %d trees", len(trees), 2*len(behind)))
 	}
 	var pairs strings.Builder
 	for i := range behind {
@@ -662,11 +662,11 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 	}
 	out, err = inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(pairs.String()), "diff-tree", "--stdin", "-r", "-z", "--no-renames", "--name-status")
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	changes, err := parsePairDiffs(out)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	for i, p := range behind {
 		ev := updateAvailableEvent{
@@ -683,11 +683,11 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 	return nil
 }
 
-// uncheckedAccount is unreachableRemote as a check reports it, in the shape
+// uncheckedHub is unreachableRemote as a check reports it, in the shape
 // of a shared source's failure, the remote named first, so that the
 // refusal reads "could not check the hub <url>: ...". err is
 // the fetch's, as fetchSources wraps it.
-func uncheckedAccount(url string, err error) *failure {
+func uncheckedHub(url string, err error) *failure {
 	f := unreachableRemote(url, err)
 	reason := strings.TrimPrefix(err.Error(), source.ErrUnreachable.Error()+": ")
 	return refuse(f.status, "the hub "+shownURL(url)+": cannot reach it: "+trimGit(reason), f.hint)
@@ -703,30 +703,30 @@ func uncheckedAccount(url string, err error) *failure {
 // unmanaged or a plugin's skill, has no upstream to check and is left out,
 // as is one whose history does not say which import is its base.
 //
-// own are hub skills, every fork, by name, each with its branch and its tip
-// as the account repo holds them, which is what the hub's branch of it is
-// compared with, see checkAccount.
-func (inv *invocation) checkLineage(ctx context.Context, gitDir string) (records, own map[string]lineage.Record, err error) {
+// hubSkills are the hub skills, every fork, by name, each with its branch and its tip
+// as the store holds them, which is what the hub's branch of it is
+// compared with, see checkHub.
+func (inv *invocation) checkLineage(ctx context.Context, gitDir string) (records, hubSkills map[string]lineage.Record, err error) {
 	records, err = inv.listLineage(ctx, gitDir)
 	if err == nil {
 		err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
 	}
 	if err != nil {
-		return nil, nil, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
+		return nil, nil, storeFailure(fmt.Errorf("store %s: %w", gitDir, err))
 	}
-	own = map[string]lineage.Record{}
+	hubSkills = map[string]lineage.Record{}
 	for name, rec := range records {
 		if rec.Kind != lineage.KindFork {
 			continue
 		}
-		own[name] = rec
+		hubSkills[name] = rec
 		if base, ok := rec.ForkBase(); ok {
 			records[name] = base
 		} else {
 			delete(records, name)
 		}
 	}
-	return records, own, nil
+	return records, hubSkills, nil
 }
 
 // checkable are the skills an update check covers, by the canonical URL of
@@ -829,7 +829,7 @@ func (c *checkRun) compare(ctx context.Context, res source.Result, recs []lineag
 	unchecked := func(subpaths []string, err error) {
 		var f *failure
 		if !errors.As(err, &f) {
-			f = refuse(exitAccountRepo, err.Error(), "run 'agentx doctor' and check the account repo it names")
+			f = refuse(exitStore, err.Error(), "run 'agentx doctor' and check the store it names")
 		}
 		var left []string
 		for _, p := range subpaths {
@@ -926,7 +926,7 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 	}
 	commits, trees, err := lineage.WriteAll(ctx, c.inv.git, c.gitDir, run, list)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	for i, v := range c.versions {
 		v.commit, v.tree = commits[i], trees[i]
@@ -942,7 +942,7 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 // mutation left it, hub skills as that read found them, see
 // checkLineage, the sources the settings hold once the fetches are done,
 // and the skills whose candidate it moved. When every fetch failed it reads
-// no lineage and returns no own skills.
+// no lineage and returns no hub skills.
 //
 // The lineage is read again under the lock. A skill whose branch no longer
 // names the import commit it was compared with, or that is gone, gets
@@ -958,7 +958,7 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 // last_fetched for every source that fetched, and the write bumps the
 // version file once.
 func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool, findings []finding, fetched map[string]bool, records map[string]lineage.Record) (
-	live, own map[string]lineage.Record, added, moved map[string]bool, journaled bool, err error,
+	live, hubSkills map[string]lineage.Record, added, moved map[string]bool, journaled bool, err error,
 ) {
 	live, moved = records, map[string]bool{}
 	if len(fetched) == 0 {
@@ -975,7 +975,7 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 	now := time.Now().UTC().Format(time.RFC3339)
 	err = inv.holdLock(ctx, wait, true, func() error {
 		var err error
-		if live, own, err = inv.checkLineage(ctx, gitDir); err != nil {
+		if live, hubSkills, err = inv.checkLineage(ctx, gitDir); err != nil {
 			return err
 		}
 		s, err := inv.loadSettings()
@@ -1036,7 +1036,7 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 	if err != nil {
 		return nil, nil, nil, nil, journaled, mutationFailure(err)
 	}
-	return live, own, added, moved, journaled, nil
+	return live, hubSkills, added, moved, journaled, nil
 }
 
 // describeCandidates builds the update_available event of every record,
@@ -1048,7 +1048,7 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 // candidate's, and one cat-file of every candidate's SKILL.md, whose name
 // is the one an install of that version would take, and of a fork's base
 // version's.
-func (inv *invocation) describeCandidates(ctx context.Context, gitDir, account string, recs []lineage.Record) ([]updateAvailableEvent, error) {
+func (inv *invocation) describeCandidates(ctx context.Context, gitDir, hub string, recs []lineage.Record) ([]updateAvailableEvent, error) {
 	if len(recs) == 0 {
 		return nil, nil
 	}
@@ -1074,19 +1074,19 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir, account s
 	}
 	out, err := inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(pairs.String()), "diff-tree", "--stdin", "-r", "-z", "--no-renames", "--name-status")
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	changes, err := parsePairDiffs(out)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	out, err = inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(blobs.String()), "cat-file", "--batch")
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	bodies, err := batchInOrder(out, n)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	events := make([]updateAvailableEvent, len(recs))
 	for i, rec := range recs {
@@ -1095,7 +1095,7 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir, account s
 			event: newEvent("update_available"), Name: rec.Name, BaseHash: rec.Import.Hash, UpstreamCommit: rec.Import.Commit, UpstreamTime: rec.Time,
 			Candidate: c.Commit, CandidateHash: c.Import.Hash, CandidateUpstreamCommit: c.Import.Commit, CandidateUpstreamTime: c.Time, Files: []changedFile{},
 		}
-		ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, account)
+		ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, hub)
 		prefix := rec.Import.Dir() + "/"
 		for _, f := range changes[rec.Tree+" "+c.Tree] {
 			f.Path = strings.TrimPrefix(f.Path, prefix)

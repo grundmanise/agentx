@@ -52,7 +52,7 @@ type adoptionEvent struct {
 
 // phaseFetch is the step a run reports for one source it fetches: the one
 // agentx skill import adds, and the ones source fetch, check-updates, publish and
-// the account commands fetch.
+// the hub commands fetch.
 const phaseFetch = "fetch"
 
 // adoptSelection is what one run of agentx skill import was asked to do: nothing
@@ -118,7 +118,7 @@ func newSkillImportCommand(inv *invocation) *cobra.Command {
 			"An unmanaged skill no tool installed is imported too, unless --from is given:\n" +
 			"one the library holds, or a folder in an agent client's own skills directory.\n" +
 			"It is imported with its files as they are and becomes a hub skill: a\n" +
-			"branch of its own, skills/<name>, in the account repo, checked out as a\n" +
+			"branch of its own, skills/<name>, in the store, checked out as a\n" +
 			"worktree in agentx home, and a symlink to it in the library. A folder in a\n" +
 			"client's skills directory moves there and a symlink to the library takes its\n" +
 			"place, so every client that reads the library sees the skill too.\n\n" +
@@ -175,7 +175,7 @@ func (s adoptSelection) check() error {
 // the batch, which may adopt some and refuse others, is the run's.
 //
 // Without a flag it is a preview and writes nothing at all: it takes no
-// lock, creates neither agentx home nor the account repo, and reaches for
+// lock, creates neither agentx home nor the store, and reaches for
 // no network. The other tools' files are never written, on any path.
 func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 	if err := sel.check(); err != nil {
@@ -427,7 +427,7 @@ func (inv *invocation) adoptCandidates(records []record, lineage map[string]line
 }
 
 // judge decides what can be done with one candidate from what is on this
-// machine alone: what the account repo already knows about the name, what
+// machine alone: what the store already knows about the name, what
 // the record rules out, and whether it names a source agentx can fetch. A
 // name that is a hub skill, or a managed skill the
 // library holds, is managed already. A record that names no source agentx
@@ -632,7 +632,7 @@ type unadopted struct {
 // be adopted, the unmanaged skills no tool recorded that --all covers. One
 // whose record names a source is installed from it, as skill add installs
 // one: the source is added and fetched when the settings do not hold it,
-// the version at its pin is read out of the account repo, the import
+// the version at its pin is read out of the store, the import
 // commits are written, and the library directories, the import branches
 // and the placements land as one journaled mutation. One whose record
 // names none, and one no tool recorded, is adopted with its files as they
@@ -856,7 +856,7 @@ func (inv *invocation) adoptFromSources(ctx context.Context, b *batch, ready []*
 // at its subpath in its source, at the pin this machine holds, the source
 // added and fetched first when the settings do not hold it. A source that
 // cannot be added or read costs its own skills and no others. It returns
-// the versions, filled, and the account repo they were read from.
+// the versions, filled, and the store they were read from.
 func (inv *invocation) adoptVersions(ctx context.Context, b *batch, ready []*candidate) ([]*imported, string, error) {
 	if len(ready) == 0 {
 		return nil, "", nil
@@ -893,8 +893,8 @@ func (inv *invocation) adoptVersions(ctx context.Context, b *batch, ready []*can
 			continue
 		}
 		if gitDir == "" {
-			if gitDir, _, err = gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home); err != nil {
-				return nil, "", accountRepoFailure(err)
+			if gitDir, _, err = gitx.CheckStore(ctx, inv.git, inv.dirs.Home); err != nil {
+				return nil, "", storeFailure(err)
 			}
 		}
 		var skills []source.Skill
@@ -930,7 +930,7 @@ func (inv *invocation) adoptVersions(ctx context.Context, b *batch, ready []*can
 
 // adoptListing is what one source holds at its pin: the listing of the
 // fetch that adds it when the settings do not hold it, else the listing of
-// the account repo as it was last fetched. A source the run cannot read is
+// the store as it was last fetched. A source the run cannot read is
 // the failure returned, which costs its skills; an error is the run's.
 func (inv *invocation) adoptListing(ctx context.Context, b *batch, url string, cands []*candidate) (listing source.Listing, fetched string, f *failure, err error) {
 	if !cands[0].added {
@@ -953,9 +953,9 @@ func (inv *invocation) adoptListing(ctx context.Context, b *batch, url string, c
 	}
 	entry := cands[0].entry
 	pinned := source.Source{URL: url, Ref: entry.Pin}
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return listing, "", nil, accountRepoFailure(err)
+		return listing, "", nil, storeFailure(err)
 	}
 	if !exists {
 		return listing, "", failureOf(sourceFailure(source.NotFetched(url), pinned)), nil

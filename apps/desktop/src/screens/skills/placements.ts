@@ -214,7 +214,7 @@ export const lockOf = (row: SkillRow): Lock | undefined => {
         : { action: "adopt", reason: `${UNMANAGED}. Import it to manage` };
     }
     case "source":
-    case "yours": {
+    case "hub": {
       return undefined;
     }
     default: {

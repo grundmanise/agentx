@@ -17,7 +17,7 @@ import (
 // source's skill does not keep the branch.
 func TestRenamedDrops(t *testing.T) {
 	t.Parallel()
-	own := func(name, id string, renamed ...string) lineage.Record {
+	hub := func(name, id string, renamed ...string) lineage.Record {
 		return lineage.Record{Name: name, Kind: lineage.KindFork, Fork: &lineage.ForkLineage{ID: id, Renamed: renamed}}
 	}
 	pushed := func(name string) *publishing {
@@ -31,17 +31,17 @@ func TestRenamedDrops(t *testing.T) {
 		tips    map[string]string
 		want    string
 	}{
-		{"the first publish of the new name", []lineage.Record{own("new", "1", "old")},
+		{"the first publish of the new name", []lineage.Record{hub("new", "1", "old")},
 			[]*publishing{pushed("new")}, map[string]string{"old": "o"}, "old>new@c-new"},
-		{"up to date", []lineage.Record{own("new", "1", "old")},
+		{"up to date", []lineage.Record{hub("new", "1", "old")},
 			[]*publishing{{name: "new", outcome: publishUpToDate, commit: "c-new"}}, map[string]string{"old": "o"}, ""},
-		{"a later publish", []lineage.Record{own("new", "1", "old")},
+		{"a later publish", []lineage.Record{hub("new", "1", "old")},
 			[]*publishing{pushed("new")}, map[string]string{"new": "n", "old": "o"}, ""},
-		{"the old name held here", []lineage.Record{own("new", "1", "old"), own("old", "1")},
+		{"the old name held here", []lineage.Record{hub("new", "1", "old"), hub("old", "1")},
 			[]*publishing{pushed("new")}, map[string]string{"old": "o"}, ""},
-		{"the old name held here as a shared source's", []lineage.Record{own("new", "1", "old"), {Name: "old", Kind: lineage.KindManaged}},
+		{"the old name held here as a shared source's", []lineage.Record{hub("new", "1", "old"), {Name: "old", Kind: lineage.KindManaged}},
 			[]*publishing{pushed("new")}, map[string]string{"old": "o"}, "old>new@c-new"},
-		{"two renamed from one old name", []lineage.Record{own("b2", "1", "old"), own("b1", "1", "old")},
+		{"two renamed from one old name", []lineage.Record{hub("b2", "1", "old"), hub("b1", "1", "old")},
 			[]*publishing{pushed("b2"), pushed("b1")}, map[string]string{"old": "o"}, "old>b1@c-b1"},
 	} {
 		records := map[string]lineage.Record{}

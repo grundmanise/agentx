@@ -258,23 +258,23 @@ func buildStandard(s *sourceRepo) []string {
 	return []string{v1, head}
 }
 
-// accountGit runs git on the harness account repo in the isolated
+// storeGit runs git on the harness store in the isolated
 // environment and returns stdout.
-func (h *harness) accountGit(args ...string) string {
+func (h *harness) storeGit(args ...string) string {
 	h.t.Helper()
 	r := gitx.New(h.env, false, func(string, ...any) {})
-	out, err := r.Isolated(context.Background(), gitx.AccountRepoPath(h.agentx), args...)
+	out, err := r.Isolated(context.Background(), gitx.StorePath(h.agentx), args...)
 	if err != nil {
 		h.t.Fatalf("git %s: %v", strings.Join(args, " "), err)
 	}
 	return out
 }
 
-// accountGitErr is accountGit for a command expected to fail.
-func (h *harness) accountGitErr(args ...string) (string, error) {
+// storeGitErr is storeGit for a command expected to fail.
+func (h *harness) storeGitErr(args ...string) (string, error) {
 	h.t.Helper()
 	r := gitx.New(h.env, false, func(string, ...any) {})
-	return r.Isolated(context.Background(), gitx.AccountRepoPath(h.agentx), args...)
+	return r.Isolated(context.Background(), gitx.StorePath(h.agentx), args...)
 }
 
 // fetches counts the git fetch commands in the verbose stderr of one run,
@@ -385,12 +385,12 @@ exec `+real+` "$@"
 `)
 }
 
-// missingObjects counts the objects of ref that the account repo does not
+// missingObjects counts the objects of ref that the store does not
 // hold, which rev-list prints with a leading question mark.
 func (h *harness) missingObjects(ref string) int {
 	h.t.Helper()
 	n := 0
-	for _, line := range strings.Split(h.accountGit("rev-list", "--objects", "--missing=print", ref), "\n") {
+	for _, line := range strings.Split(h.storeGit("rev-list", "--objects", "--missing=print", ref), "\n") {
 		if strings.HasPrefix(line, "?") {
 			n++
 		}
@@ -451,7 +451,7 @@ exec `+real+` "$@"
 // gateObjectFetch holds the by-object-id blob batch of source.Fetch open:
 // the point between the fetch that brings a source's new commit and the one
 // that brings that commit's SKILL.md blobs, which is where a source is in
-// the account repo and not yet listable.
+// the store and not yet listable.
 func gateObjectFetch(t *testing.T, h *harness) (arm func() (reached, release func())) {
 	t.Helper()
 	return gateGit(t, h, `sub= ; stdin=
@@ -526,7 +526,7 @@ func awaitFifo(t *testing.T, path string, use func(*os.File) error) {
 // both fetches source.Fetch can fill a partial clone's SKILL.md blobs with:
 // the by-object-id batch and the --refetch --no-filter fallback behind it.
 // Every other invocation is the real git, so the blobless fetch of the ref
-// still lands and the fetch fails with the new commit in the account repo
+// still lands and the fetch fails with the new commit in the store
 // and its blobs not, which is the state a source ref may never name.
 //
 // With remotes named, only those sources fail and the rest of a run fetches
@@ -588,15 +588,15 @@ exec `+real+` "$@"
 `)
 }
 
-// agentxRefs lists every ref the account repo holds under refs/agentx.
+// agentxRefs lists every ref the store holds under refs/agentx.
 func (h *harness) agentxRefs() string {
 	h.t.Helper()
-	return h.accountGit("for-each-ref", "--format=%(refname)", "refs/agentx/")
+	return h.storeGit("for-each-ref", "--format=%(refname)", "refs/agentx/")
 }
 
 // failLocalGit puts a git wrapper alone on the harness PATH that fails one
 // local subcommand and hands every other invocation to the real git, which
-// is how a test reaches the account repo's own git failing on a read: the
+// is how a test reaches the store's own git failing on a read: the
 // exit code table calls that 8, whatever command ran into it.
 func failLocalGit(t *testing.T, h *harness, sub string) {
 	t.Helper()

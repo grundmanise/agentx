@@ -117,7 +117,7 @@ func TestARootSkillIsComparedUnderTheRepositoryName(t *testing.T) {
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url)
 	equal(t, "state after the install", h.listed("solo")["state"], stateCurrent)
-	contains(t, "the import commit", h.accountGit("cat-file", "commit", "refs/heads/managed/solo"), "Agentx-Path: .")
+	contains(t, "the import commit", h.storeGit("cat-file", "commit", "refs/heads/managed/solo"), "Agentx-Path: .")
 
 	writeFile(t, filepath.Join(h.library, "solo", "notes.md"), "notes, edited\n")
 	equal(t, "state after an edit", h.listed("solo")["state"], stateModified)
@@ -459,7 +459,7 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	if arrived == nil || len(arrived["library"].([]any)) != 2 {
 		t.Fatalf("the inventory after beta arrived = %v, want alpha and beta", arrived)
 	}
-	expect(change("unmanaged", func() { h.accountGit("update-ref", "-d", "refs/heads/managed/alpha") }),
+	expect(change("unmanaged", func() { h.storeGit("update-ref", "-d", "refs/heads/managed/alpha") }),
 		"unmanaged", "", "", stateCurrent, "displaced,missing")
 
 	equal(t, "exit", p.close(), 0)
@@ -499,7 +499,7 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	if err := os.Rename(filepath.Join(h.library, "alpha"), filepath.Join(t.TempDir(), "alpha")); err != nil {
 		t.Fatal(err)
 	}
-	want := "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add " +
+	want := "alpha is managed in the store but the library holds no skill directory for it; run 'agentx skill add " +
 		shellWord(s.url) + " --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it"
 	var inventory jsonEvent
 	for _, e := range p.until("gone") {
@@ -545,7 +545,7 @@ func TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory(t *testing.T) {
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	lib := filepath.Join(h.library, "alpha")
 	remove(t, filepath.Join(lib, "SKILL.md"))
-	want := "alpha is managed in the account repo but " + lib + " holds no SKILL.md; move " + lib + " aside, then run 'agentx skill add " +
+	want := "alpha is managed in the store but " + lib + " holds no SKILL.md; move " + lib + " aside, then run 'agentx skill add " +
 		shellWord(s.url) + " --name alpha' to install it again, or run 'agentx skill remove alpha' to stop managing it"
 	equal(t, "skill list's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"), want)
 	out := h.serveOnce("--json")
@@ -633,13 +633,13 @@ func (p *serveProc) nextOf(typ string) jsonEvent {
 // another edit, a commit made with git in the fork's worktree leaves it
 // modified, since nothing published it, until a publish that has nothing
 // to record but pushes the commit, which moves only the hub's
-// branch as the account repo tracks it. Serve itself never commits an
+// branch as the store tracks it. Serve itself never commits an
 // edit.
 func TestServeReportsForkDrift(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
 	h.mustRun("skill", "new", "notes")
-	h.setAccount(newAccountRemote(t, h))
+	h.setHub(newHubRemote(t, h))
 	p := h.serve(t, "--json")
 	first := p.next("inventory")["library"].([]any)
 	equal(t, "the fork's first state", first[0].(map[string]any)["state"], stateCurrent)

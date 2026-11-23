@@ -29,7 +29,7 @@ export const originPage = (row: SkillRow): string | undefined => {
   let url: string | undefined;
   if (row.kind === "source") {
     url = row.entry?.source;
-  } else if (row.kind === "yours") {
+  } else if (row.kind === "hub") {
     url = row.entry?.upstream;
   }
   return url?.startsWith("https://") === true ? url : undefined;
@@ -81,7 +81,7 @@ const sourceDetails = (entry: LibraryEntry): Detail[] => {
   return details;
 };
 
-const yoursDetails = (row: SkillRow, entry: LibraryEntry): Detail[] => {
+const hubDetails = (row: SkillRow, entry: LibraryEntry): Detail[] => {
   const details: Detail[] = [];
   if (entry.upstream !== undefined) {
     // The skill's directory at the commit it was forked from, as the fork's name in HISTORY opens;
@@ -171,8 +171,8 @@ export const detailsOf = (
     case "source": {
       return entry === undefined ? [] : sourceDetails(entry);
     }
-    case "yours": {
-      return entry === undefined ? [] : yoursDetails(row, entry);
+    case "hub": {
+      return entry === undefined ? [] : hubDetails(row, entry);
     }
     case "plugin": {
       return pluginDetails(row, configurations);

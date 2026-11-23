@@ -51,7 +51,7 @@ func TestSkillHistoryListsEveryCommit(t *testing.T) {
 		t.Fatalf("%d history events, want 4:\n%s", len(events), out.stdout)
 	}
 	var importFiles []string
-	for _, p := range strings.Split(h.accountGit("ls-tree", "-r", "--name-only", imported), "\n") {
+	for _, p := range strings.Split(h.storeGit("ls-tree", "-r", "--name-only", imported), "\n") {
 		importFiles = append(importFiles, strings.TrimPrefix(p, "alpha/")+" added")
 	}
 	for i, want := range []struct {
@@ -59,8 +59,8 @@ func TestSkillHistoryListsEveryCommit(t *testing.T) {
 	}{
 		{foreign, committed, "By hand", "", "../README.md added,extra.md modified"},
 		{committed, created, "alpha: add extra.md (test-host)", machine, "extra.md added"},
-		{created, imported, h.accountGit("log", "-1", "--format=%s", created), machine, "SKILL.md modified"},
-		{imported, "", h.accountGit("log", "-1", "--format=%s", imported), "", strings.Join(importFiles, ",")},
+		{created, imported, h.storeGit("log", "-1", "--format=%s", created), machine, "SKILL.md modified"},
+		{imported, "", h.storeGit("log", "-1", "--format=%s", imported), "", strings.Join(importFiles, ",")},
 	} {
 		ev := events[i]
 		equal(t, "event "+want.subject+": commit", ev["commit"], want.commit)
@@ -95,7 +95,7 @@ func TestSkillHistoryListsEveryCommit(t *testing.T) {
 	equal(t, "the origin's kind", origin["kind"], "source")
 	equal(t, "the origin's source", origin["source"], h.trailer(imported, lineage.TrailerSource))
 	equal(t, "the origin's skill", origin["skill"], "alpha")
-	equal(t, "the foreign commit's author", events[0]["author"], h.accountGit("log", "-1", "--format=%an <%ae>", foreign))
+	equal(t, "the foreign commit's author", events[0]["author"], h.storeGit("log", "-1", "--format=%an <%ae>", foreign))
 	equal(t, "the foreign commit's message", events[0]["message"], "By hand\n\nWith a body.")
 	equal(t, "the result", h.one(out.stdout, "result")["summary"], "alpha has 4 commits")
 	for i, want := range []bool{false, false, false, true} {

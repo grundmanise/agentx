@@ -25,16 +25,16 @@ import { Input } from "#/components/ui/input.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
-import { accountRemote } from "#/screens/settings/source-rows.ts";
+import { hubSource } from "#/screens/settings/source-rows.ts";
 import { agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** The pending label of `source add <url> --hub` from this section. */
-export const SAVE_ACCOUNT_LABEL = "save hub";
+export const SAVE_HUB_LABEL = "save hub";
 
 /** The pending label of `source remove <url>` of the hub. */
-export const DETACH_ACCOUNT_LABEL = "detach hub";
+export const DETACH_HUB_LABEL = "detach hub";
 
 /** A confirmation: its title, its warning, Cancel and the button that goes ahead. */
 const Confirm = ({
@@ -95,7 +95,7 @@ const saveProblem = (
   // the startup layer back, which says why.
   if (
     outcome.exitCode === EXIT_CODES.locked ||
-    outcome.exitCode === EXIT_CODES.account_repo
+    outcome.exitCode === EXIT_CODES.store
   ) {
     return undefined;
   }
@@ -127,17 +127,17 @@ const RemoteForm = ({
   // The URL saved when it was refused: it keeps its case when it starts the CLI's words.
   const [refused, setRefused] = useState("");
   const [confirming, setConfirming] = useState(false);
-  const saving = usePending(SAVE_ACCOUNT_LABEL);
+  const saving = usePending(SAVE_HUB_LABEL);
   const typed = url.trim();
   const unchanged = typed === "" || typed === current;
 
   const save = async () => {
-    if (SAVE_ACCOUNT_LABEL in useAppStore.getState().pending) {
+    if (SAVE_HUB_LABEL in useAppStore.getState().pending) {
       return;
     }
     setProblem(undefined);
     const outcome = await agentx(["source", "add", typed, "--hub"], {
-      label: SAVE_ACCOUNT_LABEL,
+      label: SAVE_HUB_LABEL,
       ownFailure: true,
       success: "Linked hub",
     });
@@ -213,20 +213,14 @@ const RemoteForm = ({
  * The hub set now: its URL, a Read-only tag when access is limited, Change… and
  * Unlink. Like a source's card, it shows a tag only for a limit.
  */
-const AccountRemoteRow = ({
-  url,
-  readOnly,
-}: {
-  url: string;
-  readOnly: boolean;
-}) => {
+const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
   const [changing, setChanging] = useState(false);
   const [detaching, setDetaching] = useState(false);
-  const busy = usePending(DETACH_ACCOUNT_LABEL);
+  const busy = usePending(DETACH_HUB_LABEL);
 
   const detach = () => {
     void agentx(["source", "remove", url], {
-      label: DETACH_ACCOUNT_LABEL,
+      label: DETACH_HUB_LABEL,
       success: "The hub is no longer set",
     });
   };
@@ -293,21 +287,21 @@ const AccountRemoteRow = ({
 };
 
 /** The Hub section, from the Sources slice. */
-export const AccountRemoteSection = () => {
-  const account = useAppStore((s) => accountRemote(s.sources));
+export const HubSection = () => {
+  const hub = useAppStore((s) => hubSource(s.sources));
   return (
     <SettingsSection
       title="Hub"
       description="The Git repository your skills publish to."
     >
-      {account === undefined ? (
+      {hub === undefined ? (
         <RemoteForm />
       ) : (
-        <AccountRemoteRow
+        <HubRow
           // A new hub starts with its field closed.
-          key={account.url}
-          url={account.url}
-          readOnly={account.access === "read-only"}
+          key={hub.url}
+          url={hub.url}
+          readOnly={hub.access === "read-only"}
         />
       )}
     </SettingsSection>

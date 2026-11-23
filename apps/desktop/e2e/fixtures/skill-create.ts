@@ -12,7 +12,7 @@ import type {
 } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
-import { ACCOUNT, inventory, library, skills } from "./skills.ts";
+import { HUB, inventory, library, skills } from "./skills.ts";
 
 const LIBRARY = "/home/me/.agents/skills";
 const WORKTREES = "/home/me/.agentx/worktrees";
@@ -48,7 +48,7 @@ export const created: LibraryEntry = {
   kind: "managed",
   name: NEW_SKILL,
   placements,
-  source: ACCOUNT,
+  source: HUB,
   state: "current",
   universal,
 };

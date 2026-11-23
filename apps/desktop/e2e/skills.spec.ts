@@ -725,7 +725,7 @@ test.describe("the detail pane", () => {
           - definition:
             - link "https://github.com/acme/skills/pdf"
           - term: Published to
-          - definition: git@github.com:me/account.git
+          - definition: git@github.com:me/hub.git
           - term: Files
           - definition:
             - link "/home/me/.agentx/worktrees/pdf-letters/pdf-letters"

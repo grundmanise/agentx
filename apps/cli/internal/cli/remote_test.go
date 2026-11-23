@@ -16,9 +16,9 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
-// newAccountRemote is an empty bare repository under the test's own
+// newHubRemote is an empty bare repository under the test's own
 // directory, for the homes of one test to share as their hub.
-func newAccountRemote(t *testing.T, h *harness) string {
+func newHubRemote(t *testing.T, h *harness) string {
 	t.Helper()
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -31,15 +31,15 @@ func newAccountRemote(t *testing.T, h *harness) string {
 	return remote
 }
 
-// accountRemoteName is the name of the hub's git remote in h's
-// account repo: the remote of its source, named after its id.
-func accountRemoteName(t *testing.T, h *harness) string {
+// hubRemoteName is the name of the hub's git remote in h's
+// store: the remote of its source, named after its id.
+func hubRemoteName(t *testing.T, h *harness) string {
 	t.Helper()
 	settings, err := home.LoadSettings(h.agentx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry, ok := accountEntry(settings)
+	entry, ok := hubEntry(settings)
 	if !ok {
 		t.Fatal("no hub is set")
 	}
@@ -57,26 +57,26 @@ func remoteGit(t *testing.T, h *harness, remote string, args ...string) string {
 	return out
 }
 
-// accountHomes is two machines of one user with one hub: a,
+// hubHomes is two machines of one user with one hub: a,
 // with alpha and beta installed from a source at its first commit and
 // forked, both published, and b, a machine with the remote set that has
 // installed nothing and added no source. Each has a git identity of its
 // own. It returns the source and the remote.
-func accountHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
+func hubHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	t.Helper()
 	a, s, _ = forkUpdateHarness(t)
 	a.withIdentity("Machine A", "a@example.com")
 	a.mustRun("skill", "fork", "alpha")
 	a.mustRun("skill", "fork", "beta")
-	remote = newAccountRemote(t, a)
-	a.setAccount(remote)
+	remote = newHubRemote(t, a)
+	a.setHub(remote)
 	pushOwn(a, remote, "alpha", "beta")
 
 	b = newHarness(t)
 	b.build(t, fixture{dirs: []string{".claude"}})
 	b.rewrite(s)
 	b.withIdentity("Machine B", "b@example.com")
-	b.setAccount(remote)
+	b.setHub(remote)
 	return a, b, s, remote
 }
 
@@ -90,14 +90,14 @@ func pushOwn(h *harness, remote string, names ...string) {
 	for _, n := range names {
 		args = append(args, strings.TrimPrefix(lineage.ForkRef(n), "refs/heads/"))
 	}
-	h.accountGit(args...)
+	h.storeGit(args...)
 }
 
-// twoHomes is accountHomes with both forks installed on b from the hub,
+// twoHomes is hubHomes with both forks installed on b from the hub,
 // which adds their source to b too.
 func twoHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	t.Helper()
-	a, b, s, remote = accountHomes(t)
+	a, b, s, remote = hubHomes(t)
 	b.mustRun("skill", "add", "--name", "alpha")
 	b.mustRun("skill", "add", "--name", "beta")
 	return a, b, s, remote
@@ -165,8 +165,8 @@ func TestPublishWhenTheRemoteMoved(t *testing.T) {
 	folded := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "commit", ev["commit"], folded)
 	equal(t, "the fold's one parent", b.parents(folded), theirs)
-	equal(t, "its message", b.accountGit("log", "-1", "--format=%s", folded), "Eight, merged")
-	equal(t, "what it adds to the merge", b.accountGit("diff-tree", "-r", "--name-status", merged, folded), "A\talpha/draft.md")
+	equal(t, "its message", b.storeGit("log", "-1", "--format=%s", folded), "Eight, merged")
+	equal(t, "what it adds to the merge", b.storeGit("diff-tree", "-r", "--name-status", merged, folded), "A\talpha/draft.md")
 	merged = folded
 	var phases []string
 	for _, e := range b.eventsOfType(out.stdout, "progress") {
@@ -245,8 +245,8 @@ func TestPublishWhenTheRemoteMoved(t *testing.T) {
 func TestPublishRefusesADifferentFork(t *testing.T) {
 	t.Parallel()
 	a, _, _, _ := forkHarness(t)
-	remote := newAccountRemote(t, a)
-	a.setAccount(remote)
+	remote := newHubRemote(t, a)
+	a.setHub(remote)
 	out := a.mustRun("--json", "skill", "publish", "notes")
 	equal(t, "outcome", a.one(out.stdout, "publish")["outcome"], publishPushed)
 	equal(t, "summary", a.one(out.stdout, "result")["summary"], "published notes")
@@ -254,7 +254,7 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	equal(t, "the check of a machine with only its own skills", a.one(out.stdout, "result")["summary"], "checked 1 skill from 1 source: no update available")
 
 	b, _, _, _ := forkHarness(t)
-	b.setAccount(remote)
+	b.setHub(remote)
 	bTip := b.ref(lineage.ForkRef("notes"))
 	writeFile(t, filepath.Join(b.forkDir("notes", "notes"), "draft.md"), "an edit\n")
 	out = b.run("--json", "skill", "publish", "notes")
@@ -281,7 +281,7 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	// branches gives is TestRestoreStates'.
 	file := a.exportSnapshot("export")
 	fresh := newHarness(t)
-	fresh.setAccount(remote)
+	fresh.setHub(remote)
 	ev := fresh.one(fresh.mustRun("--json", "snapshot", "apply", file, "--yes").stdout, "import_skill")
 	equal(t, "the fresh machine's notes", ev["state"], restorePresent)
 	equal(t, "its kind", ev["kind"], lineage.KindManaged)
@@ -328,13 +328,13 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 // Then b's check pins a third version for both forks, and a takes a fourth
 // into alpha and publishes it. b's update of every fork fast-forwards alpha
 // to a's commit, whose base is newer than the candidate b pinned: the
-// candidate goes with the account step, so the update never merges the older
+// candidate goes with the hub step, so the update never merges the older
 // version back over the newer one, and alpha is left as a published it
 // while beta, which the remote has nothing new for, takes its own update.
 //
 // A skill a made with skill new, which has no upstream, is what a publishes
 // next. b's check names it published from another machine, with the file a
-// changed; b's update of every skill alone then takes it in, its account
+// changed; b's update of every skill alone then takes it in, its hub
 // step with a pull event and the skill's library_skill event. The update
 // of it alone brings it to the next version a publishes, saying so in its
 // summary; updated again, it is up to date with the hub, exit 0. Once both
@@ -365,11 +365,11 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	out = b.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "pull outcome", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	tip := b.ref(lineage.ForkRef("alpha"))
-	account := b.accountGit("rev-parse", tip+"^1")
-	equal(t, "the update's parents", b.parents(tip), account+"\n"+candidate)
-	equal(t, "the account merge's parents", b.parents(account), mine+"\n"+theirs)
-	equal(t, "its subject", b.accountGit("log", "-1", "--format=%s", account), "alpha: merge the hub (test-host)")
-	equal(t, "its author", b.accountGit("log", "-1", "--format=%an <%ae>", account), "Machine B <b@example.com>")
+	hub := b.storeGit("rev-parse", tip+"^1")
+	equal(t, "the update's parents", b.parents(tip), hub+"\n"+candidate)
+	equal(t, "the hub merge's parents", b.parents(hub), mine+"\n"+theirs)
+	equal(t, "its subject", b.storeGit("log", "-1", "--format=%s", hub), "alpha: merge the hub (test-host)")
+	equal(t, "its author", b.storeGit("log", "-1", "--format=%an <%ae>", hub), "Machine B <b@example.com>")
 	equal(t, "the base", b.trailer(tip, lineage.TrailerBase), candidate)
 	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes("one", "one, a", "three", "three, b", "seven", "seven, upstream"))
 	equal(t, "the candidate", b.ref(lineage.CandidateRef("alpha")), "")
@@ -426,7 +426,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "its upstream commit", update["upstream_commit"], "")
 	// The update is dated with the remote tip's committer time, when the
 	// other machine recorded it.
-	equal(t, "its candidate's time", update["candidate_upstream_time"], lineage.UpstreamTime(b.accountGit("log", "-1", "--format=%ct", published)))
+	equal(t, "its candidate's time", update["candidate_upstream_time"], lineage.UpstreamTime(b.storeGit("log", "-1", "--format=%ct", published)))
 	equal(t, "its kind", update["kind"], lineage.KindManaged)
 	equal(t, "its files", fmt.Sprint(update["files"]), "[map[path:notes.md status:added]]")
 	if lastFetched(t, b, "file://"+remote) == backdated {
@@ -436,7 +436,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	contains(t, "the check's line", out.stdout, "notes  published from another machine  "+short(local)+" -> "+short(published)+"  1 file")
 	out = b.mustRun("--json", "skill", "update", "--all")
 	pulled := b.one(out.stdout, "pull")
-	equal(t, "the account step of notes", pulled["name"], "notes")
+	equal(t, "the hub step of notes", pulled["name"], "notes")
 	equal(t, "its outcome", pulled["outcome"], pullFastForward)
 	equal(t, "its commit", pulled["commit"], published)
 	b.librarySkill(out.stdout, "notes")
@@ -466,11 +466,11 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	out = b.mustRun("--json", "skill", "update", "notes")
 	contains(t, "the completion", b.one(out.stdout, "result")["summary"].(string), "updated notes with the merge you resolved, committed as ")
 	tip = b.ref(lineage.ForkRef("notes"))
-	recorded, completed := b.accountGit("rev-parse", tip+"^1"), b.accountGit("rev-parse", tip+"^2")
+	recorded, completed := b.storeGit("rev-parse", tip+"^1"), b.storeGit("rev-parse", tip+"^2")
 	equal(t, "the edit made while the merge was pending, recorded on the tip", b.parents(recorded), mine)
 	equal(t, "the completed merge's parents", b.parents(completed), mine+"\n"+theirs)
 	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("notes", "notes"), "notes.md")), forkNotes("one", "one, a", "two", "two, a and b"))
-	equal(t, "the edit, kept", b.accountGit("show", tip+":notes/later.md"), "edited while the merge was pending")
+	equal(t, "the edit, kept", b.storeGit("show", tip+":notes/later.md"), "edited while the merge was pending")
 	noCheckout(t, b, "notes")
 	// An update with nothing to take in records no edit.
 	idle := filepath.Join(b.forkDir("notes", "notes"), "idle.md")
@@ -493,7 +493,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	}
 	out = b.mustRun("skill", "update", "beta")
 	contains(t, "the warning", out.stderr, "so beta is updated from upstream only")
-	equal(t, "beta's first parent", b.accountGit("rev-parse", b.ref(lineage.ForkRef("beta"))+"^1"), before)
+	equal(t, "beta's first parent", b.storeGit("rev-parse", b.ref(lineage.ForkRef("beta"))+"^1"), before)
 	equal(t, "beta's notes after the upstream-only update", fileBody(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md")), forkNotes("six", "six, fifth"))
 	out = b.mustRun("skill", "update", "beta")
 	contains(t, "the warning with nothing from upstream", out.stderr, "so nothing was updated to the latest published version")
@@ -545,7 +545,7 @@ func TestSameForkRefusal(t *testing.T) {
 	}
 }
 
-// TestReportSync is the line the account step of an update prints for a
+// TestReportSync is the line the hub step of an update prints for a
 // fork it moved: the subject of the remote tip alone, sanitised, for a
 // fast-forward, and no commit for a merge, which is not published yet.
 func TestReportSync(t *testing.T) {

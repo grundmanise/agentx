@@ -30,7 +30,7 @@ func sourceRefusal(src home.Source) string {
 	switch {
 	case src.Pin != "" && !source.ValidRef(src.Pin):
 		return src.URL + " is pinned to " + clipped(src.Pin) + ", which is not a ref git accepts"
-	case src.Pin != "" && src.Account:
+	case src.Pin != "" && src.Hub:
 		return src.URL + " is pinned to " + clipped(src.Pin) + ", and the hub is a whole repository"
 	case src.Access != "" && src.Access != home.AccessWritable && src.Access != home.AccessReadOnly:
 		return src.URL + " has the access " + clipped(src.Access) + ", and agentx writes writable or read-only, or none while it is unknown"
@@ -55,7 +55,7 @@ func sourceRefusal(src home.Source) string {
 // source.SameRepository takes it; nil reads every host as itself. Pure.
 func sourcesRefusal(sources []home.Source, resolve func(host string) string) string {
 	seen := map[string]bool{}
-	account := ""
+	hub := ""
 	for _, src := range sources {
 		if why := sourceRefusal(src); why != "" {
 			return why
@@ -63,23 +63,23 @@ func sourcesRefusal(sources []home.Source, resolve func(host string) string) str
 		switch {
 		case seen[src.URL]:
 			return src.URL + " is listed twice"
-		case src.Account && account != "":
-			return "both " + account + " and " + src.URL + " are marked as the hub"
-		case src.Account:
-			account = src.URL
+		case src.Hub && hub != "":
+			return "both " + hub + " and " + src.URL + " are marked as the hub"
+		case src.Hub:
+			hub = src.URL
 		}
 		seen[src.URL] = true
 	}
 	if !slices.IsSortedFunc(sources, func(a, b home.Source) int { return strings.Compare(a.URL, b.URL) }) {
 		return "the sources must be sorted by url"
 	}
-	for _, account := range sources {
-		if !account.Account {
+	for _, hub := range sources {
+		if !hub.Hub {
 			continue
 		}
 		for _, shared := range sources {
-			if !shared.Account && sameRepository(account.URL, shared.URL, resolve) {
-				return shared.URL + " and the hub " + account.URL + " name one repository"
+			if !shared.Hub && sameRepository(hub.URL, shared.URL, resolve) {
+				return shared.URL + " and the hub " + hub.URL + " name one repository"
 			}
 		}
 	}
@@ -107,7 +107,7 @@ func sameRepository(a, b string, resolve func(host string) string) bool {
 // repository, through resolve.
 func forkSourceRefusal(s home.Settings, src home.Source, resolve func(host string) string) *failure {
 	for _, fork := range s.Sources {
-		if fork.Account && (fork.URL == src.URL || sameRepository(src.URL, fork.URL, resolve)) {
+		if fork.Hub && (fork.URL == src.URL || sameRepository(src.URL, fork.URL, resolve)) {
 			return forkSourceIs(src.URL, fork)
 		}
 	}

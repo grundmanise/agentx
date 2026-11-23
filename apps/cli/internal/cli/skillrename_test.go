@@ -60,14 +60,14 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		{"a merge pending", []string{"alpha", "renamed"}, 4, "alpha has a merge pending"},
 	} {
 		if tc.name == "a merge pending" {
-			a.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason, pending, old)
+			a.storeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason, pending, old)
 		}
 		out := a.run(append([]string{"skill", "rename"}, tc.args...)...)
 		equal(t, tc.name+": exit", out.exit, tc.exit)
 		contains(t, tc.name+": stderr", out.stderr, tc.says)
 		equal(t, tc.name+": refs", a.refLines(), before)
 	}
-	a.accountGit("worktree", "remove", "-f", "-f", pending)
+	a.storeGit("worktree", "remove", "-f", "-f", pending)
 	// An edit the rename records itself, as a commit that leaves the copy
 	// behind the library, which a listing no longer counts as a placement;
 	// the rename keeps it all the same.
@@ -81,7 +81,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	renamed := a.ref(lineage.ForkRef("renamed"))
 	recorded := a.parents(renamed)
 	equal(t, "the recorded commit's parent", a.parents(recorded), published)
-	equal(t, "the rename's subject", a.accountGit("log", "-1", "--format=%s", renamed), "Rename alpha to renamed")
+	equal(t, "the rename's subject", a.storeGit("log", "-1", "--format=%s", renamed), "Rename alpha to renamed")
 	equal(t, "the rename's own fork id", a.trailer(renamed, lineage.TrailerForkID), "")
 	equal(t, "the renamed skill's edit", fileBody(t, filepath.Join(a.forkDir("renamed", "alpha"), "notes.md")), "edited after the copy\n")
 	listed := a.mustRun("--json", "skill", "list", "--remote")
@@ -184,14 +184,14 @@ func TestSkillRenameNamesTheCommandThatFinishesIt(t *testing.T) {
 	}
 	h, root, skillDir, lib := forkHarness(t)
 	tip := h.ref(lineage.ForkRef("notes"))
-	moved := h.accountGit("commit-tree", tip+"^{tree}", "-p", tip, "-m", "made with git")
+	moved := h.storeGit("commit-tree", tip+"^{tree}", "-p", tip, "-m", "made with git")
 	marker := filepath.Join(t.TempDir(), "moved")
 	stubGit(t, h, `#!/bin/sh
 case " $* " in
 *" for-each-ref --format=%(refname)%00%(objectname) refs/heads/skills/notes ")
 	if [ ! -e `+shellWord(marker)+` ]; then
 		: > `+shellWord(marker)+`
-		`+real+` --git-dir=`+shellWord(gitx.AccountRepoPath(h.agentx))+` update-ref refs/heads/skills/notes `+moved+` || exit 1
+		`+real+` --git-dir=`+shellWord(gitx.StorePath(h.agentx))+` update-ref refs/heads/skills/notes `+moved+` || exit 1
 	fi ;;
 esac
 exec `+real+` "$@"
@@ -222,7 +222,7 @@ func TestRenameFinish(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"another failure", refuse(exitAccountRepo, "cannot read", ""),
+		{"another failure", refuse(exitStore, "cannot read", ""),
 			"run 'agentx skill remove notes' to finish the rename"},
 		{"unpublished edits", uncommittedRefusal("notes", "removed"),
 			"to keep the edits, run 'agentx skill remove jottings' and 'agentx skill rename notes jottings' again, which records them; to drop them, run 'agentx skill remove notes'"},

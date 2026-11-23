@@ -10,9 +10,9 @@ import {
   fileReads,
   inventory,
   sources,
-  sourcesWithoutAccount,
+  sourcesWithoutHub,
 } from "./fixtures/publish.ts";
-import { ACCOUNT, ACME } from "./fixtures/skills.ts";
+import { HUB, ACME } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli, Reply } from "./harness/cli.ts";
 
@@ -98,7 +98,7 @@ const publishReply = (
     events.push({
       name,
       outcome,
-      source: ACCOUNT,
+      source: HUB,
       type: "publish",
     });
   }
@@ -136,7 +136,7 @@ test.describe("banners", () => {
     cli,
     page,
   }) => {
-    await openSkill(cli, page, "draft", sourcesWithoutAccount);
+    await openSkill(cli, page, "draft", sourcesWithoutHub);
     const note = banner(pane(page, "draft"));
     await expect(note).toHaveAccessibleName("Not published");
     await expect(note).toContainText("Set a hub to publish it.");
@@ -292,7 +292,7 @@ test.describe("the Publish dialog", () => {
     const shown = await openDialog(page, "changelog");
     const run = cli.register(["skill", "publish", "changelog"], {
       events: [
-        { current: 1, phase: "fetch", subject: ACCOUNT, type: "progress" },
+        { current: 1, phase: "fetch", subject: HUB, type: "progress" },
         {
           current: 1,
           phase: "publish",
@@ -302,7 +302,7 @@ test.describe("the Publish dialog", () => {
         {
           name: "changelog",
           outcome: "pushed",
-          source: ACCOUNT,
+          source: HUB,
           type: "publish",
         },
       ],
@@ -310,7 +310,7 @@ test.describe("the Publish dialog", () => {
     });
     await shown.getByRole("button", { name: "Publish" }).click();
     await run.started;
-    await expect(shown.getByRole("status")).toHaveText("Fetching me/account…");
+    await expect(shown.getByRole("status")).toHaveText("Fetching me/hub…");
     await expect(shown.getByRole("button", { name: "Publish" })).toBeDisabled();
     run.release();
     await expect(
@@ -482,9 +482,9 @@ test.describe("outcomes", () => {
       "denied",
       3,
       "source",
-      `the hub ${ACCOUNT} did not let this machine push skills/changelog: permission denied`,
+      `the hub ${HUB} did not let this machine push skills/changelog: permission denied`,
       "check that the git credential helper or SSH key used for it may push there",
-      `The hub ${ACCOUNT} did not let this machine push skills/changelog: permission denied. Check that the git credential helper or SSH key used for it may push there.`,
+      `The hub ${HUB} did not let this machine push skills/changelog: permission denied. Check that the git credential helper or SSH key used for it may push there.`,
     ],
   ] as const) {
     test(`${outcome} (exit ${exitCode}): the CLI's message, and its hint in the app's words`, async ({

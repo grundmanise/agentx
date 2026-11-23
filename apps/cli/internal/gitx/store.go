@@ -12,36 +12,36 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
 )
 
-// AccountRepoPath is the git directory of the account repo in agentx home.
-func AccountRepoPath(homeDir string) string { return filepath.Join(homeDir, "account.git") }
+// StorePath is the git directory of the store in agentx home.
+func StorePath(homeDir string) string { return filepath.Join(homeDir, "store.git") }
 
-// CheckAccountRepo reports whether the account repo exists in agentx home
+// CheckStore reports whether the store exists in agentx home
 // and, when it does, that git reads it as a bare repository. It changes
 // nothing.
-func CheckAccountRepo(ctx context.Context, r *Runner, homeDir string) (gitDir string, exists bool, err error) {
-	gitDir = AccountRepoPath(homeDir)
+func CheckStore(ctx context.Context, r *Runner, homeDir string) (gitDir string, exists bool, err error) {
+	gitDir = StorePath(homeDir)
 	_, err = os.Stat(gitDir)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return gitDir, false, nil
 	case err != nil:
-		return gitDir, false, fmt.Errorf("account repo %s: %w", gitDir, err)
+		return gitDir, false, fmt.Errorf("store %s: %w", gitDir, err)
 	}
 	if out, err := r.Isolated(ctx, gitDir, "rev-parse", "--is-bare-repository"); err != nil || out != "true" {
 		if err == nil {
 			err = errors.New("not a bare repository")
 		}
-		return gitDir, true, fmt.Errorf("account repo %s: %w", gitDir, err)
+		return gitDir, true, fmt.Errorf("store %s: %w", gitDir, err)
 	}
 	return gitDir, true, nil
 }
 
-// OpenAccountRepo returns the git directory of the account repo in agentx
+// OpenStore returns the git directory of the store in agentx
 // home, creating the repo under the lock when it does not exist yet. A
 // present repo that git cannot read is an error; so is one that cannot be
 // created. created reports whether this call made it.
-func OpenAccountRepo(ctx context.Context, r *Runner, homeDir string) (gitDir string, created bool, err error) {
-	gitDir, exists, err := CheckAccountRepo(ctx, r, homeDir)
+func OpenStore(ctx context.Context, r *Runner, homeDir string) (gitDir string, created bool, err error) {
+	gitDir, exists, err := CheckStore(ctx, r, homeDir)
 	if err != nil || exists {
 		return gitDir, false, err
 	}
@@ -54,16 +54,16 @@ func OpenAccountRepo(ctx context.Context, r *Runner, homeDir string) (gitDir str
 			return nil // created meanwhile by another command
 		}
 		created = true
-		return createAccountRepo(ctx, r, gitDir)
+		return createStore(ctx, r, gitDir)
 	})
 	return gitDir, created, err
 }
 
-// createAccountRepo initialises the bare repo with the configuration agentx
+// createStore initialises the bare repo with the configuration agentx
 // needs, in a temporary directory that is renamed into place only once every
 // step succeeded, so a failure leaves no half-configured repo behind.
-func createAccountRepo(ctx context.Context, r *Runner, gitDir string) error {
-	tmp, err := os.MkdirTemp(filepath.Dir(gitDir), ".account.git.*")
+func createStore(ctx context.Context, r *Runner, gitDir string) error {
+	tmp, err := os.MkdirTemp(filepath.Dir(gitDir), ".store.git.*")
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func createAccountRepo(ctx context.Context, r *Runner, gitDir string) error {
 		{"core.logAllRefUpdates", "true"}, // a bare repo has no reflogs by default
 		{"merge.conflictStyle", "zdiff3"},
 	}
-	// A git that can write the worktree paths of the account repo relative
+	// A git that can write the worktree paths of the store relative
 	// to it is told to: a fork's worktree then survives agentx home being
 	// moved as a whole. An existing repo is never switched over, since the
 	// first relative worktree marks the repo as one an older git cannot
@@ -93,7 +93,7 @@ func createAccountRepo(ctx context.Context, r *Runner, gitDir string) error {
 		}
 	}
 	if err := os.Rename(tmp, gitDir); err != nil {
-		return fmt.Errorf("account repo %s: %w", gitDir, err)
+		return fmt.Errorf("store %s: %w", gitDir, err)
 	}
 	return nil
 }

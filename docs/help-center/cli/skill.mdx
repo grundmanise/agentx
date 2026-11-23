@@ -378,7 +378,7 @@ Add `--remote` to also list the skills on your hub that this machine has not ins
 If a managed skill's directory is deleted from the library outside agentx, the skill has no row. `skill list` names it in a warning instead, with two ways out:
 
 ```text
-warning: pdf is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add https://github.com/anthropics/skills --name pdf' to install it again, or 'agentx skill remove pdf' to stop managing it
+warning: pdf is managed in the store but the library holds no skill directory for it; run 'agentx skill add https://github.com/anthropics/skills --name pdf' to install it again, or 'agentx skill remove pdf' to stop managing it
 ```
 
 - Install it again with `agentx skill add`. This works while the source still holds the version you installed. If the skill changed in the source since you last fetched it, `skill add` refuses and tells you to run `agentx skill remove` first.
@@ -759,7 +759,7 @@ This removes the worktree and whatever you resolved in it. Your library director
 | An unmanaged skill | 6 | Nothing. It has no update to apply. |
 | A hub skill with no upstream, such as a skill you created, and no hub set | 6 | Add a hub. The update then brings the skill to what your other machines published. See [Update to what another machine published](#update-to-what-another-machine-published). |
 | The library directory is gone | 6 | Install it again with `agentx skill add <source> --name <name>`, or stop managing it with `agentx skill remove <name>`. See [A skill whose library directory is gone](#a-skill-whose-library-directory-is-gone). |
-| agentx cannot read the skill's record in the account repo | 6 | Run `agentx doctor` and check the account repo it names. |
+| agentx cannot read the skill's record in the store | 6 | Run `agentx doctor` and check the store it names. |
 | The library directory is a symlink to a directory of yours | 6 | Replace the link with the directory it points to, then update again. |
 | The skill holds something git cannot record, such as a nested repository | 6 | Move it out of the skill, then update again. |
 
@@ -1024,5 +1024,5 @@ For what each code means, and for codes 2 and 9, see [Exit codes](/cli/output#ex
 | 5 | A source, skill, path or configuration you named does not exist, or you removed the skill's source. For a removed source, the hint names the `agentx source add` command that brings it back. |
 | 6 | The library already holds another skill of that name; a directory differs and `--force` is not given; another machine published first; the host declined the push; the cloud machine's snapshot changed since agentx read it; `--remote` for a skill that is not a hub skill; `--from` names a universal client; a managed skill whose record agentx cannot read (run `agentx doctor`). An interrupted change must be resolved first: the message names the file to restore. To keep the file as it is, move the journal in `~/.agentx/mutations` aside. For a hub skill, see [Your hub skills](/cli/fork#exit-codes). |
 | 7 | Another agentx command is running. Retry when it finishes. |
-| 8 | agentx cannot read or write the account repo. Run `agentx doctor`. |
+| 8 | agentx cannot read or write the store. Run `agentx doctor`. |
 | 10 | agentx could not read its settings file, or hit an error it has no better answer for. Run `agentx doctor`. |

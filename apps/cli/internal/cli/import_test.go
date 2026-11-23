@@ -82,7 +82,7 @@ func exportedFrom(t *testing.T) (*harness, string) {
 }
 
 // plainExport is a snapshot a test can import without installing anything:
-// a machine with settings of its own and no account repo, exported by the
+// a machine with settings of its own and no store, exported by the
 // command itself, with one sound entry put into the snapshot afterwards, an
 // unmanaged skill, which an import skips without reaching any source.
 // Writing that entry rather than installing a skill for it keeps a test
@@ -211,10 +211,10 @@ func TestImportRestoresAMachine(t *testing.T) {
 		actions[e["name"].(string)] = e
 	}
 	equal(t, "alpha deleted by hand", actions["alpha"]["action"], importSkipped)
-	contains(t, "its reason", actions["alpha"]["reason"].(string), "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add ")
+	contains(t, "its reason", actions["alpha"]["reason"].(string), "alpha is managed in the store but the library holds no skill directory for it; run 'agentx skill add ")
 }
 
-// TestImportSkipsASkillTheLibraryLost: an entry whose branch the account
+// TestImportSkipsASkillTheLibraryLost: an entry whose branch the home
 // repo holds and whose library directory is gone is skipped with the way
 // back, skill place for a hub skill, which checks it out again; any
 // other entry is applied.
@@ -255,7 +255,7 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--all")
 	old := h.exportSnapshot("old")
-	oldAlpha := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	oldAlpha := h.storeGit("rev-parse", "refs/heads/managed/alpha")
 
 	s.skill("skills/alpha", "alpha", "The first skill, once more", nil)
 	s.skill("skills/beta", "beta", "The second skill, revised", nil)
@@ -284,7 +284,7 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 	h.mustRun("skill", "remove", "alpha")
 	out = h.mustRun("--json", "snapshot", "apply", old, "--yes")
 	equal(t, "the old snapshot without alpha", h.one(out.stdout, "result")["summary"], "snapshot applied: 1 skill added, 1 skill already up to date")
-	equal(t, "alpha's branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), oldAlpha)
+	equal(t, "alpha's branch", h.storeGit("rev-parse", "refs/heads/managed/alpha"), oldAlpha)
 }
 
 // importChildEnv marks the process TestImportIsFinishedAfterAKill starts
@@ -498,25 +498,25 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		}
 	}
 	edited := func(change func(map[string]any)) string { return editedSound(t, change) }
-	// ownSkill turns the record into a hub skill, a fork of
+	// hubSkill turns the record into a hub skill, a fork of
 	// alpha, with no hub set: no source, and the upstream fields
 	// in place of the source's.
-	ownSkill := func(record map[string]any) {
+	hubSkill := func(record map[string]any) {
 		delete(record, "source")
 		delete(record, "subpath")
 		record["upstream"] = "https://github.com/example/skills"
 		record["upstream_subpath"] = "skills/alpha"
 	}
-	ownWith := func(key string, value any) string {
+	hubWith := func(key string, value any) string {
 		return edited(func(doc map[string]any) {
 			record := doc["skills"].([]any)[0].(map[string]any)
-			ownSkill(record)
+			hubSkill(record)
 			if key != "" {
 				record[key] = value
 			}
 		})
 	}
-	if _, err := readExport(write("sound fork", ownWith("", nil))); err != nil {
+	if _, err := readExport(write("sound fork", hubWith("", nil))); err != nil {
 		t.Fatalf("the sound document of a forked skill is refused: %v", err)
 	}
 	settingsWith := func(key string, value any) string {
@@ -566,14 +566,14 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 			e["source"] = credentialed
 		}), "canonical URL of a source"},
 		{"a fork id on a shared source's entry", recordWith("fork_id", "0b3f6c9e-2d4a-4f1e-9a7b-1c2d3e4f5a6b"), "only hub skills have"},
-		{"a fork id that is not one", ownWith("fork_id", "nonsense"), "not one"},
+		{"a fork id that is not one", hubWith("fork_id", "nonsense"), "not one"},
 		{"a hub skill with a subpath", edited(func(doc map[string]any) {
 			delete(doc["skills"].([]any)[0].(map[string]any), "source")
 		}), "and hub skills have no subpath"},
 		{"a record of a shared source with an upstream", recordWith("upstream", "https://github.com/example/other"), "only hub skills have"},
 		{"a record with no commit", recordWith("commit", "HEAD"), "does not name the commit"},
 		{"a record with a bad hash", recordWith("base_hash", "nonsense"), "one upstream version"},
-		{"a hub skill with a bad hash", ownWith("base_hash", "nonsense"), "one upstream version"},
+		{"a hub skill with a bad hash", hubWith("base_hash", "nonsense"), "one upstream version"},
 		{"a record that walks out", recordWith("name", "../evil"), "not a name the library and a branch can both hold"},
 		{"a record named for a nested branch", recordWith("name", "nested/deeper"), "not a name the library and a branch can both hold"},
 		{"a record given twice", edited(func(doc map[string]any) {
@@ -735,11 +735,11 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 	equal(t, "its placements", fmt.Sprint(snap.Skills[0].Placements), "[claude-code]")
 }
 
-// TestImportListsWhatTheAccountRepoHas: each import_skill event says what
-// this machine's account repo held of the skill before the run, which it
+// TestImportListsWhatTheStoreHas: each import_skill event says what
+// this machine's store held of the skill before the run, which it
 // holds, is missing, or holds at another version, beside what the import
 // did about it.
-func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
+func TestImportListsWhatTheStoreHas(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	other := h.newSourceRepo("third", true)
@@ -752,8 +752,8 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	file := h.exportSnapshot("export")
 
 	// beta's branch moves to another commit, and gamma leaves the machine.
-	alpha := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-	h.accountGit("update-ref", "refs/heads/managed/beta", alpha)
+	alpha := h.storeGit("rev-parse", "refs/heads/managed/alpha")
+	h.storeGit("update-ref", "refs/heads/managed/beta", alpha)
 	equal(t, "remove", h.run("skill", "remove", "gamma").exit, 0)
 
 	out := h.run("--json", "snapshot", "apply", file, "--yes")
@@ -784,11 +784,11 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 // hub skills, with the hub or no source at all, under
 // skills/, and a shared source's under managed/. A branch of the name
 // decides the state whatever the hub holds, and the remote's
-// branch stands in only for a hub skill the account repo holds
+// branch stands in only for a hub skill the store holds
 // no branch of, never for a shared source's.
 func TestRestoreStates(t *testing.T) {
 	t.Parallel()
-	const account, shared = "https://github.com/me/skills", "https://github.com/example/skills"
+	const hub, shared = "https://github.com/me/skills", "https://github.com/example/skills"
 	fork := func(commit string) lineage.Record { return lineage.Record{Kind: lineage.KindFork, Commit: commit} }
 	managed := func(commit string) lineage.Record { return lineage.Record{Kind: lineage.KindManaged, Commit: commit} }
 	cases := []struct {
@@ -796,91 +796,91 @@ func TestRestoreStates(t *testing.T) {
 		kind    string
 		commit  string
 		source  string
-		account string
+		hub     string
 		records map[string]lineage.Record
 		remote  map[string]string
 		want    string
 		local   string
 	}{
-		{"own, local branch only", "", "c1", account, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
+		{"own, local branch only", "", "c1", hub, hub, map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
 		{"own with no source", "", "c1", "", "", map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
-		{"own, remote branch at its commit", "", "c1", account, account, nil, map[string]string{"notes": "c1"}, restorePresent, "c1"},
-		{"own, remote branch at another commit", "", "c1", account, account, nil, map[string]string{"notes": "c2"}, restoreDifferent, "c2"},
-		{"own, the local branch decides", "", "c1", account, account, map[string]lineage.Record{"notes": fork("c2")}, map[string]string{"notes": "c1"}, restoreDifferent, "c2"},
-		{"own, held as a shared source's", "", "c1", account, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restoreDifferent, "c1"},
-		{"own that follows, at any commit", "", "", account, account, map[string]lineage.Record{"notes": fork("c2")}, nil, restorePresent, "c2"},
-		{"shared, its import branch", "", "c1", shared, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restorePresent, "c1"},
-		{"shared, held as a hub skill", "", "c1", shared, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
-		{"shared, not matched against the remote", "", "c1", shared, account, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
-		{"shared that follows, held as a hub skill", "", "", shared, account, map[string]lineage.Record{"notes": fork("c2")}, nil, restoreDifferent, "c2"},
-		{"the hub's URL with no hub set", "", "c1", account, "", nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
-		{"neither", "", "c1", account, account, nil, nil, restoreMissing, ""},
-		{"unmanaged, not matched against the remote", lineage.KindUnmanaged, "", "", account, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
-		{"unmanaged, a branch of its name", lineage.KindUnmanaged, "", "", account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
+		{"own, remote branch at its commit", "", "c1", hub, hub, nil, map[string]string{"notes": "c1"}, restorePresent, "c1"},
+		{"own, remote branch at another commit", "", "c1", hub, hub, nil, map[string]string{"notes": "c2"}, restoreDifferent, "c2"},
+		{"own, the local branch decides", "", "c1", hub, hub, map[string]lineage.Record{"notes": fork("c2")}, map[string]string{"notes": "c1"}, restoreDifferent, "c2"},
+		{"own, held as a shared source's", "", "c1", hub, hub, map[string]lineage.Record{"notes": managed("c1")}, nil, restoreDifferent, "c1"},
+		{"own that follows, at any commit", "", "", hub, hub, map[string]lineage.Record{"notes": fork("c2")}, nil, restorePresent, "c2"},
+		{"shared, its import branch", "", "c1", shared, hub, map[string]lineage.Record{"notes": managed("c1")}, nil, restorePresent, "c1"},
+		{"shared, held as a hub skill", "", "c1", shared, hub, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
+		{"shared, not matched against the remote", "", "c1", shared, hub, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"shared that follows, held as a hub skill", "", "", shared, hub, map[string]lineage.Record{"notes": fork("c2")}, nil, restoreDifferent, "c2"},
+		{"the hub's URL with no hub set", "", "c1", hub, "", nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"neither", "", "c1", hub, hub, nil, nil, restoreMissing, ""},
+		{"unmanaged, not matched against the remote", lineage.KindUnmanaged, "", "", hub, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"unmanaged, a branch of its name", lineage.KindUnmanaged, "", "", hub, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			got := restoreStates([]snapshotSkill{{Name: "notes", Kind: c.kind, Commit: c.commit, Source: c.source}}, c.records, c.remote, c.account)
+			got := restoreStates([]snapshotSkill{{Name: "notes", Kind: c.kind, Commit: c.commit, Source: c.source}}, c.records, c.remote, c.hub)
 			equal(t, "state", got[0].State, c.want)
 			equal(t, "local commit", got[0].LocalCommit, c.local)
 		})
 	}
 }
 
-// TestAccountRepository is when a source names the repository of the
+// TestHubRepository is when a source names the repository of the
 // hub: by its repository, over HTTPS and over SSH alike, and
 // never through a host alias, since a snapshot is read with no SSH
 // configuration. An entry of hub skills is one whose source does, so
 // a snapshot written where the hub is an SSH URL reads the same
 // on the cloud machine, which reaches it over HTTPS.
-func TestAccountRepository(t *testing.T) {
+func TestHubRepository(t *testing.T) {
 	t.Parallel()
-	const account = "https://github.com/me/agentx-account"
+	const hub = "https://github.com/me/agentx-hub"
 	for _, c := range []struct {
-		url, account string
-		want         bool
+		url, hub string
+		want     bool
 	}{
-		{account, account, true},
-		{"ssh://git@github.com/me/agentx-account", account, true},
-		{"git@github.com:me/agentx-account.git", account, true},
-		{account, "ssh://git@github.com:22/me/agentx-account", true},
-		{"ssh://git@ssh.github.com:443/me/agentx-account", account, true},
-		{"ssh://git@github-work/me/agentx-account", account, false},
-		{"https://gitlab.com/me/agentx-account", account, false},
-		{"https://github.com/me/agentx-skills", account, false},
-		{"file:///srv/me/agentx-account", "ssh://git@host/srv/me/agentx-account", false},
-		{account, "", false},
+		{hub, hub, true},
+		{"ssh://git@github.com/me/agentx-hub", hub, true},
+		{"git@github.com:me/agentx-hub.git", hub, true},
+		{hub, "ssh://git@github.com:22/me/agentx-hub", true},
+		{"ssh://git@ssh.github.com:443/me/agentx-hub", hub, true},
+		{"ssh://git@github-work/me/agentx-hub", hub, false},
+		{"https://gitlab.com/me/agentx-hub", hub, false},
+		{"https://github.com/me/agentx-skills", hub, false},
+		{"file:///srv/me/agentx-hub", "ssh://git@host/srv/me/agentx-hub", false},
+		{hub, "", false},
 		{"", "", false},
 	} {
-		equal(t, c.url+" names the repository of "+c.account, accountRepository(c.url, c.account), c.want)
+		equal(t, c.url+" names the repository of "+c.hub, hubRepository(c.url, c.hub), c.want)
 		e := snapshotSkill{Name: "notes", Kind: lineage.KindManaged, Source: c.url}
-		equal(t, c.url+" is a hub skill against "+c.account, ownRecord(e, c.account), c.want || c.url == "")
+		equal(t, c.url+" is a hub skill against "+c.hub, hubRecord(e, c.hub), c.want || c.url == "")
 	}
 }
 
-// TestKeepAccountRemote: settings an import writes keep this machine's
+// TestKeepHubRemote: settings an import writes keep this machine's
 // hub, its URL and what it found it can do there, when theirs
 // names the same repository, and keep their own otherwise.
-func TestKeepAccountRemote(t *testing.T) {
+func TestKeepHubRemote(t *testing.T) {
 	t.Parallel()
 	const shared = "https://github.com/acme/skills"
-	cloud := home.Source{URL: "https://github.com/me/agentx-account", Account: true, Access: home.AccessReadOnly, AccessChecked: "2026-10-02T10:00:00Z"}
+	cloud := home.Source{URL: "https://github.com/me/agentx-hub", Hub: true, Access: home.AccessReadOnly, AccessChecked: "2026-10-02T10:00:00Z"}
 	here := home.Settings{Sources: []home.Source{cloud}}
 	for _, c := range []struct {
 		name, theirs, want string
 	}{
-		{"its SSH URL", "ssh://git@github.com/me/agentx-account", cloud.URL},
+		{"its SSH URL", "ssh://git@github.com/me/agentx-hub", cloud.URL},
 		{"its own URL", cloud.URL, cloud.URL},
-		{"another repository", "ssh://git@github.com/me/other-account", "ssh://git@github.com/me/other-account"},
-		{"a host alias", "ssh://git@github-work/me/agentx-account", "ssh://git@github-work/me/agentx-account"},
+		{"another repository", "ssh://git@github.com/me/other-hub", "ssh://git@github.com/me/other-hub"},
+		{"a host alias", "ssh://git@github-work/me/agentx-hub", "ssh://git@github-work/me/agentx-hub"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			s := home.Settings{Sources: []home.Source{{URL: shared}, {URL: c.theirs, Account: true}}}
+			s := home.Settings{Sources: []home.Source{{URL: shared}, {URL: c.theirs, Hub: true}}}
 			sort.Slice(s.Sources, func(i, j int) bool { return s.Sources[i].URL < s.Sources[j].URL })
-			keepAccountRemote(&s, here)
-			entry, _ := accountEntry(s)
+			keepHubRemote(&s, here)
+			entry, _ := hubEntry(s)
 			equal(t, "the hub", entry.URL, c.want)
 			if c.want == cloud.URL {
 				equal(t, "its access", entry.Access, cloud.Access)
@@ -897,11 +897,11 @@ func TestKeepAccountRemote(t *testing.T) {
 	}
 }
 
-// TestImportOntoAMachineWithNoAccountRepo: everything the export lists is
+// TestImportOntoAMachineWithNoStore: everything the export lists is
 // missing, and the repo is not created to find that out, also when the
 // machine's settings name a hub, as an earlier import leaves
 // them, since no fetch of it has happened there yet.
-func TestImportOntoAMachineWithNoAccountRepo(t *testing.T) {
+func TestImportOntoAMachineWithNoStore(t *testing.T) {
 	t.Parallel()
 	_, file := plainExport(t)
 	to := newHarness(t)
@@ -912,7 +912,7 @@ func TestImportOntoAMachineWithNoAccountRepo(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			s.Sources = append(s.Sources, home.Source{URL: "https://github.com/example/forks", Account: true})
+			s.Sources = append(s.Sources, home.Source{URL: "https://github.com/example/forks", Hub: true})
 			if err := home.SaveSettings(to.agentx, s); err != nil {
 				t.Fatal(err)
 			}
@@ -924,8 +924,8 @@ func TestImportOntoAMachineWithNoAccountRepo(t *testing.T) {
 		for _, e := range skills {
 			equal(t, settings+": "+e["name"].(string)+" state", e["state"], "missing")
 		}
-		if _, err := os.Stat(filepath.Join(to.agentx, "account.git")); err == nil {
-			t.Errorf("%s: the import created an account repo", settings)
+		if _, err := os.Stat(filepath.Join(to.agentx, "store.git")); err == nil {
+			t.Errorf("%s: the import created a store", settings)
 		}
 	}
 }
@@ -1038,7 +1038,7 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 		"Settings.CopyMode":               "badCopyMode",
 		"Source.URL":                      "sourceRefusal, through badSourceURL",
 		"Source.Alias":                    "sourceRefusal, through badSourceURL",
-		"Source.Account":                  "sourcesRefusal: on one entry at most, no shared source of its repository",
+		"Source.Hub":                      "sourcesRefusal: on one entry at most, no shared source of its repository",
 		"Source.Pin":                      "sourceRefusal, through source.ValidRef",
 		"Source.Access":                   "sourceRefusal: writable, read-only or absent; an import then forgets it",
 		"Source.AccessChecked":            "sourceRefusal, through fetchTime; an import then forgets it",
@@ -1111,9 +1111,9 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 	t.Parallel()
 	from, _ := exportedFrom(t)
-	remote := newAccountRemote(t, from)
-	from.setAccount(remote)
-	file := from.exportSnapshot("with-account")
+	remote := newHubRemote(t, from)
+	from.setHub(remote)
+	file := from.exportSnapshot("with-hub")
 	exported, err := home.LoadSettings(from.agentx)
 	if err != nil {
 		t.Fatal(err)
@@ -1150,7 +1150,7 @@ func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 	}
 	equal(t, "the pinned source's event", added[pinned.URL]["pin"], pinned.Pin)
 	equal(t, "its skills", added[pinned.URL]["skills"], float64(1))
-	equal(t, "the hub's event", added["file://"+remote]["account"], true)
+	equal(t, "the hub's event", added["file://"+remote]["hub"], true)
 	if len(added) != 3 {
 		t.Errorf("the sources added are %v, want the three of the settings", added)
 	}
@@ -1189,13 +1189,13 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 	other.skill("tools/gamma", "gamma", "The third skill", nil)
 	other.commit("one skill")
 	gone := t.TempDir()
-	shared, account := "file://"+filepath.Join(gone, "gone.git"), "file://"+filepath.Join(gone, "gone-account.git")
+	shared, hub := "file://"+filepath.Join(gone, "gone.git"), "file://"+filepath.Join(gone, "gone-hub.git")
 	file := editedExport(t, h, h.exportSnapshot("export"), "unreachable.json", func(doc map[string]any) {
 		settings := doc["settings"].(map[string]any)
 		sources := append(settings["sources"].([]any),
 			map[string]any{"url": other.url, "pin": "main"},
 			map[string]any{"url": shared, "pin": "v1"},
-			map[string]any{"url": account, "account": true})
+			map[string]any{"url": hub, "hub": true})
 		slices.SortFunc(sources, func(a, b any) int {
 			return strings.Compare(a.(map[string]any)["url"].(string), b.(map[string]any)["url"].(string))
 		})
@@ -1211,17 +1211,17 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 		"Skills added (1)\n  alpha  Claude Code\n\n"+
 		"Sources added (2)\n  "+other.url+"\n  "+s.url+"\n\n"+
 		"Sources not added (2)\n"+
-		"  agentx source add "+account+" --hub\n"+
+		"  agentx source add "+hub+" --hub\n"+
 		"  agentx source add "+shared+"#v1\n\n"+
 		"Agents enabled\n  Claude Code\n")
 	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: "+shared+": git ")
-	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: cannot reach the hub "+account+": ")
+	contains(t, "stderr", out.stderr, "warning: could not add a source of the imported settings: cannot reach the hub "+hub+": ")
 	if !lexists(filepath.Join(to.home, ".claude", "skills", "alpha")) {
 		t.Error("alpha is not placed in claude-code")
 	}
 
-	remotes := source.Remotes(context.Background(), gitx.New(to.env, false, func(string, ...any) {}), gitx.AccountRepoPath(to.agentx))
-	if r, ok := remotes[source.ID(account)]; ok {
+	remotes := source.Remotes(context.Background(), gitx.New(to.env, false, func(string, ...any) {}), gitx.StorePath(to.agentx))
+	if r, ok := remotes[source.ID(hub)]; ok {
 		t.Errorf("the hub that could not be added left a remote: %+v", r)
 	}
 	equal(t, "the remote of the shared source not added", remotes[source.ID(shared)], source.RemoteOf(home.Source{URL: shared, Pin: "v1"}))
@@ -1233,7 +1233,7 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, src := range restored.Sources {
-		if (src.URL == shared || src.URL == account) && (src.LastFetched != "" || src.Access != "") {
+		if (src.URL == shared || src.URL == hub) && (src.LastFetched != "" || src.Access != "") {
 			t.Errorf("the settings record a fetch of %s, which could not be added: %+v", src.URL, src)
 		}
 	}
@@ -1259,7 +1259,7 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 
 // TestCommandsNameThePinOfASourceNeverFetched: settings can name a source
 // this machine never fetched, as an import stopped before it added it
-// leaves them, with no account repo yet. skill add, source fetch and source
+// leaves them, with no store yet. skill add, source fetch and source
 // skills of it answer that it was never fetched, with a source add to run
 // that names the pin the settings hold: source add writes the pin its
 // argument names, so a bare URL would unpin the very source the settings
@@ -1399,14 +1399,14 @@ func TestImportWithNoSkillsStillAddsTheSources(t *testing.T) {
 	kept.skill("tools/gamma", "gamma", "The third skill", nil)
 	kept.commit("one skill")
 	gone := t.TempDir()
-	shared, account := "file://"+filepath.Join(gone, "skills.git"), "file://"+filepath.Join(gone, "forks.git")
+	shared, hub := "file://"+filepath.Join(gone, "skills.git"), "file://"+filepath.Join(gone, "forks.git")
 	file := editedExport(t, h, good, "sources-only.json", func(doc map[string]any) {
 		doc["skills"] = []any{}
 		sources := []any{
 			map[string]any{"url": kept.url, "pin": "main"},
 			map[string]any{"url": shared, "pin": "release",
 				"access": "writable", "access_checked": "2026-10-02T10:00:00Z", "default_branch": "main"},
-			map[string]any{"url": account, "account": true,
+			map[string]any{"url": hub, "hub": true,
 				"access": "read-only", "access_checked": "2026-10-02T10:00:00Z"},
 		}
 		slices.SortFunc(sources, func(a, b any) int {
@@ -1421,7 +1421,7 @@ func TestImportWithNoSkillsStillAddsTheSources(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "Sources added (1)\n  "+kept.url+"\n")
 	contains(t, "stdout", out.stdout, "Sources not added (2)\n"+
-		"  agentx source add "+account+" --hub\n"+
+		"  agentx source add "+hub+" --hub\n"+
 		"  agentx source add "+shared+"#release\n")
 
 	restored, err := home.LoadSettings(to.agentx)
@@ -1435,7 +1435,7 @@ func TestImportWithNoSkillsStillAddsTheSources(t *testing.T) {
 		}
 	}
 	want := []home.Source{
-		{URL: account, Account: true},
+		{URL: hub, Hub: true},
 		{URL: shared, Pin: "release", DefaultBranch: "main"},
 	}
 	if !reflect.DeepEqual(notAdded, want) {

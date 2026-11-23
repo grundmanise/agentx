@@ -378,7 +378,7 @@ func (inv *invocation) export(ctx context.Context, path string, force bool) erro
 // hostname when the setting is empty, and writing that into a snapshot
 // would give the machine that imports it the exporting machine's hostname.
 //
-// The lineage is read as skill list reads it, so that an account repo git
+// The lineage is read as skill list reads it, so that a store git
 // cannot read is exit code 8 here rather than a snapshot that lists every
 // managed skill as unmanaged; the scan that follows is the one skill list
 // runs for the placements, which judges no drift, since a snapshot carries
@@ -442,7 +442,7 @@ func (inv *invocation) snapshotSkills(sc skillContext, inventory scan.Inventory)
 			inv.out.warn("left " + sanitised(rec.Ref) + " out of the snapshot: its commit names no source it was imported from")
 			continue
 		}
-		entry := skillFromLibrary(lib, rec, ok, sc.sources, sc.account, inv.placements(inventory, lib, sc.modes), nil, observation{}).LibraryEntry
+		entry := skillFromLibrary(lib, rec, ok, sc.sources, sc.hub, inv.placements(inventory, lib, sc.modes), nil, observation{}).LibraryEntry
 		e := snapshotSkill{
 			Name: entry.Name, Kind: entry.Kind, ForkID: entry.ForkID,
 			Source: entry.Source, Subpath: entry.Subpath, Upstream: entry.Upstream, UpstreamSubpath: entry.UpstreamSubpath,
