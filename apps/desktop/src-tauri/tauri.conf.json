@@ -26,7 +26,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDEyOUI3RkMwMjFEQzQKUldURUhRTDh0eWtCeVBFRDJzRU04N2RLaVFLSWpkRHdrMW0wRHN5ZDlycXhGWGlsemVhQ251cEQK",
       "requireSignedVersion": true
     }
   },
