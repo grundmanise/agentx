@@ -1,7 +1,9 @@
 import type { Locator, Page } from "@playwright/test";
 
-import type { SourceSkillEvent } from "#/cli/events.gen.ts";
+import type { Install, SourceSkillEvent } from "#/cli/events.gen.ts";
 import {
+  installableCards,
+  installOf,
   listingCards,
   planAdds,
   skillPage,
@@ -104,7 +106,11 @@ const lastSearch = (cli: MockCli) => {
 };
 
 /** Opens the Sources screen on the fixture machine and waits for acme's skills. */
-const openSources = async (cli: MockCli, page: Page, first = inventory) => {
+const openSources = async (
+  cli: MockCli,
+  page: Page,
+  first: InlineEvent = inventory
+) => {
   cli.onServeStart({ events: [first] });
   cli.register(["source", "list"], { events: sources });
   cli.register(["source", "skills", ACME_ID], { events: acmeSkills });
@@ -572,6 +578,48 @@ test("Remove on an Added skill confirms, then runs skill remove for every agent"
   await run.started;
   await expect(toasts(page).getByText("Removed pdf skill")).toBeVisible();
   expect(commandLines(cli)).toContain("skill remove pdf");
+});
+
+test("an Added skill shows when it was added, a removed one when it was removed, an open row both", async ({
+  cli,
+  page,
+}) => {
+  const year = new Date().getFullYear();
+  await openSources(cli, page, {
+    ...inventory,
+    installs: [
+      {
+        added: `${year}-10-02T09:00:00Z`,
+        name: "pdf",
+        removed: `${year}-09-20T09:00:00Z`,
+        source: ACME,
+        subpath: "skills/pdf",
+      },
+      {
+        name: "docx",
+        removed: `${year}-11-18T09:00:00Z`,
+        source: ACME,
+        subpath: "skills/docx",
+      },
+    ],
+  });
+  await expect(row(page, "pdf")).toHaveAccessibleDescription(
+    /^Added on Oct 2\./u
+  );
+  await expect(
+    rowLine(page, "pdf").getByText("Added on Oct 2", { exact: true })
+  ).toBeVisible();
+  await expect(
+    rowLine(page, "docx").getByText("Removed Nov 18", { exact: true })
+  ).toBeVisible();
+  cli.register(["source", "read", ACME_ID, "skills/pdf"], {
+    events: [skillMd("pdf", "# pdf\n")],
+  });
+  await row(page, "pdf").click();
+  await expect(opened(page, "pdf")).toBeVisible();
+  await expect(
+    rowLine(page, "pdf").getByText("Added on Oct 2", { exact: true })
+  ).toBeVisible();
 });
 
 test("many agents: five logos and +n, the agent picker toggles a target, two-letter monograms", async ({
@@ -1412,4 +1460,32 @@ test("the page of a skill in its source", () => {
       skillPage(url, ref, subpath),
     ])
   ).toEqual(cases);
+});
+
+test("the dates of a card's skill: a source's by its source and subpath, yours by its fork id", () => {
+  const added = "2026-10-02T09:00:00Z";
+  const installs: Install[] = [
+    { added, fork_id: "a1a1a1a1a1a1", name: "my-pdf" },
+    { added, name: "pdf", source: ZETA, subpath: "skills/pdf" },
+    { added, name: "pdf", source: ACME, subpath: "skills/pdf" },
+    { added, name: "docx", source: ACME, subpath: "docx" },
+  ];
+  const cards = [
+    ...listingCards(acmeSkills, ACME, library),
+    ...installableCards(installable, library),
+  ];
+  // Which entry each card reads, by its index; -1 for none.
+  const read = (name: string) => {
+    const found = cards.find((c) => c.name === name);
+    const install =
+      found === undefined ? undefined : installOf(found, installs);
+    return install === undefined ? -1 : installs.indexOf(install);
+  };
+  const cases: [string, number][] = [
+    ["pdf", 2],
+    ["docx", -1],
+    ["my-pdf", 0],
+    ["release-notes", -1],
+  ];
+  expect(cases.map(([name]) => [name, read(name)])).toEqual(cases);
 });
