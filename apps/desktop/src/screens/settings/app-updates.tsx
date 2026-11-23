@@ -10,8 +10,8 @@ import {
   useAppUpdateChecking,
   useCheckUpdates,
 } from "#/app/app-update.ts";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { inApp } from "#/lib/platform.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
