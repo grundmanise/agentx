@@ -57,6 +57,7 @@ export const library: LibraryEntry[] = [
     drift: ["not published"],
     fork_id: "d4af7001c0ffee",
     kind: "managed",
+    logical_id: "skill:draft",
     name: "draft",
     placements: libraryPlacements("draft"),
     state: "current",
@@ -66,6 +67,7 @@ export const library: LibraryEntry[] = [
     content_hash: "h-gone",
     drift: ["upstream removed"],
     kind: "managed",
+    logical_id: "skill:gone",
     name: "gone",
     placements: [
       placement("claude-code", "gone"),
@@ -81,6 +83,7 @@ export const library: LibraryEntry[] = [
     base_hash: "h-pdf",
     content_hash: "h-pdf",
     kind: "managed",
+    logical_id: "skill:pdf",
     name: "pdf",
     placements: [placement("claude-code", "pdf"), ...libraryPlacements("pdf")],
     source: ACME,
@@ -94,6 +97,7 @@ export const library: LibraryEntry[] = [
     content_hash: "h-letters",
     fork_id: "f0f0f0f0f0f0",
     kind: "managed",
+    logical_id: "skill:pdf-letters",
     name: "pdf-letters",
     placements: [
       placement("claude-code", "pdf-letters"),
@@ -110,6 +114,7 @@ export const library: LibraryEntry[] = [
     content_hash: "h-rn",
     fork_id: "a1b2c3d4e5f6",
     kind: "managed",
+    logical_id: "skill:release-notes",
     name: "release-notes",
     placements: [
       placement("claude-code", "release-notes"),
@@ -128,6 +133,7 @@ export const library: LibraryEntry[] = [
     },
     content_hash: "h-review",
     kind: "managed",
+    logical_id: "skill:review",
     name: "review",
     placements: [placement("cursor", "review"), ...libraryPlacements("review")],
     source: ACME,
@@ -139,6 +145,7 @@ export const library: LibraryEntry[] = [
   {
     content_hash: "h-scratch",
     kind: "unmanaged",
+    logical_id: "skill:scratch",
     name: "scratch",
     placements: libraryPlacements("scratch"),
     universal,

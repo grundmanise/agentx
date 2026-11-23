@@ -221,6 +221,7 @@ test("sightsOf: a fork with the plugin's content still shows the plugin's copy",
       entry: {
         content_hash: "",
         kind: "managed",
+        logical_id: "skill:review",
         name: "review",
         placements: [],
         universal: [],
@@ -247,6 +248,7 @@ test("sightsOf: an agent with only the plugin's copy does not see the library's"
     entry: {
       content_hash: "",
       kind: "managed",
+      logical_id: "skill:review",
       name: "review",
       placements: [],
       universal: [],

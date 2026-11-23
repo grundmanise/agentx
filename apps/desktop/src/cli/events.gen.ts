@@ -115,6 +115,7 @@ export interface Settings {
   label?: string;
   accept_operations: boolean;
   ignore_system_files: boolean;
+  report_inventory: boolean;
   disabled_configurations: string[];
   copy_configurations: string[];
   sources: SettingsSource[];
@@ -124,6 +125,7 @@ export interface Settings {
 export interface LibraryEntry {
   name: string;
   kind: SkillKind;
+  logical_id: string;
   fork_id?: string;
   source?: string;
   subpath?: string;
@@ -178,6 +180,12 @@ export interface SnapshotSkill {
   placements: string[];
 }
 
+export interface FleetMachine extends ReportContents {
+  machine: MachineFacts;
+  commit: string;
+  changed_at: string;
+}
+
 export interface Inventory {
   instance_id: string;
   scan_counter: number;
@@ -222,6 +230,20 @@ export interface LibraryPlacement {
   path: string;
   mode: PlacementMode;
   kind: PlacementKind;
+}
+
+export interface MachineFacts {
+  id: string;
+  label: string;
+  os?: string;
+  agentx?: string;
+}
+
+export interface ReportContents {
+  configurations: ReportConfiguration[];
+  skills: ReportSkill[];
+  library: ReportLibrarySkill[];
+  plugins: ReportPlugin[];
 }
 
 export interface Machine {
@@ -286,6 +308,45 @@ export interface Edge {
   to: string;
 }
 
+export interface ReportConfiguration {
+  id: string;
+  name: string;
+  enabled: boolean;
+  reads_library: boolean;
+}
+
+export interface ReportSkill {
+  name: string;
+  content_hash: string;
+  occurrences: ReportOccurrence[];
+}
+
+export interface ReportLibrarySkill {
+  name: string;
+  kind: SkillKind;
+  logical_id?: string;
+  fork_id?: string;
+  source?: string;
+  subpath?: string;
+  upstream?: string;
+  upstream_subpath?: string;
+  upstream_commit?: string;
+  upstream_time?: string;
+  base_hash?: string;
+  content_hash?: string;
+  state?: SkillState;
+  placements: ReportPlacement[];
+  universal: string[];
+}
+
+export interface ReportPlugin {
+  name: string;
+  marketplace: string;
+  version: string;
+  configuration: string;
+  enabled?: boolean;
+}
+
 export interface Occurrence {
   id: string;
   configuration: string;
@@ -323,6 +384,18 @@ export interface ServerOccurrence {
 export interface Hook {
   event: string;
   name: string;
+}
+
+export interface ReportOccurrence {
+  configuration: string;
+  kind: OccurrenceKind;
+  plugin?: string;
+}
+
+export interface ReportPlacement {
+  configuration: string;
+  mode?: PlacementMode;
+  kind?: PlacementKind;
 }
 
 export interface McpTool {
@@ -528,6 +601,20 @@ export interface MachineSkillEvent {
   commit: string;
 }
 
+export interface MachineReportEvent {
+  type: "machine_report";
+  schema_version: number;
+  machine: string;
+  commit: string;
+  pushed: boolean;
+}
+
+export interface FleetEvent {
+  type: "fleet";
+  schema_version: number;
+  machines: FleetMachine[];
+}
+
 export interface PullEvent {
   type: "pull";
   schema_version: number;
@@ -654,10 +741,6 @@ export interface OperationEvent {
   type: "operation";
   schema_version: number;
 }
-export interface FleetEvent {
-  type: "fleet";
-  schema_version: number;
-}
 
 // Every event type the app knows.
 export type CliEvent =
@@ -678,6 +761,8 @@ export type CliEvent =
   | ExportEvent
   | ImportSkillEvent
   | MachineSkillEvent
+  | MachineReportEvent
+  | FleetEvent
   | PullEvent
   | PublishEvent
   | InstallableSkillEvent
@@ -691,8 +776,7 @@ export type CliEvent =
   | DriftEvent
   | UpdateCheckEvent
   | ListeningEvent
-  | OperationEvent
-  | FleetEvent;
+  | OperationEvent;
 export type CliEventType = CliEvent["type"];
 export type EventOf<T extends CliEventType> = Extract<CliEvent, { type: T }>;
 

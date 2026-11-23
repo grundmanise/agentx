@@ -153,6 +153,16 @@ agentx skill remove <name> --machine cloud
 
 The next session that starts or resumes applies the change. A session that already installed a skill you took off keeps it until a new session starts. For the details and the refusals, see [Turn skills on for your cloud agents](/cli/skill#turn-skills-on-for-your-cloud-agents).
 
+## See the cloud machine's skills
+
+On a machine with your hub, show what the cloud machine holds:
+
+```sh
+agentx machine show cloud
+```
+
+`agentx machine list` shows the cloud machine with your other machines. Both commands read the cloud machine's snapshot on your hub. The cloud machine writes no inventory report, and a session never writes to your hub. See [See the skills of your other machines](/cli/machine#see-the-skills-of-your-other-machines).
+
 ## Limits
 
 - The hook relies on Claude Code reading `~/.claude/settings.json` on the session's own computer. This works in Claude Code on the web today, but Claude Code does not document it, so it can change.

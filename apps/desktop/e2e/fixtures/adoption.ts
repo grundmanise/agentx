@@ -35,6 +35,7 @@ const more: LibraryEntry[] = [
     content_hash: "h-lint",
     drift: ["source removed"],
     kind: "managed",
+    logical_id: "skill:lint",
     name: "lint",
     placements: [
       {
@@ -54,6 +55,7 @@ const more: LibraryEntry[] = [
   {
     content_hash: "h-legacy",
     kind: "unmanaged",
+    logical_id: "skill:legacy",
     name: "legacy",
     placements: libraryPlacements("legacy"),
     universal,

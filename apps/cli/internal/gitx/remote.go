@@ -125,19 +125,10 @@ func (r *Runner) UnsetRemote(ctx context.Context, gitDir, remote string) error {
 // another URL, wrote says nothing about the remote set now.
 func (r *Runner) dropRemoteRefs(ctx context.Context, gitDir, remote string) error {
 	out, err := r.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", TrackingPrefix(remote))
-	if err != nil || strings.TrimSpace(out) == "" {
+	if err != nil {
 		return err
 	}
-	var b strings.Builder
-	b.WriteString("start\n")
-	for _, ref := range strings.Split(out, "\n") {
-		if ref != "" {
-			b.WriteString("delete " + ref + "\n")
-		}
-	}
-	b.WriteString("commit\n")
-	_, err = r.IsolatedInput(ctx, gitDir, strings.NewReader(b.String()), "update-ref", "--stdin")
-	return err
+	return r.deleteRefs(ctx, gitDir, strings.Fields(out))
 }
 
 // networkConfig is what every git agentx runs against the hub

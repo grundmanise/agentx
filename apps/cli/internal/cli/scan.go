@@ -85,7 +85,8 @@ const lockWait = time.Second
 // once, if it needs any. The inventory a scan or serve emits is inventory's,
 // which lists the library too.
 func (inv *invocation) scan(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Inventory, error) {
-	return inv.scanMachine(ctx, wait, project, handshake, false)
+	inventory, _, err := inv.scanMachine(ctx, wait, project, handshake, libraryUnread)
+	return inventory, err
 }
 
 // inventory is the scan that is emitted, by agentx scan and by
@@ -116,32 +117,53 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 // instead would call every managed skill unmanaged, which is not true.
 // skill list, which exists to report the lineage, still fails on it.
 func (inv *invocation) inventory(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Inventory, error) {
-	return inv.scanMachine(ctx, wait, project, handshake, true)
+	inventory, _, err := inv.scanMachine(ctx, wait, project, handshake, libraryEmitted)
+	return inventory, err
 }
 
-// scanMachine is scan and inventory, the library read when library says so.
-func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, project string, handshake, library bool) (scan.Inventory, error) {
+// reportedInventory is the scan an inventory report is built from: the
+// user scope alone, with no handshake, and the library listed whatever the
+// output mode, since the report lists it. unlisted is why the library
+// could not be listed, a store git cannot read, and nil when it is listed:
+// a report of a machine whose library is not known is never written.
+func (inv *invocation) reportedInventory(ctx context.Context, wait time.Duration) (inventory scan.Inventory, unlisted *failure, err error) {
+	return inv.scanMachine(ctx, wait, "", false, libraryListed)
+}
+
+// libraryRead is how much of the library a scan reads.
+type libraryRead int
+
+const (
+	libraryUnread  libraryRead = iota // nothing of it
+	libraryEmitted                    // its directories, and its entries for an inventory emitted as JSON
+	libraryListed                     // its directories and its entries
+)
+
+// scanMachine is scan, inventory and reportedInventory, the library read
+// as library says. unlisted is the failure of the store that left the
+// library's entries out of an inventory that was to list them.
+func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, project string, handshake bool, library libraryRead) (inventory scan.Inventory, unlisted *failure, err error) {
 	timeout := handshakeTimeout
 	if v := inv.env["AGENTX_HANDSHAKE_TIMEOUT"]; handshake && v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil || d <= 0 {
-			return scan.Inventory{}, fail(exitUsage, "AGENTX_HANDSHAKE_TIMEOUT "+v+" is not a duration", "set it like 10s or 500ms, or unset it")
+			return scan.Inventory{}, nil, fail(exitUsage, "AGENTX_HANDSHAKE_TIMEOUT "+v+" is not a duration", "set it like 10s or 500ms, or unset it")
 		}
 		timeout = d
 	}
 	if project != "" {
 		abs, err := filepath.Abs(project)
 		if err != nil {
-			return scan.Inventory{}, err
+			return scan.Inventory{}, nil, err
 		}
 		if info, err := os.Stat(abs); err != nil || !info.IsDir() {
-			return scan.Inventory{}, fail(exitNotFound, "project directory "+abs+" does not exist", "pass the root of a repository to --project")
+			return scan.Inventory{}, nil, fail(exitNotFound, "project directory "+abs+" does not exist", "pass the root of a repository to --project")
 		}
 		project = abs
 	}
 	machineID, _, err := home.MachineID(inv.dirs.Home, inv.env, inv.refs(ctx))
 	if err != nil {
-		return scan.Inventory{}, err
+		return scan.Inventory{}, nil, err
 	}
 	lockCtx := ctx
 	if wait > 0 {
@@ -149,7 +171,7 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 		lockCtx, cancel = context.WithTimeout(ctx, wait)
 		defer cancel()
 	}
-	listed := library && inv.out.json // whether the inventory's library entries are built and emitted
+	listed := library == libraryListed || library == libraryEmitted && inv.out.json // whether the inventory's library entries are built
 	var sc *scan.Scan
 	var listing *skillContext // what the library entries are built from, read with the rest; nil lists none
 	var installs []home.Install
@@ -177,7 +199,7 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 				Disabled:   s.DisabledConfigurations,
 				Copies:     s.CopyConfigurations,
 				CopyMode:   copyMode,
-				Library:    library,
+				Library:    library != libraryUnread,
 			})
 			if !listed {
 				return nil
@@ -215,6 +237,7 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 				// The store's own answer, and not a stop that killed
 				// the git reading it: that is the run's to answer for.
 				sc.Warn(f.message + "; the library is not listed, run 'agentx doctor' and check the store it names")
+				unlisted = f
 			default:
 				return err
 			}
@@ -225,13 +248,14 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 			err = home.Recover(lockCtx, inv.dirs.Home, inv.refs(ctx))
 		}
 		if err != nil {
-			return scan.Inventory{}, err
+			return scan.Inventory{}, nil, err
 		}
 	}
 	if handshake {
 		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion, Debug: inv.out.debugf})
 	}
-	inventory, fresh := sc.Inventory()
+	var fresh map[string]home.Handshake
+	inventory, fresh = sc.Inventory()
 	if installs != nil {
 		inventory.Installs = installs
 	}
@@ -242,10 +266,10 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 	}
 	if len(fresh) > 0 {
 		if err := home.SaveHandshakes(inv.dirs.Home, inv.refs(ctx), fresh); err != nil {
-			return scan.Inventory{}, err
+			return scan.Inventory{}, nil, err
 		}
 	}
-	return inventory, nil
+	return inventory, unlisted, nil
 }
 
 // instanceID is fresh per process; AGENTX_INSTANCE_ID fixes it for tests.

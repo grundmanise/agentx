@@ -50,6 +50,8 @@ var eventTypes = []struct {
 	{"export", exportEvent{}},
 	{"import_skill", importSkillEvent{}},
 	{"machine_skill", machineSkillEvent{}},
+	{"machine_report", machineReportEvent{}},
+	{"fleet", fleetEvent{}},
 	{"pull", pullEvent{}},
 	{"publish", publishEvent{}},
 	{"installable_skill", installableSkillEvent{}},
@@ -67,7 +69,7 @@ var eventTypes = []struct {
 
 // reservedEventTypes are event types the contract reserves and no command
 // emits. The app knows them and renders nothing for them.
-var reservedEventTypes = []string{"operation", "fleet"}
+var reservedEventTypes = []string{"operation"}
 
 // fieldRef names one field of a struct by its Go name.
 type fieldRef struct {
@@ -118,9 +120,11 @@ var valueLists = []valueList{
 	{name: "SkillKind", values: []string{lineage.KindManaged, lineage.KindUnmanaged}, fields: []fieldRef{
 		{scan.LibraryEntry{}, "Kind"}, {reconcileEvent{}, "Kind"}, {driftEvent{}, "Kind"},
 		{updateAvailableEvent{}, "Kind"}, {conflictEvent{}, "Kind"}, {snapshotSkill{}, "Kind"},
+		{reportLibrarySkill{}, "Kind"},
 	}},
 	{name: "SkillState", values: []string{stateCurrent, stateModified}, fields: []fieldRef{
 		{scan.LibraryEntry{}, "State"}, {driftEvent{}, "State"}, {driftEvent{}, "PreviousState"},
+		{reportLibrarySkill{}, "State"},
 	}},
 	{name: "DriftState", open: true, values: []string{
 		driftDisplaced, driftMissing, driftSourceRemoved, driftUpstreamRemoved, driftNotPublished,
@@ -128,16 +132,16 @@ var valueLists = []valueList{
 		{scan.LibraryEntry{}, "Drift"}, {driftEvent{}, "Drift"}, {driftEvent{}, "PreviousDrift"},
 	}},
 	{name: "PlacementMode", values: []string{modeSymlink, modeCopy, modeLibrary}, fields: []fieldRef{
-		{scan.LibraryPlacement{}, "Mode"},
+		{scan.LibraryPlacement{}, "Mode"}, {reportPlacement{}, "Mode"},
 	}},
 	{name: "PlacementKind", values: []string{scan.KindSymlink, scan.KindCopy, scan.KindDirectory, modeLibrary}, fields: []fieldRef{
-		{scan.LibraryPlacement{}, "Kind"},
+		{scan.LibraryPlacement{}, "Kind"}, {reportPlacement{}, "Kind"},
 	}},
 	{name: "ConfigurationPlacement", values: []string{scan.PlacementSymlink, scan.PlacementCopy, scan.PlacementLibrary}, fields: []fieldRef{
 		{scan.Configuration{}, "Placement"},
 	}},
 	{name: "OccurrenceKind", values: []string{scan.KindSymlink, scan.KindCopy, scan.KindDirectory}, fields: []fieldRef{
-		{scan.Occurrence{}, "Kind"},
+		{scan.Occurrence{}, "Kind"}, {reportOccurrence{}, "Kind"},
 	}},
 	{name: "OccurrenceScope", values: []string{scan.ScopeUser, scan.ScopeProject}, fields: []fieldRef{
 		{scan.Occurrence{}, "Scope"},

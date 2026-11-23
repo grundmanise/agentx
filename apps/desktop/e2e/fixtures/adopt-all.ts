@@ -42,6 +42,7 @@ const libraryPlacements = (name: string) =>
 const unmanaged = (name: string): LibraryEntry => ({
   content_hash: `h-${name}`,
   kind: "unmanaged",
+  logical_id: `skill:${name}`,
   name,
   placements: libraryPlacements(name),
   universal,
@@ -52,6 +53,7 @@ const adopted = (name: string, source: string): LibraryEntry => ({
   base_hash: `h-${name}`,
   content_hash: `h-${name}`,
   kind: "managed",
+  logical_id: `skill:${name}`,
   name,
   placements: libraryPlacements(name),
   source,

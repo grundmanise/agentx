@@ -109,6 +109,7 @@ type Occurrence struct {
 type LibraryEntry struct {
 	Name            string             `json:"name"`
 	Kind            string             `json:"kind"`                       // managed or unmanaged
+	LogicalID       string             `json:"logical_id"`                 // its logical asset, see SkillLogicalID
 	ForkID          string             `json:"fork_id,omitempty"`          // a hub skill's permanent id, from the commit that created it
 	Source          string             `json:"source,omitempty"`           // the canonical URL of the source it is published to
 	Subpath         *string            `json:"subpath,omitempty"`          // the directory in the source, "" for its root
@@ -329,7 +330,7 @@ func (s *Scan) add(conf Configuration, p placement, scope, plugin string) *Skill
 	node, ok := s.nodes[p.info.contentHash]
 	if !ok {
 		node = &Skill{
-			LogicalID:   id("skill", "content", p.info.contentHash),
+			LogicalID:   SkillLogicalID("", "", nil, p.info.contentHash),
 			Name:        p.info.name,
 			Description: p.info.description,
 			ContentHash: p.info.contentHash,

@@ -30,8 +30,12 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   "config set": {},
   doctor: {},
   machine: {},
+  "machine list": {},
+  "machine remove": {},
   "machine rename": {},
+  "machine report": {},
   "machine reset-id": {},
+  "machine show": {},
   scan: {
     configuration: true,
     handshake: false,

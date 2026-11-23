@@ -29,6 +29,7 @@ const ownEntry = (
   drift: ["not published"],
   fork_id: `f-${name}`,
   kind: "managed",
+  logical_id: `skill:${name}`,
   name,
   placements: [
     {

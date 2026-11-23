@@ -1,6 +1,6 @@
 ---
 title: "agentx machine"
-description: "See the machine's stable id and label and where agentx keeps its files, rename the machine, or reset the id."
+description: "See the machine's stable id and label and where agentx keeps its files, rename the machine, reset the id, and see the skills of your other machines."
 ---
 
 agentx gives each computer a machine id and a label. The id identifies the machine in scans, snapshots and the commits agentx writes. It stays the same when you reinstall agentx. The label is a readable name that you can change. The same command shows where agentx keeps its files on this machine.
@@ -68,3 +68,127 @@ agentx machine reset-id
 Reset the id when two computers show the same id, for example after you clone a virtual machine. The new id is random. agentx keeps using it until you delete `machine.json` in agentx home. agentx then computes the id from the platform id again, or generates a new random id if the computer has no platform id.
 
 If another agentx command is running, `rename` and `reset-id` stop with [exit code 7](/cli/output#exit-codes). Run them again when that command finishes.
+
+## See the skills of your other machines
+
+A machine can write an **inventory report** to your [hub](/hub): which skills it has, and which agent clients see them. Every machine with that hub can then show the report, also while the machine that wrote it is off.
+
+You need a hub on each machine. See [Add it](/hub#add-it).
+
+### Write this machine's report
+
+```sh
+agentx machine report
+```
+
+```text
+✓ wrote this machine's report to reports/3ea501b8fb5db1ad3cc85268972d7012 on the hub at 4c1d2e7
+```
+
+agentx scans the machine and writes the report to your hub, as the file `inventory.json` on the branch `reports/<machine id>`. Run the command again after you change the machine's skills. When nothing changed, agentx pushes nothing:
+
+```text
+✓ reports/3ea501b8fb5db1ad3cc85268972d7012 on the hub holds this report already, at 4c1d2e7, so nothing was pushed
+```
+
+The report holds:
+
+- the machine's id, label, operating system and agentx version
+- its agent configurations, and whether each one is enabled
+- every skill an agent client sees, by name and content hash: the library's skills, a plugin's skills, and the skills in an agent client's own skills directory
+- each library skill with its source, its version, its placements, and whether you edited it
+- its plugins
+
+The report holds no path, no machine settings, no MCP server and no file of any skill. Anyone who can read your hub can read the report: the machine's label, the names of your skills and plugins, and your source URLs.
+
+agentx writes a report only when you run this command.
+
+| Exit code | Cause |
+|---|---|
+| 3 | Git cannot reach the hub, or the hub does not let this machine push. A machine with read-only access cannot write a report. |
+| 6 | No hub is set. Or the branch changed on the hub after agentx read it: run the command again. |
+| 8 | agentx cannot read the store, so it cannot list the library. Run `agentx doctor`. |
+
+### List the machines
+
+```sh
+agentx machine list
+```
+
+```text
+3 machines
+my-laptop (this machine)  scanned now               12 skills  Claude Code, Codex
+studio                    changed 2026-11-22 18:04  9 skills   Claude Code, Cursor
+cloud                     changed 2026-11-20 09:31  4 skills   Claude Code
+```
+
+The first row is this machine, from a scan agentx makes now, whether this machine wrote a report or not. The other machines that wrote a report follow, by label. The last row is the [cloud machine](/cloud), from its snapshot.
+
+Each row shows:
+
+1. The machine's label.
+2. When the machine's report last changed on the hub. This is not when the machine was last on.
+3. How many skills the machine's agent clients see. For the cloud machine, this is how many skills its snapshot lists.
+4. The machine's agent clients.
+
+agentx reads the hub each time you run the command, and fetches only the reports that changed.
+
+If agentx cannot use a report, such as one a newer agentx wrote, it leaves that machine out and prints a warning that names the branch.
+
+With `--json`, the command emits one `fleet` event with what the hub holds of each machine. It does not scan this machine.
+
+### Show one machine
+
+```sh
+agentx machine show studio
+```
+
+```text
+Label        studio
+Machine id   7c1f0a2e9b3d4c5e8f6a1b2c3d4e5f60
+OS           darwin
+agentx       1.4.0
+Last change  2026-11-22 18:04
+
+Claude Code (claude-code)  enabled  4 skills
+  changelog      library           https://github.com/example/skills/skills/changelog  modified
+  release-notes  library           ssh://git@github.com/you/agentx-hub (hub)
+  lint           plugin review
+  scratch        skills directory
+
+Cursor (cursor)  enabled  2 skills
+  changelog      library  https://github.com/example/skills/skills/changelog  modified
+  release-notes  library  ssh://git@github.com/you/agentx-hub (hub)
+```
+
+Name the machine by its label, its id or the start of its id, as `agentx machine list` and `agentx machine` print them. `cloud` names the cloud machine.
+
+Each agent configuration lists the skills its agent client sees, and where each skill comes from:
+
+| Value | What it means |
+|---|---|
+| `library` | A skill in that machine's library, followed by the source it is published to. `modified` means it was edited on that machine. |
+| `plugin <name>` | A skill that the plugin `<name>` brings. |
+| `skills directory` | A skill in the agent client's own skills directory that agentx does not manage. |
+
+The command shows what the hub holds of the machine. It does not compare it with this machine.
+
+| Exit code | Cause |
+|---|---|
+| 3 | Git cannot reach the hub. |
+| 5 | The hub holds no report of that machine. |
+| 6 | No hub is set. Or the name matches more than one machine: agentx lists them, so give the machine id. |
+
+### Remove a machine's report
+
+```sh
+agentx machine remove studio
+```
+
+```text
+✓ removed the report of studio from the hub, reports/7c1f0a2e9b3d4c5e8f6a1b2c3d4e5f60; a machine that still reports writes its report again
+```
+
+Remove the report of a machine you no longer use. The command deletes the branch `reports/<machine id>` from the hub and does not ask for confirmation. Nothing changes on that machine. If you run `agentx machine report` on it again, its report is back.
+
+The cloud machine writes no report, so `agentx machine remove cloud` stops with exit code 1. To take a skill off the cloud machine, see [Change the cloud machine's skills](/cloud#change-the-cloud-machines-skills).

@@ -521,6 +521,7 @@ test("names and targets: two cards and one enabled agent turned off", async ({
         {
           content_hash: "h-docx",
           kind: "managed",
+          logical_id: "skill:docx",
           name: "docx",
           placements: [],
           source: ACME,

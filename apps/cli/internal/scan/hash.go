@@ -23,6 +23,23 @@ func id(typ string, parts ...string) string {
 	return typ + ":" + hex.EncodeToString(h.Sum(nil))
 }
 
+// SkillLogicalID is the logical asset of a library skill as an identity
+// of the skill type: the same on every machine that holds the skill, in
+// any version. A hub skill is its fork id, wherever it came from. A
+// managed skill of a shared source is its source and its subpath there,
+// "" for the source's root. Any other skill, an unmanaged one or a
+// managed one whose lineage names neither, is its content, with the
+// logical id the skill node of that content has.
+func SkillLogicalID(forkID, source string, subpath *string, contentHash string) string {
+	switch {
+	case forkID != "":
+		return id("skill", "fork", forkID)
+	case source != "" && subpath != nil:
+		return id("skill", "source", source, *subpath)
+	}
+	return id("skill", "content", contentHash)
+}
+
 // contentHash is the hash over a skill's name, description and files, as
 // documented in the CLI contract. root is the skill directory with every
 // symlink resolved.

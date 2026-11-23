@@ -34,6 +34,7 @@ export const settings = (ignoreSystemFiles: boolean): InlineEvent => {
     disabled_configurations: [],
     ignore_system_files: ignoreSystemFiles,
     label: machineLabel,
+    report_inventory: false,
     schema_version: 1,
     sources: [],
   };

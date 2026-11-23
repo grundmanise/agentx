@@ -1,9 +1,9 @@
 ---
 title: "Hub"
-description: "The Git repository that carries your hub skills and the snapshot of each machine to your other machines and your cloud agents. It can be your own, one your machines share, or one someone else keeps to share skills."
+description: "The Git repository that carries your hub skills, the snapshot of each machine and each machine's inventory report to your other machines and your cloud agents. It can be your own, one your machines share, or one someone else keeps to share skills."
 ---
 
-Your hub is a Git repository. agentx uses it to move your hub skills and a snapshot of each machine between machines. It can be your own repository, one your machines share, or one someone else keeps to share skills with you, such as a team.
+Your hub is a Git repository. agentx uses it to move your hub skills and a snapshot of each machine between machines, and to show on each machine which skills the others have. It can be your own repository, one your machines share, or one someone else keeps to share skills with you, such as a team.
 
 You need it only for that. On a single machine, agentx works without it: the store in `~/.agentx` keeps the full history of your hub skills.
 
@@ -12,25 +12,27 @@ You need it only for that. On a single machine, agentx works without it: the sto
 - **A second machine**: publish your hub skills on one machine, and install them on another.
 - **A backup**: save a snapshot of a machine, and restore it after a reinstall or on a new computer.
 - **Cloud agents**: the cloud machine has no computer of its own, so its snapshot on the hub is its only state. See [Cloud agents](/cloud).
+- **A view of your machines**: a machine reports which skills it has, and every other machine can list them. See [See the skills of your other machines](/cli/machine#see-the-skills-of-your-other-machines).
 
 Skills from a shared source never go through the hub. Each machine installs them from their source.
 
 ## What it holds
 
-agentx writes two kinds of branches, and does not use any other branch, such as `main`.
+agentx writes three kinds of branches, and does not use any other branch, such as `main`.
 
 | Branch | Holds | Written by | Read by |
 |---|---|---|---|
 | `skills/<name>` | A hub skill, with its history. | `agentx skill publish` | `agentx skill add --name <name>` and `agentx skill update` on your other machines |
 | `machines/<id>` | The snapshot of one machine: its settings, and its skills with their placements. It holds no skill content. | `agentx snapshot save --machine <id>`, and `agentx skill place` or `agentx skill remove` with `--machine cloud` | `agentx snapshot apply --machine <id>`, and each cloud agent session |
+| `reports/<id>` | The inventory report of one machine: its agent configurations, the skills its agent clients see, its library's skills and its plugins. It holds no path, no settings, no MCP server and no skill content. | `agentx machine report` on that machine | `agentx machine list` and `agentx machine show` on your other machines |
 
 ## Create it
 
 Create a repository on any Git host, such as GitHub or GitLab. Only these choices matter to agentx:
 
-- **Private or public**: make it private. A snapshot keeps each MCP server's command, arguments and URL, and these can hold a token. Each machine then needs Git credentials for it, such as an SSH key or a credential helper, and a cloud agent needs a [read-only token](/cloud#create-a-read-only-token). A public hub needs no credentials to read over HTTPS, but anyone can read your skills and snapshots. An SSH URL needs an SSH key, even for a public repository.
+- **Private or public**: make it private. A snapshot keeps each MCP server's command, arguments and URL, and these can hold a token. Each machine then needs Git credentials for it, such as an SSH key or a credential helper, and a cloud agent needs a [read-only token](/cloud#create-a-read-only-token). A public hub needs no credentials to read over HTTPS, but anyone can read your skills, snapshots and inventory reports. An SSH URL needs an SSH key, even for a public repository.
 - **First files**: choose any. The repository can be empty, or have a README, a license or a `.gitignore` on its default branch, because agentx does not use that branch.
-- **Access**: a machine that publishes or saves snapshots needs write access. A machine that only installs and applies snapshots needs read access.
+- **Access**: a machine that publishes, saves snapshots or writes its inventory report needs write access. A machine that only installs, applies snapshots and lists machines needs read access.
 - **A new repository**: use a repository that is not a source on any machine. One repository cannot be both a shared source and the hub.
 
 ## Add it

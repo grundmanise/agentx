@@ -337,6 +337,8 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 	ev := librarySkillEvent{event: newEvent("library_skill"), LibraryEntry: scan.LibraryEntry{
 		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places, Universal: universal,
 	}}
+	// An unmanaged skill is its content, which is its logical asset.
+	ev.LogicalID = scan.SkillLogicalID("", "", nil, lib.ContentHash)
 	if !ok {
 		return ev
 	}
@@ -358,6 +360,11 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 	if hasBase {
 		ev.UpstreamCommit, ev.UpstreamTime, ev.BaseHash = base.Commit, when, base.Hash
 	}
+	// A managed skill's logical asset is what its lineage names: a hub
+	// skill's fork id, wherever it came from, and the source and subpath of
+	// a skill of a shared source, which alone has a subpath. One whose
+	// lineage names neither stays its content.
+	ev.LogicalID = scan.SkillLogicalID(ev.ForkID, ev.Source, ev.Subpath, lib.ContentHash)
 	// A fork is compared with what the hub holds of it:
 	// modified while it has edits not yet published, see unpublished. Its drift is its placements', since what
 	// the source drift states say of a managed skill is not true of a

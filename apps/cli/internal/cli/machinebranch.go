@@ -101,7 +101,7 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch) (sna
 	if b.tip == "" {
 		return snapshot{}, false, nil
 	}
-	data, size, held, err := inv.git.SnapshotAt(ctx, b.gitDir, b.tip, documentLimit)
+	data, size, held, err := inv.git.FileAt(ctx, b.gitDir, b.tip, gitx.SnapshotFile, documentLimit)
 	switch {
 	case err != nil:
 		return snapshot{}, false, storeFailure(err)
@@ -163,7 +163,7 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 	if err != nil {
 		return "", false, fail(exitInternal, err.Error(), "")
 	}
-	tree, err := inv.git.SnapshotTree(ctx, b.gitDir, append(data, '\n'))
+	tree, err := inv.git.FileTree(ctx, b.gitDir, gitx.SnapshotFile, append(data, '\n'))
 	if err != nil {
 		return "", false, storeFailure(err)
 	}

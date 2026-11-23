@@ -36,6 +36,7 @@ func TestConfigListDefaults(t *testing.T) {
 		"label                    test-host",
 		"accept_operations        false",
 		"ignore_system_files      true",
+		"report_inventory         false",
 		"disabled_configurations  (none)",
 		"copy_configurations      (none)",
 		"sources                  []",
@@ -61,6 +62,7 @@ func TestConfigListDefaults(t *testing.T) {
 		"label":                   "test-host",
 		"accept_operations":       false,
 		"ignore_system_files":     true,
+		"report_inventory":        false,
 		"disabled_configurations": []any{},
 		"copy_configurations":     []any{},
 		"sources":                 []any{},
@@ -96,11 +98,14 @@ func TestConfigSetAndGet(t *testing.T) {
 
 	out = h.run("config", "set", "ignore_system_files", "0")
 	equal(t, "exit", out.exit, 0)
+	out = h.run("config", "set", "report_inventory", "true")
+	equal(t, "exit", out.exit, 0)
 
 	file := readSettingsFile(t, h)
 	equal(t, "file label", file["label"], "work laptop")
 	equal(t, "file accept_operations", file["accept_operations"], true)
 	equal(t, "file ignore_system_files", file["ignore_system_files"], false)
+	equal(t, "file report_inventory", file["report_inventory"], true)
 	equal(t, "file schema_version", file["schema_version"], float64(1))
 
 	out = h.run("--json", "config", "get", "accept_operations")

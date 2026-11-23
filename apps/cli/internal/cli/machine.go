@@ -38,6 +38,9 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 			"agentx machine", "this machine's id, label and paths",
 			`agentx machine rename "work laptop"`, "change the label",
 			"agentx machine reset-id", "give the machine a new id",
+			"agentx machine report", "write this machine's inventory report to the hub",
+			"agentx machine list", "this machine and the machines the hub holds",
+			"agentx machine show work-laptop", "the skills of one of them, by agent configuration",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			m, err := inv.machine(cmd.Context())
@@ -89,6 +92,71 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 			inv.out.done("machine id is now " + inv.out.paint(heading, m.ID))
 			return nil
 		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "report",
+		Short: "Write this machine's inventory report to the hub",
+		Long: "Scan this machine and write its inventory report to the hub, as the one file\n" +
+			"inventory.json of the branch reports/<machine id>, so that your other machines\n" +
+			"can show which skills this one has and which agent clients see them.\n\n" +
+			"The report names the machine, its agent configurations, every skill an agent\n" +
+			"client sees with its content hash, the library's skills with their sources, and\n" +
+			"the plugins. It holds no path, no settings, no MCP server and no content of a\n" +
+			"skill. Whoever can read the hub can read it.\n\n" +
+			"A report the branch holds already is pushed nowhere. Otherwise it is one commit\n" +
+			"on the branch, pushed without force.",
+		Args:    cobra.NoArgs,
+		Example: examples("agentx machine report", "write this machine's report to the hub"),
+		RunE:    func(cmd *cobra.Command, args []string) error { return inv.machineReport(cmd.Context()) },
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List this machine and the machines the hub holds",
+		Long: "List this machine and every machine the hub holds something of: each machine\n" +
+			"that wrote an inventory report, and the cloud machine, from its snapshot. Each\n" +
+			"row says when the machine's branch last changed, how many skills its agent\n" +
+			"clients see and which agent clients it has. A row says what the machine held at\n" +
+			"that change, never that the machine is on.\n\n" +
+			"This machine is listed first, from a scan made now, whether it reports or not.\n" +
+			"With --json, the one fleet event holds what the hub holds and nothing else.",
+		Args: cobra.NoArgs,
+		Example: examples(
+			"agentx machine list", "this machine and the machines the hub holds",
+			"agentx machine list --json", "what the hub holds of each machine, as one fleet event",
+		),
+		RunE: func(cmd *cobra.Command, args []string) error { return inv.machineList(cmd.Context()) },
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "show <machine>",
+		Short: "Show the skills of one machine, as the hub holds them",
+		Long: "Show one machine as the hub holds it: its label, id, operating system and\n" +
+			"agentx version, when its branch last changed, and the skills each of its agent\n" +
+			"configurations sees. Each skill names where it comes from: the library, with\n" +
+			"the source it is published to, a plugin, or the agent client's own skills\n" +
+			"directory. A library skill edited on that machine reads modified.\n\n" +
+			"<machine> is cloud, a machine's label, its id or the start of its id, as\n" +
+			"'agentx machine list' and 'agentx machine' print them.",
+		Args: cobra.ExactArgs(1),
+		Example: examples(
+			"agentx machine show work-laptop", "a machine by its label",
+			"agentx machine show 3f9a", "a machine by the start of its id",
+			"agentx machine show cloud", "the cloud machine, from its snapshot",
+		),
+		RunE: func(cmd *cobra.Command, args []string) error { return inv.machineShow(cmd.Context(), args[0]) },
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "remove <machine>",
+		Short: "Delete a machine's report from the hub",
+		Long: "Delete the report branch of a machine from the hub, such as that of a machine\n" +
+			"you no longer use. Nothing on that machine changes, and a machine that still\n" +
+			"reports writes its report again.\n\n" +
+			"<machine> is a machine's label, its id or the start of its id. The cloud\n" +
+			"machine writes no report and has none to remove.",
+		Args: cobra.ExactArgs(1),
+		Example: examples(
+			"agentx machine remove old-laptop", "delete the report of a machine by its label",
+		),
+		RunE: func(cmd *cobra.Command, args []string) error { return inv.machineRemove(cmd.Context(), args[0]) },
 	})
 	return cmd
 }

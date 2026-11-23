@@ -298,6 +298,7 @@ test.describe("the list", () => {
             {
               content_hash: "h",
               kind: "unmanaged",
+              logical_id: "skill:scratch",
               name: "scratch",
               placements: [
                 {

@@ -46,6 +46,7 @@ export const created: LibraryEntry = {
   drift: ["not published"],
   fork_id: "5a1d0c3e9b7f2468",
   kind: "managed",
+  logical_id: `skill:${NEW_SKILL}`,
   name: NEW_SKILL,
   placements,
   source: HUB,
@@ -118,6 +119,7 @@ const addedEntry = (name: string): LibraryEntry => ({
   base_hash: `h-${name}`,
   content_hash: `h-${name}`,
   kind: "managed",
+  logical_id: `skill:${name}`,
   name,
   placements: placements.map((p) => ({
     ...p,

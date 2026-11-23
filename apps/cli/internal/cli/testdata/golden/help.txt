@@ -41,13 +41,17 @@ MACHINES
   machine                                Print this machine's id, label and agentx's paths
   machine rename <label>                 Change this machine's label
   machine reset-id                       Replace this machine's id with a new random one
+  machine report                         Write this machine's inventory report to the hub
+  machine list                           List this machine and the machines the hub holds
+  machine show <machine>                 Show the skills of one machine, as the hub holds them
+  machine remove <machine>               Delete a machine's report from the hub
   snapshot save [<name>]|--machine <id>  Save a snapshot to the library or the hub
   snapshot apply <file>|--machine <id>   Apply a snapshot: settings, skills and placements
 
 SETTINGS
   config list                            Print every setting
   config get <key>                       Print one setting
-  config set <key> <value>               Change label, accept_operations or ignore_system_files
+  config set <key> <value>               Change the label, or a setting that is true or false
   config enable <configuration>          Select a client for placements by default
   config disable <configuration>         Leave a client out of placements by default
   config placement <id> <mode>           Choose whether a client gets symlinks or copies

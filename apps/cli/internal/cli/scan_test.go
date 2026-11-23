@@ -826,11 +826,15 @@ func TestScanListsNoLibraryWhenTheStoreCannotBeRead(t *testing.T) {
 // asks of it, and only reading the branches fails. So the inventory's
 // warning carries git's error, which says what is wrong, and sends the
 // reader to the repo it names as well as to doctor, which on its own would
-// answer that the repo is fine.
+// answer that the repo is fine. A machine whose library is not listed
+// writes no inventory report, exit code 8: a report with an empty library
+// would say the machine holds no skill of its own.
 func TestScanWarnsOfABranchDoctorDoesNotRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
+	remote := newHubRemote(t, h)
+	h.setHub(remote)
 	store := gitx.StorePath(h.agentx)
 	tip := strings.TrimSpace(h.storeGit("rev-parse", "refs/heads/managed/alpha"))
 	object := filepath.Join(store, "objects", tip[:2], tip[2:])
@@ -848,6 +852,11 @@ func TestScanWarnsOfABranchDoctorDoesNotRead(t *testing.T) {
 	equal(t, "skill list exit", h.run("skill", "list").exit, 8)
 	rows, _ := doctorRows(t, h.events(h.run("--json", "doctor").stdout))
 	equal(t, "doctor's store row", rows["store"]["status"], "ok")
+
+	report := h.run("machine", "report")
+	equal(t, "machine report exit", report.exit, 8)
+	contains(t, "machine report", report.stderr, "no report was written, since the library could not be listed: ")
+	equal(t, "the hub's report branches", remoteGit(t, h, remote, "for-each-ref", "refs/heads/reports/"), "")
 }
 
 // secrets lists every distinctive secret value a fixture's config files hold,

@@ -71,6 +71,7 @@ const unusableRepo = {
 const skill = (name: string, more: { fork_id?: string; source?: string }) => ({
   content_hash: "sha256:0",
   kind: "managed" as const,
+  logical_id: `skill:${name}`,
   name,
   placements: [],
   universal: [],
