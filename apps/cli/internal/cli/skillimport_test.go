@@ -21,7 +21,7 @@ func TestImportCommitIsTheSameEverywhere(t *testing.T) {
 	first, s := installHarness(t)
 	first.env["TZ"] = "UTC"
 	equal(t, "exit", first.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	want := first.homeGit("rev-parse", "refs/heads/managed/alpha")
+	want := first.storeGit("rev-parse", "refs/heads/managed/alpha")
 
 	second := newHarness(t)
 	second.build(t, fixture{dirs: []string{".claude"}})
@@ -31,10 +31,10 @@ func TestImportCommitIsTheSameEverywhere(t *testing.T) {
 	spoilTheGitConfig(t, second)
 	second.mustRun("source", "add", s.url)
 	second.mustRun("skill", "add", s.url, "--name", "alpha")
-	if got := second.homeGit("rev-parse", "refs/heads/managed/alpha"); got != want {
+	if got := second.storeGit("rev-parse", "refs/heads/managed/alpha"); got != want {
 		t.Errorf("the import branch is at %s in the second home and %s in the first", got, want)
-		t.Logf("first:\n%s", first.homeGit("cat-file", "commit", want))
-		t.Logf("second:\n%s", second.homeGit("cat-file", "commit", got))
+		t.Logf("first:\n%s", first.storeGit("cat-file", "commit", want))
+		t.Logf("second:\n%s", second.storeGit("cat-file", "commit", got))
 	}
 }
 
@@ -82,7 +82,7 @@ func TestImportLeavesOutWhatIsNotAFile(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(h.library, "linked", "alias.md")); err == nil {
 		t.Error("the library holds the symlink the import left out")
 	}
-	for _, line := range strings.Split(h.homeGit("ls-tree", "-r", "refs/heads/managed/linked"), "\n") {
+	for _, line := range strings.Split(h.storeGit("ls-tree", "-r", "refs/heads/managed/linked"), "\n") {
 		if !strings.HasPrefix(line, "100644 ") && !strings.HasPrefix(line, "100755 ") {
 			t.Errorf("the import tree holds %q, want only regular files", line)
 		}
@@ -121,9 +121,9 @@ func TestLibraryNameAndImportDirectoryDiffer(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(h.library, "pdf-tools")); err == nil {
 		t.Error("the library holds the upstream directory name as well")
 	}
-	head := h.homeGit("rev-parse", "refs/heads/managed/pdf")
+	head := h.storeGit("rev-parse", "refs/heads/managed/pdf")
 	// The import tree goes by the upstream's own directory name.
-	equal(t, "the import tree", h.homeGit("ls-tree", head), "040000 tree "+s.tree("tools/pdf-tools")+"\tpdf-tools")
+	equal(t, "the import tree", h.storeGit("ls-tree", head), "040000 tree "+s.tree("tools/pdf-tools")+"\tpdf-tools")
 
 	// A skill at the root of a repository with no frontmatter name takes the
 	// repository name for both, as the source listing calls it.
@@ -136,9 +136,9 @@ func TestLibraryNameAndImportDirectoryDiffer(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(h.library, "rooted", "SKILL.md")); err != nil {
 		t.Errorf("a skill at the root is not in the library under the repository name: %v", err)
 	}
-	rootHead := h.homeGit("rev-parse", "refs/heads/managed/rooted")
-	contains(t, "the import tree", h.homeGit("ls-tree", rootHead), "\trooted")
-	contains(t, "the import commit", h.homeGit("cat-file", "commit", rootHead), "Agentx-Path: .")
+	rootHead := h.storeGit("rev-parse", "refs/heads/managed/rooted")
+	contains(t, "the import tree", h.storeGit("ls-tree", rootHead), "\trooted")
+	contains(t, "the import commit", h.storeGit("cat-file", "commit", rootHead), "Agentx-Path: .")
 }
 
 // TestStagingIsHiddenFromDiscovery is why the library directory is built in
@@ -211,7 +211,7 @@ func TestImportCommitTakesTheUpstreamCommitterDate(t *testing.T) {
 	equal(t, "upstream_time", h.librarySkill(out.stdout, "dated")["upstream_time"], secondTime)
 
 	equal(t, "the upstream committer time", s.bare("show", "-s", "--format=%ct", "HEAD"), upstream)
-	body := h.homeGit("cat-file", "commit", "refs/heads/managed/dated")
+	body := h.storeGit("cat-file", "commit", "refs/heads/managed/dated")
 	for _, who := range []string{"author", "committer"} {
 		contains(t, "the import commit", body, who+" agentx <agentx@localhost> "+upstream+" +0000")
 	}
@@ -228,8 +228,8 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 	h, s := installHarness(t)
 	touched := s.run("rev-parse", "HEAD") // the fixture's last commit changes skills/alpha
 	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code").exit, 0)
-	head := h.homeGit("rev-parse", "refs/heads/managed/alpha")
-	body := h.homeGit("cat-file", "commit", head)
+	head := h.storeGit("rev-parse", "refs/heads/managed/alpha")
+	body := h.storeGit("cat-file", "commit", head)
 	contains(t, "the import commit", body, "Agentx-Upstream-Commit: "+touched)
 	contains(t, "the import subject", body, " at "+touched[:12]+" content ")
 
@@ -239,11 +239,11 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 	const later = "1800000000"
 	tip := s.commitAt("an unrelated change", later+" +0000")
 	equal(t, "exit of source fetch", h.run("source", "fetch", s.url).exit, 0)
-	equal(t, "the fetched tip", h.homeGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), tip)
+	equal(t, "the fetched tip", h.storeGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), tip)
 
 	out := h.run("skill", "add", s.url, "--name", "alpha", "--to", "cortex")
 	equal(t, "exit of the second placement", out.exit, 0)
-	equal(t, "the import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), head)
+	equal(t, "the import branch", h.storeGit("rev-parse", "refs/heads/managed/alpha"), head)
 	if _, err := os.Lstat(filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")); err != nil {
 		t.Errorf("the second configuration has no placement: %v", err)
 	}
@@ -254,11 +254,11 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 	second.rewrite(s)
 	equal(t, "exit of source add in the second home", second.run("source", "add", s.url).exit, 0)
 	equal(t, "exit of skill add in the second home", second.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	got := second.homeGit("rev-parse", "refs/heads/managed/alpha")
+	got := second.storeGit("rev-parse", "refs/heads/managed/alpha")
 	if got != head {
 		t.Errorf("the import branch is at %s in a home that fetched %s, %s in one that fetched before it", got, short(tip), head)
 		t.Logf("first:\n%s", body)
-		t.Logf("second:\n%s", second.homeGit("cat-file", "commit", got))
+		t.Logf("second:\n%s", second.storeGit("cat-file", "commit", got))
 	}
 }
 
@@ -287,7 +287,7 @@ func TestImportCommitMatchesTheSubpathLiterally(t *testing.T) {
 	// pattern.
 	for _, name := range []string{"star", "odd"} {
 		equal(t, name+": exit", h.run("skill", "add", s.url, "--name", name).exit, 0)
-		contains(t, name+": the import commit", h.homeGit("cat-file", "commit", "refs/heads/managed/"+name), "Agentx-Upstream-Commit: "+touched)
+		contains(t, name+": the import commit", h.storeGit("cat-file", "commit", "refs/heads/managed/"+name), "Agentx-Upstream-Commit: "+touched)
 	}
 }
 
@@ -349,23 +349,23 @@ func TestUpstreamCommitIsTheOneGitLogNames(t *testing.T) {
 	merge := commitTree("merge the change back", back, change)
 	s.run("update-ref", "refs/heads/main", merge)
 	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
-	equal(t, "the fetch", h.homeGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), merge)
+	equal(t, "the fetch", h.storeGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), merge)
 	equal(t, "exit of skill add --all", h.run("skill", "add", s.url, "--all").exit, 0)
 
 	for name, want := range map[string]string{"alpha": change, "beta": base, "gamma": merge, "delta": back} {
 		reference := s.run("log", "-1", "--no-renames", "--format=%H", merge, "--", ":(literal)skills/"+name)
 		equal(t, name+": git log -1", reference, want)
-		contains(t, name+"'s import commit", h.homeGit("cat-file", "commit", "refs/heads/managed/"+name), "Agentx-Upstream-Commit: "+reference)
+		contains(t, name+"'s import commit", h.storeGit("cat-file", "commit", "refs/heads/managed/"+name), "Agentx-Upstream-Commit: "+reference)
 	}
 	for _, name := range []string{"alpha", "beta"} {
-		equal(t, name+" fetched at the change and at the merge", h.homeGit("rev-parse", "refs/heads/managed/"+name), first.homeGit("rev-parse", "refs/heads/managed/"+name))
+		equal(t, name+" fetched at the change and at the merge", h.storeGit("rev-parse", "refs/heads/managed/"+name), first.storeGit("rev-parse", "refs/heads/managed/"+name))
 	}
 }
 
 // TestUpstreamWalkReadsNoBlob installs a skill whose history renames one of
 // its files with a change. Finding the upstream commit compares trees
 // alone: the blob the file had before the rename is never asked of the
-// source, which a blobless home repo would have to fetch for it, or
+// source, which a blobless store would have to fetch for it, or
 // fail, to tell whether the two files are similar.
 func TestUpstreamWalkReadsNoBlob(t *testing.T) {
 	t.Parallel()
@@ -383,9 +383,9 @@ func TestUpstreamWalkReadsNoBlob(t *testing.T) {
 	renamed := s.commit("rename the notes, with a change")
 	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
 	equal(t, "exit of skill add", h.run("skill", "add", s.url).exit, 0)
-	contains(t, "the import commit", h.homeGit("cat-file", "commit", "refs/heads/managed/alpha"), "Agentx-Upstream-Commit: "+renamed)
-	if strings.Contains(h.homeGit("cat-file", "--batch-all-objects", "--batch-check=%(objectname)"), old) {
-		t.Errorf("the blob notes.md had before the rename, %s, was fetched into the home repo", short(old))
+	contains(t, "the import commit", h.storeGit("cat-file", "commit", "refs/heads/managed/alpha"), "Agentx-Upstream-Commit: "+renamed)
+	if strings.Contains(h.storeGit("cat-file", "--batch-all-objects", "--batch-check=%(objectname)"), old) {
+		t.Errorf("the blob notes.md had before the rename, %s, was fetched into the store", short(old))
 	}
 }
 
@@ -405,8 +405,8 @@ func TestUpstreamOfASkillAtTheRootIsTheTip(t *testing.T) {
 	tip := s.commit("a readme")
 	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
 	equal(t, "exit of skill add --all", h.run("skill", "add", s.url, "--all").exit, 0)
-	contains(t, "the root skill's import commit", h.homeGit("cat-file", "commit", "refs/heads/managed/top"), "Agentx-Upstream-Commit: "+tip)
-	contains(t, "the inner skill's import commit", h.homeGit("cat-file", "commit", "refs/heads/managed/inner"), "Agentx-Upstream-Commit: "+first)
+	contains(t, "the root skill's import commit", h.storeGit("cat-file", "commit", "refs/heads/managed/top"), "Agentx-Upstream-Commit: "+tip)
+	contains(t, "the inner skill's import commit", h.storeGit("cat-file", "commit", "refs/heads/managed/inner"), "Agentx-Upstream-Commit: "+first)
 }
 
 // TestUpstreamsAttributesEachSubpath reads a history walk as git prints it

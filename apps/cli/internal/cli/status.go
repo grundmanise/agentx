@@ -17,14 +17,14 @@ var (
 	exitNotFound     = status{5, "not_found"}
 	exitRefused      = status{6, "refused"}
 	exitLocked       = status{7, "locked"}
-	exitHomeRepo     = status{8, "home_repo"}
+	exitStore        = status{8, "store"}
 	exitInterrupted  = status{9, "interrupted"}
 	exitInternal     = status{10, "internal"}
 )
 
 var statuses = []status{
 	exitOK, exitUsage, exitGit, exitSource, exitPendingMerge,
-	exitNotFound, exitRefused, exitLocked, exitHomeRepo, exitInterrupted,
+	exitNotFound, exitRefused, exitLocked, exitStore, exitInterrupted,
 	exitInternal,
 }
 

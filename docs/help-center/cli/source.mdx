@@ -112,7 +112,7 @@ If a fetch fails or you stop it, the source stays at the last version that arriv
 If an add cannot finish, agentx undoes it. If the add fails while another agentx command runs for too long, agentx cannot undo it. It then names what it left and how to clear it:
 
 ```text
-error: another agentx command holds the lock; the remote src-1c9d0b7e4a2f6d38 was left in the home repo and no source names it
+error: another agentx command holds the lock; the remote src-1c9d0b7e4a2f6d38 was left in the store and no source names it
 hint: run 'agentx source add https://github.com/anthropics/skills' to add the source and take the remote with it, or 'agentx source remove 1c9d0b7e4a2f6d38' to clear it
 ```
 
@@ -304,4 +304,4 @@ For what each code means, see [Exit codes](/cli/output#exit-codes). These causes
 - `5`: the pinned ref or the path does not exist in the source, the path given to `source read` holds no skill, the source is not on this machine, or what this machine holds of it is incomplete. For an id of a source you removed, the hint names the `agentx source add` command that brings it back.
 - `6`: `source skills` names your hub or its repository by another URL, `source read` names your hub, or `source add` names its repository by another URL. List its skills with `agentx skill list --remote`, and install one with `agentx skill add --name <name>`. See [Install your skills on another machine](/cli/skill#install-your-skills-on-another-machine). Exit code 6 also means `--hub` named a source you added without it, by the same or another URL.
 - `7`: another agentx command is running. Retry when it finishes. An add that could not undo its work says what it left and how to clear it.
-- `8`: the home repo in agentx home cannot be read or written. Run `agentx doctor`.
+- `8`: the store in agentx home cannot be read or written. Run `agentx doctor`.

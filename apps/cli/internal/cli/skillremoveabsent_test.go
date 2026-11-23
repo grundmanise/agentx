@@ -35,12 +35,12 @@ var absentHome = &fixtureHome{
 	},
 }
 
-// refValue is what a ref of the home repo holds, empty when it holds
+// refValue is what a ref of the store holds, empty when it holds
 // nothing: the removal under test may have deleted it, which is the thing
 // being measured rather than a reason to fail on the spot.
 func refValue(t *testing.T, h *harness, ref string) string {
 	t.Helper()
-	out, err := h.homeGitErr("for-each-ref", "--format=%(objectname)", ref)
+	out, err := h.storeGitErr("for-each-ref", "--format=%(objectname)", ref)
 	if err != nil {
 		t.Fatalf("for-each-ref %s: %v", ref, err)
 	}
@@ -85,7 +85,7 @@ func TestSkillRemoveTakesAwayWhatIsLeftOfASkillTheLibraryNoLongerHolds(t *testin
 	equal(t, "the listing's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"), "")
 
 	// With the branch gone the name is in neither the library nor the
-	// home repo.
+	// store.
 	equal(t, "a second removal", h.run("skill", "remove", "alpha").exit, 5)
 }
 
@@ -121,7 +121,7 @@ func TestSkillRemoveOfAnAbsentSkillSaysAnEditedCopyWent(t *testing.T) {
 func TestSkillRemoveOfAnAbsentSkillWithNoLineageSaysEveryCopyWent(t *testing.T) {
 	t.Parallel()
 	h, claude, cortex := absentHarness(t)
-	h.homeGit("update-ref", "refs/heads/managed/alpha", h.homeGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-m", "no lineage"))
+	h.storeGit("update-ref", "refs/heads/managed/alpha", h.storeGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-m", "no lineage"))
 
 	out := h.run("--json", "skill", "remove", "alpha")
 	if out.exit != 0 {
@@ -164,7 +164,7 @@ func TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock(t *testing.T) 
 			h, claude, cortex := absentHarness(t)
 			tip := refValue(t, h, "refs/heads/managed/alpha")
 			lib := filepath.Join(h.library, "alpha")
-			change := real + " --git-dir=" + shellWord(gitx.HomeRepoPath(h.agentx)) + " update-ref " + c.fork + " " + tip + " || exit 1"
+			change := real + " --git-dir=" + shellWord(gitx.StorePath(h.agentx)) + " update-ref " + c.fork + " " + tip + " || exit 1"
 			if c.fork == "" {
 				// A directory with no SKILL.md is not the skill, so the
 				// removal still takes the path of one the library does

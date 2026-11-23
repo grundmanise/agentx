@@ -13,8 +13,8 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// The two home-repo checks below report and never repair, which is what
-// every other doctor row does and what the home repo leaves room for:
+// The two store checks below report and never repair, which is what
+// every other doctor row does and what the store leaves room for:
 // doctor takes no lock, so it cannot tell a run that is working from one
 // that died. A remote is a settings write away from being named again, and
 // a staging ref of a run still fetching looks exactly like one of a run
@@ -23,7 +23,7 @@ import (
 // wrong guess takes the objects a live install is about to publish out from
 // under it. Naming the state costs nothing and is always true.
 
-// sourceRemotes reports the source remotes of the home repo that no
+// sourceRemotes reports the source remotes of the store that no
 // settings entry names. A remote no entry names is not a source: `source
 // fetch` and `source skills` both answer from the settings, so nothing
 // names it again or cleans it up.
@@ -42,7 +42,7 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 	if err != nil {
 		// The settings row above already said what is wrong with the file;
 		// this one says only that it could not be compared with, and its
-		// hint names that file: the home repo itself opened fine. A file
+		// hint names that file: the store itself opened fine. A file
 		// a later agentx wrote is not to be fixed but read by that version,
 		// so the hint then repeats the settings row's.
 		hint := "fix " + home.SettingsPath(d.inv.dirs.Home) + ", then run doctor again"

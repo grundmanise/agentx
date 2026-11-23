@@ -52,7 +52,7 @@ type renamed struct{ old, name, tip string }
 // renamedDrops is the old names' branches the publish of list deletes
 // from the hub, sorted by old name: one for every skill of
 // list the publish pushed whose branch it created there, see
-// renamedBranch, records being the home repo's branches, with each
+// renamedBranch, records being the store's branches, with each
 // fork's lineage, and remote what the fetch read of the hub
 // before the push. Each old name's branch is handled once, by the first
 // skill by name that was renamed from it. Pure.

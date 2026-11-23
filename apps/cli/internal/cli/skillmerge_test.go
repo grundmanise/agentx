@@ -124,7 +124,7 @@ func unmerged(t *testing.T, h *harness, name string) string {
 func noCheckout(t *testing.T, h *harness, name string) {
 	t.Helper()
 	nothingAt(t, "the checkout of "+name, pendingCheckout(h, name))
-	if list := h.homeGit("worktree", "list", "--porcelain"); strings.Contains(list, pendingReason) {
+	if list := h.storeGit("worktree", "list", "--porcelain"); strings.Contains(list, pendingReason) {
 		t.Errorf("git still knows a checkout of a pending merge:\n%s", list)
 	}
 }
@@ -177,7 +177,7 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], candidate)
 	equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], "")
 	noCheckout(t, h, "alpha")
-	contains(t, "the branch's reflog", h.homeGit("reflog", "show", "--format=%H", lineage.ManagedRef("alpha")), tip)
+	contains(t, "the branch's reflog", h.storeGit("reflog", "show", "--format=%H", lineage.ManagedRef("alpha")), tip)
 	sameTree(t, "the library directory", libraryTree(t, lib), want)
 	if !executable(t, filepath.Join(lib, "scripts", "run.sh")) {
 		t.Error("scripts/run.sh is not executable after the merge")
@@ -254,9 +254,9 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	equal(t, "theirs", ev["theirs"], candidate)
 	equal(t, "files", conflictPaths(ev), "notes.md")
 	file := fileOf(t, ev, "notes.md")
-	equal(t, "the base blob", file["base"], h.homeGit("rev-parse", tip+":alpha-dir/notes.md"))
-	equal(t, "the theirs blob", file["theirs"], h.homeGit("rev-parse", candidate+":alpha-dir/notes.md"))
-	equal(t, "the mine blob", file["mine"], h.homeGit("hash-object", filepath.Join(h.library, "alpha", "notes.md")))
+	equal(t, "the base blob", file["base"], h.storeGit("rev-parse", tip+":alpha-dir/notes.md"))
+	equal(t, "the theirs blob", file["theirs"], h.storeGit("rev-parse", candidate+":alpha-dir/notes.md"))
+	equal(t, "the mine blob", file["mine"], h.storeGit("hash-object", filepath.Join(h.library, "alpha", "notes.md")))
 
 	mine := ev["mine"].(string)
 	head, mergeHead, msg := mergeState(t, h, "alpha")
@@ -264,9 +264,9 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	equal(t, "the checkout's MERGE_HEAD", mergeHead, candidate)
 	equal(t, "the checkout's MERGE_MSG", msg,
 		"update alpha from "+first[:7]+" to "+second[:7]+", keeping its edits\n")
-	equal(t, "mine's parent", h.homeGit("rev-parse", mine+"^@"), tip)
-	equal(t, "mine's notes.md", h.homeGit("cat-file", "blob", mine+":alpha-dir/notes.md"), strings.TrimSuffix(editedNotes, "\n"))
-	contains(t, "the checkout's lock", h.homeGit("worktree", "list", "--porcelain"), "locked "+pendingReason)
+	equal(t, "mine's parent", h.storeGit("rev-parse", mine+"^@"), tip)
+	equal(t, "mine's notes.md", h.storeGit("cat-file", "blob", mine+":alpha-dir/notes.md"), strings.TrimSuffix(editedNotes, "\n"))
+	contains(t, "the checkout's lock", h.storeGit("worktree", "list", "--porcelain"), "locked "+pendingReason)
 	equal(t, "the unmerged paths", unmerged(t, h, "alpha"), "1 alpha-dir/notes.md\n2 alpha-dir/notes.md\n3 alpha-dir/notes.md")
 	merged := fileBody(t, filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir", "notes.md"))
 	contains(t, "the checkout's notes.md", merged, crlf("<<<<<<< "+mine+"\n"+editedNotes+"||||||| "))
@@ -295,7 +295,7 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 
 	contains(t, "git status", checkoutGit(t, h, "alpha", "status", "--porcelain"), "UU alpha-dir/notes.md")
 	resolvedWithGit(t, h, true)
-	equal(t, "the commit's notes.md", checkoutGit(t, h, "alpha", "rev-parse", "HEAD:alpha-dir/notes.md"), h.homeGit("rev-parse", candidate+":alpha-dir/notes.md")+"\n")
+	equal(t, "the commit's notes.md", checkoutGit(t, h, "alpha", "rev-parse", "HEAD:alpha-dir/notes.md"), h.storeGit("rev-parse", candidate+":alpha-dir/notes.md")+"\n")
 	equal(t, "the commit's parents", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD^@")), mine+"\n"+candidate)
 	equal(t, "the commit's message", checkoutGit(t, h, "alpha", "log", "-1", "--format=%B"), msg+"\n")
 	equal(t, "the library once the merge is committed", onDisk(t, h.library), was.library)
@@ -473,8 +473,8 @@ func TestSkillUpdateRefusesToApplyAMergeItCannot(t *testing.T) {
 			hint:    "run 'agentx skill update alpha --abort' to give it up",
 			change: func(t *testing.T, h *harness) {
 				tip := h.ref(lineage.ManagedRef("alpha"))
-				moved := h.homeGit("commit-tree", tip+"^{tree}", "-m", "written again", "-m", h.homeGit("log", "-1", "--format=%B", tip))
-				h.homeGit("update-ref", lineage.ManagedRef("alpha"), moved, tip)
+				moved := h.storeGit("commit-tree", tip+"^{tree}", "-m", "written again", "-m", h.storeGit("log", "-1", "--format=%B", tip))
+				h.storeGit("update-ref", lineage.ManagedRef("alpha"), moved, tip)
 			},
 		},
 		{
@@ -578,7 +578,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	equal(t, "pending_merge", h.listed("kinds")["pending_merge"], true)
 
 	// The same conflicts in text, once the merge is given up.
-	h.homeGit("worktree", "remove", "-f", "-f", pendingCheckout(h, "kinds"))
+	h.storeGit("worktree", "remove", "-f", "-f", pendingCheckout(h, "kinds"))
 	text := h.run("skill", "update", "kinds")
 	equal(t, "exit in text", text.exit, 4)
 	equal(t, "the text", text.stdout, "kinds conflicts with its update from "+first[:7]+" to "+second[:7]+" in 7 files\n"+
@@ -929,7 +929,7 @@ func TestSkillUpdateRefusesAMergePendingSinceItJudgedTheSkill(t *testing.T) {
 	real := realGit(t)
 	stubGit(t, h, `#!/bin/sh
 case " $* " in
-*" merge-tree "*) [ -d `+shellWord(checkout)+` ] || `+real+` --git-dir=`+shellWord(gitx.HomeRepoPath(h.agentx))+
+*" merge-tree "*) [ -d `+shellWord(checkout)+` ] || `+real+` --git-dir=`+shellWord(gitx.StorePath(h.agentx))+
 		` worktree add --quiet --detach --lock --reason `+shellWord(pendingReason)+` `+shellWord(checkout)+` `+tip+` >/dev/null || exit 1 ;;
 esac
 exec `+real+` "$@"
@@ -948,7 +948,7 @@ exec `+real+` "$@"
 	equal(t, "the library", onDisk(t, h.library), library)
 	equal(t, "journals", journalCount(t, h), 0)
 	equal(t, "the other run's checkout", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD")), tip)
-	contains(t, "its registration", h.homeGit("worktree", "list", "--porcelain"), "locked "+pendingReason)
+	contains(t, "its registration", h.storeGit("worktree", "list", "--porcelain"), "locked "+pendingReason)
 }
 
 // TestSkillUpdateStoppedWhileItMergesChangesNothing stops an update with
@@ -1153,7 +1153,7 @@ func TestAnIgnoredFileIsNotMineAndSurvivesTheMerge(t *testing.T) {
 	out = h.run("--json", "skill", "update", "logs")
 	equal(t, "exit of the update that conflicts", out.exit, 4)
 	mine := h.one(out.stdout, "conflict")["mine"].(string)
-	equal(t, "what mine holds", h.homeGit("ls-tree", "-r", "--name-only", mine),
+	equal(t, "what mine holds", h.storeGit("ls-tree", "-r", "--name-only", mine),
 		"logs/.gitignore\nlogs/SKILL.md\nlogs/notes.md\nlogs/run.log\nlogs/usage.md")
 	equal(t, "the library", onDisk(t, h.library), library)
 }
@@ -1170,12 +1170,12 @@ func TestRecoveryPrunesStaleMergeCheckouts(t *testing.T) {
 	h, s, _ := updateHarness(t)
 	pendingMerge(t, h, s)
 	writeFile(t, mkdirs(t, pendingCheckout(h, "ghost"), "notes.md"), "left behind\n")
-	writeFile(t, mkdirs(t, pendingCheckout(h, "orphan"), ".git"), "gitdir: "+filepath.Join(h.agentx, "home.git", "worktrees", "orphan")+"\n")
-	h.homeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
+	writeFile(t, mkdirs(t, pendingCheckout(h, "orphan"), ".git"), "gitdir: "+filepath.Join(h.agentx, "store.git", "worktrees", "orphan")+"\n")
+	h.storeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
 		pendingCheckout(h, "beta"), h.ref(lineage.ManagedRef("beta")))
 	remove(t, pendingCheckout(h, "beta"))
 	other := filepath.Join(t.TempDir(), "elsewhere")
-	h.homeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", "on a usb stick", other, h.ref(lineage.ManagedRef("beta")))
+	h.storeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", "on a usb stick", other, h.ref(lineage.ManagedRef("beta")))
 	remove(t, other)
 	head, mergeHead, _ := mergeState(t, h, "alpha")
 
@@ -1189,7 +1189,7 @@ func TestRecoveryPrunesStaleMergeCheckouts(t *testing.T) {
 		names = append(names, e.Name())
 	}
 	equal(t, "the merges directory", strings.Join(names, " "), "alpha")
-	list := h.homeGit("worktree", "list", "--porcelain")
+	list := h.storeGit("worktree", "list", "--porcelain")
 	if strings.Contains(list, filepath.Join("merges", "beta")) {
 		t.Errorf("the registration of beta's checkout is still there:\n%s", list)
 	}

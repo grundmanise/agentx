@@ -14,7 +14,7 @@ import (
 // took different versions of the same upstream, the newer one is the base,
 // but only when the source's own history proves it newer: its upstream
 // commit descends from the other's. Anything else keeps this machine's
-// base: a version whose history the home repo never fetched, a source
+// base: a version whose history the store never fetched, a source
 // that was force pushed, two versions on diverged branches of the source,
 // or bases from two different sources or directories. A base kept that way
 // costs at most a conflict on the next update from upstream; no content is
@@ -57,7 +57,7 @@ func PickBase(ctx context.Context, r *gitx.Runner, gitDir string, local, remote 
 // the same upstream skill than older: both from one source and directory,
 // and newer's upstream commit a descendant of older's. It is proved in the
 // isolated environment, at most two git processes: one rev-list that finds
-// whether both upstream commits are in the home repo at all, without
+// whether both upstream commits are in the store at all, without
 // reaching any remote for one that is not, and, when they are, one
 // merge-base --is-ancestor. The same version, and any failure, is no
 // proof.

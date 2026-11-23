@@ -68,7 +68,7 @@ A failed command prints `error: ...` on stderr. If there is a fix, a `hint: ...`
 | 5 | Something you named does not exist: a skill, a source, a ref or directory in a source, a configuration, a file or a release of agentx. |
 | 6 | agentx refused because something is in the way or changed meanwhile. Examples: a name is already taken, a server rule such as a hook declined a push (see [Publish a skill](/cli/skill#publish-a-skill)), or a source changed a skill you publish to it (see [Publish edits to a shared source](/cli/skill#publish-edits-to-a-shared-source)). |
 | 7 | Another agentx command is running. Retry when it finishes. A command waits a few seconds for a scan, such as the desktop app reading your skills, before it stops with this code. |
-| 8 | git cannot use the home repo, `home.git` in agentx home. Run `agentx doctor`. |
+| 8 | git cannot use the store, `store.git` in agentx home. Run `agentx doctor`. |
 | 9 | You stopped the run with Ctrl-C, or something sent it a `SIGTERM`. See [Stop a run](#stop-a-run). |
 | 10 | An internal error, such as a file agentx cannot read or write. Read the message and hint. If they name no cause, report it as a bug. |
 

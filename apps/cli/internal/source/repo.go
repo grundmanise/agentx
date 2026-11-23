@@ -20,21 +20,21 @@ import (
 )
 
 // RefPrefix is where the last fetched state of every source lives in the
-// home repo: one ref per source id.
+// store: one ref per source id.
 const RefPrefix = "refs/agentx/sources/"
 
 // StagingRefPrefix is where a fetch in flight holds the commit it is still
 // filling in, one ref per fetch. A fetch reaches a source over two network
 // round trips – the commit and its trees, then the SKILL.md blobs – and
-// between them there is a commit the home repo can read whose blobs are
+// between them there is a commit the store can read whose blobs are
 // not here yet. Staging keeps that commit off RefPrefix until it is whole,
 // so nothing that reads a source ref can see a half fetched one.
 const StagingRefPrefix = "refs/agentx/fetching/"
 
-// RemoteName is the home repo remote of the source with id.
+// RemoteName is the store remote of the source with id.
 func RemoteName(id string) string { return "src-" + id }
 
-// Ref is the home repo ref that holds the last fetched commit of the
+// Ref is the store ref that holds the last fetched commit of the
 // source with id.
 func Ref(id string) string { return RefPrefix + id }
 
@@ -64,16 +64,16 @@ func newFetchRun() string {
 var (
 	ErrUnreachable = errors.New("cannot fetch the source")          // network, authentication or not a repository
 	ErrRefNotFound = errors.New("ref not found in the source")      // the pin names no branch, tag or commit
-	ErrNotFetched  = errors.New("source not fetched")               // the home repo holds no ref for it
+	ErrNotFetched  = errors.New("source not fetched")               // the store holds no ref for it
 	ErrNoSubpath   = errors.New("subpath not in the source")        // the subpath is not a directory at the fetched commit
-	ErrIncomplete  = errors.New("the fetched source is incomplete") // an object the listing needs is not in the home repo
+	ErrIncomplete  = errors.New("the fetched source is incomplete") // an object the listing needs is not in the store
 	ErrUnsafePath  = errors.New("unsafe path in the source")        // a tree entry that could be laid out outside its directory
 	ErrNotABranch  = errors.New("the source is not on a branch")    // a tag, a commit, or a remote HEAD that names no branch
 	ErrNoSkill     = errors.New("no skill at the subpath")          // the subpath holds no SKILL.md file at the fetched commit
 )
 
 // NotFetched is ErrNotFetched naming the source at url, the one way a
-// source the home repo holds no ref for is reported.
+// source the store holds no ref for is reported.
 func NotFetched(url string) error { return fmt.Errorf("%w: %s", ErrNotFetched, url) }
 
 // Skill is one installable skill of a source at its fetched commit.
@@ -122,7 +122,7 @@ func refspecOnto(s Source, dst string) string {
 	return "+" + src + ":" + dst
 }
 
-// Remote is what the home repo's config records about one source's
+// Remote is what the store's config records about one source's
 // remote, each key as git config prints it: the URL it is fetched from and
 // pushed to, the refspec that records its pin, and the promisor settings of
 // a partial clone. A key set more than once holds every value,
@@ -191,9 +191,9 @@ func Configure(ctx context.Context, r *gitx.Runner, gitDir string, entry home.So
 	return nil
 }
 
-// Remotes maps the id of every source remote of the home repo to what
+// Remotes maps the id of every source remote of the store to what
 // the config records about it, read in one config --get-regexp so that a
-// run over many sources checks them all in one git process. A home repo
+// run over many sources checks them all in one git process. A store
 // with no source remote at all makes that command exit 1, which is the
 // empty map and not a failure; a config git really cannot read fails the
 // write or the fetch that follows.
@@ -234,7 +234,7 @@ func Remotes(ctx context.Context, r *gitx.Runner, gitDir string) map[string]Remo
 	return remotes
 }
 
-// Fetch fetches the source's ref into the home repo without blobs, in
+// Fetch fetches the source's ref into the store without blobs, in
 // the user's git environment, then the SKILL.md blobs of every skill under
 // the subpath in one batch, and returns the listing built from them. A
 // server that cannot filter or serve single objects gets one full fetch
@@ -243,7 +243,7 @@ func Remotes(ctx context.Context, r *gitx.Runner, gitDir string) map[string]Remo
 // Nothing of this lands on the source ref until all of it has arrived. The
 // two fetches write a staging ref of this fetch alone, and the source ref
 // is moved onto the fetched object in one update-ref at the end, once every
-// SKILL.md blob of the new commit is in the home repo. A fetch that
+// SKILL.md blob of the new commit is in the store. A fetch that
 // fails anywhere therefore leaves the source ref exactly where the last
 // complete fetch left it, and no reader of a source ref – the serve child
 // rebuilding its index, a concurrent listing, the next command after a
@@ -393,7 +393,7 @@ func staged(ctx context.Context, r *gitx.Runner, gitDir, ref string) (object, co
 // it was read before: empty for a source ref that is not there or that
 // peels to no commit. A ref for-each-ref cannot peel to a commit in one
 // step is left to rev-parse, which peels all the way; and since
-// for-each-ref fails outright on a ref whose object the home repo
+// for-each-ref fails outright on a ref whose object the store
 // lacks, where rev-parse only answers nothing, a failure reads the two
 // refs apart, so that a broken source ref still leaves the fetch to repair
 // it.
@@ -470,14 +470,14 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing
 	// --quiet, which exits non-zero both for a ref that is not there and for
 	// a repository git cannot read and so cannot tell the two apart. The
 	// difference is what the reader is told: a source that was never fetched
-	// is exit code 5 with a hint to add it, while a home repo git cannot
+	// is exit code 5 with a hint to add it, while a store git cannot
 	// read is exit code 8, and a listing that reported the second as the
 	// first would send the reader to a command that fails differently again.
 	// for-each-ref prints nothing and succeeds for an absent ref, and fails
 	// only when git could not read the refs at all.
 	_, commit, err := staged(ctx, r, gitDir, Ref(s.ID()))
 	if err != nil {
-		return Listing{}, err // the home repo itself, not a source that was never fetched
+		return Listing{}, err // the store itself, not a source that was never fetched
 	}
 	if commit == "" {
 		return Listing{}, NotFetched(s.URL)
@@ -503,7 +503,7 @@ type SkillFile struct {
 
 // ReadSkill reads the SKILL.md of the skill in dir, the skill directory from
 // the repository root as a listing's Subpath carries it, "" for the root, at
-// the commit the source ref of s holds, from the home repo alone: no
+// the commit the source ref of s holds, from the store alone: no
 // network. A fetch brings every SKILL.md blob, so this is one tree lookup and
 // one blob read. A dir CheckPath refuses, one the commit holds no directory
 // at, and one without a SKILL.md regular file are ErrNoSkill.
@@ -513,7 +513,7 @@ func ReadSkill(ctx context.Context, r *gitx.Runner, gitDir string, s Source, dir
 	}
 	_, commit, err := staged(ctx, r, gitDir, Ref(s.ID()))
 	if err != nil {
-		return SkillFile{}, err // the home repo itself, as for a listing
+		return SkillFile{}, err // the store itself, as for a listing
 	}
 	if commit == "" {
 		return SkillFile{}, NotFetched(s.URL)
@@ -547,7 +547,7 @@ func ReadSkill(ctx context.Context, r *gitx.Runner, gitDir string, s Source, dir
 	}
 	content, ok := blobs[blob]
 	if !ok {
-		return SkillFile{}, fmt.Errorf("%w: %s is not in the home repo", ErrIncomplete, path.Join(dir, "SKILL.md"))
+		return SkillFile{}, fmt.Errorf("%w: %s is not in the store", ErrIncomplete, path.Join(dir, "SKILL.md"))
 	}
 	name, _, _ := scan.SkillFrontmatter(content)
 	return SkillFile{Commit: commit, Name: skillName(name, dir, s.URL), Content: content}, nil
@@ -555,7 +555,7 @@ func ReadSkill(ctx context.Context, r *gitx.Runner, gitDir string, s Source, dir
 
 // ListUnadded builds the listing of s straight from its repository, for a
 // URL the settings hold no source for, and leaves nothing of it in agentx
-// home: no remote, no ref, and no home repo where there was none. It
+// home: no remote, no ref, and no store where there was none. It
 // makes the fetch Fetch makes, the commit and its trees without blobs, then
 // the SKILL.md blobs in one batch, into a bare repository of its own in the
 // temporary directory, which goes when the listing is built, whether it was
@@ -593,7 +593,7 @@ func ListUnadded(ctx context.Context, r *gitx.Runner, s Source) (Listing, error)
 	return Listing{Commit: listing.Commit, Skills: listing.Skills}, nil
 }
 
-// Configured reports whether the home repo holds the remote of the
+// Configured reports whether the store holds the remote of the
 // source with id. A settings entry whose remote is gone, which an
 // interrupted removal leaves behind, cannot be fetched at all: git answers
 // a fetch through it by naming the remote it cannot find, which is agentx's
@@ -603,7 +603,7 @@ func Configured(ctx context.Context, r *gitx.Runner, gitDir, id string) bool {
 	return err == nil
 }
 
-// Present reports whether the home repo holds a remote or a ref for the
+// Present reports whether the store holds a remote or a ref for the
 // source with id, which it can do without a settings entry when an add was
 // cut short.
 func Present(ctx context.Context, r *gitx.Runner, gitDir, id string) bool {
@@ -617,7 +617,7 @@ func Present(ctx context.Context, r *gitx.Runner, gitDir, id string) bool {
 // ResolveRef asks the source itself what one of its refs names. It is the
 // only way to reach a branch or a tag of a source: a fetch writes one ref
 // for the whole source and carries --no-tags, so the names a repository
-// publishes live nowhere in the home repo, whatever it has fetched.
+// publishes live nowhere in the store, whatever it has fetched.
 //
 // It is one ls-remote over the remote already configured for the source, so
 // the URL rewrites, credential helpers and SSH configuration of the user
@@ -727,7 +727,7 @@ func parsePushBranch(out, pin string) (string, error) {
 	return "", fmt.Errorf("%w: the source holds no branch %s", ErrNotABranch, pin)
 }
 
-// Remove deletes the source's remote and ref from the home repo, and
+// Remove deletes the source's remote and ref from the store, and
 // every staging ref a fetch of it killed mid-flight can leave behind, so
 // that removing a source leaves nothing of it under refs/agentx. The refs
 // go in one update-ref transaction. The objects stay until maintenance
@@ -772,7 +772,7 @@ func Commits(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]str
 	return commits, nil
 }
 
-// TreeEntry is one entry of a tree in the home repo: its path below the
+// TreeEntry is one entry of a tree in the store: its path below the
 // tree read, its mode as git writes it (100644 and 100755 for a file,
 // 040000 for a directory, 120000 for a symlink, 160000 for a submodule) and
 // its object id.
@@ -850,7 +850,7 @@ func CheckPath(p string) error {
 }
 
 // MissingArgs are the arguments of the read that lists the objects under
-// the trees the home repo does not hold, which is how an install learns what
+// the trees the store does not hold, which is how an install learns what
 // to fetch without asking git for an object that is not there: a read of a
 // missing object in a partial clone either reaches for the network or
 // fails, and every local read forbids the lazy fetch.
@@ -870,7 +870,7 @@ func ParseMissing(out string) []string {
 	return missing
 }
 
-// ReadBlobs reads the blobs with ids from the home repo in one cat-file
+// ReadBlobs reads the blobs with ids from the store in one cat-file
 // batch and returns their content by id. An id the repository does not hold
 // is left out rather than fetched: every local read forbids the lazy fetch
 // of a missing object.
@@ -923,7 +923,7 @@ type skillEntry struct {
 // directories and node_modules below the subpath are left out, which is what
 // a listing shows; without it every one is returned, which is what the blob
 // fetch needs so that a later listing of a directory named outright still
-// reads from the home repo alone.
+// reads from the store alone.
 func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath string, skip bool) ([]skillEntry, error) {
 	root, err := subtree(ctx, r, gitDir, commit, subpath)
 	if err != nil {
@@ -962,7 +962,7 @@ func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath s
 // for "": ErrNoSubpath when commit holds nothing there, or something other
 // than a directory. One cat-file --batch-check names the object and its
 // type. It cannot tell a path commit does not hold from one whose object
-// the home repo lacks, a blob a partial clone never fetched, and says
+// the store lacks, a blob a partial clone never fetched, and says
 // "missing" for both, so only then, or when git fails, do the two reads
 // that tell them apart run: rev-parse resolves the path, then cat-file -t
 // reads the object's type. A path a line of input cannot carry goes to
@@ -1072,7 +1072,7 @@ func fetchIDs(ctx context.Context, r *gitx.Runner, gitDir, remote string, ids []
 
 // promisor gives the remote its promisor settings on the command line of a
 // fetch that filters. Such a fetch runs outside the lock, and git writes
-// these settings into the home repo's config, and moves
+// these settings into the store's config, and moves
 // repositoryformatversion to 1, when the config lacks them: a remote source
 // remove deleted while the fetch ran, or one a killed add had begun to
 // write. That write could fail another command's git config, which does
@@ -1084,7 +1084,7 @@ func promisor(remote string) []string {
 }
 
 // missingBlob names the directory of the first entry whose SKILL.md the
-// home repo does not hold, and "" when it holds them all. One
+// store does not hold, and "" when it holds them all. One
 // cat-file --batch-check reads the ids alone, never the content, and the
 // promisor remote makes a miss an error rather than a "missing" line, since
 // GIT_NO_LAZY_FETCH forbids the fetch git would otherwise run; both are a
@@ -1112,7 +1112,7 @@ func missingBlob(ctx context.Context, r *gitx.Runner, gitDir string, entries []s
 	return "", nil
 }
 
-// readSkills reads the SKILL.md blobs of entries from the home repo in
+// readSkills reads the SKILL.md blobs of entries from the store in
 // one cat-file batch and builds the skills from their frontmatter.
 func readSkills(ctx context.Context, r *gitx.Runner, gitDir, canonical string, entries []skillEntry) ([]Skill, error) {
 	skills := make([]Skill, 0, len(entries))
@@ -1130,7 +1130,7 @@ func readSkills(ctx context.Context, r *gitx.Runner, gitDir, canonical string, e
 	for _, e := range entries {
 		content, ok := blobs[e.blob]
 		if !ok {
-			return nil, fmt.Errorf("%w: %s/SKILL.md is not in the home repo", ErrIncomplete, e.dir)
+			return nil, fmt.Errorf("%w: %s/SKILL.md is not in the store", ErrIncomplete, e.dir)
 		}
 		name, description, _ := scan.SkillFrontmatter(content)
 		skills = append(skills, Skill{Subpath: e.dir, Name: skillName(name, e.dir, canonical), Description: description, Tree: e.tree})

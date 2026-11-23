@@ -12,7 +12,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
-// TestServeRunsMaintenance starts serve over a home whose home repo
+// TestServeRunsMaintenance starts serve over a home whose store
 // holds an install, has no record of a maintenance and holds a maintenance
 // lock a killed git left behind. It removes the lock and runs one off its
 // loop, after its inventory: the loose-objects and incremental-repack
@@ -34,7 +34,7 @@ func TestServeRunsMaintenance(t *testing.T) {
 	stubGit(t, h, "#!/bin/sh\n"+hostPATH()+"case \" $* \" in *\" maintenance \"*) all=\"$*\"; echo \"${all##* maintenance }\" >> "+log+" ;; esac\nexec "+real+" \"$@\"\n")
 	// A lock a killed maintenance left behind would make git skip its
 	// work; one an hour old is no running git's, and serve removes it.
-	lock := filepath.Join(gitx.HomeRepoPath(h.agentx), "objects", "maintenance.lock")
+	lock := filepath.Join(gitx.StorePath(h.agentx), "objects", "maintenance.lock")
 	writeFile(t, lock, "")
 	left := time.Now().Add(-2 * time.Hour)
 	if err := os.Chtimes(lock, left, left); err != nil {
@@ -55,7 +55,7 @@ func TestServeRunsMaintenance(t *testing.T) {
 	equal(t, "maintenance", strings.TrimSuffix(string(b), "\n"), "run --task=loose-objects\nrun --task=incremental-repack\nrun --task=pack-refs")
 }
 
-// TestMaintenanceIsDueOnceADay is when serve maintains the home repo:
+// TestMaintenanceIsDueOnceADay is when serve maintains the store:
 // with no record of a run, or one a day old or more, and, so that a clock
 // set back never stops it for good, one in the future.
 func TestMaintenanceIsDueOnceADay(t *testing.T) {

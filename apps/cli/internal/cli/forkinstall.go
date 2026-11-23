@@ -51,7 +51,7 @@ type installableSkillEvent struct {
 const installRemoteRow = "installable"
 
 // installableSkills reads hub skills that the hub, the
-// settings entry hub, holds and records, the home repo's branches,
+// settings entry hub, holds and records, the store's branches,
 // hold no branch of, sorted by name, with the provenance of each read by one
 // walk of their remote tips. A branch whose name agentx would never give
 // a fork, or whose history records no fork id, is left out, with a
@@ -64,7 +64,7 @@ func (inv *invocation) installableSkills(ctx context.Context, gitDir string, hub
 	remote := source.RemoteName(source.ID(hub.URL))
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
-		return nil, nil, homeRepoFailure(err)
+		return nil, nil, storeFailure(err)
 	}
 	var candidates, warnings []string
 	var walk []string
@@ -80,7 +80,7 @@ func (inv *invocation) installableSkills(ctx context.Context, gitDir string, hub
 	}
 	walked, err := lineage.Walk(ctx, inv.git, gitDir, walk)
 	if err != nil {
-		return nil, nil, homeRepoFailure(err)
+		return nil, nil, storeFailure(err)
 	}
 	local := map[string][]string{}
 	for _, rec := range records {
@@ -250,7 +250,7 @@ func (inv *invocation) addFromHub(ctx context.Context, sel selection, to []strin
 		return err
 	}
 	if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	if sel.all {
 		if names, err = inv.everyHubSkillBut(ctx, gitDir, entry, sel.except); err != nil || len(names) == 0 {
@@ -379,7 +379,7 @@ func (inv *invocation) installOne(ctx context.Context, gitDir, remote, name stri
 func (inv *invocation) judgeHubInstall(ctx context.Context, gitDir, remote, name string) (*hubInstall, error) {
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	tip := tips[name]
 	if tip == "" {
@@ -387,7 +387,7 @@ func (inv *invocation) judgeHubInstall(ctx context.Context, gitDir, remote, name
 	}
 	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	in := &hubInstall{remote: remote}
 	if rec, ok := records[name]; ok {
@@ -406,7 +406,7 @@ func (inv *invocation) judgeHubInstall(ctx context.Context, gitDir, remote, name
 	}
 	walked, err := lineage.Walk(ctx, inv.git, gitDir, []string{tip})
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	in.there = walked[tip]
 	if in.there.ID == "" {
@@ -457,7 +457,7 @@ func (inv *invocation) judgeHubInstall(ctx context.Context, gitDir, remote, name
 func (inv *invocation) tipHoldsSkill(ctx context.Context, gitDir, tip, dir string) (bool, error) {
 	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", tip, "--", dir+"/SKILL.md")
 	if err != nil {
-		return false, homeRepoFailure(err)
+		return false, storeFailure(err)
 	}
 	meta, _, _ := strings.Cut(strings.TrimSuffix(out, "\x00"), "\t")
 	fields := strings.Fields(meta)
@@ -483,7 +483,7 @@ func (inv *invocation) installedRefusal(gitDir string, rec lineage.Record) error
 func (inv *invocation) tipDir(ctx context.Context, gitDir string, rec lineage.Record) (string, error) {
 	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", "-d", "--name-only", rec.Commit)
 	if err != nil {
-		return "", homeRepoFailure(err)
+		return "", storeFailure(err)
 	}
 	var dirs []string
 	for _, d := range strings.Split(out, "\x00") {
@@ -492,7 +492,7 @@ func (inv *invocation) tipDir(ctx context.Context, gitDir string, rec lineage.Re
 		}
 	}
 	if len(dirs) != 1 {
-		return "", fail(exitHomeRepo, fmt.Sprintf("the hub's branch %s holds %d directories at its root, not the one skill directory a skill's branch holds", strings.TrimPrefix(rec.Ref, "refs/heads/"), len(dirs)),
+		return "", fail(exitStore, fmt.Sprintf("the hub's branch %s holds %d directories at its root, not the one skill directory a skill's branch holds", strings.TrimPrefix(rec.Ref, "refs/heads/"), len(dirs)),
 			"fix the branch on the hub, then run '"+hubAddCommand(rec.Name)+"' again")
 	}
 	return dirs[0], nil
@@ -532,7 +532,7 @@ func (inv *invocation) judgeHubLibrary(ctx context.Context, gitDir string, in *h
 	}
 	j, err := inv.judgeDir(ctx, gitDir, libPath, t, baseVersion(*rec), true)
 	if err != nil {
-		return 0, homeRepoFailure(err)
+		return 0, storeFailure(err)
 	}
 	if !j.holds {
 		return holdsDirectory, nil
@@ -587,7 +587,7 @@ func (inv *invocation) applyHubInstall(ctx context.Context, in *hubInstall, targ
 	again := "run '" + hubAddCommand(f.name) + "' again"
 	records, err := inv.listLineage(ctx, f.gitDir)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	if err := takenRefusal(records, f.name, f.name, again); err != nil {
 		return err
@@ -646,7 +646,7 @@ func (inv *invocation) applyHubInstall(ctx context.Context, in *hubInstall, targ
 	fp, err := inv.stageForkContent(ctx, f.gitDir, f.rec.Commit, f.dir, staged, carried, in.ignored)
 	if err != nil {
 		_ = home.RemoveTree(staged)
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	m.Publish(f.skillDir, staged, fp)
 	if !home.IsAbsent(in.libState) {

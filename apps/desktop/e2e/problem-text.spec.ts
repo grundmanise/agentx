@@ -8,9 +8,9 @@ const table: [Problem, string][] = [
   [
     {
       hint: "choose another name",
-      message: "the home repo already holds release-notes as a hub skill",
+      message: "the store already holds release-notes as a hub skill",
     },
-    "The home repo already holds release-notes as a hub skill. Choose another name.",
+    "The store already holds release-notes as a hub skill. Choose another name.",
   ],
   [{ message: "no such skill" }, "No such skill."],
   [{ hint: "try again.", message: "it failed." }, "It failed. Try again."],

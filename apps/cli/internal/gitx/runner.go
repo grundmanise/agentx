@@ -1,5 +1,5 @@
 // Package gitx runs the system git as a subprocess in the two environments
-// agentx needs, and holds what agentx keeps in git: the home repo.
+// agentx needs, and holds what agentx keeps in git: the store.
 package gitx
 
 import (

@@ -17,9 +17,9 @@ import (
 // 6, and nothing changes. Once that source is removed, source add
 // --hub makes it the hub, and its fork branches are fetched
 // whole, although the shared fetch of the same history left its blobs out
-// of the home repo: the first fetch of a hub on a machine
+// of the store: the first fetch of a hub on a machine
 // is made with --refetch, so that no object the fork branch's history
-// reaches is missing. The first is read from the home repo, not the
+// reaches is missing. The first is read from the store, not the
 // settings: settings an import wrote can name as the hub a
 // repository this machine fetched as a shared source, and the run that
 // writes its remote over the shared one, here source fetch, refetches too.
@@ -34,7 +34,7 @@ func TestHubRemoteRefusesASharedSourceOfItsURL(t *testing.T) {
 	imported.commit("two")
 	imported.bare("branch", "skills/two", "main")
 	h.mustRun("source", "add", imported.url)
-	// Another shared source stays: while any remote of the home repo is
+	// Another shared source stays: while any remote of the store is
 	// a promisor, git takes the blobless commits the removed one left as
 	// complete, and only --refetch brings their blobs.
 	other := h.newSourceRepo("other", true)
@@ -43,7 +43,7 @@ func TestHubRemoteRefusesASharedSourceOfItsURL(t *testing.T) {
 	h.mustRun("source", "add", other.url)
 	whole := func(what, fork string) {
 		t.Helper()
-		for _, line := range strings.Split(h.homeGit("rev-list", "--objects", "--missing=print", fork), "\n") {
+		for _, line := range strings.Split(h.storeGit("rev-list", "--objects", "--missing=print", fork), "\n") {
 			if strings.HasPrefix(line, "?") {
 				t.Errorf("%s: the fork branch's history lacks %s", what, line)
 			}
@@ -72,7 +72,7 @@ func TestHubRemoteRefusesASharedSourceOfItsURL(t *testing.T) {
 	whole("source add --hub", fork)
 
 	// The settings an import writes, naming the shared source as the
-	// hub, while the home repo keeps the shared remote.
+	// hub, while the store keeps the shared remote.
 	editSettings(t, h, func(st *home.Settings) {
 		st.RemoveSource(s.url)
 		st.SetSource(home.Source{URL: imported.url, Hub: true})
@@ -84,7 +84,7 @@ func TestHubRemoteRefusesASharedSourceOfItsURL(t *testing.T) {
 // TestTheHubRemoteIsSetReplacedAndDetached attaches, replaces and
 // detaches the hub. With none set, publish is refused, exit 6, naming
 // source add --hub. One git cannot reach is refused, exit 3, before
-// anything is written, a home repo included. source add --hub records
+// anything is written, a store included. source add --hub records
 // the settings entry and the remote src-<id>, with one fetch refspec, the
 // fork branches, no tags and no promisor settings, then fetches its forks
 // and checks what this machine may do there. A plain source add of its URL
@@ -104,8 +104,8 @@ func TestTheHubRemoteIsSetReplacedAndDetached(t *testing.T) {
 	contains(t, "publish: hint", e["hint"].(string), "agentx source add <url> --hub")
 	remote := newHubRemote(t, h)
 	equal(t, "an unreachable remote", h.run("source", "add", remote+"-missing", "--hub").exit, 3)
-	if _, err := os.Stat(gitx.HomeRepoPath(h.agentx)); err == nil {
-		t.Error("a remote that could not be set created the home repo")
+	if _, err := os.Stat(gitx.StorePath(h.agentx)); err == nil {
+		t.Error("a remote that could not be set created the store")
 	}
 
 	h.mustRun("skill", "new", "notes")
@@ -116,11 +116,11 @@ func TestTheHubRemoteIsSetReplacedAndDetached(t *testing.T) {
 	equal(t, "hub", ev["hub"], true)
 	equal(t, "access", ev["access"], home.AccessWritable)
 	equal(t, "skills", ev["skills"], float64(0))
-	equal(t, "fetch refspecs", h.homeGit("config", "--get-all", "remote."+name+".fetch"), gitx.ForkRefspec(name))
-	equal(t, "tags", h.homeGit("config", "--get", "remote."+name+".tagOpt"), "--no-tags")
-	equal(t, "the remote's URL", h.homeGit("config", "--get", "remote."+name+".url"), url)
+	equal(t, "fetch refspecs", h.storeGit("config", "--get-all", "remote."+name+".fetch"), gitx.ForkRefspec(name))
+	equal(t, "tags", h.storeGit("config", "--get", "remote."+name+".tagOpt"), "--no-tags")
+	equal(t, "the remote's URL", h.storeGit("config", "--get", "remote."+name+".url"), url)
 	for _, key := range []string{"promisor", "partialclonefilter"} {
-		if got, err := h.homeGitErr("config", "--get", "remote."+name+"."+key); err == nil {
+		if got, err := h.storeGitErr("config", "--get", "remote."+name+"."+key); err == nil {
 			t.Errorf("the hub has %s = %s", key, got)
 		}
 	}
@@ -133,7 +133,7 @@ func TestTheHubRemoteIsSetReplacedAndDetached(t *testing.T) {
 	contains(t, "source list", h.mustRun("source", "list").stdout, "  "+url+" (hub)  writable  skills/*  1 skill  ")
 	contains(t, "source fetch", h.mustRun("source", "fetch", "--all").stdout, "re-fetched "+url+": 1 skill\n")
 
-	h.homeGit("config", "branch.skills/notes.remote", name)
+	h.storeGit("config", "branch.skills/notes.remote", name)
 	other := newHubRemote(t, h)
 	otherURL := "file://" + other
 	contains(t, "replaced", h.setHub(other).stdout, "the hub is now "+otherURL+"; it holds")
@@ -142,17 +142,17 @@ func TestTheHubRemoteIsSetReplacedAndDetached(t *testing.T) {
 	}
 	equal(t, "the new entry", sourceEntryOf(t, h, otherURL)["hub"], true)
 	equal(t, "what the first remote held", h.ref(lineage.RemoteForkRef(name, "notes")), "")
-	if got, err := h.homeGitErr("config", "--get-regexp", "^remote\\."+name+"\\."); err == nil {
+	if got, err := h.storeGitErr("config", "--get-regexp", "^remote\\."+name+"\\."); err == nil {
 		t.Errorf("the first remote's configuration is still there: %s", got)
 	}
-	equal(t, "the fork's tracking", h.homeGit("config", "--get", "branch.skills/notes.remote"), source.RemoteName(source.ID(otherURL)))
+	equal(t, "the fork's tracking", h.storeGit("config", "--get", "branch.skills/notes.remote"), source.RemoteName(source.ID(otherURL)))
 
 	contains(t, "source remove", h.mustRun("source", "remove", otherURL).stdout,
 		"the hub "+otherURL+" is no longer set; your skills on this machine are as they were")
-	if out, err := h.homeGitErr("config", "--get-regexp", "^(remote\\.|branch\\.)"); err == nil {
+	if out, err := h.storeGitErr("config", "--get-regexp", "^(remote\\.|branch\\.)"); err == nil {
 		t.Errorf("source remove left configuration: %s", out)
 	}
-	equal(t, "remote-tracking branches", h.homeGit("for-each-ref", "refs/remotes/"), "")
+	equal(t, "remote-tracking branches", h.storeGit("for-each-ref", "refs/remotes/"), "")
 	if sources, _ := readSettingsFile(t, h)["sources"].([]any); len(sources) != 0 {
 		t.Errorf("source remove left the entry: %v", readSettingsFile(t, h)["sources"])
 	}

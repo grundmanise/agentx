@@ -21,7 +21,7 @@ func TestRefsUpdateWithAnExpectedOldValue(t *testing.T) {
 		t.Skip("git is not installed")
 	}
 	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "home.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}
 	r := New(env, false, func(string, ...any) {})
 	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
@@ -117,7 +117,7 @@ func TestRefsDeleteWithAnExpectedOldValue(t *testing.T) {
 		t.Skip("git is not installed")
 	}
 	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "home.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}
 	r := New(env, false, func(string, ...any) {})
 	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
@@ -181,7 +181,7 @@ func TestIsolatedAllRunsReadsAtOnce(t *testing.T) {
 		t.Skip("git is not installed")
 	}
 	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "home.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}
 	r := New(env, false, func(string, ...any) {})
 	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
@@ -211,7 +211,7 @@ func TestIsolatedAllRunsReadsAtOnce(t *testing.T) {
 // refs below it as well as the ref itself, so a repository holding
 // refs/heads/managed/a/b would answer a read of refs/heads/managed/a with
 // a ref nobody asked about. Nothing agentx writes creates such a name (a
-// library name cannot hold a separator), but the home repo is a git
+// library name cannot hold a separator), but the store is a git
 // repository the user can write to, and a value read for the wrong ref is
 // the value a journal would move a branch from.
 func TestRefValuesAnswersOnlyForTheNamesAsked(t *testing.T) {
@@ -220,7 +220,7 @@ func TestRefValuesAnswersOnlyForTheNamesAsked(t *testing.T) {
 		t.Skip("git is not installed")
 	}
 	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "home.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}
 	r := New(env, false, func(string, ...any) {})
 	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
@@ -258,7 +258,7 @@ func TestIsolatedAllReportsTheFirstFailureByCallOrder(t *testing.T) {
 		t.Skip("git is not installed")
 	}
 	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "home.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}
 	r := New(env, false, func(string, ...any) {})
 	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {

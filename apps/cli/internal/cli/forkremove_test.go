@@ -43,11 +43,11 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	tip := a.ref(lineage.ForkRef("alpha"))
 
 	pending := filepath.Join(a.agentx, "merges", "alpha")
-	a.homeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason, pending, tip)
+	a.storeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason, pending, tip)
 	out := a.run("skill", "remove", "alpha")
 	equal(t, "a merge pending: exit", out.exit, 4)
 	contains(t, "a merge pending: stderr", out.stderr, "alpha has a merge pending, so it cannot be removed until the merge is resolved or given up")
-	a.homeGit("worktree", "remove", "-f", "-f", pending)
+	a.storeGit("worktree", "remove", "-f", "-f", pending)
 	out = a.run("skill", "remove", "alpha", "--remote", "--from", "claude-code")
 	equal(t, "--remote with --from: exit", out.exit, 1)
 	contains(t, "--remote with --from: stderr", out.stderr, "--remote and --from claude-code cannot both be given")
@@ -66,13 +66,13 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	writeFile(t, filepath.Join(root, "alpha", "notes.md"), "edited, never committed\n")
 	writeFile(t, filepath.Join(root, "alpha", ".DS_Store"), "ignored\n")
 	// An update candidate a check pinned goes with its fork, and no other.
-	a.homeGit("update-ref", lineage.CandidateRef("alpha"), tip)
-	a.homeGit("update-ref", lineage.CandidateRef("beta"), tip)
+	a.storeGit("update-ref", lineage.CandidateRef("alpha"), tip)
+	a.storeGit("update-ref", lineage.CandidateRef("beta"), tip)
 	out = a.run("skill", "remove", "alpha")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "alpha's candidate", a.ref(lineage.CandidateRef("alpha")), "")
 	equal(t, "beta's candidate", a.ref(lineage.CandidateRef("beta")), tip)
-	a.homeGit("update-ref", "-d", lineage.CandidateRef("beta"))
+	a.storeGit("update-ref", "-d", lineage.CandidateRef("beta"))
 	equal(t, "the text", out.stdout, "✓ removed alpha from the library: 1 placement\n"+
 		"  claude-code  copy  "+claude+"\n"+
 		"  deleted "+lib+", "+root+" and refs/heads/skills/alpha\n")
@@ -81,7 +81,7 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	}
 	equal(t, "the branch", a.ref(lineage.ForkRef("alpha")), "")
 	equal(t, "copy_mode", copyModeOf(t, a, "alpha"), "")
-	if list := a.homeGit("worktree", "list", "--porcelain"); strings.Contains(list, root) {
+	if list := a.storeGit("worktree", "list", "--porcelain"); strings.Contains(list, root) {
 		t.Errorf("the worktree is still registered:\n%s", list)
 	}
 	equal(t, "what is left in the worktrees directory", strings.Join(hiddenEntries(t, filepath.Dir(root)), " "), "")
@@ -126,7 +126,7 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 		equal(t, "its summary", a.one(out.stdout, "result")["summary"], "removed skills/"+name+" from the hub; this machine has no skill called "+name)
 	}
 	equal(t, "the remote's branches", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)"), "")
-	equal(t, "a's remote-tracking branches", a.homeGit("for-each-ref", "--format=%(refname)", "refs/remotes/"), "")
+	equal(t, "a's remote-tracking branches", a.storeGit("for-each-ref", "--format=%(refname)", "refs/remotes/"), "")
 	out = a.run("skill", "remove", "beta", "--remote")
 	equal(t, "neither holds beta: exit", out.exit, 5)
 	contains(t, "neither holds beta: stderr", out.stderr, "neither this machine nor the hub holds a skill called beta")
@@ -160,9 +160,9 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	// b installed both from the hub, which made their branches track
 	// the hub's: a removal takes that tracking with the branch,
 	// so that a later fork of the name tracks nothing.
-	contains(t, "b's tracking", b.homeGit("config", "--get-regexp", `^branch\.`), "branch.skills/alpha.remote")
+	contains(t, "b's tracking", b.storeGit("config", "--get-regexp", `^branch\.`), "branch.skills/alpha.remote")
 	b.mustRun("skill", "remove", "alpha")
-	if tracking := b.homeGit("config", "--get-regexp", `^branch\.`); strings.Contains(tracking, "skills/alpha") || !strings.Contains(tracking, "skills/beta") {
+	if tracking := b.storeGit("config", "--get-regexp", `^branch\.`); strings.Contains(tracking, "skills/alpha") || !strings.Contains(tracking, "skills/beta") {
 		t.Errorf("b's tracking after alpha's removal:\n%s", tracking)
 	}
 	// Published by name, beta is back on the hub.
@@ -240,7 +240,7 @@ exec %GIT% "$@"
 			}
 			equal(t, "journals after recovery", journalCount(t, h), 0)
 			equal(t, "the branch", h.ref(lineage.ForkRef("notes")), "")
-			if list := h.homeGit("worktree", "list", "--porcelain"); strings.Contains(list, root) {
+			if list := h.storeGit("worktree", "list", "--porcelain"); strings.Contains(list, root) {
 				t.Errorf("the worktree is still registered:\n%s", list)
 			}
 			equal(t, "what is left in the worktrees directory", strings.Join(hiddenEntries(t, filepath.Dir(root)), " "), "")

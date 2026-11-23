@@ -11,7 +11,7 @@ import (
 )
 
 // Merge is the three versions of a skill a merge takes, each a commit of
-// the home repo whose tree wraps the skill in its upstream directory, as
+// the store whose tree wraps the skill in its upstream directory, as
 // an import tree does: the base version the import branch pointed at, the
 // library directory as git records it, committed on top of it, and the
 // update candidate. A merge that conflicts is left as a git merge in

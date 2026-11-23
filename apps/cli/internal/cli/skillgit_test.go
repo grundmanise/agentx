@@ -45,7 +45,7 @@ func TestSkillAddSpawnsABoundedNumberOfGitProcesses(t *testing.T) {
 	libraryDecoys(t, h, 4)
 
 	// The wrapper goes on the PATH only now: the add above must not open the
-	// gate the install has to open for itself. Two reads of the home repo
+	// gate the install has to open for itself. Two reads of the store
 	// that do not depend on each other pass through it together.
 	counts := gatedGitOn(t, h, 2, `*" rev-list "*|*" log "*`)
 	one := libraryReads(t, func() {
@@ -154,7 +154,7 @@ func TestSkillAddFetchesTheBlobsInOneBatch(t *testing.T) {
 
 	// The same version again, in another home that fetched the source but
 	// holds no blobs yet, still costs one fetch; in this home, where the
-	// blobs are already in the home repo, it costs none.
+	// blobs are already in the store, it costs none.
 	if err := os.RemoveAll(filepath.Join(h.library, "alpha")); err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestSkillAddCreatesTheBranchWithAnExpectedOldValue(t *testing.T) {
 	// branches written and the rest not.
 	want := "start\n"
 	for _, name := range []string{"alpha", "beta"} {
-		want += "update refs/heads/managed/" + name + " " + h.homeGit("rev-parse", "refs/heads/managed/"+name) + " \"\"\n"
+		want += "update refs/heads/managed/" + name + " " + h.storeGit("rev-parse", "refs/heads/managed/"+name) + " \"\"\n"
 	}
 	want += "commit\n"
 	equal(t, "the update-ref transaction", created[0], want)

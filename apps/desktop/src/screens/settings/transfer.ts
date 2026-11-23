@@ -19,7 +19,7 @@ export const fileName = (path: string) =>
 
 /**
  * The sources of the settings this machine has not fetched, as `source list` reports them: a
- * shared source whose event carries no `commit` (the home repo holds no ref for it), and an
+ * shared source whose event carries no `commit` (the store holds no ref for it), and an
  * hub whose event carries no `skills` (this machine has not fetched it). Applying a
  * snapshot restores the settings entry of such a source and nothing of the source itself.
  */

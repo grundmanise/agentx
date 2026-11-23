@@ -92,7 +92,7 @@ type removalStep struct {
 }
 
 // removalPlan is one run of agentx skill remove: what it deleted, what it
-// left alone and what it found in the home repo, for the report that
+// left alone and what it found in the store, for the report that
 // follows the mutation.
 type removalPlan struct {
 	name    string
@@ -146,9 +146,9 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 	if err != nil {
 		return err
 	}
-	gitDir, hasRepo, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, hasRepo, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	plan := removalPlan{name: name, whole: whole, from: targetIDs(targets)}
 	libPath := inv.libraryPath(name)
@@ -292,9 +292,9 @@ func (inv *invocation) stageRemovals(m *home.Mutation, plan *removalPlan, target
 // no skill for one configuration to keep while another loses it. A name
 // that has no import branch, or is a fork, is not in the library at all.
 func (inv *invocation) removeAbsent(ctx context.Context, name string, from []string) error {
-	gitDir, hasRepo, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, hasRepo, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	if !hasRepo {
 		return inv.noLibrarySkill(name)
@@ -339,7 +339,7 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 		// trailers of the commit the branch holds, read for that commit.
 		records, err := inv.listLineage(ctx, gitDir)
 		if err != nil {
-			return homeRepoFailure(err)
+			return storeFailure(err)
 		}
 		rec := records[name]
 		if rec.Kind != lineage.KindManaged || rec.Commit != commit {
@@ -593,7 +593,7 @@ func (inv *invocation) lineageRefs(ctx context.Context, gitDir, name string) (ma
 	values, err := inv.git.Refs(ctx).RefValues(gitDir,
 		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name)})
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	return values, nil
 }

@@ -148,24 +148,24 @@ func TestMissingGit(t *testing.T) {
 	}
 }
 
-func TestOpenHomeRepoCreatesOnceWithAgentxConfig(t *testing.T) {
+func TestOpenStoreCreatesOnceWithAgentxConfig(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
 	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}
 	r := New(env, false, func(string, ...any) {})
 	ctx := context.Background()
 
-	gitDir, exists, err := CheckHomeRepo(ctx, r, home)
+	gitDir, exists, err := CheckStore(ctx, r, home)
 	if err != nil || exists {
-		t.Fatalf("CheckHomeRepo before creation = %v, %v", exists, err)
+		t.Fatalf("CheckStore before creation = %v, %v", exists, err)
 	}
 	if _, err := os.Stat(gitDir); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("CheckHomeRepo created %s: %v", gitDir, err)
+		t.Fatalf("CheckStore created %s: %v", gitDir, err)
 	}
 
-	gitDir, created, err := OpenHomeRepo(ctx, r, home)
-	if err != nil || !created || gitDir != filepath.Join(home, "home.git") {
-		t.Fatalf("OpenHomeRepo = %q, %v, %v", gitDir, created, err)
+	gitDir, created, err := OpenStore(ctx, r, home)
+	if err != nil || !created || gitDir != filepath.Join(home, "store.git") {
+		t.Fatalf("OpenStore = %q, %v, %v", gitDir, created, err)
 	}
 	want := map[string]string{"core.bare": "true", "gc.auto": "0", "core.logAllRefUpdates": "true", "merge.conflictStyle": "zdiff3"}
 	if v, err := r.Version(ctx); err == nil && v.AtLeast(2, 48) {
@@ -177,11 +177,11 @@ func TestOpenHomeRepoCreatesOnceWithAgentxConfig(t *testing.T) {
 		}
 	}
 
-	if _, created, err := OpenHomeRepo(ctx, r, home); err != nil || created {
-		t.Errorf("second OpenHomeRepo = created %v, %v", created, err)
+	if _, created, err := OpenStore(ctx, r, home); err != nil || created {
+		t.Errorf("second OpenStore = created %v, %v", created, err)
 	}
-	if _, exists, err := CheckHomeRepo(ctx, r, home); err != nil || !exists {
-		t.Errorf("CheckHomeRepo after creation = %v, %v", exists, err)
+	if _, exists, err := CheckStore(ctx, r, home); err != nil || !exists {
+		t.Errorf("CheckStore after creation = %v, %v", exists, err)
 	}
 }
 
@@ -409,7 +409,7 @@ func checkoutRepo(t *testing.T) (*Runner, string, string) {
 		t.Skip("git is not installed")
 	}
 	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "home.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	r := New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
 	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
 		t.Fatal(err)

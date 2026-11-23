@@ -1,4 +1,4 @@
-// Package source parses source URLs and keeps sources in the home repo:
+// Package source parses source URLs and keeps sources in the store:
 // one named remote and one ref per source, fetched without blobs, plus the
 // SKILL.md blobs of the skills inside.
 package source
@@ -31,7 +31,7 @@ type Source struct {
 }
 
 // ID is the source's id: the first 16 hex characters of the SHA-256 of its
-// canonical URL. It names the remote and the ref in the home repo.
+// canonical URL. It names the remote and the ref in the store.
 func (s Source) ID() string { return ID(s.URL) }
 
 // ID derives the source id of a canonical URL.

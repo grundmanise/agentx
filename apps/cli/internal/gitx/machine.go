@@ -15,7 +15,7 @@ const SnapshotFile = "snapshot.json"
 // holds the snapshot of the machine with the id, such as "machines/cloud".
 func MachineBranch(id string) string { return "machines/" + id }
 
-// MachineTracking is where the home repo keeps what the last read of the
+// MachineTracking is where the store keeps what the last read of the
 // machine's branch on the remote called remote found. The fork refspec, see
 // ForkRefspec, never reaches it, so a fetch of the fork branches leaves it
 // alone, and a removal of the remote takes it with every other ref under
@@ -48,7 +48,7 @@ func (r *Runner) MachineTip(ctx context.Context, gitDir, remote, id string) (str
 // refspec is given on the command line with --refmap=, so that no fetch
 // refspec of the remote's or of the user's configuration applies, quiet,
 // with no tags, no FETCH_HEAD, no submodules and no lazy fetch of an object
-// the home repo lacks. A read-only credential is enough.
+// the store lacks. A read-only credential is enough.
 func (r *Runner) FetchMachine(ctx context.Context, gitDir, remote, id string) error {
 	refspec := "+refs/heads/" + MachineBranch(id) + ":" + MachineTracking(remote, id)
 	args := append(networkConfig(), "--git-dir="+gitDir,

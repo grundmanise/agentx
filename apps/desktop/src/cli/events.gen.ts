@@ -51,7 +51,7 @@ export type ErrorCode =
   | "not_found"
   | "refused"
   | "locked"
-  | "home_repo"
+  | "store"
   | "interrupted"
   | "internal";
 export type PublishOutcome =
@@ -96,7 +96,6 @@ export type ProgressPhase =
 // The exit code of each error code, the ok of success included.
 export const EXIT_CODES = {
   git: 2,
-  home_repo: 8,
   internal: 10,
   interrupted: 9,
   locked: 7,
@@ -105,6 +104,7 @@ export const EXIT_CODES = {
   pending_merge: 4,
   refused: 6,
   source: 3,
+  store: 8,
   usage: 1,
 } as const;
 export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
@@ -373,8 +373,8 @@ export interface MachineEvent {
   home: string;
   settings_file: string;
   library: string;
-  home_repo?: string;
-  home_repo_bytes?: number;
+  store?: string;
+  store_bytes?: number;
 }
 
 export interface SourceEvent {

@@ -461,7 +461,7 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
     events: [
       {
         hint: "choose another name",
-        message: "the home repo already holds release-notes as a hub skill",
+        message: "the store already holds release-notes as a hub skill",
         type: "error",
       },
     ],
@@ -472,7 +472,7 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
   const alert = dialog(page).getByRole("alert");
   // The message and the hint as one sentence-cased paragraph.
   await expect(alert).toHaveText(
-    "The home repo already holds release-notes as a hub skill. Choose another name."
+    "The store already holds release-notes as a hub skill. Choose another name."
   );
   await expect(nameField(page)).toHaveAttribute("aria-invalid", "true");
   await expect(dialog(page)).toBeVisible();

@@ -21,10 +21,10 @@ type Index struct {
 }
 
 // reading is what one build made of one source at one commit: the skills
-// the home repo held for it and the warning that says why it holds none.
+// the store held for it and the warning that says why it holds none.
 // A source whose listing failed has no reading at all, so the next build
 // reads it again instead of serving an empty listing for as long as the ref
-// stands still: the failure is the home repo's answer now, not a
+// stands still: the failure is the store's answer now, not a
 // property of the commit.
 type reading struct {
 	skills  []Skill
@@ -90,7 +90,7 @@ func (idx *Index) Search(query string) []Match {
 }
 
 // BuildIndex lists the skills of every source in urls, the canonical URLs
-// the machine settings hold, from the home repo alone: no network, and
+// the machine settings hold, from the store alone: no network, and
 // the whole of each source rather than a subpath, since a subpath scopes one
 // listing and is never stored.
 //
@@ -100,13 +100,13 @@ func (idx *Index) Search(query string) []Match {
 // prev itself is returned and nothing else runs, so a rescan that follows a
 // change elsewhere on the machine costs one git process, and a machine with
 // no source costs none. A source prev could not list is listed again
-// whatever its commit, so an index built while the home repo could not
+// whatever its commit, so an index built while the store could not
 // answer for one source recovers on the next build rather than holding that
 // source empty until its ref moves. warnings, sorted, name the sources whose
 // skills are not in the index: one that was never fetched, by the build
 // that first finds it so and not by the builds that keep that reading, so
 // that a rebuild that follows another source's ref does not warn about it
-// again; and one the home repo cannot list whole, by every build, since
+// again; and one the store cannot list whole, by every build, since
 // each lists it again.
 func BuildIndex(ctx context.Context, r *gitx.Runner, gitDir string, urls []string, prev *Index) (idx *Index, warnings []string, err error) {
 	idx = &Index{Sources: []Indexed{}, read: map[string]reading{}}
@@ -139,7 +139,7 @@ func BuildIndex(ctx context.Context, r *gitx.Runner, gitDir string, urls []strin
 			var failed string
 			if got, failed = readSource(ctx, r, gitDir, src.URL, src.Commit); failed != "" {
 				// Deliberately not remembered: the next build asks the
-				// home repo again rather than caching what it could not
+				// store again rather than caching what it could not
 				// answer.
 				warnings = append(warnings, failed)
 				continue
@@ -161,8 +161,8 @@ func BuildIndex(ctx context.Context, r *gitx.Runner, gitDir string, urls []strin
 	return idx, warnings, nil
 }
 
-// readSource lists one source of the index from the home repo. It
-// returns the reading to remember, or, when the home repo could not
+// readSource lists one source of the index from the store. It
+// returns the reading to remember, or, when the store could not
 // answer for the source at all, the warning that says so and no reading.
 func readSource(ctx context.Context, r *gitx.Runner, gitDir, url, commit string) (reading, string) {
 	if commit == "" {
@@ -177,7 +177,7 @@ func readSource(ctx context.Context, r *gitx.Runner, gitDir, url, commit string)
 	return reading{skills: listing.Skills}, ""
 }
 
-// commitsOf is Commits over a home repo that may not exist yet, which
+// commitsOf is Commits over a store that may not exist yet, which
 // on a machine whose sources were recorded but never fetched is the same as
 // one holding no source ref. The directory is checked without running git,
 // so a rebuild that finds nothing to do spawns nothing.

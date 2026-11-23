@@ -133,8 +133,8 @@ export const passingDoctor: InlineEvent[] = [
     type: "doctor",
   },
   {
-    check: "home_repo",
-    detail: "/home/me/.agentx/home.git",
+    check: "store",
+    detail: "/home/me/.agentx/store.git",
     status: "ok",
     type: "doctor",
   },

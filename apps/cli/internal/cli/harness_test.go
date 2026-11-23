@@ -73,7 +73,7 @@ type harness struct {
 	agentx  string // AGENTX_HOME
 	library string // AGENTX_LIBRARY
 	config  string // XDG_CONFIG_HOME
-	// maintain lets serve maintain the home repo when it starts. Serve
+	// maintain lets serve maintain the store when it starts. Serve
 	// does once a day, and a test's serve is told the home was maintained
 	// just now unless the test is about maintenance, so that the git
 	// processes a test counts are its own.

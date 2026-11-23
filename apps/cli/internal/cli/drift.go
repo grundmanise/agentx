@@ -115,7 +115,7 @@ func (inv *invocation) tipPublished(ctx context.Context, rec lineage.Record, rem
 				return b.base
 			}
 		}
-		out, status, err := inv.git.IsolatedStatus(ctx, gitx.HomeRepoPath(inv.dirs.Home), 1, "merge-base", rec.Commit, remoteTip)
+		out, status, err := inv.git.IsolatedStatus(ctx, gitx.StorePath(inv.dirs.Home), 1, "merge-base", rec.Commit, remoteTip)
 		if err != nil {
 			inv.out.debugf("cannot tell whether the hub holds %s: %v", rec.Name, err)
 			return remoteTip // unknown, which reads as unpublished
@@ -359,7 +359,7 @@ func driftOf(obs observation, sourceRemoved, upstreamRemoved bool) []string {
 }
 
 // absentManaged are the names of the managed skills whose library
-// directory is not among libs, sorted: an import branch the home repo
+// directory is not among libs, sorted: an import branch the store
 // holds for a skill the library no longer holds, because its directory was
 // deleted, or lost its SKILL.md, outside agentx. Such a skill has no entry
 // to carry a state or a drift: there is no directory to compare with its
@@ -419,10 +419,10 @@ func (sc skillContext) absentNotice(inv *invocation, name string) (what, wayOut 
 	remove := "'" + skillCommand("remove", name) + "'"
 	libPath := quotedPath(inv.libraryPath(name))
 	if _, err := os.Lstat(inv.libraryPath(name)); err == nil {
-		return name + " is managed in the home repo but " + libPath + " holds no SKILL.md",
+		return name + " is managed in the store but " + libPath + " holds no SKILL.md",
 			"move " + libPath + " aside, then run " + add + " to install it again, or run " + remove + " to stop managing it"
 	}
-	return name + " is managed in the home repo but the library holds no skill directory for it",
+	return name + " is managed in the store but the library holds no skill directory for it",
 		"run " + add + " to install it again, or " + remove + " to stop managing it"
 }
 
@@ -465,7 +465,7 @@ func (inv *invocation) publishedTips(ctx context.Context, records map[string]lin
 	if !hubSkill || !ok {
 		return nil, true
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitx.HomeRepoPath(inv.dirs.Home), source.RemoteName(source.ID(entry.URL)))
+	tips, err := lineage.ListRemote(ctx, inv.git, gitx.StorePath(inv.dirs.Home), source.RemoteName(source.ID(entry.URL)))
 	if err != nil {
 		inv.out.debugf("cannot read what the hub holds: %v", err)
 		return nil, false

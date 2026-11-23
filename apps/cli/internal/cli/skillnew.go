@@ -29,7 +29,7 @@ func newSkillNewCommand(inv *invocation) *cobra.Command {
 			"and the description in its frontmatter. It is a managed skill whose source is\n" +
 			"your hub: 'agentx skill publish <name>' publishes it there, and no\n" +
 			"hub needs to be set until then. The skill gets its own branch,\n" +
-			"skills/<name>, in the home repo, checked out as a worktree in agentx home, and\n" +
+			"skills/<name>, in the store, checked out as a worktree in agentx home, and\n" +
 			"the library holds a symlink to it. It is placed into every enabled configuration,\n" +
 			"as an install places a skill, and listed as managed with no upstream.\n\n" +
 			"The name must be 1 to 64 lowercase letters, digits and hyphens, with no hyphen at\n" +
@@ -52,7 +52,7 @@ func newSkillNewCommand(inv *invocation) *cobra.Command {
 const descriptionLimit = 1024
 
 // skillNew creates a hub skill from the template: a branch of
-// its own in the home repo, whose first commit holds the template
+// its own in the store, whose first commit holds the template
 // SKILL.md under a directory named after the skill and carries the skill's
 // new fork id, checked out as a worktree in agentx home, with the library's
 // symlink to the skill's directory and a placement in every enabled
@@ -66,7 +66,7 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 		return fail(exitUsage, fmt.Sprintf("--description must be one line of at most %d bytes with no control character", descriptionLimit),
 			"say in one line what the skill does and when an agent should use it")
 	}
-	// The name is checked before anything is created, the home repo
+	// The name is checked before anything is created, the store
 	// included, so that a name agentx refuses leaves the machine as it was.
 	if refusal := forkNameRefusal(name); refusal != "" {
 		return fail(exitRefused, refusal, "choose a name such as my-skill")
@@ -75,20 +75,20 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 	if err := inv.newSkillRoom(libPath, root); err != nil {
 		return err
 	}
-	gitDir, _, err := gitx.OpenHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err := gitx.OpenStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
-	// The home repo's info/exclude is brought in line with
+	// The store's info/exclude is brought in line with
 	// ignore_system_files before any fork command, so that git applies the
-	// list to the new worktree as the setting says, even in a home repo
+	// list to the new worktree as the setting says, even in a store
 	// created before the setting existed.
 	if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	if err := inv.checkForkName(ctx, records, name, "", "choose another name"); err != nil {
 		return err
@@ -99,11 +99,11 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 	}
 	tree, err := inv.git.EditTree(ctx, gitDir, "", []gitx.TreeEdit{{Path: name + "/SKILL.md", Mode: treeid.FileMode, Content: skillTemplate(name, description)}})
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	commit, err := w.commit(ctx, tree, nil, forkMessage{subject: creationSubject(name), trailers: lineage.ForkTrailers{ForkID: lineage.NewForkID()}})
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	targets, err := inv.placementTargets(nil)
 	if err != nil {
@@ -152,7 +152,7 @@ func (inv *invocation) newSkillRoom(libPath, root string) error {
 func (inv *invocation) createFork(ctx context.Context, gitDir, name, dir, commit, copiesOf string, targets []placeTarget, done *placements) error {
 	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	if err := takenRefusal(records, name, "", "choose another name"); err != nil {
 		return err
@@ -195,7 +195,7 @@ func (inv *invocation) createFork(ctx context.Context, gitDir, name, dir, commit
 	fingerprint, err := inv.stageForkContent(ctx, gitDir, commit, dir, staged, "", nil)
 	if err != nil {
 		os.RemoveAll(staged)
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	m.Ref(gitDir, lineage.ForkRef(name), "", commit)
 	m.Worktree(gitDir, root, strings.TrimPrefix(lineage.ForkRef(name), "refs/heads/"))

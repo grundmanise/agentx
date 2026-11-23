@@ -51,7 +51,7 @@ func TestSearchMatchesNameAndDescriptionCaseInsensitively(t *testing.T) {
 }
 
 // repo is a bare repository with skill directories, reached by its file://
-// URL, and fetched into a home repo the way source add does.
+// URL, and fetched into a store the way source add does.
 type repo struct {
 	t      *testing.T
 	git    *gitx.Runner
@@ -128,26 +128,26 @@ func (r *repo) fetch(gitDir string) {
 	}
 }
 
-// homeRepo is a home repo in a temporary agentx home.
-func homeRepo(t *testing.T) (*gitx.Runner, string) {
+// store is a store in a temporary agentx home.
+func store(t *testing.T) (*gitx.Runner, string) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed; the source tests need it")
 	}
 	r := gitx.New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
-	gitDir, _, err := gitx.OpenHomeRepo(context.Background(), r, t.TempDir())
+	gitDir, _, err := gitx.OpenStore(context.Background(), r, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	return r, gitDir
 }
 
-// countingHomeRepo is homeRepo whose runner counts the git processes
+// countingStore is store whose runner counts the git processes
 // it starts, so a test can hold BuildIndex to the one for-each-ref a
 // rebuild that finds nothing changed is allowed. The runner logs one line
 // per process and one more for a child's stderr; only the first has this
 // format.
-func countingHomeRepo(t *testing.T) (*gitx.Runner, string, func() int) {
+func countingStore(t *testing.T) (*gitx.Runner, string, func() int) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed; the source tests need it")
@@ -162,7 +162,7 @@ func countingHomeRepo(t *testing.T) (*gitx.Runner, string, func() int) {
 		defer mu.Unlock()
 		started++
 	})
-	gitDir, _, err := gitx.OpenHomeRepo(context.Background(), r, t.TempDir())
+	gitDir, _, err := gitx.OpenStore(context.Background(), r, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func countingHomeRepo(t *testing.T) (*gitx.Runner, string, func() int) {
 }
 
 // TestBuildIndexListsASourceItCouldNotListAgain covers a build that met a
-// source the home repo could not answer for. That answer belongs to the
+// source the store could not answer for. That answer belongs to the
 // moment, not to the commit, so it is not remembered: the next build lists
 // the source again and its skills come back without its ref having moved.
 // A build that could list everything is still remembered whole, so a
@@ -178,7 +178,7 @@ func countingHomeRepo(t *testing.T) (*gitx.Runner, string, func() int) {
 func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	git, gitDir, started := countingHomeRepo(t)
+	git, gitDir, started := countingStore(t)
 	ctx := context.Background()
 
 	r := newRepo(t, root, "alpha")
@@ -191,7 +191,7 @@ func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
 	// longer leaves this behind: it stages until it is whole, and the source
 	// ref is published last. What is left is everything outside that path –
 	// a killed process, objects reclaimed while the ref stands, another
-	// writer of the home repo – so the state is planted here rather than
+	// writer of the store – so the state is planted here rather than
 	// fetched into being, since the point of the index is to recover from it
 	// however it arose. The source repository is then moved aside, so that
 	// no git old enough to ignore GIT_NO_LAZY_FETCH can fill the blobs in
@@ -260,7 +260,7 @@ func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
 func TestBuildIndexListsEverySkillOfEverySource(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	git, gitDir := homeRepo(t)
+	git, gitDir := store(t)
 	ctx := context.Background()
 
 	alpha := newRepo(t, root, "alpha")
@@ -337,7 +337,7 @@ func TestBuildIndexListsEverySkillOfEverySource(t *testing.T) {
 func TestBuildIndexWarnsOnceAboutAnUnfetchedSource(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	git, gitDir := homeRepo(t)
+	git, gitDir := store(t)
 	ctx := context.Background()
 
 	alpha := newRepo(t, root, "alpha")
@@ -395,13 +395,13 @@ func TestBuildIndexWithoutSourcesRunsNoGit(t *testing.T) {
 	t.Parallel()
 	// No git on PATH at all: a machine with no source never reaches one.
 	git := gitx.New(map[string]string{"PATH": t.TempDir()}, false, func(string, ...any) {})
-	gitDir := filepath.Join(t.TempDir(), "home.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	idx, warnings, err := source.BuildIndex(context.Background(), git, gitDir, nil, nil)
 	if err != nil || len(warnings) != 0 || len(idx.Sources) != 0 || len(idx.Search("anything")) != 0 {
 		t.Errorf("BuildIndex() = %#v, %v, %v; want an empty index", idx, warnings, err)
 	}
 
-	// A source recorded before the home repo exists is one not fetched.
+	// A source recorded before the store exists is one not fetched.
 	idx, warnings, err = source.BuildIndex(context.Background(), git, gitDir, []string{"https://example.com/a"}, nil)
 	if err != nil || len(warnings) != 1 || len(idx.Sources) != 1 || len(idx.Search("a")) != 0 {
 		t.Errorf("BuildIndex() = %#v, %v, %v; want one unfetched source", idx, warnings, err)

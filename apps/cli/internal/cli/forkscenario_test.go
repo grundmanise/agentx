@@ -62,7 +62,7 @@ func takeVersion(h *harness) {
 // merged, its second parent: the version the fork's last update took.
 func mergedImport(h *harness, name string) string {
 	h.t.Helper()
-	return h.homeGit("rev-parse", lineage.ForkRef(name)+"^2")
+	return h.storeGit("rev-parse", lineage.ForkRef(name)+"^2")
 }
 
 // forkIDOf is the fork id the listing of h gives the fork called name.
@@ -90,8 +90,8 @@ func keptInConflict(t *testing.T, h *harness, name, dir, path, mine, theirs stri
 			stages[stage] = blob
 		}
 	}
-	equal(t, path+": mine", stages["2"], h.homeGit("rev-parse", mine+":"+dir+"/"+path))
-	equal(t, path+": theirs", stages["3"], h.homeGit("rev-parse", theirs+":"+dir+"/"+path))
+	equal(t, path+": mine", stages["2"], h.storeGit("rev-parse", mine+":"+dir+"/"+path))
+	equal(t, path+": theirs", stages["3"], h.storeGit("rev-parse", theirs+":"+dir+"/"+path))
 }
 
 // noMarkers fails the test when the file at path holds a conflict marker.
@@ -152,10 +152,10 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	out := b.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "the pull", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	merged := b.ref(lineage.ForkRef("alpha"))
-	recorded := b.homeGit("rev-parse", merged+"^1")
+	recorded := b.storeGit("rev-parse", merged+"^1")
 	equal(t, "the merge's parents", b.parents(merged), recorded+"\n"+theirs)
 	equal(t, "the recorded draft's parent", b.parents(recorded), mine)
-	equal(t, "what the recorded commit changes", b.homeGit("diff-tree", "--no-commit-id", "--name-only", "-r", recorded), "alpha/draft.md")
+	equal(t, "what the recorded commit changes", b.storeGit("diff-tree", "--no-commit-id", "--name-only", "-r", recorded), "alpha/draft.md")
 	equal(t, "b's state after the update", b.listed("alpha")["state"], stateModified)
 	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
 	diff := b.mustRun("skill", "diff", "alpha").stdout
@@ -269,7 +269,7 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	equal(t, "the update: exit", out.exit, 4)
 	equal(t, "the conflicted file", conflictPaths(b.one(out.stdout, "conflict")), "notes.md")
 	keptInConflict(t, b, "alpha", "alpha", "notes.md", mine, theirs)
-	equal(t, "a's side", b.homeGit("show", theirs+":alpha/notes.md"), strings.TrimSuffix(forkNotes("seven", "seven, v2"), "\n"))
+	equal(t, "a's side", b.storeGit("show", theirs+":alpha/notes.md"), strings.TrimSuffix(forkNotes("seven", "seven, v2"), "\n"))
 	// a's side closes the conflict, its put-back line first; the merge
 	// base git writes between the sides holds those lines too, but never
 	// right before a closing marker.
@@ -345,7 +345,7 @@ func TestScenarioDifferentVersionsOtherLines(t *testing.T) {
 	a.mustRun("skill", "update", "alpha")
 	tip := a.ref(lineage.ForkRef("alpha"))
 	equal(t, "alpha's base after its update", a.trailer(tip, lineage.TrailerBase), alphaThree)
-	equal(t, "the update changed no line", a.homeGit("diff", tip+"^1", tip), "")
+	equal(t, "the update changed no line", a.storeGit("diff", tip+"^1", tip), "")
 	a.mustRun("skill", "publish")
 	b.mustRun("skill", "update", "--all")
 	writeFile(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md"), "edited\n")
@@ -376,9 +376,9 @@ func TestScenarioDifferentVersionsOtherLines(t *testing.T) {
 	}
 	equal(t, "beta's state", listed["beta"]["state"], stateModified)
 
-	for _, ref := range strings.Split(b.homeGit("for-each-ref", "--format=%(refname)", source.RefPrefix), "\n") {
+	for _, ref := range strings.Split(b.storeGit("for-each-ref", "--format=%(refname)", source.RefPrefix), "\n") {
 		if ref != "" {
-			b.homeGit("update-ref", "-d", ref)
+			b.storeGit("update-ref", "-d", ref)
 		}
 	}
 	if after := b.mustRun("--json", "skill", "list").stdout; after != before {
@@ -511,7 +511,7 @@ func TestScenarioUnprovableOrderKeepsTheLocalBase(t *testing.T) {
 	a.mustRun("skill", "update", "alpha")
 	tip := a.ref(lineage.ForkRef("alpha"))
 	equal(t, "the base after the update", a.trailer(tip, lineage.TrailerBase), rewritten)
-	equal(t, "the update changed no line", a.homeGit("diff", merged, tip), "")
+	equal(t, "the update changed no line", a.storeGit("diff", merged, tip), "")
 }
 
 // TestScenarioIgnoredFilesStayLocal has a commit and publish alpha with
@@ -619,7 +619,7 @@ func TestScenarioEdgeCases(t *testing.T) {
 	equal(t, "alpha's pull", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	merged := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "alpha's base", b.trailer(merged, lineage.TrailerBase), imp)
-	equal(t, "the merged tree", b.homeGit("ls-tree", merged+":alpha", "--format=%(objectmode) %(path)"),
+	equal(t, "the merged tree", b.storeGit("ls-tree", merged+":alpha", "--format=%(objectmode) %(path)"),
 		"100644 SKILL.md\n120000 link.md\n100644 logo.png\n100755 notes.md")
 	equal(t, "b's notes", fileBody(t, filepath.Join(alphaB, "notes.md")), forkNotes("four", "four, v2", "eight", "eight, b"))
 	if info, err := os.Stat(filepath.Join(alphaB, "notes.md")); err != nil || info.Mode().Perm()&0o100 == 0 {

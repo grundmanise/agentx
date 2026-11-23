@@ -159,13 +159,13 @@ var libraryName = regexp.MustCompile(`^[^./\\\x00][^/\\\x00]*$`)
 // The two are not one refusal: a POSIX directory happily holds "who?" or
 // "a b", so telling the user their library cannot would be untrue and would
 // send them looking in the wrong place. What refuses those is the branch
-// the home repo has to record the version on.
+// the store has to record the version on.
 func nameRefusal(name string) string {
 	switch {
 	case !libraryName.MatchString(name), strings.ContainsAny(name, "\n\r"):
 		return "is not a name the library can hold as a directory"
 	case !refComponent(name):
-		return "is not a name the home repo can hold as an import branch"
+		return "is not a name the store can hold as an import branch"
 	}
 	return ""
 }

@@ -44,7 +44,7 @@ func (r *Runner) PackRefs(ctx context.Context, gitDir string) error {
 // ErrMaintenanceRunning is the answer of a maintenance task to a
 // repository whose maintenance lock is taken: git would skip the task and
 // exit 0 having done nothing, so the task is not run, and is not done.
-var ErrMaintenanceRunning = errors.New("git maintenance is already running in the home repo")
+var ErrMaintenanceRunning = errors.New("git maintenance is already running in the store")
 
 // maintain runs one maintenance git over the repository at gitDir, in the
 // isolated environment, unless git maintenance holds the repository's

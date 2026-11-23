@@ -37,7 +37,7 @@ func TestSkillDiffShowsEachFileAgainstTheBase(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
 	lib := filepath.Join(h.library, "pdf")
-	short := h.homeGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/pdf")[:7]
+	short := h.storeGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/pdf")[:7]
 
 	out := h.mustRun("--json", "skill", "diff", "pdf")
 	if diffs := h.eventsOfType(out.stdout, "diff"); len(diffs) != 0 {
@@ -141,7 +141,7 @@ func TestSkillDiffNamesWhatGitCannotRecord(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
 	lib := filepath.Join(h.library, "pdf")
-	short := h.homeGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/pdf")[:7]
+	short := h.storeGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/pdf")[:7]
 	nested := filepath.Join(lib, "vendored", ".git")
 	writeFile(t, mkdirs(t, nested, "HEAD"), "ref: refs/heads/main\n")
 	out := h.mustRun("--json", "skill", "diff", "pdf")
@@ -176,7 +176,7 @@ func TestSkillDiffRefusesWhatHasNoBase(t *testing.T) {
 	h, _ := driftHarness(t)
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "My own"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "forked"), "SKILL.md"), skill("forked", "A fork"))
-	h.homeGit("update-ref", "refs/heads/skills/forked", h.homeGit("rev-parse", "refs/heads/managed/pdf"))
+	h.storeGit("update-ref", "refs/heads/skills/forked", h.storeGit("rev-parse", "refs/heads/managed/pdf"))
 	for _, c := range []struct {
 		args    []string
 		message string
@@ -301,7 +301,7 @@ func TestSkillDiffOfAFork(t *testing.T) {
 		message string
 		exit    int
 	}{
-		{[]string{"--commit", "deadbeef"}, "the home repo holds no commit deadbeef", 6},
+		{[]string{"--commit", "deadbeef"}, "the store holds no commit deadbeef", 6},
 		{[]string{"--commit", h.ref(lineage.ManagedRef("alpha"))}, "holds no skill directory notes to compare notes with", 6},
 		{[]string{"--commit", first, "--update"}, "--update and --commit cannot be given together", 1},
 	} {

@@ -19,13 +19,13 @@ type machineEvent struct {
 	Label      string `json:"label"`
 	Derivation string `json:"derivation"`
 	// Where agentx keeps its files on this machine, as AGENTX_HOME and
-	// AGENTX_LIBRARY resolved them. The home repo and its size are
+	// AGENTX_LIBRARY resolved them. The store and its size are
 	// absent until the repo is created.
-	Home          string `json:"home"`
-	SettingsFile  string `json:"settings_file"`
-	Library       string `json:"library"`
-	HomeRepo      string `json:"home_repo,omitempty"`
-	HomeRepoBytes int64  `json:"home_repo_bytes,omitempty"`
+	Home         string `json:"home"`
+	SettingsFile string `json:"settings_file"`
+	Library      string `json:"library"`
+	Store        string `json:"store,omitempty"`
+	StoreBytes   int64  `json:"store_bytes,omitempty"`
 }
 
 func newMachineCommand(inv *invocation) *cobra.Command {
@@ -115,10 +115,10 @@ func (inv *invocation) printMachine(m machineEvent) {
 	t.add(c("Home", label), c(m.Home, plain))
 	t.add(c("Settings", label), c(m.SettingsFile, plain))
 	t.add(c("Library", label), c(m.Library, plain))
-	if m.HomeRepo == "" {
-		t.add(c("Home repo", label), c("not created yet", muted))
+	if m.Store == "" {
+		t.add(c("Store", label), c("not created yet", muted))
 	} else {
-		t.add(c("Home repo", label), c(m.HomeRepo+" ("+formatBytes(m.HomeRepoBytes)+")", plain))
+		t.add(c("Store", label), c(m.Store+" ("+formatBytes(m.StoreBytes)+")", plain))
 	}
 	inv.out.render(t, "")
 }
@@ -134,24 +134,24 @@ func (inv *invocation) machine(ctx context.Context) (machineEvent, error) {
 	}
 	m := machineEvent{event: newEvent("machine"), ID: id, Label: inv.label(s), Derivation: derivation,
 		Home: inv.dirs.Home, SettingsFile: home.SettingsPath(inv.dirs.Home), Library: inv.dirs.Library}
-	// The home repo is reported from files alone, without a git process:
+	// The store is reported from files alone, without a git process:
 	// a present directory is the repo whether or not git can read it, which
 	// is doctor's question, and its size is the one the user asks about.
-	repo := gitx.HomeRepoPath(inv.dirs.Home)
+	repo := gitx.StorePath(inv.dirs.Home)
 	size, err := dirSize(repo)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil:
 		return machineEvent{}, err
 	default:
-		m.HomeRepo, m.HomeRepoBytes = repo, size
+		m.Store, m.StoreBytes = repo, size
 	}
 	return m, nil
 }
 
 // dirSize is the size on disk of the tree under root: the sizes of the
 // regular files it holds, added up. A symlink counts nothing and is never
-// followed, so the home repo's size is that of home.git alone, and
+// followed, so the store's size is that of store.git alone, and
 // nothing a worktree outside it holds. A missing root is fs.ErrNotExist.
 func dirSize(root string) (int64, error) {
 	var total int64

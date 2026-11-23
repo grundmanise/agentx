@@ -1,6 +1,6 @@
 // Package treeid computes, in process, the git tree id a directory on disk
 // would have: the id git gives the same files, modes and symlinks, so that a
-// directory can be compared with a tree of the home repo without running
+// directory can be compared with a tree of the store without running
 // git and without writing anything.
 //
 // It reads the directory the way git records one and in no other way: every

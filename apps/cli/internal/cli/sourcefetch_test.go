@@ -91,10 +91,10 @@ func (h *harness) fetchSources(t *testing.T) (one, two *sourceRepo) {
 	return one, two
 }
 
-// sourceRef is the commit the home repo holds for a source.
+// sourceRef is the commit the store holds for a source.
 func (h *harness) sourceRef(url string) string {
 	h.t.Helper()
-	return h.homeGit("rev-parse", source.Ref(source.ID(url))+"^{commit}")
+	return h.storeGit("rev-parse", source.Ref(source.ID(url))+"^{commit}")
 }
 
 // TestSourceFetchByURLByIDAndAll walks the three ways to ask for a fetch
@@ -143,7 +143,7 @@ func TestSourceFetchByURLByIDAndAll(t *testing.T) {
 	equal(t, "last_fetched of two", lastFetched(t, h, two.url), backdated)
 	equal(t, "version", readVersion(t, h), before+1)
 
-	// The new skill is in the listing, which reads the home repo alone.
+	// The new skill is in the listing, which reads the store alone.
 	listing := h.run("source", "skills", one.url)
 	equal(t, "exit", listing.exit, 0)
 	contains(t, "source skills", listing.stdout, "3 skills in "+one.url+" at "+moved[:7])
@@ -320,8 +320,8 @@ func TestSourceFetchErrors(t *testing.T) {
 		t.Errorf("event types = %v, want %v", got, want)
 	}
 
-	// A home repo that is gone takes every source with it.
-	if err := os.RemoveAll(filepath.Join(h.agentx, "home.git")); err != nil {
+	// A store that is gone takes every source with it.
+	if err := os.RemoveAll(filepath.Join(h.agentx, "store.git")); err != nil {
 		t.Fatal(err)
 	}
 	out = h.run("--json", "source", "fetch", "--all")
@@ -454,7 +454,7 @@ func TestSourceFetchIsParallelAndBounded(t *testing.T) {
 	// them, the update-ref that publishes the fetch and the one that drops
 	// the staging ref. The check after it adds two: the access check's dry
 	// run and the read of the default branch. The run adds the version
-	// check and the home repo probe. Nothing here is per skill.
+	// check and the store probe. Nothing here is per skill.
 	if bound := 14*sources + 4; total > bound {
 		t.Errorf("%d git processes for %d sources, want at most %d", total, sources, bound)
 	}
@@ -515,7 +515,7 @@ func TestSourceFetchAllKeepsTheRefsOfTheSourcesThatFailed(t *testing.T) {
 		s.commit("first version")
 		equal(t, "add", h.run("source", "add", s.url).exit, 0)
 		repos = append(repos, s)
-		before = append(before, h.homeGit("rev-parse", source.Ref(source.ID(s.url))))
+		before = append(before, h.storeGit("rev-parse", source.Ref(source.ID(s.url))))
 	}
 	for _, s := range repos {
 		s.skill("beta", "beta", "The second skill", nil)
@@ -533,11 +533,11 @@ func TestSourceFetchAllKeepsTheRefsOfTheSourcesThatFailed(t *testing.T) {
 	}
 
 	// The source that fetched moved; the two that failed are where they were.
-	if got := h.homeGit("rev-parse", source.Ref(source.ID(repos[0].url))); got == before[0] {
+	if got := h.storeGit("rev-parse", source.Ref(source.ID(repos[0].url))); got == before[0] {
 		t.Errorf("the source that fetched is still at %s", got[:7])
 	}
 	for i, s := range repos[1:] {
-		equal(t, "ref of "+s.url, h.homeGit("rev-parse", source.Ref(source.ID(s.url))), before[i+1])
+		equal(t, "ref of "+s.url, h.storeGit("rev-parse", source.Ref(source.ID(s.url))), before[i+1])
 	}
 
 	// Nothing staged is left over, and every source still lists whole: the
@@ -563,7 +563,7 @@ func TestSourceFetchAllKeepsTheRefsOfTheSourcesThatFailed(t *testing.T) {
 // TestSourceFetchAnswersWithTheCauseItFound: a run has one exit code, and
 // it is the code the same failure would have on its own. Fetching a source
 // whose pin is gone is exit 5, as adding it would be; a run every source of
-// which fell over the home repo's own git is exit 8, as `source skills`
+// which fell over the store's own git is exit 8, as `source skills`
 // would be; a run whose sources failed for different reasons is the
 // source-level 3, since no one code is true of them all. In every case the
 // hint answers the code, and every warning names the source it is about.
@@ -582,13 +582,13 @@ func TestSourceFetchAnswersWithTheCauseItFound(t *testing.T) {
 		repos = append(repos, s)
 	}
 
-	// Every source of the run falls over the home repo's own git, which
+	// Every source of the run falls over the store's own git, which
 	// is exit 8 wherever it happens, and each warning names its source.
 	failLocalGit(t, h, "ls-tree")
 	out := h.run("--json", "source", "fetch", "--all")
 	equal(t, "exit", out.exit, 8)
 	e := lastError(t, h.events(out.stdout))
-	equal(t, "code", e["code"], "home_repo")
+	equal(t, "code", e["code"], "store")
 	contains(t, "hint", e["hint"].(string), "agentx doctor")
 	for _, s := range repos {
 		contains(t, "warning names "+s.url, out.stderr, s.url)
@@ -629,8 +629,8 @@ func TestSourceFetchNamesASourceItHasNothingOf(t *testing.T) {
 	s.commit("first version")
 	equal(t, "add", h.run("source", "add", s.url).exit, 0)
 	id := source.ID(s.url)
-	h.homeGit("remote", "remove", source.RemoteName(id))
-	h.homeGit("update-ref", "-d", source.Ref(id))
+	h.storeGit("remote", "remove", source.RemoteName(id))
+	h.storeGit("update-ref", "-d", source.Ref(id))
 
 	out := h.run("--json", "source", "fetch", s.url)
 	equal(t, "exit", out.exit, 5)
@@ -649,7 +649,7 @@ func TestSourceFetchNamesASourceItHasNothingOf(t *testing.T) {
 	// partialclonefilter for the remote name before it resolves it, which
 	// is git's and not agentx's; url and fetch are what make a remote one.)
 	for _, key := range []string{"url", "fetch"} {
-		if out, err := h.homeGitErr("config", "--get", "remote."+source.RemoteName(id)+"."+key); err == nil {
+		if out, err := h.storeGitErr("config", "--get", "remote."+source.RemoteName(id)+"."+key); err == nil {
 			t.Errorf("a fetch of a source with no remote wrote %s = %q", key, out)
 		}
 	}
@@ -686,7 +686,7 @@ func TestSourceFetchDropsASourceRemovedMidRun(t *testing.T) {
 			t.Errorf("a removed source was reported as fetched: %v", e)
 		}
 	}
-	// Nothing of the source is left in the home repo either.
+	// Nothing of the source is left in the store either.
 	equal(t, "refs under refs/agentx", h.agentxRefs(), "")
 	equal(t, "sources", len(readSettingsFile(t, h)["sources"].([]any)), 0)
 }
@@ -712,14 +712,14 @@ func TestSourceRemoteFollowsThePin(t *testing.T) {
 	equal(t, "add", h.run("source", "add", s.url+"#v1").exit, 0)
 	id := source.ID(s.url)
 	remote := "remote." + source.RemoteName(id) + "."
-	v1 := h.homeGit("rev-parse", source.Ref(id))
+	v1 := h.storeGit("rev-parse", source.Ref(id))
 
-	h.homeGit("config", remote+"fetch", "+main:"+source.StagingRef(id))
+	h.storeGit("config", remote+"fetch", "+main:"+source.StagingRef(id))
 	equal(t, "fetch", h.run("source", "fetch", "--all").exit, 0)
 
 	// The pin decided, not the remote, and the remote records it again.
-	equal(t, "ref", h.homeGit("rev-parse", source.Ref(id)), v1)
-	equal(t, "refspec", h.homeGit("config", "--get", remote+"fetch"), "+v1:"+source.StagingRef(id))
+	equal(t, "ref", h.storeGit("rev-parse", source.Ref(id)), v1)
+	equal(t, "refspec", h.storeGit("config", "--get", remote+"fetch"), "+v1:"+source.StagingRef(id))
 	out := h.run("--json", "source", "skills", s.url)
 	equal(t, "source skills", out.exit, 0)
 	_, skills := sourceEvents(t, h.events(out.stdout))

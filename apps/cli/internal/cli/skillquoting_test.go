@@ -135,7 +135,7 @@ func TestImportKeepsNamesGitWouldQuote(t *testing.T) {
 
 			// The import tree holds exactly one entry, the upstream
 			// directory under its own name, quotes, newlines and all.
-			root := treeRecords(t, h.homeGit("ls-tree", "-z", ref))
+			root := treeRecords(t, h.storeGit("ls-tree", "-z", ref))
 			if len(root) != 1 {
 				t.Fatalf("the import tree holds %d entries, want 1: %q", len(root), root)
 			}
@@ -158,7 +158,7 @@ func TestImportKeepsNamesGitWouldQuote(t *testing.T) {
 				}
 			}
 			var got []string
-			for _, rec := range treeRecords(t, h.homeGit("ls-tree", "-r", "-t", "-z", ref)) {
+			for _, rec := range treeRecords(t, h.storeGit("ls-tree", "-r", "-t", "-z", ref)) {
 				name := entryName(rec)
 				if name == path.Base(c.dir) {
 					continue // the one entry of the import tree

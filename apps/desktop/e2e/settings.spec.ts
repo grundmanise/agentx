@@ -89,7 +89,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
       - heading "Storage" [level=2]
       - term: Library
       - definition: ${libraryPath}
-      - term: Home repo
+      - term: Store
       - definition: 1.5 MiB
   `);
 
@@ -98,13 +98,11 @@ test("each section shows what the store holds", async ({ cli, page }) => {
   );
 });
 
-test("a home repo not created yet says so", async ({ cli, page }) => {
-  const { home_repo: _, home_repo_bytes: __, ...fresh } = machine();
+test("a store not created yet says so", async ({ cli, page }) => {
+  const { store: _, store_bytes: __, ...fresh } = machine();
   cli.register(["machine"], { events: [fresh] });
   await page.goto("/#/settings");
-  await expect(section(page, "Storage")).toContainText(
-    "Home repoNot created yet"
-  );
+  await expect(section(page, "Storage")).toContainText("StoreNot created yet");
 });
 
 test("Enter with a new label runs config set label and toasts; the field shows the label read again", async ({
