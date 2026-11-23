@@ -224,15 +224,6 @@ export const statusLabels: Record<CardStatus, string> = {
   "name-taken": "Name taken",
 };
 
-/** The status as read aloud and in a row's description: "Name taken by zeta/tools". */
-export const statusText = (card: SkillCard): string | undefined => {
-  if (card.status === undefined) {
-    return undefined;
-  }
-  const label = statusLabels[card.status];
-  return card.holder === undefined ? label : `${label} by ${card.holder}`;
-};
-
 /**
  * Where `source read` finds a skill's SKILL.md: the source as the command takes it (its id for a
  * listing's card, its URL for a search answer's), the skill's subpath as the CLI gave it, "" for
@@ -256,8 +247,11 @@ export interface SkillCard {
   description: string;
   /** Why it cannot be selected; absent for a selectable card. */
   status?: CardStatus;
-  /** What holds the card's name, after "Name taken by": "a folder", "your skill", a source. */
-  holder?: string;
+  /**
+   * The library skill that holds the card's name, which Open in Skills opens; absent when an
+   * earlier skill of the same source holds it.
+   */
+  holderName?: string;
   /** Why a card that cannot be selected cannot be. */
   title?: string;
   /** Where its SKILL.md is read from; absent for your skills on the account remote. */
@@ -283,26 +277,15 @@ interface CardState {
   holder?: LibraryEntry;
 }
 
-/** What holds a name, after "Name taken by", and why the card cannot be added. */
-const takenBy = (holder: LibraryEntry): { holder: string; title: string } => {
-  const { name } = holder;
-  if (holder.kind === "unmanaged") {
-    return {
-      holder: "a folder",
-      title: `Your library has a ${name} folder that agentx doesn't manage. Import or remove it to add this skill.`,
-    };
+/** Why a card whose name `holder` holds cannot be added, and how to free the name. */
+const takenWhy = ({ kind, name, source, subpath }: LibraryEntry): string => {
+  if (kind === "unmanaged") {
+    return `Your library has a ${name} folder that agentx doesn't manage. Import or remove it to add this skill.`;
   }
-  if (holder.subpath === undefined || holder.source === undefined) {
-    return {
-      holder: "your skill",
-      title: `Your library has your own ${name}. Remove or rename it to add this skill.`,
-    };
+  if (subpath === undefined || source === undefined) {
+    return `Your library has your own ${name}. Remove or rename it to add this skill.`;
   }
-  const from = shortSource(holder.source);
-  return {
-    holder: from,
-    title: `Your library has ${name} from ${from}. Remove or rename it to add this skill.`,
-  };
+  return `Your library has ${name} from ${shortSource(source)}. Remove or rename it to add this skill.`;
 };
 
 const card = (
@@ -328,7 +311,8 @@ const card = (
   if (state !== undefined) {
     c.status = state.status;
     if (state.holder !== undefined) {
-      Object.assign(c, takenBy(state.holder));
+      c.holderName = state.holder.name;
+      c.title = takenWhy(state.holder);
     }
   }
   return c;
@@ -390,7 +374,6 @@ const withSharedNames = (cards: SkillCard[]): SkillCard[] => {
     }
     return {
       ...c,
-      holder: earlier === "" ? "the root skill" : earlier,
       sharedWith: earlier,
       status: "name-taken",
       title: `The skill at ${placeOf(earlier)} in this source is named ${c.name} too, and only the first of a name can be added.`,

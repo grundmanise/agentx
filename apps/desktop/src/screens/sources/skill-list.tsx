@@ -22,6 +22,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
+import { Button } from "#/components/ui/button.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import {
   Tooltip,
@@ -31,14 +32,11 @@ import {
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
+import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
 import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
-import {
-  addedName,
-  statusLabels,
-  statusText,
-} from "#/screens/sources/projection.ts";
+import { addedName, statusLabels } from "#/screens/sources/projection.ts";
 import type {
   CardGroup,
   SkillCard,
@@ -129,7 +127,7 @@ const CheckMark = ({ checked }: { checked: boolean }) => (
   </svg>
 );
 
-const statusVariants = cva("type-secondary flex-none font-medium", {
+export const statusVariants = cva("type-secondary flex-none font-medium", {
   variants: {
     status: {
       added: "text-add-card-status-added",
@@ -138,20 +136,6 @@ const statusVariants = cva("type-secondary flex-none font-medium", {
     },
   },
 });
-
-/** A card's status in its colour, then for a name taken, what holds the name, muted. */
-export const StatusLabel = ({ card }: { card: SkillCard }) =>
-  card.status === undefined ? null : (
-    <span
-      title={statusText(card)}
-      className={statusVariants({ status: card.status })}
-    >
-      {statusLabels[card.status]}
-      {card.holder !== undefined && (
-        <span className="text-text-muted font-normal"> by {card.holder}</span>
-      )}
-    </span>
-  );
 
 /** A line in the code pane's place while SKILL.md is not shown. */
 const PaneHint = ({ children }: { children: string }) => (
@@ -221,15 +205,17 @@ const ViewSkill = ({ page }: { page: string }) => (
 );
 
 /**
- * What an open row shows: why a skill that cannot be selected cannot be, and its SKILL.md, whose
- * frontmatter holds the description. One of your skills on the account remote has no SKILL.md to
- * read here, so its row shows its description.
+ * What an open row shows: why a skill that cannot be selected cannot be, with Open in Skills for
+ * the library skill that holds its name, and its SKILL.md, whose frontmatter holds the
+ * description. One of your skills on the account remote has no SKILL.md to read here, so its row
+ * shows its description.
  */
 const Details = ({ card }: { card: SkillCard }) => {
   const description =
     card.skillMd === undefined && card.description !== ""
       ? card.description
       : undefined;
+  const holder = card.holderName;
   const header = description !== undefined || card.title !== undefined;
   return (
     <>
@@ -244,6 +230,18 @@ const Details = ({ card }: { card: SkillCard }) => {
             <p className="type-secondary text-text-hint m-0 text-pretty">
               {card.title}
             </p>
+          )}
+          {holder !== undefined && (
+            <div className="flex">
+              <Button
+                size="sm"
+                onClick={() => {
+                  openSkill(holder);
+                }}
+              >
+                Open in Skills
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -348,7 +346,9 @@ const SkillItemView = ({
       void loadSkillMd(card.key, { source, subpath, tree });
     }
   }, [wanted, card.key, source, subpath, tree]);
-  const description = [statusText(card), markdownText(card.description)]
+  const status =
+    card.status === undefined ? undefined : statusLabels[card.status];
+  const description = [status, markdownText(card.description)]
     .filter((part) => part !== undefined && part !== "")
     .join(". ");
   let action: ReactNode;
@@ -377,8 +377,10 @@ const SkillItemView = ({
         open={open}
         busy={loading}
         meta={
-          card.status === undefined || card.status === "added" ? undefined : (
-            <StatusLabel card={card} />
+          status === undefined || card.status === "added" ? undefined : (
+            <span className={statusVariants({ status: card.status })}>
+              {status}
+            </span>
           )
         }
         action={action}

@@ -4,8 +4,9 @@ import type { ReactNode } from "react";
 
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
+import { statusLabels } from "#/screens/sources/projection.ts";
 import type { SkillCard } from "#/screens/sources/projection.ts";
-import { StatusLabel } from "#/screens/sources/skill-list.tsx";
+import { statusVariants } from "#/screens/sources/skill-list.tsx";
 
 /**
  * One skill as a row of the Add skill dialog's list: the round checkbox before the name, the
@@ -48,7 +49,9 @@ const SkillRow = ({
     return (
       <li title={card.title} className="flex items-center gap-3 px-3 py-2">
         {text(<span aria-hidden className="size-checkbox flex-none" />)}
-        <StatusLabel card={card} />
+        <span className={statusVariants({ status: card.status })}>
+          {statusLabels[card.status]}
+        </span>
       </li>
     );
   }
