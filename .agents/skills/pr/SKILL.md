@@ -14,7 +14,7 @@ Write the PR body from the template in `.github/pull_request_template.md`.
 
 Skip all preambles and keep prose brief. Use the project's vocabulary from `GLOSSARY.md`.
 
-### Summary
+### What has changed
 
 Pick the smallest view that makes the key point clear.
 
@@ -113,11 +113,19 @@ func skippedHint(name string) string {
 
 Place each visual next to the short text it supports. Keep only the calls, files, states, and boundaries a reviewer needs to understand the change.
 
-Use one view, or a few when they each add something. Most PRs need only one or two.
+Use one view, or a few if each adds value. It's unlikely you'll need to use all of them. Use your judgment and don't overwhelm the user. Most PRs only need one or two.
+
+### Why
+
+Succinctly describe the functional/non-functional requirement, including the business reason if you know it. Don’t add this section unless you’re sure from your context or the linked issue.
 
 ### Evidence
 
-Show that the change works, before and after. Evidence is required when the change impacts functionality or behavior.
+Concrete evidence that the change works. Show a before and after. Evidence is required when the change impacts functionality or behavior.
 
-- For a visual change, use screenshots or a recording.
+- For a visual change, use screenshots or a recording from the running product.
 - For an execution-based change, display the relevant console output from before and after the change.
+
+## Merge danger
+
+The blast radius is the potential impact or scope of the changes introduced by this PR. Consider all possibilities. Examples are layout shift, breakages for consumers, mobile responsiveness, etc.
