@@ -26,8 +26,13 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { WithReason } from "#/components/with-reason.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
-import { hubOf, notPublished } from "#/screens/skills/banners.ts";
+import {
+  hubOf,
+  notPublished,
+  readOnlyHubReason,
+} from "#/screens/skills/banners.ts";
 import { fileStatusLabels } from "#/screens/skills/files.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
@@ -386,6 +391,11 @@ export const PublishButton = ({
   // The read of the latest opening: an earlier one that ends later does not replace it.
   const opening = useRef(0);
   const pending = useSettling(publishLabel(row.name));
+  // A hub skill cannot be published while the hub is read-only; a source's skill shows
+  // Publish only while its source is writable.
+  const readOnly = useAppStore((s) =>
+    row.kind === "hub" ? readOnlyHubReason(s.sources) : undefined
+  );
   const openDialog = async () => {
     opening.current += 1;
     const mine = opening.current;
@@ -398,18 +408,25 @@ export const PublishButton = ({
   };
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={pending}
-        aria-busy={pending ? true : undefined}
-        onClick={() => {
-          void openDialog();
-        }}
-      >
-        {pending && <Spinner />}
-        {label}
-      </Button>
+      <WithReason reason={readOnly}>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          aria-busy={pending ? true : undefined}
+          aria-disabled={readOnly === undefined ? undefined : true}
+          onClick={
+            readOnly === undefined
+              ? () => {
+                  void openDialog();
+                }
+              : undefined
+          }
+        >
+          {pending && <Spinner />}
+          {label}
+        </Button>
+      </WithReason>
       <PublishDialog
         row={row}
         files={files}
