@@ -328,8 +328,8 @@ const sequence = async () => {
   }
 };
 
-/** A command exited with code 8: the account repo is unusable, so the checks run again. */
-const accountRepoLost = () => {
+/** A command exited with code 8: the store is unusable, so the checks run again. */
+const storeLost = () => {
   if (useStartup.getState().running) {
     return;
   }
@@ -338,23 +338,22 @@ const accountRepoLost = () => {
 };
 
 /**
- * Runs the checks again whenever a serve child exits with code 8, reports an `account_repo` error
+ * Runs the checks again whenever a serve child exits with code 8, reports a `store` error
  * while it keeps running, or a run exits with code 8.
  */
 const listen = async () => {
   useAppStore.subscribe(({ serveEnd, serveError }, previous) => {
     if (
       (serveEnd !== previous.serveEnd &&
-        serveEnd?.exitCode === EXIT_CODES.account_repo) ||
-      (serveError !== previous.serveError &&
-        serveError?.code === "account_repo")
+        serveEnd?.exitCode === EXIT_CODES.store) ||
+      (serveError !== previous.serveError && serveError?.code === "store")
     ) {
-      accountRepoLost();
+      storeLost();
     }
   });
   await onRunEnd(({ runId, exitCode }) => {
-    if (exitCode === EXIT_CODES.account_repo && !ownRuns.has(runId)) {
-      accountRepoLost();
+    if (exitCode === EXIT_CODES.store && !ownRuns.has(runId)) {
+      storeLost();
     }
   });
 };

@@ -128,15 +128,15 @@ export const loadListing = async (id: string) => {
 };
 
 /**
- * Loads your skills the account remote holds that this machine has not installed:
- * `skill list --remote`, which fetches the account remote. The Add screen calls it when the Your
- * skills pill opens. The list kept from an earlier launch for the same account remote shows while
+ * Loads your skills the hub holds that this machine has not installed:
+ * `skill list --remote`, which fetches the hub. The Add screen calls it when the Your
+ * skills pill opens. The list kept from an earlier launch for the same hub shows while
  * it runs.
  */
 export const loadInstallable = async () => {
   const remote = useAppStore
     .getState()
-    .settings?.sources.find((s) => s.account === true)?.url;
+    .settings?.sources.find((s) => s.hub === true)?.url;
   if (
     remote !== undefined &&
     useAppStore.getState().installable === undefined
@@ -162,7 +162,7 @@ export const loadInstallable = async () => {
   // The list belongs to the remote set when the command ran: kept only if that is still this one.
   const now = useAppStore
     .getState()
-    .settings?.sources.find((s) => s.account === true)?.url;
+    .settings?.sources.find((s) => s.hub === true)?.url;
   if (remote !== undefined && read !== undefined && now === remote) {
     void keepRead("installable", remote, "", read);
   }
@@ -204,7 +204,7 @@ export const loadAdoption = async ({ afterWrite = false } = {}) => {
 const historyVersions = new Map<string, string>();
 
 /**
- * Loads the history of one of your own skills: `skill history <name>`, a read. `version` names
+ * Loads the history of a hub skill: `skill history <name>`, a read. `version` names
  * what the history is of, such as the skill's content and state from the inventory: the same
  * version is read once, however often the skill is selected, and a change to it reads again.
  */

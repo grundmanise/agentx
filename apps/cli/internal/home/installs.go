@@ -15,7 +15,7 @@ import (
 // Install is when one skill last entered the library of this machine and
 // when it last left it, kept in installs.json by the skill's logical asset:
 // a skill of a source by the source's canonical URL and the skill's subpath
-// in it, one of the user's own skills by its fork id, never by its name,
+// in it, a hub skill by its fork id, never by its name,
 // which a rename changes. Only the last of each is kept: an add overwrites
 // added and leaves removed as it was, and a removal the other way round. An
 // unmanaged skill has no entry, since nothing but its content says which
@@ -24,7 +24,7 @@ import (
 type Install struct {
 	Source  string  `json:"source,omitempty"`  // the canonical URL of the source, for a skill of a source
 	Subpath *string `json:"subpath,omitempty"` // the skill's directory in that source, "" for its root
-	ForkID  string  `json:"fork_id,omitempty"` // for one of the user's own skills
+	ForkID  string  `json:"fork_id,omitempty"` // for a hub skill
 	Name    string  `json:"name"`              // the name it last had on this machine, for display only
 	Added   string  `json:"added,omitempty"`   // RFC 3339 in UTC; absent when this machine never saw it added
 	Removed string  `json:"removed,omitempty"` // RFC 3339 in UTC; absent when this machine never saw it removed
@@ -36,7 +36,7 @@ func SourceInstall(name, url, subpath string) Install {
 	return Install{Source: url, Subpath: &subpath, Name: name}
 }
 
-// ForkInstall is the logical asset of the user's own skill called name
+// ForkInstall is the logical asset of the hub skill called name
 // with the fork id id, for RecordInstalls.
 func ForkInstall(name, id string) Install { return Install{ForkID: id, Name: name} }
 

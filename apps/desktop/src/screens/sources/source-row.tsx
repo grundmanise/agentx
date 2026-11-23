@@ -18,7 +18,7 @@ const StaleDot = ({ title }: { title: string }) => (
 );
 
 /**
- * The sources row of the Sources screen: one pill per shared source and Personal, the active one
+ * The sources row of the Sources screen: one pill per shared source and Hub, the active one
  * lit, each with its skill count once it is known and the attention dot when it is stale.
  */
 export const SourceRow = ({

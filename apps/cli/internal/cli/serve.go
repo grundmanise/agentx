@@ -28,26 +28,26 @@ import (
 type updateCheckEvent struct {
 	event
 	InstanceID string `json:"instance_id"`
-	Scope      string `json:"scope"`      // checkScopeAll or checkScopeAccount
+	Scope      string `json:"scope"`      // checkScopeAll or checkScopeHub
 	CheckedAt  string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
-	OK         bool   `json:"ok"`         // false when the check failed as a whole or could not reach the account remote
+	OK         bool   `json:"ok"`         // false when the check failed as a whole or could not reach the hub
 	Fetched    bool   `json:"fetched"`    // whether the check fetched anything
 }
 
 // The scopes of an update_check event: the full check serve runs at start,
-// and the check of the account remote alone it repeats while it runs.
+// and the check of the hub alone it repeats while it runs.
 const (
-	checkScopeAll     = "all"
-	checkScopeAccount = "account"
+	checkScopeAll = "all"
+	checkScopeHub = "hub"
 )
 
-// accountCheckInterval is how long the serve child waits, once the report
-// of one check is made, before it checks the account remote again, see
-// serveChecks.account. accountCheckEvery is what serve waits, which a test
+// hubCheckInterval is how long the serve child waits, once the report
+// of one check is made, before it checks the hub again, see
+// serveChecks.hub. hubCheckEvery is what serve waits, which a test
 // shortens.
-const accountCheckInterval = 10 * time.Minute
+const hubCheckInterval = 10 * time.Minute
 
-var accountCheckEvery = accountCheckInterval
+var hubCheckEvery = hubCheckInterval
 
 // driftEvent says that one skill of the library is no longer in the state
 // the last inventory showed it in: its state, its drift, or both changed
@@ -299,8 +299,8 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		Trees:        trees,
 		Requests:     methods.requests,
 		Check:        checks.startup,
-		Recheck:      checks.account,
-		RecheckEvery: accountCheckEvery,
+		Recheck:      checks.hub,
+		RecheckEvery: hubCheckEvery,
 		Jobs:         []serve.Job{inv.maintenanceJob},
 		Inventory:    inv.inventoryReporter(),
 		Fail:         inv.serveFailed,
@@ -326,19 +326,19 @@ func (inv *invocation) serveFailed(err error) {
 
 // serveChecks are the update checks of the serve child: the full check it
 // runs once, as soon as its initial inventory is out, see startup, and the
-// check of the account remote alone it repeats while it runs, see account.
+// check of the hub alone it repeats while it runs, see hub.
 // serve runs one at a time and makes each report on its loop's goroutine,
 // so failing needs no lock.
 type serveChecks struct {
 	inv *invocation
-	// failing is set while the checks fail to reach the account remote, or
+	// failing is set while the checks fail to reach the hub, or
 	// fail as a whole: the check that starts failing warns, and those after
 	// it stay quiet until one succeeds again.
 	failing bool
 }
 
 // startup is the serve child's update check at start: the check skill
-// check-updates runs, the account remote included, over every source of
+// check-updates runs, the hub included, over every source of
 // the settings rather than only the sources a managed skill came from, so
 // that one pass fetches each source once, whether or not a skill was
 // installed from it, and the source index follows what they hold now. It
@@ -349,8 +349,8 @@ type serveChecks struct {
 // update_available per update, with this process's instance id, a warning
 // for each thing the check could not check, and its update_check. A
 // machine with no source runs no git at all, and neither does one with no
-// account repo; a source an import wrote stays a source not fetched,
-// account repo or not, until source add adds it. The rescan its write of
+// store; a source an import wrote stays a source not fetched,
+// store or not, until source add adds it. The rescan its write of
 // the version file sets off brings the candidates and markers it wrote
 // into the next inventory, and every source ref it moved into the source
 // index.
@@ -362,72 +362,72 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 			return // nothing to check, and nothing was
 		}
 		c.inv.reportServeCheck(rep, err)
-		ok := err == nil && !rep.accountFailed
+		ok := err == nil && !rep.hubFailed
 		c.failing = !ok
 		c.inv.reportUpdateCheck(checkScopeAll, at, ok, err == nil && len(rep.refreshed) > 0)
 	}
 }
 
-// account is the check the serve child repeats while it runs, see
-// accountCheckEvery: what another machine published to your own skills
-// since the last fetch of the account remote. With no account remote set,
-// or no account repo, it runs no git and reports nothing. Otherwise one
-// git ls-remote asks the account remote for its fork branches, see
+// hub is the check the serve child repeats while it runs, see
+// hubCheckEvery: what another machine published to hub skills
+// since the last fetch of the hub. With no hub set,
+// or no store, it runs no git and reports nothing. Otherwise one
+// git ls-remote asks the hub for its fork branches, see
 // gitx.Runner.ForkTips, and when they are what the remote-tracking
 // branches the last fetch left hold, read in one for-each-ref, it fetches
 // nothing, takes no lock and writes nothing. When they differ, it runs the
-// update check of the account remote alone, see checkUpdates: one fetch of
-// it, outside the lock, the comparison of your own skills placed here with
+// update check of the hub alone, see checkUpdates: one fetch of
+// it, outside the lock, the comparison of hub skills placed here with
 // what it holds, and one write of its last_fetched, under the lock, waited
 // for as the check at start waits. Its report is that check's: one
 // update_available per update, then its update_check. A failure is a
 // warning prefixed "update check: " when the checks start failing, and
 // none while they go on failing, see serveChecks.failing.
-func (c *serveChecks) account(ctx context.Context) func() {
+func (c *serveChecks) hub(ctx context.Context) func() {
 	inv := c.inv
-	entry, remote, set, err := inv.accountSource()
+	entry, remote, set, err := inv.hubSource()
 	if err == nil && !set {
 		return nil
 	}
 	if err == nil {
-		if _, err := os.Stat(gitx.AccountRepoPath(inv.dirs.Home)); err != nil {
-			return nil // no account repo yet: nothing was ever fetched into one
+		if _, err := os.Stat(gitx.StorePath(inv.dirs.Home)); err != nil {
+			return nil // no store yet: nothing was ever fetched into one
 		}
 	}
 	var rep checkReport
 	if err == nil {
-		rep, err = inv.checkAccountRemote(ctx, entry.URL, remote)
+		rep, err = inv.checkHubRemote(ctx, entry.URL, remote)
 	}
 	at := time.Now()
 	return func() {
 		if err == nil && rep.idle {
 			return
 		}
-		ok := err == nil && !rep.accountFailed
+		ok := err == nil && !rep.hubFailed
 		if ok || !c.failing {
 			inv.reportServeCheck(rep, err)
 		}
 		c.failing = !ok
-		inv.reportUpdateCheck(checkScopeAccount, at, ok, err == nil && rep.accountFetched)
+		inv.reportUpdateCheck(checkScopeHub, at, ok, err == nil && rep.hubFetched)
 	}
 }
 
-// checkAccountRemote is the account check of the serve child, see
-// serveChecks.account, of the account remote at url, the git remote
-// called remote in the account repo: an empty report, neither idle nor
-// fetched, when the account remote holds the fork branches its
+// checkHubRemote is the hub check of the serve child, see
+// serveChecks.hub, of the hub at url, the git remote
+// called remote in the store: an empty report, neither idle nor
+// fetched, when the hub holds the fork branches its
 // remote-tracking branches hold, and otherwise the report of the update
-// check of the account remote alone. An ls-remote that fails is reported
-// as a fetch of the account remote that failed.
-func (inv *invocation) checkAccountRemote(ctx context.Context, url, remote string) (checkReport, error) {
+// check of the hub alone. An ls-remote that fails is reported
+// as a fetch of the hub that failed.
+func (inv *invocation) checkHubRemote(ctx context.Context, url, remote string) (checkReport, error) {
 	theirs, err := inv.git.ForkTips(ctx, url)
 	if err != nil {
-		f := uncheckedAccount(url, fmt.Errorf("%w: %v", source.ErrUnreachable, err))
-		return checkReport{accountFailed: true, failures: []checkFailure{{source: url, fetch: true, f: f}}}, nil
+		f := uncheckedHub(url, fmt.Errorf("%w: %v", source.ErrUnreachable, err))
+		return checkReport{hubFailed: true, failures: []checkFailure{{source: url, fetch: true, f: f}}}, nil
 	}
-	ours, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), remote)
+	ours, err := lineage.ListRemote(ctx, inv.git, gitx.StorePath(inv.dirs.Home), remote)
 	if err != nil {
-		return checkReport{}, accountRepoFailure(err)
+		return checkReport{}, storeFailure(err)
 	}
 	if maps.Equal(theirs, ours) {
 		return checkReport{}, nil
@@ -479,19 +479,19 @@ func (inv *invocation) reportUpdateCheck(scope string, at time.Time, ok, fetched
 
 // watchedDirs are the directories a change signal can come from, most
 // important first: agentx home holds the version file every mutation
-// rewrites; the account repo, the worktrees, the library and every agent
+// rewrites; the store, the worktrees, the library and every agent
 // client's user-scope skills directory hold content. Everything but agentx
-// home and the account repo is a tree: an edit anywhere inside a skill is a
+// home and the store is a tree: an edit anywhere inside a skill is a
 // signal too, wherever the scan reads that skill from. A skills directory a
 // client shares with another, and the library itself, are watched once.
 //
 // The reflogs of the fork branches are a tree too: a commit made with git
 // in a fork's worktree writes nothing in the worktree or in agentx home,
-// only in the account repo, where it appends to its branch's reflog, so
+// only in the store, where it appends to its branch's reflog, so
 // that is how serve learns the fork moved. So are the reflogs of the
 // remote-tracking branches: a publish with nothing to record, as of a
-// commit made with git, moves only the account remote's branch as the
-// account repo tracks it, which is what a fork's state is judged against,
+// commit made with git, moves only the hub's branch as the
+// store tracks it, which is what a fork's state is judged against,
 // see unpublished. Those reflog trees appear with the first ref of their
 // kind, a skill's first publish creating logs/refs/remotes and every
 // directory below it at once, so logs and logs/refs are watched too: the
@@ -500,7 +500,7 @@ func (inv *invocation) reportUpdateCheck(scope string, at time.Time, ok, fetched
 // there on every status, which would be a signal of its own.
 func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	h := inv.dirs.Home
-	logs := filepath.Join(gitx.AccountRepoPath(h), "logs")
+	logs := filepath.Join(gitx.StorePath(h), "logs")
 	refs := filepath.Join(logs, "refs")
 	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library, filepath.Join(refs, "heads", "skills"), filepath.Join(refs, "remotes")}
 	for _, dir := range scan.UserSkillsDirs(inv.dirs) {
@@ -508,11 +508,11 @@ func (inv *invocation) watchedDirs() (dirs, trees []string) {
 			trees = append(trees, dir)
 		}
 	}
-	return append([]string{h, gitx.AccountRepoPath(h), logs, refs}, trees...), trees
+	return append([]string{h, gitx.StorePath(h), logs, refs}, trees...), trees
 }
 
 // sourceIndex builds the index serve answers searches from: the sources of
-// the machine settings, each listed from its ref in the account repo. The
+// the machine settings, each listed from its ref in the store. The
 // settings are read under the shared lock, as a scan reads them, so a
 // source being added or removed is never seen half written; the listing
 // itself reads objects, which no mutation rewrites. A search reads the
@@ -523,7 +523,7 @@ func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx
 		if err != nil {
 			return err
 		}
-		// The account remote holds forks rather than skills on one branch,
+		// The hub holds forks rather than skills on one branch,
 		// and is never fetched as a shared source, so it has nothing to
 		// search.
 		shared := sharedSources(s.Sources)
@@ -531,7 +531,7 @@ func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx
 		for _, src := range shared {
 			urls = append(urls, src.URL)
 		}
-		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), urls, prev)
+		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.StorePath(inv.dirs.Home), urls, prev)
 		return err
 	})
 	return idx, warnings, err
