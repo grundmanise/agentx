@@ -603,9 +603,11 @@ test("an Added skill shows when it was added, a removed one when it was removed,
       },
     ],
   });
-  await expect(row(page, "pdf")).toHaveAccessibleDescription(/^Added Oct 2\./u);
+  await expect(row(page, "pdf")).toHaveAccessibleDescription(
+    /^Added on Oct 2\./u
+  );
   await expect(
-    rowLine(page, "pdf").getByText("Oct 2", { exact: true })
+    rowLine(page, "pdf").getByText("Added on Oct 2", { exact: true })
   ).toBeVisible();
   await expect(
     rowLine(page, "docx").getByText("Removed Nov 18", { exact: true })
@@ -616,7 +618,7 @@ test("an Added skill shows when it was added, a removed one when it was removed,
   await row(page, "pdf").click();
   await expect(opened(page, "pdf")).not.toContainText("Removed");
   await expect(
-    rowLine(page, "pdf").getByText("Oct 2", { exact: true })
+    rowLine(page, "pdf").getByText("Added on Oct 2", { exact: true })
   ).toBeVisible();
 });
 

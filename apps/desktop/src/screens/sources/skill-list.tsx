@@ -266,24 +266,29 @@ const noLibrary: never[] = [];
 const noInstalls: never[] = [];
 
 /**
- * The date a row shows before its status or check: when an Added skill was added, or when a skill
- * that can be selected left this machine's library. Undefined when this machine recorded neither.
+ * The status of an Added skill: Added, with the date this machine last added it when it recorded
+ * one.
+ */
+const addedStatus = (install: Install | undefined): string =>
+  install?.added === undefined
+    ? statusLabels.added
+    : `${statusLabels.added} on ${formatDate(install.added)}`;
+
+/**
+ * The date a row shows before its check: when a skill that can be selected last left this
+ * machine's library. Undefined when this machine recorded none.
  */
 const rowDate = (
   card: SkillCard,
   install: Install | undefined
-): string | undefined => {
-  if (card.status === "added" && install?.added !== undefined) {
-    return formatDate(install.added);
-  }
-  return card.status === undefined && install?.removed !== undefined
+): string | undefined =>
+  card.status === undefined && install?.removed !== undefined
     ? `Removed ${formatDate(install.removed)}`
     : undefined;
-};
 
 /**
  * The text at a row's end, before its action: the status of a skill that has no action, or the
- * row's date. Added is the action's own label, so its date sits before it and it never moves.
+ * row's date, which sits before the check so the check never moves.
  */
 const rowMeta = (card: SkillCard, date: string | undefined): ReactNode => {
   if (card.status !== undefined && card.status !== "added") {
@@ -307,9 +312,12 @@ const rowMeta = (card: SkillCard, date: string | undefined): ReactNode => {
  */
 const AddedRemove = ({
   card,
+  status,
   onRemove,
 }: {
   card: SkillCard;
+  /** Added, with its date when this machine recorded one. */
+  status: string;
   onRemove: (name: string) => void;
 }) => {
   const name = useAppStore((s) =>
@@ -319,7 +327,7 @@ const AddedRemove = ({
   const busy = useSettling(`remove ${name ?? ""}`);
   return (
     <RemoveSwap
-      status={statusLabels.added}
+      status={status}
       label={`Remove ${name ?? card.name}`}
       busy={name !== undefined && busy}
       onClick={() => {
@@ -335,8 +343,9 @@ const AddedRemove = ({
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its
  * description while closed, View skill beside the name while open) and, at its end, the round
  * check that selects it, or for a skill this machine holds already its status, which for an Added
- * skill turns into Remove on hover; before either, the date of its last add or removal when this
- * machine recorded it. The row is named
+ * skill turns into Remove on hover. Added carries the date of the last add, and the check of a
+ * skill this machine removed has the date of the last removal before it, when this machine
+ * recorded them. The row is named
  * by the skill alone; its status and description are read as its description. A row asked to
  * open reads its SKILL.md first, with a spinner in the description's place, and opens once the
  * read ends.
@@ -376,8 +385,12 @@ const SkillItemView = ({
   const install = useAppStore((s) =>
     installOf(card, s.inventory?.installs ?? noInstalls)
   );
-  const status =
-    card.status === undefined ? undefined : statusLabels[card.status];
+  let status: string | undefined;
+  if (card.status === "added") {
+    status = addedStatus(install);
+  } else if (card.status !== undefined) {
+    status = statusLabels[card.status];
+  }
   const date = rowDate(card, install);
   const description = [
     [status, date].filter((part) => part !== undefined).join(" "),
@@ -400,7 +413,9 @@ const SkillItemView = ({
       </Toggle>
     );
   } else if (card.status === "added") {
-    action = <AddedRemove card={card} onRemove={onRemove} />;
+    action = (
+      <AddedRemove card={card} status={status ?? ""} onRemove={onRemove} />
+    );
   }
   return (
     <AccordionItem variant="list" value={card.key} selected={selected}>
