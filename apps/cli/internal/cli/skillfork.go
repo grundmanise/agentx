@@ -279,7 +279,13 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 		fk.src.rec, fk.site, fk.judged, fk.record = site.rec, site, judged, nil
 	}
 	var done placements
-	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error { return inv.applyFork(ctx, fk, &done) })
+	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
+		if err := inv.applyFork(ctx, fk, &done); err != nil {
+			return err
+		}
+		inv.recordInstalls(fk.installs(message.trailers.ForkID))
+		return nil
+	})
 	if errors.Is(err, home.ErrMovedBeforeApply) {
 		return fk.changed()
 	}
@@ -290,6 +296,22 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 		return inv.reportAdoptedOwn(ctx, fk, done)
 	}
 	return inv.reportForked(ctx, fk, done)
+}
+
+// installs is what the applied fork fk did to the library, for the
+// installs file, id being the fork id its creation commit carries: the new
+// skill entered it, unless the commit carries no id, as skill rename's
+// does when the renamed skill keeps the one its history records, and a
+// managed skill forked in its own place left it, its source's skill
+// replaced by one of the user's own.
+func (fk *forking) installs(id string) (added, removed []home.Install) {
+	if id != "" {
+		added = append(added, home.ForkInstall(fk.target, id))
+	}
+	if fk.inPlace && fk.src.kind == lineage.KindManaged {
+		removed = append(removed, recordedInstall(fk.src.rec))
+	}
+	return added, removed
 }
 
 // checkForking runs the refusals of a fork that need no git but the

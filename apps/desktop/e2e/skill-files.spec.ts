@@ -469,6 +469,7 @@ test("the places of a skill come from the inventory, the library first", () => {
   // The fixture inventory with the fields serve adds to it.
   const whole: InventoryEvent = {
     edges: [],
+    installs: [],
     instance_id: "instance-1",
     machine: { id: "machine-1", label: "studio-mac" },
     mcp_servers: [],

@@ -1086,6 +1086,9 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 		// for good.
 		applied := m.Apply(inv.refs(ctx))
 		journaled = m.Journaled()
+		if applied == nil {
+			inv.recordInstalls(enteredLibrary(dones, records), nil)
+		}
 		return applied
 	})
 	if errors.Is(err, errNothingInstalled) {
@@ -1096,6 +1099,22 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 	}
 	b.done = dones
 	return dones, journaled, nil
+}
+
+// enteredLibrary is the skills of dones that entered the library with the
+// run, by the source and subpath their import records, for the installs
+// file: every one but a skill the library held already as the managed
+// skill of that name, which installing it again does not add. records is
+// the lineage as the run read it under the lock, before its journal.
+func enteredLibrary(dones []*installed, records map[string]lineage.Record) []home.Install {
+	var added []home.Install
+	for _, done := range dones {
+		if rec, ok := records[done.v.name]; done.adopted && ok && rec.Kind == lineage.KindManaged {
+			continue
+		}
+		added = append(added, home.SourceInstall(done.v.name, done.v.imp.Source, done.v.imp.Path))
+	}
+	return added
 }
 
 // errNothingInstalled ends the mutation of a run whose every skill was
