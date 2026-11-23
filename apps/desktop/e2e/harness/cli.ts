@@ -515,6 +515,7 @@ export class MockCli {
                 ? {
                     configurations: [],
                     edges: [],
+                    installs: [],
                     instance_id: `instance-${childId}`,
                     library: [],
                     machine: { id: "machine-1", label: machineLabel },

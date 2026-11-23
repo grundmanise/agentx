@@ -5,6 +5,7 @@
 // same way and the tests pin the command lines.
 import type {
   Configuration,
+  Install,
   InstallableSkillEvent,
   LibraryEntry,
   SearchResult,
@@ -256,6 +257,8 @@ export interface SkillCard {
    * which `skill add` installs instead: the card is in use by name, not added.
    */
   sharedWith?: string;
+  /** The fork id of a hub skill. */
+  forkId?: string;
 }
 
 export const cardKey = (source: string, name: string, subpath?: string) =>
@@ -408,16 +411,17 @@ export const installableCards = (
   installable: InstallableSkillEvent[],
   library: LibraryEntry[]
 ): SkillCard[] =>
-  installable.map((s) =>
-    card(
+  installable.map((s) => ({
+    ...card(
       HUB_SKILLS,
       s.name,
       s.upstream === undefined
         ? "hub skill"
         : `from ${shortSource(s.upstream)}`,
       installableStatus(s, library)
-    )
-  );
+    ),
+    forkId: s.fork_id,
+  }));
 
 /** The cards of a search answer, whose `source` is each skill's source URL. */
 export const resultCards = (
@@ -479,6 +483,24 @@ export const addedName = (
           e.subpath === added.skillMd?.subpath
       )?.name
     : undefined;
+
+/**
+ * When a card's skill last entered and last left this machine's library, from the inventory's
+ * installs: a skill of a source by its source URL and subpath, a hub skill by its fork id.
+ * Undefined when this machine recorded neither, as for a skill added before it kept the dates.
+ */
+export const installOf = (
+  skill: SkillCard,
+  installs: Install[]
+): Install | undefined => {
+  if (skill.forkId !== undefined) {
+    return installs.find((i) => i.fork_id === skill.forkId);
+  }
+  const subpath = skill.skillMd?.subpath;
+  return subpath === undefined
+    ? undefined
+    : installs.find((i) => i.source === skill.source && i.subpath === subpath);
+};
 
 export interface CardGroup {
   /** The source URL, or HUB_SKILLS. */
