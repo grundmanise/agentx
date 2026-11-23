@@ -1,14 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cva } from "class-variance-authority";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -477,14 +469,16 @@ const PLACED_CARD = "pt-add-card absolute top-0 left-0 w-full";
 /**
  * Where the list starts in the scroller's content, in px, for the virtualizer's scroll margin. It
  * changes whenever something above it in the scroller changes size, comes or goes, such as the
- * card of the open source or the select-all row.
+ * card of the open source or the select-all row. It is measured in an effect, not a layout
+ * effect: the scroller belongs to a component above, and when both mount at once, as on a launch
+ * that draws the kept sources, React sets its ref only after the list's layout effects ran.
  */
 const useOffsetIn = (
   list: RefObject<HTMLElement | null>,
   scroller: RefObject<HTMLElement | null>
 ) => {
   const [offset, setOffset] = useState(0);
-  useLayoutEffect(() => {
+  useEffect(() => {
     const element = list.current;
     const parent = scroller.current;
     const measure = () => {

@@ -385,6 +385,17 @@ test("a row that opens keeps the scroll, its top hidden or not", async ({
 }) => {
   await page.setViewportSize({ height: 600, width: 1100 });
   await openSources(cli, page);
+  // A later launch draws the kept sources at once, so the list mounts with the scroller it
+  // scrolls in.
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(() => localStorage.getItem("agentx.launch"))
+    )
+    .not.toBeNull();
+  cli.restart();
+  await page.reload();
+  await expect(row(page, "pdf")).toBeVisible();
   const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n");
   for (const name of ["pdf", "docx"]) {
     cli.register(["source", "read", ACME_ID, `skills/${name}`], {
