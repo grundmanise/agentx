@@ -59,9 +59,9 @@ test("every entry says what happened, and the stored upstream version is left ou
     .getByRole("listitem");
   await expect(entries).toHaveText([
     /^Tighten the examplesOct 2(?:, 2026)? · 1 file$/u,
-    new RegExp(`^${EDITS}Oct 2(?:, 2026)? · this computer · 4 files$`, "u"),
-    /^Synced edits from another computerOct 1(?:, 2026)? · laptop · 1 file$/u,
-    /^Forked from acme\/skillsSep 30(?:, 2026)? · this computer · version of Sep 14(?:, 2026)?$/u,
+    new RegExp(`^${EDITS}Oct 2(?:, 2026)? · this machine · 4 files$`, "u"),
+    /^Synced edits from another machineOct 1(?:, 2026)? · laptop · 1 file$/u,
+    /^Forked from acme\/skillsSep 30(?:, 2026)? · this machine · version of Sep 14(?:, 2026)?$/u,
   ]);
 });
 
@@ -196,10 +196,10 @@ test("each kind of commit in words", () => {
 
   expect(isShown(of({ kind: "upstream" }))).toBe(false);
   expect(isShown(of({ kind: "edit" }))).toBe(true);
-  // The meta line: this computer by its id, another by its label, and nothing for an unknown one.
+  // The meta line: this machine by its id, another by its label, and nothing for an unknown one.
   const at = { time: "2026-10-02T14:03:00Z" };
   expect(metaOf(of({ ...at, machine: "m-1" }), "m-1")).toMatch(
-    /· this (?:computer|Mac) · 1 file$/u
+    /· this (?:machine|Mac) · 1 file$/u
   );
   expect(
     metaOf(of({ ...at, machine: "m-2", machine_label: "laptop" }), "m-1")

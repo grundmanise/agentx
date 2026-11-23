@@ -24,15 +24,15 @@ const SHOWN = 3;
 
 const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
 
-/** What this computer is called in an entry's meta line. */
-const HERE = isMac ? "this Mac" : "this computer";
+/** What this machine is called in an entry's meta line. */
+const HERE = isMac ? "this Mac" : "this machine";
 
 /** An https URL, which the window opens; undefined for anything else. */
 const https = (url: string | undefined) =>
   url?.startsWith("https://") === true ? url : undefined;
 
 /**
- * What the meta line of an entry says: the date, the computer it was made on when known, the date
+ * What the meta line of an entry says: the date, the machine it was made on when known, the date
  * of the upstream version a fork or an update took in, and the number of files, except on a fork
  * or a rename, whose files are the skill's own.
  */
@@ -145,7 +145,7 @@ export const entrySegments = (e: HistoryEvent): Segment[] => {
       ];
     }
     case "sync": {
-      return [{ text: "Synced edits from another computer" }];
+      return [{ text: "Synced edits from another machine" }];
     }
     case "edit": {
       return e.generated === true

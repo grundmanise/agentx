@@ -735,8 +735,8 @@ test.describe("the detail pane", () => {
           - heading "History" [level=2]
           - list "History":
             - listitem: /Tighten the examples\\s+Oct 2(, 2026)?\\s+· 1 file/
-            - listitem: /Edited SKILL\\.md, added examples\\.md and 2 more files\\s+Oct 2(, 2026)?\\s+· this computer · 4 files/
-            - listitem: /Synced edits from another computer\\s+Oct 1(, 2026)?\\s+· laptop · 1 file/
+            - listitem: /Edited SKILL\\.md, added examples\\.md and 2 more files\\s+Oct 2(, 2026)?\\s+· this machine · 4 files/
+            - listitem: /Synced edits from another machine\\s+Oct 1(, 2026)?\\s+· laptop · 1 file/
             - listitem:
               - button "Show all 4"
     `);
@@ -828,11 +828,11 @@ test.describe("the detail pane", () => {
     expect(await sideways()).toBe(0);
     await long.click();
     await sheet
-      .getByRole("button", { name: "Synced edits from another computer" })
+      .getByRole("button", { name: "Synced edits from another machine" })
       .click();
     const files = sheet
       .getByRole("list", {
-        name: "Files of Synced edits from another computer",
+        name: "Files of Synced edits from another machine",
       })
       .getByRole("listitem");
     await expect(files).toHaveText(["modifiedSKILL.md"]);
