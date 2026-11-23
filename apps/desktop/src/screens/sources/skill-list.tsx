@@ -609,35 +609,11 @@ export const SkillList = ({
     scrollMargin: offset,
   });
 
-  // A row that changes height moves the scroll only when it lies wholly above what shows. By
-  // default the list also moves it for a row whose top is above, so a row opened with its top
-  // hidden pushed the list up by all it revealed.
+  // A row that changes height moves the scroll only when it lies wholly above what shows, so a
+  // row that opens keeps the scroll. By default the list also moves it for a row whose top is
+  // above, so a row opened with its top hidden pushed the list up by all it revealed.
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) =>
     item.end <= (virtualizer.scrollOffset ?? 0);
-
-  // The list keeps its scroll as a row opens, and its content shows below. Only a row whose top
-  // is above the scroller's, partly hidden, scrolls down to show it in full.
-  const wasOpen = useRef(open);
-  useLayoutEffect(() => {
-    const opened = open.find((key) => !wasOpen.current.includes(key));
-    wasOpen.current = open;
-    if (opened === undefined || scroller.current === null) {
-      return;
-    }
-    const index = items.findIndex((item) => item.key === opened);
-    const card = list.current?.querySelector(
-      `[data-index="${index}"] [data-slot="accordion-item"]`
-    );
-    if (!card) {
-      return;
-    }
-    const hidden =
-      scroller.current.getBoundingClientRect().top -
-      card.getBoundingClientRect().top;
-    if (hidden > 0) {
-      scroller.current.scrollTop -= hidden;
-    }
-  });
 
   const drawn = virtualizer.getVirtualItems().flatMap((v) => {
     const item = items[v.index];

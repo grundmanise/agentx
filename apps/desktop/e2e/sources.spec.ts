@@ -379,7 +379,7 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   ]);
 });
 
-test("a row that opens keeps the scroll, unless its top is hidden", async ({
+test("a row that opens keeps the scroll, its top hidden or not", async ({
   cli,
   page,
 }) => {
@@ -394,42 +394,31 @@ test("a row that opens keeps the scroll, unless its top is hidden", async ({
   const scroller = page
     .locator(".overflow-auto")
     .filter({ has: row(page, "pdf") });
+  const scrollTop = async () => await scroller.evaluate((el) => el.scrollTop);
   const top = async (name: string) => {
     const box = await rowLine(page, name).boundingBox();
     return box?.y ?? Number.NaN;
   };
-  const scrollerTop = async () => {
-    const box = await scroller.boundingBox();
-    return box?.y ?? Number.NaN;
-  };
 
   // pdf opens at the bottom edge: nothing moves, and its SKILL.md shows below the fold.
-  await scroller.evaluate((el, y) => {
-    el.scrollTop = y;
-  }, 0);
   const pdfBefore = await top("pdf");
   await row(page, "pdf").dispatchEvent("click");
   await expect(row(page, "pdf")).toHaveAttribute("aria-expanded", "true");
   expect(await top("pdf")).toBe(pdfBefore);
 
-  // docx, its top 20px above the scroller's, scrolls down just enough to show its top.
-  const offset = (await top("docx")) - (await scrollerTop()) + 20;
+  // docx, its top 20px above the scroller's, opens in place too.
+  const scrollerBox = await scroller.boundingBox();
+  const offset = (await top("docx")) - (scrollerBox?.y ?? Number.NaN) + 20;
   await scroller.evaluate((el, by) => {
     el.scrollTop += by;
   }, offset);
-  const scrolled = await scroller.evaluate((el) => el.scrollTop);
+  const scrolled = await scrollTop();
   await row(page, "docx").dispatchEvent("click");
   await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
-  await expect
-    .poll(async () => await scroller.evaluate((el) => el.scrollTop))
-    .toBeLessThan(scrolled);
-  const card = page
-    .locator("[data-slot=accordion-item]")
-    .filter({ has: row(page, "docx") });
-  const cardBox = await card.boundingBox();
-  expect(Math.round(cardBox?.y ?? Number.NaN)).toBe(
-    Math.round(await scrollerTop())
-  );
+  await expect(
+    opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
+  ).toBeVisible();
+  expect(await scrollTop()).toBe(scrolled);
 });
 
 test("opening a row reads its SKILL.md once, then opens, and links to the skill", async ({
