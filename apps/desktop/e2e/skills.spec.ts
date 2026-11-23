@@ -733,10 +733,10 @@ test.describe("the detail pane", () => {
           - heading "History" [level=2]
           - list "History":
             - listitem: /Tighten the examples\\s+Oct 2(, 2026)?\\s+· 1 file/
-            - listitem: /pdf-letters:\\sedit SKILL\\.md and add examples\\.md \\(studio-mac\\)\\s+Oct 2(, 2026)?\\s+· 2 files/
-            - listitem: /pdf-letters:\\sedit SKILL\\.md \\(studio-mac\\)\\s+Oct 1(, 2026)?\\s+· 1 file/
+            - listitem: /Edited SKILL\\.md, added examples\\.md and 2 more files\\s+Oct 2(, 2026)?\\s+· this computer · 4 files/
+            - listitem: /Synced edits from another computer\\s+Oct 1(, 2026)?\\s+· laptop · 1 file/
             - listitem:
-              - button "Show all 5"
+              - button "Show all 4"
     `);
 
     // A URL opens in the browser, the skill's files show in the file manager.
@@ -786,14 +786,14 @@ test.describe("the detail pane", () => {
       )
     ).toBeVisible();
 
-    await article.getByRole("button", { name: "Show all 5" }).click();
+    await article.getByRole("button", { name: "Show all 4" }).click();
     const sheet = page.getByRole("dialog", { name: "History" });
     await expect(sheet).toContainText("pdf-letters");
     const entries = sheet
       .getByRole("list", { name: "All history" })
       .getByRole("listitem");
-    await expect(entries).toHaveCount(5);
-    await expect(entries.last()).toContainText("Import pdf from acme/skills");
+    await expect(entries).toHaveCount(4);
+    await expect(entries.last()).toContainText("Forked from acme/skills");
     // Dragged to its narrowest, a long subject wraps inside the sheet; the sheet never scrolls
     // sideways.
     const handle = sheet.getByRole("separator", { name: "Resize" });
@@ -806,7 +806,7 @@ test.describe("the detail pane", () => {
     const narrowest = await sheet.boundingBox();
     expect(Math.round(narrowest?.width ?? 0)).toBe(420);
     const long = sheet.getByRole("button", {
-      name: "pdf-letters: edit SKILL.md and add examples.md (studio-mac)",
+      name: "Edited SKILL.md, added examples.md and 2 more files",
     });
     const line = await long.evaluate((el) => el.getBoundingClientRect().height);
     expect(line).toBeGreaterThan(20);
@@ -818,17 +818,19 @@ test.describe("the detail pane", () => {
     expect(await sideways()).toBe(0);
     await long.click();
     await expect(
-      sheet.getByRole("list", { name: /^Files of pdf-letters: edit/u })
+      sheet.getByRole("list", { name: /^Files of Edited SKILL\.md/u })
     ).toBeVisible();
     expect(await sideways()).toBe(0);
     await long.click();
     await sheet
-      .getByRole("button", { name: "Import pdf from acme/skills" })
+      .getByRole("button", { name: "Synced edits from another computer" })
       .click();
     const files = sheet
-      .getByRole("list", { name: "Files of Import pdf from acme/skills" })
+      .getByRole("list", {
+        name: "Files of Synced edits from another computer",
+      })
       .getByRole("listitem");
-    await expect(files).toHaveText(["addedSKILL.md", "addedreference.md"]);
+    await expect(files).toHaveText(["modifiedSKILL.md"]);
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
     // The history was read once: selecting the skill again does not read it again.

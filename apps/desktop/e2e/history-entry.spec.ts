@@ -1,11 +1,14 @@
-// The History sheet of one of your own skills: each entry expands to the files its commit changed
-// and collapses again, and the subject of the commit that created a fork links to its origin's page.
+// The History of one of your own skills: each commit said as what it did to the skill, the
+// versions of the source's skill agentx stored left out, and in the sheet each entry expanding to
+// the files its commit changed and collapsing again.
 import type { Page } from "@playwright/test";
 
+import type { HistoryEvent } from "#/cli/events.gen.ts";
 import {
-  originPage,
-  originParts,
-  subjectSegments,
+  entrySegments,
+  entryText,
+  isShown,
+  metaOf,
 } from "#/screens/skills/history.tsx";
 
 import {
@@ -18,13 +21,13 @@ import {
 import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
-const SUBJECT = "pdf-letters: edit SKILL.md and add examples.md (studio-mac)";
+const EDITS = "Edited SKILL.md, added examples.md and 2 more files";
 
 const sheet = (page: Page) => page.getByRole("dialog", { name: "History" });
 const entryButton = (page: Page) =>
-  sheet(page).getByRole("button", { exact: true, name: SUBJECT });
+  sheet(page).getByRole("button", { exact: true, name: EDITS });
 const filesOf = (page: Page) =>
-  sheet(page).getByRole("list", { name: `Files of ${SUBJECT}` });
+  sheet(page).getByRole("list", { name: `Files of ${EDITS}` });
 const details = (page: Page) =>
   page.getByRole("region", { name: "Skill details" });
 
@@ -42,9 +45,25 @@ const start = (cli: MockCli) => {
 const openSheet = async (cli: MockCli, page: Page) => {
   start(cli);
   await page.goto("/#/skills/pdf-letters");
-  await details(page).getByRole("button", { name: "Show all 5" }).click();
+  await details(page).getByRole("button", { name: "Show all 4" }).click();
   await expect(sheet(page)).toBeVisible();
 };
+
+test("every entry says what happened, and the stored upstream version is left out", async ({
+  cli,
+  page,
+}) => {
+  await openSheet(cli, page);
+  const entries = sheet(page)
+    .getByRole("list", { name: "All history" })
+    .getByRole("listitem");
+  await expect(entries).toHaveText([
+    /^Tighten the examplesOct 2(?:, 2026)? · 1 file$/u,
+    new RegExp(`^${EDITS}Oct 2(?:, 2026)? · this computer · 4 files$`, "u"),
+    /^Synced edits from another computerOct 1(?:, 2026)? · laptop · 1 file$/u,
+    /^Forked from acme\/skillsSep 30(?:, 2026)? · this computer · version of Sep 14(?:, 2026)?$/u,
+  ]);
+});
 
 test("an entry expands to its files and collapses again", async ({
   cli,
@@ -59,6 +78,8 @@ test("an entry expands to its files and collapses again", async ({
   await expect(filesOf(page).getByRole("listitem")).toHaveText([
     "modifiedSKILL.md",
     "addedexamples.md",
+    "addedletters/formal.md",
+    "addedletters/short.md",
   ]);
 
   await button.click();
@@ -66,77 +87,124 @@ test("an entry expands to its files and collapses again", async ({
   await expect(filesOf(page)).toHaveCount(0);
 });
 
-test("the subject of a fork's first commit links to the skill and the page it came from", async ({
+test("a fork's source links to the skill's folder at the forked commit", async ({
   cli,
   page,
 }) => {
   await openSheet(cli, page);
-  const subject =
-    "Fork pdf-letters from https://github.com/acme/skills/pdf at 3f2a9c1";
   const files = sheet(page).getByRole("button", {
-    name: `Show the files of ${subject}`,
+    name: "Show the files of Forked from acme/skills",
   });
   await files.click();
   await expect(files).toHaveAttribute("aria-expanded", "true");
 
-  // The fork's name leads to the skill's folder at the forked commit, the source to its page.
   const links = sheet(page).getByRole("link");
-  await expect(links).toHaveText(["pdf-letters", `${ACME}/pdf`]);
+  await expect(links).toHaveText(["acme/skills"]);
   await links.first().click();
-  await links.last().click();
   await expect
     .poll(() => cli.openedUrls)
-    .toEqual([`${ACME}/tree/3f2a9c1e8d7/pdf`, ACME]);
+    .toEqual([`${ACME}/tree/3f2a9c1e8d7/pdf`]);
 });
 
-test("a fork's origin links its name, and only to an https page", () => {
-  const [first] = history;
-  const origin = {
-    kind: "plugin" as const,
-    plugin: "chrome-devtools-mcp",
-    skill: "a11y-debugging",
-  };
-  const url = "https://github.com/ChromeDevTools/chrome-devtools-mcp";
-  const fork = {
-    ...first,
-    origin: { ...origin, url },
-    subject: "Fork a11y-debugging from plugin chrome-devtools-mcp",
-  };
-  expect(originPage(fork)).toBe(url);
-  expect(originParts(fork)).toEqual({
-    after: "",
-    before: "Fork a11y-debugging from plugin ",
-    name: "chrome-devtools-mcp",
-  });
-  // The skill a fork of a fork came from, named after "from" even when the fork shares the word.
-  expect(
-    originParts({
-      ...first,
-      origin: { kind: "skill", skill: "alpha" },
-      subject: "Fork alpha-2 from alpha",
-    })
-  ).toEqual({ after: "", before: "Fork alpha-2 from ", name: "alpha" });
-  // A source's path as the CLI writes it into the subject, its runs of spaces as one.
-  expect(
-    originParts({
-      ...first,
-      origin: {
-        kind: "source",
-        path: "tools/two  words",
-        skill: "words",
-        source: "https://github.com/acme/skills",
-      },
-      subject:
-        "Fork words from https://github.com/acme/skills/tools/two words at 3f2a9c1",
-    })?.name
-  ).toBe("https://github.com/acme/skills/tools/two words");
-  expect(originParts({ ...fork, subject: "Rename it" })).toBeUndefined();
-  // Only a fork of a source's skill links the fork's name.
-  expect(subjectSegments(fork).map((r) => r.page)).toEqual([undefined, url]);
+/** An event of `kind`, from the fixture's first, with `fields`. */
+const of = (fields: Partial<HistoryEvent>): HistoryEvent => ({
+  ...history[0],
+  ...fields,
+});
 
-  expect(originPage({ ...fork, origin })).toBeUndefined();
+test("each kind of commit in words", () => {
+  const plugin = "https://github.com/ChromeDevTools/chrome-devtools-mcp";
+  const version = {
+    commit: "9b8c7d6e5f4a",
+    path: "pdf",
+    skill_url: `${ACME}/tree/9b8c7d6e5f4a/pdf`,
+    source: ACME,
+    time: "2026-10-03T12:00:00Z",
+    url: ACME,
+  };
+  const cases: [Partial<HistoryEvent>, string][] = [
+    [{ kind: "create", subject: "Create notes" }, "Created"],
+    [{ kind: "adopt", subject: "Adopt notes" }, "Imported from disk"],
+    [
+      { kind: "rename", renamed_from: "pdf-notes", subject: "Rename x to y" },
+      "Renamed from pdf-notes",
+    ],
+    [
+      {
+        kind: "fork",
+        origin: {
+          kind: "plugin",
+          plugin: "chrome-devtools-mcp",
+          skill: "a11y",
+          url: plugin,
+        },
+      },
+      "Forked from plugin chrome-devtools-mcp",
+    ],
+    [
+      { kind: "fork", origin: { kind: "skill", skill: "alpha" } },
+      "Forked from alpha",
+    ],
+    [{ kind: "fork", subject: "Fork old from new" }, "Forked"],
+    [{ kind: "update", upstream: version }, "Updated from acme/skills"],
+    [
+      {
+        files: [{ path: "SKILL.md", status: "modified" }],
+        generated: true,
+        kind: "edit",
+      },
+      "Edited SKILL.md",
+    ],
+    [
+      {
+        files: [
+          { path: "a.md", status: "deleted" },
+          { path: "b.md", status: "added" },
+        ],
+        generated: true,
+        kind: "edit",
+      },
+      "Deleted a.md, added b.md",
+    ],
+    [{ kind: "edit", subject: "My own words" }, "My own words"],
+    [{ kind: "git", subject: "By hand" }, "By hand"],
+    [
+      { kind: "later", subject: "A kind not known yet" },
+      "A kind not known yet",
+    ],
+  ];
+  for (const [fields, text] of cases) {
+    expect(entryText(of(fields))).toBe(text);
+  }
+  // Only an https page is a link.
   expect(
-    originPage({ ...fork, origin: { ...origin, url: "http://example.com" } })
-  ).toBeUndefined();
-  expect(originPage(first)).toBeUndefined();
+    entrySegments(
+      of({ kind: "fork", origin: { kind: "skill", skill: "a", url: plugin } })
+    ).map((s) => s.page)
+  ).toEqual([undefined, plugin]);
+  expect(
+    entrySegments(
+      of({
+        kind: "fork",
+        origin: { kind: "skill", skill: "a", url: "http://example.com" },
+      })
+    ).map((s) => s.page)
+  ).toEqual([undefined, undefined]);
+  expect(
+    entrySegments(of({ kind: "update", upstream: version })).map((s) => s.page)
+  ).toEqual([undefined, version.skill_url]);
+
+  expect(isShown(of({ kind: "upstream" }))).toBe(false);
+  expect(isShown(of({ kind: "edit" }))).toBe(true);
+  // The meta line: this computer by its id, another by its label, and nothing for an unknown one.
+  const at = { time: "2026-10-02T14:03:00Z" };
+  expect(metaOf(of({ ...at, machine: "m-1" }), "m-1")).toMatch(
+    /· this (?:computer|Mac) · 1 file$/u
+  );
+  expect(
+    metaOf(of({ ...at, machine: "m-2", machine_label: "laptop" }), "m-1")
+  ).toMatch(/· laptop · 1 file$/u);
+  expect(metaOf(of({ ...at, machine: "m-2" }), "m-1")).toMatch(
+    /^Oct 2(?:, 2026)? · 1 file$/u
+  );
 });

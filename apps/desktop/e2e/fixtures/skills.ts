@@ -291,11 +291,17 @@ const historyEvent = (
   time: string,
   subject: string,
   files: HistoryEvent["files"],
-  flags: Partial<Pick<HistoryEvent, "machine" | "origin">> = {}
+  flags: Partial<
+    Pick<
+      HistoryEvent,
+      "generated" | "kind" | "machine" | "machine_label" | "origin" | "upstream"
+    >
+  > = {}
 ): HistoryEvent => ({
   author: "Me <me@example.com>",
   commit,
   files,
+  kind: "git",
   message: subject,
   name: "pdf-letters",
   parents: [],
@@ -306,9 +312,20 @@ const historyEvent = (
   ...flags,
 });
 
+/** The version of acme/skills' pdf that pdf-letters was forked from. */
+const forkedVersion = {
+  commit: "3f2a9c1e8d7",
+  path: "pdf",
+  skill_url: `${ACME}/tree/3f2a9c1e8d7/pdf`,
+  source: ACME,
+  time: "2026-09-14T12:00:00Z",
+  url: ACME,
+};
+
 /**
- * The history of pdf-letters, newest first: a commit made with Git, three of agentx's, the last
- * of them the fork's creation with the skill of acme/skills it came from, then the import.
+ * The history of pdf-letters, newest first: a commit made with Git, edits recorded on this
+ * machine, the edits another machine published merged in, the fork's creation with the skill of
+ * acme/skills it came from, then the import of that version, which the app does not show.
  */
 export const history: HistoryEvent[] = [
   historyEvent("9b41c07aaaa", "2026-10-02T14:03:00Z", "Tighten the examples", [
@@ -317,19 +334,31 @@ export const history: HistoryEvent[] = [
   historyEvent(
     "4c2e9a1bbbb",
     "2026-10-02T11:20:00Z",
-    "pdf-letters: edit SKILL.md and add examples.md (studio-mac)",
+    "pdf-letters: edit SKILL.md, add examples.md and 2 more files (studio-mac)",
     [
       { path: "SKILL.md", status: "modified" },
       { path: "examples.md", status: "added" },
+      { path: "letters/formal.md", status: "added" },
+      { path: "letters/short.md", status: "added" },
     ],
-    { machine: "machine-1" }
+    {
+      generated: true,
+      kind: "edit",
+      machine: "machine-1",
+      machine_label: "studio-mac",
+    }
   ),
   historyEvent(
     "e07d5b2cccc",
     "2026-10-01T09:12:00Z",
-    "pdf-letters: edit SKILL.md (studio-mac)",
+    "pdf-letters: merge the account remote (laptop)",
     [{ path: "SKILL.md", status: "modified" }],
-    { machine: "machine-1" }
+    {
+      generated: true,
+      kind: "sync",
+      machine: "machine-2",
+      machine_label: "laptop",
+    }
   ),
   historyEvent(
     "51f3a8edddd",
@@ -337,6 +366,8 @@ export const history: HistoryEvent[] = [
     "Fork pdf-letters from https://github.com/acme/skills/pdf at 3f2a9c1",
     [{ path: "SKILL.md", status: "modified" }],
     {
+      generated: true,
+      kind: "fork",
       machine: "machine-1",
       origin: {
         kind: "source",
@@ -346,16 +377,18 @@ export const history: HistoryEvent[] = [
         source: ACME,
         url: ACME,
       },
+      upstream: forkedVersion,
     }
   ),
   historyEvent(
     "3f2a9c1e8d7",
     "2026-09-14T12:00:00Z",
-    "Import pdf from acme/skills",
+    "import https://github.com/acme/skills/pdf at 3f2a9c1e8d7 content 7d1e04c3aa21",
     [
       { path: "SKILL.md", status: "added" },
       { path: "reference.md", status: "added" },
-    ]
+    ],
+    { kind: "upstream" }
   ),
 ];
 

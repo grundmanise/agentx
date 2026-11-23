@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { ForkOrigin, HistoryEvent } from "#/cli/events.gen.ts";
+import type { HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -12,7 +12,9 @@ import {
 } from "#/components/ui/sheet.tsx";
 import { formatDate } from "#/lib/dates.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
+import { isMac } from "#/lib/platform.ts";
 import { useKeptRead } from "#/screens/skills/kept-read.ts";
+import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -22,9 +24,33 @@ const SHOWN = 3;
 
 const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
 
-/** What the meta line of an entry says: the date and the number of files. */
-const metaOf = (e: HistoryEvent) =>
-  [formatDate(e.time), files(e.files.length)].join(" · ");
+/** What this computer is called in an entry's meta line. */
+const HERE = isMac ? "this Mac" : "this computer";
+
+/** An https URL, which the window opens; undefined for anything else. */
+const https = (url: string | undefined) =>
+  url?.startsWith("https://") === true ? url : undefined;
+
+/**
+ * What the meta line of an entry says: the date, the computer it was made on when known, the date
+ * of the upstream version a fork or an update took in, and the number of files, except on a fork
+ * or a rename, whose files are the skill's own.
+ */
+export const metaOf = (e: HistoryEvent, here: string | undefined) => {
+  const parts = [formatDate(e.time)];
+  if (e.machine !== undefined && e.machine === here) {
+    parts.push(HERE);
+  } else if (e.machine_label !== undefined) {
+    parts.push(e.machine_label);
+  }
+  if (e.upstream !== undefined) {
+    parts.push(`version of ${formatDate(e.upstream.time)}`);
+  }
+  if (e.kind !== "fork" && e.kind !== "rename" && e.files.length > 0) {
+    parts.push(files(e.files.length));
+  }
+  return parts.join(" · ");
+};
 
 /** The version a skill's history is read for: a new read when the skill changed. */
 const versionOf = (row: SkillRow) =>
@@ -35,123 +61,127 @@ const versionOf = (row: SkillRow) =>
   ].join(":");
 
 /**
- * The page of the skill a fork came from, on the commit that created the fork, when the CLI knows
- * one: an https URL alone, since the window opens nothing else.
+ * Whether an entry is shown: a version of the source's skill that agentx stored is not something
+ * done to the skill, and the fork or update that took it in shows its date.
  */
-export const originPage = (e: HistoryEvent) =>
-  e.origin?.url?.startsWith("https://") === true ? e.origin.url : undefined;
+export const isShown = (e: HistoryEvent) => e.kind !== "upstream";
 
-/**
- * Text as the CLI writes it into a commit's subject: a control character as a space, runs of
- * spaces as one, none at either end.
- */
-const displayed = (text: string) =>
-  text
-    .replaceAll(/\p{Cc}/gu, " ")
-    .replaceAll(/ +/gu, " ")
-    .trim();
-
-const originName = (origin: ForkOrigin) => {
-  if (origin.kind === "plugin" && origin.plugin !== undefined) {
-    return origin.plugin;
-  }
-  if (origin.kind === "source" && origin.source !== undefined) {
-    return origin.path === undefined || origin.path === ""
-      ? origin.source
-      : `${origin.source}/${origin.path}`;
-  }
-  return origin.skill;
-};
-
-/**
- * The subject of the commit that created a fork, split around the name of its origin, the part
- * that links to the origin's page: the plugin, the source with its path, or the skill, as the CLI
- * writes them after "from". Undefined when the subject does not name it.
- */
-export const originParts = (e: HistoryEvent) => {
-  const name = e.origin === undefined ? "" : displayed(originName(e.origin));
-  const from = e.subject.indexOf(" from ");
-  const at =
-    name === "" || from === -1
-      ? -1
-      : e.subject.indexOf(name, from + " from ".length);
-  return at === -1
-    ? undefined
-    : {
-        after: e.subject.slice(at + name.length),
-        before: e.subject.slice(0, at),
-        name,
-      };
-};
-
-/** An https URL, which the window opens; undefined for anything else. */
-const https = (url: string | undefined) =>
-  url?.startsWith("https://") === true ? url : undefined;
-
-/** A run of an entry's subject, with the page it links to, if any. */
+/** A run of an entry's text, with the page it links to, if any. */
 interface Segment {
   text: string;
   page?: string;
 }
 
-/**
- * An entry's subject in runs, of text and of links. On the commit that created a fork, the
- * origin's name links to its page, and for a fork of a source's skill, the fork's name, after
- * "Fork", links to the page of the skill's directory at the commit it was forked from, each when
- * the CLI knows it.
- */
-export const subjectSegments = (e: HistoryEvent): Segment[] => {
-  const links: { at: number; end: number; page: string }[] = [];
-  const skillPage =
-    e.origin?.kind === "source" ? https(e.origin.skill_url) : undefined;
-  const from = e.subject.indexOf(" from ");
-  if (
-    skillPage !== undefined &&
-    e.subject.startsWith("Fork ") &&
-    from > "Fork ".length
-  ) {
-    links.push({ at: "Fork ".length, end: from, page: skillPage });
-  }
-  const page = originPage(e);
-  const parts = page === undefined ? undefined : originParts(e);
-  if (page !== undefined && parts !== undefined) {
-    const at = parts.before.length;
-    links.push({ at, end: at + parts.name.length, page });
-  }
-  const segments: Segment[] = [];
-  let done = 0;
-  for (const link of links) {
-    if (link.at < done) {
-      continue;
-    }
-    if (link.at > done) {
-      segments.push({ text: e.subject.slice(done, link.at) });
-    }
-    segments.push({
-      page: link.page,
-      text: e.subject.slice(link.at, link.end),
-    });
-    done = link.end;
-  }
-  if (done < e.subject.length) {
-    segments.push({ text: e.subject.slice(done) });
-  }
-  return segments;
+const VERBS: Record<string, string> = {
+  added: "added",
+  deleted: "deleted",
+  modified: "edited",
 };
 
-/** Whether an entry's subject holds a link, which cannot sit inside its button. */
-const hasLink = (e: HistoryEvent) =>
-  subjectSegments(e).some((s) => s.page !== undefined);
+/** What recorded edits did, as agentx's own subject says it: the first two files, then how many more. */
+const editsOf = (e: HistoryEvent) => {
+  const said = e.files.slice(0, 2).map((f) => `${VERBS[f.status]} ${f.path}`);
+  const more = e.files.length - said.length;
+  let text = said.join(", ");
+  if (said.length === 0) {
+    text = "edited";
+  } else if (more > 0) {
+    text = `${text} and ${more === 1 ? "1 more file" : `${more} more files`}`;
+  }
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+};
 
-/** An entry's subject, its links underlined. */
+/** Where a fork came from: the source as owner/repo, the plugin or the skill, with its page. */
+const forkedFrom = (e: HistoryEvent): Segment[] => {
+  const { origin, upstream } = e;
+  if (origin === undefined) {
+    return [{ text: "Forked" }];
+  }
+  if (origin.kind === "source") {
+    const source = upstream?.source ?? origin.source ?? origin.skill;
+    const page = https(upstream?.skill_url ?? origin.skill_url ?? origin.url);
+    return [{ text: "Forked from " }, { page, text: shortSource(source) }];
+  }
+  const name =
+    origin.kind === "plugin" && origin.plugin !== undefined
+      ? origin.plugin
+      : origin.skill;
+  return [
+    { text: origin.kind === "plugin" ? "Forked from plugin " : "Forked from " },
+    { page: https(origin.url), text: name },
+  ];
+};
+
+/**
+ * An entry's text in runs, of text and of links: a short sentence for what the commit did, from the
+ * kind and facts the CLI reports, or its subject for a message the user wrote, a commit made with
+ * Git and a kind this app does not know. A fork's origin links to the skill's folder at the forked
+ * commit, or to the origin's page, and an update's source to the folder at the version it took in.
+ */
+export const entrySegments = (e: HistoryEvent): Segment[] => {
+  switch (e.kind) {
+    case "fork": {
+      return forkedFrom(e);
+    }
+    case "create": {
+      return [{ text: "Created" }];
+    }
+    case "adopt": {
+      return [{ text: "Imported from disk" }];
+    }
+    case "rename": {
+      return [{ text: `Renamed from ${e.renamed_from ?? ""}`.trim() }];
+    }
+    case "update": {
+      if (e.upstream === undefined) {
+        return [{ text: "Updated from upstream" }];
+      }
+      return [
+        { text: "Updated from " },
+        {
+          page: https(e.upstream.skill_url ?? e.upstream.url),
+          text: shortSource(e.upstream.source),
+        },
+      ];
+    }
+    case "sync": {
+      return [{ text: "Synced edits from another computer" }];
+    }
+    case "edit": {
+      return e.generated === true
+        ? [{ text: editsOf(e) }]
+        : [{ text: e.subject }];
+    }
+    case "git":
+    case "upstream": {
+      return [{ text: e.subject }];
+    }
+    default: {
+      // A kind a later CLI reports: its subject, as written.
+      return [{ text: e.subject }];
+    }
+  }
+};
+
+/** An entry's text, plain. */
+export const entryText = (e: HistoryEvent) =>
+  entrySegments(e)
+    .map((s) => s.text)
+    .join("");
+
+/** Whether an entry's text holds a link, which cannot sit inside its button. */
+const hasLink = (e: HistoryEvent) =>
+  entrySegments(e).some((s) => s.page !== undefined);
+
+/** An entry's text, its links underlined. */
 const Subject = ({ entry }: { entry: HistoryEvent }) => (
   <span className="type-timeline-entry text-text-primary min-w-0 wrap-break-word">
-    {subjectSegments(entry).map(({ text, page }, i) =>
+    {entrySegments(entry).map(({ text, page }, i) =>
       page === undefined ? (
         text
       ) : (
         <a
-          // The runs of one subject never change order.
+          // The runs of one entry never change order.
           key={i}
           href={page}
           title={page}
@@ -187,6 +217,7 @@ const Entry = ({
   expandable?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
+  const here = useAppStore((s) => s.inventory?.machine.id);
   const linked = hasLink(entry);
   return (
     <li
@@ -211,7 +242,7 @@ const Entry = ({
             variant="plain"
             size="inline"
             aria-expanded={open}
-            aria-label={`Show the files of ${entry.subject}`}
+            aria-label={`Show the files of ${entryText(entry)}`}
             onClick={() => {
               setOpen((o) => !o);
             }}
@@ -238,7 +269,7 @@ const Entry = ({
         </div>
       )}
       {!expandable && <Subject entry={entry} />}
-      {/* The meta line and the files sit under the subject, past the chevron, which hangs outside. */}
+      {/* The meta line and the files sit under the text, past the chevron, which hangs outside. */}
       <div
         className={
           expandable
@@ -247,11 +278,11 @@ const Entry = ({
         }
       >
         <span className="type-timeline-meta text-timeline-meta">
-          {metaOf(entry)}
+          {metaOf(entry, here)}
         </span>
         {expandable && open && (
           <ul
-            aria-label={`Files of ${entry.subject}`}
+            aria-label={`Files of ${entryText(entry)}`}
             className="m-0 mt-2 flex list-none flex-col gap-1 p-0"
           >
             {entry.files.map((f) => (
@@ -289,7 +320,7 @@ const HistorySheet = ({
         <SheetTitle>History</SheetTitle>
         <SheetDescription>{name}</SheetDescription>
       </SheetHeader>
-      {/* The entries scroll down only; a long subject wraps. */}
+      {/* The entries scroll down only; a long entry wraps. */}
       <div className="min-h-0 flex-1 overflow-auto">
         <ol
           aria-label="All history"
@@ -311,9 +342,9 @@ const HistorySheet = ({
 
 /**
  * HISTORY in the detail pane, for one of your own skills: the latest commits of its branch from
- * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. In the
- * subject of the commit that created a fork, the origin's name links to its page, when the CLI
- * knows one. Other skills have no history of their own, and the pane shows no section for them.
+ * `skill history <name>`, read when the skill is selected, each said as what it did to the skill;
+ * "Show all" opens the sheet. Other skills have no history of their own, and the pane shows no
+ * section for them.
  */
 export const HistorySection = ({ row }: { row: SkillRow }) => {
   const version = versionOf(row);
@@ -338,7 +369,7 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
       </p>
     );
   }
-  const { entries } = read;
+  const entries = read.entries.filter(isShown);
   if (entries.length === 0) {
     return <p className="type-secondary text-text-hint m-0">No history yet</p>;
   }
