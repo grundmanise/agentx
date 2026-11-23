@@ -10,7 +10,7 @@ import type {
 } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
-import { ACCOUNT, ACME, configurations, filesOf, ZETA } from "./skills.ts";
+import { HUB, ACME, configurations, filesOf, ZETA } from "./skills.ts";
 
 const LIBRARY = "/home/me/.agents/skills";
 const universal = ["codex", "gemini-cli"];
@@ -31,7 +31,7 @@ const placements = (name: string): LibraryPlacement[] => [
   })),
 ];
 
-const yours = (
+const hubSkill = (
   name: string,
   fields: Partial<LibraryEntry> = {}
 ): LibraryEntry => ({
@@ -40,7 +40,7 @@ const yours = (
   kind: "managed",
   name,
   placements: placements(name),
-  source: ACCOUNT,
+  source: HUB,
   state: "current",
   universal,
   ...fields,
@@ -64,8 +64,8 @@ const ofSource = (
 });
 
 export const library: LibraryEntry[] = [
-  yours("changelog", { state: "modified" }),
-  yours("draft", { drift: ["not published"] }),
+  hubSkill("changelog", { state: "modified" }),
+  hubSkill("draft", { drift: ["not published"] }),
   ofSource("lint", ZETA, "modified"),
   ofSource("pdf", ACME, "current"),
   ofSource("review", ACME, "modified"),
@@ -79,11 +79,11 @@ export const inventory = {
   type: "inventory",
 } satisfies InlineEvent;
 
-const accountRemote: InlineEvent = {
-  account: true,
+const hub: InlineEvent = {
+  hub: true,
   id: "2222222222222222",
   type: "source",
-  url: ACCOUNT,
+  url: HUB,
 };
 
 const shared: InlineEvent[] = [
@@ -92,10 +92,10 @@ const shared: InlineEvent[] = [
 ];
 
 /** What `source list` answers: the hub and two shared sources. */
-export const sources: InlineEvent[] = [accountRemote, ...shared];
+export const sources: InlineEvent[] = [hub, ...shared];
 
 /** What `source list` answers on a machine with no hub set. */
-export const sourcesWithoutAccount: InlineEvent[] = shared;
+export const sourcesWithoutHub: InlineEvent[] = shared;
 
 const diff = (
   name: string,

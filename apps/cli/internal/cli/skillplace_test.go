@@ -149,13 +149,13 @@ func TestSkillAddAdoptsTheLibraryDirectory(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	head := h.homeGit("rev-parse", "refs/heads/managed/alpha")
 
 	// The same version again: the branch stays where it is and nothing is
 	// written over the library.
 	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
+	equal(t, "the import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), head)
 	contains(t, "the result", out.stdout, "imported alpha")
 
 	// A library directory holding something else is a refusal, not an
@@ -200,7 +200,7 @@ func TestSkillAddRefusesASecondVersion(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	head := h.homeGit("rev-parse", "refs/heads/managed/alpha")
 
 	// Move the source on and take the library directory out of the way, so
 	// that the branch is the only thing in the way.
@@ -217,12 +217,12 @@ func TestSkillAddRefusesASecondVersion(t *testing.T) {
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], "alpha is already managed at another version, which the library no longer holds")
 	equal(t, "hint", e["hint"], "run 'agentx skill remove alpha' to stop managing that version, then install again to get the version the source holds now")
-	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
+	equal(t, "the import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), head)
 
 	h.mustRun("skill", "remove", "alpha")
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "newer\n")
-	if h.accountGit("rev-parse", "refs/heads/managed/alpha") == head {
+	if h.homeGit("rev-parse", "refs/heads/managed/alpha") == head {
 		t.Error("the import branch still names the version the library no longer held")
 	}
 	listed := h.mustRun("--json", "skill", "list")
@@ -325,21 +325,21 @@ func TestSkillAddFetchesOnlyWhenAsked(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	ref := "refs/agentx/sources/" + source.ID(s.url)
-	fetchedAt := h.accountGit("rev-parse", ref)
+	fetchedAt := h.homeGit("rev-parse", ref)
 	s.skill("skills/beta", "beta", "The second skill, revised", nil)
 	moved := s.commit("beta moves on")
 
 	// Without --fetch: the version the last fetch brought.
 	out := h.run("--json", "skill", "add", s.url, "--name", "beta")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "the source ref", h.accountGit("rev-parse", ref), fetchedAt)
+	equal(t, "the source ref", h.homeGit("rev-parse", ref), fetchedAt)
 	equal(t, "the source commit", h.one(out.stdout, "source")["commit"], fetchedAt)
 
 	// With --fetch: the source is fetched again at its pin first, and the
 	// install reads what that fetch brought.
 	out = h.run("--json", "skill", "add", s.url, "--name", "alpha", "--fetch")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "the source ref", h.accountGit("rev-parse", ref), moved)
+	equal(t, "the source ref", h.homeGit("rev-parse", ref), moved)
 	ev := h.one(out.stdout, "source")
 	equal(t, "commit", ev["commit"], moved)
 	equal(t, "previous_commit", ev["previous_commit"], fetchedAt)

@@ -127,12 +127,12 @@ func TestAGitattributesConversionApplies(t *testing.T) {
 }
 
 // TestConfigSetIgnoreSystemFilesWritesTheList: the setting is on by
-// default, and setting it writes the list to the account repo's
+// default, and setting it writes the list to the home repo's
 // info/exclude, or empties the file, at once.
 func TestConfigSetIgnoreSystemFilesWritesTheList(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
-	exclude := filepath.Join(h.agentx, "account.git", "info", "exclude")
+	exclude := filepath.Join(h.agentx, "home.git", "info", "exclude")
 	equal(t, "the default", h.mustRun("config", "get", "ignore_system_files").stdout, "true\n")
 	h.mustRun("config", "set", "ignore_system_files", "false")
 	equal(t, "info/exclude when off", readText(t, exclude), "")

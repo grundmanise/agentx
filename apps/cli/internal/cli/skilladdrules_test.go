@@ -18,7 +18,7 @@ import (
 // same way.
 func TestNameRefusal(t *testing.T) {
 	t.Parallel()
-	const library, branch = "is not a name the library can hold as a directory", "is not a name the account repo can hold as an import branch"
+	const library, branch = "is not a name the library can hold as a directory", "is not a name the home repo can hold as an import branch"
 	for _, c := range []struct {
 		what, name, want string
 	}{

@@ -16,14 +16,14 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// sourceEvent is one source: its settings entry plus what the account repo
+// sourceEvent is one source: its settings entry plus what the home repo
 // holds of it.
 type sourceEvent struct {
 	event
 	ID            string `json:"id"`
 	URL           string `json:"url"`
 	Alias         string `json:"alias,omitempty"`
-	Account       bool   `json:"account,omitempty"` // the hub
+	Hub           bool   `json:"hub,omitempty"` // the hub
 	Pin           string `json:"pin,omitempty"`
 	Access        string `json:"access,omitempty"`         // writable, read-only or unknown; absent on a removal's event, which says only what went
 	AccessChecked string `json:"access_checked,omitempty"` // when access was last checked
@@ -31,7 +31,7 @@ type sourceEvent struct {
 	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
 	Subpath       string `json:"subpath,omitempty"`        // the scope of this listing, not stored
 	LastFetched   string `json:"last_fetched,omitempty"`
-	Commit        string `json:"commit,omitempty"`          // the fetched commit; absent when the account repo holds no ref
+	Commit        string `json:"commit,omitempty"`          // the fetched commit; absent when the home repo holds no ref
 	Previous      string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
 	Skills        *int   `json:"skills,omitempty"`          // how many skills the listing found, only after a listing; for the hub, its skill branches as its last fetch found them, absent before a fetch
 }
@@ -114,7 +114,7 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 }
 
 func newSourceAddCommand(inv *invocation) *cobra.Command {
-	var account bool
+	var hub bool
 	cmd := &cobra.Command{
 		Use:         "add <url>",
 		Short:       "Fetch a git repository and add it as a source",
@@ -137,10 +137,10 @@ func newSourceAddCommand(inv *invocation) *cobra.Command {
 			"published to.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return inv.sourceAdd(cmd.Context(), args[0], account)
+			return inv.sourceAdd(cmd.Context(), args[0], hub)
 		},
 	}
-	cmd.Flags().BoolVar(&account, "hub", false, "add the source as the hub, which hub skills are published to")
+	cmd.Flags().BoolVar(&hub, "hub", false, "add the source as the hub, which hub skills are published to")
 	return cmd
 }
 
@@ -200,19 +200,19 @@ func leftBehind(cause error, id, add string) error {
 	case errors.Is(cause, home.ErrRecovery):
 		f.status = exitRefused
 	}
-	f.message = cause.Error() + "; the remote " + source.RemoteName(id) + " was left in the account repo and no source names it"
+	f.message = cause.Error() + "; the remote " + source.RemoteName(id) + " was left in the home repo and no source names it"
 	f.hint = "run '" + add + "' to add the source and take the remote with it, or 'agentx source remove " + id + "' to clear it"
 	return f
 }
 
 // sourceAdd fetches the source its argument names and records it in the
-// settings, as the hub when account is set. The hub, added with --hub or
-// added again by its URL, is added by addAccount; every other source is a
+// settings, as the hub when hub is set. The hub, added with --hub or
+// added again by its URL, is added by addHub; every other source is a
 // shared source, and one naming the hub's repository is refused, exit code
 // 6, see forkSourceRefusal.
-func (inv *invocation) sourceAdd(ctx context.Context, arg string, account bool) error {
-	if account {
-		return inv.addAccount(ctx, arg)
+func (inv *invocation) sourceAdd(ctx context.Context, arg string, hub bool) error {
+	if hub {
+		return inv.addHub(ctx, arg)
 	}
 	s, err := inv.loadSettings()
 	if err != nil {
@@ -222,8 +222,8 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string, account bool) 
 	// credential rather than drop it, so its URL is looked up before
 	// anything is said about the argument.
 	if src, err := source.Parse(arg); err == nil {
-		if i := s.FindSource(src.URL); i >= 0 && s.Sources[i].Account {
-			return inv.addAccount(ctx, arg)
+		if i := s.FindSource(src.URL); i >= 0 && s.Sources[i].Hub {
+			return inv.addHub(ctx, arg)
 		}
 	}
 	src, err := inv.parseSource(arg)
@@ -268,9 +268,9 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	if f := forkSourceRefusal(before, want, inv.sshHosts(ctx)); f != nil {
 		return listing, entry, f
 	}
-	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err := gitx.OpenHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return listing, entry, accountRepoFailure(err)
+		return listing, entry, homeRepoFailure(err)
 	}
 	remote := source.RemoteName(src.ID())
 	// revert takes back the remote this add is about to write, for a run
@@ -286,7 +286,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	// ref again, and serve, seeing it move, would list the source again
 	// under the shared lock just as that run wants the lock for its
 	// settings write: on a slow machine every run again lost it the same
-	// way. It writes the git config of the account repo, so every caller
+	// way. It writes the git config of the home repo, so every caller
 	// holds the lock while it runs.
 	//
 	// undo is the command's context with the stop signals taken off it. A
@@ -340,7 +340,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
 		return source.Configure(ctx, inv.git, gitDir, want)
 	}); err != nil {
-		return listing, entry, accountRepoFailure(err)
+		return listing, entry, homeRepoFailure(err)
 	}
 	listing, err = source.Fetch(ctx, inv.git, gitDir, src)
 	if err != nil {
@@ -447,12 +447,12 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 		return err
 	}
 	commits := map[string]string{}
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	} else if exists {
 		if commits, err = source.Commits(ctx, inv.git, gitDir); err != nil {
-			return accountRepoFailure(err) // a local git failure in a source command is exit code 8, hint and all
+			return homeRepoFailure(err) // a local git failure in a source command is exit code 8, hint and all
 		}
 	}
 	out := inv.out
@@ -466,7 +466,7 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 		id := source.ID(src.URL)
 		ev := entryEvent(src)
 		name := "  " + src.URL
-		if src.Account {
+		if src.Hub {
 			name += " (hub)"
 		}
 		// The branch the source follows: its pin, else the branch its HEAD
@@ -475,7 +475,7 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 		// many of them its last fetch found.
 		branch := c("(unpinned)", muted)
 		switch {
-		case src.Account:
+		case src.Hub:
 			branch = c("skills/*", muted)
 		case src.Pin != "":
 			branch = c(src.Pin, plain)
@@ -484,11 +484,11 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 		}
 		commit := c("not fetched", warnStyle)
 		switch {
-		case src.Account:
+		case src.Hub:
 			n, fetched := 0, false
 			if exists {
 				if n, fetched, err = inv.forkCount(ctx, gitDir, src, source.RemoteName(id)); err != nil {
-					return accountRepoFailure(err)
+					return homeRepoFailure(err)
 				}
 			}
 			if fetched {
@@ -507,7 +507,7 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 }
 
 // sourceSkills lists the skills of a fetched source under the subpath of
-// the argument, from the account repo alone. A URL the settings hold no
+// the argument, from the home repo alone. A URL the settings hold no
 // source for is listed from its repository instead, see listUnadded.
 func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	src, entry, err := inv.findSource(ctx, arg)
@@ -517,16 +517,16 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	if err != nil {
 		return err
 	}
-	if entry.Account {
+	if entry.Hub {
 		return forkSourceIs(entry.URL, entry)
 	}
 	src = inv.linkPin(ctx, src, entry)
 	if src.Ref != "" && src.Ref != entry.Pin {
 		return pinMismatch(src, entry)
 	}
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	// Refused as not fetched, the source is named with the pin the settings
 	// hold, which a bare URL argument leaves out.
@@ -570,7 +570,7 @@ func (inv *invocation) listUnadded(ctx context.Context, src source.Source) error
 	case errors.Is(err, source.ErrRefNotFound), errors.Is(err, source.ErrNoSubpath), errors.Is(err, source.ErrUnreachable):
 		return sourceFailure(err, src)
 	case err != nil:
-		// A failure of the run's own repository, never of the account repo.
+		// A failure of the run's own repository, never of the home repo.
 		return err
 	}
 	inv.printSourceSkills(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL}, src, listing)
@@ -604,7 +604,7 @@ func (inv *invocation) printSourceSkills(ev sourceEvent, src source.Source, list
 }
 
 // sourceRead reads the SKILL.md of the skill at subpath, from the root of
-// a fetched source, from the account repo alone, and reports it as skill
+// a fetched source, from the home repo alone, and reports it as skill
 // files reports a file. It is refused as source skills is, and a subpath
 // that holds no skill is exit code 5.
 func (inv *invocation) sourceRead(ctx context.Context, arg, subpath string) error {
@@ -612,15 +612,15 @@ func (inv *invocation) sourceRead(ctx context.Context, arg, subpath string) erro
 	if err != nil {
 		return err
 	}
-	if entry.Account {
+	if entry.Hub {
 		return forkSourceIs(entry.URL, entry)
 	}
 	if src.Ref != "" && src.Ref != entry.Pin {
 		return pinMismatch(src, entry)
 	}
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	pinned := src
 	pinned.Ref = entry.Pin
@@ -662,7 +662,7 @@ func (inv *invocation) sourceRead(ctx context.Context, arg, subpath string) erro
 //
 // The hub's remote goes with its remote-tracking branches and
 // the tracking configuration of every fork branch that names it, see
-// removeAccount.
+// removeHub.
 func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	id, url, err := inv.sourceToRemove(ctx, arg)
 	if err != nil {
@@ -670,17 +670,17 @@ func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	}
 	if s, err := inv.loadSettings(); err != nil {
 		return err
-	} else if i := s.FindSource(url); i >= 0 && s.Sources[i].Account {
-		return inv.removeAccount(ctx, s.Sources[i])
+	} else if i := s.FindSource(url); i >= 0 && s.Sources[i].Hub {
+		return inv.removeHub(ctx, s.Sources[i])
 	}
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+		gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 		if err != nil {
-			return accountRepoFailure(err)
+			return homeRepoFailure(err)
 		}
 		if exists {
 			if err := source.Remove(ctx, inv.git, gitDir, id); err != nil {
-				return accountRepoFailure(err)
+				return homeRepoFailure(err)
 			}
 		}
 		s, err := inv.loadSettings()
@@ -703,7 +703,7 @@ func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 }
 
 // sourceToRemove resolves what remove was asked to delete: the settings
-// entry when there is one, else whatever the account repo still holds under
+// entry when there is one, else whatever the home repo still holds under
 // that id, since an add cut short before its settings write leaves a remote
 // and a ref that only remove can clean up.
 func (inv *invocation) sourceToRemove(ctx context.Context, arg string) (id, url string, err error) {
@@ -719,9 +719,9 @@ func (inv *invocation) sourceToRemove(ctx context.Context, arg string) (id, url 
 	} else {
 		id, url = src.ID(), src.URL
 	}
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return "", "", accountRepoFailure(err)
+		return "", "", homeRepoFailure(err)
 	}
 	if exists && source.Present(ctx, inv.git, gitDir, id) {
 		return id, url, nil
@@ -756,7 +756,7 @@ func (inv *invocation) findSource(ctx context.Context, arg string) (source.Sourc
 }
 
 // errNotAdded marks the refusal of a source that has no settings entry, so
-// that remove can still reach what the account repo holds under its id.
+// that remove can still reach what the home repo holds under its id.
 var errNotAdded = errors.New("not added")
 
 // unknownID refuses an id no source entry of the settings has. An id is a
@@ -767,7 +767,7 @@ var errNotAdded = errors.New("not added")
 // source back rather than a listing that no longer shows it. The lineage is
 // read on this path alone, once, and a repo that cannot be read leaves the
 // refusal as it would be without one: the answer is exit 5 either way, and
-// the account repo is not what the command was asked about.
+// the home repo is not what the command was asked about.
 func (inv *invocation) unknownID(ctx context.Context, id string) error {
 	if url := inv.removedSource(ctx, id); url != "" {
 		return fail(exitNotFound, "no source with id "+id+": "+url+" was removed, and the skills installed from it still name it",
@@ -868,8 +868,8 @@ func sourceFailure(err error, src source.Source) error {
 		}
 		return fail(exitSource, fmt.Sprintf("%s: %s", src.URL, trimGit(msg)), hint)
 	}
-	// What is left is the account repo's own git failing on a local read.
-	return accountRepoFailure(err)
+	// What is left is the home repo's own git failing on a local read.
+	return homeRepoFailure(err)
 }
 
 // trimGit keeps the first line of a git error after the source package's
@@ -882,12 +882,12 @@ func trimGit(msg string) string {
 	return line
 }
 
-// accountRepoFailure is exit 8 for an account repo git cannot read.
-func accountRepoFailure(err error) error {
+// homeRepoFailure is exit 8 for a home repo git cannot read.
+func homeRepoFailure(err error) error {
 	if errors.Is(err, home.ErrLocked) || errors.Is(err, home.ErrRecovery) {
 		return err
 	}
-	return fail(exitAccountRepo, err.Error(), "run 'agentx doctor' and check the account repo it names")
+	return fail(exitHomeRepo, err.Error(), "run 'agentx doctor' and check the home repo it names")
 }
 
 func short(commit string) string {

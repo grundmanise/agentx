@@ -185,14 +185,14 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	one, two := h.fetchSources(t)
-	h.accountGit("remote", "remove", source.RemoteName(source.ID(two.url)))
-	h.accountGit("update-ref", "-d", source.Ref(source.ID(two.url)))
+	h.homeGit("remote", "remove", source.RemoteName(source.ID(two.url)))
+	h.homeGit("update-ref", "-d", source.Ref(source.ID(two.url)))
 	err := home.Mutate(h.agentx, nil, func() error {
 		settings, err := home.LoadSettings(h.agentx)
 		if err != nil {
 			return err
 		}
-		settings.SetSource(home.Source{URL: "https://example.invalid/me/forks", Account: true})
+		settings.SetSource(home.Source{URL: "https://example.invalid/me/forks", Hub: true})
 		return home.SaveSettings(h.agentx, settings)
 	})
 	if err != nil {
@@ -324,8 +324,8 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 // TestServeWarnsAboutSourcesAnImportBrought runs serve on a machine whose
 // settings name two sources it never fetched, as an import stopped before
 // it added them leaves them, written here as such an import writes them, so
-// that it has no account repo to fetch into until source add creates one.
-// The check at launch fetches nothing, creates no account repo and writes
+// that it has no home repo to fetch into until source add creates one.
+// The check at launch fetches nothing, creates no home repo and writes
 // nothing, but warns about each source as not fetched, as source fetch
 // refuses it. skill check-updates, which checks only the sources a managed
 // skill came from, still has nothing to check there.
@@ -343,9 +343,9 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	editSettings(t, h, func(s *home.Settings) { *s = exported })
-	account := filepath.Join(h.agentx, "account.git")
-	if _, err := os.Stat(account); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("the settings write left %s behind, or it cannot be told: %v", account, err)
+	homeRepo := filepath.Join(h.agentx, "home.git")
+	if _, err := os.Stat(homeRepo); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the settings write left %s behind, or it cannot be told: %v", homeRepo, err)
 	}
 	version := mutationVersion(t, h)
 	calls := countingGit(t, h)
@@ -367,33 +367,33 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 	}
 	for _, call := range calls() {
 		if slices.Contains(strings.Fields(call), "fetch") {
-			t.Errorf("serve fetched on a machine with no account repo: %s", call)
+			t.Errorf("serve fetched on a machine with no home repo: %s", call)
 		}
 	}
-	if _, err := os.Stat(account); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("serve created %s: %v", account, err)
+	if _, err := os.Stat(homeRepo); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("serve created %s: %v", homeRepo, err)
 	}
 	equal(t, "the version file", mutationVersion(t, h), version)
 	equal(t, "skill check-updates", h.mustRun("skill", "check-updates").stdout,
 		"Nothing to check: no managed skill comes from a source added on this machine.\n")
 }
 
-// TestServeChecksTheAccountRemoteWhileItRuns runs serve on machine b of
-// two that share a hub, with the account check it repeats
+// TestServeChecksTheHubRemoteWhileItRuns runs serve on machine b of
+// two that share a hub, with the hub check it repeats
 // made a few milliseconds apart. The check at launch ends in an
 // update_check of scope all that fetched. Then, while the hub
-// holds what b's remote-tracking branches hold, each account check is one
+// holds what b's remote-tracking branches hold, each hub check is one
 // ls-remote, fetches nothing and writes nothing, and ends in an
-// update_check of scope account that did not fetch. Once machine a
-// publishes alpha, the next account check fetches, announces the update a
+// update_check of scope hub that did not fetch. Once machine a
+// publishes alpha, the next hub check fetches, announces the update a
 // published as the check at launch would, with this serve's instance id,
 // and ends in an update_check that fetched. With the hub out of
 // reach, the checks warn once, however many fail, each ending in an
 // update_check that is not ok, until one reaches it again.
-func TestServeChecksTheAccountRemoteWhileItRuns(t *testing.T) {
-	every := accountCheckEvery
-	accountCheckEvery = 20 * time.Millisecond
-	t.Cleanup(func() { accountCheckEvery = every })
+func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
+	every := hubCheckEvery
+	hubCheckEvery = 20 * time.Millisecond
+	t.Cleanup(func() { hubCheckEvery = every })
 	a, b, _, remote := twoHomes(t)
 	url := "file://" + remote
 	calls := countingGit(t, b)
@@ -415,7 +415,7 @@ func TestServeChecksTheAccountRemoteWhileItRuns(t *testing.T) {
 	atLaunch, version := fetched(), mutationVersion(t, b)
 
 	for range 2 {
-		unchanged := checked(checkScopeAccount)
+		unchanged := checked(checkScopeHub)
 		equal(t, "an unchanged remote: ok", unchanged["ok"], true)
 		equal(t, "an unchanged remote: fetched", unchanged["fetched"], false)
 	}
@@ -429,7 +429,7 @@ func TestServeChecksTheAccountRemoteWhileItRuns(t *testing.T) {
 	equal(t, "the update's instance_id", update["instance_id"], first["instance_id"])
 	equal(t, "its source", update["source"], url)
 	equal(t, "its candidate", update["candidate"], published)
-	moved := checked(checkScopeAccount)
+	moved := checked(checkScopeHub)
 	equal(t, "a remote another machine published to: ok", moved["ok"], true)
 	equal(t, "a remote another machine published to: fetched", moved["fetched"], true)
 
@@ -438,17 +438,17 @@ func TestServeChecksTheAccountRemoteWhileItRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A check that began before the rename can still report ok: wait for the first that failed.
-	p.nextMatching("an account check of the remote out of reach", func(e jsonEvent) bool {
-		return e["type"] == "update_check" && e["scope"] == checkScopeAccount && e["ok"] == false
+	p.nextMatching("a hub check of the remote out of reach", func(e jsonEvent) bool {
+		return e["type"] == "update_check" && e["scope"] == checkScopeHub && e["ok"] == false
 	})
 	for range 2 {
-		equal(t, "a hub out of reach: ok", checked(checkScopeAccount)["ok"], false)
+		equal(t, "a hub out of reach: ok", checked(checkScopeHub)["ok"], false)
 	}
 	if err := os.Rename(away, remote); err != nil {
 		t.Fatal(err)
 	}
 	p.nextMatching("an update_check that is ok again", func(e jsonEvent) bool {
-		return e["type"] == "update_check" && e["scope"] == checkScopeAccount && e["ok"] == true
+		return e["type"] == "update_check" && e["scope"] == checkScopeHub && e["ok"] == true
 	})
 	equal(t, "exit", p.close(), 0)
 	var unreached []string

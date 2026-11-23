@@ -100,13 +100,13 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 // about the same library directories with and without --json. Its lineage
 // is read only for an inventory emitted as JSON, the one output that lists
 // the entries: without --json nothing prints them, so a text scan runs no
-// git for them and cannot fail on the account repo.
+// git for them and cannot fail on the home repo.
 //
-// An account repo git cannot read costs the inventory its library and
+// A home repo git cannot read costs the inventory its library and
 // nothing else. The library is listed empty and one warning carries git's
-// error and sends the reader to agentx doctor and to the account repo it
+// error and sends the reader to agentx doctor and to the home repo it
 // names, while the configurations, the skills, the servers and the plugins
-// the scan read stand: neither agentx scan nor a serve reads the account
+// the scan read stand: neither agentx scan nor a serve reads the home
 // repo for any of them, and a serve whose every scan failed on it would
 // leave the desktop app with no inventory at all. The warning names the
 // repo as well as doctor because git's error is the diagnosis: doctor
@@ -202,10 +202,10 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 				for _, w := range read.absentWarnings(inv, sc.Library()) {
 					sc.Warn(w)
 				}
-			case errors.As(err, &f) && f.status == exitAccountRepo && ctx.Err() == nil && !inv.git.StoppedChild():
-				// The account repo's own answer, and not a stop that killed
+			case errors.As(err, &f) && f.status == exitHomeRepo && ctx.Err() == nil && !inv.git.StoppedChild():
+				// The home repo's own answer, and not a stop that killed
 				// the git reading it: that is the run's to answer for.
-				sc.Warn(f.message + "; the library is not listed, run 'agentx doctor' and check the account repo it names")
+				sc.Warn(f.message + "; the library is not listed, run 'agentx doctor' and check the home repo it names")
 			default:
 				return err
 			}

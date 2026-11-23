@@ -77,7 +77,7 @@ func TestAdoptAgainAfterSkillshareTookTheSkillBack(t *testing.T) {
 		"beta":  {Source: "github.com/owner/repo/skills/beta", Type: "github-subdir", RepoURL: s.url, Subdir: "skills/beta"},
 	})
 	h.mustRun("skill", "import", "--all")
-	first := h.accountGit("rev-parse", "--verify", "refs/heads/managed/alpha")
+	first := h.homeGit("rev-parse", "--verify", "refs/heads/managed/alpha")
 
 	// Skillshare's sync put its link back for alpha and pruned beta, and
 	// the source has a newer alpha since.
@@ -106,7 +106,7 @@ func TestAdoptAgainAfterSkillshareTookTheSkillBack(t *testing.T) {
 			t.Errorf("%s is not a real directory of the library after adopting again: %v", name, err)
 		}
 	}
-	if again := h.accountGit("rev-parse", "--verify", "refs/heads/managed/alpha"); again == first {
+	if again := h.homeGit("rev-parse", "--verify", "refs/heads/managed/alpha"); again == first {
 		t.Error("alpha's branch did not move to the revised version")
 	}
 	equal(t, "alpha's SKILL.md", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), skill("alpha", "The first skill, revised"))
@@ -183,7 +183,7 @@ func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 			t.Errorf("%s is not a real directory of the library after adopting: %v", path, err)
 		}
 		sameTree(t, name, libraryTree(t, path), libraryTree(t, filepath.Join(s.work, subpath)))
-		if h.accountGit("rev-parse", "--verify", "refs/heads/managed/"+name) == "" {
+		if h.homeGit("rev-parse", "--verify", "refs/heads/managed/"+name) == "" {
 			t.Errorf("%s has no import branch", name)
 		}
 		if link, err := os.Readlink(filepath.Join(h.home, ".claude", "skills", name)); err != nil || link != path {

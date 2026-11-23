@@ -128,7 +128,7 @@ func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 	equal(t, "upstream_commit", rec["upstream_commit"], head)
 	// Codex reads the library, so the library entry is its placement.
 	equal(t, "placements", fmt.Sprint(rec["placements"]), "[claude-code codex]")
-	equal(t, "commit", rec["commit"], h.accountGit("rev-parse", "refs/heads/managed/keeper"))
+	equal(t, "commit", rec["commit"], h.homeGit("rev-parse", "refs/heads/managed/keeper"))
 
 	// An entry carries the base version the branch records and no hash of
 	// any directory, so its base_hash is the base_hash the listing reports
@@ -160,7 +160,7 @@ func TestExportListsTheLibraryWithItsPlacements(t *testing.T) {
 	h.mustRun("skill", "remove", "beta", "--from", "claude-code", "--from", "github-copilot", "--from", "windsurf")
 	// A fork branch with no library directory, and a directory put in the
 	// library by hand, which no branch knows about.
-	h.accountGit("update-ref", "refs/heads/skills/zeta", h.accountGit("rev-parse", "refs/heads/managed/alpha"))
+	h.homeGit("update-ref", "refs/heads/skills/zeta", h.homeGit("rev-parse", "refs/heads/managed/alpha"))
 	byHand := filepath.Join(h.library, "mine")
 	if err := os.MkdirAll(byHand, 0o755); err != nil {
 		t.Fatal(err)
@@ -201,10 +201,10 @@ func TestExportListsTheLibraryWithItsPlacements(t *testing.T) {
 	equal(t, "mine imported", imported["mine"]["kind"], "unmanaged")
 }
 
-// TestExportWithoutAnAccountRepo is a machine that has installed nothing:
+// TestExportWithoutAnHomeRepo is a machine that has installed nothing:
 // the settings are exported, the listing is empty, and the library, which
 // such a machine has none of yet, is created for the file.
-func TestExportWithoutAnAccountRepo(t *testing.T) {
+func TestExportWithoutAnHomeRepo(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
@@ -291,7 +291,7 @@ func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
-	alpha := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	alpha := h.homeGit("rev-parse", "refs/heads/managed/alpha")
 	for _, name := range []string{"has space", "bare"} {
 		dir := filepath.Join(h.library, name)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -302,8 +302,8 @@ func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 	if err := os.Symlink(filepath.Join(h.library, "nowhere"), filepath.Join(h.library, "dangling")); err != nil {
 		t.Fatal(err)
 	}
-	bare := h.accountGit("commit-tree", "-m", "no lineage", alpha+"^{tree}")
-	h.accountGit("update-ref", "refs/heads/managed/bare", bare)
+	bare := h.homeGit("commit-tree", "-m", "no lineage", alpha+"^{tree}")
+	h.homeGit("update-ref", "refs/heads/managed/bare", bare)
 
 	file := h.snapshotPath(defaultSnapshot)
 	out := h.run("snapshot", "save")

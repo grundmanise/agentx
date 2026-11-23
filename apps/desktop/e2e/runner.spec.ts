@@ -140,9 +140,9 @@ test("exit 7 says another command runs, and Retry runs it again", async ({
 test("exit 8 brings the startup layer back", async ({ cli, page }) => {
   await launch(cli, page);
   const unusable = {
-    check: "account_repo",
-    detail: "/home/me/.agentx/account.git: not a git repository",
-    hint: "move /home/me/.agentx/account.git aside, then run agentx doctor again",
+    check: "home_repo",
+    detail: "/home/me/.agentx/home.git: not a git repository",
+    hint: "move /home/me/.agentx/home.git aside, then run agentx doctor again",
     status: "fail",
     type: "doctor",
   } as const;
@@ -150,8 +150,8 @@ test("exit 8 brings the startup layer back", async ({ cli, page }) => {
   cli.register(["skill", "remove", "pdf"], {
     events: [
       {
-        code: "account_repo",
-        message: "account repo is unusable",
+        code: "home_repo",
+        message: "home repo is unusable",
         type: "error",
       },
     ],
@@ -163,7 +163,7 @@ test("exit 8 brings the startup layer back", async ({ cli, page }) => {
     page
       .getByRole("region", { name: "Startup checks" })
       .getByRole("heading", { level: 1 })
-  ).toHaveText("agentx can't open its account repo");
+  ).toHaveText("agentx can't open its home repo");
   expect(later(cli)).toEqual([
     ["skill", "remove", "pdf", "--json"],
     ...launchLines,

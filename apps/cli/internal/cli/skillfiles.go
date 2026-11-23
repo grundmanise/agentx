@@ -242,10 +242,10 @@ func configurationSkill(inventory scan.Inventory, id, name string) (scan.Occurre
 // managed skill or the tip of a fork, so a file that version holds is
 // never ignored; an unmanaged skill's over an empty index. A fork's
 // directory is read in its worktree, so a .gitignore at the worktree's
-// root counts. Nothing is written to the library. While no account repo
+// root counts. Nothing is written to the library. While no home repo
 // exists there is no repository to run git over, and nothing is ignored.
 func (inv *invocation) libraryIgnored(ctx context.Context, name string, lib scan.LibrarySkill) (map[string]bool, error) {
-	gitDir, rec, held, err := inv.accountRecord(ctx, name)
+	gitDir, rec, held, err := inv.hubRecord(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -263,17 +263,17 @@ func (inv *invocation) libraryIgnored(ctx context.Context, name string, lib scan
 	}
 	wt, err := inv.openWorkTreeWithin(ctx, gitDir, top, lib.ResolvedPath)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, homeRepoFailure(err)
 	}
 	defer wt.Close()
 	if load != "" {
 		if err := wt.Load(ctx, load); err != nil {
-			return nil, accountRepoFailure(err)
+			return nil, homeRepoFailure(err)
 		}
 	}
 	paths, err := wt.Ignored(ctx)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, homeRepoFailure(err)
 	}
 	ignored := make(map[string]bool, len(paths))
 	for _, p := range paths {

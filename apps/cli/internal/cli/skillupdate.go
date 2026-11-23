@@ -206,14 +206,14 @@ type updateRun struct {
 	bodies     map[string]string // what the files of every version staged hold, by blob id
 	applied    []*updating       // the skills whose update the mutation applied, by name
 	pending    []*updating       // the skills whose merge the mutation left pending, by name
-	account    *accountFetch     // the hub as the run fetched it; nil when it did not, see fetchAccount
+	hub        *hubFetch         // the hub as the run fetched it; nil when it did not, see fetchHub
 }
 
-// accountFetch is the hub as a run of skill update fetched it,
-// once, before it selected anything, see updateRun.fetchAccount.
-type accountFetch struct {
+// hubFetch is the hub as a run of skill update fetched it,
+// once, before it selected anything, see updateRun.fetchHub.
+type hubFetch struct {
 	entry  home.Source       // the hub's settings entry
-	remote string            // its git remote in the account repo
+	remote string            // its git remote in the home repo
 	tips   map[string]string // the tip of each skill it holds, by name, as its remote-tracking branches hold them
 	err    error             // why git could not fetch it, which leaves the tips of the fetch before; nil when it fetched
 }
@@ -330,9 +330,9 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 		all:      len(names) == 0,
 		names:    names,
 	}
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	r.gitDir = gitDir
 	// An unfinished journal is finished before anything is read. A stopped
@@ -351,7 +351,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 			err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
 		}
 		if err != nil {
-			return accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
+			return homeRepoFailure(fmt.Errorf("home repo %s: %w", gitDir, err))
 		}
 	}
 	s, err := inv.loadSettings()
@@ -360,12 +360,12 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 	}
 	sources := sourceURLs(s)
 
-	if err := r.fetchAccount(ctx, records); err != nil {
+	if err := r.fetchHub(ctx, records); err != nil {
 		return err
 	}
 	names, libs := r.selection(records)
 	r.selected = len(names)
-	pulled, dropped, err := r.accountStep(ctx, names, records)
+	pulled, dropped, err := r.hubStep(ctx, names, records)
 	if err != nil {
 		return err
 	}
@@ -375,7 +375,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 		}
 	}
 	if r.all {
-		names = r.afterAccountStep(names, records, pulled, dropped)
+		names = r.afterHubStep(names, records, pulled, dropped)
 		if len(names)+len(pulled)+len(dropped) == 0 {
 			inv.summary = "nothing to update: no managed skill has an update as of the last update check; run '" + checkUpdatesCommand + "' to look again"
 			inv.out.print("Nothing to update: no managed skill has an update as of the last update check. Run ",
@@ -392,8 +392,8 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 		var u *updating
 		var f *failure
 		fork := managed && rec.Kind == lineage.KindFork
-		if fork && r.account != nil && rec.Fork != nil && rec.Fork.NoUpstream && !inv.mergePending(n) {
-			// A fork with no upstream is up to date once its account step
+		if fork && r.hub != nil && rec.Fork != nil && rec.Fork.NoUpstream && !inv.mergePending(n) {
+			// A fork with no upstream is up to date once its hub step
 			// took in what the hub held, or found nothing to take
 			// in; one the hub holds no branch of has nothing to
 			// take in until it is published. One with a merge pending goes
@@ -402,7 +402,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 			case slices.Contains(pulled, n):
 				inv.summary = "updated " + n + " to the latest published version; it has no upstream to update from"
 				continue // ended once it is reported, see reportForks
-			case !r.all && r.account.tips[n] == "":
+			case !r.all && r.hub.tips[n] == "":
 				inv.summary = n + " has no branch on the hub; run '" + publishCommand(n) + "' to publish it"
 				inv.out.print(inv.out.paint(heading, sanitised(n)), " has no branch on the hub; run ",
 					inv.out.paint(label, publishCommand(n)), " to publish it")
@@ -421,7 +421,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 		switch {
 		case f != nil:
 			r.drop(n, f)
-		case u == nil && r.all: // a fork whose account step took in the update its candidate named
+		case u == nil && r.all: // a fork whose hub step took in the update its candidate named
 			continue
 		case u == nil: // a name the last check found no update for, which only a run of names asks about
 			inv.summary = n + " is up to date as of the last update check; run '" + checkUpdatesCommand + "' to look again"
@@ -434,7 +434,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 				return inv.reportForks(ctx, pulled)
 			}
 			if !slices.Contains(pulled, n) {
-				r.end(n) // a fork the account step moved ends once it is reported, see reportForks
+				r.end(n) // a fork the hub step moved ends once it is reported, see reportForks
 			}
 		case u.merged.conflicted && (u.fork == nil || !u.fork.start): // a merge pending with files still to resolve, left as it is
 			r.pending = append(r.pending, u)
@@ -487,18 +487,18 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 	return r.failure()
 }
 
-// afterAccountStep is what a run over every skill goes on to update once
-// the account step ran, see accountStep: the skills it selected but for
+// afterHubStep is what a run over every skill goes on to update once
+// the hub step ran, see hubStep: the skills it selected but for
 // the forks that have no update from upstream, a candidate other than
 // their base version, and no merge pending. Those were selected for the
-// account step alone, since the hub held another tip of them,
+// hub step alone, since the hub held another tip of them,
 // and it already took in what there was: a fork with no upstream is up to
 // date then, and one the remote is behind, with commits not yet published,
 // was up to date all along, so nothing is said of either. The forks the
-// account step dropped are left out too. The account step already took
+// hub step dropped are left out too. The hub step already took
 // the forks left out silently off the count of skills the run set out to
 // update.
-func (r *updateRun) afterAccountStep(names []string, records map[string]lineage.Record, pulled []string, dropped map[string]bool) []string {
+func (r *updateRun) afterHubStep(names []string, records map[string]lineage.Record, pulled []string, dropped map[string]bool) []string {
 	var kept []string
 	for _, n := range names {
 		if dropped[n] {
@@ -514,7 +514,7 @@ func (r *updateRun) afterAccountStep(names []string, records map[string]lineage.
 	return kept
 }
 
-// fetchAccount fetches the hub once for the run, before it
+// fetchHub fetches the hub once for the run, before it
 // selects anything, when one is set and the run needs it: for names, when
 // one is a fork, a skill of the hub, with no merge pending; with
 // --all, when any fork is placed on this machine, a worktree or a library
@@ -522,10 +522,10 @@ func (r *updateRun) afterAccountStep(names []string, records map[string]lineage.
 // shared source say, never fetches the hub, so one git cannot
 // reach neither warns nor fails it. The remote-tracking branches are read
 // once, after the fetch: --all selects from them, see selection, and the
-// account step takes in what they hold, see accountStep. A fetch that fails
-// is no failure of the run here: the account step answers for it, and
+// hub step takes in what they hold, see hubStep. A fetch that fails
+// is no failure of the run here: the hub step answers for it, and
 // --all selects from what the fetch before left.
-func (r *updateRun) fetchAccount(ctx context.Context, records map[string]lineage.Record) error {
+func (r *updateRun) fetchHub(ctx context.Context, records map[string]lineage.Record) error {
 	inv := r.inv
 	need := false
 	if r.all {
@@ -543,41 +543,41 @@ func (r *updateRun) fetchAccount(ctx context.Context, records map[string]lineage
 	if !need {
 		return nil
 	}
-	entry, remote, ok, err := inv.accountSource()
+	entry, remote, ok, err := inv.hubSource()
 	if err != nil || !ok {
 		return err
 	}
-	if err := inv.alignAccount(ctx, r.gitDir, entry); err != nil {
+	if err := inv.alignHub(ctx, r.gitDir, entry); err != nil {
 		return err
 	}
-	a := &accountFetch{entry: entry, remote: remote, err: inv.fetchForks(ctx, r.gitDir, remote, false)}
+	a := &hubFetch{entry: entry, remote: remote, err: inv.fetchForks(ctx, r.gitDir, remote, false)}
 	if a.err == nil || r.all {
 		if a.tips, err = lineage.ListRemote(ctx, inv.git, r.gitDir, remote); err != nil {
-			return accountRepoFailure(err)
+			return homeRepoFailure(err)
 		}
 	}
-	r.account = a
+	r.hub = a
 	return nil
 }
 
-// accountStep is the first step of a fork's update when the run fetched
-// the hub, see fetchAccount: what another machine published of
+// hubStep is the first step of a fork's update when the run fetched
+// the hub, see fetchHub: what another machine published of
 // the fork is taken in first, see syncFork, as a commit of its own, before
 // the update from upstream merges on top of it. With --all that covers
 // every fork placed here that another machine published to, see selection,
-// a fork with no upstream included, which its account step alone brings up
+// a fork with no upstream included, which its hub step alone brings up
 // to date. A fork with a merge pending is left to the update, which
 // completes it; one whose remote branch holds nothing it lacks, or that
 // the remote holds no branch of, is left as it is, with nothing reported.
-// A fork whose account step conflicts, and so is left pending, or is
+// A fork whose hub step conflicts, and so is left pending, or is
 // refused, is dropped from the run, see drop, and its update from upstream
 // waits: dropped names them. pulled names the forks whose branch it moved,
 // in name order. A remote git could not reach drops each fork with no
 // upstream, exit code 3, since it has nothing else to update from; for the
 // others it is a warning, and the update from upstream goes on without it.
-func (r *updateRun) accountStep(ctx context.Context, names []string, records map[string]lineage.Record) (pulled []string, dropped map[string]bool, err error) {
+func (r *updateRun) hubStep(ctx context.Context, names []string, records map[string]lineage.Record) (pulled []string, dropped map[string]bool, err error) {
 	inv := r.inv
-	a := r.account
+	a := r.hub
 	if a == nil {
 		return nil, nil, nil
 	}
@@ -628,7 +628,7 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 		}
 		s := inv.syncFork(ctx, r.gitDir, records[n], remote)
 		if s.outcome == pullUpToDate {
-			continue // the remote is behind: the account step took nothing in
+			continue // the remote is behind: the hub step took nothing in
 		}
 		inv.reportSync(s)
 		switch {
@@ -640,8 +640,8 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 		}
 	}
 	// With --all, a fork the step neither moved nor dropped, with no
-	// candidate, was selected for the account step alone and is left out
-	// of the run silently, see afterAccountStep: the count of skills the
+	// candidate, was selected for the hub step alone and is left out
+	// of the run silently, see afterHubStep: the count of skills the
 	// run set out to update loses it before any fork is dropped, so that a
 	// drop warns only when other skills are left to update.
 	for _, n := range forks {
@@ -655,7 +655,7 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 	return pulled, dropped, nil
 }
 
-// forkFailure is a fork the account step gave up on, dropped once the step
+// forkFailure is a fork the hub step gave up on, dropped once the step
 // is done with every fork.
 type forkFailure struct {
 	name string
@@ -688,8 +688,8 @@ func (inv *invocation) finishJournals(ctx context.Context) error {
 // with one, a candidate other than its base version (see
 // lineage.Record.ForkCandidate), and, when the run fetched the hub, every
 // fork placed on this machine whose branch there differs from its own, or
-// whose merge is pending, see accountStep: one the remote is behind is
-// judged up to date there, with nothing said, see afterAccountStep. A
+// whose merge is pending, see hubStep: one the remote is behind is
+// judged up to date there, with nothing said, see afterHubStep. A
 // remote git could not reach selects, of those, the forks with no upstream
 // it held at the last fetch, which then fail, and those with a merge
 // pending. A skill with no candidate has nothing to update, an
@@ -724,17 +724,17 @@ func (r *updateRun) selection(records map[string]lineage.Record) ([]string, map[
 // fork placed on this machine whose merge is pending, or that the hub, as
 // the run fetched it, holds another tip of. When git could not fetch it,
 // nothing is taken in from the tips the fetch before left, and a fork it
-// held is selected only when it has no upstream, for the account step to
-// fail it, see accountStep.
+// held is selected only when it has no upstream, for the hub step to
+// fail it, see hubStep.
 func (r *updateRun) published(name string, rec lineage.Record) bool {
-	if r.account == nil || rec.Kind != lineage.KindFork || !r.inv.forkPlaced(name) {
+	if r.hub == nil || rec.Kind != lineage.KindFork || !r.inv.forkPlaced(name) {
 		return false
 	}
 	if r.inv.mergePending(name) {
 		return true
 	}
-	tip := r.account.tips[name]
-	if r.account.err != nil {
+	tip := r.hub.tips[name]
+	if r.hub.err != nil {
 		return tip != "" && rec.Fork != nil && rec.Fork.NoUpstream
 	}
 	return tip != "" && tip != rec.Commit
@@ -777,7 +777,7 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 		return nil, refuse(exitRefused, what+", so there is nothing to update", wayOut)
 	case !rec.HasImport:
 		return nil, refuse(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
-			"run 'agentx doctor' and check the account repo it names")
+			"run 'agentx doctor' and check the home repo it names")
 	case !sources[rec.Import.Source]:
 		return nil, removedSourceRefusal(name, rec.Import.Source)
 	case rec.UpstreamRemoved != "":
@@ -820,7 +820,7 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 	}
 	j, err := inv.judgeDir(ctx, gitDir, lib.ResolvedPath, tree, v, true)
 	if err != nil {
-		return nil, failureOf(accountRepoFailure(err))
+		return nil, failureOf(homeRepoFailure(err))
 	}
 	if u.checkout != "" && !j.holds {
 		return nil, refuse(exitRefused, name+" was edited while its merge was pending, so the merge cannot be applied",
@@ -844,13 +844,13 @@ func (inv *invocation) judgePending(ctx context.Context, gitDir string, u *updat
 	u.checkout = inv.checkoutPath(u.name)
 	s, err := inv.readMerge(ctx, u.checkout)
 	if err != nil {
-		return failureOf(accountRepoFailure(err))
+		return failureOf(homeRepoFailure(err))
 	}
 	if s.theirs == "" {
 		s.theirs = u.rec.CandidateCommit() // no merge in progress: the update it would merge
 	}
 	if u.next, err = u.rec.At(ctx, inv.git, gitDir, s.theirs); err != nil {
-		return failureOf(accountRepoFailure(err))
+		return failureOf(homeRepoFailure(err))
 	}
 	dir := u.rec.Import.Dir()
 	u.merge = lineage.Merge{Base: s.base, Mine: s.mine, Theirs: s.theirs}
@@ -858,7 +858,7 @@ func (inv *invocation) judgePending(ctx context.Context, gitDir string, u *updat
 	if s.tree == "" {
 		files, err := conflictFiles(s.unmerged, dir)
 		if err != nil {
-			return failureOf(accountRepoFailure(err))
+			return failureOf(homeRepoFailure(err))
 		}
 		u.merged.conflicted, u.conflict = true, conflictOfSkill(u.name, u.merge, files)
 		return nil
@@ -898,7 +898,7 @@ func (r *updateRun) read(ctx context.Context) error {
 	for _, u := range r.ready {
 		theirs, err := lineage.ReadBase(ctx, r.inv.git, r.gitDir, u.next)
 		if err != nil {
-			r.drop(u.name, failureOf(accountRepoFailure(err)))
+			r.drop(u.name, failureOf(homeRepoFailure(err)))
 			continue
 		}
 		u.theirs, u.base = theirs, theirs
@@ -922,7 +922,7 @@ func (r *updateRun) read(ctx context.Context) error {
 	}
 	bodies, err := source.ReadBlobs(ctx, r.inv.git, r.gitDir, ids)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	r.bodies = bodies
 	for _, u := range ready {
@@ -953,23 +953,23 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 	git, gitDir := r.inv.git, r.gitDir
 	dir := u.rec.Import.Dir()
 	if u.next.Import.Dir() != dir {
-		return refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(u.name)+" holds "+u.name+" under another directory than its import branch",
+		return refuse(exitHomeRepo, "the update candidate "+lineage.CandidateRef(u.name)+" holds "+u.name+" under another directory than its import branch",
 			"run '"+checkUpdatesCommand+"' to pin the update again")
 	}
 	if u.checkout == "" {
 		mine, err := lineage.CommitDir(ctx, git, gitDir, dir, u.written, u.rec.Commit, "library directory of "+u.name+"\n")
 		if err != nil {
-			return failureOf(accountRepoFailure(err))
+			return failureOf(homeRepoFailure(err))
 		}
 		u.merge = lineage.Merge{Base: u.rec.Commit, Mine: mine, Theirs: u.next.Commit}
 		u.mine = treeVersion(u.written)
 		if u.merged, err = mergeVersions(ctx, git, gitDir, u.merge); err != nil {
-			return failureOf(accountRepoFailure(err))
+			return failureOf(homeRepoFailure(err))
 		}
 		if u.merged.conflicted {
 			files, err := conflictFiles(u.merged.stages, dir)
 			if err != nil {
-				return failureOf(accountRepoFailure(err))
+				return failureOf(homeRepoFailure(err))
 			}
 			u.conflict = conflictOfSkill(u.name, u.merge, files)
 			return nil
@@ -977,7 +977,7 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 	}
 	merged, err := lineage.ReadMerged(ctx, git, gitDir, u.merged.tree, dir)
 	if err != nil {
-		return failureOf(accountRepoFailure(err))
+		return failureOf(homeRepoFailure(err))
 	}
 	u.base = merged
 	u.target = treeVersion(merged.ID())
@@ -1038,7 +1038,7 @@ func (r *updateRun) apply(ctx context.Context) error {
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.git.Refs(ctx).RefValues(r.gitDir, refs)
 		if err != nil {
-			return accountRepoFailure(err)
+			return homeRepoFailure(err)
 		}
 		edit, err := inv.beginSettings()
 		if err != nil {
@@ -1111,7 +1111,7 @@ func (r *updateRun) apply(ctx context.Context) error {
 		for _, u := range conflicted {
 			start := mergeStart{mine: u.merge.Mine, theirs: u.merge.Theirs, merged: u.merged, message: updateMergeMessage(u.name, u.rec, u.next)}
 			if err := inv.startMerge(ctx, r.gitDir, u.name, start); err != nil {
-				r.drop(u.name, failureOf(accountRepoFailure(err)))
+				r.drop(u.name, failureOf(homeRepoFailure(err)))
 				continue
 			}
 			pending = append(pending, u)
@@ -1311,7 +1311,7 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 		moved := " from " + short(u.rec.Import.Commit) + " to " + short(u.next.Import.Commit)
 		switch {
 		case u.checkout != "" && u.fork != nil && u.rec.Import.Commit == u.next.Import.Commit:
-			// A merge the account step left pending moves no upstream version.
+			// A merge the hub step left pending moves no upstream version.
 			moved = " with the merge you resolved"
 		case u.checkout != "":
 			moved += " with the merge you resolved"

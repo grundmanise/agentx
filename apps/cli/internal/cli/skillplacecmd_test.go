@@ -27,7 +27,7 @@ func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "codex")
-	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	head := h.homeGit("rev-parse", "refs/heads/managed/alpha")
 	before := mutationVersion(t, h)
 
 	out := h.run("--json", "skill", "place", "alpha", "--to", "cortex")
@@ -37,7 +37,7 @@ func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 	if !ok || target != filepath.Join(h.library, "alpha") {
 		t.Errorf("the placement is %q (symlink %v), want a link to the library", target, ok)
 	}
-	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
+	equal(t, "the import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), head)
 	equal(t, "mutations", mutationVersion(t, h), before+1)
 	equal(t, "journals left behind", journalCount(t, h), 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
@@ -242,12 +242,12 @@ func TestTheHintForAnEditedCopyTakesTheLibraryVersion(t *testing.T) {
 			remove: "agentx skill remove alpha --from cortex", again: "agentx skill place alpha --to cortex --copy",
 		},
 		{
-			what: "a name that starts with a dash", name: "-mine", install: placeOwnCopy("-mine"),
+			what: "a name that starts with a dash", name: "-mine", install: placeHubCopy("-mine"),
 			edit:   func(t *testing.T, _ *harness, place string) { editCopy(t, place) },
 			remove: "agentx skill remove --from cortex -- -mine", again: "agentx skill place --to cortex --copy -- -mine",
 		},
 		{
-			what: "a name a shell has to quote", name: "it's mine", install: placeOwnCopy("it's mine"),
+			what: "a name a shell has to quote", name: "it's mine", install: placeHubCopy("it's mine"),
 			edit:   func(t *testing.T, _ *harness, place string) { editCopy(t, place) },
 			remove: `agentx skill remove 'it'\''s mine' --from cortex`, again: `agentx skill place 'it'\''s mine' --to cortex --copy`,
 		},
@@ -291,9 +291,9 @@ func editCopy(t *testing.T, place string) {
 	writeFile(t, filepath.Join(place, "mine.md"), "a file of my own\n")
 }
 
-// placeOwnCopy is a machine with no source whose library holds a hub skill
+// placeHubCopy is a machine with no source whose library holds a hub skill
 // called name, a copy of it placed in Cortex Code.
-func placeOwnCopy(name string) func(t *testing.T) *harness {
+func placeHubCopy(name string) func(t *testing.T) *harness {
 	return func(t *testing.T) *harness {
 		h := placeHome(t)
 		if err := os.MkdirAll(filepath.Join(h.library, name), 0o755); err != nil {

@@ -42,9 +42,9 @@ func TestSourceAddUnwindsItsRemoteWhenTheSettingsWriteFails(t *testing.T) {
 	if out.exit == 0 {
 		t.Fatalf("the add did not fail although its settings write could not land:\n%s", out.stdout)
 	}
-	// Nothing of the source is left in the account repo: no remote for a
+	// Nothing of the source is left in the home repo: no remote for a
 	// source no command would ever name again, and no ref.
-	config := h.accountGit("config", "--list", "--local")
+	config := h.homeGit("config", "--list", "--local")
 	if strings.Contains(config, "remote.src-"+source.ID(s.url)) {
 		t.Errorf("the refused add left its remote behind:\n%s", config)
 	}
@@ -70,7 +70,7 @@ func TestSourceAddKeepsItsRemoteOnceTheEntryIsWritten(t *testing.T) {
 	s.skill("one", "one", "One", nil)
 	s.commit("one")
 
-	// One add that works first: it creates the account repo, which is its
+	// One add that works first: it creates the home repo, which is its
 	// own mutation, so the run under test fails at the change signal of the
 	// add itself and nowhere earlier.
 	first := h.newSourceRepo("first", true)
@@ -105,7 +105,7 @@ func TestSourceAddKeepsItsRemoteOnceTheEntryIsWritten(t *testing.T) {
 	if !found {
 		t.Fatalf("the settings hold no entry for the source, so this is not the case under test:\n%v", entries)
 	}
-	config := h.accountGit("config", "--list", "--local")
+	config := h.homeGit("config", "--list", "--local")
 	if !strings.Contains(config, "remote.src-"+id+".url") {
 		t.Errorf("the settings name the source but its remote was taken back:\n%s", config)
 	}

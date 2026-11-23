@@ -30,8 +30,8 @@ func TestSkillForkConvertsManagedSkills(t *testing.T) {
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta")
 	imports := map[string]string{"alpha": h.ref(lineage.ManagedRef("alpha")), "beta": h.ref(lineage.ManagedRef("beta"))}
-	h.accountGit("update-ref", lineage.CandidateRef("alpha"), imports["beta"])
-	h.accountGit("update-ref", lineage.UpstreamRemovedRef("alpha"), imports["beta"])
+	h.homeGit("update-ref", lineage.CandidateRef("alpha"), imports["beta"])
+	h.homeGit("update-ref", lineage.UpstreamRemovedRef("alpha"), imports["beta"])
 	writeFile(t, filepath.Join(h.library, "beta", "SKILL.md"), skill("beta", "The second skill, edited"))
 	writeFile(t, filepath.Join(h.library, "beta", ".DS_Store"), "finder\n")
 	placed := func(client, name string) string {
@@ -49,13 +49,13 @@ func TestSkillForkConvertsManagedSkills(t *testing.T) {
 		for key, was := range map[string]string{"upstream": "source", "upstream_subpath": "subpath", "upstream_commit": "upstream_commit", "base_hash": "base_hash"} {
 			equal(t, name+": "+key, ev[key], before[was])
 		}
-		if _, err := h.accountGitErr("rev-parse", "--verify", "-q", lineage.ManagedRef(name)); err == nil {
+		if _, err := h.homeGitErr("rev-parse", "--verify", "-q", lineage.ManagedRef(name)); err == nil {
 			t.Errorf("%s: the import branch is still there", name)
 		}
 		tip := h.ref(lineage.ForkRef(name))
-		equal(t, name+": the parent", h.accountGit("rev-list", "--parents", "-1", tip), tip+" "+imports[name])
+		equal(t, name+": the parent", h.homeGit("rev-list", "--parents", "-1", tip), tip+" "+imports[name])
 		equal(t, name+": the fork id", ev["fork_id"], h.trailer(tip, lineage.TrailerForkID))
-		equal(t, name+": the subject", h.accountGit("log", "-1", "--format=%s", tip), "Fork "+name+" from "+s.url+"/skills/"+name+" at "+short(h.trailer(imports[name], "Agentx-Upstream-Commit")))
+		equal(t, name+": the subject", h.homeGit("log", "-1", "--format=%s", tip), "Fork "+name+" from "+s.url+"/skills/"+name+" at "+short(h.trailer(imports[name], "Agentx-Upstream-Commit")))
 		root := filepath.Join(h.agentx, "worktrees", name)
 		equal(t, name+": git status in the worktree", gitIn(t, h, root, "status", "--porcelain"), "")
 		if link, _ := os.Readlink(filepath.Join(h.library, name)); link != "../../../agentx/worktrees/"+name+"/"+name {
@@ -66,13 +66,13 @@ func TestSkillForkConvertsManagedSkills(t *testing.T) {
 		}
 	}
 	alpha, beta := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.ForkRef("beta"))
-	equal(t, "the unedited fork's tree", h.accountGit("rev-parse", alpha+"^{tree}"), h.accountGit("rev-parse", imports["alpha"]+"^{tree}"))
-	equal(t, "what the edited fork's creation commit changes", h.accountGit("diff-tree", "-r", "--name-status", imports["beta"], beta), "M\tbeta/SKILL.md")
+	equal(t, "the unedited fork's tree", h.homeGit("rev-parse", alpha+"^{tree}"), h.homeGit("rev-parse", imports["alpha"]+"^{tree}"))
+	equal(t, "what the edited fork's creation commit changes", h.homeGit("diff-tree", "-r", "--name-status", imports["beta"], beta), "M\tbeta/SKILL.md")
 	if b, err := os.ReadFile(filepath.Join(h.agentx, "worktrees", "beta", "beta", ".DS_Store")); err != nil || string(b) != "finder\n" {
 		t.Errorf("the ignored file did not move with the skill: %q, %v", b, err)
 	}
 	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), imports["beta"])
-	if _, err := h.accountGitErr("rev-parse", "--verify", "-q", lineage.UpstreamRemovedRef("alpha")); err == nil {
+	if _, err := h.homeGitErr("rev-parse", "--verify", "-q", lineage.UpstreamRemovedRef("alpha")); err == nil {
 		t.Error("the upstream-removed marker is still there")
 	}
 	for _, dir := range []string{h.library, filepath.Join(h.agentx, "worktrees")} {
@@ -103,18 +103,18 @@ func TestForksOfOneVersionShareTheImport(t *testing.T) {
 	contains(t, "the text output", out.stdout, "✓ forked alpha as my-alpha: 4 placements; alpha stays as it was\n")
 
 	tipA, tipB := a.ref(lineage.ForkRef("alpha")), b.ref(lineage.ForkRef("my-alpha"))
-	equal(t, "the shared import", b.accountGit("rev-parse", tipB+"^"), a.accountGit("rev-parse", tipA+"^"))
+	equal(t, "the shared import", b.homeGit("rev-parse", tipB+"^"), a.homeGit("rev-parse", tipA+"^"))
 	if idA, idB := a.trailer(tipA, lineage.TrailerForkID), b.trailer(tipB, lineage.TrailerForkID); idA == idB || idB == "" {
 		t.Errorf("the fork ids are %q and %q", idA, idB)
 	}
-	equal(t, "the original", b.ref(lineage.ManagedRef("alpha")), a.accountGit("rev-parse", tipA+"^"))
-	equal(t, "the renamed fork's directory", b.accountGit("ls-tree", "--name-only", tipB), "alpha")
-	equal(t, "what the rename changes", b.accountGit("diff-tree", "-r", "--name-status", tipB+"^", tipB), "M\talpha/SKILL.md")
-	renamed, err := renameFrontmatter([]byte(b.accountGit("cat-file", "blob", tipB+"^:alpha/SKILL.md")+"\n"), "my-alpha")
+	equal(t, "the original", b.ref(lineage.ManagedRef("alpha")), a.homeGit("rev-parse", tipA+"^"))
+	equal(t, "the renamed fork's directory", b.homeGit("ls-tree", "--name-only", tipB), "alpha")
+	equal(t, "what the rename changes", b.homeGit("diff-tree", "-r", "--name-status", tipB+"^", tipB), "M\talpha/SKILL.md")
+	renamed, err := renameFrontmatter([]byte(b.homeGit("cat-file", "blob", tipB+"^:alpha/SKILL.md")+"\n"), "my-alpha")
 	if err != nil {
 		t.Fatal(err)
 	}
-	equal(t, "the renamed SKILL.md", b.accountGit("cat-file", "blob", tipB+":alpha/SKILL.md")+"\n", string(renamed))
+	equal(t, "the renamed SKILL.md", b.homeGit("cat-file", "blob", tipB+":alpha/SKILL.md")+"\n", string(renamed))
 	contains(t, "the renamed SKILL.md", string(renamed), "name: my-alpha\n")
 	ev := b.listed("my-alpha")
 	equal(t, "the renamed fork's upstream", ev["upstream_commit"], b.listed("alpha")["upstream_commit"])
@@ -133,7 +133,7 @@ func TestForksOfOneVersionShareTheImport(t *testing.T) {
 
 	b.mustRun("skill", "fork", "alpha")
 	tipB = b.ref(lineage.ForkRef("alpha"))
-	equal(t, "the import of b's alpha", b.accountGit("rev-parse", tipB+"^"), a.accountGit("rev-parse", tipA+"^"))
+	equal(t, "the import of b's alpha", b.homeGit("rev-parse", tipB+"^"), a.homeGit("rev-parse", tipA+"^"))
 	if idA, idB := a.trailer(tipA, lineage.TrailerForkID), b.trailer(tipB, lineage.TrailerForkID); idA == idB {
 		t.Errorf("both machines' alpha have the fork id %q", idA)
 	}
@@ -195,8 +195,8 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "the text output", out.stdout, "• claude-code, codex now see more than one skill named format; rename the fork with 'agentx skill rename format <new>' to keep them apart\n")
 	tip := h.ref(lineage.ForkRef("format"))
-	equal(t, "the history", h.accountGit("rev-list", lineage.ForkRef("format")), tip)
-	equal(t, "the subject", h.accountGit("log", "-1", "--format=%s", tip), "Fork format from plugin formatter")
+	equal(t, "the history", h.homeGit("rev-list", lineage.ForkRef("format")), tip)
+	equal(t, "the subject", h.homeGit("log", "-1", "--format=%s", tip), "Fork format from plugin formatter")
 	if target, _ := os.Readlink(filepath.Join(h.home, ".claude", "skills", "format")); target != filepath.Join(h.library, "format") {
 		t.Errorf("claude-code's placement points at %q", target)
 	}
@@ -256,17 +256,17 @@ func TestSkillForkOfAFork(t *testing.T) {
 
 	h.mustRun("skill", "fork", "alpha", "--name", "alpha-two")
 	source, tip := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.ForkRef("alpha-two"))
-	equal(t, "the parent", h.accountGit("rev-parse", tip+"^"), source)
-	equal(t, "what the recorded edit changes", h.accountGit("diff-tree", "--no-commit-id", "--name-only", "-r", source), "alpha/notes.md")
+	equal(t, "the parent", h.homeGit("rev-parse", tip+"^"), source)
+	equal(t, "what the recorded edit changes", h.homeGit("diff-tree", "--no-commit-id", "--name-only", "-r", source), "alpha/notes.md")
 	equal(t, "the edit in the fork", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "edited\n")
 	equal(t, "the edit in the new fork", fileBody(t, filepath.Join(h.library, "alpha-two", "notes.md")), "edited\n")
-	equal(t, "the kept history", h.accountGit("rev-list", "--count", tip), "5")
+	equal(t, "the kept history", h.homeGit("rev-list", "--count", tip), "5")
 	if a, b := h.trailer(source+"^^", lineage.TrailerForkID), h.trailer(tip, lineage.TrailerForkID); a == b || b == "" {
 		t.Errorf("the fork ids are %q and %q", a, b)
 	}
 	equal(t, "the origin", h.trailer(tip, lineage.TrailerOriginSkill), "alpha")
-	equal(t, "what the creation commit changes", h.accountGit("diff-tree", "-r", "--name-status", source, tip), "D\tREADME.md\nM\talpha/SKILL.md")
-	contains(t, "SKILL.md", h.accountGit("cat-file", "blob", tip+":alpha/SKILL.md"), "name: alpha-two\n")
+	equal(t, "what the creation commit changes", h.homeGit("diff-tree", "-r", "--name-status", source, tip), "D\tREADME.md\nM\talpha/SKILL.md")
+	contains(t, "SKILL.md", h.homeGit("cat-file", "blob", tip+":alpha/SKILL.md"), "name: alpha-two\n")
 	equal(t, "the upstream", h.listed("alpha-two")["upstream_commit"], h.listed("alpha")["upstream_commit"])
 	for _, client := range []string{".claude", ".snowflake/cortex"} {
 		if target, _ := os.Readlink(filepath.Join(h.home, client, "skills", "alpha-two")); target != filepath.Join(h.library, "alpha-two") {
@@ -291,7 +291,7 @@ func TestSkillForkRefusals(t *testing.T) {
 	// Three more managed skills, each with a branch of its own at beta's
 	// import: what refuses them is asked before their content is read.
 	for _, name := range []string{"gamma", "held", "cloned"} {
-		h.accountGit("update-ref", lineage.ManagedRef(name), h.ref(lineage.ManagedRef("beta")))
+		h.homeGit("update-ref", lineage.ManagedRef(name), h.ref(lineage.ManagedRef("beta")))
 	}
 	writeFile(t, mkdirs(t, filepath.Join(h.home, "mine", "gamma"), "SKILL.md"), skill("gamma", "Mine"))
 	if err := os.Symlink(filepath.Join(h.home, "mine", "gamma"), filepath.Join(h.library, "gamma")); err != nil {
@@ -305,7 +305,7 @@ func TestSkillForkRefusals(t *testing.T) {
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "cloned", ".git"), "HEAD"), "ref: refs/heads/main\n")
 	writeFile(t, filepath.Join(h.library, "cloned", ".gitignore"), ".git\n")
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "loose"), "SKILL.md"), skill("loose", "No branch records it"))
-	refs := h.accountGit("for-each-ref")
+	refs := h.homeGit("for-each-ref")
 	for _, tc := range []struct {
 		args []string
 		exit status
@@ -313,7 +313,7 @@ func TestSkillForkRefusals(t *testing.T) {
 	}{
 		{[]string{"nothing"}, exitNotFound, `neither the library nor any plugin holds a skill called "nothing"`},
 		{[]string{"loose", "--name", "tight"}, exitRefused, "loose is not managed by agentx, so it cannot be forked"},
-		{[]string{"alpha", "--name", "beta"}, exitRefused, "the account repo already holds beta as a skill of a shared source"},
+		{[]string{"alpha", "--name", "beta"}, exitRefused, "the home repo already holds beta as a skill of a shared source"},
 		{[]string{"gamma"}, exitRefused, "is a symlink to"},
 		{[]string{"held"}, exitRefused, "worktrees/held already exists"},
 		{[]string{"beta"}, exitRefused, "beta holds a Git repository at vendor/.git"},
@@ -330,12 +330,12 @@ func TestSkillForkRefusals(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(h.agentx, "merges", "alpha"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	objects := h.accountGit("count-objects")
+	objects := h.homeGit("count-objects")
 	out := h.run("--json", "skill", "fork", "alpha", "--name", "my-alpha")
 	equal(t, "a merge pending: exit", out.exit, exitPendingMerge.exit)
 	contains(t, "a merge pending", h.one(out.stdout, "error")["message"].(string), "alpha has a merge with its update pending, so it cannot be forked")
-	equal(t, "the objects", h.accountGit("count-objects"), objects)
-	equal(t, "the refs", h.accountGit("for-each-ref"), refs)
+	equal(t, "the objects", h.homeGit("count-objects"), objects)
+	equal(t, "the refs", h.homeGit("for-each-ref"), refs)
 	if entries, _ := os.ReadDir(filepath.Join(h.agentx, "worktrees")); len(entries) != 1 {
 		t.Errorf("a refused fork left %d entries in the worktrees directory, want the one the test made", len(entries))
 	}
@@ -477,7 +477,7 @@ exec %GIT% "$@"
 			if !home.WorktreeAt(root, "skills/alpha") {
 				t.Error("the worktree is not on the branch after recovery")
 			}
-			if _, err := h.accountGitErr("rev-parse", "--verify", "-q", lineage.ManagedRef("alpha")); err == nil {
+			if _, err := h.homeGitErr("rev-parse", "--verify", "-q", lineage.ManagedRef("alpha")); err == nil {
 				t.Error("the import branch is still there")
 			}
 			equal(t, "git status in the worktree", gitIn(t, h, root, "status", "--porcelain"), "")

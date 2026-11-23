@@ -15,13 +15,13 @@ import { formatAgo } from "#/lib/dates.ts";
 import { hostAndPath, shortSource } from "#/screens/skills/projection.ts";
 
 /** The key of the Hub pill and the source of its cards, beside the source ids and URLs. */
-export const YOUR_SKILLS = "your-skills";
+export const HUB_SKILLS = "your-skills";
 
 /** The label of the Hub pill and of its cards' group. */
-export const YOUR_SKILLS_LABEL = "Hub";
+export const HUB_LABEL = "Hub";
 
 export interface SourcePill {
-  /** The source id, or YOUR_SKILLS. */
+  /** The source id, or HUB_SKILLS. */
   key: string;
   /** The source's short form, or "Hub". */
   label: string;
@@ -47,7 +47,7 @@ export const sourcePills = (
   listings: Readonly<Record<string, readonly unknown[] | undefined>> = {}
 ): SourcePill[] => {
   const shared = sources
-    .filter((s) => s.account !== true)
+    .filter((s) => s.hub !== true)
     .map((s): SourcePill => {
       const pill: SourcePill = {
         key: s.id,
@@ -67,22 +67,22 @@ export const sourcePills = (
   shared.sort(
     (a, b) => compareLabels(a.label, b.label) || a.key.localeCompare(b.key)
   );
-  const account = sources.find((s) => s.account === true);
-  if (account === undefined) {
+  const hub = sources.find((s) => s.hub === true);
+  if (hub === undefined) {
     return shared;
   }
-  const yours: SourcePill = {
-    key: YOUR_SKILLS,
-    label: YOUR_SKILLS_LABEL,
-    source: account,
+  const hubPill: SourcePill = {
+    key: HUB_SKILLS,
+    label: HUB_LABEL,
+    source: hub,
   };
-  if (account.last_fetched !== undefined) {
-    yours.lastFetched = account.last_fetched;
+  if (hub.last_fetched !== undefined) {
+    hubPill.lastFetched = hub.last_fetched;
   }
-  if (account.skills !== undefined) {
-    yours.skills = account.skills;
+  if (hub.skills !== undefined) {
+    hubPill.skills = hub.skills;
   }
-  return [...shared, yours];
+  return [...shared, hubPill];
 };
 
 /** "1 skill", "2 skills". */
@@ -239,7 +239,7 @@ export interface SkillCard {
    * two directories of one source can hold skills of the same name.
    */
   key: string;
-  /** Where the card installs from: the source's canonical URL, or YOUR_SKILLS. */
+  /** Where the card installs from: the source's canonical URL, or HUB_SKILLS. */
   source: string;
   name: string;
   description: string;
@@ -410,7 +410,7 @@ export const installableCards = (
 ): SkillCard[] =>
   installable.map((s) =>
     card(
-      YOUR_SKILLS,
+      HUB_SKILLS,
       s.name,
       s.upstream === undefined
         ? "hub skill"
@@ -481,7 +481,7 @@ export const addedName = (
     : undefined;
 
 export interface CardGroup {
-  /** The source URL, or YOUR_SKILLS. */
+  /** The source URL, or HUB_SKILLS. */
   source: string;
   /** The source's short form, or "Hub". */
   label: string;
@@ -489,7 +489,7 @@ export interface CardGroup {
 }
 
 const sourceLabel = (source: string) =>
-  source === YOUR_SKILLS ? YOUR_SKILLS_LABEL : shortSource(source);
+  source === HUB_SKILLS ? HUB_LABEL : shortSource(source);
 
 /** The cards grouped by source, the sources A to Z by label. */
 export const groupCards = (cards: SkillCard[]): CardGroup[] => {
@@ -560,7 +560,7 @@ export const linkAdd = ({
 export interface AddPlan {
   /** The command line, without --json. */
   args: string[];
-  /** The source the command installs from: its URL, or YOUR_SKILLS. */
+  /** The source the command installs from: its URL, or HUB_SKILLS. */
   source: string;
   /** The names the command installs. */
   names: string[];
@@ -615,7 +615,7 @@ export const planAdds = ({
       args: [
         "skill",
         "add",
-        ...(source === YOUR_SKILLS ? [] : [source]),
+        ...(source === HUB_SKILLS ? [] : [source]),
         ...selection,
         ...to,
       ],

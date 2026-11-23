@@ -51,7 +51,7 @@ export type ErrorCode =
   | "not_found"
   | "refused"
   | "locked"
-  | "account_repo"
+  | "home_repo"
   | "interrupted"
   | "internal";
 export type PublishOutcome =
@@ -81,7 +81,7 @@ export type ImportAction =
   | "kept"
   | "skipped";
 export type MachineDerivation = "platform" | "random";
-export type UpdateCheckScope = "all" | "account";
+export type UpdateCheckScope = "all" | "hub";
 export type SourceAccess = "writable" | "read-only" | "unknown";
 export type ProgressPhase =
   | "fetch"
@@ -95,8 +95,8 @@ export type ProgressPhase =
 
 // The exit code of each error code, the ok of success included.
 export const EXIT_CODES = {
-  account_repo: 8,
   git: 2,
+  home_repo: 8,
   internal: 10,
   interrupted: 9,
   locked: 7,
@@ -202,7 +202,7 @@ export interface SearchResult {
 export interface SettingsSource {
   url: string;
   alias?: string;
-  account?: boolean;
+  hub?: boolean;
   pin?: string;
   access?: SourceAccess;
   access_checked?: string;
@@ -373,8 +373,8 @@ export interface MachineEvent {
   home: string;
   settings_file: string;
   library: string;
-  account_repo?: string;
-  account_repo_bytes?: number;
+  home_repo?: string;
+  home_repo_bytes?: number;
 }
 
 export interface SourceEvent {
@@ -383,7 +383,7 @@ export interface SourceEvent {
   id: string;
   url: string;
   alias?: string;
-  account?: boolean;
+  hub?: boolean;
   pin?: string;
   access?: SourceAccess;
   access_checked?: string;

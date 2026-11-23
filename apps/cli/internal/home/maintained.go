@@ -8,10 +8,10 @@ import (
 )
 
 // maintainedPath is the file that says when the serve child last
-// maintained the account repo: the time, as RFC 3339.
+// maintained the home repo: the time, as RFC 3339.
 func maintainedPath(dir string) string { return filepath.Join(dir, "maintained") }
 
-// Maintained is when the account repo of agentx home dir was last
+// Maintained is when the home repo of agentx home dir was last
 // maintained, and false when the file that says so is missing or does not
 // hold a time.
 func Maintained(dir string) (time.Time, bool) {
@@ -23,7 +23,7 @@ func Maintained(dir string) (time.Time, bool) {
 	return t, err == nil
 }
 
-// SetMaintained records that the account repo of agentx home dir was
+// SetMaintained records that the home repo of agentx home dir was
 // maintained at t. The file is written whole or not at all, and no journal
 // covers it: losing it only makes the next serve child maintain once more.
 func SetMaintained(dir string, t time.Time) error {

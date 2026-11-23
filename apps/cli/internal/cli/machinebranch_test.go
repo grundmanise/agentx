@@ -69,14 +69,14 @@ func machineOperation(t *testing.T, h *harness, remote, tip string) lineage.Oper
 // installed from the hub, and the second keeps its own URL of the hub.
 func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	t.Parallel()
-	const overSSH, overHTTPS = "git@example.com:me/agentx-account.git", "https://example.com/me/agentx-account"
+	const overSSH, overHTTPS = "git@example.com:me/agentx-hub.git", "https://example.com/me/agentx-hub"
 	a, s := installHarness(t)
 	a.mustRun("config", "set", "label", "first-laptop")
 	a.mustRun("skill", "add", s.url, "--all", "--to", "claude-code")
 	a.mustRun("skill", "fork", "alpha")
-	remote := newAccountRemote(t, a)
-	a.reachAs(remote, "ssh://git@example.com/me/agentx-account")
-	a.setAccount(overSSH)
+	remote := newHubRemote(t, a)
+	a.reachAs(remote, "ssh://git@example.com/me/agentx-hub")
+	a.setHub(overSSH)
 	a.mustRun("skill", "publish", "alpha")
 
 	file := a.exportSnapshot("export")
@@ -106,7 +106,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	b.build(t, fixture{dirs: []string{".claude"}})
 	b.rewrite(s)
 	b.reachAs(remote, overHTTPS)
-	b.setAccount(overHTTPS)
+	b.setHub(overHTTPS)
 	testshim.Write(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\necho 'read only' >&2\nexit 1\n")
 	out = b.run("--json", "snapshot", "apply", "--machine", "cloud", "--yes")
 	equal(t, "import --machine: exit", out.exit, 0)
@@ -121,9 +121,9 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	account, _ := accountEntry(settings)
-	equal(t, "the second home's hub", account.URL, overHTTPS)
-	if _, err := b.accountGitErr("rev-parse", "--verify", "--quiet", lineage.ForkRef("alpha")); err != nil {
+	hub, _ := hubEntry(settings)
+	equal(t, "the second home's hub", hub.URL, overHTTPS)
+	if _, err := b.homeGitErr("rev-parse", "--verify", "--quiet", lineage.ForkRef("alpha")); err != nil {
 		t.Errorf("alpha is not a hub skill on the second home: %v", err)
 	}
 	for _, name := range []string{"alpha", "beta"} {
@@ -161,8 +161,8 @@ func TestABranchWithNoSettingsIsRefused(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
-	remote := newAccountRemote(t, h)
-	h.setAccount(remote)
+	remote := newHubRemote(t, h)
+	h.setHub(remote)
 	h.mustRun("skill", "place", "alpha", "--machine", "cloud")
 	tip, doc, _ := machineSnapshot(t, h, remote, "cloud")
 	delete(doc, "settings")
@@ -211,11 +211,11 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
-	remote := newAccountRemote(t, h)
-	h.setAccount(remote)
+	remote := newHubRemote(t, h)
+	h.setHub(remote)
 	disk := func() []string {
 		return slices.DeleteFunc(diskState(t, h), func(e string) bool {
-			return strings.HasPrefix(e, gitx.AccountRepoPath(h.agentx))
+			return strings.HasPrefix(e, gitx.HomeRepoPath(h.agentx))
 		})
 	}
 	before := disk()
@@ -238,13 +238,13 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	account, _ := accountEntry(here)
+	hub, _ := hubEntry(here)
 	born := doc["settings"].(map[string]any)
 	equal(t, "the settings the branch is born with", fmt.Sprint(born["schema_version"], born["ignore_system_files"], born["copy_mode"]), "1 true map[]")
 	sources := born["sources"].([]any)
 	equal(t, "the sources it is born with", len(sources), 1)
-	equal(t, "the account entry's fields, without the access", keysOf(sources[0].(map[string]any)), "account,last_fetched,url")
-	equal(t, "the account entry's URL", sources[0].(map[string]any)["url"], account.URL)
+	equal(t, "the hub entry's fields, without the access", keysOf(sources[0].(map[string]any)), "hub,last_fetched,url")
+	equal(t, "the hub entry's URL", sources[0].(map[string]any)["url"], hub.URL)
 
 	text := h.run("skill", "remove", "alpha", "--machine", "cloud", "--from", "cortex")
 	equal(t, "remove --from: exit", text.exit, 0)
@@ -308,12 +308,12 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 // directory.
 func TestPlaceACopyOnTheCloudMachineAndImportIt(t *testing.T) {
 	t.Parallel()
-	const overSSH, overHTTPS = "git@example.com:me/agentx-account.git", "https://example.com/me/agentx-account"
+	const overSSH, overHTTPS = "git@example.com:me/agentx-hub.git", "https://example.com/me/agentx-hub"
 	a, s := installHarness(t)
 	a.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
-	remote := newAccountRemote(t, a)
-	a.reachAs(remote, "ssh://git@example.com/me/agentx-account")
-	a.setAccount(overSSH)
+	remote := newHubRemote(t, a)
+	a.reachAs(remote, "ssh://git@example.com/me/agentx-hub")
+	a.setHub(overSSH)
 	a.mustRun("skill", "place", "alpha", "--machine", "cloud", "--to", "cortex", "--copy")
 	_, doc, _ := machineSnapshot(t, a, remote, "cloud")
 	equal(t, "copy_mode after place --copy", fmt.Sprint(doc["settings"].(map[string]any)["copy_mode"]), "map[alpha:[cortex]]")
@@ -322,15 +322,15 @@ func TestPlaceACopyOnTheCloudMachineAndImportIt(t *testing.T) {
 	b.build(t, fixture{dirs: []string{".snowflake/cortex"}})
 	b.rewrite(s)
 	b.reachAs(remote, overHTTPS)
-	b.setAccount(overHTTPS)
+	b.setHub(overHTTPS)
 	out := b.run("snapshot", "apply", "--machine", "cloud", "--yes")
 	equal(t, "import --machine: exit", out.exit, 0)
 	settings, err := home.LoadSettings(b.agentx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	account, _ := accountEntry(settings)
-	equal(t, "the second home's hub", account.URL, overHTTPS)
+	hub, _ := hubEntry(settings)
+	equal(t, "the second home's hub", hub.URL, overHTTPS)
 	info, err := os.Lstat(filepath.Join(b.home, ".snowflake/cortex", "skills", "alpha"))
 	if err != nil || !info.IsDir() {
 		t.Errorf("alpha is not placed in cortex as a copy: %v %v", info, err)

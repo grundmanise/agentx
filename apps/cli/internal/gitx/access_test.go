@@ -146,7 +146,7 @@ func equalString(t *testing.T, what, got, want string) {
 // TestProbeAccessAppliesTheIncludesOfItsOwnURL checks why the access check
 // runs in a repository of its own: a setting the user keys on a remote's
 // URL applies to that source alone and never to another, as it would
-// inside the account repo, which holds every source's remote. It also
+// inside the home repo, which holds every source's remote. It also
 // checks that the user's pushInsteadOf applies to the check as it does to
 // a real push.
 func TestProbeAccessAppliesTheIncludesOfItsOwnURL(t *testing.T) {

@@ -35,7 +35,7 @@ type Settings struct {
 type Source struct {
 	URL           string `json:"url"`
 	Alias         string `json:"alias,omitempty"`
-	Account       bool   `json:"account,omitempty"` // the hub, which holds one branch per fork and is fetched whole; every other source is shared
+	Hub           bool   `json:"hub,omitempty"` // the hub, which holds one branch per fork and is fetched whole; every other source is shared
 	Pin           string `json:"pin,omitempty"`
 	Access        string `json:"access,omitempty"`         // AccessWritable or AccessReadOnly, absent while unknown
 	AccessChecked string `json:"access_checked,omitempty"` // RFC 3339, when access was last checked, whatever the answer
@@ -70,7 +70,7 @@ func (s Source) AccessName() string {
 // source's memory and is kept unless the add set it. The access is kept
 // or replaced as a pair with the time of its check, so that an add whose
 // check could not decide records that it looked and does not bring back
-// an answer it no longer has. The account flag is the add's own: source
+// an answer it no longer has. The hub flag is the add's own: source
 // add --hub sets it, and only the hub is added that way.
 func (s Source) Merge(prev Source) Source {
 	if s.Alias == "" {

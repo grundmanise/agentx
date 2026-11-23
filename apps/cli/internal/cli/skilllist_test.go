@@ -60,9 +60,9 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 	// new or skill fork, the hub, marked as source list marks
 	// it, and a forked one the upstream it came from too; an unmanaged one
 	// none. Neither command publishes, so both read not published.
-	remote := newAccountRemote(t, h)
-	h.setAccount(remote)
-	account := "file://" + remote
+	remote := newHubRemote(t, h)
+	h.setHub(remote)
+	hub := "file://" + remote
 	h.mustRun("skill", "new", "gamma")
 	h.mustRun("skill", "fork", "alpha", "--name", "delta")
 	upstream := managed["source"].(string) + "/" + managed["subpath"].(string)
@@ -73,8 +73,8 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 		cells[fields[0]] = fields[1:]
 	}
 	equal(t, "alpha's row", cells["alpha"][0]+"|"+cells["alpha"][2], "managed|"+upstream)
-	equal(t, "gamma's row", strings.Join(cells["gamma"], "|"), "managed|current, not published|"+account+" (hub)|4 placements")
-	equal(t, "delta's row", strings.Join(cells["delta"], "|"), "managed|current, not published|"+account+" (hub), from "+upstream+"|4 placements")
+	equal(t, "gamma's row", strings.Join(cells["gamma"], "|"), "managed|current, not published|"+hub+" (hub)|4 placements")
+	equal(t, "delta's row", strings.Join(cells["delta"], "|"), "managed|current, not published|"+hub+" (hub), from "+upstream+"|4 placements")
 	equal(t, "mine's row", strings.Join(cells["mine"], "|"), "unmanaged|-|(none)|2 placements")
 }
 
@@ -91,12 +91,12 @@ func TestSkillListReadsLineageFromTheBranchesAlone(t *testing.T) {
 	beforeText := h.mustRun("skill", "list")
 
 	// Every source ref goes, with plain git, behind agentx's back.
-	for _, ref := range strings.Split(h.accountGit("for-each-ref", "--format=%(refname)", "refs/agentx/sources/"), "\n") {
+	for _, ref := range strings.Split(h.homeGit("for-each-ref", "--format=%(refname)", "refs/agentx/sources/"), "\n") {
 		if ref != "" {
-			h.accountGit("update-ref", "-d", ref)
+			h.homeGit("update-ref", "-d", ref)
 		}
 	}
-	if refs := h.accountGit("for-each-ref", "refs/agentx/sources/"); refs != "" {
+	if refs := h.homeGit("for-each-ref", "refs/agentx/sources/"); refs != "" {
 		t.Fatalf("source refs are still there:\n%s", refs)
 	}
 	for _, c := range []struct{ what, before, after string }{
@@ -119,7 +119,7 @@ func TestSkillListReportsAFork(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	h.accountGit("update-ref", "refs/heads/skills/beta", h.accountGit("rev-parse", "refs/heads/managed/alpha"))
+	h.homeGit("update-ref", "refs/heads/skills/beta", h.homeGit("rev-parse", "refs/heads/managed/alpha"))
 	copyTree(t, filepath.Join(h.library, "alpha"), filepath.Join(h.library, "beta"))
 
 	out := h.run("--json", "skill", "list")
@@ -172,17 +172,17 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	remove(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "beta"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
 	writeFile(t, filepath.Join(h.library, "beta", ".DS_Store"), "finder\n")
-	h.accountGit("update-ref", "refs/heads/managed/ghost", h.accountGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))
+	h.homeGit("update-ref", "refs/heads/managed/ghost", h.homeGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))
 	// A candidate is a commit of its own, as a check pins it: here alpha's
 	// version again, with its lineage, on top of the branch. One the branch
 	// already holds is no update, and lists as none.
-	message := h.accountGit("log", "-1", "--format=%B", "refs/heads/managed/alpha")
-	candidate := strings.TrimSpace(h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", "refs/heads/managed/alpha", "-m", message))
-	h.accountGit("update-ref", "refs/agentx/candidate/alpha", candidate)
-	h.accountGit("update-ref", "refs/agentx/upstream-removed/beta", "refs/agentx/sources/"+source.ID(s.url))
-	// A pending merge is a checkout of the account repo, as an update adds
+	message := h.homeGit("log", "-1", "--format=%B", "refs/heads/managed/alpha")
+	candidate := strings.TrimSpace(h.homeGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", "refs/heads/managed/alpha", "-m", message))
+	h.homeGit("update-ref", "refs/agentx/candidate/alpha", candidate)
+	h.homeGit("update-ref", "refs/agentx/upstream-removed/beta", "refs/agentx/sources/"+source.ID(s.url))
+	// A pending merge is a checkout of the home repo, as an update adds
 	// one.
-	h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
+	h.homeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
 		pendingCheckout(h, "alpha"), h.ref(lineage.ManagedRef("alpha")))
 	h.mustRun("skill", "new", "fresh")
 	h.mustRun("skill", "new", "edited")
@@ -228,7 +228,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 		sort.Strings(ran)
 		equal(t, what+": git runs", strings.Join(ran, " "), "add add config for-each-ref log read-tree read-tree write-tree write-tree")
 	}
-	ghost := "ghost is managed in the account repo but the library holds no skill directory for it;" +
+	ghost := "ghost is managed in the home repo but the library holds no skill directory for it;" +
 		" run 'agentx skill add <source> --name ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
 	list := h.mustRun("skill", "list")
 	equal(t, "skill list's warning", list.stderr, "warning: "+ghost+"\n")
@@ -288,39 +288,39 @@ func TestSkillListSanitisesTheName(t *testing.T) {
 // passing it what its event says.
 func TestSourceCell(t *testing.T) {
 	t.Parallel()
-	const account, shared, up = "https://example.com/me/skills", "https://example.com/team/skills", "https://example.com/up/skills"
+	const hub, shared, up = "https://example.com/me/skills", "https://example.com/team/skills", "https://example.com/up/skills"
 	root, dir, nasty := "", "tools/pdf", "na\x1b[31msty"
 	for _, c := range []struct {
 		name            string
-		own             bool
+		hubSkill        bool
 		source          string
 		subpath         *string
 		upstream        string
 		upstreamSubpath *string
-		account, want   string
+		hub, want       string
 	}{
-		{"unmanaged, or an import agentx cannot read", false, "", nil, "", nil, account, "(none)"},
+		{"unmanaged, or an import agentx cannot read", false, "", nil, "", nil, hub, "(none)"},
 		{"unmanaged, no hub", false, "", nil, "", nil, "", "(none)"},
-		{"a shared source at its root", false, shared, &root, "", nil, account, shared},
-		{"a shared source's directory", false, shared, &dir, "", nil, account, shared + "/tools/pdf"},
+		{"a shared source at its root", false, shared, &root, "", nil, hub, shared},
+		{"a shared source's directory", false, shared, &dir, "", nil, hub, shared + "/tools/pdf"},
 		{"a shared source, no hub", false, shared, nil, "", nil, "", shared},
-		{"a hub skill", true, account, nil, "", nil, account, account + " (hub)"},
-		{"a hub skill, forked", true, account, nil, up, &dir, account, account + " (hub), from " + up + "/tools/pdf"},
-		{"a hub skill, forked from a root", true, account, nil, up, &root, account, account + " (hub), from " + up},
+		{"a hub skill", true, hub, nil, "", nil, hub, hub + " (hub)"},
+		{"a hub skill, forked", true, hub, nil, up, &dir, hub, hub + " (hub), from " + up + "/tools/pdf"},
+		{"a hub skill, forked from a root", true, hub, nil, up, &root, hub, hub + " (hub), from " + up},
 		{"a hub skill, no hub", true, "", nil, "", nil, "", "hub not set"},
 		{"a hub skill, forked, no hub", true, "", nil, up, nil, "", "hub not set, from " + up},
-		{"a shared source, sanitised", false, shared, &nasty, "", nil, account, shared + "/na [31msty"},
-		{"a hub skill, sanitised", true, account + "\x1b[1m", nil, up, &nasty, account + "\x1b[1m", account + " [1m (hub), from " + up + "/na [31msty"},
+		{"a shared source, sanitised", false, shared, &nasty, "", nil, hub, shared + "/na [31msty"},
+		{"a hub skill, sanitised", true, hub + "\x1b[1m", nil, up, &nasty, hub + "\x1b[1m", hub + " [1m (hub), from " + up + "/na [31msty"},
 	} {
-		got := sourceCell(c.own, c.source, c.subpath, c.upstream, c.upstreamSubpath, c.account).text
+		got := sourceCell(c.hubSkill, c.source, c.subpath, c.upstream, c.upstreamSubpath, c.hub).text
 		equal(t, c.name, got, c.want)
 	}
 
 	// Each listing says which skills are hub skills: skill list by the
 	// lineage, and skill list --remote lists nothing else.
 	w := &writer{}
-	equal(t, "skill list", row(w, librarySkillEvent{LibraryEntry: scan.LibraryEntry{Kind: lineage.KindManaged, Source: account, Upstream: up}, own: true}, account)[3].text,
-		account+" (hub), from "+up)
-	equal(t, "skill list --remote", installableRow(w, installableSkillEvent{Name: "alpha", Source: account, Upstream: up, UpstreamSubpath: &dir})[3].text,
-		account+" (hub), from "+up+"/tools/pdf")
+	equal(t, "skill list", row(w, librarySkillEvent{LibraryEntry: scan.LibraryEntry{Kind: lineage.KindManaged, Source: hub, Upstream: up}, hubSkill: true}, hub)[3].text,
+		hub+" (hub), from "+up)
+	equal(t, "skill list --remote", installableRow(w, installableSkillEvent{Name: "alpha", Source: hub, Upstream: up, UpstreamSubpath: &dir})[3].text,
+		hub+" (hub), from "+up+"/tools/pdf")
 }

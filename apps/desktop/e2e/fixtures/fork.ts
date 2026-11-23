@@ -5,7 +5,7 @@ import type { LibraryEntry, Plugin, SkillNode } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
 import { inventory, LIBRARY } from "./agents.ts";
-import { ACCOUNT, ACME } from "./skills.ts";
+import { HUB, ACME } from "./skills.ts";
 
 export { inventory } from "./agents.ts";
 
@@ -39,7 +39,7 @@ const ownEntry = (
     },
     ...universal.map((id) => libraryPlacement(id, name)),
   ],
-  source: ACCOUNT,
+  source: HUB,
   state: "current",
   universal,
   ...from,

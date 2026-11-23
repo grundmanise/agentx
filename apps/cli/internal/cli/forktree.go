@@ -101,7 +101,7 @@ func (inv *invocation) findForkDir(ctx context.Context, f *forkSite) error {
 // rec: the directory its library entry leads to in its worktree, which
 // costs no git, or the one directory the tip's tree holds, read with one
 // ls-tree. A tip holding no directory or several, beside which nothing
-// tells the skill's, is the account repo's to sort out, exit code 8.
+// tells the skill's, is the home repo's to sort out, exit code 8.
 func (inv *invocation) forkDir(ctx context.Context, gitDir string, rec lineage.Record) (string, error) {
 	if real, err := filepath.EvalSymlinks(inv.libraryPath(rec.Name)); err == nil {
 		if dir, ok := inv.placedForkDir(rec.Name, real); ok {
@@ -110,7 +110,7 @@ func (inv *invocation) forkDir(ctx context.Context, gitDir string, rec lineage.R
 	}
 	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", "-d", "--name-only", rec.Commit)
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return "", homeRepoFailure(err)
 	}
 	var dirs []string
 	for _, d := range strings.Split(out, "\x00") {
@@ -119,8 +119,8 @@ func (inv *invocation) forkDir(ctx context.Context, gitDir string, rec lineage.R
 		}
 	}
 	if len(dirs) != 1 {
-		return "", fail(exitAccountRepo, fmt.Sprintf("the branch %s holds %d directories at its root, not the one skill directory a fork's branch holds", rec.Ref, len(dirs)),
-			"run 'agentx doctor' and check the account repo it names")
+		return "", fail(exitHomeRepo, fmt.Sprintf("the branch %s holds %d directories at its root, not the one skill directory a fork's branch holds", rec.Ref, len(dirs)),
+			"run 'agentx doctor' and check the home repo it names")
 	}
 	return dirs[0], nil
 }
@@ -144,7 +144,7 @@ func (inv *invocation) placedForkDir(name, real string) (string, bool) {
 // such as a merge with conflicts, whose state resetting the index would
 // lose, one whose index a running git holds, and one checked out on
 // another branch than the fork's. Each is exit code 6, since nothing is
-// wrong with the account repo.
+// wrong with the home repo.
 func worktreeHealth(name, root, branch string) error {
 	if err := worktreeMissing(name, root); err != nil {
 		return err
@@ -204,7 +204,7 @@ func (inv *invocation) holdsTip(ctx context.Context, lib scan.LibrarySkill, rec 
 	if err != nil {
 		return false
 	}
-	f := forkSite{name: lib.Name, gitDir: gitx.AccountRepoPath(inv.dirs.Home), rec: rec, dir: dir,
+	f := forkSite{name: lib.Name, gitDir: gitx.HomeRepoPath(inv.dirs.Home), rec: rec, dir: dir,
 		root: filepath.Dir(lib.ResolvedPath), skillDir: lib.ResolvedPath}
 	return inv.verdict(lib.Name, "its branch tip", tree, f.version(), func() (bool, error) {
 		j, err := inv.judgeTip(ctx, f, tree, false)
@@ -230,11 +230,11 @@ type forkJudged struct {
 
 // judgeFork compares a directory a fork's branch is to hold with v as
 // judgeDir compares a managed skill's: the in-process tree id first, then
-// git, with the directory as a work tree of the account repo over a
+// git, with the directory as a work tree of the home repo over a
 // throwaway index. So the tree it writes follows Git's ignore rules: the
 // skill's own .gitignore files, the user's global ignore file, whether at
 // git's default place or at the core.excludesFile they set, and the list
-// ignore_system_files keeps in the account repo's info/exclude while the
+// ignore_system_files keeps in the home repo's info/exclude while the
 // setting is on. Attributes come from the skill's own .gitattributes files
 // alone. That tree is what a commit of the fork records, so a file git
 // ignores stays on disk and is never committed.
@@ -368,7 +368,7 @@ func (inv *invocation) stageForkContent(ctx context.Context, gitDir, commit, dir
 
 // forkLayout is the skill directory dir that commit holds, as a version a
 // directory is compared with, and lay, which lays it out at a destination
-// byte for byte as the account repo stores it, exactly as a managed skill's
+// byte for byte as the home repo stores it, exactly as a managed skill's
 // base version is laid out: every file with the mode git records, every
 // symlink as a symlink, and nothing else. It is read in one ls-tree of
 // commit:dir and one cat-file of its blobs, whatever the commit holds

@@ -43,7 +43,7 @@ func contentHash(root string, fm frontmatter, warn func(string)) string {
 }
 
 // File is one regular file of a skill read from somewhere other than the
-// filesystem, today a tree in the account repo: its path relative to the
+// filesystem, today a tree in the home repo: its path relative to the
 // skill directory with / as the separator, and its bytes.
 type File struct {
 	Path    string

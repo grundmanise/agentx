@@ -37,7 +37,7 @@ func (rec Record) HoldsID(id string) bool {
 	return rec.HasImport && treeid.Wrap(rec.Import.Dir(), id) == rec.Tree
 }
 
-// Base is the base version of a managed skill as the account repo holds it:
+// Base is the base version of a managed skill as the home repo holds it:
 // the tree of the skill's directory and every entry below it, their paths
 // relative to that directory.
 type Base struct {
@@ -68,7 +68,7 @@ func ReadBase(ctx context.Context, r *gitx.Runner, gitDir string, rec Record) (B
 	return readVersion(ctx, r, gitDir, rec.Commit, rec.Import.Dir(), rec.Ref)
 }
 
-// readVersion reads the version of a skill a tree of the account repo holds
+// readVersion reads the version of a skill a tree of the home repo holds
 // under the upstream directory dir, the tree's one entry, as ReadBase says.
 // what names the tree in an error.
 func readVersion(ctx context.Context, r *gitx.Runner, gitDir, treeish, dir, what string) (Base, error) {

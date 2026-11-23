@@ -16,7 +16,7 @@ import (
 // TestSubtreeAnswersAsRevParseAndCatFileDo: the tree a listing starts from
 // is found with one git process where it used to take two, rev-parse and
 // then cat-file -t, and for every path a commit can hold or not – a
-// directory, a file, a file whose object the account repo lacks, with a
+// directory, a file, a file whose object the home repo lacks, with a
 // promisor remote or without, a submodule, nothing, a path through a file,
 // a name with a newline – it answers what those two did, word for word.
 func TestSubtreeAnswersAsRevParseAndCatFileDo(t *testing.T) {
@@ -32,7 +32,7 @@ func TestSubtreeAnswersAsRevParseAndCatFileDo(t *testing.T) {
 	})
 	ctx := context.Background()
 	for _, promisor := range []bool{false, true} {
-		gitDir := filepath.Join(t.TempDir(), "account.git")
+		gitDir := filepath.Join(t.TempDir(), "home.git")
 		git := func(stdin string, args ...string) string {
 			t.Helper()
 			out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(stdin), args...)

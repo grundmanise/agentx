@@ -28,7 +28,7 @@ import (
 // renamedBranch is the name of the hub's branch that the
 // publish of the fork rec, the one that creates rec's branch there,
 // deletes as rec's old name, see the comment above: remote is what the
-// publish's fetch read, before its push, and records are the account
+// publish's fetch read, before its push, and records are the home
 // repo's branches. "" when the hub held rec's own name
 // already, when it holds no former name of rec's that is the same skill,
 // or when this machine holds a skill of its own under that name, whose
@@ -52,7 +52,7 @@ type renamed struct{ old, name, tip string }
 // renamedDrops is the old names' branches the publish of list deletes
 // from the hub, sorted by old name: one for every skill of
 // list the publish pushed whose branch it created there, see
-// renamedBranch, records being the account repo's branches, with each
+// renamedBranch, records being the home repo's branches, with each
 // fork's lineage, and remote what the fetch read of the hub
 // before the push. Each old name's branch is handled once, by the first
 // skill by name that was renamed from it. Pure.
@@ -82,11 +82,11 @@ func renamedDrops(list []*publishing, records map[string]lineage.Record, remote 
 }
 
 // dropRenamed deletes from the hub, the git remote called
-// account, the old names' branches of the publish of list, see
+// hub, the old names' branches of the publish of list, see
 // renamedDrops.
-func (inv *invocation) dropRenamed(ctx context.Context, gitDir, account string, records map[string]lineage.Record, remote remoteForks, list []*publishing) {
+func (inv *invocation) dropRenamed(ctx context.Context, gitDir, hub string, records map[string]lineage.Record, remote remoteForks, list []*publishing) {
 	for _, d := range renamedDrops(list, records, remote) {
-		inv.dropRenamedBranch(ctx, gitDir, account, d.old, d.name, remote.tips[d.old], d.tip)
+		inv.dropRenamedBranch(ctx, gitDir, hub, d.old, d.name, remote.tips[d.old], d.tip)
 	}
 }
 
@@ -94,21 +94,21 @@ func (inv *invocation) dropRenamed(ctx context.Context, gitDir, account string, 
 // oldTip, which the skill called newName was renamed from, when newTip,
 // newName's branch there, holds it, and warns when it does not, when that
 // cannot be told, or when the deletion is not made.
-func (inv *invocation) dropRenamedBranch(ctx context.Context, gitDir, account, old, newName, oldTip, newTip string) {
+func (inv *invocation) dropRenamedBranch(ctx context.Context, gitDir, hub, old, newName, oldTip, newTip string) {
 	out := inv.out
 	branch := forkBranch(old)
 	held, err := inv.isAncestor(ctx, gitDir, oldTip, newTip)
 	switch {
 	case err != nil:
 		out.warnWith("cannot tell whether "+sanitised(newName)+" holds the hub's "+branch+", which it was renamed from, so it was kept: "+trimGit(err.Error()),
-			"install it beside "+sanitised(newName)+" with '"+accountAddCommand(old)+"', or "+removeRenamed(old))
+			"install it beside "+sanitised(newName)+" with '"+hubAddCommand(old)+"', or "+removeRenamed(old))
 		return
 	case !held:
 		out.warnWith("the hub's "+branch+" holds changes "+sanitised(newName)+" lacks, so it was kept",
-			"install it beside "+sanitised(newName)+" with '"+accountAddCommand(old)+"', or "+removeRenamed(old))
+			"install it beside "+sanitised(newName)+" with '"+hubAddCommand(old)+"', or "+removeRenamed(old))
 		return
 	}
-	s, err := inv.git.DeleteRemoteBranch(ctx, gitDir, account, strings.TrimPrefix(lineage.ForkRef(old), "refs/heads/"), oldTip)
+	s, err := inv.git.DeleteRemoteBranch(ctx, gitDir, hub, strings.TrimPrefix(lineage.ForkRef(old), "refs/heads/"), oldTip)
 	switch {
 	case err != nil:
 		out.warnWith(remoteStillHolds(old, "")+", which "+sanitised(newName)+" was renamed from: "+trimGit(err.Error()), removeRenamed(old))
@@ -134,7 +134,7 @@ func renameDeleteWarning(old, newName string, s gitx.PushStatus) (string, string
 	case strings.Contains(why, "current branch"):
 		hint = "make another branch the hub's default branch on its hosting service, then " + hint
 	case strings.Contains(why, "stale info"):
-		hint = "another machine moved it since the fetch: install it beside " + sanitised(newName) + " with '" + accountAddCommand(old) + "', or " + hint
+		hint = "another machine moved it since the fetch: install it beside " + sanitised(newName) + " with '" + hubAddCommand(old) + "', or " + hint
 	}
 	return remoteDeleteRefusal(old, "", s).message, hint
 }

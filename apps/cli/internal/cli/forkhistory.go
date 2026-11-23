@@ -127,7 +127,7 @@ const historyFormat = "--format=%x01%H%x00%P%x00%aI%x00%an <%ae>%x00%B%x00"
 // the skill's directory. Nothing is
 // written, and the fork needs no worktree on this machine.
 func (inv *invocation) skillHistory(ctx context.Context, name string) error {
-	gitDir, rec, held, err := inv.accountRecord(ctx, name)
+	gitDir, rec, held, err := inv.hubRecord(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -147,11 +147,11 @@ func (inv *invocation) skillHistory(ctx context.Context, name string) error {
 	}
 	out, err := inv.git.Isolated(ctx, gitDir, "log", "--no-renames", "--diff-merges=first-parent", "--root", "--name-status", "-z", historyFormat, rec.Commit)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	commits, err := parseForkLog(out)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	inv.reportHistory(name, dir, commits)
 	return nil

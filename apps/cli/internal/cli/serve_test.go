@@ -362,7 +362,7 @@ func TestServeWatchesInsideSkills(t *testing.T) {
 }
 
 // TestWatchedDirsCoverEverySkillsDirectoryOnce pins what serve asks the
-// watcher for: agentx home, the account repo and its logs and logs/refs flat,
+// watcher for: agentx home, the home repo and its logs and logs/refs flat,
 // then every tree, each real path once however many clients read it. The
 // flat logs directories are where a skill's first publish shows: it creates
 // logs/refs/remotes and everything below it at once.
@@ -375,7 +375,7 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 		Config:  "/u/.config",
 	}}
 	dirs, trees := inv.watchedDirs()
-	repo := gitx.AccountRepoPath("/u/.agentx")
+	repo := gitx.HomeRepoPath("/u/.agentx")
 	if got, want := dirs[:4], []string{"/u/.agentx", repo, repo + "/logs", repo + "/logs/refs"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("flat directories = %v, want %v", got, want)
 	}
@@ -385,7 +385,7 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 	// The reflogs of the fork branches are where a commit made with git in
 	// a fork's worktree shows, and those of the remote-tracking branches
 	// where a publish that only pushes does.
-	logs := gitx.AccountRepoPath("/u/.agentx") + "/logs/refs"
+	logs := gitx.HomeRepoPath("/u/.agentx") + "/logs/refs"
 	if got, want := trees[:5], []string{"/u/.agentx/worktrees", "/u/.agents/skills", logs + "/heads/skills", logs + "/remotes", "/u/.claude/skills"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("first trees = %v, want %v", got, want)
 	}
@@ -438,19 +438,19 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 	equal(t, "stderr", p.stderr.String(), "")
 }
 
-// TestServeKeepsServingWhenTheAccountRepoCannotBeRead breaks the account
+// TestServeKeepsServingWhenTheHomeRepoCannotBeRead breaks the home
 // repo under a running serve and repairs it. The scan in between still
 // succeeds, with the library listed empty and a warning saying why, so the
 // desktop app keeps the rest of its inventory; the first scan after the
 // repair gives the library back. A skill edited meanwhile comes back
 // modified with no drift event: the inventory before it held no library, so
 // the skill arrives in the library, which the inventory says itself.
-func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
+func TestServeKeepsServingWhenTheHomeRepoCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
-	account := gitx.AccountRepoPath(h.agentx)
-	head := filepath.Join(account, "HEAD")
+	homeRepo := gitx.HomeRepoPath(h.agentx)
+	head := filepath.Join(homeRepo, "HEAD")
 	healthy, err := os.ReadFile(head)
 	if err != nil {
 		t.Fatal(err)
@@ -474,12 +474,12 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	equal(t, "library while broken", len(broken["library"].([]any)), 0)
 	equal(t, "skills while broken", strings.Join(skillNames(broken), " "), "alpha")
 	warnings := broken["warnings"].([]any)
-	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) {
-		t.Errorf("warnings = %q, want one naming %s", warnings, account)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), homeRepo) {
+		t.Errorf("warnings = %q, want one naming %s", warnings, homeRepo)
 	}
 	p.answered("broken")
 
-	replaceFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited while the account repo was broken\n")
+	replaceFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited while the home repo was broken\n")
 	setHead(string(healthy))
 	events := p.until("repaired")
 	var repaired jsonEvent

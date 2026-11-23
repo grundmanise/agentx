@@ -218,7 +218,7 @@ func sorted(files map[string]string) []string {
 
 func newRepo(t *testing.T) (*gitx.Runner, string) {
 	t.Helper()
-	gitDir := filepath.Join(t.TempDir(), "account.git")
+	gitDir := filepath.Join(t.TempDir(), "home.git")
 	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}
 	r := gitx.New(env, false, func(string, ...any) {})
 	if _, err := r.Isolated(context.Background(), gitDir, "init", "--bare", "--quiet", gitDir); err != nil {

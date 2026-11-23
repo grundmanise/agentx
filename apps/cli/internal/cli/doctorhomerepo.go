@@ -13,8 +13,8 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// The two account-repo checks below report and never repair, which is what
-// every other doctor row does and what the account repo leaves room for:
+// The two home-repo checks below report and never repair, which is what
+// every other doctor row does and what the home repo leaves room for:
 // doctor takes no lock, so it cannot tell a run that is working from one
 // that died. A remote is a settings write away from being named again, and
 // a staging ref of a run still fetching looks exactly like one of a run
@@ -23,7 +23,7 @@ import (
 // wrong guess takes the objects a live install is about to publish out from
 // under it. Naming the state costs nothing and is always true.
 
-// sourceRemotes reports the source remotes of the account repo that no
+// sourceRemotes reports the source remotes of the home repo that no
 // settings entry names. A remote no entry names is not a source: `source
 // fetch` and `source skills` both answer from the settings, so nothing
 // names it again or cleans it up.
@@ -42,7 +42,7 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 	if err != nil {
 		// The settings row above already said what is wrong with the file;
 		// this one says only that it could not be compared with, and its
-		// hint names that file: the account repo itself opened fine. A file
+		// hint names that file: the home repo itself opened fine. A file
 		// a later agentx wrote is not to be fixed but read by that version,
 		// so the hint then repeats the settings row's.
 		hint := "fix " + home.SettingsPath(d.inv.dirs.Home) + ", then run doctor again"
@@ -54,11 +54,11 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 		return
 	}
 	named := make(map[string]bool, len(settings.Sources))
-	account := ""
+	hub := ""
 	for _, s := range settings.Sources {
 		named[source.ID(s.URL)] = true
-		if s.Account {
-			account = s.URL
+		if s.Hub {
+			hub = s.URL
 		}
 	}
 	remotes := source.Remotes(ctx, d.inv.git, gitDir)
@@ -83,12 +83,12 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 	sort.Strings(orphans)
 	sort.Strings(forks)
 	all := append(append([]string{}, orphans...), forks...)
-	hint := sourceRemotesHint(orphans, forks, account)
+	hint := sourceRemotesHint(orphans, forks, hub)
 	d.row("source_remotes", rowWarn, plural(len(all), "source remote")+" the settings do not name: "+strings.Join(all, ", "), hint)
 }
 
 // sourceRemotesHint is the source_remotes hint for the orphan remotes
-// orphans and the orphan remotes of fork branches forks, account being the
+// orphans and the orphan remotes of fork branches forks, hub being the
 // URL of the hub the settings hold, "" when none. A remote of
 // fork branches added back as a shared source would have its forks fetched
 // without blobs. With no hub set, it is one the settings lost,
@@ -96,21 +96,21 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 // it is what a replaced hub left, and adding it back with
 // --hub would replace the hub the user chose, so it is
 // only cleared.
-func sourceRemotesHint(orphans, forks []string, account string) string {
+func sourceRemotesHint(orphans, forks []string, hub string) string {
 	plain := "run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"
 	if len(forks) == 0 {
 		return "for each, " + plain
 	}
 	var held string
 	switch {
-	case account != "":
-		held = "run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --hub' would replace the hub " + account
+	case hub != "":
+		held = "run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --hub' would replace the hub " + hub
 	case len(forks) == 1:
 		held = "run 'agentx source add <url> --hub' to make it the hub again and take the remote with it, or 'agentx source remove <id>' to clear it"
 	default:
 		held = "run 'agentx source add <url> --hub' for the one to make the hub again, and 'agentx source remove <id>' for the rest"
 	}
-	if len(orphans) == 0 && (len(forks) == 1 || account != "") {
+	if len(orphans) == 0 && (len(forks) == 1 || hub != "") {
 		return "for each, " + held
 	}
 	hint := "for " + strings.Join(forks, ", ") + ", which held your skills, " + held

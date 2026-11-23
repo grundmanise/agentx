@@ -414,7 +414,7 @@ func TestRemoveIntoRetainsInTheGivenDirectory(t *testing.T) {
 func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	gitDir := filepath.Join(root, "account.git")
+	gitDir := filepath.Join(root, "home.git")
 	path := filepath.Join(root, "worktrees", "alpha")
 	var u refs
 	if err := u.AddWorktree(gitDir, path, "skills/alpha"); err != nil {
@@ -529,7 +529,7 @@ func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 func TestStaleForkRegistrations(t *testing.T) {
 	t.Parallel()
 	const reason = "agentx fork"
-	gitDir := filepath.Join(t.TempDir(), "account.git")
+	gitDir := filepath.Join(t.TempDir(), "home.git")
 	writeAt := func(path, body string) {
 		t.Helper()
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -74,7 +74,7 @@ func TestSkillAddAllSelectsEverySkill(t *testing.T) {
 		equal(t, "state", ev["state"], "current")
 	}
 	for _, name := range bulkSkills {
-		if h.accountGit("rev-parse", "refs/heads/managed/"+name) == "" {
+		if h.homeGit("rev-parse", "refs/heads/managed/"+name) == "" {
 			t.Errorf("%s has no import branch", name)
 		}
 		for _, rel := range []string{".claude/skills/", ".snowflake/cortex/skills/"} {
@@ -202,7 +202,7 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 		if _, err := os.Readlink(filepath.Join(h.home, ".claude", "skills", name)); err != nil {
 			t.Errorf("%s did not install although another skill of the batch failed: %v", name, err)
 		}
-		if h.accountGit("rev-parse", "refs/heads/managed/"+name) == "" {
+		if h.homeGit("rev-parse", "refs/heads/managed/"+name) == "" {
 			t.Errorf("%s has no import branch", name)
 		}
 	}
@@ -210,7 +210,7 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(mine, "SKILL.md")); err != nil || !strings.Contains(string(b), "mine") {
 		t.Errorf("the skill that was in the way was changed: %q %v", b, err)
 	}
-	if ref := h.accountGit("for-each-ref", "--format=%(refname)", "refs/heads/managed/beta"); ref != "" {
+	if ref := h.homeGit("for-each-ref", "--format=%(refname)", "refs/heads/managed/beta"); ref != "" {
 		t.Errorf("the skill that failed got a branch: %s", ref)
 	}
 	// The result names it, so that a script reading nothing else knows.
@@ -236,7 +236,7 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 	h.mustRun("skill", "rename", "beta", "my-beta")
 	h.mustRun("skill", "add", s.url, "--name", "beta")
 	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "alpha,beta,gamma,my-beta")
-	if h.accountGit("rev-parse", "refs/heads/managed/beta") == "" {
+	if h.homeGit("rev-parse", "refs/heads/managed/beta") == "" {
 		t.Error("beta installed from the source has no import branch")
 	}
 
@@ -280,7 +280,7 @@ func TestSkillAddDropsASkillTheLibraryCannotName(t *testing.T) {
 	for _, want := range []string{
 		"2 of 3 skills could not be installed",
 		`"feature/login" is not a name the library can hold as a directory`,
-		`"who?" is not a name the account repo can hold as an import branch`,
+		`"who?" is not a name the home repo can hold as an import branch`,
 	} {
 		contains(t, "the result", summary, want)
 	}
@@ -325,7 +325,7 @@ func TestSkillAddKeepsTheBatchEdgeCasesApart(t *testing.T) {
 		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			t.Errorf("the library entry of %s is not the installed directory: %v", name, err)
 		}
-		if h.accountGit("rev-parse", "refs/heads/managed/"+name) == "" {
+		if h.homeGit("rev-parse", "refs/heads/managed/"+name) == "" {
 			t.Errorf("%s has no import branch", name)
 		}
 	}
@@ -551,8 +551,8 @@ func TestSkillAddSignalsNothingWhenNothingInstalls(t *testing.T) {
 }
 
 // TestSkillAddDropsASkillTheSourceCannotServe is the one per-skill refusal
-// that is not about a name: a file the account repo does not hold and the
-// source will not serve. The account repo is a partial clone, so the blob
+// that is not about a name: a file the home repo does not hold and the
+// source will not serve. The home repo is a partial clone, so the blob
 // is asked for at install time and the source answers without it; the skill
 // that needs it is dropped with exit code 5 and the rest of the run lands.
 func TestSkillAddDropsASkillTheSourceCannotServe(t *testing.T) {
@@ -567,7 +567,7 @@ func TestSkillAddDropsASkillTheSourceCannotServe(t *testing.T) {
 
 	// The add brought the trees and the SKILL.md blobs; alpha's notes.md is
 	// still only in the source. Dropping it from the source's history and
-	// pruning it leaves the account repo naming an object the source no
+	// pruning it leaves the home repo naming an object the source no
 	// longer has, which is what a server that answers a batch without
 	// sending everything it was asked for looks like from here.
 	s.run("rm", "--quiet", "skills/alpha/notes.md")
@@ -578,10 +578,10 @@ func TestSkillAddDropsASkillTheSourceCannotServe(t *testing.T) {
 	out := h.run("--json", "skill", "add", s.url, "--all")
 	equal(t, "exit", out.exit, 5)
 	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "beta")
-	if ref := h.accountGit("for-each-ref", "--format=%(refname)", "refs/heads/managed/alpha"); ref != "" {
+	if ref := h.homeGit("for-each-ref", "--format=%(refname)", "refs/heads/managed/alpha"); ref != "" {
 		t.Errorf("the skill whose blob did not arrive got a branch: %s", ref)
 	}
-	if h.accountGit("rev-parse", "refs/heads/managed/beta") == "" {
+	if h.homeGit("rev-parse", "refs/heads/managed/beta") == "" {
 		t.Error("beta has no import branch although its blobs all arrived")
 	}
 	result := h.one(out.stdout, "result")

@@ -193,7 +193,7 @@ func TestASignalStopsAFetchAndTearsDownItsGit(t *testing.T) {
 // remote no settings entry names is one nothing will ever name again. A
 // stop may not be the one way to defeat that. The take-back runs on a
 // context the stop does not reach, so a Ctrl-C during the fetch leaves the
-// account repo as it found it and doctor has nothing to report.
+// home repo as it found it and doctor has nothing to report.
 func TestASignalDuringAnAddStillTakesTheRemoteBack(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -208,7 +208,7 @@ func TestASignalDuringAnAddStillTakesTheRemoteBack(t *testing.T) {
 	contains(t, "stderr", stderr, "error: interrupted")
 	// git config exits non-zero when nothing matches, which is the answer
 	// this test wants, so the error is the empty case and not a failure.
-	if left, err := h.accountGitErr("config", "--get-regexp", `^remote\.src-`); err == nil && left != "" {
+	if left, err := h.homeGitErr("config", "--get-regexp", `^remote\.src-`); err == nil && left != "" {
 		t.Errorf("the stopped add left its remote behind:\n%s", left)
 	}
 	rows, _ := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
@@ -229,7 +229,7 @@ func TestASignalDuringTheAccessCheckOfAReAddLeavesTheSourceAsItWas(t *testing.T)
 	s, v1, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url+"#v1")
 	ref := source.Ref(source.ID(s.url))
-	held := h.accountGit("rev-parse", ref)
+	held := h.homeGit("rev-parse", ref)
 	ready := filepath.Join(t.TempDir(), "checking")
 	hangingGit(t, h, "push", ready)
 
@@ -238,8 +238,8 @@ func TestASignalDuringTheAccessCheckOfAReAddLeavesTheSourceAsItWas(t *testing.T)
 
 	equal(t, "the exit code of a stopped re-add", code, exitInterrupted.exit)
 	contains(t, "stderr", stderr, "error: interrupted")
-	equal(t, "the source ref after the stopped re-add", h.accountGit("rev-parse", ref), held)
-	equal(t, "the commit it names", h.accountGit("rev-parse", ref+"^{commit}"), v1)
+	equal(t, "the source ref after the stopped re-add", h.homeGit("rev-parse", ref), held)
+	equal(t, "the commit it names", h.homeGit("rev-parse", ref+"^{commit}"), v1)
 	settings, err := home.LoadSettings(h.agentx)
 	if err != nil {
 		t.Fatal(err)
@@ -321,7 +321,7 @@ exec `+real+` "$@"
 
 	// The mutation is whole: branch, library directory and placements, and
 	// no journal left for the next command to finish.
-	if head := h.accountGit("for-each-ref", "--format=%(objectname)", "refs/heads/managed/alpha"); head == "" {
+	if head := h.homeGit("for-each-ref", "--format=%(objectname)", "refs/heads/managed/alpha"); head == "" {
 		t.Error("the import branch was not written")
 	}
 	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
@@ -336,7 +336,7 @@ exec `+real+` "$@"
 	// And the run still took its own staging refs away, which it does on a
 	// context the stop does not reach: leaving them would hand the next
 	// doctor a warning for a run that had already decided about them.
-	if left := h.accountGit("for-each-ref", "--format=%(refname)", lineage.ImportingPrefix); left != "" {
+	if left := h.homeGit("for-each-ref", "--format=%(refname)", lineage.ImportingPrefix); left != "" {
 		t.Errorf("the interrupted install left its staging refs behind:\n%s", left)
 	}
 }
@@ -371,7 +371,7 @@ func TestATerminalCtrlCDuringTheJournalIsTheCrashBoundary(t *testing.T) {
 	contains(t, "stderr", stderr, "error: interrupted")
 
 	// The transaction did not commit and the journal says what is left.
-	if head := h.accountGit("for-each-ref", "--format=%(objectname)", lineage.ManagedRef("alpha")); head != "" {
+	if head := h.homeGit("for-each-ref", "--format=%(objectname)", lineage.ManagedRef("alpha")); head != "" {
 		t.Errorf("the ref transaction committed although its git was killed: %s", head)
 	}
 	equal(t, "journals left by the killed run", journalCount(t, h), 1)
@@ -380,7 +380,7 @@ func TestATerminalCtrlCDuringTheJournalIsTheCrashBoundary(t *testing.T) {
 	// is the guarantee the graceful stop was never allowed to weaken.
 	h.mustRun("config", "set", "label", "recovered")
 	equal(t, "journals after recovery", journalCount(t, h), 0)
-	if head := h.accountGit("for-each-ref", "--format=%(objectname)", lineage.ManagedRef("alpha")); head == "" {
+	if head := h.homeGit("for-each-ref", "--format=%(objectname)", lineage.ManagedRef("alpha")); head == "" {
 		t.Error("the import branch was not recovered")
 	}
 	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {

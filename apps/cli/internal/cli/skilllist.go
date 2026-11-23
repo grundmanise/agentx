@@ -36,8 +36,8 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 
 // skillList reports the skills of the library: what each one is, where it
 // came from and where it is seen from. The lineage comes from the branches
-// of the account repo alone, read in one for-each-ref over both namespaces,
-// so what a source holds, and whether its ref is in the account repo at
+// of the home repo alone, read in one for-each-ref over both namespaces,
+// so what a source holds, and whether its ref is in the home repo at
 // all, changes nothing here. Whether the source is still added does: a
 // managed skill whose source has no entry in the settings is listed as
 // source removed, which is read from the settings this command reads
@@ -45,7 +45,7 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 //
 // A managed skill whose library directory is gone has no row: there is
 // nothing to list, compare or place. It is named in a warning of its own
-// after the rows, see absentWarnings, so that a branch the account repo
+// after the rows, see absentWarnings, so that a branch the home repo
 // still holds is never silently left out.
 //
 // With remote, the hub is fetched first, outside the lock, and
@@ -55,16 +55,16 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 	inv.forksWarned = true // the warnings after the rows name them
 	var gitDir string
-	var account home.Source
+	var hub home.Source
 	if remote {
-		dir, entry, name, err := inv.accountRemote(ctx)
+		dir, entry, name, err := inv.hubRemote(ctx)
 		if err != nil {
 			return err
 		}
 		if err := inv.fetchRemote(ctx, dir, name, entry.URL); err != nil {
 			return err
 		}
-		gitDir, account = dir, entry
+		gitDir, hub = dir, entry
 	}
 	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
@@ -79,7 +79,7 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 	var installable []installableSkillEvent
 	if remote {
 		var skipped []string
-		if installable, skipped, err = inv.installableSkills(ctx, gitDir, account, sc.records); err != nil {
+		if installable, skipped, err = inv.installableSkills(ctx, gitDir, hub, sc.records); err != nil {
 			return err
 		}
 		warnings = append(warnings, skipped...)
@@ -93,7 +93,7 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 		for _, lib := range skills {
 			ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, nil) // every placement, not only a command's own
 			out.emit(ev)
-			t.add(row(out, ev, sc.account)...)
+			t.add(row(out, ev, sc.hub)...)
 		}
 		out.render(t, "")
 	}
@@ -127,7 +127,7 @@ func (inv *invocation) printInstallable(installable []installableSkillEvent) {
 
 // row is one line of the human listing: the name, what agentx knows it as,
 // how it stands against its base version and whatever else it has drifted
-// by, where it is published to, see sourceCell, account being the hub's
+// by, where it is published to, see sourceCell, hub being the hub's
 // URL, and how many placements it has, one per configuration that sees it.
 //
 // The name and the source are sanitised: the name of an unmanaged skill
@@ -147,7 +147,7 @@ func (inv *invocation) printInstallable(installable []installableSkillEvent) {
 // available, and a merge an update left pending after it, as merge
 // pending: neither is drift, but both are how the skill stands against its
 // upstream, which is what the cell is about.
-func row(out *writer, ev librarySkillEvent, account string) []cell {
+func row(out *writer, ev librarySkillEvent, hub string) []cell {
 	words := append([]string{ev.State}, ev.Drift...)
 	if ev.Candidate != nil {
 		words = append(words, updateAvailable)
@@ -166,7 +166,7 @@ func row(out *writer, ev librarySkillEvent, account string) []cell {
 		c("  "+sanitised(ev.Name), heading),
 		c(ev.Kind, muted),
 		state,
-		sourceCell(ev.own, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath, account),
+		sourceCell(ev.hubSkill, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath, hub),
 		c(plural(placedIn(ev.Placements), "placement"), noteStyle),
 	}
 }
@@ -183,7 +183,7 @@ func placedIn(places []placementEvent) int {
 }
 
 // sourceCell is the cell of a listing that says where a skill is published
-// to, own being whether it is a hub skill and account the URL
+// to, hubSkill being whether it is a hub skill and hub the URL
 // of the hub, "" when none is set. A hub skill is published
 // to the hub: its URL marked (hub), as source list marks
 // it, or hub not set while there is none, then, for a forked
@@ -192,16 +192,16 @@ func placedIn(places []placementEvent) int {
 // root, or to none: an unmanaged skill, or a managed one whose import
 // agentx cannot read. URLs and directories are sanitised, since they are
 // not agentx's words.
-func sourceCell(own bool, source string, subpath *string, upstream string, upstreamSubpath *string, account string) cell {
-	if !own {
+func sourceCell(hubSkill bool, source string, subpath *string, upstream string, upstreamSubpath *string, hub string) cell {
+	if !hubSkill {
 		if source == "" {
 			return c("(none)", muted)
 		}
 		return c(sanitised(withSubpath(source, subpath)), plain)
 	}
 	text, st := "hub not set", muted
-	if account != "" {
-		text, st = sanitised(account)+" (hub)", plain
+	if hub != "" {
+		text, st = sanitised(hub)+" (hub)", plain
 	}
 	if upstream != "" {
 		text += ", from " + sanitised(withSubpath(upstream, upstreamSubpath))

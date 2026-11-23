@@ -73,7 +73,7 @@ type harness struct {
 	agentx  string // AGENTX_HOME
 	library string // AGENTX_LIBRARY
 	config  string // XDG_CONFIG_HOME
-	// maintain lets serve maintain the account repo when it starts. Serve
+	// maintain lets serve maintain the home repo when it starts. Serve
 	// does once a day, and a test's serve is told the home was maintained
 	// just now unless the test is about maintenance, so that the git
 	// processes a test counts are its own.
@@ -146,9 +146,9 @@ func (h *harness) mustRun(args ...string) outcome {
 	return out
 }
 
-// setAccount makes the repository at url the hub of h, as the
+// setHub makes the repository at url the hub of h, as the
 // user does, and fails on the spot when it does not work.
-func (h *harness) setAccount(url string) outcome {
+func (h *harness) setHub(url string) outcome {
 	h.t.Helper()
 	return h.mustRun("source", "add", url, "--hub")
 }

@@ -1208,9 +1208,9 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 	t.Run("a fork", func(t *testing.T) {
 		t.Parallel()
 		h, lib, claude, cortex := everywhereHarness(t)
-		commit := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-		h.accountGit("update-ref", "refs/heads/skills/alpha", commit)
-		h.accountGit("update-ref", "-d", "refs/heads/managed/alpha")
+		commit := h.homeGit("rev-parse", "refs/heads/managed/alpha")
+		h.homeGit("update-ref", "refs/heads/skills/alpha", commit)
+		h.homeGit("update-ref", "-d", "refs/heads/managed/alpha")
 		remove(t, cortex)
 		displace(t, lib, claude, true)
 		writeFile(t, filepath.Join(lib, "notes.md"), "alpha notes, edited in the library\n")
@@ -1236,7 +1236,7 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 		summary := h.one(out.stdout, "result")["summary"].(string)
 		contains(t, "summary", summary, ", 1 placement skipped")
 		contains(t, "summary", summary, "; moved "+lib+" into alpha's worktree; its content is the skill's unpublished edits")
-		equal(t, "the fork", h.accountGit("rev-parse", "refs/heads/skills/alpha"), commit)
+		equal(t, "the fork", h.homeGit("rev-parse", "refs/heads/skills/alpha"), commit)
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cortex), filepath.Dir(root))
 
 		out = h.run("--json", "skill", "place", "alpha", "--force")
@@ -1282,7 +1282,7 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 		out := h.run("--json", "skill", "place", "alpha")
 		equal(t, "exit", out.exit, 6)
 		e := h.one(out.stdout, "error")
-		equal(t, "message", e["message"], "alpha is managed in the account repo but the library holds no skill directory for it, so there is no skill to place")
+		equal(t, "message", e["message"], "alpha is managed in the home repo but the library holds no skill directory for it, so there is no skill to place")
 		equal(t, "hint", e["hint"], "run 'agentx skill add "+shellWord(s.url)+" --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it")
 		equal(t, "journals", journalCount(t, h), 0)
 	})
@@ -1290,9 +1290,9 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 	t.Run("a managed skill whose import branch carries no lineage", func(t *testing.T) {
 		t.Parallel()
 		h, lib, claude, cortex := everywhereHarness(t)
-		tree := h.accountGit("rev-parse", "refs/heads/managed/alpha^{tree}")
-		plain := h.accountGit("commit-tree", tree, "-m", "plain")
-		h.accountGit("update-ref", "refs/heads/managed/alpha", plain)
+		tree := h.homeGit("rev-parse", "refs/heads/managed/alpha^{tree}")
+		plain := h.homeGit("commit-tree", tree, "-m", "plain")
+		h.homeGit("update-ref", "refs/heads/managed/alpha", plain)
 		displace(t, lib, claude, true)
 		h.mustRun("skill", "place", "alpha", "--force")
 		linksToLibrary(t, "claude's placement", claude, lib)
@@ -1326,17 +1326,17 @@ func TestSkillPlaceRefusesWhenItsInputsChange(t *testing.T) {
 		change func(t *testing.T, h *harness, git, lib, claude string) (script string, check func(t *testing.T))
 	}{
 		{"the import branch moves", "--force", moved, "", "", func(t *testing.T, h *harness, git, _, _ string) (string, func(*testing.T)) {
-			before := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-			written := h.accountGit("commit-tree", before+"^{tree}", "-p", before, "-m", "moved")
-			return accountRepoCommand(h, git, "update-ref", "refs/heads/managed/alpha", written), func(t *testing.T) {
-				equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), written)
+			before := h.homeGit("rev-parse", "refs/heads/managed/alpha")
+			written := h.homeGit("commit-tree", before+"^{tree}", "-p", before, "-m", "moved")
+			return homeRepoCommand(h, git, "update-ref", "refs/heads/managed/alpha", written), func(t *testing.T) {
+				equal(t, "the import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), written)
 			}
 		}},
 		{"a fork appears", "--force", moved, "", "", func(t *testing.T, h *harness, git, _, _ string) (string, func(*testing.T)) {
-			before := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-			return accountRepoCommand(h, git, "update-ref", "refs/heads/skills/alpha", before), func(t *testing.T) {
-				equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), before)
-				equal(t, "the fork", h.accountGit("rev-parse", "refs/heads/skills/alpha"), before)
+			before := h.homeGit("rev-parse", "refs/heads/managed/alpha")
+			return homeRepoCommand(h, git, "update-ref", "refs/heads/skills/alpha", before), func(t *testing.T) {
+				equal(t, "the import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), before)
+				equal(t, "the fork", h.homeGit("rev-parse", "refs/heads/skills/alpha"), before)
 			}
 		}},
 		{"the library is edited", "--force", changed, "", "library", func(t *testing.T, _ *harness, _, lib, _ string) (string, func(*testing.T)) {
@@ -1452,10 +1452,10 @@ exec `+real+` "$@"
 	}
 }
 
-// accountRepoCommand is the shell command that runs the real git, at git,
-// with args against the account repo of h, as a wrapper runs it.
-func accountRepoCommand(h *harness, git string, args ...string) string {
-	return git + " --git-dir=" + shellWord(gitx.AccountRepoPath(h.agentx)) + " " + strings.Join(args, " ")
+// homeRepoCommand is the shell command that runs the real git, at git,
+// with args against the home repo of h, as a wrapper runs it.
+func homeRepoCommand(h *harness, git string, args ...string) string {
+	return git + " --git-dir=" + shellWord(gitx.HomeRepoPath(h.agentx)) + " " + strings.Join(args, " ")
 }
 
 // placeChildEnv marks the process TestSkillPlaceRecoversWhenKilled
@@ -1533,7 +1533,7 @@ func TestSkillPlaceRecoversWhenKilled(t *testing.T) {
 			t.Parallel()
 			h, lib, claude, cortex := everywhereHarness(t)
 			base := libraryTree(t, lib)
-			branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+			branch := h.homeGit("rev-parse", "refs/heads/managed/alpha")
 			displace(t, lib, claude, flag != "")
 			kept := libraryTree(t, claude)
 			remove(t, cortex)
@@ -1557,7 +1557,7 @@ func TestSkillPlaceRecoversWhenKilled(t *testing.T) {
 			if !executable(t, filepath.Join(lib, "scripts", "run.sh")) {
 				t.Error("scripts/run.sh is not executable after recovery")
 			}
-			equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
+			equal(t, "the import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), branch)
 			cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cortex))
 			ev := h.listed("alpha")
 			equal(t, "state", ev["state"], stateCurrent)

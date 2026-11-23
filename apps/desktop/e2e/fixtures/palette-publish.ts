@@ -7,7 +7,7 @@
 import type { LibraryEntry, LibraryPlacement } from "#/cli/events.gen.ts";
 
 import type { InlineEvent, MockCli } from "../harness/cli.ts";
-import { ACCOUNT, ACME, configurations, filesOf } from "./skills.ts";
+import { HUB, ACME, configurations, filesOf } from "./skills.ts";
 
 const LIBRARY = "/home/me/.agents/skills";
 const universal = ["codex", "gemini-cli"];
@@ -27,7 +27,7 @@ const placements = (name: string): LibraryPlacement[] => [
   })),
 ];
 
-const yours = (
+const hubSkill = (
   name: string,
   fields: Partial<LibraryEntry> = {}
 ): LibraryEntry => ({
@@ -36,7 +36,7 @@ const yours = (
   kind: "managed",
   name,
   placements: placements(name),
-  source: ACCOUNT,
+  source: HUB,
   state: "current",
   universal,
   ...fields,
@@ -57,9 +57,9 @@ const ofSource = (name: string): LibraryEntry => ({
 
 /** changelog and notes hold edits not published; draft was never published. */
 export const library: LibraryEntry[] = [
-  yours("changelog", { state: "modified" }),
-  yours("draft", { drift: ["not published"] }),
-  yours("notes", { state: "modified" }),
+  hubSkill("changelog", { state: "modified" }),
+  hubSkill("draft", { drift: ["not published"] }),
+  hubSkill("notes", { state: "modified" }),
   ofSource("pdf"),
   ofSource("review"),
 ];
@@ -101,23 +101,23 @@ export const notesFromAnotherMachine: InlineEvent = {
   files: [{ path: "SKILL.md", status: "modified" }],
   kind: "managed",
   name: "notes",
-  source: ACCOUNT,
+  source: HUB,
   type: "update_available",
   upstream_commit: "",
 };
 
 /** What `source list` answers: the hub and the source. */
 export const sources: InlineEvent[] = [
-  { account: true, id: "2222222222222222", type: "source", url: ACCOUNT },
+  { hub: true, id: "2222222222222222", type: "source", url: HUB },
   { access: "read-only", id: "1111111111111111", type: "source", url: ACME },
 ];
 
 /** What `source list` answers on a machine with no hub. */
-export const sourcesWithoutAccount: InlineEvent[] = sources.filter(
-  (s) => s.type === "source" && s.account !== true
+export const sourcesWithoutHub: InlineEvent[] = sources.filter(
+  (s) => s.type === "source" && s.hub !== true
 );
 
-export type Variant = "edited" | "synced" | "no-account-remote";
+export type Variant = "edited" | "synced" | "no-hub";
 
 export interface LaunchOptions {
   /** Whether serve found the update of pdf; it does unless a test says otherwise. */
@@ -144,7 +144,7 @@ export const launch = (
     ],
   });
   cli.register(["source", "list"], {
-    events: variant === "no-account-remote" ? sourcesWithoutAccount : sources,
+    events: variant === "no-hub" ? sourcesWithoutHub : sources,
   });
   for (const entry of entries) {
     cli.register(["skill", "history", entry.name], { events: [] });

@@ -14,9 +14,9 @@ import (
 )
 
 // The hub is the source its settings entry marks with the
-// account flag: a Git repository the user owns,
+// hub flag: a Git repository the user owns,
 // holding one branch per fork, which forks are published to and another
-// machine of the user's installs them from. Its remote in the account repo
+// machine of the user's installs them from. Its remote in the home repo
 // is named after its id, src-<id>, as every source's is, with one fetch
 // refspec: every fork branch onto a remote-tracking branch of the same
 // name, see source.RemoteOf. Only fork branches travel, both ways: import
@@ -25,70 +25,70 @@ import (
 // git that reaches the remote runs in the user's own environment, where
 // their credential helpers, SSH keys and URL rewrites apply, but with no
 // hook of theirs, see gitx.FetchRemote. A fork repository is fetched whole,
-// never without blobs: its forks' history is what the account step,
+// never without blobs: its forks' history is what the hub step,
 // publish and history read.
 //
 // The hub is set only by source add <url> --hub, see
-// addAccount, and detached only by source remove, see removeAccount.
+// addHub, and detached only by source remove, see removeHub.
 
-// accountEntry is the settings entry of the hub, ok false when
+// hubEntry is the settings entry of the hub, ok false when
 // the settings mark none.
-func accountEntry(s home.Settings) (entry home.Source, ok bool) {
+func hubEntry(s home.Settings) (entry home.Source, ok bool) {
 	for _, src := range s.Sources {
-		if src.Account {
+		if src.Hub {
 			return src, true
 		}
 	}
 	return home.Source{}, false
 }
 
-// accountSource is the hub as the settings record it: its
-// entry, and the name of its git remote in the account repo, which every
+// hubSource is the hub as the settings record it: its
+// entry, and the name of its git remote in the home repo, which every
 // command that reads, fetches or pushes the hub's fork branches
 // works with. ok is false when no hub is set. It runs no git.
-func (inv *invocation) accountSource() (entry home.Source, remote string, ok bool, err error) {
+func (inv *invocation) hubSource() (entry home.Source, remote string, ok bool, err error) {
 	s, err := inv.loadSettings()
 	if err != nil {
 		return home.Source{}, "", false, err
 	}
-	if entry, ok := accountEntry(s); ok {
+	if entry, ok := hubEntry(s); ok {
 		return entry, source.RemoteName(source.ID(entry.URL)), true, nil
 	}
 	return home.Source{}, "", false, nil
 }
 
-// accountRemote is the account repo and the hub, see
-// accountSource, for a command that fetches the remote, refusing, exit code
-// 6, when no remote is set. The account repo is created when this machine
+// hubRemote is the home repo and the hub, see
+// hubSource, for a command that fetches the remote, refusing, exit code
+// 6, when no remote is set. The home repo is created when this machine
 // has none yet, as settings an import wrote leave it, and the remote is
-// written into it when it is not the one the entry wants, see alignAccount.
-func (inv *invocation) accountRemote(ctx context.Context) (gitDir string, entry home.Source, remote string, err error) {
-	entry, remote, ok, err := inv.accountSource()
+// written into it when it is not the one the entry wants, see alignHub.
+func (inv *invocation) hubRemote(ctx context.Context) (gitDir string, entry home.Source, remote string, err error) {
+	entry, remote, ok, err := inv.hubSource()
 	if err != nil {
 		return "", home.Source{}, "", err
 	}
 	if !ok {
 		return "", home.Source{}, "", noRemoteRefusal()
 	}
-	gitDir, _, err = gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err = gitx.OpenHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return "", home.Source{}, "", accountRepoFailure(err)
+		return "", home.Source{}, "", homeRepoFailure(err)
 	}
-	if err := inv.alignAccount(ctx, gitDir, entry); err != nil {
+	if err := inv.alignHub(ctx, gitDir, entry); err != nil {
 		return "", home.Source{}, "", err
 	}
 	return gitDir, entry, remote, nil
 }
 
-// alignAccount writes the remote of the hub's entry into the
-// account repo when the remote there is not the one the entry wants, see
+// alignHub writes the remote of the hub's entry into the
+// home repo when the remote there is not the one the entry wants, see
 // source.RemoteOf: missing, as settings an import wrote leave it, or
 // rewritten, as a run cut short leaves it. The remotes
 // are read in one git process, and only a remote that disagrees is written,
 // under the lock, since git config fails rather than waits for its own lock
 // file. One written over a remote never fetched whole is fetched with
 // --refetch the first time, see awaitWholeFetch.
-func (inv *invocation) alignAccount(ctx context.Context, gitDir string, entry home.Source) error {
+func (inv *invocation) alignHub(ctx context.Context, gitDir string, entry home.Source) error {
 	remotes := source.Remotes(ctx, inv.git, gitDir)
 	if remotes[source.ID(entry.URL)] == source.RemoteOf(entry) {
 		return nil
@@ -96,13 +96,13 @@ func (inv *invocation) alignAccount(ctx context.Context, gitDir string, entry ho
 	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
 		return source.Configure(ctx, inv.git, gitDir, entry)
 	}); err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	inv.awaitWholeFetch(remotes, entry)
 	return nil
 }
 
-// fetchedWhole reports whether remotes, the account repo's as
+// fetchedWhole reports whether remotes, the home repo's as
 // source.Remotes reads them, hold the remote of id as only a fetch of the
 // hub leaves it: with the fork refspec. A remote that is
 // missing, or that a shared source of the same repository left, as an
@@ -143,11 +143,11 @@ func (inv *invocation) fetchRemote(ctx context.Context, gitDir, remote, url stri
 
 // fetchForks fetches the fork branches of the remote called remote, see
 // gitx.FetchRemote, with --refetch when refetch is set: the first add of
-// the hub on this machine asks for it, see addAccount. So does
+// the hub on this machine asks for it, see addHub. So does
 // the first fetch after an alignment wrote the remote over one never
 // fetched whole, see awaitWholeFetch, once a probe of the repository finds
 // a fork branch there; a fetch so made that fails takes the remote out of
-// the account repo again, under the lock, so that the next run writes it
+// the home repo again, under the lock, so that the next run writes it
 // and refetches in turn rather than read a remote with the fork refspec as
 // fetched whole.
 func (inv *invocation) fetchForks(ctx context.Context, gitDir, remote string, refetch bool) error {
@@ -179,12 +179,12 @@ func unreachableRemote(url string, err error) *failure {
 		"check the URL and that you can reach it with git; a private repository needs a git credential helper (git config credential.helper) or an SSH key")
 }
 
-// accountURL reads arg as the URL of the hub, refusing, exit
+// hubURL reads arg as the URL of the hub, refusing, exit
 // code 1, what the hub cannot be: a URL source.Parse does not
 // read, one with a user or a token in it, which a hub is
 // fetched and pushed with and agentx never stores, and one that names a
 // ref or a folder, since the hub is a whole repository.
-func accountURL(arg string) (source.Source, *failure) {
+func hubURL(arg string) (source.Source, *failure) {
 	src, err := source.Parse(arg)
 	switch {
 	case err != nil:
@@ -198,16 +198,16 @@ func accountURL(arg string) (source.Source, *failure) {
 	return src, nil
 }
 
-// accountRefusal is why want, the hub an add is about to write,
+// hubRefusal is why want, the hub an add is about to write,
 // cannot be it given the settings s, nil when it can; resolve reads the
 // host an SSH alias names, as source.SameRepository takes it. A shared
 // source, any entry but the hub, of the same URL or of another
 // URL naming the same repository is refused, exit code 6, the hint saying
 // to remove it first: its skills are fetched on one branch without blobs,
 // and the repository would be fetched both ways. Pure but for resolve.
-func accountRefusal(s home.Settings, want home.Source, resolve func(host string) string) *failure {
+func hubRefusal(s home.Settings, want home.Source, resolve func(host string) string) *failure {
 	for _, shared := range s.Sources {
-		if shared.Account || (shared.URL != want.URL && !sameRepository(want.URL, shared.URL, resolve)) {
+		if shared.Hub || (shared.URL != want.URL && !sameRepository(want.URL, shared.URL, resolve)) {
 			continue
 		}
 		what := want.URL + " is a shared source"
@@ -220,36 +220,36 @@ func accountRefusal(s home.Settings, want home.Source, resolve func(host string)
 	return nil
 }
 
-// addAccount makes the repository arg names the hub: source add
+// addHub makes the repository arg names the hub: source add
 // --hub and a source add of the hub's URL again both run it.
-// arg is held to the rules of accountURL before anything is read.
+// arg is held to the rules of hubURL before anything is read.
 //
 // It is source add for the hub, step by step. A shared source of
-// the settings naming the same repository refuses it, see accountRefusal,
+// the settings naming the same repository refuses it, see hubRefusal,
 // exit code 6. The repository is reached first, in the user's environment,
-// so that a URL git cannot reach changes nothing, exit code 3, an account
-// repo included. Then the account repo is opened, created when this is its
+// so that a URL git cannot reach changes nothing, exit code 3, a home
+// repo included. Then the home repo is opened, created when this is its
 // first use, its remote is written under the lock, its fork branches are
 // fetched outside it, see fetchForks, and what this machine may do there is
-// checked, see checkSource. The fetch of a remote the account repo did not
+// checked, see checkSource. The fetch of a remote the home repo did not
 // hold as fetched whole, see fetchedWhole, from a repository the probe
 // found holding fork branches, is made with --refetch: a shared source of
 // the same repository, removed before or replaced by an import, may have
-// left objects fetched without their blobs in the account repo, and git
+// left objects fetched without their blobs in the home repo, and git
 // would otherwise leave those blobs out of this fetch. That is decided by
-// the account repo, not the settings, which an import can name the
+// the home repo, not the settings, which an import can name the
 // hub in before this machine fetched it. A repository with no
 // fork branch has nothing to refetch, and git would wait on it for good,
 // see gitx.FetchRemote. Last, in one hold of the lock, the settings
 // entry is written, and the hub it replaces, if any, is taken
-// out of the settings and its remote out of the account repo, its
+// out of the settings and its remote out of the home repo, its
 // remote-tracking branches first, then its source ref and staging refs.
 // Local forks stay as they are: those of a replaced hub are
 // published to the new one by name, see remoteSelection. A run that gets
 // no further than its fetch takes back the remote it wrote, as an add
 // does.
-func (inv *invocation) addAccount(ctx context.Context, arg string) error {
-	src, f := accountURL(arg)
+func (inv *invocation) addHub(ctx context.Context, arg string) error {
+	src, f := hubURL(arg)
 	if f != nil {
 		return f
 	}
@@ -259,17 +259,17 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 		return err
 	}
 	existing := before.FindSource(src.URL)
-	want := home.Source{URL: src.URL, Account: true}
-	if f := accountRefusal(before, want, resolve); f != nil {
+	want := home.Source{URL: src.URL, Hub: true}
+	if f := hubRefusal(before, want, resolve); f != nil {
 		return f
 	}
 	seen, err := inv.git.ProbeRemote(ctx, src.URL)
 	if err != nil {
 		return unreachableRemote(src.URL, err)
 	}
-	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err := gitx.OpenHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	id, remote := src.ID(), source.RemoteName(src.ID())
 	whole := fetchedWhole(source.Remotes(ctx, inv.git, gitDir), id)
@@ -302,7 +302,7 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
 		return source.Configure(ctx, inv.git, gitDir, want)
 	}); err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	if err := inv.fetchForks(ctx, gitDir, remote, seen && !whole); err != nil {
 		if ctx.Err() != nil {
@@ -317,7 +317,7 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 	}
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
-		return takeBack(accountRepoFailure(err))
+		return takeBack(homeRepoFailure(err))
 	}
 	entry := want
 	entry.LastFetched = time.Now().UTC().Format(time.RFC3339)
@@ -330,14 +330,14 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 		if err != nil {
 			return left(err, revert())
 		}
-		if f := accountRefusal(s, want, resolve); f != nil {
+		if f := hubRefusal(s, want, resolve); f != nil {
 			return left(f, revert())
 		}
 		if i := s.FindSource(src.URL); i >= 0 {
 			entry = entry.Merge(s.Sources[i]) // the alias and anything else this add did not find out is kept
 		}
 		for _, other := range s.Sources {
-			if other.Account && other.URL != src.URL {
+			if other.Hub && other.URL != src.URL {
 				replaced = other
 			}
 		}
@@ -354,16 +354,16 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 		if replaced.URL != "" {
 			old := source.RemoteName(source.ID(replaced.URL))
 			if err := inv.retrack(ctx, gitDir, old, remote); err != nil {
-				return accountRepoFailure(err)
+				return homeRepoFailure(err)
 			}
 			if err := inv.git.UnsetRemote(ctx, gitDir, old); err != nil {
-				return accountRepoFailure(err)
+				return homeRepoFailure(err)
 			}
 			// Then its source ref and the staging refs a killed fetch of
 			// its URL can have left, as a shared source add of that URL
-			// cut short does, see removeAccount.
+			// cut short does, see removeHub.
 			if err := source.Remove(ctx, inv.git, gitDir, source.ID(replaced.URL)); err != nil {
-				return accountRepoFailure(err)
+				return homeRepoFailure(err)
 			}
 		}
 		return nil
@@ -385,28 +385,28 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 	return nil
 }
 
-// removeAccount detaches the hub entry names in one hold of the
-// lock: its remote is taken out of the account repo, see gitx.UnsetRemote,
+// removeHub detaches the hub entry names in one hold of the
+// lock: its remote is taken out of the home repo, see gitx.UnsetRemote,
 // the remote-tracking branches first, then its source ref and every
 // staging ref a killed fetch of its URL can have left, as a shared source
 // add of that URL cut short does, see source.Remove, then its settings
 // entry. source remove of the hub's URL or id runs it. Local
 // fork branches, their worktrees and every commit stay as they are, and
 // nothing on the remote changes.
-func (inv *invocation) removeAccount(ctx context.Context, entry home.Source) error {
+func (inv *invocation) removeHub(ctx context.Context, entry home.Source) error {
 	id := source.ID(entry.URL)
 	remote := source.RemoteName(id)
 	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+		gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 		if err != nil {
-			return accountRepoFailure(err)
+			return homeRepoFailure(err)
 		}
 		if exists {
 			if err := inv.git.UnsetRemote(ctx, gitDir, remote); err != nil {
-				return accountRepoFailure(err)
+				return homeRepoFailure(err)
 			}
 			if err := source.Remove(ctx, inv.git, gitDir, id); err != nil {
-				return accountRepoFailure(err)
+				return homeRepoFailure(err)
 			}
 		}
 		s, err := inv.loadSettings()
@@ -468,7 +468,7 @@ func (inv *invocation) retrack(ctx context.Context, gitDir, from, to string) err
 }
 
 // shownURL is a remote URL as agentx prints it: a password someone wrote
-// into the account repo's configuration by hand is never shown.
+// into the home repo's configuration by hand is never shown.
 func shownURL(raw string) string {
 	if u, err := url.Parse(raw); err == nil && u.User != nil {
 		if _, ok := u.User.Password(); ok {

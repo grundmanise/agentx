@@ -113,7 +113,7 @@ func TestSkillRemoveFromOneConfiguration(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	head := h.homeGit("rev-parse", "refs/heads/managed/alpha")
 	before := mutationVersion(t, h)
 
 	out := h.run("--json", "skill", "remove", "alpha", "--from", "cortex")
@@ -125,7 +125,7 @@ func TestSkillRemoveFromOneConfiguration(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
 		t.Errorf("the library directory was removed by a --from removal: %v", err)
 	}
-	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
+	equal(t, "the import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), head)
 	equal(t, "mutations", mutationVersion(t, h), before+1)
 	equal(t, "journals left behind", journalCount(t, h), 0)
 
@@ -167,8 +167,8 @@ func TestSkillRemoveTakesTheSkillOffTheMachine(t *testing.T) {
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--copy").exit, 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cortex,github-copilot,windsurf")
 	// A candidate ref, which a later spec writes and this command deletes.
-	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-	h.accountGit("update-ref", "refs/agentx/candidate/alpha", strings.TrimSpace(head))
+	head := h.homeGit("rev-parse", "refs/heads/managed/alpha")
+	h.homeGit("update-ref", "refs/agentx/candidate/alpha", strings.TrimSpace(head))
 	before := mutationVersion(t, h)
 
 	out := h.run("--json", "skill", "remove", "alpha")
@@ -177,7 +177,7 @@ func TestSkillRemoveTakesTheSkillOffTheMachine(t *testing.T) {
 		nothingAt(t, "the placement", filepath.Join(h.home, filepath.FromSlash(rel)))
 	}
 	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
-	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
+	if _, err := h.homeGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
 		t.Error("the import branch is still there")
 	}
 	equal(t, "refs under refs/agentx", h.agentxRefs(), source.Ref(source.ID(s.url)))

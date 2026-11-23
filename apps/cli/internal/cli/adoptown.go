@@ -413,8 +413,8 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 			}
 			return forkSource{kind: lineage.KindUnmanaged, name: name, lib: lib, held: true, dir: lib.ResolvedPath}, nil
 		}
-		what, own := "a skill of a shared source", rec.Kind == lineage.KindFork
-		if own {
+		what, hubSkill := "a skill of a shared source", rec.Kind == lineage.KindFork
+		if hubSkill {
 			what = "a hub skill"
 		}
 		dirs, _ := inv.adoptSites(name)
@@ -435,7 +435,7 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 			switch i := slices.IndexFunc(dirs[0].targets, func(t placeTarget) bool { return !t.readsLibrary }); {
 			case i < 0:
 				hint += "remove it"
-			case own:
+			case hubSkill:
 				hint += "remove it and place yours with '" + skillCommand("place", name, "--to", dirs[0].targets[i].id) + "'"
 			default:
 				hint += "replace it with '" + skillCommand("place", name, "--to", dirs[0].targets[i].id, "--force") + "', which discards what it holds"
@@ -444,7 +444,7 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 				listed(managedNameRow(dirs[0].path))
 		}
 		message, row := shown+" is already managed by agentx", "already managed by agentx"
-		if own {
+		if hubSkill {
 			message, row = shown+" is already a hub skill", "already a hub skill"
 		}
 		return forkSource{}, refuse(exitRefused, message, "run 'agentx skill list' to see it").listed(row + ". To see it, run 'agentx skill list'")
@@ -508,7 +508,7 @@ func (inv *invocation) adoptSites(name string) (dirs []adoptPlace, links []strin
 }
 
 // adoptTakenHint is the hint of an adoption whose name a branch of the
-// account repo already holds, records being its branches. The directory
+// home repo already holds, records being its branches. The directory
 // can be renamed, and one found in an agent client's own skills directory
 // may also be in the way of the skill the branch is, whose library entry
 // is gone: a hub skill is put back, and any other let go of.
@@ -524,7 +524,7 @@ func (fk *forking) adoptTakenHint(records map[string]lineage.Record) string {
 	return rename + ", or stop managing the other with '" + skillCommand("remove", rec.Name) + "'"
 }
 
-// adoptTaken refuses an adoption whose name the account repo already
+// adoptTaken refuses an adoption whose name the home repo already
 // holds a branch of, whatever its case, see nameTaken; nil when it holds
 // none. It is takenRefusal in an adoption's words: a branch is no word of
 // the user's, and the name is all there is to change.
@@ -550,11 +550,11 @@ func (inv *invocation) adoptClash(ctx context.Context, fk *forking) error {
 	if len(fk.places) == 0 {
 		return nil
 	}
-	if _, remote, set, err := inv.accountSource(); err != nil || !set || !inv.remoteHolds(ctx, remote, fk.target) {
+	if _, remote, set, err := inv.hubSource(); err != nil || !set || !inv.remoteHolds(ctx, remote, fk.target) {
 		return nil
 	}
 	return refuse(exitRefused, "you already published a skill called "+sanitised(fk.target)+", so "+quotedPath(fk.from)+" cannot be imported under that name",
-		"install the published one with '"+accountAddCommand(fk.target)+"' once "+quotedPath(fk.from)+" is moved aside, or rename the folder and import it under the new name").
+		"install the published one with '"+hubAddCommand(fk.target)+"' once "+quotedPath(fk.from)+" is moved aside, or rename the folder and import it under the new name").
 		listed(quotedPath(fk.from) + " has the name of a skill you already published. To import it, rename that folder")
 }
 
@@ -896,7 +896,7 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	if len(fk.places) == 0 && len(fk.copies) == 0 {
 		inv.summary = "imported " + name
 		out.done("imported " + out.paint(heading, name))
-		inv.noAccountRemoteHint(ev)
+		inv.noHubRemoteHint(ev)
 		return nil
 	}
 	_, links := inv.adoptSites(fk.target)
@@ -913,7 +913,7 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	out.done("imported " + out.paint(heading, name) + from + ": " + out.paint(noteStyle, plural(len(rows), "placement")))
 	inv.printPlacementRows(fk.target, rows)
 	inv.printUniversal(ev.Universal)
-	inv.noAccountRemoteHint(ev)
+	inv.noHubRemoteHint(ev)
 	inv.summary = "imported " + name + from + " in " + plural(len(done.placed), "configuration") + universalClause(ev.Universal)
 	return nil
 }

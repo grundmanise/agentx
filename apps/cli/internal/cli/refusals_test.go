@@ -15,7 +15,7 @@ func TestRefusalsFailure(t *testing.T) {
 	const mixed = "run 'agentx skill list', then update the rest one at a time"
 	gone := refuse(exitRefused, "the library holds no skill directory for it", "install it again")
 	nested := refuse(exitRefused, "it holds a repository git cannot record", "move it out")
-	unreadable := refuse(exitAccountRepo, "its candidate cannot be read", "install it again")
+	unreadable := refuse(exitHomeRepo, "its candidate cannot be read", "install it again")
 	pending := refuse(exitPendingMerge, "it conflicts with its update in 1 file", "resolve it with git")
 	type skill struct {
 		name string

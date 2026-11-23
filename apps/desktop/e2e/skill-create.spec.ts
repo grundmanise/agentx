@@ -59,7 +59,8 @@ const later = (cli: MockCli) =>
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
 const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
-const yours = (page: Page) => list(page).getByRole("region", { name: /^HUB/u });
+const hubGroup = (page: Page) =>
+  list(page).getByRole("region", { name: /^HUB/u });
 const pane = (page: Page, name: string) =>
   page
     .getByRole("region", { name: "Skill details" })
@@ -168,7 +169,7 @@ test("Create in the Skills header runs skill new with the description and select
   await answerRefresh(cli);
   await expect(dialog(page)).toBeHidden();
   await expect(
-    yours(page).getByRole("button", { exact: true, name: NEW_SKILL })
+    hubGroup(page).getByRole("button", { exact: true, name: NEW_SKILL })
   ).toHaveAttribute("aria-current", "true");
   await expect(pane(page, NEW_SKILL)).toBeVisible();
   expect(page.url()).toContain(`#/skills/${NEW_SKILL}`);
@@ -444,7 +445,7 @@ test("Create skill runs skill new without --description when it is empty", async
   await answerRefresh(cli);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect(
-    yours(page).getByRole("button", { exact: true, name: NEW_SKILL })
+    hubGroup(page).getByRole("button", { exact: true, name: NEW_SKILL })
   ).toHaveAttribute("aria-current", "true");
   await expect(pane(page, NEW_SKILL)).toBeVisible();
   expect(later(cli)).toEqual([["skill", "new", NEW_SKILL, "--json"]]);
@@ -460,7 +461,7 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
     events: [
       {
         hint: "choose another name",
-        message: "the account repo already holds release-notes as a hub skill",
+        message: "the home repo already holds release-notes as a hub skill",
         type: "error",
       },
     ],
@@ -471,7 +472,7 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
   const alert = dialog(page).getByRole("alert");
   // The message and the hint as one sentence-cased paragraph.
   await expect(alert).toHaveText(
-    "The account repo already holds release-notes as a hub skill. Choose another name."
+    "The home repo already holds release-notes as a hub skill. Choose another name."
   );
   await expect(nameField(page)).toHaveAttribute("aria-invalid", "true");
   await expect(dialog(page)).toBeVisible();
@@ -624,7 +625,7 @@ test("Create opens the new skill's SKILL.md in the chosen editor once it is sele
 
   await answerRefresh(cli);
   await expect(
-    yours(page).getByRole("button", { exact: true, name: NEW_SKILL })
+    hubGroup(page).getByRole("button", { exact: true, name: NEW_SKILL })
   ).toHaveAttribute("aria-current", "true");
   await expect
     .poll(() => cli.editorOpens)

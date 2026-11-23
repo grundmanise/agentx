@@ -19,13 +19,13 @@ import (
 // which is one content version found anywhere on the machine, or from a
 // sourceSkillEvent, which is one installable skill of a source. Its fields
 // are the library entry an inventory lists, so the two always say the same.
-// own, which no event carries, is whether it is a hub skill,
+// hubSkill, which no event carries, is whether it is a hub skill,
 // whose source is the hub: its kind alone does not say, and
 // while no hub is set neither does its source.
 type librarySkillEvent struct {
 	event
 	scan.LibraryEntry
-	own bool
+	hubSkill bool
 }
 
 // placementEvent is one way a configuration sees the skill: mode is what
@@ -159,13 +159,13 @@ var libraryName = regexp.MustCompile(`^[^./\\\x00][^/\\\x00]*$`)
 // The two are not one refusal: a POSIX directory happily holds "who?" or
 // "a b", so telling the user their library cannot would be untrue and would
 // send them looking in the wrong place. What refuses those is the branch
-// the account repo has to record the version on.
+// the home repo has to record the version on.
 func nameRefusal(name string) string {
 	switch {
 	case !libraryName.MatchString(name), strings.ContainsAny(name, "\n\r"):
 		return "is not a name the library can hold as a directory"
 	case !refComponent(name):
-		return "is not a name the account repo can hold as an import branch"
+		return "is not a name the home repo can hold as an import branch"
 	}
 	return ""
 }
@@ -330,18 +330,18 @@ func universalClients(inventory scan.Inventory) []string {
 // for one: the lineage says where the skill came from and the settings say
 // which sources this machine has, so removing a source and adding it back
 // each change what the next read says, and nothing else. What decides that
-// a source is gone is its settings entry and not its ref in the account
+// a source is gone is its settings entry and not its ref in the home
 // repo: an entry whose ref is missing is a source this machine still has
 // and has not fetched, which is what an import leaves.
-func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, account string, places []placementEvent, universal []string, obs observation) librarySkillEvent {
+func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, hub string, places []placementEvent, universal []string, obs observation) librarySkillEvent {
 	ev := librarySkillEvent{event: newEvent("library_skill"), LibraryEntry: scan.LibraryEntry{
 		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places, Universal: universal,
 	}}
 	if !ok {
 		return ev
 	}
-	ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, account)
-	ev.own = rec.Kind == lineage.KindFork
+	ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, hub)
+	ev.hubSkill = rec.Kind == lineage.KindFork
 	// The version is the base version's: a managed skill's is the import
 	// commit its branch points at, and a fork's the import commit its
 	// history names, read by the walk, which a skill made by skill new has

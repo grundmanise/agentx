@@ -69,23 +69,23 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 		inv.out.print("No sources. Add one with ", inv.out.paint(label, "agentx source add <url>"), ".")
 		return nil
 	}
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	if !exists {
-		// Settings that name sources the account repo has nothing of, as an
+		// Settings that name sources the home repo has nothing of, as an
 		// import leaves them: a shared source is refused as not fetched, with
 		// the add that fetches it as the hint, and the hub, which
 		// this command writes the remote of when it is missing, is fetched
-		// into an account repo created for it.
+		// into a home repo created for it.
 		for _, t := range targets {
-			if !t.entry.Account {
+			if !t.entry.Hub {
 				return sourceFailure(source.NotFetched(t.src.URL), t.src)
 			}
 		}
-		if gitDir, _, err = gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home); err != nil {
-			return accountRepoFailure(err)
+		if gitDir, _, err = gitx.OpenHomeRepo(ctx, inv.git, inv.dirs.Home); err != nil {
+			return homeRepoFailure(err)
 		}
 	}
 	// Each source that fetched is checked again in the worker that fetched
@@ -141,7 +141,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // say, and only source add sets it.
 func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool, then func(i int)) ([]source.Result, error) {
 	if err := inv.holdLock(ctx, wait, false, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, homeRepoFailure(err)
 	}
 	// Shared sources are fetched in parallel, without blobs, see
 	// source.FetchAll; the hub whole, once those are done, see
@@ -150,7 +150,7 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 	var srcs []source.Source
 	var shared, forks []int
 	for i, t := range targets {
-		if t.entry.Account {
+		if t.entry.Hub {
 			forks = append(forks, i)
 			continue
 		}
@@ -187,7 +187,7 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 			done(t.src, len(srcs)+k+1)
 		}
 	}
-	// A source whose remote the account repo no longer holds, which an
+	// A source whose remote the home repo no longer holds, which an
 	// interrupted removal leaves behind, cannot be fetched at all. git
 	// reports that as a repository it cannot find and names the remote,
 	// which is agentx's internal name for the source rather than anything
@@ -198,7 +198,7 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 	// and one a failed first fetch took out again, see fetchForks, was
 	// still unreachable.
 	for i, res := range results {
-		if res.Err != nil && !targets[i].entry.Account && !source.Configured(ctx, inv.git, gitDir, res.Source.ID()) {
+		if res.Err != nil && !targets[i].entry.Hub && !source.Configured(ctx, inv.git, gitDir, res.Source.ID()) {
 			results[i].Err = source.NotFetched(res.Source.URL)
 		}
 	}
@@ -242,13 +242,13 @@ func (inv *invocation) alignRemotes(ctx context.Context, gitDir string, targets 
 	remotes := source.Remotes(ctx, inv.git, gitDir)
 	for _, t := range targets {
 		remote, ok := remotes[t.src.ID()]
-		if (!ok || remote.URL == "") && !t.entry.Account || remote == source.RemoteOf(t.entry) {
+		if (!ok || remote.URL == "") && !t.entry.Hub || remote == source.RemoteOf(t.entry) {
 			continue
 		}
 		if err := source.Configure(ctx, inv.git, gitDir, t.entry); err != nil {
 			return err
 		}
-		if t.entry.Account {
+		if t.entry.Hub {
 			inv.awaitWholeFetch(remotes, t.entry)
 		}
 	}
@@ -308,10 +308,10 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 		check.report(inv, res.Source.URL)
 		ev := entryEvent(entry)
 		ev.AccessReason = check.reason()
-		if entry.Account {
+		if entry.Hub {
 			n, _, err := inv.forkCount(ctx, gitDir, entry, source.RemoteName(res.Source.ID()))
 			if err != nil {
-				return accountRepoFailure(err)
+				return homeRepoFailure(err)
 			}
 			ev.Skills = &n
 			inv.out.emit(ev)
@@ -370,7 +370,7 @@ func (inv *invocation) stampFetched(ctx context.Context, m *home.Mutation, gitDi
 // code every failure agrees on: fetching one source answers exactly as
 // adding or listing that source would, and a run whose sources all failed
 // the same way answers for that cause rather than flattening a vanished
-// pin or a broken account repo into "unreachable". Only a run whose causes
+// pin or a broken home repo into "unreachable". Only a run whose causes
 // disagree, where no one code is true of them all, is the source-level
 // refusal. Every failed source is named, so that the result event says
 // which.
@@ -411,8 +411,8 @@ func refusalHint(st status) string {
 	switch st {
 	case exitNotFound:
 		return "run 'agentx source list' to see what each source is pinned to and what this machine holds of it"
-	case exitAccountRepo:
-		return "run 'agentx doctor' and check the account repo it names"
+	case exitHomeRepo:
+		return "run 'agentx doctor' and check the home repo it names"
 	}
 	return "check that you can reach every source and that a private one has a git credential helper (git config credential.helper) or an SSH key"
 }
@@ -496,7 +496,7 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 func sharedSources(sources []home.Source) []home.Source {
 	var shared []home.Source
 	for _, entry := range sources {
-		if !entry.Account {
+		if !entry.Hub {
 			shared = append(shared, entry)
 		}
 	}

@@ -23,9 +23,9 @@ import (
 // judgeForkCompletion. Only the checkout changes: the library directory,
 // every placement and every branch stay as they are until the update.
 func (inv *invocation) settleMerge(ctx context.Context, name string, theirs bool) error {
-	gitDir, _, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		if !inv.mergePending(name) {
@@ -51,7 +51,7 @@ func (inv *invocation) settleMerge(ctx context.Context, name string, theirs bool
 func (inv *invocation) takeTheirs(ctx context.Context, name, path string) error {
 	paths, err := inv.gitPaths(ctx, path, "MERGE_HEAD")
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	b, err := os.ReadFile(paths[0])
 	if errors.Is(err, fs.ErrNotExist) {
@@ -62,7 +62,7 @@ func (inv *invocation) takeTheirs(ctx context.Context, name, path string) error 
 		return err
 	}
 	if _, err := inv.git.InCheckout(ctx, path, "read-tree", "--reset", "-u", strings.TrimSpace(string(b))); err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	return nil
 }
@@ -76,14 +76,14 @@ func (inv *invocation) takeTheirs(ctx context.Context, name, path string) error 
 func (inv *invocation) takeResolved(ctx context.Context, gitDir, name, path string) error {
 	s, err := inv.readMerge(ctx, path)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	if len(s.unmerged) == 0 {
 		return nil
 	}
 	size, err := conflictMarkerSize(ctx, inv.git, gitDir, s.unmerged)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	for _, p := range unmergedPaths(s.unmerged) {
 		body, err := os.ReadFile(filepath.Join(path, filepath.FromSlash(p)))
@@ -100,7 +100,7 @@ func (inv *invocation) takeResolved(ctx context.Context, gitDir, name, path stri
 		}
 	}
 	if _, err := inv.git.InCheckout(ctx, path, "add", "-A"); err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	return nil
 }

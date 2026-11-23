@@ -46,7 +46,7 @@ export interface Applied {
 /** A problem a serve child reported with an `error` event of its own, and kept running. */
 export interface ServeError {
   childId: number;
-  /** The error event's code, such as `account_repo`. */
+  /** The error event's code, such as `home_repo`. */
   code: string;
   problem: Problem;
 }

@@ -49,7 +49,7 @@ const openSkill = async (
   await expect(pane(page, name)).toBeVisible();
 };
 
-// The action row of each skill that is not yours and has no edits.
+// The action row of each skill that is not a hub skill and has no edits.
 for (const [name, key, shown] of [
   ["pdf", "pdf", ["Fork", "Remove"]],
   ["gone", "gone", ["Fork", "Remove"]],

@@ -1,4 +1,4 @@
-// Package lineage writes and reads what the account repo knows about where
+// Package lineage writes and reads what the home repo knows about where
 // a skill came from: the parentless import commit of one upstream version,
 // its trailers, and the branches that point at them.
 package lineage

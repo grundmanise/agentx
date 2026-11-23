@@ -61,7 +61,7 @@ exec %GIT% "$@"
 	// branch names, and the next scan would read it as a new unmanaged
 	// skill, which is what the mutation safety spec forbids.
 	for _, name := range bulkSkills {
-		if head := h.accountGit("for-each-ref", "--format=%(objectname)", "refs/heads/managed/"+name); head == "" {
+		if head := h.homeGit("for-each-ref", "--format=%(objectname)", "refs/heads/managed/"+name); head == "" {
 			t.Fatalf("the killed run created no branch for %s, so it was not killed where the test expects:\n%s", name, out)
 		}
 		if _, err := os.Stat(filepath.Join(h.library, name)); err == nil {

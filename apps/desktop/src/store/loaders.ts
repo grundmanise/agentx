@@ -136,7 +136,7 @@ export const loadListing = async (id: string) => {
 export const loadInstallable = async () => {
   const remote = useAppStore
     .getState()
-    .settings?.sources.find((s) => s.account === true)?.url;
+    .settings?.sources.find((s) => s.hub === true)?.url;
   if (
     remote !== undefined &&
     useAppStore.getState().installable === undefined
@@ -162,7 +162,7 @@ export const loadInstallable = async () => {
   // The list belongs to the remote set when the command ran: kept only if that is still this one.
   const now = useAppStore
     .getState()
-    .settings?.sources.find((s) => s.account === true)?.url;
+    .settings?.sources.find((s) => s.hub === true)?.url;
   if (remote !== undefined && read !== undefined && now === remote) {
     void keepRead("installable", remote, "", read);
   }

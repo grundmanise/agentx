@@ -14,7 +14,7 @@ import (
 // .gitattributes files, the repository's info/exclude and the user's
 // global ignore file, and writes nothing to the directory or to any index
 // but this one. A skill directory is compared, diffed and updated this
-// way against the account repo.
+// way against the home repo.
 type WorkTree struct {
 	r            *Runner
 	gitDir       string

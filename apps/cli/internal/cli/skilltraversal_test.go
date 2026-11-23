@@ -113,8 +113,8 @@ func TestSkillAddRefusesAnEntryThatClimbsOut(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(h.library, "evil")); err == nil {
 		t.Error("the library holds the refused skill")
 	}
-	if _, err := h.accountGitErr("rev-parse", "--verify", "--quiet", "refs/heads/managed/evil"); err == nil {
-		t.Error("the account repo holds managed/evil")
+	if _, err := h.homeGitErr("rev-parse", "--verify", "--quiet", "refs/heads/managed/evil"); err == nil {
+		t.Error("the home repo holds managed/evil")
 	}
 
 	// The source is refused one skill at a time, not whole.

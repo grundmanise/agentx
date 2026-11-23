@@ -133,11 +133,11 @@ func TestSkillAddWritesTheImportCommit(t *testing.T) {
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
-	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-	if parents := h.accountGit("rev-list", "--count", head); parents != "1" {
+	head := h.homeGit("rev-parse", "refs/heads/managed/alpha")
+	if parents := h.homeGit("rev-list", "--count", head); parents != "1" {
 		t.Errorf("the import commit has %s commits behind it, want it parentless", parents)
 	}
-	body := h.accountGit("cat-file", "commit", head)
+	body := h.homeGit("cat-file", "commit", head)
 	for _, want := range []string{
 		"author agentx <agentx@localhost> ",
 		"committer agentx <agentx@localhost> ",
@@ -156,9 +156,9 @@ func TestSkillAddWritesTheImportCommit(t *testing.T) {
 		contains(t, "the import commit", body, who+" agentx <agentx@localhost> "+when+" +0000")
 	}
 	// The tree holds the upstream directory alone, with the modes git keeps.
-	tree := h.accountGit("ls-tree", head)
+	tree := h.homeGit("ls-tree", head)
 	equal(t, "the import tree", tree, "040000 tree "+s.tree("skills/alpha")+"\talpha")
-	files := h.accountGit("ls-tree", "-r", head)
+	files := h.homeGit("ls-tree", "-r", head)
 	for _, line := range strings.Split(files, "\n") {
 		if !strings.HasPrefix(line, "100644 ") && !strings.HasPrefix(line, "100755 ") {
 			t.Errorf("the import tree holds %q, want only regular files", line)

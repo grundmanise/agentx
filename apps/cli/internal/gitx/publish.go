@@ -113,7 +113,7 @@ func IndexInfo(diffTreeZ, prefix string) (string, error) {
 // no other ref. It runs in the user's environment, so their credentials,
 // SSH configuration and URL rewrites apply, with no hook of theirs, no
 // push certificate or push option, no negotiation, no thin pack and no lazy fetch of an
-// object the account repo lacks. The remote's answer is the porcelain
+// object the home repo lacks. The remote's answer is the porcelain
 // status of the branch's ref, found false when git printed none, git's
 // stderr and its exit status, for ClassifyPush to read; err is a git that
 // could not run or was stopped.

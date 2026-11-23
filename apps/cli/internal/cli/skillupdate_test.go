@@ -73,7 +73,7 @@ func upToDate(name string) string {
 }
 
 // unchangedHome is what a command that changes nothing leaves as it found
-// it: every ref of the account repo, the library and the clients'
+// it: every ref of the home repo, the library and the clients'
 // directories byte for byte, and the version file.
 type unchangedHome struct {
 	refs, library, clients string
@@ -137,7 +137,7 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	refs = h.refMap()
 	equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], candidate)
 	equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], "")
-	contains(t, "the branch's reflog", h.accountGit("reflog", "show", "--format=%H", lineage.ManagedRef("alpha")), tip)
+	contains(t, "the branch's reflog", h.homeGit("reflog", "show", "--format=%H", lineage.ManagedRef("alpha")), tip)
 	sameTree(t, "the library directory", libraryTree(t, lib), withFile(want, ".DS_Store", "finder data\n"))
 	if !executable(t, filepath.Join(lib, "scripts", "run.sh")) {
 		t.Error("scripts/run.sh is not executable after the update")
@@ -527,7 +527,7 @@ func TestSkillUpdateAllSkipsASkillWhoseSourceWasRemoved(t *testing.T) {
 // holds a repository git cannot record, which are exit code 6 each, the
 // second counted rather than skipped, since what an update would discard
 // there has no record anywhere; and beta's candidate holds no directory of
-// beta's, which is the account repo's exit code 8. Refusals that disagree
+// beta's, which is the home repo's exit code 8. Refusals that disagree
 // end the run with 6, the hint of a mixed run and an error naming every
 // skill it gave up on. A skill of a removed source is skipped all the same
 // and is not among them.
@@ -556,13 +556,13 @@ func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
 	writeFile(t, mkdirs(t, nested, "HEAD"), "ref: refs/heads/main\n")
 	// beta's candidate carries its lineage over a tree that holds delta's
 	// directory and not beta's.
-	message := h.accountGit("log", "-1", "--format=%B", lineage.CandidateRef("beta"))
-	elsewhere := h.accountGit("commit-tree", h.accountGit("rev-parse", refs[lineage.ManagedRef("delta")]+"^{tree}"), "-m", message)
-	h.accountGit("update-ref", lineage.CandidateRef("beta"), elsewhere)
+	message := h.homeGit("log", "-1", "--format=%B", lineage.CandidateRef("beta"))
+	elsewhere := h.homeGit("commit-tree", h.homeGit("rev-parse", refs[lineage.ManagedRef("delta")]+"^{tree}"), "-m", message)
+	h.homeGit("update-ref", lineage.CandidateRef("beta"), elsewhere)
 
 	out := h.run("--json", "skill", "update", "--all")
 	equal(t, "exit", out.exit, 6)
-	delta := "delta is managed in the account repo but the library holds no skill directory for it, so there is nothing to update"
+	delta := "delta is managed in the home repo but the library holds no skill directory for it, so there is nothing to update"
 	epsilon := "epsilon holds " + nested + ", which git cannot record"
 	beta := `not an import commit: refs/heads/managed/beta holds "delta" beside beta`
 	gamma := "gamma was installed from " + other.url + ", which was removed from this machine, so it is not updated; run 'agentx source add " + other.url + "' to add it again"
@@ -832,8 +832,8 @@ func upstreamRemoved(t *testing.T, h *harness, s *sourceRepo) {
 // holds whose message carries no lineage.
 func withoutLineage(t *testing.T, h *harness, _ *sourceRepo) {
 	t.Helper()
-	tree := h.accountGit("rev-parse", lineage.ManagedRef("beta")+"^{tree}")
-	h.accountGit("update-ref", lineage.ManagedRef("beta"), h.accountGit("commit-tree", tree, "-m", "no lineage"))
+	tree := h.homeGit("rev-parse", lineage.ManagedRef("beta")+"^{tree}")
+	h.homeGit("update-ref", lineage.ManagedRef("beta"), h.homeGit("commit-tree", tree, "-m", "no lineage"))
 }
 
 // lineagelessCandidate runs a check that pins alpha's second version as its
@@ -842,8 +842,8 @@ func withoutLineage(t *testing.T, h *harness, _ *sourceRepo) {
 func lineagelessCandidate(t *testing.T, h *harness, s *sourceRepo) {
 	t.Helper()
 	checked(t, h, s)
-	tree := h.accountGit("rev-parse", lineage.CandidateRef("alpha")+"^{tree}")
-	h.accountGit("update-ref", lineage.CandidateRef("alpha"), h.accountGit("commit-tree", tree, "-p", lineage.ManagedRef("alpha"), "-m", "no lineage"))
+	tree := h.homeGit("rev-parse", lineage.CandidateRef("alpha")+"^{tree}")
+	h.homeGit("update-ref", lineage.CandidateRef("alpha"), h.homeGit("commit-tree", tree, "-p", lineage.ManagedRef("alpha"), "-m", "no lineage"))
 }
 
 // TestSkillUpdateRefusesInOrder is every skill update refuses, one name at
@@ -924,12 +924,12 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 					name: "a managed skill whose import branch records no version agentx can read", skill: "beta", exit: 6,
 					setup:   withoutLineage,
 					message: "the import branch refs/heads/managed/beta records no version agentx can read",
-					hint:    "run 'agentx doctor' and check the account repo it names",
+					hint:    "run 'agentx doctor' and check the home repo it names",
 				},
 				{
 					name: "a managed skill whose library directory is gone", skill: "alpha", exit: 6,
 					setup:   func(t *testing.T, h *harness, _ *sourceRepo) { remove(t, filepath.Join(h.library, "alpha")) },
-					message: "alpha is managed in the account repo but the library holds no skill directory for it, so there is nothing to update",
+					message: "alpha is managed in the home repo but the library holds no skill directory for it, so there is nothing to update",
 					hint:    "run 'agentx skill add %URL% --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it",
 				},
 			},
@@ -1148,7 +1148,7 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 	tip, pinned, other := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")], refs[lineage.ManagedRef("beta")]
 	real := realGit(t)
 	path := h.env["PATH"]
-	git := real + " --git-dir=" + shellWord(gitx.AccountRepoPath(h.agentx))
+	git := real + " --git-dir=" + shellWord(gitx.HomeRepoPath(h.agentx))
 	notes := filepath.Join(h.library, "alpha", "notes.md")
 	for _, c := range []struct {
 		name, change     string // the shell line the wrapper runs
@@ -1472,9 +1472,9 @@ func applyUpdateSteps(t *testing.T, h *harness, steps []journalStep, n int) {
 		n--
 		switch {
 		case s.Kind == "ref" && s.New == "":
-			h.accountGit("update-ref", "-d", s.Ref, s.Old)
+			h.homeGit("update-ref", "-d", s.Ref, s.Old)
 		case s.Kind == "ref":
-			h.accountGit("update-ref", s.Ref, s.New, s.Old)
+			h.homeGit("update-ref", s.Ref, s.New, s.Old)
 		default:
 			applySteps(t, []journalStep{s}, 1)
 		}

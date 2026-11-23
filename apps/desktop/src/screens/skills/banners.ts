@@ -89,23 +89,22 @@ interface BannerRule {
 }
 
 /** The hub, the one source added with `--hub`, when one is set. */
-export const accountRemoteOf = (sources: SourceEvent[]) =>
-  sources.find((s) => s.account === true);
+export const hubOf = (sources: SourceEvent[]) =>
+  sources.find((s) => s.hub === true);
 
 /**
  * A hub skill edited since it was published: what a bare `skill publish` covers, and
  * what the title bar's status counts as edited.
  */
 export const hasEditsToPublish = (row: SkillRow) =>
-  row.kind === "yours" && row.modified && row.published;
+  row.kind === "hub" && row.modified && row.published;
 
 /**
  * A hub skill the hub holds no branch of: a publish sends every file, and
  * the title bar counts it as new.
  */
 export const notPublished = (row: SkillRow) =>
-  row.kind === "yours" &&
-  (row.entry?.drift?.includes("not published") ?? false);
+  row.kind === "hub" && (row.entry?.drift?.includes("not published") ?? false);
 
 const filesWord = (n: number) => (n === 1 ? "1 file" : `${n} files`);
 
@@ -125,7 +124,7 @@ const changedFiles = (row: SkillRow) =>
  */
 const updateOrigin = (row: SkillRow) => {
   const upstream =
-    row.kind === "yours"
+    row.kind === "hub"
       ? (row.update?.upstream ?? row.entry?.upstream)
       : undefined;
   return shortSource(upstream ?? row.update?.source ?? row.entry?.source ?? "");
@@ -261,7 +260,7 @@ const table: BannerRule[] = [
       tone: "yours",
     }),
     when: (row, facts) =>
-      notPublished(row) && accountRemoteOf(facts.sources) !== undefined,
+      notPublished(row) && hubOf(facts.sources) !== undefined,
   },
   {
     banner: () => ({
@@ -271,7 +270,7 @@ const table: BannerRule[] = [
       tone: "yours",
     }),
     when: (row, facts) =>
-      notPublished(row) && accountRemoteOf(facts.sources) === undefined,
+      notPublished(row) && hubOf(facts.sources) === undefined,
   },
   {
     banner: (row, _configurations, facts) => {

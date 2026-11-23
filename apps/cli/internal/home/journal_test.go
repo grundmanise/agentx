@@ -105,7 +105,7 @@ func newInstall(t *testing.T) (install, refs) {
 		dir:      filepath.Join(root, "agentx"),
 		library:  filepath.Join(root, "library"),
 		place:    filepath.Join(root, "client", "skills"),
-		gitDir:   filepath.Join(root, "account.git"),
+		gitDir:   filepath.Join(root, "home.git"),
 		settings: filepath.Join(root, "agentx", "settings.json"),
 	}
 	for _, dir := range []string{MutationsDir(in.dir), in.library, in.place} {
@@ -291,7 +291,7 @@ func TestBatchRefsMoveInOneTransaction(t *testing.T) {
 // failure that leaves nothing behind and one recovery has to finish. The
 // caller reads it to decide whether it may take away the staging refs
 // holding this run's commits: before the journal exists nothing would ever
-// recover them, so keeping them would leak them into the account repo for
+// recover them, so keeping them would leak them into the home repo for
 // good, and after it exists recovery needs them.
 func TestJournaledIsTrueOnlyOnceTheJournalIsOnDisk(t *testing.T) {
 	t.Parallel()

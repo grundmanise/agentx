@@ -223,7 +223,7 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 // leave open. source.Fetch reaches the source over two fetches: the first
 // brings the commit and its trees without blobs, the second the SKILL.md
 // blobs in one batch. While the blob batch is held open here, every reader
-// of the account repo – the serve child rebuilding its source index, a
+// of the home repo – the serve child rebuilding its source index, a
 // concurrent `source skills`, `source list` – must still see the commit the
 // last complete fetch left, never the new one with its blobs missing, which
 // lists no skill and warns.
@@ -236,7 +236,7 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 	s.commit("first")
 	equal(t, "add", h.run("source", "add", s.url).exit, 0)
 	id := source.ID(s.url)
-	first := h.accountGit("rev-parse", source.Ref(id))
+	first := h.homeGit("rev-parse", source.Ref(id))
 
 	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
@@ -259,7 +259,7 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 
 	// Mid-fetch. The source ref still names the commit whose blobs are all
 	// here, so a rebuild of the index now lists that commit's skills whole.
-	equal(t, "ref during the fetch", h.accountGit("rev-parse", source.Ref(id)), first)
+	equal(t, "ref during the fetch", h.homeGit("rev-parse", source.Ref(id)), first)
 	p.refreshed("mid")
 	if got := p.search("s1", "commit"); !reflect.DeepEqual(got, whole) {
 		t.Errorf("results during the fetch = %q, want %q", got, whole)
@@ -273,7 +273,7 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 	// The fetch finishes, and only then does the ref move.
 	release()
 	equal(t, "exit", (<-done).exit, 0)
-	equal(t, "ref after the fetch", h.accountGit("rev-parse", source.Ref(id)), second)
+	equal(t, "ref after the fetch", h.homeGit("rev-parse", source.Ref(id)), second)
 	p.refreshed("after")
 	want := []string{s.url + " commit commit", s.url + " release release"}
 	if got := p.search("s2", "commit"); !reflect.DeepEqual(got, want) {

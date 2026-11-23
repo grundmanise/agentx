@@ -13,7 +13,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
  */
 export const canEdit = (row: SkillRow) =>
   row.entry !== undefined &&
-  (row.kind === "yours" || (row.kind === "source" && row.modified));
+  (row.kind === "hub" || (row.kind === "source" && row.modified));
 
 /** The `SKILL.md` of the library skill `name`, `library` being where agentx keeps the library. */
 export const skillFile = (library: string, name: string) =>

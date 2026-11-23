@@ -49,7 +49,7 @@ const groups: Record<2 | 3 | 4, readonly string[]> = {
   2: ["git", "fork_merges", "commit_identity"],
   3: ["home", "library"],
   4: [
-    "account_repo",
+    "home_repo",
     "settings",
     "lock",
     "mutations",
@@ -62,7 +62,7 @@ const labels = [
   "agentx command line",
   "git 2.40 or newer",
   "Home folder is writable",
-  "Account repo opens",
+  "Home repo opens",
   "Watching this machine",
 ] as const;
 
@@ -70,7 +70,7 @@ const titles = [
   "Reinstall agentx",
   "Update git to continue",
   "agentx can't write to your home folder",
-  "agentx can't open its account repo",
+  "agentx can't open its home repo",
   "agentx can't watch this machine",
 ] as const;
 
@@ -178,13 +178,13 @@ const doctorChecks = ({ doctor, serve }: Findings): Check[] => {
       status: "fail",
     };
   }
-  const account = checks.at(2);
+  const homeRepo = checks.at(2);
   if (
-    account?.status === "pass" &&
+    homeRepo?.status === "pass" &&
     serve !== undefined &&
     "inventory" in serve
   ) {
-    checks[2] = { ...account, lines: [{ text: counts(serve.inventory) }] };
+    checks[2] = { ...homeRepo, lines: [{ text: counts(serve.inventory) }] };
   }
   return checks;
 };

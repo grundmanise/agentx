@@ -10,7 +10,7 @@ import (
 
 // LibrarySkill is one directory of the library: the name agentx knows it by,
 // which is the directory's own name and the name of its branch in the
-// account repo, and what the directory holds.
+// home repo, and what the directory holds.
 type LibrarySkill struct {
 	Name         string // the directory name in the library
 	Path         string // <library>/<name>

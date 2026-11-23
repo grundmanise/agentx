@@ -49,7 +49,7 @@ func TestInstallRefusesASubpathItCannotRecord(t *testing.T) {
 
 	alone := h.run("--json", "skill", "add", s.url, "--name", nastySubpaths[0].name)
 	equal(t, "exit of the skill alone", alone.exit, exitRefused.exit)
-	contains(t, "the refusal", lastError(t, h.events(alone.stdout))["message"].(string), "is not a directory the account repo can record")
+	contains(t, "the refusal", lastError(t, h.events(alone.stdout))["message"].(string), "is not a directory the home repo can record")
 
 	out := h.run("skill", "add", s.url, "--all")
 	equal(t, "exit of the batch", out.exit, exitRefused.exit)
@@ -58,7 +58,7 @@ func TestInstallRefusesASubpathItCannotRecord(t *testing.T) {
 		contains(t, "the warnings", out.stderr, c.quoted)
 		// Nothing was written for it: no import branch, no library
 		// directory, and so nothing for a later command to trip over.
-		if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/"+c.name); err == nil {
+		if _, err := h.homeGitErr("rev-parse", "--verify", "refs/heads/managed/"+c.name); err == nil {
 			t.Errorf("%s has an import branch after a refused install", c.name)
 		}
 		if _, err := os.Lstat(filepath.Join(h.library, c.name)); err == nil {
@@ -71,7 +71,7 @@ func TestInstallRefusesASubpathItCannotRecord(t *testing.T) {
 		t.Errorf("the refusal carries an escape of the source's: %q", out.stderr)
 	}
 
-	// What the run did install reads back whole: the account repo records
+	// What the run did install reads back whole: the home repo records
 	// the lineage and the listing gives it again, which is the agreement
 	// the refusal exists to keep.
 	ev := h.one(h.mustRun("--json", "skill", "list").stdout, "library_skill")
@@ -109,5 +109,5 @@ func TestTheDirectoryIsRefusedBeforeTheEntriesUnderIt(t *testing.T) {
 
 	out := h.run("skill", "add", s.url, "--name", "evil")
 	equal(t, "exit", out.exit, exitRefused.exit)
-	contains(t, "the refusal", out.stderr, `evil comes from "skills/evil ", which is not a directory the account repo can record`)
+	contains(t, "the refusal", out.stderr, `evil comes from "skills/evil ", which is not a directory the home repo can record`)
 }

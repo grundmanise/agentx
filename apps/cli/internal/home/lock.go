@@ -143,8 +143,8 @@ func takeLock(dir string) (*os.File, error) { return takeLockWithin(dir, readerW
 //
 // Readers are waited for because a scan only reads and lets go on its own,
 // and the serve child scans on every change it sees, a mutation's own git
-// writes in the account repo among them: a fetch that deletes its staging
-// ref touches the account repo's directory, and the rescan that sets off
+// writes in the home repo among them: a fetch that deletes its staging
+// ref touches the home repo's directory, and the rescan that sets off
 // holds the shared lock about when the command comes to record the fetch.
 // A command that gave up on readers would be run again, write again and
 // set off the same rescan, so a machine slow enough to lose that race once

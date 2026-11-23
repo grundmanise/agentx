@@ -10,7 +10,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// forkCommit is a commit of the account repo a fork's skill directory is
+// forkCommit is a commit of the home repo a fork's skill directory is
 // compared with or put back to, as a user named it: the commit, and the
 // tree of the fork's skill directory in it.
 type forkCommit struct {
@@ -27,13 +27,13 @@ func (c forkCommit) version() version {
 }
 
 // resolveForkCommit finds the commit arg names, an id or anything else git
-// reads as one, for the fork f, in one cat-file of the account repo: the
+// reads as one, for the fork f, in one cat-file of the home repo: the
 // commit itself and its tree at the fork's skill directory. A name that is
 // no commit, or several, is exit code 6, and so is a commit that holds no
 // skill directory under the fork's directory name, which the fork's
 // content cannot be compared with.
 func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg string) (forkCommit, error) {
-	unknown := fail(exitRefused, "the account repo holds no commit "+sanitised(arg),
+	unknown := fail(exitRefused, "the home repo holds no commit "+sanitised(arg),
 		"name a commit by its id, as '"+skillCommand("history", f.name)+"' lists them")
 	if strings.ContainsAny(arg, "\r\n\x00") {
 		return forkCommit{}, unknown
@@ -41,16 +41,16 @@ func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg st
 	query := arg + "^{commit}\n" + arg + "^{commit}:" + f.dir + "\n"
 	out, err := inv.git.IsolatedInput(ctx, f.gitDir, strings.NewReader(query), "cat-file", "--batch-check=%(objectname) %(objecttype)")
 	if err != nil {
-		return forkCommit{}, accountRepoFailure(err)
+		return forkCommit{}, homeRepoFailure(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
 	if len(lines) != 2 {
-		return forkCommit{}, accountRepoFailure(fmt.Errorf("git cat-file answered %q for two names", out))
+		return forkCommit{}, homeRepoFailure(fmt.Errorf("git cat-file answered %q for two names", out))
 	}
 	commit, commitType, _ := strings.Cut(lines[0], " ")
 	switch {
 	case strings.HasSuffix(lines[0], " ambiguous"):
-		return forkCommit{}, fail(exitRefused, sanitised(arg)+" names more than one object of the account repo",
+		return forkCommit{}, fail(exitRefused, sanitised(arg)+" names more than one object of the home repo",
 			"give more of the commit id")
 	case commitType != "commit":
 		return forkCommit{}, unknown
@@ -69,7 +69,7 @@ func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg st
 // how its skill directory differs from its last published version, see
 // publishedVersion, so edits an update, a fork or a failed push recorded
 // stay in the diff until they are published, or, when commit names one,
-// from that commit, any commit of the account repo whose tree holds the
+// from that commit, any commit of the home repo whose tree holds the
 // fork's skill directory. Only the skill directory is compared, and every
 // path is relative to it.
 //
@@ -125,7 +125,7 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 	}
 	files, left, err := inv.diffForkDir(ctx, f, t, v)
 	if err != nil {
-		return accountRepoFailure(err)
+		return homeRepoFailure(err)
 	}
 	for _, p := range left {
 		inv.out.warn(quotedPath(filepath.Join(f.skillDir, filepath.FromSlash(p))) + " cannot be recorded by git and is left out of the diff")
@@ -152,12 +152,12 @@ func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec 
 		}
 		recs := map[string]lineage.Record{rec.Name: rec}
 		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
-			return accountRepoFailure(err)
+			return homeRepoFailure(err)
 		}
 		rec = recs[rec.Name]
 		return nil
 	}
-	_, remote, ok, err := inv.accountSource()
+	_, remote, ok, err := inv.hubSource()
 	if err != nil {
 		return "", "", err
 	}
@@ -183,7 +183,7 @@ func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec 
 		if there != "" {
 			out, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", rec.Commit, there)
 			if err != nil {
-				return "", "", accountRepoFailure(err)
+				return "", "", homeRepoFailure(err)
 			}
 			if base := strings.TrimSpace(out); status == 0 && base != "" {
 				return base, "its last published version " + short(base), nil
@@ -206,7 +206,7 @@ func (inv *invocation) remoteForkTip(ctx context.Context, gitDir, remote, name s
 	ref := lineage.RemoteForkRef(remote, name)
 	values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{ref})
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return "", homeRepoFailure(err)
 	}
 	return values[ref], nil
 }

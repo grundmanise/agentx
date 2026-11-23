@@ -12,20 +12,20 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// accountRecord is the branch the account repo holds for the skill called
+// hubRecord is the branch the home repo holds for the skill called
 // name, read in the one for-each-ref a listing reads, and false when it
-// holds none, as an account repo that does not exist yet holds none. A
+// holds none, as a home repo that does not exist yet holds none. A
 // command that works on managed skills and forks alike reads it first, to
 // tell which of the two it was given.
-func (inv *invocation) accountRecord(ctx context.Context, name string) (string, lineage.Record, bool, error) {
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+func (inv *invocation) hubRecord(ctx context.Context, name string) (string, lineage.Record, bool, error) {
+	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return "", lineage.Record{}, false, accountRepoFailure(err)
+		return "", lineage.Record{}, false, homeRepoFailure(err)
 	}
 	records := map[string]lineage.Record{}
 	if exists {
 		if records, err = inv.listLineage(ctx, gitDir); err != nil {
-			return "", lineage.Record{}, false, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
+			return "", lineage.Record{}, false, homeRepoFailure(fmt.Errorf("home repo %s: %w", gitDir, err))
 		}
 	}
 	rec, ok := records[name]
@@ -44,14 +44,14 @@ func managedRefusal(name string, rec lineage.Record, ok bool) error {
 			"run 'agentx skill list' to see which skills are managed")
 	case !rec.HasImport:
 		return fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
-			"run 'agentx doctor' and check the account repo it names")
+			"run 'agentx doctor' and check the home repo it names")
 	}
 	return nil
 }
 
 // notAForkRefusal refuses a flag that names one of a fork's commits, given
 // for the skill called name, which has no commits of its own: a managed
-// skill, ok being whether the account repo holds its branch, whose one
+// skill, ok being whether the home repo holds its branch, whose one
 // version is its base, which skill diff compares with instead, or an
 // unmanaged one.
 func notAForkRefusal(name string, ok bool) error {
@@ -93,7 +93,7 @@ func baseBlobs(base lineage.Base) []string {
 
 // materialise lays a base version out under dest, which it creates: every
 // directory, every file with the mode git records for it and every symlink,
-// and nothing else. Every path is the account repo's own bytes, so each one
+// and nothing else. Every path is the home repo's own bytes, so each one
 // is held to the rule a path of a source is held to before anything is
 // written, as an install holds it.
 func materialise(dest string, base lineage.Base, bodies map[string]string) error {
@@ -115,7 +115,7 @@ func materialise(dest string, base lineage.Base, bodies map[string]string) error
 		}
 		body, ok := bodies[e.OID]
 		if !ok {
-			return fmt.Errorf("the account repo does not hold %s of the base version", e.Path)
+			return fmt.Errorf("the home repo does not hold %s of the base version", e.Path)
 		}
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			return err
