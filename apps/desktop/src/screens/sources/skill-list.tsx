@@ -11,7 +11,7 @@ import {
 } from "react";
 import type { ReactNode, RefObject } from "react";
 
-import type { Configuration } from "#/cli/events.gen.ts";
+import type { Configuration, Install } from "#/cli/events.gen.ts";
 import { CodePane } from "#/components/code-pane.tsx";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { RemoveSwap } from "#/components/remove-swap.tsx";
@@ -28,13 +28,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { formatDate } from "#/lib/dates.ts";
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
 import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
-import { addedName, statusLabels } from "#/screens/sources/projection.ts";
+import {
+  addedName,
+  installOf,
+  statusLabels,
+} from "#/screens/sources/projection.ts";
 import type {
   CardGroup,
   SkillCard,
@@ -204,16 +209,33 @@ const ViewSkill = ({ page }: { page: string }) => (
 );
 
 /**
- * What an open row shows: why a skill that cannot be selected cannot be, and its SKILL.md, whose
- * frontmatter holds the description. One of your skills on the account remote has no SKILL.md to
- * read here, so its row shows its description.
+ * What an open row shows: why a skill that cannot be selected cannot be, when it last entered and
+ * left this machine's library, and its SKILL.md, whose frontmatter holds the description. One of
+ * your skills on the account remote has no SKILL.md to read here, so its row shows its description.
  */
-const Details = ({ card }: { card: SkillCard }) => {
+const Details = ({
+  card,
+  install,
+}: {
+  card: SkillCard;
+  install: Install | undefined;
+}) => {
   const description =
     card.skillMd === undefined && card.description !== ""
       ? card.description
       : undefined;
-  const header = description !== undefined || card.title !== undefined;
+  const dates = [
+    install?.added === undefined
+      ? undefined
+      : `Added ${formatDate(install.added)}`,
+    install?.removed === undefined
+      ? undefined
+      : `Removed ${formatDate(install.removed)}`,
+  ]
+    .filter((part) => part !== undefined)
+    .join(" · ");
+  const header =
+    description !== undefined || card.title !== undefined || dates !== "";
   return (
     <>
       {header && (
@@ -227,6 +249,9 @@ const Details = ({ card }: { card: SkillCard }) => {
             <p className="type-secondary text-text-hint m-0 text-pretty">
               {card.title}
             </p>
+          )}
+          {dates !== "" && (
+            <p className="type-technical-sm text-text-caption m-0">{dates}</p>
           )}
         </div>
       )}
@@ -258,6 +283,42 @@ const Loading = () => (
 );
 
 const noLibrary: never[] = [];
+const noInstalls: never[] = [];
+
+/**
+ * The date a row shows before its status or check: when an Added skill was added, or when a skill
+ * that can be selected left this machine's library. Undefined when this machine recorded neither.
+ */
+const rowDate = (
+  card: SkillCard,
+  install: Install | undefined
+): string | undefined => {
+  if (card.status === "added" && install?.added !== undefined) {
+    return formatDate(install.added);
+  }
+  return card.status === undefined && install?.removed !== undefined
+    ? `Removed ${formatDate(install.removed)}`
+    : undefined;
+};
+
+/**
+ * The text at a row's end, before its action: the status of a skill that has no action, or the
+ * row's date. Added is the action's own label, so its date sits before it and it never moves.
+ */
+const rowMeta = (card: SkillCard, date: string | undefined): ReactNode => {
+  if (card.status !== undefined && card.status !== "added") {
+    return (
+      <span className={statusVariants({ status: card.status })}>
+        {statusLabels[card.status]}
+      </span>
+    );
+  }
+  return date === undefined ? undefined : (
+    <span className="type-technical-sm text-file-row-meta flex-none">
+      {date}
+    </span>
+  );
+};
 
 /**
  * The Added status of a card whose skill this machine installed from it: a red Remove while
@@ -294,7 +355,8 @@ const AddedRemove = ({
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its
  * description while closed, View skill beside the name while open) and, at its end, the round
  * check that selects it, or for a skill this machine holds already its status, which for an Added
- * skill turns into Remove on hover. The row is named
+ * skill turns into Remove on hover; before either, while closed, the date of the last add or
+ * removal when this machine recorded it. The row is named
  * by the skill alone; its status and description are read as its description. A row asked to
  * open reads its SKILL.md first, with a spinner in the description's place, and opens once the
  * read ends.
@@ -331,9 +393,16 @@ const SkillItemView = ({
       void loadSkillMd(card.key, { source, subpath, tree });
     }
   }, [wanted, card.key, source, subpath, tree]);
+  const install = useAppStore((s) =>
+    installOf(card, s.inventory?.installs ?? noInstalls)
+  );
   const status =
     card.status === undefined ? undefined : statusLabels[card.status];
-  const description = [status, markdownText(card.description)]
+  const date = rowDate(card, install);
+  const description = [
+    [status, date].filter((part) => part !== undefined).join(" "),
+    markdownText(card.description),
+  ]
     .filter((part) => part !== undefined && part !== "")
     .join(". ");
   let action: ReactNode;
@@ -361,13 +430,7 @@ const SkillItemView = ({
         description={description === "" ? undefined : descriptionId}
         open={open}
         busy={loading}
-        meta={
-          status === undefined || card.status === "added" ? undefined : (
-            <span className={statusVariants({ status: card.status })}>
-              {status}
-            </span>
-          )
-        }
+        meta={rowMeta(card, open ? undefined : date)}
         action={action}
       >
         {/* The name and View skill share a baseline, as their sizes differ. */}
@@ -398,7 +461,7 @@ const SkillItemView = ({
         )}
       </AccordionTrigger>
       <AccordionContent>
-        <Details card={card} />
+        <Details card={card} install={install} />
       </AccordionContent>
     </AccordionItem>
   );
