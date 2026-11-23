@@ -28,10 +28,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#/components/ui/popover.tsx";
+import { WithReason } from "#/components/with-reason.tsx";
 import { formatAgo } from "#/lib/dates.ts";
 import { navigateTo } from "#/lib/navigate.ts";
 import { useNow } from "#/lib/now.ts";
-import { hubOf } from "#/screens/skills/banners.ts";
+import { hubOf, readOnlyHubReason } from "#/screens/skills/banners.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
   fromAnotherMachine,
@@ -61,6 +62,8 @@ export type SyncState =
   | {
       kind: "hub";
       url: string;
+      /** Why Publish all does nothing, while the hub is read-only. */
+      readOnly?: string;
       outgoing: ToPublish[];
       incoming: UpdateAvailableEvent[];
     };
@@ -71,6 +74,7 @@ export const useSyncState = (): SyncState | undefined => {
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
   const hub = useAppStore((s) => hubOf(s.sources));
+  const readOnly = useAppStore((s) => readOnlyHubReason(s.sources));
   // The sources load once the checks pass: until their first answer, the status would guess.
   const loadingSources = usePending(loadLabel(["source", "list"]));
   const noSources = useAppStore((s) => s.sources.length === 0);
@@ -97,6 +101,7 @@ export const useSyncState = (): SyncState | undefined => {
     incoming,
     kind: "hub",
     outgoing: toPublish(rows),
+    readOnly,
     url: hub.url,
   };
 };
@@ -173,7 +178,7 @@ export const PublishStatus = () => {
       </>
     );
   }
-  const { incoming, outgoing, url } = state;
+  const { incoming, outgoing, readOnly, url } = state;
   const checked =
     lastChecked === undefined ? undefined : formatAgo(lastChecked, now);
   const shown = describe(outgoing, incoming, checked);
@@ -210,18 +215,27 @@ export const PublishStatus = () => {
                 ))}
               </SyncRows>
               <div className="mt-2 flex justify-end px-2">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  aria-busy={publishing}
-                  onClick={() => {
-                    setOpen(false);
-                    void publishAll(outgoing.map((skill) => skill.name));
-                  }}
-                >
-                  {publishing && <Spinner />}
-                  Publish all
-                </Button>
+                <WithReason reason={readOnly}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    aria-busy={publishing}
+                    aria-disabled={readOnly === undefined ? undefined : true}
+                    onClick={
+                      readOnly === undefined
+                        ? () => {
+                            setOpen(false);
+                            void publishAll(
+                              outgoing.map((skill) => skill.name)
+                            );
+                          }
+                        : undefined
+                    }
+                  >
+                    {publishing && <Spinner />}
+                    Publish all
+                  </Button>
+                </WithReason>
               </div>
             </SyncGroup>
           )}
