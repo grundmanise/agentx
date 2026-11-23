@@ -185,6 +185,7 @@ export interface Inventory {
   configurations: Configuration[];
   skills: SkillNode[];
   library: LibraryEntry[];
+  installs: Install[];
   mcp_servers: McpServer[];
   plugins: Plugin[];
   edges: Edge[];
@@ -247,6 +248,15 @@ export interface SkillNode {
   description: string;
   content_hash: string;
   occurrences: Occurrence[];
+}
+
+export interface Install {
+  source?: string;
+  subpath?: string;
+  fork_id?: string;
+  name: string;
+  added?: string;
+  removed?: string;
 }
 
 export interface McpServer {

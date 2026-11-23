@@ -90,7 +90,8 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 
 // inventory is the scan that is emitted, by agentx scan and by
 // every scan of agentx serve: the scan above, with the library listed as
-// agentx skill list lists it. The lineage it takes is read under the same
+// agentx skill list lists it and the installs as installs.json holds
+// them. The lineage it takes is read under the same
 // shared lock as the settings and the filesystem, in one for-each-ref, so an
 // inventory never pairs a library directory with lineage from either side
 // of a mutation; and an inventory carries drift, which the desktop app takes
@@ -151,6 +152,7 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 	listed := library && inv.out.json // whether the inventory's library entries are built and emitted
 	var sc *scan.Scan
 	var listing *skillContext // what the library entries are built from, read with the rest; nil lists none
+	var installs []home.Install
 	for sc == nil {
 		var journals []string
 		err = home.ReadLocked(lockCtx, inv.dirs.Home, func() error {
@@ -179,6 +181,13 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 			})
 			if !listed {
 				return nil
+			}
+			// When each skill last entered and left the library, as the
+			// commands that did it recorded, read under the lock they write
+			// it under and listed as it is stored.
+			if installs, err = home.LoadInstalls(inv.dirs.Home); err != nil {
+				sc.Warn(err.Error() + ", ignored")
+				installs = []home.Install{}
 			}
 			if !inv.forksWarned {
 				// Read, not written, under serve, where the update check
@@ -223,6 +232,9 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion, Debug: inv.out.debugf})
 	}
 	inventory, fresh := sc.Inventory()
+	if installs != nil {
+		inventory.Installs = installs
+	}
 	if listing != nil {
 		for _, lib := range sc.Library() {
 			inventory.Library = append(inventory.Library, listing.librarySkillEventFor(ctx, inv, inventory, lib, nil).LibraryEntry)

@@ -64,6 +64,14 @@ func TestSkillForkConvertsManagedSkills(t *testing.T) {
 		for _, client := range []string{".claude", ".snowflake/cortex"} {
 			equal(t, name+": "+client+"'s placement", placed(client, name), filepath.Join(h.library, name))
 		}
+		// The skill of the source left the library and one of the user's
+		// own entered it.
+		if storedInstall(t, h, s.url, "skills/"+name, "").Removed == "" {
+			t.Errorf("%s: no date it left the library as the source's skill", name)
+		}
+		if storedInstall(t, h, "", "", ev["fork_id"].(string)).Added == "" {
+			t.Errorf("%s: no date it entered the library as a fork", name)
+		}
 	}
 	alpha, beta := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.ForkRef("beta"))
 	equal(t, "the unedited fork's tree", h.storeGit("rev-parse", alpha+"^{tree}"), h.storeGit("rev-parse", imports["alpha"]+"^{tree}"))

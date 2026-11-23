@@ -101,7 +101,8 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 	if err != nil {
 		return storeFailure(err)
 	}
-	commit, err := w.commit(ctx, tree, nil, forkMessage{subject: creationSubject(name), trailers: lineage.ForkTrailers{ForkID: lineage.NewForkID()}})
+	id := lineage.NewForkID()
+	commit, err := w.commit(ctx, tree, nil, forkMessage{subject: creationSubject(name), trailers: lineage.ForkTrailers{ForkID: id}})
 	if err != nil {
 		return storeFailure(err)
 	}
@@ -111,7 +112,11 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 	}
 	var done placements
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		return inv.createFork(ctx, gitDir, name, name, commit, name, targets, &done)
+		if err := inv.createFork(ctx, gitDir, name, name, commit, name, targets, &done); err != nil {
+			return err
+		}
+		inv.recordInstalls([]home.Install{home.ForkInstall(name, id)}, nil)
+		return nil
 	})
 	if errors.Is(err, home.ErrMovedBeforeApply) {
 		return fail(exitRefused, name+" changed while it was being created, so nothing was changed", "run the command again")

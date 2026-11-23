@@ -72,6 +72,7 @@ const rowOf = (
 ) => {
   const whole: InventoryEvent = {
     edges: [],
+    installs: [],
     instance_id: "instance-1",
     machine: { id: "machine-1", label: "studio-mac" },
     mcp_servers: [],
