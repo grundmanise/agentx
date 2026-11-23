@@ -13,11 +13,22 @@ There are no aliases, migrations or redirects: the old flag, keys, check id and 
 
 ## Considered and rejected
 
+For the hub:
+
 - Account: names an identity, which the product keeps for the hosted account a machine may later sign in to; a hub kept by someone else is not the user's account.
 - Linked remote: says how the repository is attached, not what it is for, and every source is a linked remote.
 - Fleet: names the machines, not the repository, and a hub that distributes skills to other people serves no fleet of the user's.
 - Workspace: editors already use it for a folder of projects, and it suggests files the user works in rather than a repository they publish to.
 - The remote's own name: it differs for every user, so the docs, the help and a flag cannot name it, and `origin` already means something else in Git.
+
+For the home repo, named after agentx home, where it lives, since it holds more than any one thing it could be named after (hub skills, base versions of every managed skill, fetched sources) and exists without a hub:
+
+- Hub repo: it exists on a machine with no hub, and holds the skills of shared sources too.
+- Library repo, cache, vault and store: the glossary keeps them away from the library, and cache suggests the repository can be thrown away, when its history exists nowhere else until a publish.
+- State repo: state already names a skill's state, the sync status and an operation's state, and also suggests something that can be thrown away.
+- History repo: closest to its main job, but it also holds fetched sources and worktrees.
+- Skills repo: reads as the library, or as a source on a Git host.
+- Local repo: fits any repository on the machine.
 
 ## Consequences
 
