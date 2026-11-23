@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { Spinner } from "#/components/spinner.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 
 /**
  * A primary button that runs a command and stops it (DESIGN.md §6 "Run button"). While the command

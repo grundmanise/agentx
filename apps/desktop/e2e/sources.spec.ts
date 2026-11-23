@@ -10,6 +10,7 @@ import {
   webUrl,
 } from "#/screens/sources/projection.ts";
 
+import { filesOf } from "./fixtures/skills.ts";
 import {
   ACME,
   ACME_ID,
@@ -234,8 +235,8 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   const states: [string, string][] = [
     ["letters", "Forked"],
     ["pdf", "Added"],
-    ["scratch", "Already in library"],
-    ["xlsx", "Name in use"],
+    ["scratch", "Name taken"],
+    ["xlsx", "Name taken"],
   ];
   await Promise.all(
     states.flatMap(([name, label]) => [
@@ -257,11 +258,14 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   await row(page, "xlsx").click();
   await row(page, "scratch").click();
   await expect(opened(page, "xlsx")).toContainText(
-    "Remove or rename xlsx first"
+    "Your library has xlsx skill from zeta/tools. Remove or rename it to add this skill."
   );
   await expect(opened(page, "scratch")).toContainText(
-    "A folder named scratch is already in your library, added outside agentx. Import it in Skills to manage it, or remove it to add this one."
+    "Your library has a scratch folder that agentx doesn't manage. Import or remove it to add this skill."
   );
+  await expect(
+    opened(page, "scratch").getByRole("link", { exact: true, name: "scratch" })
+  ).toHaveAttribute("href", "#/skills/scratch");
 
   // Opening another pill reads that source's listing.
   await pill(page, "zeta/tools").click();
@@ -272,6 +276,22 @@ test("a source listing: the skills A to Z, each state with its label and, once o
     `source read ${ACME_ID} skills/scratch`,
     `source skills ${ZETA_ID}`,
   ]);
+});
+
+test("the name of the skill that holds a Name taken card's name opens it in Skills", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  cli.register(["source", "read", ACME_ID, "skills/xlsx"], {
+    events: [skillMd("xlsx", "# xlsx\n")],
+  });
+  await row(page, "xlsx").click();
+  cli.register(["skill", "files", "xlsx"], { events: filesOf("xlsx") });
+  await opened(page, "xlsx")
+    .getByRole("link", { exact: true, name: "xlsx" })
+    .click();
+  await expect(page).toHaveURL(/#\/skills\/xlsx$/u);
 });
 
 /**
@@ -368,7 +388,7 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
 
   // The later skill of a name cannot be selected, and says why once open.
   const second = rowLine(page, "skill-89").last();
-  await expect(second.getByText("Name in use", { exact: true })).toBeVisible();
+  await expect(second.getByText("Name taken", { exact: true })).toBeVisible();
   await expect(
     second.getByRole("button", { name: "Select skill-89" })
   ).toHaveCount(0);
@@ -377,12 +397,65 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   });
   await row(page, "skill-89").last().click();
   await expect(opened(page, "skill-89")).toContainText(
-    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added"
+    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added."
   );
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
     `source read ${ACME_ID} beta/skills/skill-89`,
   ]);
+});
+
+test("a row that opens keeps the scroll, its top hidden or not", async ({
+  cli,
+  page,
+}) => {
+  await page.setViewportSize({ height: 600, width: 1100 });
+  await openSources(cli, page);
+  // A later launch draws the kept sources at once, so the list mounts with the scroller it
+  // scrolls in.
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(() => localStorage.getItem("agentx.launch"))
+    )
+    .not.toBeNull();
+  cli.restart();
+  await page.reload();
+  await expect(row(page, "pdf")).toBeVisible();
+  const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n");
+  for (const name of ["pdf", "docx"]) {
+    cli.register(["source", "read", ACME_ID, `skills/${name}`], {
+      events: [skillMd(name, `---\nname: ${name}\n---\n${lines}\n`)],
+    });
+  }
+  const scroller = page
+    .locator(".overflow-auto")
+    .filter({ has: row(page, "pdf") });
+  const scrollTop = async () => await scroller.evaluate((el) => el.scrollTop);
+  const top = async (name: string) => {
+    const box = await rowLine(page, name).boundingBox();
+    return box?.y ?? Number.NaN;
+  };
+
+  // pdf opens at the bottom edge: nothing moves, and its SKILL.md shows below the fold.
+  const pdfBefore = await top("pdf");
+  await row(page, "pdf").dispatchEvent("click");
+  await expect(row(page, "pdf")).toHaveAttribute("aria-expanded", "true");
+  expect(await top("pdf")).toBe(pdfBefore);
+
+  // docx, its top 20px above the scroller's, opens in place too.
+  const scrollerBox = await scroller.boundingBox();
+  const offset = (await top("docx")) - (scrollerBox?.y ?? Number.NaN) + 20;
+  await scroller.evaluate((el, by) => {
+    el.scrollTop += by;
+  }, offset);
+  const scrolled = await scrollTop();
+  await row(page, "docx").dispatchEvent("click");
+  await expect(row(page, "docx")).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
+  ).toBeVisible();
+  expect(await scrollTop()).toBe(scrolled);
 });
 
 test("opening a row reads its SKILL.md once, then opens, and links to the skill", async ({

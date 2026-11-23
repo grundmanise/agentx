@@ -9,7 +9,6 @@ import type {
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { CodePane, codeLines } from "#/components/code-pane.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import {
   Accordion,
@@ -20,6 +19,7 @@ import {
 import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import { cn } from "#/lib/utils.ts";
 import { useKeptRead } from "#/screens/skills/kept-read.ts";
