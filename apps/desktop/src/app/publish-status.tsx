@@ -191,7 +191,7 @@ export const PublishStatus = () => {
             onRimSettled={settlePublishRim}
           />
         </PopoverTrigger>
-        <PopoverContent aria-label="Sync" align="end" width="fit">
+        <PopoverContent aria-label="Sync" placement="below-end" width="fit">
           {outgoing.length === 0 && incoming.length === 0 && (
             <SyncNote>Everything is synced</SyncNote>
           )}

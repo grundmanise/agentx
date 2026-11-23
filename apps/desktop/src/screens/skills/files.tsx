@@ -210,7 +210,7 @@ const PlaceLine = ({
           hidden={clients.slice(MAX_PLACE_LOGOS)}
           size={20}
           surface="overlay"
-          listSide="left"
+          listPlacement="left-start"
         />
         {caption === undefined ? undefined : <Caption>{caption}</Caption>}
       </span>
