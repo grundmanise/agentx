@@ -59,13 +59,13 @@ func TestMachineFromPlatformID(t *testing.T) {
 
 	out := h.run("machine")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "Machine id    "+other["id"].(string))
-	contains(t, "stdout", out.stdout, "Label         test-host")
-	contains(t, "stdout", out.stdout, "Derivation    platform")
+	contains(t, "stdout", out.stdout, "Machine id  "+other["id"].(string))
+	contains(t, "stdout", out.stdout, "Label       test-host")
+	contains(t, "stdout", out.stdout, "Derivation  platform")
 }
 
 // The machine event says where agentx keeps its files, as AGENTX_HOME and
-// AGENTX_LIBRARY resolve them, and names the account repo with its size once
+// AGENTX_LIBRARY resolve them, and names the store with its size once
 // it exists.
 func TestMachinePaths(t *testing.T) {
 	t.Parallel()
@@ -75,30 +75,30 @@ func TestMachinePaths(t *testing.T) {
 	equal(t, "home", before["home"], h.agentx)
 	equal(t, "settings_file", before["settings_file"], filepath.Join(h.agentx, "settings.json"))
 	equal(t, "library", before["library"], h.library)
-	for _, key := range []string{"account_repo", "account_repo_bytes"} {
+	for _, key := range []string{"store", "store_bytes"} {
 		if v, ok := before[key]; ok {
-			t.Errorf("%s = %v before the account repo exists", key, v)
+			t.Errorf("%s = %v before the store exists", key, v)
 		}
 	}
 	out := h.run("machine")
-	contains(t, "stdout", out.stdout, "Home          "+h.agentx+"\n")
-	contains(t, "stdout", out.stdout, "Account repo  not created yet\n")
+	contains(t, "stdout", out.stdout, "Home        "+h.agentx+"\n")
+	contains(t, "stdout", out.stdout, "Store       not created yet\n")
 
-	h.mustRun("skill", "new", "notes") // the first command that needs the account repo creates it
-	repo := filepath.Join(h.agentx, "account.git")
+	h.mustRun("skill", "new", "notes") // the first command that needs the store creates it
+	repo := filepath.Join(h.agentx, "store.git")
 	size, err := dirSize(repo)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if size == 0 {
-		t.Fatal("the account repo is empty")
+		t.Fatal("the store is empty")
 	}
 	after := showMachine(t, h)
-	equal(t, "account_repo", after["account_repo"], repo)
-	equal(t, "account_repo_bytes", after["account_repo_bytes"], float64(size))
+	equal(t, "store", after["store"], repo)
+	equal(t, "store_bytes", after["store_bytes"], float64(size))
 
 	out = h.run("machine")
-	contains(t, "stdout", out.stdout, "Account repo  "+repo+" ("+formatBytes(size)+")\n")
+	contains(t, "stdout", out.stdout, "Store       "+repo+" ("+formatBytes(size)+")\n")
 }
 
 func TestDirSize(t *testing.T) {

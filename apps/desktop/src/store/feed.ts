@@ -274,8 +274,8 @@ const apply = (childId: number, event: ServeEvent) => {
     addActivity("success", `Update available for ${event.name}`);
     logBackground(`update available for ${event.name}`);
   } else if (event.type === "update_check") {
-    // The check's update_available events came before it, and stay: a check of the account
-    // remote alone adds to what the last full check found.
+    // The check's update_available events came before it, and stay: a check of the hub
+    // alone adds to what the last full check found.
     if (event.ok) {
       set({ lastChecked: event.checked_at });
       logBackground("update check finished");

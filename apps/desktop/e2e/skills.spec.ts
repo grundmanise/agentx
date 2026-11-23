@@ -118,7 +118,7 @@ test.describe("the list", () => {
     await openSkills(cli, page);
     await expect(page.getByLabel("9 skills")).toHaveText("9");
     expect(await names(list(page).getByRole("region"))).toEqual([
-      "PERSONAL (3)",
+      "HUB (3)",
       "ACME/SKILLS (2)",
       "ZETA/TOOLS (1)",
       "PLUGINS (1)",
@@ -130,7 +130,7 @@ test.describe("the list", () => {
       .getByText("ACME/SKILLS", { exact: true })
       .hover();
     await expect(page.getByRole("tooltip")).toHaveText(ACME);
-    expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
+    expect(await rowNames(group(page, "HUB (3)"))).toEqual([
       "draft",
       "pdf-letters",
       "release-notes",
@@ -168,7 +168,7 @@ test.describe("the list", () => {
     const header = (name: string) =>
       list(page).getByRole("button", { exact: true, name });
     for (const name of [
-      "PERSONAL 3",
+      "HUB 3",
       "ACME/SKILLS 2",
       "ZETA/TOOLS 1",
       "PLUGINS 1",
@@ -237,7 +237,7 @@ test.describe("the list", () => {
       draft.getByText("Not published", { exact: true })
     ).toBeVisible();
     await expect(draft).toHaveAccessibleDescription(
-      "Personal skill · Enabled. Not published. Turn a design doc into a task list"
+      "Hub skill · Enabled. Not published. Turn a design doc into a task list"
     );
     expect(await names(draft.getByRole("img"))).toEqual([
       "Codex",
@@ -358,7 +358,7 @@ test.describe("filters", () => {
     await page.getByRole("button", { name: "Filter" }).click();
     await filters(page)
       .getByRole("group", { name: "Show" })
-      .getByRole("radio", { name: "Personal 1" })
+      .getByRole("radio", { name: "Hub 1" })
       .check();
     await page.keyboard.press("Escape");
     expect(await rowNames(list(page))).toEqual(["pdf-letters"]);
@@ -384,12 +384,12 @@ test.describe("filters", () => {
     await expect(show).toMatchAriaSnapshot(`
       - group "Show":
         - radio "All skills 9" [checked]
-        - radio "Personal 3"
+        - radio "Hub 3"
         - radio "Plugins 1"
         - radio "Unmanaged 2"
         - radio "Updates 1"
     `);
-    await show.getByRole("radio", { name: "Personal 3" }).check();
+    await show.getByRole("radio", { name: "Hub 3" }).check();
     expect(await rowNames(list(page))).toEqual([
       "draft",
       "pdf-letters",
@@ -535,6 +535,10 @@ test.describe("filters", () => {
         - checkbox "OpenCode"
         - button "Show 20 more"
     `);
+    // Universal draws a few logos and a count, which opens the list of every client it stands for.
+    await agents.getByText("+2", { exact: true }).hover();
+    await expect(page.getByRole("list", { name: "Agents" })).toBeVisible();
+    await page.mouse.move(0, 0);
 
     await agents.getByRole("button", { name: "Show 20 more" }).click();
     await expect(agents.getByRole("checkbox")).toHaveCount(26);
@@ -574,7 +578,7 @@ test.describe("filters", () => {
         universal: [],
       })),
     });
-    const personal = group(page, "PERSONAL (3)");
+    const personal = group(page, "HUB (3)");
     // A-Z at first: by name alone, whatever the state.
     const toggle = page.getByRole("button", { name: /^Sort: /u });
     await expect(toggle).toHaveAccessibleName("Sort: A to Z");
@@ -595,7 +599,7 @@ test.describe("filters", () => {
     ]);
     // The groups keep their order.
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
-      "PERSONAL (3)"
+      "HUB (3)"
     );
     // A-Z again.
     await toggle.click();
@@ -627,7 +631,7 @@ test.describe("keyboard", () => {
       "true"
     );
     await page.keyboard.press("ArrowDown");
-    // From the last of PERSONAL into the first source.
+    // From the last of HUB into the first source.
     await expect(row(page, "pdf")).toHaveAttribute("aria-current", "true");
     await expect(pane(page, "pdf")).toBeVisible();
     await page.keyboard.press("k");
@@ -692,7 +696,7 @@ test.describe("the detail pane", () => {
     await expect(list(page).locator("[aria-current=true]")).toHaveCount(1);
   });
 
-  test("one of your own skills: its history, with Show all opening the sheet", async ({
+  test("a hub skill: its history, with Show all opening the sheet", async ({
     cli,
     page,
   }) => {
@@ -704,7 +708,7 @@ test.describe("the detail pane", () => {
     ]);
     await expect(article).toMatchAriaSnapshot(`
       - article "pdf-letters":
-        - text: Personal skill · Enabled
+        - text: Hub skill · Enabled
         - heading "pdf-letters" [level=1]
         - link "from acme/skills"
         - paragraph: Read PDFs and write letters from them
@@ -720,10 +724,8 @@ test.describe("the detail pane", () => {
           - term: Forked from
           - definition:
             - link "https://github.com/acme/skills/pdf"
-          - term: Based on
-          - definition: 3f2a9c1
           - term: Published to
-          - definition: git@github.com:me/account.git
+          - definition: git@github.com:me/hub.git
           - term: Files
           - definition:
             - link "/home/me/.agentx/worktrees/pdf-letters/pdf-letters"
@@ -733,10 +735,10 @@ test.describe("the detail pane", () => {
           - heading "History" [level=2]
           - list "History":
             - listitem: /Tighten the examples\\s+Oct 2(, 2026)?\\s+· 1 file/
-            - listitem: /pdf-letters:\\sedit SKILL\\.md and add examples\\.md \\(studio-mac\\)\\s+Oct 2(, 2026)?\\s+· 2 files/
-            - listitem: /pdf-letters:\\sedit SKILL\\.md \\(studio-mac\\)\\s+Oct 1(, 2026)?\\s+· 1 file/
+            - listitem: /pdf-letters:\\sedit SKILL\\.md and add examples\\.md \\(studio-mac\\)\\s+Oct 2(, 2026)?\\s+· this (machine|Mac) · 2 files/
+            - listitem: /pdf-letters:\\sedit SKILL\\.md \\(laptop\\)\\s+Oct 1(, 2026)?\\s+· 7c41e09b · 1 file/
             - listitem:
-              - button "Show all 5"
+              - button "Show all 4"
     `);
 
     // A URL opens in the browser, the skill's files show in the file manager.
@@ -763,8 +765,11 @@ test.describe("the detail pane", () => {
       await page.evaluate(() => window.getSelection()?.toString() ?? "")
     ).toContain("acme/skills/pdf");
     expect(cli.openedUrls).toEqual([]);
+    // It opens the skill's directory at the commit it was forked from, as its name in History does.
     await forkedFrom.click();
-    expect(cli.openedUrls).toEqual(["https://github.com/acme/skills"]);
+    expect(cli.openedUrls).toEqual([
+      "https://github.com/acme/skills/tree/3f2a9c1e8d7b6a/pdf",
+    ]);
     await details
       .getByRole("link", {
         name: "/home/me/.agentx/worktrees/pdf-letters/pdf-letters",
@@ -786,14 +791,15 @@ test.describe("the detail pane", () => {
       )
     ).toBeVisible();
 
-    await article.getByRole("button", { name: "Show all 5" }).click();
+    await article.getByRole("button", { name: "Show all 4" }).click();
     const sheet = page.getByRole("dialog", { name: "History" });
     await expect(sheet).toContainText("pdf-letters");
     const entries = sheet
       .getByRole("list", { name: "All history" })
       .getByRole("listitem");
-    await expect(entries).toHaveCount(5);
-    await expect(entries.last()).toContainText("Import pdf from acme/skills");
+    // The upstream version agentx stored is left out: the fork's creation comes last.
+    await expect(entries).toHaveCount(4);
+    await expect(entries.last()).toContainText("Fork pdf-letters from");
     // Dragged to its narrowest, a long subject wraps inside the sheet; the sheet never scrolls
     // sideways.
     const handle = sheet.getByRole("separator", { name: "Resize" });
@@ -822,13 +828,6 @@ test.describe("the detail pane", () => {
     ).toBeVisible();
     expect(await sideways()).toBe(0);
     await long.click();
-    await sheet
-      .getByRole("button", { name: "Import pdf from acme/skills" })
-      .click();
-    const files = sheet
-      .getByRole("list", { name: "Files of Import pdf from acme/skills" })
-      .getByRole("listitem");
-    await expect(files).toHaveText(["addedSKILL.md", "addedreference.md"]);
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
     // The history was read once: selecting the skill again does not read it again.
@@ -973,6 +972,13 @@ test.describe("the detail pane", () => {
     await expect(
       row(page, "draft").getByText("Not published", { exact: true })
     ).toBeVisible();
+    // Details says so too, in place of a remote.
+    await expect(
+      pane(page, "draft")
+        .getByRole("region", { name: "Details" })
+        .getByRole("definition")
+        .first()
+    ).toHaveText("Not published");
   });
 
   test("a pending merge comes first: its banner in place of any other", async ({

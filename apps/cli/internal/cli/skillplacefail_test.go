@@ -110,15 +110,15 @@ func TestRecoveryRefusesAStepItCannotApplyCleanly(t *testing.T) {
 	equal(t, "skill list", h.run("skill", "list").exit, 6)
 }
 
-// TestCommandsRefuseAJournalWhoseAccountRepoIsGone leaves a journal with a
-// ref step and takes the account repo away. The contract calls an unusable
-// account repo exit code 8 wherever it surfaces, a journal's ref step
+// TestCommandsRefuseAJournalWhoseStoreIsGone leaves a journal with a
+// ref step and takes the store away. The contract calls an unusable
+// store exit code 8 wherever it surfaces, a journal's ref step
 // included.
-func TestCommandsRefuseAJournalWhoseAccountRepoIsGone(t *testing.T) {
+func TestCommandsRefuseAJournalWhoseStoreIsGone(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	gitDir := filepath.Join(h.agentx, "account.git")
+	gitDir := filepath.Join(h.agentx, "store.git")
 	writeJournalFile(t, h, `{"progress":"staged","replace":[],"steps":[`+
 		`{"kind":"ref","git_dir":`+quote(gitDir)+`,"ref":"refs/heads/managed/beta","old":"","new":"0123456789abcdef0123456789abcdef01234567"}]}`)
 	if err := os.RemoveAll(gitDir); err != nil {
@@ -127,7 +127,7 @@ func TestCommandsRefuseAJournalWhoseAccountRepoIsGone(t *testing.T) {
 
 	out := h.run("--json", "config", "set", "label", "gone")
 	equal(t, "exit", out.exit, 8)
-	equal(t, "code", lastError(t, h.events(out.stdout))["code"], "account_repo")
+	equal(t, "code", lastError(t, h.events(out.stdout))["code"], "store")
 }
 
 // writeJournalFile puts one journal into agentx home, the way a process

@@ -1,10 +1,10 @@
-// The sync status at the right of the title bar: how this machine stands with the account remote,
-// from the inventory's library, the Sources slice and the update candidates. With no account
-// remote set, it says so and a click goes to Settings, where one is set. Otherwise it counts what
-// there is to publish (your own skills edited since they were published, and those never
-// published) and what is incoming (your own skills changed on your other machines), or says it
-// is synced; a click opens a popover that lists both, with Publish all, and says when the account
-// remote was last checked. It runs no check itself: serve checks on its own, and Check updates on
+// The sync status at the right of the title bar: how this machine stands with the hub,
+// from the inventory's library, the Sources slice and the update candidates. With no hub
+// set, it says so and a click goes to Settings, where one is set. Otherwise it counts what
+// there is to publish (hub skills edited since they were published, and those never
+// published) and what is incoming (hub skills changed on your other machines), or says it
+// is synced; a click opens a popover that lists both, with Publish all, and says when the hub
+// was last checked. It runs no check itself: serve checks on its own, and Check updates on
 // the Skills screen checks by hand.
 import { useState } from "react";
 
@@ -28,10 +28,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#/components/ui/popover.tsx";
+import { WithReason } from "#/components/with-reason.tsx";
 import { formatAgo } from "#/lib/dates.ts";
 import { navigateTo } from "#/lib/navigate.ts";
 import { useNow } from "#/lib/now.ts";
-import { accountRemoteOf } from "#/screens/skills/banners.ts";
+import { hubOf, readOnlyHubReason } from "#/screens/skills/banners.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
   fromAnotherMachine,
@@ -53,14 +54,16 @@ import { useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /**
- * The status, as the store says it: no account remote, or with one, the skills to publish and
+ * The status, as the store says it: no hub, or with one, the skills to publish and
  * those incoming, each in name order.
  */
 export type SyncState =
-  | { kind: "no-account-remote" }
+  | { kind: "no-hub" }
   | {
-      kind: "account-remote";
+      kind: "hub";
       url: string;
+      /** Why Publish all does nothing, while the hub is read-only. */
+      readOnly?: string;
       outgoing: ToPublish[];
       incoming: UpdateAvailableEvent[];
     };
@@ -70,34 +73,36 @@ export const useSyncState = (): SyncState | undefined => {
   const rows = useSkillRows();
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
-  const accountRemote = useAppStore((s) => accountRemoteOf(s.sources));
+  const hub = useAppStore((s) => hubOf(s.sources));
+  const readOnly = useAppStore((s) => readOnlyHubReason(s.sources));
   // The sources load once the checks pass: until their first answer, the status would guess.
   const loadingSources = usePending(loadLabel(["source", "list"]));
   const noSources = useAppStore((s) => s.sources.length === 0);
   if (inventory === undefined || (loadingSources && noSources)) {
     return undefined;
   }
-  if (accountRemote === undefined) {
-    return { kind: "no-account-remote" };
+  if (hub === undefined) {
+    return { kind: "no-hub" };
   }
-  // Only what another machine published to this account remote, for one of your own skills still
+  // Only what another machine published to this hub, for a hub skill still
   // in the library: a skill removed since, a plugin's or a client's skill of the same name, or an
-  // update from an account remote set before this one, is not incoming.
+  // update from a hub set before this one, is not incoming.
   const installed = new Set(
-    rows.filter((row) => row.kind === "yours").map((row) => row.name)
+    rows.filter((row) => row.kind === "hub").map((row) => row.name)
   );
   const incoming = Object.values(updates).filter(
     (update) =>
       fromAnotherMachine(update) &&
-      update.source === accountRemote.url &&
+      update.source === hub.url &&
       installed.has(update.name)
   );
   incoming.sort((a, b) => a.name.localeCompare(b.name));
   return {
     incoming,
-    kind: "account-remote",
+    kind: "hub",
     outgoing: toPublish(rows),
-    url: accountRemote.url,
+    readOnly,
+    url: hub.url,
   };
 };
 
@@ -117,7 +122,7 @@ const outgoingLine = (outgoing: ToPublish[]) => {
   ].join(" · ");
 };
 
-/** The pill's tone, label and tooltip lines with an account remote set. */
+/** The pill's tone, label and tooltip lines with a hub set. */
 const describe = (
   outgoing: ToPublish[],
   incoming: UpdateAvailableEvent[],
@@ -130,7 +135,7 @@ const describe = (
       label: "Synced",
       tone: "synced",
       tooltip: [
-        `Synced with your account remote · ${checked === undefined ? "not checked yet" : `checked ${checked}`}`,
+        `Synced with your hub · ${checked === undefined ? "not checked yet" : `checked ${checked}`}`,
       ],
     };
   }
@@ -158,13 +163,13 @@ export const PublishStatus = () => {
   if (state === undefined) {
     return null;
   }
-  if (state.kind === "no-account-remote") {
+  if (state.kind === "no-hub") {
     return (
       <>
         <StatusButton
           tone="none"
           label="Set up sync"
-          tooltip={["Connect an account remote to sync skills"]}
+          tooltip={["Connect a hub to sync skills"]}
           onClick={() => {
             navigateTo("/settings");
           }}
@@ -173,7 +178,7 @@ export const PublishStatus = () => {
       </>
     );
   }
-  const { incoming, outgoing, url } = state;
+  const { incoming, outgoing, readOnly, url } = state;
   const checked =
     lastChecked === undefined ? undefined : formatAgo(lastChecked, now);
   const shown = describe(outgoing, incoming, checked);
@@ -210,18 +215,27 @@ export const PublishStatus = () => {
                 ))}
               </SyncRows>
               <div className="mt-2 flex justify-end px-2">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  aria-busy={publishing}
-                  onClick={() => {
-                    setOpen(false);
-                    void publishAll(outgoing.map((skill) => skill.name));
-                  }}
-                >
-                  {publishing && <Spinner />}
-                  Publish all
-                </Button>
+                <WithReason reason={readOnly}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    aria-busy={publishing}
+                    aria-disabled={readOnly === undefined ? undefined : true}
+                    onClick={
+                      readOnly === undefined
+                        ? () => {
+                            setOpen(false);
+                            void publishAll(
+                              outgoing.map((skill) => skill.name)
+                            );
+                          }
+                        : undefined
+                    }
+                  >
+                    {publishing && <Spinner />}
+                    Publish all
+                  </Button>
+                </WithReason>
               </div>
             </SyncGroup>
           )}

@@ -14,7 +14,7 @@ import (
 )
 
 // TestAFetchWritesNoConfig: a fetch runs outside agentx's lock, so it never
-// writes the account repo's config, where it could fail another command's
+// writes the store's config, where it could fail another command's
 // git config and leave a remote behind. git's fetch with --filter writes a
 // remote's promisor settings, and moves repositoryformatversion to 1, when
 // the config lacks them: a remote source remove deleted while the fetch
@@ -45,7 +45,7 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 			up.run("config", "uploadpack.allowFilter", "true")
 			up.skill("skills/alpha", "alpha", "The first skill")
 			up.commit()
-			git, gitDir := accountRepo(t)
+			git, gitDir := store(t)
 			src := source.Source{URL: up.url}
 			c.remote(t, git, gitDir, src)
 			config := filepath.Join(gitDir, "config")
@@ -62,32 +62,32 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 			if string(after) != string(before) {
-				t.Errorf("the fetch wrote the account repo's config:\n--- before\n%s--- after\n%s", before, after)
+				t.Errorf("the fetch wrote the store's config:\n--- before\n%s--- after\n%s", before, after)
 			}
 		})
 	}
 }
 
 // TestConfigureWritesTheRemoteOfEachKind configures one source's remote
-// as a shared source and as the account remote, in turn, and reads each
+// as a shared source and as the hub, in turn, and reads each
 // back as the entry wants it: a key the remote does not have goes, and a
 // key a user gave a second value is set to one again. A key git cannot
 // unset fails the write.
 func TestConfigureWritesTheRemoteOfEachKind(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	git, gitDir := accountRepo(t)
+	git, gitDir := store(t)
 	const url = "https://github.com/acme/skills"
 	id := source.ID(url)
 	key := "remote." + source.RemoteName(id) + "."
-	account := home.Source{URL: url, Account: true}
+	hub := home.Source{URL: url, Hub: true}
 	for _, tc := range []struct {
 		name  string
 		entry home.Source
 		want  source.Remote
 	}{
 		{"a shared source", home.Source{URL: url, Pin: "v1"}, source.Remote{URL: url, Refspec: "+v1:" + source.StagingRef(id), Promisor: "true", Filter: "blob:none"}},
-		{"the account remote", account, source.Remote{URL: url, Refspec: gitx.ForkRefspec(source.RemoteName(id))}},
+		{"the hub", hub, source.Remote{URL: url, Refspec: gitx.ForkRefspec(source.RemoteName(id))}},
 	} {
 		if _, err := git.Isolated(ctx, gitDir, "config", "--add", key+"fetch", "+refs/heads/x:refs/x"); err != nil {
 			t.Fatal(err)
@@ -112,7 +112,7 @@ func TestConfigureWritesTheRemoteOfEachKind(t *testing.T) {
 	bin := t.TempDir()
 	testshim.Write(t, filepath.Join(bin, "git"), "#!/bin/sh\ncase \"$*\" in *--unset-all*) exit 4;; esac\nexec '"+gitPath+"' \"$@\"\n")
 	failing := gitx.New(map[string]string{"PATH": bin, "HOME": t.TempDir()}, false, func(string, ...any) {})
-	if err := source.Configure(ctx, failing, gitDir, account); err == nil {
+	if err := source.Configure(ctx, failing, gitDir, hub); err == nil {
 		t.Error("Configure succeeded although git could not unset the promisor settings")
 	}
 }

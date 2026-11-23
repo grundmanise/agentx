@@ -130,7 +130,7 @@ func TestForkWorktreeAddsResetsAndComesBack(t *testing.T) {
 
 // TestRepairWorktreesNamesItsPaths: a repair always names the worktrees it
 // repairs, and keeps their paths relative only where git can and the
-// account repo is set to.
+// store is set to.
 func TestRepairWorktreesNamesItsPaths(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

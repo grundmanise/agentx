@@ -4,24 +4,24 @@
 import type { InlineEvent } from "../harness/cli.ts";
 
 export const LIBRARY = "/home/me/.agents/skills";
-export const ACCOUNT = "https://github.com/me/agentx-account";
-export const NEW_ACCOUNT = "https://github.com/me/work-account";
+export const HUB = "https://github.com/me/agentx-hub";
+export const NEW_HUB = "https://github.com/me/work-hub";
 export const TEAM = "https://github.com/team/skills";
 export const VENDOR = "https://github.com/vendor/skills";
 
 /** The file the user picks in the open dialog. */
 export const SNAPSHOT = "/home/me/Downloads/agentx-snapshot.json";
 
-/** This machine's sources before the import: its account remote and one shared source, both fetched. */
+/** This machine's sources before the import: its hub and one shared source, both fetched. */
 export const sourcesBefore: InlineEvent[] = [
   {
     access: "writable",
-    account: true,
-    id: "s-account",
+    hub: true,
+    id: "s-hub",
     last_fetched: "2026-11-05T10:00:00Z",
     skills: 3,
     type: "source",
-    url: ACCOUNT,
+    url: HUB,
   },
   {
     commit: "a1a1a1a1a1a1",
@@ -33,16 +33,16 @@ export const sourcesBefore: InlineEvent[] = [
 ];
 
 /**
- * The sources after the import: the imported settings set another account remote and a pinned
+ * The sources after the import: the imported settings set another hub and a pinned
  * team source, neither fetched here, and keep the vendor source, which this machine has fetched.
  */
 export const sourcesAfterImport: InlineEvent[] = [
   {
-    account: true,
-    id: "s-new-account",
+    hub: true,
+    id: "s-new-hub",
     last_fetched: "2026-11-01T09:00:00Z",
     type: "source",
-    url: NEW_ACCOUNT,
+    url: NEW_HUB,
   },
   {
     id: "s-team",
@@ -118,7 +118,7 @@ export const imported: InlineEvent[] = [
     kind: "managed",
     name: "brand",
     placements: [],
-    source: NEW_ACCOUNT,
+    source: NEW_HUB,
     state: "present",
     type: "import_skill",
   },

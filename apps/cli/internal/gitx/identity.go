@@ -39,7 +39,7 @@ type UserConfig struct {
 }
 
 // ReadUserConfig reads the user's identity and core.excludesFile in one git
-// process of the user's environment, against the account repo so that
+// process of the user's environment, against the store so that
 // every file git reads configuration from, the system's, the user's, the
 // files they include and the repository's own, is read as git reads it for
 // any command: git config --get-regexp, whose last value of a key wins.

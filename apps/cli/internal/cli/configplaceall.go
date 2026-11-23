@@ -112,7 +112,7 @@ func (inv *invocation) reportPlacedAll(ctx context.Context, id string, targets [
 	}
 	inv.progress(phaseRescan, "", total, total)
 	inv.printEnabled(id, true)
-	// The account repo and the settings are read once for the whole library,
+	// The store and the settings are read once for the whole library,
 	// not once per skill: a run over thirty skills may not cost thirty git
 	// processes any more than an install of thirty does.
 	sc, err := inv.skillContext(ctx)

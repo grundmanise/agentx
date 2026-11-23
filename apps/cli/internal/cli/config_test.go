@@ -119,7 +119,7 @@ func TestConfigSetAndGet(t *testing.T) {
 func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	source := `{"url":"https://example.com/skills","account":true,` +
+	source := `{"url":"https://example.com/skills","hub":true,` +
 		`"access":"writable","access_checked":"2026-10-02T10:00:00Z","default_branch":"main"}`
 	// A key this agentx does not know is read past, not refused, and the
 	// next write drops it.

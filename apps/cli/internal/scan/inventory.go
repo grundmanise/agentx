@@ -30,7 +30,8 @@ type Inventory struct {
 	Machine        Machine         `json:"machine"`
 	Configurations []Configuration `json:"configurations"`
 	Skills         []Skill         `json:"skills"`
-	Library        []LibraryEntry  `json:"library"` // filled in by the caller, which reads the lineage
+	Library        []LibraryEntry  `json:"library"`  // filled in by the caller, which reads the lineage
+	Installs       []home.Install  `json:"installs"` // filled in by the caller, as installs.json holds them
 	MCPServers     []Server        `json:"mcp_servers"`
 	Plugins        []Plugin        `json:"plugins"`
 	Edges          []Edge          `json:"edges"`
@@ -108,7 +109,7 @@ type Occurrence struct {
 type LibraryEntry struct {
 	Name            string             `json:"name"`
 	Kind            string             `json:"kind"`                       // managed or unmanaged
-	ForkID          string             `json:"fork_id,omitempty"`          // one of your own skills' permanent id, from the commit that created it
+	ForkID          string             `json:"fork_id,omitempty"`          // a hub skill's permanent id, from the commit that created it
 	Source          string             `json:"source,omitempty"`           // the canonical URL of the source it is published to
 	Subpath         *string            `json:"subpath,omitempty"`          // the directory in the source, "" for its root
 	Upstream        string             `json:"upstream,omitempty"`         // the canonical URL a forked skill came from
@@ -231,6 +232,7 @@ func Read(o Options) *Scan {
 			Configurations: []Configuration{},
 			Skills:         []Skill{},
 			Library:        []LibraryEntry{},
+			Installs:       []home.Install{},
 			MCPServers:     []Server{},
 			Plugins:        []Plugin{},
 			Edges:          []Edge{},

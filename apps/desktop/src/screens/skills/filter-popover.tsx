@@ -21,7 +21,7 @@ import {
   filterCount,
   GROUP_DISK,
   GROUP_PLUGINS,
-  GROUP_YOURS,
+  GROUP_HUB,
   groupName,
   noFilters,
   showCounts,
@@ -36,7 +36,7 @@ import type {
 
 const shows: { value: Show; label: string }[] = [
   { label: "All skills", value: "all" },
-  { label: groupName(GROUP_YOURS), value: "yours" },
+  { label: groupName(GROUP_HUB), value: "hub" },
   { label: groupName(GROUP_PLUGINS), value: "plugins" },
   { label: groupName(GROUP_DISK), value: "unmanaged" },
   { label: "Updates", value: "updates" },
@@ -54,6 +54,9 @@ export const universalNames = (universal: Configuration[]) =>
 
 /** The agent choices AGENTS shows before the rest is asked for. */
 const AGENTS_SHOWN = 6;
+
+/** How many logos the Universal choice shows before "+n". */
+const UNIVERSAL_LOGOS = 3;
 
 /**
  * The choices of AGENTS: the checked ones, then the rest by the popularity of the agent client,
@@ -104,7 +107,15 @@ export const AgentChoices = ({
       id: UNIVERSAL,
       label: (
         <>
-          <LogoStack clients={universal} size={20} decorative />
+          {/* Positioned, so it sits above the row's checkbox and opens the agent list on hover. */}
+          <span className="relative shrink-0">
+            <LogoStack
+              clients={universal.slice(0, UNIVERSAL_LOGOS)}
+              hidden={universal.slice(UNIVERSAL_LOGOS)}
+              size={20}
+              decorative
+            />
+          </span>
           <span className="flex min-w-0 flex-col">
             <span className="type-secondary text-text-primary">Universal</span>
             <span className="type-row-desc text-text-hint truncate">

@@ -1,5 +1,5 @@
 // The machine the Skills tests run against: an inventory with a skill of every kind the screen
-// shows, the configurations that see them, and the history of one of your own skills. Inline
+// shows, the configurations that see them, and the history of a hub skill. Inline
 // events with only the fields the tests check, typed by the generated event types.
 import type {
   AdoptionEvent,
@@ -19,7 +19,7 @@ import type { InlineEvent } from "../harness/cli.ts";
 
 export const ACME = "https://github.com/acme/skills";
 export const ZETA = "https://gitlab.com/zeta/tools.git";
-export const ACCOUNT = "git@github.com:me/account.git";
+export const HUB = "git@github.com:me/hub.git";
 const LIBRARY = "/home/me/.agents/skills";
 const WORKTREES = "/home/me/.agentx/worktrees";
 
@@ -99,7 +99,7 @@ export const library: LibraryEntry[] = [
       placement("claude-code", "pdf-letters"),
       ...libraryPlacements("pdf-letters"),
     ],
-    source: ACCOUNT,
+    source: HUB,
     state: "current",
     universal,
     upstream: ACME,
@@ -116,7 +116,7 @@ export const library: LibraryEntry[] = [
       placement("cursor", "release-notes", "symlink", "directory"),
       ...libraryPlacements("release-notes"),
     ],
-    source: ACCOUNT,
+    source: HUB,
     state: "modified",
     universal,
   },
@@ -291,7 +291,7 @@ const historyEvent = (
   time: string,
   subject: string,
   files: HistoryEvent["files"],
-  flags: Partial<Pick<HistoryEvent, "machine" | "origin">> = {}
+  flags: Partial<Pick<HistoryEvent, "import" | "machine" | "origin">> = {}
 ): HistoryEvent => ({
   author: "Me <me@example.com>",
   commit,
@@ -308,7 +308,8 @@ const historyEvent = (
 
 /**
  * The history of pdf-letters, newest first: a commit made with Git, three of agentx's, the last
- * of them the fork's creation with the skill of acme/skills it came from, then the import.
+ * of them the fork's creation with the skill of acme/skills it came from, then the import, which
+ * History leaves out. One of agentx's commits was made on another machine.
  */
 export const history: HistoryEvent[] = [
   historyEvent("9b41c07aaaa", "2026-10-02T14:03:00Z", "Tighten the examples", [
@@ -327,9 +328,9 @@ export const history: HistoryEvent[] = [
   historyEvent(
     "e07d5b2cccc",
     "2026-10-01T09:12:00Z",
-    "pdf-letters: edit SKILL.md (studio-mac)",
+    "pdf-letters: edit SKILL.md (laptop)",
     [{ path: "SKILL.md", status: "modified" }],
-    { machine: "machine-1" }
+    { machine: "7c41e09b5a2d4f6e8b1c3d5e7f9a0b2c" }
   ),
   historyEvent(
     "51f3a8edddd",
@@ -355,7 +356,8 @@ export const history: HistoryEvent[] = [
     [
       { path: "SKILL.md", status: "added" },
       { path: "reference.md", status: "added" },
-    ]
+    ],
+    { import: true }
   ),
 ];
 
@@ -482,7 +484,7 @@ export const reviewDiffs: DiffEvent[] = [
   ),
 ];
 
-/** The edits of `release-notes`, one of your own skills: SKILL.md edited since the last publish. */
+/** The edits of `release-notes`, a hub skill: SKILL.md edited since the last publish. */
 export const releaseNotesDiffs: DiffEvent[] = [
   diffEvent(
     "release-notes",

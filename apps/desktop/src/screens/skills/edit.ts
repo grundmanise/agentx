@@ -5,7 +5,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 
 /**
  * Whether the detail pane offers Edit: for a skill the user may write to without losing the edit
- * or diverging silently. That is one of your own skills, and a skill of a source that is already
+ * or diverging silently. That is a hub skill, and a skill of a source that is already
  * edited (`state` `modified`), whose edits an update keeps and the "Edited locally" banner shows.
  * Not an unmodified skill of a source, whose first edit would quietly turn it into one the update
  * merges; not a plugin's skill, which the plugin overwrites; and not an unmanaged skill or one a
@@ -13,7 +13,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
  */
 export const canEdit = (row: SkillRow) =>
   row.entry !== undefined &&
-  (row.kind === "yours" || (row.kind === "source" && row.modified));
+  (row.kind === "hub" || (row.kind === "source" && row.modified));
 
 /** The `SKILL.md` of the library skill `name`, `library` being where agentx keeps the library. */
 export const skillFile = (library: string, name: string) =>

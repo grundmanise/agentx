@@ -4,6 +4,7 @@
 import type { Configuration, LibraryEntry } from "#/cli/events.gen.ts";
 import { shortId, toolName } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import { skillPage } from "#/screens/sources/projection.ts";
 
 /** Where a value leads: a URL opened in the browser, or a path shown in Finder. */
 export type DetailLink =
@@ -21,14 +22,14 @@ const pageLink = (url: string | undefined): DetailLink | undefined =>
   url?.startsWith("https://") === true ? { kind: "page", url } : undefined;
 
 /**
- * The page the origin beside the skill's name opens: its source's, or the source it was forked
- * from, the page Source or Forked from in DETAILS opens. Other skills have none.
+ * The page the origin beside the skill's name opens: its source's, or the repository it was forked
+ * from. Other skills have none.
  */
 export const originPage = (row: SkillRow): string | undefined => {
   let url: string | undefined;
   if (row.kind === "source") {
     url = row.entry?.source;
-  } else if (row.kind === "yours") {
+  } else if (row.kind === "hub") {
     url = row.entry?.upstream;
   }
   return url?.startsWith("https://") === true ? url : undefined;
@@ -45,7 +46,7 @@ const linked = (detail: Detail, link: DetailLink | undefined): Detail =>
 const at = (source: string, subpath: string | undefined) =>
   subpath === undefined || subpath === "" ? source : `${source}/${subpath}`;
 
-/** The directory one of your own skills is checked out in, as the library occurrence resolves. */
+/** The directory a hub skill is checked out in, as the library occurrence resolves. */
 const worktreeOf = (row: SkillRow): string | undefined => {
   const library = row.entry?.placements.find((p) => p.mode === "library");
   const occurrence =
@@ -80,25 +81,32 @@ const sourceDetails = (entry: LibraryEntry): Detail[] => {
   return details;
 };
 
-const yoursDetails = (row: SkillRow, entry: LibraryEntry): Detail[] => {
+const hubDetails = (row: SkillRow, entry: LibraryEntry): Detail[] => {
   const details: Detail[] = [];
   if (entry.upstream !== undefined) {
+    // The skill's directory at the commit it was forked from, as the fork's name in HISTORY opens;
+    // the repository when the host's pages are unknown.
+    const forkedAt =
+      entry.upstream_commit === undefined
+        ? undefined
+        : skillPage(
+            entry.upstream,
+            entry.upstream_commit,
+            entry.upstream_subpath ?? ""
+          );
     details.push(
       linked(
         {
           key: "Forked from",
           value: at(entry.upstream, entry.upstream_subpath),
         },
-        pageLink(entry.upstream)
+        pageLink(forkedAt ?? entry.upstream)
       )
     );
-    if (entry.upstream_commit !== undefined) {
-      details.push({ key: "Based on", value: shortId(entry.upstream_commit) });
-    }
   }
   details.push(
     linked(
-      { key: "Published to", value: entry.source ?? "No account remote" },
+      { key: "Published to", value: entry.source ?? "Not published" },
       pageLink(entry.source)
     )
   );
@@ -163,8 +171,8 @@ export const detailsOf = (
     case "source": {
       return entry === undefined ? [] : sourceDetails(entry);
     }
-    case "yours": {
-      return entry === undefined ? [] : yoursDetails(row, entry);
+    case "hub": {
+      return entry === undefined ? [] : hubDetails(row, entry);
     }
     case "plugin": {
       return pluginDetails(row, configurations);

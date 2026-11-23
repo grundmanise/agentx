@@ -133,8 +133,8 @@ export const passingDoctor: InlineEvent[] = [
     type: "doctor",
   },
   {
-    check: "account_repo",
-    detail: "/home/me/.agentx/account.git",
+    check: "store",
+    detail: "/home/me/.agentx/store.git",
     status: "ok",
     type: "doctor",
   },
@@ -515,6 +515,7 @@ export class MockCli {
                 ? {
                     configurations: [],
                     edges: [],
+                    installs: [],
                     instance_id: `instance-${childId}`,
                     library: [],
                     machine: { id: "machine-1", label: machineLabel },

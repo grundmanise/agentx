@@ -120,7 +120,7 @@ func TestDoctorChecksGitAgainstTheFloor(t *testing.T) {
 		equal(t, "git.status", rows["git"]["status"], "ok")
 		equal(t, "git.detail", rows["git"]["detail"], "git 2.40.0")
 		equal(t, "fork_merges.status", rows["fork_merges"]["status"], "ok")
-		equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
+		equal(t, "store.status", rows["store"]["status"], "ok")
 		equal(t, "result.ok", events[len(events)-1]["ok"], true)
 	})
 }
@@ -128,7 +128,7 @@ func TestDoctorChecksGitAgainstTheFloor(t *testing.T) {
 func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	account := filepath.Join(h.agentx, "account.git")
+	store := filepath.Join(h.agentx, "store.git")
 
 	// A fresh machine: agentx home does not exist and doctor leaves it so.
 	if err := os.Remove(h.agentx); err != nil {
@@ -139,13 +139,13 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	equal(t, "stderr", out.stderr, "")
 	events := h.events(out.stdout)
 	rows, order := doctorRows(t, events)
-	wantOrder := []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings", "account_repo", "library", "clients"}
+	wantOrder := []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings", "store", "library", "clients"}
 	if !reflect.DeepEqual(order, wantOrder) {
 		t.Fatalf("checks = %v, want %v", order, wantOrder)
 	}
 	equal(t, "last event", events[len(events)-1]["type"], "result")
 	equal(t, "result.ok", events[len(events)-1]["ok"], true)
-	for _, check := range []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings", "account_repo", "library"} {
+	for _, check := range []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings", "store", "library"} {
 		equal(t, check+".status", rows[check]["status"], "ok")
 	}
 	equal(t, "clients.status", rows["clients"]["status"], "warn")
@@ -156,15 +156,15 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	equal(t, "home.detail", rows["home"]["detail"], "not created yet: "+h.agentx+"; the first scan creates it")
 	equal(t, "lock.detail", rows["lock"]["detail"], "no other agentx command is running")
 	contains(t, "settings.detail", rows["settings"]["detail"].(string), "defaults")
-	equal(t, "account_repo.detail", rows["account_repo"]["detail"], "not created yet: "+account)
+	equal(t, "store.detail", rows["store"]["detail"], "not created yet: "+store)
 	equal(t, "library.detail", rows["library"]["detail"], h.library+" is writable")
 	gone(t, "agentx home", h.agentx)
 
-	// With a home and an account repo in place doctor reads both and writes nothing.
+	// With a home and a store in place doctor reads both and writes nothing.
 	if err := os.MkdirAll(h.agentx, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := exec.Command("git", "init", "--bare", "--quiet", account).CombinedOutput(); err != nil {
+	if out, err := exec.Command("git", "init", "--bare", "--quiet", store).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 	out = h.run("doctor")
@@ -172,12 +172,12 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	equal(t, "stderr", out.stderr, "")
 	for _, line := range []string{
 		"git              ok  git 2.",
-		"fork_merges      ok  upstream changes can be merged into your own skills",
+		"fork_merges      ok  upstream changes can be merged into hub skills",
 		"commit_identity  ok  commits get the same id on every machine",
 		"home             ok  " + h.agentx + " is writable",
 		"lock             ok  no other agentx command is running",
 		"mutations        ok  no interrupted changes",
-		"account_repo     ok  " + account + " opens",
+		"store            ok  " + store + " opens",
 		"library          ok  " + h.library + " is writable",
 		"\nApp\n  ✓ lock ",
 		"\nClients  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n\n1 issue\n",
@@ -186,7 +186,7 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	} {
 		contains(t, "stdout", out.stdout, line)
 	}
-	equal(t, "home entries", listDir(t, h.agentx), "account.git")
+	equal(t, "home entries", listDir(t, h.agentx), "store.git")
 }
 
 func TestDoctorReportsDetectedClients(t *testing.T) {
@@ -257,7 +257,7 @@ func TestDoctorIsolatedFromUserGitConfig(t *testing.T) {
 	equal(t, "commit_identity.status", rows["commit_identity"]["status"], "ok")
 	equal(t, "commit_identity.detail", rows["commit_identity"]["detail"], "commits get the same id on every machine")
 	equal(t, "fork_merges.status", rows["fork_merges"]["status"], "ok")
-	equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
+	equal(t, "store.status", rows["store"]["status"], "ok")
 }
 
 func TestDoctorReportsHeldLock(t *testing.T) {
@@ -291,7 +291,7 @@ func TestDoctorReportsHeldLock(t *testing.T) {
 	equal(t, "lock.status", rows["lock"]["status"], "warn")
 	equal(t, "lock.detail", rows["lock"]["detail"], "held by process 4242: "+lock)
 	equal(t, "lock.hint", rows["lock"]["hint"], "wait for it to finish")
-	equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
+	equal(t, "store.status", rows["store"]["status"], "ok")
 	equal(t, "result.ok", events[len(events)-1]["ok"], true)
 
 	out = h.run("doctor")
@@ -363,7 +363,7 @@ func TestDoctorLibraryStates(t *testing.T) {
 	equal(t, "library.hint", rows["library"]["hint"], "move it aside")
 }
 
-func TestDoctorUnusableAccountRepoExits8(t *testing.T) {
+func TestDoctorUnusableStoreExits8(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name  string
@@ -384,7 +384,7 @@ func TestDoctorUnusableAccountRepoExits8(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			h := newHarness(t)
-			path := filepath.Join(h.agentx, "account.git")
+			path := filepath.Join(h.agentx, "store.git")
 			tt.setup(t, path)
 
 			out := h.run("--json", "doctor")
@@ -392,10 +392,10 @@ func TestDoctorUnusableAccountRepoExits8(t *testing.T) {
 			events := h.events(out.stdout)
 			rows, order := doctorRows(t, events)
 			equal(t, "last check", order[len(order)-1], "clients")
-			equal(t, "account_repo.status", rows["account_repo"]["status"], "fail")
-			contains(t, "account_repo.detail", rows["account_repo"]["detail"].(string), path)
+			equal(t, "store.status", rows["store"]["status"], "fail")
+			contains(t, "store.detail", rows["store"]["detail"].(string), path)
 			errorEvent := events[len(events)-2]
-			equal(t, "error.code", errorEvent["code"], "account_repo")
+			equal(t, "error.code", errorEvent["code"], "store")
 			contains(t, "error.hint", errorEvent["hint"].(string), path)
 			equal(t, "result.ok", events[len(events)-1]["ok"], false)
 		})

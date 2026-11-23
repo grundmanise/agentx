@@ -1,16 +1,22 @@
 // The one native dialog the app shows: the open dialog in which the user picks a snapshot to
 // apply, through Tauri's dialog plugin. It returns the path the user picked, and the app passes
-// that path to the CLI; the app reads and writes no file itself (ADR 0001). Screens call this and
+// that path to the CLI; the app reads and writes no file itself (ADR 0001). A browser gives a page
+// no file's path, so there it says the dialog needs the app. Screens call this and
 // never the plugin, and the tests' mocked CLI answers it with the path the test picks.
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { notifyFailure } from "#/components/toast.tsx";
+import { inApp } from "#/lib/platform.ts";
 
 /**
  * Shows the open dialog for a snapshot, starting in `folder` when one is given, and returns the
  * path the user picked, or null when they cancelled.
  */
 export const pickSnapshot = async (folder?: string): Promise<string | null> => {
+  if (!inApp) {
+    notifyFailure("Couldn't open the file dialog. Apply a snapshot in the app");
+    return null;
+  }
   try {
     const picked = await open({
       defaultPath: folder,
