@@ -1,6 +1,6 @@
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { formatDate } from "#/lib/dates.ts";
 import { useRouteKey } from "#/lib/route-key.ts";
 import { checkTools, useChecking } from "#/screens/servers/check-tools.ts";

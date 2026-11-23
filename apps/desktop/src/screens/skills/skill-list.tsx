@@ -22,10 +22,10 @@ import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { LIST_GUIDE, LIST_GUIDE_NESTED } from "#/components/list-guide.ts";
 import { SearchField } from "#/components/search-field.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import {
   Tooltip,
   TooltipContent,

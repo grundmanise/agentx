@@ -8,8 +8,8 @@ import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
 import { LockMark } from "#/components/check-mark.tsx";
 import { HelpTerm } from "#/components/help-term.tsx";
-import { PillTip } from "#/components/pill.tsx";
 import { SearchField } from "#/components/search-field.tsx";
+import { BadgeButton } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
@@ -20,6 +20,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 
 /** What universal agents are, in the tooltip of the subtitle's term and of the Universal pill. */
 const universalTip = (
@@ -44,9 +49,14 @@ const Name = ({
         {configuration.name}
       </span>
       {universal && (
-        <PillTip tone="universal" tip={universalTip}>
-          Universal
-        </PillTip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <BadgeButton tone="universal" help>
+              Universal
+            </BadgeButton>
+          </TooltipTrigger>
+          <TooltipContent size="text">{universalTip}</TooltipContent>
+        </Tooltip>
       )}
     </span>
     <span className="type-technical-sm text-text-caption truncate">

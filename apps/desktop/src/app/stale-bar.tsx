@@ -1,7 +1,7 @@
 import { cva } from "class-variance-authority";
 
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { retryRefresh } from "#/store/feed.ts";
 import { useAppStore } from "#/store/store.ts";
 

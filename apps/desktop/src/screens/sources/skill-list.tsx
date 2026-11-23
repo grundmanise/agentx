@@ -5,15 +5,16 @@ import type { ReactNode, RefObject } from "react";
 
 import type { Configuration, Install } from "#/cli/events.gen.ts";
 import { CodePane } from "#/components/code-pane.tsx";
+import { ExternalLinkIcon } from "#/components/icons/external-link.tsx";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { RemoveSwap } from "#/components/remove-swap.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import {
   Tooltip,
@@ -184,20 +185,22 @@ const SkillMd = ({
 };
 
 /**
- * "View skill": the skill's directory on its source's web page, opened in the browser. It sits
- * beside the name in the open row, over the row's trigger, and takes its own clicks.
+ * "See full skill": the skill's directory on its source's web page, opened in the browser, with
+ * the external-link icon after it. It sits beside the name in the open row, over the row's
+ * trigger, and takes its own clicks.
  */
-const ViewSkill = ({ page }: { page: string }) => (
+const SeeFullSkill = ({ page }: { page: string }) => (
   <a
     href={page}
     title={page}
-    className="type-secondary text-text-primary pointer-events-auto flex-none font-medium underline underline-offset-2"
+    className="type-secondary text-text-primary pointer-events-auto inline-flex flex-none items-center gap-1 font-medium underline underline-offset-2"
     onClick={(e) => {
       e.preventDefault();
       void openInBrowser(page);
     }}
   >
-    View skill
+    See full skill
+    <ExternalLinkIcon size="2xs" />
   </a>
 );
 
@@ -356,7 +359,7 @@ const AddedRemove = ({
 
 /**
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its
- * description while closed, View skill beside the name while open) and, at its end, the round
+ * description while closed, See full skill beside the name while open) and, at its end, the round
  * check that selects it, or for a skill this machine holds already its status, which for an Added
  * skill turns into Remove on hover. Added carries the date of the last add, and the check of a
  * skill this machine removed has the date of the last removal before it, when this machine
@@ -443,7 +446,7 @@ const SkillItemView = ({
         meta={rowMeta(card, date)}
         action={action}
       >
-        {/* The name and View skill share a baseline, as their sizes differ. */}
+        {/* The name and See full skill share a baseline, as their sizes differ. */}
         <span className="flex min-w-0 flex-initial items-baseline gap-3">
           <span
             aria-hidden
@@ -451,7 +454,7 @@ const SkillItemView = ({
           >
             {card.name}
           </span>
-          {open && card.page !== undefined && <ViewSkill page={card.page} />}
+          {open && card.page !== undefined && <SeeFullSkill page={card.page} />}
         </span>
         {loading ? (
           <Loading />
