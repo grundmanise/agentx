@@ -17,7 +17,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
-// A machine's snapshot can live on the account remote, on the branch
+// A machine's snapshot can live on the hub, on the branch
 // machines/<machine id>, whose tree holds one file, the snapshot, see
 // gitx.SnapshotFile (ADR 0011). Every write is a command the user runs:
 // export naming a machine writes this machine's snapshot there, and skill
@@ -27,7 +27,7 @@ import (
 // another writer's change is refused and the writer reads the branch
 // again. Import naming a machine reads the branch, fetching that one ref
 // and nothing else, which a read-only credential can do. A fetch of the
-// account remote's skills never fetches a machine's branch.
+// hub's skills never fetches a machine's branch.
 
 // cloudMachine is the machine id of the cloud machine: a fixed name, not
 // one derived on a computer, so that every cloud virtual machine reads the
@@ -58,10 +58,10 @@ func cloudOnly(id string) error {
 		"run the command on that computer without --machine, or give --machine "+cloudMachine)
 }
 
-// machineBranch is a machine's branch on the account remote as one read
-// found it: the account repo, the account remote's git remote and URL, the
+// machineBranch is a machine's branch on the hub as one read
+// found it: the store, the hub's git remote and URL, the
 // machine id, and the commit the branch held, "" when the remote holds no
-// such branch. A tip is in the account repo, fetched into its
+// such branch. A tip is in the store, fetched into its
 // gitx.MachineTracking ref.
 type machineBranch struct {
 	gitDir, remote, url, id string
@@ -71,12 +71,12 @@ type machineBranch struct {
 // name is the branch's short name, as every line names it.
 func (b machineBranch) name() string { return gitx.MachineBranch(b.id) }
 
-// readMachineBranch reads the branch of the machine id on the account
-// remote, refusing, exit code 6, a machine with no account remote set: one
-// ls-remote of that ref, then, when the remote holds it, one fetch of that
-// ref alone. A remote git cannot reach is exit code 3.
+// readMachineBranch reads the branch of the machine id on the hub,
+// refusing, exit code 6, a machine with no hub set: one ls-remote of that
+// ref, then, when the remote holds it, one fetch of that ref alone. A
+// remote git cannot reach is exit code 3.
 func (inv *invocation) readMachineBranch(ctx context.Context, id string) (machineBranch, error) {
-	gitDir, entry, remote, err := inv.accountRemote(ctx)
+	gitDir, entry, remote, err := inv.hubRemote(ctx)
 	if err != nil {
 		return machineBranch{}, err
 	}
@@ -104,13 +104,13 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch) (sna
 	data, size, held, err := inv.git.SnapshotAt(ctx, b.gitDir, b.tip, documentLimit)
 	switch {
 	case err != nil:
-		return snapshot{}, false, accountRepoFailure(err)
+		return snapshot{}, false, storeFailure(err)
 	case !held:
-		return snapshot{}, false, fail(exitRefused, b.name()+" on the account remote holds no "+gitx.SnapshotFile,
+		return snapshot{}, false, fail(exitRefused, b.name()+" on the hub holds no "+gitx.SnapshotFile,
 			"write a snapshot to it with 'agentx snapshot save --machine "+b.id+"'")
 	case size > documentLimit:
 		return snapshot{}, false, fail(exitRefused,
-			fmt.Sprintf("%s on the account remote holds a snapshot larger than %d bytes, which is more than any machine's settings and skills come to", b.name(), documentLimit),
+			fmt.Sprintf("%s on the hub holds a snapshot larger than %d bytes, which is more than any machine's settings and skills come to", b.name(), documentLimit),
 			"write a snapshot to it with 'agentx snapshot save --machine "+b.id+"'")
 	}
 	snap, err = decodeSnapshot(b.name(), data)
@@ -122,7 +122,7 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch) (sna
 
 // importMachine is the snapshot import --machine reads, and the name its
 // lines give it, the branch's: it is what the rest of the import reads, as
-// the snapshot of a file is. A machine whose branch the account remote
+// the snapshot of a file is. A machine whose branch the hub
 // does not hold is exit code 5.
 func (inv *invocation) importMachine(ctx context.Context, id string) (snapshot, string, error) {
 	b, err := inv.readMachineBranch(ctx, id)
@@ -134,7 +134,7 @@ func (inv *invocation) importMachine(ctx context.Context, id string) (snapshot, 
 		return snapshot{}, "", err
 	}
 	if !found {
-		return snapshot{}, "", fail(exitNotFound, "the account remote holds no "+b.name(),
+		return snapshot{}, "", fail(exitNotFound, "the hub holds no "+b.name(),
 			"write a snapshot there with 'agentx snapshot save --machine "+id+"' on the machine it is to come from")
 	}
 	return snap, b.name(), nil
@@ -165,13 +165,13 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 	}
 	tree, err := inv.git.SnapshotTree(ctx, b.gitDir, append(data, '\n'))
 	if err != nil {
-		return "", false, accountRepoFailure(err)
+		return "", false, storeFailure(err)
 	}
 	var parents []string
 	if b.tip != "" {
 		held, err := inv.git.TreeOf(ctx, b.gitDir, b.tip)
 		if err != nil {
-			return "", false, accountRepoFailure(err)
+			return "", false, storeFailure(err)
 		}
 		if held == tree {
 			return b.tip, false, nil
@@ -185,7 +185,7 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 	op.ID = lineage.NewOperationID()
 	commit, err = w.commitOperation(ctx, tree, parents, subject, op)
 	if err != nil {
-		return "", false, accountRepoFailure(err)
+		return "", false, storeFailure(err)
 	}
 	branch := b.name()
 	s, found, stderr, exit, err := inv.git.PushBranch(ctx, b.gitDir, b.remote, commit, branch, b.tip)
@@ -198,27 +198,27 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 	case class == gitx.PushPushed, class == gitx.PushUpToDate:
 		return commit, true, nil
 	case class == gitx.PushMoved:
-		return "", false, fail(exitRefused, branch+" on the account remote changed since it was read, so nothing was pushed",
+		return "", false, fail(exitRefused, branch+" on the hub changed since it was read, so nothing was pushed",
 			run+": it reads "+branch+" again first")
 	case class == gitx.PushDeclined:
-		return "", false, fail(exitRefused, "the account remote declined "+branch+": "+sanitised(reason),
-			"once the account remote takes it, "+run)
+		return "", false, fail(exitRefused, "the hub declined "+branch+": "+sanitised(reason),
+			"once the hub takes it, "+run)
 	case class == gitx.PushDenied:
-		return "", false, fail(exitSource, "the account remote "+shownURL(b.url)+" did not let this machine push "+branch+": "+sanitised(reason),
+		return "", false, fail(exitSource, "the hub "+shownURL(b.url)+" did not let this machine push "+branch+": "+sanitised(reason),
 			deniedHint(gitx.DeniedFix(reason))+", then "+run)
 	case found || exit == 0:
-		return "", false, fail(exitSource, "whether the account remote took "+branch+" is not known: "+sanitised(reason), run)
+		return "", false, fail(exitSource, "whether the hub took "+branch+" is not known: "+sanitised(reason), run)
 	}
 	return "", false, unreachableRemote(b.url, errors.New(reason))
 }
 
 // exportToMachine writes this machine's snapshot to the branch of the
-// machine id on the account remote: its own as a backup, or another
-// machine's to seed it. The account remote is required, and read before
+// machine id on the hub: its own as a backup, or another
+// machine's to seed it. The hub is required, and read before
 // the scan, so that a machine with none is refused before anything is
 // read.
 func (inv *invocation) exportToMachine(ctx context.Context, id string) error {
-	if _, _, ok, err := inv.accountSource(); err != nil || !ok {
+	if _, _, ok, err := inv.hubSource(); err != nil || !ok {
 		if err == nil {
 			err = noRemoteRefusal()
 		}
@@ -242,7 +242,7 @@ func (inv *invocation) exportToMachine(ctx context.Context, id string) error {
 	}
 	inv.out.emit(exportEvent{event: newEvent("export"), Machine: id, Commit: commit, Skills: len(snap.Skills)})
 	out := inv.out
-	where := b.name() + " on the account remote"
+	where := b.name() + " on the hub"
 	done := "saved the snapshot of the settings and " + plural(len(snap.Skills), "skill") + " to " + where + " at " + short(commit)
 	if !pushed {
 		done = where + " holds this snapshot already, at " + short(commit) + ", so nothing was pushed"
@@ -269,8 +269,8 @@ type machineSkillEvent struct {
 // the cloud machine's snapshot, and changes nothing on this machine's
 // disk. The entry is the skill as this machine's library knows it, or, for
 // a skill this machine does not hold, as the snapshot already lists it. A
-// branch the account remote does not hold yet is born with the settings of
-// a fresh home and this machine's account remote, as a snapshot always
+// branch the hub does not hold yet is born with the settings of
+// a fresh home and this machine's hub, as a snapshot always
 // holds its machine's settings. With asCopy, the configurations it places
 // the skill in are recorded in the snapshot's copy_mode, as skill place
 // --copy records them in this machine's, but for a universal client, which
@@ -328,9 +328,9 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 		return err
 	}
 	if !found {
-		account, _ := accountEntry(here) // set, or readMachineBranch had refused
+		hub, _ := hubEntry(here) // set, or readMachineBranch had refused
 		snap.Settings = home.DefaultSettings()
-		snap.Settings.SetSource(account)
+		snap.Settings.SetSource(hub)
 		forgetAccess(&snap.Settings)
 	}
 	entry, err := inv.machineEntry(sc, snap, name)
@@ -370,7 +370,7 @@ func (inv *invocation) removeFromMachine(ctx context.Context, id, name string, f
 	}
 	if remote {
 		return fail(exitUsage, "--remote and --machine cannot both be given",
-			"--remote deletes one of your own skills' branches on the account remote; drop it to change the "+cloudMachine+" machine")
+			"--remote deletes a hub skill's branches on the hub; drop it to change the "+cloudMachine+" machine")
 	}
 	for _, c := range namedConfigurations(from) {
 		if !configurationID(c) {
@@ -506,10 +506,10 @@ func cloudRemoval(name string, from []string, universal func(string) bool) error
 // machineEntry is the entry skill place writes for the skill called name:
 // one that follows the latest version, naming the skill as this machine's
 // library knows it, its source and subpath for a skill of a shared source,
-// the account remote and its fork id for one of your own, or, when this
+// the hub and its fork id for a hub skill, or, when this
 // machine holds no such skill, as snap already lists it. Its placements
 // are left to placeInSnapshot. An unmanaged skill, which no machine can
-// install, is refused, exit code 6, and one of your own the account remote
+// install, is refused, exit code 6, and a hub skill the hub
 // does not hold is warned of, since the cloud machine cannot install it
 // until it is published.
 func (inv *invocation) machineEntry(sc skillContext, snap snapshot, name string) (snapshotSkill, error) {
@@ -521,16 +521,16 @@ func (inv *invocation) machineEntry(sc skillContext, snap snapshot, name string)
 		}
 		if _, held := librarySkill(inv.dirs.Library, name); held {
 			return snapshotSkill{}, fail(exitRefused, name+" is not managed by agentx, so the "+cloudMachine+" machine has nowhere to install it from",
-				"make it one of your own with '"+adoptCommand(name)+"' and publish it, then place it again")
+				"make it a hub skill with '"+adoptCommand(name)+"' and publish it, then place it again")
 		}
 		return snapshotSkill{}, inv.noLibrarySkill(name)
 	case rec.Kind == lineage.KindFork:
-		e := snapshotSkill{Name: name, Kind: lineage.KindManaged, Source: sc.account, Placements: []string{}}
+		e := snapshotSkill{Name: name, Kind: lineage.KindManaged, Source: sc.hub, Placements: []string{}}
 		if rec.Fork != nil {
 			e.ForkID = rec.Fork.ID
 		}
 		if sc.publishedRead && sc.published[name] == "" {
-			inv.out.warn(name + " is not published to the account remote, so the " + cloudMachine + " machine cannot install it until you run '" + publishCommand(name) + "'")
+			inv.out.warn(name + " is not published to the hub, so the " + cloudMachine + " machine cannot install it until you run '" + publishCommand(name) + "'")
 		}
 		return e, nil
 	case !rec.HasImport:

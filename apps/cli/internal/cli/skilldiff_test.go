@@ -37,7 +37,7 @@ func TestSkillDiffShowsEachFileAgainstTheBase(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
 	lib := filepath.Join(h.library, "pdf")
-	short := h.accountGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/pdf")[:7]
+	short := h.storeGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/pdf")[:7]
 
 	out := h.mustRun("--json", "skill", "diff", "pdf")
 	if diffs := h.eventsOfType(out.stdout, "diff"); len(diffs) != 0 {
@@ -141,7 +141,7 @@ func TestSkillDiffNamesWhatGitCannotRecord(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
 	lib := filepath.Join(h.library, "pdf")
-	short := h.accountGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/pdf")[:7]
+	short := h.storeGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/pdf")[:7]
 	nested := filepath.Join(lib, "vendored", ".git")
 	writeFile(t, mkdirs(t, nested, "HEAD"), "ref: refs/heads/main\n")
 	out := h.mustRun("--json", "skill", "diff", "pdf")
@@ -176,7 +176,7 @@ func TestSkillDiffRefusesWhatHasNoBase(t *testing.T) {
 	h, _ := driftHarness(t)
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "My own"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "forked"), "SKILL.md"), skill("forked", "A fork"))
-	h.accountGit("update-ref", "refs/heads/skills/forked", h.accountGit("rev-parse", "refs/heads/managed/pdf"))
+	h.storeGit("update-ref", "refs/heads/skills/forked", h.storeGit("rev-parse", "refs/heads/managed/pdf"))
 	for _, c := range []struct {
 		args    []string
 		message string
@@ -185,8 +185,8 @@ func TestSkillDiffRefusesWhatHasNoBase(t *testing.T) {
 		{[]string{"nowhere"}, `the library holds no skill called "nowhere"`, 5},
 		{[]string{"mine"}, "mine is not managed by agentx, so it has no base version to", 6},
 		{[]string{"forked"}, "forked's worktree " + quotedPath(filepath.Join(h.agentx, "worktrees", "forked")) + " is missing", 6},
-		{[]string{"pdf", "--commit", "HEAD"}, "pdf is not a skill of the account remote, so it has no commit of its own to", 6},
-		{[]string{"mine", "--commit", "HEAD"}, "mine is not a skill of the account remote, so it has no commit to", 6},
+		{[]string{"pdf", "--commit", "HEAD"}, "pdf is not a skill of the hub, so it has no commit of its own to", 6},
+		{[]string{"mine", "--commit", "HEAD"}, "mine is not a skill of the hub, so it has no commit to", 6},
 	} {
 		what := "diff " + strings.Join(c.args, " ")
 		out := h.run(append([]string{"--json", "skill", "diff"}, c.args...)...)
@@ -258,7 +258,7 @@ func TestSkillDiffTakesARelativeHome(t *testing.T) {
 // system-file list names make two diffs, with every path relative to the
 // skill's directory and never the root's own entries; once the edits are
 // recorded on its branch, unpublished, the diff still shows them, and the
-// fork matches the commit they were recorded as. A commit the account
+// fork matches the commit they were recorded as. A commit the home
 // repo does not hold, one that holds no skill directory of that name, and
 // --update with --commit are refused.
 func TestSkillDiffOfAFork(t *testing.T) {
@@ -301,7 +301,7 @@ func TestSkillDiffOfAFork(t *testing.T) {
 		message string
 		exit    int
 	}{
-		{[]string{"--commit", "deadbeef"}, "the account repo holds no commit deadbeef", 6},
+		{[]string{"--commit", "deadbeef"}, "the store holds no commit deadbeef", 6},
 		{[]string{"--commit", h.ref(lineage.ManagedRef("alpha"))}, "holds no skill directory notes to compare notes with", 6},
 		{[]string{"--commit", first, "--update"}, "--update and --commit cannot be given together", 1},
 	} {

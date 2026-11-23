@@ -1,7 +1,7 @@
 // The machine the Sources tests run against: two shared sources (one pinned and read-only here,
-// fetched three days ago, one never fetched) and an account remote; the listing of the first source; a library that puts one of
+// fetched three days ago, one never fetched) and a hub; the listing of the first source; a library that puts one of
 // its skills in each state a card can be in; three configurations that take placements (two
-// enabled) and two universal ones; your skills on the account remote; a search answer; and the
+// enabled) and two universal ones; your skills on the hub; a search answer; and the
 // SKILL.md `source read` gives for a skill.
 // Inline events with only the fields the tests check, typed by the generated event types.
 import type {
@@ -21,8 +21,8 @@ export const ACME = "https://github.com/acme/skills";
 export const ACME_ID = "1c9d0b7e4a2f6d38";
 export const ZETA = "https://gitlab.com/zeta/tools";
 export const ZETA_ID = "7a3b5c9e1f2d4a60";
-export const ACCOUNT = "ssh://git@github.com/me/account";
-export const ACCOUNT_ID = "5e8a1c3b7d9f2a64";
+export const HUB = "ssh://git@github.com/me/hub";
+export const HUB_ID = "5e8a1c3b7d9f2a64";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -41,7 +41,7 @@ export const acme: SourceEvent = {
   url: ACME,
 };
 
-/** The sources `source list` reports: acme, zeta never fetched, the account remote two hours ago. */
+/** The sources `source list` reports: acme, zeta never fetched, the hub two hours ago. */
 export const sources: SourceEvent[] = [
   acme,
   {
@@ -53,13 +53,13 @@ export const sources: SourceEvent[] = [
   },
   {
     access: "writable",
-    account: true,
-    id: ACCOUNT_ID,
+    hub: true,
+    id: HUB_ID,
     last_fetched: ago(2 * HOUR),
     schema_version: 4,
     skills: 2,
     type: "source",
-    url: ACCOUNT,
+    url: HUB,
   },
 ];
 
@@ -103,7 +103,7 @@ const universal = ["codex", "gemini-cli"];
 
 /**
  * The library: pdf installed from acme (Added), my-letters forked from acme's letters (Forked), an
- * unmanaged scratch (Already in library), and an xlsx from zeta (Name in use for acme's xlsx).
+ * unmanaged scratch (Name taken), and an xlsx from zeta (Name taken for acme's xlsx).
  */
 export const library: LibraryEntry[] = [
   {
@@ -113,7 +113,7 @@ export const library: LibraryEntry[] = [
     kind: "managed",
     name: "my-letters",
     placements: [],
-    source: ACCOUNT,
+    source: HUB,
     state: "current",
     universal,
     upstream: ACME,
@@ -158,7 +158,7 @@ export const inventory = {
   type: "inventory",
 } satisfies InlineEvent;
 
-/** Your skills on the account remote: one forked from acme's pdf, one made from scratch. */
+/** Your skills on the hub: one forked from acme's pdf, one made from scratch. */
 export const installable: InstallableSkillEvent[] = [
   {
     base_hash: "h-pdf",
@@ -166,7 +166,7 @@ export const installable: InstallableSkillEvent[] = [
     fork_id: "a1a1a1a1a1a1",
     name: "my-pdf",
     schema_version: 4,
-    source: ACCOUNT,
+    source: HUB,
     type: "installable_skill",
     upstream: ACME,
     upstream_commit: "3f2a9c1e8d7b6a",
@@ -177,7 +177,7 @@ export const installable: InstallableSkillEvent[] = [
     fork_id: "b2b2b2b2b2b2",
     name: "release-notes",
     schema_version: 4,
-    source: ACCOUNT,
+    source: HUB,
     type: "installable_skill",
   },
 ];

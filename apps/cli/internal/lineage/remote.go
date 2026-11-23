@@ -7,7 +7,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
-// RemoteForkPrefix is where the account repo keeps the fork branches the
+// RemoteForkPrefix is where the store keeps the fork branches the
 // remote called remote holds, as a fetch of the remote writes them: one
 // remote-tracking branch per fork branch, under the same name.
 func RemoteForkPrefix(remote string) string { return gitx.TrackingPrefix(remote) + "skills/" }

@@ -11,19 +11,19 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// TestDoctorReadsTheAccountRepoOnlyWhenItOpens: the account-repo rows
+// TestDoctorReadsTheStoreOnlyWhenItOpens: the store rows
 // follow the row that says the repo can be read. A run on a machine that
-// has no account repo yet leaves them out, there being nothing to say about
+// has no store yet leaves them out, there being nothing to say about
 // a repository that does not exist: TestDoctorPassesAndChangesNothing pins
 // the rows of that run.
-func TestDoctorReadsTheAccountRepoOnlyWhenItOpens(t *testing.T) {
+func TestDoctorReadsTheStoreOnlyWhenItOpens(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	s, _, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url)
 	rows, order := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
 	want := []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings",
-		"account_repo", "source_remotes", "staged_imports", "library", "clients"}
+		"store", "source_remotes", "staged_imports", "library", "clients"}
 	if !reflect.DeepEqual(order, want) {
 		t.Fatalf("checks = %v, want %v", order, want)
 	}
@@ -44,8 +44,8 @@ func TestDoctorReadsTheAccountRepoOnlyWhenItOpens(t *testing.T) {
 // now from one a run died over. The row names the remote by its URL, or by
 // its bare source id when the URL is one agentx would not have written, here
 // one carrying a token: that id is what the hint's `source remove <id>`
-// accepts. A remote of fork branches is told to come back with --account
-// while the settings hold no account remote, and only to be cleared while
+// accepts. A remote of fork branches is told to come back with --hub
+// while the settings hold no hub, and only to be cleared while
 // they hold another: sourceRemotesHint's table has the wording of each.
 func TestDoctorNamesARemoteTheSettingsDoNotName(t *testing.T) {
 	t.Parallel()
@@ -58,25 +58,25 @@ func TestDoctorNamesARemoteTheSettingsDoNotName(t *testing.T) {
 	const other = "https://github.com/me/forks"
 
 	for _, tc := range []struct {
-		url, fetch, account, named, hint string
+		url, fetch, hub, named, hint string
 	}{
 		{s.url, "", "", s.url, "'agentx source add <url>' to add the source"},
 		{"https://user:token@github.com/owner/repo", "", "", id, "'agentx source add <url>' to add the source"},
-		// A remote of fork branches is an account remote the settings lost:
-		// added back without --account, its forks would be fetched blobless.
-		{s.url, gitx.ForkRefspec(remote), "", s.url, "'agentx source add <url> --account' to make it the account remote again"},
-		// With another account remote set, it is what replacing that one
-		// left, and --account would replace the remote the user chose.
-		{s.url, gitx.ForkRefspec(remote), other, s.url, "'agentx source remove <id>' to clear it, since 'agentx source add <url> --account' would replace the account remote " + other},
+		// A remote of fork branches is a hub the settings lost:
+		// added back without --hub, its forks would be fetched blobless.
+		{s.url, gitx.ForkRefspec(remote), "", s.url, "'agentx source add <url> --hub' to make it the hub again"},
+		// With another hub set, it is what replacing that one
+		// left, and --hub would replace the remote the user chose.
+		{s.url, gitx.ForkRefspec(remote), other, s.url, "'agentx source remove <id>' to clear it, since 'agentx source add <url> --hub' would replace the hub " + other},
 	} {
 		// The remove took the remote with it; putting it back on its own is
 		// exactly what the killed add left: a remote, and no entry naming it.
-		h.accountGit("config", "remote."+remote+".url", tc.url)
+		h.storeGit("config", "remote."+remote+".url", tc.url)
 		if tc.fetch != "" {
-			h.accountGit("config", "remote."+remote+".fetch", tc.fetch)
+			h.storeGit("config", "remote."+remote+".fetch", tc.fetch)
 		}
-		if tc.account != "" {
-			editSettings(t, h, func(s *home.Settings) { s.SetSource(home.Source{URL: tc.account, Account: true}) })
+		if tc.hub != "" {
+			editSettings(t, h, func(s *home.Settings) { s.SetSource(home.Source{URL: tc.hub, Hub: true}) })
 		}
 		rows, _ := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
 		equal(t, "source_remotes.status", rows["source_remotes"]["status"], "warn")
@@ -90,13 +90,13 @@ func TestDoctorNamesARemoteTheSettingsDoNotName(t *testing.T) {
 		h.mustRun("source", "remove", id)
 		rows, _ = doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
 		equal(t, "source_remotes.status after removing by id", rows["source_remotes"]["status"], "ok")
-		if tc.account != "" {
-			editSettings(t, h, func(s *home.Settings) { s.RemoveSource(tc.account) })
+		if tc.hub != "" {
+			editSettings(t, h, func(s *home.Settings) { s.RemoveSource(tc.hub) })
 		}
 	}
 
 	// And adding the source again writes the entry and the remote together.
-	h.accountGit("config", "remote."+remote+".url", s.url)
+	h.storeGit("config", "remote."+remote+".url", s.url)
 	h.mustRun("source", "add", s.url)
 	rows, _ := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
 	equal(t, "source_remotes.status after adding again", rows["source_remotes"]["status"], "ok")
@@ -104,43 +104,43 @@ func TestDoctorNamesARemoteTheSettingsDoNotName(t *testing.T) {
 }
 
 // TestSourceRemotesHint: the hint of each mix of orphan remotes, of fork
-// branches or not, with and without an account remote in the settings.
-// Only one remote can be made the account remote, so several of fork
+// branches or not, with and without a hub in the settings.
+// Only one remote can be made the hub, so several of fork
 // branches are told to pick one.
 func TestSourceRemotesHint(t *testing.T) {
 	t.Parallel()
-	const account = "https://github.com/me/forks"
+	const hub = "https://github.com/me/forks"
 	for _, tc := range []struct {
 		name           string
 		orphans, forks []string
-		account        string
+		hub            string
 		want           string
 	}{
 		{"plain only", []string{"a"}, nil, "",
 			"for each, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
 		{"one fork", nil, []string{"f"}, "",
-			"for each, run 'agentx source add <url> --account' to make it the account remote again and take the remote with it, or 'agentx source remove <id>' to clear it"},
+			"for each, run 'agentx source add <url> --hub' to make it the hub again and take the remote with it, or 'agentx source remove <id>' to clear it"},
 		{"two forks", nil, []string{"f", "g"}, "",
-			"for f, g, which held your skills, run 'agentx source add <url> --account' for the one to make the account remote again, and 'agentx source remove <id>' for the rest"},
-		{"forks beside an account remote", nil, []string{"f", "g"}, account,
-			"for each, run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --account' would replace the account remote " + account},
+			"for f, g, which held your skills, run 'agentx source add <url> --hub' for the one to make the hub again, and 'agentx source remove <id>' for the rest"},
+		{"forks beside a hub", nil, []string{"f", "g"}, hub,
+			"for each, run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --hub' would replace the hub " + hub},
 		{"both", []string{"a"}, []string{"f"}, "",
-			"for f, which held your skills, run 'agentx source add <url> --account' to make it the account remote again and take the remote with it, or 'agentx source remove <id>' to clear it; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
+			"for f, which held your skills, run 'agentx source add <url> --hub' to make it the hub again and take the remote with it, or 'agentx source remove <id>' to clear it; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
 		{"both, two forks", []string{"a"}, []string{"f", "g"}, "",
-			"for f, g, which held your skills, run 'agentx source add <url> --account' for the one to make the account remote again, and 'agentx source remove <id>' for the rest; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
-		{"both beside an account remote", []string{"a"}, []string{"f"}, account,
-			"for f, which held your skills, run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --account' would replace the account remote " + account + "; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
+			"for f, g, which held your skills, run 'agentx source add <url> --hub' for the one to make the hub again, and 'agentx source remove <id>' for the rest; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
+		{"both beside a hub", []string{"a"}, []string{"f"}, hub,
+			"for f, which held your skills, run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --hub' would replace the hub " + hub + "; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			equal(t, "hint", sourceRemotesHint(tc.orphans, tc.forks, tc.account), tc.want)
+			equal(t, "hint", sourceRemotesHint(tc.orphans, tc.forks, tc.hub), tc.want)
 		})
 	}
 }
 
 // TestDoctorSendsUnreadableSettingsBackToTheSettings: when the settings do
 // not parse, source_remotes cannot compare the remotes with them, and its
-// hint names the settings file to fix, not the account repo, which the row
+// hint names the settings file to fix, not the store, which the row
 // above has just reported as fine; for settings a later agentx wrote, it
 // gives the settings row's hint to upgrade.
 func TestDoctorSendsUnreadableSettingsBackToTheSettings(t *testing.T) {
@@ -154,7 +154,7 @@ func TestDoctorSendsUnreadableSettingsBackToTheSettings(t *testing.T) {
 	}
 
 	rows, _ := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
-	equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
+	equal(t, "store.status", rows["store"]["status"], "ok")
 	equal(t, "source_remotes.status", rows["source_remotes"]["status"], "fail")
 	equal(t, "source_remotes.hint", rows["source_remotes"]["hint"], "fix "+settings+", then run doctor again")
 
@@ -179,12 +179,12 @@ func TestDoctorNamesStagingRefsOfAnInterruptedInstall(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
-	commit := h.accountGit("rev-parse", lineage.ManagedRef("alpha"))
+	commit := h.storeGit("rev-parse", lineage.ManagedRef("alpha"))
 
 	// Two refs of one run, as a killed install of two skills leaves them.
 	run := "0123456789abcdef"
 	for _, ref := range []string{lineage.ImportingRef(run, 0), lineage.ImportingRef(run, 1)} {
-		h.accountGit("update-ref", ref, commit)
+		h.storeGit("update-ref", ref, commit)
 	}
 
 	out := h.mustRun("--json", "doctor")
@@ -207,7 +207,7 @@ func TestDoctorNamesStagingRefsOfAnInterruptedInstall(t *testing.T) {
 
 	// And doctor repaired nothing: the refs are still there, which is the
 	// whole of the decision this row stands for.
-	left := h.accountGit("for-each-ref", "--format=%(refname)", lineage.ImportingPrefix)
+	left := h.storeGit("for-each-ref", "--format=%(refname)", lineage.ImportingPrefix)
 	equal(t, "the staging refs after doctor", left,
 		lineage.ImportingRef(run, 0)+"\n"+lineage.ImportingRef(run, 1))
 }

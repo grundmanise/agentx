@@ -1,6 +1,6 @@
 // What the Sources screen shows, projected from the store and nothing else: the source pills
 // from the Sources slice, the facts of the open source, the cards of a listing, of your skills on
-// the account remote or of a search answer, each card's state from the inventory's library, and
+// the hub or of a search answer, each card's state from the inventory's library, and
 // the `skill add` command lines a selection produces. Pure functions, so that every part of the screen reads a skill the
 // same way and the tests pin the command lines.
 import type {
@@ -15,23 +15,23 @@ import type {
 import { formatAgo } from "#/lib/dates.ts";
 import { hostAndPath, shortSource } from "#/screens/skills/projection.ts";
 
-/** The key of the Personal pill and the source of its cards, beside the source ids and URLs. */
-export const YOUR_SKILLS = "your-skills";
+/** The key of the Hub pill and the source of its cards, beside the source ids and URLs. */
+export const HUB_SKILLS = "your-skills";
 
-/** The label of the Personal pill and of its cards' group. */
-export const YOUR_SKILLS_LABEL = "Personal";
+/** The label of the Hub pill and of its cards' group. */
+export const HUB_LABEL = "Hub";
 
 export interface SourcePill {
-  /** The source id, or YOUR_SKILLS. */
+  /** The source id, or HUB_SKILLS. */
   key: string;
-  /** The source's short form, or "Personal". */
+  /** The source's short form, or "Hub". */
   label: string;
-  /** The canonical URL; absent for Personal. */
+  /** The canonical URL; absent for Hub. */
   url?: string;
   lastFetched?: string;
-  /** How many skills it holds: its listing's length, or your skills on the account remote. */
+  /** How many skills it holds: its listing's length, or your skills on the hub. */
   skills?: number;
-  /** The entry `source list` gave: the shared source, or the account remote for Personal. */
+  /** The entry `source list` gave: the shared source, or the hub for Hub. */
   source: SourceEvent;
 }
 
@@ -39,7 +39,7 @@ const compareLabels = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "base" });
 
 /**
- * One pill per shared source, A to Z by short form, then Personal when an account remote is
+ * One pill per shared source, A to Z by short form, then Hub when a hub is
  * set. A shared source's skill count is the length of its listing, once read: `source list`
  * reports none for a shared source.
  */
@@ -48,7 +48,7 @@ export const sourcePills = (
   listings: Readonly<Record<string, readonly unknown[] | undefined>> = {}
 ): SourcePill[] => {
   const shared = sources
-    .filter((s) => s.account !== true)
+    .filter((s) => s.hub !== true)
     .map((s): SourcePill => {
       const pill: SourcePill = {
         key: s.id,
@@ -68,22 +68,22 @@ export const sourcePills = (
   shared.sort(
     (a, b) => compareLabels(a.label, b.label) || a.key.localeCompare(b.key)
   );
-  const account = sources.find((s) => s.account === true);
-  if (account === undefined) {
+  const hub = sources.find((s) => s.hub === true);
+  if (hub === undefined) {
     return shared;
   }
-  const yours: SourcePill = {
-    key: YOUR_SKILLS,
-    label: YOUR_SKILLS_LABEL,
-    source: account,
+  const hubPill: SourcePill = {
+    key: HUB_SKILLS,
+    label: HUB_LABEL,
+    source: hub,
   };
-  if (account.last_fetched !== undefined) {
-    yours.lastFetched = account.last_fetched;
+  if (hub.last_fetched !== undefined) {
+    hubPill.lastFetched = hub.last_fetched;
   }
-  if (account.skills !== undefined) {
-    yours.skills = account.skills;
+  if (hub.skills !== undefined) {
+    hubPill.skills = hub.skills;
   }
-  return [...shared, yours];
+  return [...shared, hubPill];
 };
 
 /** "1 skill", "2 skills". */
@@ -213,14 +213,16 @@ export const removedText = (skills: number): string =>
     ? "Source removed"
     : `Source and ${count(skills, "skill")} removed`;
 
-/** Why a card cannot be selected, from the inventory's library. */
-export type CardStatus = "added" | "forked" | "on-disk" | "name-in-use";
+/**
+ * Why a card cannot be selected, from the inventory's library: this skill is Added or Forked, or
+ * another skill holds its name.
+ */
+export type CardStatus = "added" | "forked" | "name-taken";
 
 export const statusLabels: Record<CardStatus, string> = {
   added: "Added",
   forked: "Forked",
-  "name-in-use": "Name in use",
-  "on-disk": "Already in library",
+  "name-taken": "Name taken",
 };
 
 /**
@@ -234,13 +236,21 @@ export interface SkillMdRef {
   tree: string;
 }
 
+/** Why a card's name is taken, as the text before and after the library skill that holds it. */
+export interface TakenReason {
+  before: string;
+  /** The name of the library skill that holds the name. */
+  skill: string;
+  after: string;
+}
+
 export interface SkillCard {
   /**
    * The card's own key: its source and name, and for a skill read from a source, its subpath, as
    * two directories of one source can hold skills of the same name.
    */
   key: string;
-  /** Where the card installs from: the source's canonical URL, or YOUR_SKILLS. */
+  /** Where the card installs from: the source's canonical URL, or HUB_SKILLS. */
   source: string;
   name: string;
   description: string;
@@ -248,7 +258,9 @@ export interface SkillCard {
   status?: CardStatus;
   /** Why a card that cannot be selected cannot be. */
   title?: string;
-  /** Where its SKILL.md is read from; absent for your skills on the account remote. */
+  /** For a name a library skill holds: `title` around that skill's name, which opens it in Skills. */
+  taken?: TakenReason;
+  /** Where its SKILL.md is read from; absent for your skills on the hub. */
   skillMd?: SkillMdRef;
   /** The skill's directory on its source's web page, when agentx knows the host's pages. */
   page?: string;
@@ -257,7 +269,7 @@ export interface SkillCard {
    * which `skill add` installs instead: the card is in use by name, not added.
    */
   sharedWith?: string;
-  /** The fork id of one of your skills on the account remote. */
+  /** The fork id of a hub skill. */
   forkId?: string;
 }
 
@@ -266,11 +278,47 @@ export const cardKey = (source: string, name: string, subpath?: string) =>
     ? `${source}\u0000${name}`
     : `${source}\u0000${name}\u0000${subpath}`;
 
+/** Why a card is not selectable: its status, and for a name taken, the skill that holds it. */
+interface CardState {
+  status: CardStatus;
+  /** The library entry that holds the card's name, for "name-taken". */
+  holder?: LibraryEntry;
+}
+
+/** Why a card whose name `holder` holds cannot be added, and how to free the name. */
+const takenWhy = ({
+  kind,
+  name,
+  source,
+  subpath,
+}: LibraryEntry): TakenReason => {
+  if (kind === "unmanaged") {
+    return {
+      after:
+        " folder that agentx doesn't manage. Import or remove it to add this skill.",
+      before: "Your library has a ",
+      skill: name,
+    };
+  }
+  if (subpath === undefined || source === undefined) {
+    return {
+      after: " skill. Remove or rename it to add this skill.",
+      before: "Your library has ",
+      skill: name,
+    };
+  }
+  return {
+    after: ` skill from ${shortSource(source)}. Remove or rename it to add this skill.`,
+    before: "Your library has ",
+    skill: name,
+  };
+};
+
 const card = (
   source: string,
   name: string,
   description: string,
-  status: CardStatus | undefined,
+  state: CardState | undefined,
   skillMd?: SkillMdRef,
   page?: string
 ): SkillCard => {
@@ -286,13 +334,11 @@ const card = (
   if (page !== undefined) {
     c.page = page;
   }
-  if (status !== undefined) {
-    c.status = status;
-    if (status === "name-in-use") {
-      c.title = `Remove or rename ${name} first`;
-    }
-    if (status === "on-disk") {
-      c.title = `A folder named ${name} is already in your library, added outside agentx. Import it in Skills to manage it, or remove it to add this one.`;
+  if (state !== undefined) {
+    c.status = state.status;
+    if (state.holder !== undefined) {
+      c.taken = takenWhy(state.holder);
+      c.title = `${c.taken.before}${c.taken.skill}${c.taken.after}`;
     }
   }
   return c;
@@ -304,26 +350,25 @@ const sourceSkillStatus = (
   subpath: string,
   name: string,
   library: LibraryEntry[]
-): CardStatus | undefined => {
+): CardState | undefined => {
   if (
     library.some(
       (e) => e.kind === "managed" && e.source === url && e.subpath === subpath
     )
   ) {
-    return "added";
+    return { status: "added" };
   }
   if (
     library.some(
       (e) => e.upstream === url && (e.upstream_subpath ?? "") === subpath
     )
   ) {
-    return "forked";
+    return { status: "forked" };
   }
   const named = library.find((e) => e.name === name);
-  if (named === undefined) {
-    return undefined;
-  }
-  return named.kind === "unmanaged" ? "on-disk" : "name-in-use";
+  return named === undefined
+    ? undefined
+    : { holder: named, status: "name-taken" };
 };
 
 /** Where a skill sits in its source, for a reason that names it. */
@@ -356,8 +401,8 @@ const withSharedNames = (cards: SkillCard[]): SkillCard[] => {
     return {
       ...c,
       sharedWith: earlier,
-      status: "name-in-use",
-      title: `The skill at ${placeOf(earlier)} in this source is named ${c.name} too, and only the first of a name can be added`,
+      status: "name-taken",
+      title: `The skill at ${placeOf(earlier)} in this source is named ${c.name} too, and only the first of a name can be added.`,
     };
   });
 };
@@ -384,39 +429,39 @@ export const listingCards = (
   );
 
 /**
- * The state of one of your skills on the account remote, by its name: a library entry of the
+ * The state of one of your skills on the hub, by its name: a library entry of the
  * name is in the way, unless it is the same skill installed from its upstream without edits,
  * which the install replaces.
  */
 const installableStatus = (
   skill: InstallableSkillEvent,
   library: LibraryEntry[]
-): CardStatus | undefined => {
+): CardState | undefined => {
   const named = library.find((e) => e.name === skill.name);
   if (named === undefined) {
     return undefined;
   }
-  if (named.kind === "unmanaged") {
-    return "on-disk";
-  }
   const sameUpstream =
+    named.kind === "managed" &&
     skill.upstream !== undefined &&
     named.source === skill.upstream &&
     named.subpath === (skill.upstream_subpath ?? "");
-  return sameUpstream && named.state === "current" ? undefined : "name-in-use";
+  return sameUpstream && named.state === "current"
+    ? undefined
+    : { holder: named, status: "name-taken" };
 };
 
-/** The cards of your skills on the account remote, as `skill list --remote` gave them. */
+/** The cards of your skills on the hub, as `skill list --remote` gave them. */
 export const installableCards = (
   installable: InstallableSkillEvent[],
   library: LibraryEntry[]
 ): SkillCard[] =>
   installable.map((s) => ({
     ...card(
-      YOUR_SKILLS,
+      HUB_SKILLS,
       s.name,
       s.upstream === undefined
-        ? "personal skill"
+        ? "hub skill"
         : `from ${shortSource(s.upstream)}`,
       installableStatus(s, library)
     ),
@@ -486,7 +531,7 @@ export const addedName = (
 
 /**
  * When a card's skill last entered and last left this machine's library, from the inventory's
- * installs: a skill of a source by its source URL and subpath, one of your skills by its fork id.
+ * installs: a skill of a source by its source URL and subpath, a hub skill by its fork id.
  * Undefined when this machine recorded neither, as for a skill added before it kept the dates.
  */
 export const installOf = (
@@ -503,15 +548,15 @@ export const installOf = (
 };
 
 export interface CardGroup {
-  /** The source URL, or YOUR_SKILLS. */
+  /** The source URL, or HUB_SKILLS. */
   source: string;
-  /** The source's short form, or "Personal". */
+  /** The source's short form, or "Hub". */
   label: string;
   cards: SkillCard[];
 }
 
 const sourceLabel = (source: string) =>
-  source === YOUR_SKILLS ? YOUR_SKILLS_LABEL : shortSource(source);
+  source === HUB_SKILLS ? HUB_LABEL : shortSource(source);
 
 /** The cards grouped by source, the sources A to Z by label. */
 export const groupCards = (cards: SkillCard[]): CardGroup[] => {
@@ -582,7 +627,7 @@ export const linkAdd = ({
 export interface AddPlan {
   /** The command line, without --json. */
   args: string[];
-  /** The source the command installs from: its URL, or YOUR_SKILLS. */
+  /** The source the command installs from: its URL, or HUB_SKILLS. */
   source: string;
   /** The names the command installs. */
   names: string[];
@@ -637,7 +682,7 @@ export const planAdds = ({
       args: [
         "skill",
         "add",
-        ...(source === YOUR_SKILLS ? [] : [source]),
+        ...(source === HUB_SKILLS ? [] : [source]),
         ...selection,
         ...to,
       ],

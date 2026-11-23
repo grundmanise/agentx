@@ -18,7 +18,7 @@ import (
 // same way.
 func TestNameRefusal(t *testing.T) {
 	t.Parallel()
-	const library, branch = "is not a name the library can hold as a directory", "is not a name the account repo can hold as an import branch"
+	const library, branch = "is not a name the library can hold as a directory", "is not a name the store can hold as an import branch"
 	for _, c := range []struct {
 		what, name, want string
 	}{
@@ -208,7 +208,7 @@ func TestRefPlan(t *testing.T) {
 		want      string
 	}{
 		{"no branch", nil, false, true, ""},
-		{"a fork of that name", &lineage.Record{Kind: lineage.KindFork, Commit: "fork1"}, false, false, "is a skill of the account remote"},
+		{"a fork of that name", &lineage.Record{Kind: lineage.KindFork, Commit: "fork1"}, false, false, "is a skill of the hub"},
 		{"the same import commit", &lineage.Record{Kind: lineage.KindManaged, Commit: "commit1", Import: imp, HasImport: true}, false, false, ""},
 		{"another commit with the same trailers", &lineage.Record{Kind: lineage.KindManaged, Commit: "commit2", Import: imp, HasImport: true}, false, false, "is already managed at another version"},
 		{"another commit, the library without it", &lineage.Record{Kind: lineage.KindManaged, Commit: "commit2", Import: imp, HasImport: true}, true, false, "which the library no longer holds"},

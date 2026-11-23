@@ -1,4 +1,4 @@
-// What renaming one of your own skills takes, as pure functions over rows: whether Rename
+// What renaming a hub skill takes, as pure functions over rows: whether Rename
 // takes a skill, the command line, and a refusal's hint in the Rename dialog's own words
 // (docs/spec/cli-contract.md, "Renaming a skill").
 import type { ErrorEvent } from "#/cli/events.gen.ts";
@@ -6,8 +6,8 @@ import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
-/** Whether `skill rename` takes `row`: one of your own skills, which a fork branch holds. */
-export const canRename = (row: SkillRow) => row.kind === "yours";
+/** Whether `skill rename` takes `row`: a hub skill, which a fork branch holds. */
+export const canRename = (row: SkillRow) => row.kind === "hub";
 
 /** `skill rename <old> <new>`. */
 export const renameArgs = (old: string, newName: string): string[] => [

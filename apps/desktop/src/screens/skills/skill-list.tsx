@@ -22,7 +22,6 @@ import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
 import { LIST_GUIDE, LIST_GUIDE_NESTED } from "#/components/list-guide.ts";
 import { SectionToggle } from "#/components/section-toggle.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
@@ -31,6 +30,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "#/components/ui/input-group.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import {
   Tooltip,
   TooltipContent,

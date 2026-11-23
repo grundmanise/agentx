@@ -69,7 +69,7 @@ const updatedText = (row: SkillRow, events: CliEvent[]) => {
   if (updated === undefined) {
     return `${row.name} skill is already up to date`;
   }
-  if (row.kind === "yours") {
+  if (row.kind === "hub") {
     return `Updated ${row.name} skill. Publish when ready.`;
   }
   return updated.state === "modified"
@@ -444,10 +444,10 @@ const conflictsText = (names: string[]) =>
     ? `${names[0]} skill has conflicts. Resolve them to finish the update`
     : `${andList(names)} skills have conflicts. Resolve them to finish the updates`;
 
-/** Whether a command ended in a way the runner answers itself: the lock, the account repo, a cancel. */
+/** Whether a command ended in a way the runner answers itself: the lock, the store, a cancel. */
 const answeredByRunner = (outcome: Outcome) =>
   outcome.exitCode === EXIT_CODES.locked ||
-  outcome.exitCode === EXIT_CODES.account_repo ||
+  outcome.exitCode === EXIT_CODES.store ||
   outcome.cancelled;
 
 /** A command that failed with no word from the CLI: it could not start, or was stopped. */
@@ -473,7 +473,7 @@ const logRun = (run: UpdateRun) => {
  * done with its skill, then once more from the whole outcome when the command ended, since a
  * warning on stderr may come after. A merge that conflicts stays on its row and opens no skill;
  * the dialog shows the result, so no toast does. A command that ends in a way the runner answers
- * (the lock, the account repo, a cancel) puts the dialog back as it was before the run, with the
+ * (the lock, the store, a cancel) puts the dialog back as it was before the run, with the
  * skills already updated gone from it; one that ends with no word from the CLI stops the run with
  * its problem, the skills it never reached waiting again.
  */

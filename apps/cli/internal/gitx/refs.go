@@ -9,13 +9,13 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
-// ErrAccountRepo marks a git failure on the account repo, which the exit
+// ErrStore marks a git failure on the store, which the exit
 // code table calls 8 wherever it surfaces. A mutation journal's ref step
 // runs git through a RefUpdater long after the command that wrote the
-// journal is gone, so the account repo can have been removed or broken
+// journal is gone, so the store can have been removed or broken
 // meanwhile; the reader of that failure has to be told to look at the
-// account repo rather than handed an internal error.
-var ErrAccountRepo = errors.New("the account repo is unusable")
+// store rather than handed an internal error.
+var ErrStore = errors.New("the store is unusable")
 
 // Refs is the ref updater the mutation journal applies its lineage ref
 // steps with, and recovers them with after an interrupted install. The
@@ -50,7 +50,7 @@ func (x refs) RefValues(gitDir string, names []string) (map[string]string, error
 	args := append([]string{"for-each-ref", "--format=%(refname)%00%(objectname)"}, names...)
 	out, err := x.r.Isolated(x.ctx, gitDir, args...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAccountRepo, err)
+		return nil, fmt.Errorf("%w: %w", ErrStore, err)
 	}
 	wanted := make(map[string]bool, len(names))
 	for _, name := range names {
@@ -112,7 +112,7 @@ func (x refs) UpdateRefs(gitDir string, updates []home.RefUpdate) error {
 	}
 	b.WriteString("commit\n")
 	if _, err := x.r.IsolatedInput(x.ctx, gitDir, strings.NewReader(b.String()), "update-ref", "--stdin"); err != nil {
-		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
+		return fmt.Errorf("%w: %w", ErrStore, err)
 	}
 	return nil
 }
@@ -121,7 +121,7 @@ func (x refs) UpdateRefs(gitDir string, updates []home.RefUpdate) error {
 // AddForkWorktree.
 func (x refs) AddWorktree(gitDir, path, branch string) error {
 	if err := x.r.AddForkWorktree(x.ctx, gitDir, path, branch); err != nil {
-		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
+		return fmt.Errorf("%w: %w", ErrStore, err)
 	}
 	return nil
 }
@@ -130,7 +130,7 @@ func (x refs) AddWorktree(gitDir, path, branch string) error {
 // journal's worktree step, see Runner.ResetIndex.
 func (x refs) ResetIndex(path string) error {
 	if err := x.r.ResetIndex(x.ctx, path); err != nil {
-		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
+		return fmt.Errorf("%w: %w", ErrStore, err)
 	}
 	return nil
 }
@@ -139,7 +139,7 @@ func (x refs) ResetIndex(path string) error {
 // directory for the journal's worktree step, see Runner.CheckOutEntries.
 func (x refs) CheckOut(path string, names []string) error {
 	if err := x.r.CheckOutEntries(x.ctx, path, names); err != nil {
-		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
+		return fmt.Errorf("%w: %w", ErrStore, err)
 	}
 	return nil
 }

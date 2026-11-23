@@ -4,7 +4,7 @@
 import type { Page } from "@playwright/test";
 
 import { launch } from "./fixtures/palette-publish.ts";
-import { ACCOUNT } from "./fixtures/skills.ts";
+import { HUB } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -80,8 +80,8 @@ test.describe("ACTIONS", () => {
     ]);
   });
 
-  test("with no account remote: no Publish all", async ({ cli, page }) => {
-    launch(cli, "no-account-remote");
+  test("with no hub: no Publish all", async ({ cli, page }) => {
+    launch(cli, "no-hub");
     await openPalette(page);
     // Once the skills show, the inventory is in.
     await expect(
@@ -100,7 +100,7 @@ test.describe("ACTIONS", () => {
       events: names.map((name) => ({
         name,
         outcome: "pushed" as const,
-        source: ACCOUNT,
+        source: HUB,
         type: "publish" as const,
       })),
     });
@@ -189,9 +189,9 @@ test.describe("SKILLS", () => {
     await openPalette(page);
     const rows = group(page, "SKILLS").getByRole("option");
     await expect(rows).toHaveText([
-      "changelogpersonal skill",
-      "draftpersonal skill",
-      "notespersonal skill",
+      "changeloghub skill",
+      "drafthub skill",
+      "noteshub skill",
       "pdfacme/skills",
     ]);
   });

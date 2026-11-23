@@ -306,7 +306,7 @@ test("a modified skill of a source: its edits labelled and tinted, against the v
   ]);
 });
 
-test("a modified skill of your own compares with what was last published", async ({
+test("a modified hub skill compares with what was last published", async ({
   cli,
   page,
 }) => {
@@ -459,7 +459,7 @@ test("each file on disk can be shown in the file manager from its row", async ({
     "/home/me/.claude/plugins/acme-tools/skills/commit-helper/reference/forms.md",
   ]);
 
-  // One of your own skills is shown at its library entry too, which leads into its worktree.
+  // A hub skill is shown at its library entry too, which leads into its worktree.
   await row(page, "pdf-letters").click();
   await reveal(files(page, "pdf-letters"), "SKILL.md").click();
   expect(cli.reveals.at(-1)).toEqual([`${libraryPath}/pdf-letters/SKILL.md`]);
@@ -486,7 +486,7 @@ test("the places of a skill come from the inventory, the library first", () => {
       library ?? undefined
     ).map((l) => [l.label, l.path, l.directory, l.symlink]);
   // A library skill: the library entry, then each placement in a client's own directory, which
-  // opens where it resolves; one of your own resolves into its worktree.
+  // opens where it resolves; a hub skill resolves into its worktree.
   expect(places("pdf", libraryPath)).toEqual([
     ["Library", `${libraryPath}/pdf`, `${libraryPath}/pdf`, false],
     [

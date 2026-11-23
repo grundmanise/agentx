@@ -13,7 +13,7 @@ import (
 // writes it: url and alias are both URLs of a source and are stored
 // canonical; pin and default_branch are refs this machine hands to git,
 // which source.ValidRef exists to check before that happens, and the
-// account remote, a whole repository, has no pin; last_fetched
+// hub, a whole repository, has no pin; last_fetched
 // and access_checked are dates agentx wrote; access is a word agentx
 // writes, unknown written as no key at all. The messages name the entry by
 // its url, which is canonical by the time they are reached. Pure.
@@ -30,8 +30,8 @@ func sourceRefusal(src home.Source) string {
 	switch {
 	case src.Pin != "" && !source.ValidRef(src.Pin):
 		return src.URL + " is pinned to " + clipped(src.Pin) + ", which is not a ref git accepts"
-	case src.Pin != "" && src.Account:
-		return src.URL + " is pinned to " + clipped(src.Pin) + ", and the account remote is a whole repository"
+	case src.Pin != "" && src.Hub:
+		return src.URL + " is pinned to " + clipped(src.Pin) + ", and the hub is a whole repository"
 	case src.Access != "" && src.Access != home.AccessWritable && src.Access != home.AccessReadOnly:
 		return src.URL + " has the access " + clipped(src.Access) + ", and agentx writes writable or read-only, or none while it is unknown"
 	case src.AccessChecked != "" && !fetchTime(src.AccessChecked):
@@ -46,8 +46,8 @@ func sourceRefusal(src home.Source) string {
 
 // sourcesRefusal is why sources is not a list agentx would write, "" when
 // it is one: an entry sourceRefusal refuses, a source listed twice, a list
-// out of order, more than one account remote, or a shared source and the
-// account remote naming one repository, which would be fetched both ways
+// out of order, more than one hub, or a shared source and the
+// hub naming one repository, which would be fetched both ways
 // and pushed to by both. SetSource keeps the list sorted by url and holds
 // one entry per source, so two entries for one source are a list agentx did
 // not write and a pin or an alias silently lost: FindSource only ever sees
@@ -55,7 +55,7 @@ func sourceRefusal(src home.Source) string {
 // source.SameRepository takes it; nil reads every host as itself. Pure.
 func sourcesRefusal(sources []home.Source, resolve func(host string) string) string {
 	seen := map[string]bool{}
-	account := ""
+	hub := ""
 	for _, src := range sources {
 		if why := sourceRefusal(src); why != "" {
 			return why
@@ -63,23 +63,23 @@ func sourcesRefusal(sources []home.Source, resolve func(host string) string) str
 		switch {
 		case seen[src.URL]:
 			return src.URL + " is listed twice"
-		case src.Account && account != "":
-			return "both " + account + " and " + src.URL + " are marked as the account remote"
-		case src.Account:
-			account = src.URL
+		case src.Hub && hub != "":
+			return "both " + hub + " and " + src.URL + " are marked as the hub"
+		case src.Hub:
+			hub = src.URL
 		}
 		seen[src.URL] = true
 	}
 	if !slices.IsSortedFunc(sources, func(a, b home.Source) int { return strings.Compare(a.URL, b.URL) }) {
 		return "the sources must be sorted by url"
 	}
-	for _, account := range sources {
-		if !account.Account {
+	for _, hub := range sources {
+		if !hub.Hub {
 			continue
 		}
 		for _, shared := range sources {
-			if !shared.Account && sameRepository(account.URL, shared.URL, resolve) {
-				return shared.URL + " and the account remote " + account.URL + " name one repository"
+			if !shared.Hub && sameRepository(hub.URL, shared.URL, resolve) {
+				return shared.URL + " and the hub " + hub.URL + " name one repository"
 			}
 		}
 	}
@@ -103,11 +103,11 @@ func sameRepository(a, b string, resolve func(host string) string) bool {
 }
 
 // forkSourceRefusal is why src, a shared source an add is about to write,
-// cannot be one, nil when it can: the account remote of s already names its
+// cannot be one, nil when it can: the hub of s already names its
 // repository, through resolve.
 func forkSourceRefusal(s home.Settings, src home.Source, resolve func(host string) string) *failure {
 	for _, fork := range s.Sources {
-		if fork.Account && (fork.URL == src.URL || sameRepository(src.URL, fork.URL, resolve)) {
+		if fork.Hub && (fork.URL == src.URL || sameRepository(src.URL, fork.URL, resolve)) {
 			return forkSourceIs(src.URL, fork)
 		}
 	}
@@ -115,15 +115,15 @@ func forkSourceRefusal(s home.Settings, src home.Source, resolve func(host strin
 }
 
 // forkSourceIs refuses to read url, which names the repository of the
-// account remote fork, as a shared source, exit 6. The account remote holds
+// hub fork, as a shared source, exit 6. The hub holds
 // one branch per fork, and fetching it as a shared source as well would
 // bring its objects in without their blobs, which a fork's history then
 // lacks. Its skills are listed with skill list --remote and installed with
 // skill add --name, so the hint names both.
 func forkSourceIs(url string, fork home.Source) *failure {
-	what := url + " names the repository of the account remote " + fork.URL
+	what := url + " names the repository of the hub " + fork.URL
 	if fork.URL == url {
-		what = url + " is the account remote"
+		what = url + " is the hub"
 	}
 	return refuse(exitRefused, what+": it holds one branch per skill rather than skills on one branch",
 		"run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one")

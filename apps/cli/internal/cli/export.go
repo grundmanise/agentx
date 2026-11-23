@@ -95,8 +95,8 @@ type snapshotConfiguration struct {
 // paths, plus the commit its branch points at, which an inventory entry
 // does not carry. Source and Subpath are where the skill is published to:
 // the source its import commit names for a skill of a shared source, and
-// the account remote, with no subpath, for your own skills, absent while no
-// account remote is set. Upstream and UpstreamSubpath are where a forked
+// the hub, with no subpath, for hub skills, absent while no
+// hub is set. Upstream and UpstreamSubpath are where a forked
 // skill came from. Commit, UpstreamCommit and BaseHash are its version: the
 // commit its branch points at and the upstream version it is based on, the
 // source's or the upstream's, the last two absent for a skill based on no
@@ -107,7 +107,7 @@ type snapshotConfiguration struct {
 type snapshotSkill struct {
 	Name            string   `json:"name"`
 	Kind            string   `json:"kind"`              // managed or unmanaged; an entry that leaves it out is managed
-	ForkID          string   `json:"fork_id,omitempty"` // one of your own skills' permanent id
+	ForkID          string   `json:"fork_id,omitempty"` // a hub skill's permanent id
 	Commit          string   `json:"commit,omitempty"`  // what the branch points at; absent for an entry that follows
 	Source          string   `json:"source,omitempty"`
 	Subpath         *string  `json:"subpath,omitempty"` // "" for a skill at the source's root
@@ -182,7 +182,7 @@ type snapshotPlugin struct {
 // exportEvent reports the snapshot agentx snapshot save wrote. The entries
 // themselves are in the file or on the branch; the event says where it is
 // and how many skills it holds: a file by its path, or a machine's branch
-// on the account remote by the machine id and the commit that holds it.
+// on the hub by the machine id and the commit that holds it.
 type exportEvent struct {
 	event
 	Path    string `json:"path,omitempty"`    // the file, absent for a machine's branch
@@ -221,7 +221,7 @@ func newSnapshotSaveCommand(inv *invocation) *cobra.Command {
 	var machine string
 	cmd := &cobra.Command{
 		Use:         "save [<name> | --machine <id>]",
-		Short:       "Save a snapshot to the library or the account remote",
+		Short:       "Save a snapshot to the library or the hub",
 		Annotations: map[string]string{annotationSection: "machines", annotationSynopsis: "[<name>]|--machine <id>"},
 		Example: examples(
 			"agentx snapshot save", "write snapshot.json to the library",
@@ -236,7 +236,7 @@ func newSnapshotSaveCommand(inv *invocation) *cobra.Command {
 					"run 'agentx snapshot save --help' for usage")
 			case machine != "" && len(args) == 1:
 				return fail(exitUsage, "a name and --machine cannot both be given",
-					"give the name, or --machine to save the snapshot to the account remote")
+					"give the name, or --machine to save the snapshot to the hub")
 			case machine != "":
 				return machineArg(machine)
 			case len(args) == 1:
@@ -260,7 +260,7 @@ func newSnapshotSaveCommand(inv *invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "replace the file when one of that name is there")
-	cmd.Flags().StringVar(&machine, "machine", "", "write to the branch machines/<id> of the account remote instead: cloud, or a computer's machine id")
+	cmd.Flags().StringVar(&machine, "machine", "", "write to the branch machines/<id> of the hub instead: cloud, or a computer's machine id")
 	// The long help names this machine's id and the file the export writes,
 	// which are known before the command runs: help is printed before the
 	// root's PersistentPreRunE resolves the directories, so it resolves them
@@ -297,8 +297,8 @@ func (inv *invocation) exportHelp() string {
 		"snapshot apply' to restore from the snapshot.\n\n" +
 		"The snapshot goes to the library, as snapshot.json or as <name>.json:\n" +
 		file + "\n" +
-		"With --machine <id>, it is committed to the branch machines/<id> of the account\n" +
-		"remote. Use this machine's id (" + id + ") to keep a\n" +
+		"With --machine <id>, it is committed to the branch machines/<id> of the hub.\n" +
+		"Use this machine's id (" + id + ") to keep a\n" +
 		"backup on the remote. Use 'cloud', or another computer's id, to sync this\n" +
 		"machine with another.\n\n" +
 		"The snapshot keeps each MCP server's command, arguments and URL as written,\n" +
@@ -333,7 +333,7 @@ func importArgs(args []string, machine string) error {
 	switch {
 	case machine != "" && len(args) > 0:
 		return fail(exitUsage, "a file and --machine cannot both be given",
-			"give the file, or --machine to apply the snapshot from the account remote")
+			"give the file, or --machine to apply the snapshot from the hub")
 	case machine != "":
 		return machineArg(machine)
 	case len(args) != 1:
@@ -378,7 +378,7 @@ func (inv *invocation) export(ctx context.Context, path string, force bool) erro
 // hostname when the setting is empty, and writing that into a snapshot
 // would give the machine that imports it the exporting machine's hostname.
 //
-// The lineage is read as skill list reads it, so that an account repo git
+// The lineage is read as skill list reads it, so that a store git
 // cannot read is exit code 8 here rather than a snapshot that lists every
 // managed skill as unmanaged; the scan that follows is the one skill list
 // runs for the placements, which judges no drift, since a snapshot carries
@@ -435,14 +435,14 @@ func (inv *invocation) snapshotSkills(sc skillContext, inventory scan.Inventory)
 		rec, ok := sc.records[lib.Name]
 		if ok && rec.Kind == lineage.KindManaged && !rec.HasImport {
 			// An import branch whose lineage cannot be read names no
-			// source, and an entry with no source is one of your own skills
+			// source, and an entry with no source is a hub skill
 			// to the reader, which would look for it under skills/. The
 			// snapshot cannot say what it is, so it is left out and said out
 			// loud, as a name the library cannot hold is.
 			inv.out.warn("left " + sanitised(rec.Ref) + " out of the snapshot: its commit names no source it was imported from")
 			continue
 		}
-		entry := skillFromLibrary(lib, rec, ok, sc.sources, sc.account, inv.placements(inventory, lib, sc.modes), nil, observation{}).LibraryEntry
+		entry := skillFromLibrary(lib, rec, ok, sc.sources, sc.hub, inv.placements(inventory, lib, sc.modes), nil, observation{}).LibraryEntry
 		e := snapshotSkill{
 			Name: entry.Name, Kind: entry.Kind, ForkID: entry.ForkID,
 			Source: entry.Source, Subpath: entry.Subpath, Upstream: entry.Upstream, UpstreamSubpath: entry.UpstreamSubpath,

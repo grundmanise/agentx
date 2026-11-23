@@ -5,12 +5,12 @@ import { SCHEMA_VERSION } from "#/cli/events.gen.ts";
 import type { LibraryEntry, UpdateAvailableEvent } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
-import { ACCOUNT, ACME, inventory, library } from "./skills.ts";
+import { HUB, ACME, inventory, library } from "./skills.ts";
 
 export { ACME, ZETA } from "./skills.ts";
 
 /**
- * The Skills library, where pdf-letters, one of your own, holds edits not published, and draft
+ * The Skills library, where pdf-letters, a hub skill, holds edits not published, and draft
  * has a pending merge: pdf is an unmodified skill of a source, review a modified one.
  */
 export const updatesLibrary: LibraryEntry[] = library.map((entry) => {
@@ -74,7 +74,7 @@ export const lettersUpdate = event({
     { path: "examples.md", status: "deleted" },
   ],
   name: "pdf-letters",
-  source: ACCOUNT,
+  source: HUB,
   upstream: ACME,
   upstream_subpath: "pdf",
 });
@@ -88,7 +88,7 @@ export const releaseNotesUpdate = event({
   candidate_upstream_time: "2026-10-01T18:30:00Z",
   files: [{ path: "template.md", status: "added" }],
   name: "release-notes",
-  source: ACCOUNT,
+  source: HUB,
   upstream_commit: "",
 });
 
@@ -96,7 +96,7 @@ export const releaseNotesUpdate = event({
 export const draftUpdate = event({
   files: [{ path: "SKILL.md", status: "modified" }],
   name: "draft",
-  source: ACCOUNT,
+  source: HUB,
 });
 
 /** Every update the check finds, sorted by name, as the CLI emits them. */
