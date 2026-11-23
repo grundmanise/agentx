@@ -1,4 +1,5 @@
 import { cva } from "class-variance-authority";
+import type { ReactNode } from "react";
 
 import { ProgressRim } from "#/components/progress-rim/progress-rim.tsx";
 import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
@@ -27,15 +28,17 @@ const noop = () => {
 export type StatusTone = "none" | "pending" | "synced";
 
 /**
- * The sync status at the right of the title bar (DESIGN.md §6 "Publish status (title bar)"): a
- * dot in the state's colour and the label, on a pill. `tooltip` holds the lines its tooltip
- * shows, one each; none shows no tooltip. `busy` marks it `aria-busy` while its command runs, and
- * `rim` draws that run's progress on its edge (§8 "Progress rim"), until the rim has faded. As
- * the trigger of the popover it opens, it takes what the popover gives it (its state attributes,
- * the click and the ref) and passes them to the button; its accessible name stays the label.
+ * A status at the right of the title bar (DESIGN.md §6 "Publish status (title bar)", "App
+ * update (title bar)"): a dot in the state's colour, or `icon` in its place, and the label, on a
+ * pill. `tooltip` holds the lines its tooltip shows, one each; none shows no tooltip. `busy`
+ * marks it `aria-busy` while its command runs, and `rim` draws that run's progress on its edge
+ * (§8 "Progress rim"), until the rim has faded. As the trigger of the popover it opens, it takes
+ * what the popover gives it (its state attributes, the click and the ref) and passes them to the
+ * button; its accessible name stays the label.
  */
 export const StatusButton = ({
   tone,
+  icon,
   label,
   tooltip = noLines,
   busy = false,
@@ -44,6 +47,7 @@ export const StatusButton = ({
   ...props
 }: {
   tone: StatusTone;
+  icon?: ReactNode;
   label: string;
   tooltip?: readonly string[];
   busy?: boolean;
@@ -60,7 +64,7 @@ export const StatusButton = ({
         {...props}
       >
         <span className="text-shell-topbar-text flex size-4 items-center justify-center">
-          <span className={dot({ tone })} />
+          {icon ?? <span className={dot({ tone })} />}
         </span>
         {label}
         <ProgressRim run={rim} onSettled={onRimSettled} size="sm" />
