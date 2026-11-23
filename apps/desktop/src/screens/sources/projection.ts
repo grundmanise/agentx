@@ -248,11 +248,6 @@ export interface SkillCard {
   description: string;
   /** Why it cannot be selected; absent for a selectable card. */
   status?: CardStatus;
-  /**
-   * The library skill that holds the card's name, which Open in Skills opens; absent when an
-   * earlier skill of the same source holds it.
-   */
-  holderName?: string;
   /** Why a card that cannot be selected cannot be. */
   title?: string;
   /** Where its SKILL.md is read from; absent for your skills on the account remote. */
@@ -314,7 +309,6 @@ const card = (
   if (state !== undefined) {
     c.status = state.status;
     if (state.holder !== undefined) {
-      c.holderName = state.holder.name;
       c.title = takenWhy(state.holder);
     }
   }

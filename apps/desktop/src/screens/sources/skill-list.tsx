@@ -22,7 +22,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
-import { Button } from "#/components/ui/button.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import {
   Tooltip,
@@ -33,7 +32,6 @@ import { formatDate } from "#/lib/dates.ts";
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
-import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
 import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
@@ -210,17 +208,15 @@ const ViewSkill = ({ page }: { page: string }) => (
 );
 
 /**
- * What an open row shows: why a skill that cannot be selected cannot be, with Open in Skills for
- * the library skill that holds its name, and its SKILL.md, whose frontmatter holds the
- * description. One of your skills on the account remote has no SKILL.md to read here, so its row
- * shows its description.
+ * What an open row shows: why a skill that cannot be selected cannot be, and its SKILL.md, whose
+ * frontmatter holds the description. One of your skills on the account remote has no SKILL.md to
+ * read here, so its row shows its description.
  */
 const Details = ({ card }: { card: SkillCard }) => {
   const description =
     card.skillMd === undefined && card.description !== ""
       ? card.description
       : undefined;
-  const holder = card.holderName;
   const header = description !== undefined || card.title !== undefined;
   return (
     <>
@@ -235,18 +231,6 @@ const Details = ({ card }: { card: SkillCard }) => {
             <p className="type-secondary text-text-hint m-0 text-pretty">
               {card.title}
             </p>
-          )}
-          {holder !== undefined && (
-            <div className="flex">
-              <Button
-                size="sm"
-                onClick={() => {
-                  openSkill(holder);
-                }}
-              >
-                Open in Skills
-              </Button>
-            </div>
           )}
         </div>
       )}

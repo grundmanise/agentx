@@ -262,9 +262,6 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   await expect(opened(page, "scratch")).toContainText(
     "Your library has a scratch folder that agentx doesn't manage. Import or remove it to add this skill."
   );
-  await expect(
-    opened(page, "scratch").getByRole("button", { name: "Open in Skills" })
-  ).toBeVisible();
 
   // Opening another pill reads that source's listing.
   await pill(page, "zeta/tools").click();
@@ -275,21 +272,6 @@ test("a source listing: the skills A to Z, each state with its label and, once o
     `source read ${ACME_ID} skills/scratch`,
     `source skills ${ZETA_ID}`,
   ]);
-});
-
-test("Open in Skills on a Name taken row opens the library skill that holds the name", async ({
-  cli,
-  page,
-}) => {
-  await openSources(cli, page);
-  cli.register(["source", "read", ACME_ID, "skills/xlsx"], {
-    events: [skillMd("xlsx", "# xlsx\n")],
-  });
-  await row(page, "xlsx").click();
-  await opened(page, "xlsx")
-    .getByRole("button", { name: "Open in Skills" })
-    .click();
-  await expect(page).toHaveURL(/#\/skills\/xlsx$/u);
 });
 
 /**
@@ -397,9 +379,6 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   await expect(opened(page, "skill-89")).toContainText(
     "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added."
   );
-  await expect(
-    opened(page, "skill-89").getByRole("button", { name: "Open in Skills" })
-  ).toHaveCount(0);
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
     `source read ${ACME_ID} beta/skills/skill-89`,
