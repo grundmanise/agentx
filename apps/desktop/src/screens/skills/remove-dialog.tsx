@@ -1,8 +1,8 @@
 // The Remove dialog (DESIGN.md §6 "Banner actions and dialogs"): what leaves the machine with the
-// skill, and for one of your own, whether its branch leaves the account remote too. Opened from the
+// skill, and for a hub skill, whether its branch leaves the hub too. Opened from the
 // Universal chip, it says why the skill leaves every agent: those agents read the library. Remove runs
 // `skill remove <name>`, with --remote when that is checked, and never offers an Undo: unpublished
-// edits of your own are gone.
+// edits of a hub skill are gone.
 import { useId, useRef, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -27,7 +27,7 @@ import { useAppStore } from "#/store/store.ts";
 /** The label of the Remove control for `row`: the runner's name for it. */
 export const removeLabel = (row: SkillRow) => `remove ${row.key}`;
 
-/** What is lost with the skill: the unpublished edits of one of your own. */
+/** What is lost with the skill: the unpublished edits of a hub skill. */
 const Consequence = ({ row }: { row: SkillRow }) => {
   if (row.kind === "yours") {
     return (
@@ -64,11 +64,11 @@ export const RemoveDialog = ({
   const agents = seenBy(row, configurations);
   // Whether this close is the confirmation, for `onCloseAutoFocus`.
   const removed = useRef(false);
-  // Your own published skill, when an account remote is set, can leave that too.
+  // A published hub skill, when a hub is set, can leave that too.
   const offersRemote =
     row.kind === "yours" && row.published && hasAccountRemote;
   // The choice lasts one confirmation: a dialog dismissed and opened again starts unticked, so
-  // the account remote's branch goes only when the box is ticked in the confirmation that removes.
+  // the hub's branch goes only when the box is ticked in the confirmation that removes.
   const close = () => {
     setRemote(false);
     onClose();
@@ -136,7 +136,7 @@ export const RemoveDialog = ({
               }}
             />
             <span className="type-body text-text-primary">
-              Also delete it from your account remote
+              Also delete it from your hub
             </span>
           </label>
         )}

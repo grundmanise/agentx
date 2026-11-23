@@ -9,8 +9,8 @@ import (
 
 // TestSkillOrigin is what every event says of a skill's origin: its kind
 // is managed or unmanaged, a skill of a shared source is published to the
-// source its import names, and your own skills, the fork branches, to the
-// account remote, at no subpath and with no source while none is set,
+// source its import names, and hub skills, the fork branches, to the
+// hub, at no subpath and with no source while none is set,
 // carrying the upstream a forked one came from.
 func TestSkillOrigin(t *testing.T) {
 	t.Parallel()
@@ -35,7 +35,7 @@ func TestSkillOrigin(t *testing.T) {
 		{"an import branch with no lineage", lineage.Record{Kind: lineage.KindManaged}, account, [5]string{"managed", "", "<absent>", "", "<absent>"}},
 		{"forked, its upstream at its root", lineage.Record{Kind: lineage.KindFork, Fork: based}, account,
 			[5]string{"managed", account, "<absent>", upstream, ""}},
-		{"forked, no account remote", lineage.Record{Kind: lineage.KindFork, Fork: based}, "",
+		{"forked, no hub", lineage.Record{Kind: lineage.KindFork, Fork: based}, "",
 			[5]string{"managed", "", "<absent>", upstream, ""}},
 		{"made by skill new", lineage.Record{Kind: lineage.KindFork, Fork: &lineage.ForkLineage{ID: "id", NoUpstream: true}}, account,
 			[5]string{"managed", account, "<absent>", "", "<absent>"}},

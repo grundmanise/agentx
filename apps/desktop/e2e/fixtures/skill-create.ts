@@ -1,5 +1,5 @@
 // The Create skill tests: the Skills fixture's machine before `skill new`, and the inventory the
-// scan after it reports, with the new skill of your own in the library, placed in every enabled
+// scan after it reports, with the new hub skill in the library, placed in every enabled
 // agent: a symlink in Claude Code and Cursor, the library itself for the two that read it. And the
 // Add skill tests: a folder of a source not added that holds four skills, one of them installed
 // already and kept when its source was removed, what Find skills reads of it, and the machine
@@ -40,7 +40,7 @@ const placements: LibraryPlacement[] = [
   })),
 ];
 
-/** The library entry `skill new` made: one of your own skills, never published. */
+/** The library entry `skill new` made: a hub skill, never published. */
 export const created: LibraryEntry = {
   content_hash: "h-standup",
   drift: ["not published"],

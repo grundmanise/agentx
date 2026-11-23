@@ -62,7 +62,7 @@ type forkUpdate struct {
 	// names it, see updating.conflictsWith; "" for an update from upstream.
 	with string
 	// pull is set for the account step of an update, which takes in what
-	// the account remote holds and says so in its refusals; an update from
+	// the hub holds and says so in its refusals; an update from
 	// upstream leaves it unset.
 	pull bool
 	// stale is the update candidate the fork's new base passed: when the
@@ -344,7 +344,7 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 		return refuse(exitRefused, "the update candidate "+candidate+" moved while "+sanitised(name)+" was being updated, so nothing was changed",
 			"run '"+skillCommand("update", name)+"' again to apply the update the last check found")
 	default:
-		return refuse(exitRefused, "the account remote's "+site.branch+" moved while "+sanitised(name)+" was being updated, so nothing was changed",
+		return refuse(exitRefused, "the hub's "+site.branch+" moved while "+sanitised(name)+" was being updated, so nothing was changed",
 			"run '"+skillCommand("update", name)+"' again to update it as it is now")
 	}
 	if err := worktreeHealth(name, site.root, site.branch); err != nil {

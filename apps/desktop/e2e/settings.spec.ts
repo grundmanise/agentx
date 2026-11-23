@@ -58,7 +58,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
   const sections = page.getByRole("main").getByRole("region");
   await expect(sections).toHaveText([
     /^This machine/u,
-    /^Account remote/u,
+    /^Hub/u,
     /^Import skills/u,
     /^Comparing edits/u,
     /^Editor/u,

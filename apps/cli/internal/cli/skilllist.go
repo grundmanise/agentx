@@ -16,21 +16,21 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 		Short:       "List the library: sources, states and placements",
 		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "List the skills in the library: each one's kind, state, source (where it is\n" +
-			"published to, and for one of your own forked from a skill of a shared source,\n" +
-			"the upstream it came from) and placements. With --remote, fetch the account\n" +
-			"remote first and list after them the skills it holds that this machine has not\n" +
+			"published to, and for a hub skill forked from a skill of a shared source,\n" +
+			"the upstream it came from) and placements. With --remote, fetch the hub\n" +
+			"first and list after them the skills it holds that this machine has not\n" +
 			"installed; install one with 'agentx skill add --name <name>', or all of them\n" +
 			"with 'agentx skill add --all'. A managed skill reads modified while it holds\n" +
 			"edits not yet published, whatever its source; 'agentx skill diff <name>' shows\n" +
 			"them and 'agentx skill publish <name>' publishes them.",
 		Example: examples(
 			"agentx skill list", "every skill with its source, state and placements",
-			"agentx skill list --remote", "also the account remote's skills not installed here",
+			"agentx skill list --remote", "also the hub's skills not installed here",
 		),
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillList(cmd.Context(), remote) },
 	}
-	cmd.Flags().BoolVar(&remote, "remote", false, "fetch the account remote and list the skills it holds that this machine has not installed")
+	cmd.Flags().BoolVar(&remote, "remote", false, "fetch the hub and list the skills it holds that this machine has not installed")
 	return cmd
 }
 
@@ -48,7 +48,7 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 // after the rows, see absentWarnings, so that a branch the account repo
 // still holds is never silently left out.
 //
-// With remote, the account remote is fetched first, outside the lock, and
+// With remote, the hub is fetched first, outside the lock, and
 // every fork it holds that this machine has no branch of is listed after
 // the library's skills as installable, see installableSkills. Nothing else
 // in the listing reaches the network.
@@ -106,16 +106,16 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 	return nil
 }
 
-// printInstallable reports the skills the account remote holds that this
+// printInstallable reports the skills the hub holds that this
 // machine has not installed: one installable_skill event each, and a table
 // of them after the library's, with the commands that install them.
 func (inv *invocation) printInstallable(installable []installableSkillEvent) {
 	out := inv.out
 	if len(installable) == 0 {
-		out.print("The account remote holds no skill this machine has not installed.")
+		out.print("The hub holds no skill this machine has not installed.")
 		return
 	}
-	out.print(out.paint(heading, plural(len(installable), "installable skill")+" on the account remote"))
+	out.print(out.paint(heading, plural(len(installable), "installable skill")+" on the hub"))
 	t := &table{}
 	for _, ev := range installable {
 		out.emit(ev)
@@ -127,9 +127,8 @@ func (inv *invocation) printInstallable(installable []installableSkillEvent) {
 
 // row is one line of the human listing: the name, what agentx knows it as,
 // how it stands against its base version and whatever else it has drifted
-// by, where it is published to, see sourceCell, account being the account
-// remote's URL, and how many placements it has, one per configuration that
-// sees it.
+// by, where it is published to, see sourceCell, account being the hub's
+// URL, and how many placements it has, one per configuration that sees it.
 //
 // The name and the source are sanitised: the name of an unmanaged skill
 // is the library directory's own, which whoever put it there chose, a
@@ -184,10 +183,10 @@ func placedIn(places []placementEvent) int {
 }
 
 // sourceCell is the cell of a listing that says where a skill is published
-// to, own being whether it is one of your own skills and account the URL
-// of the account remote, "" when none is set. One of your own is published
-// to the account remote: its URL marked (account), as source list marks
-// it, or account remote not set while there is none, then, for a forked
+// to, own being whether it is a hub skill and account the URL
+// of the hub, "" when none is set. A hub skill is published
+// to the hub: its URL marked (hub), as source list marks
+// it, or hub not set while there is none, then, for a forked
 // one, the upstream it came from. Any other skill is published to its
 // source, the URL followed by the directory in it when that is not its
 // root, or to none: an unmanaged skill, or a managed one whose import
@@ -200,9 +199,9 @@ func sourceCell(own bool, source string, subpath *string, upstream string, upstr
 		}
 		return c(sanitised(withSubpath(source, subpath)), plain)
 	}
-	text, st := "account remote not set", muted
+	text, st := "hub not set", muted
 	if account != "" {
-		text, st = sanitised(account)+" (account)", plain
+		text, st = sanitised(account)+" (hub)", plain
 	}
 	if upstream != "" {
 		text += ", from " + sanitised(withSubpath(upstream, upstreamSubpath))

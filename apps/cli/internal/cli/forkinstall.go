@@ -17,8 +17,8 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// A skill of the account remote, one another machine published, is
-// installable here once a fetch of the account remote has written its
+// A skill of the hub, one another machine published, is
+// installable here once a fetch of the hub has written its
 // remote-tracking branch and this machine has no branch of its own by that
 // name. skill list --remote lists them, each with the provenance its own
 // commits record, and skill add with no source installs them, named with
@@ -29,16 +29,16 @@ import (
 // for the branch and its skill directory laid out from the commit, as a
 // fork put back by skill place is.
 
-// installableSkillEvent is one of your own skills the account remote holds
+// installableSkillEvent is a hub skill the hub holds
 // that this machine has no branch of, as skill list --remote lists it. Its
-// source is the account remote; its upstream, a forked skill's, is where
+// source is the hub; its upstream, a forked skill's, is where
 // it came from.
 type installableSkillEvent struct {
 	event
 	Name            string  `json:"name"`
 	ForkID          string  `json:"fork_id"`            // the skill's permanent id; a branch whose history records none is not listed
 	Commit          string  `json:"commit"`             // the remote tip
-	Source          string  `json:"source"`             // the canonical URL of the account remote
+	Source          string  `json:"source"`             // the canonical URL of the hub
 	Upstream        string  `json:"upstream,omitempty"` // the canonical URL a forked skill came from
 	UpstreamSubpath *string `json:"upstream_subpath,omitempty"`
 	UpstreamCommit  string  `json:"upstream_commit,omitempty"`
@@ -46,11 +46,11 @@ type installableSkillEvent struct {
 }
 
 // installRemoteRow is what the human listing says, in the state column the
-// library's rows use, of one of your own skills it can install from the
-// account remote.
+// library's rows use, of a hub skill it can install from the
+// hub.
 const installRemoteRow = "installable"
 
-// installableSkills reads your own skills that the account remote, the
+// installableSkills reads hub skills that the hub, the
 // settings entry account, holds and records, the account repo's branches,
 // hold no branch of, sorted by name, with the provenance of each read by one
 // walk of their remote tips. A branch whose name agentx would never give
@@ -72,7 +72,7 @@ func (inv *invocation) installableSkills(ctx context.Context, gitDir string, acc
 		switch {
 		case records[name].Kind == lineage.KindFork:
 		case forkNameRefusal(name) != "":
-			warnings = append(warnings, "the account remote's branch skills/"+sanitised(name)+" is left out, since it cannot be installed: "+forkNameRefusal(name))
+			warnings = append(warnings, "the hub's branch skills/"+sanitised(name)+" is left out, since it cannot be installed: "+forkNameRefusal(name))
 		default:
 			candidates = append(candidates, name)
 			walk = append(walk, tip)
@@ -100,7 +100,7 @@ func (inv *invocation) installableSkills(ctx context.Context, gitDir string, acc
 		id := walked[tips[name]].ID
 		switch {
 		case id == "":
-			warnings = append(warnings, "the account remote's branch skills/"+sanitised(name)+" is left out, since its history records no fork id")
+			warnings = append(warnings, "the hub's branch skills/"+sanitised(name)+" is left out, since its history records no fork id")
 		case !heldUnderAnotherName(local, id, tips[name], ancestor):
 			names = append(names, name)
 		}
@@ -120,7 +120,7 @@ func (inv *invocation) installableSkills(ctx context.Context, gitDir string, acc
 	return events, warnings, nil
 }
 
-// heldUnderAnotherName reports whether the account remote's branch whose
+// heldUnderAnotherName reports whether the hub's branch whose
 // fork id is id and whose tip is tip is a skill this machine already holds
 // under another name: one of its skills, whose tips local holds by fork
 // id, holds id, and that skill's tip is tip or has it in its history, as
@@ -138,26 +138,25 @@ func heldUnderAnotherName(local map[string][]string, id, tip string, ancestor fu
 	return false
 }
 
-// installableRow is one line of the human listing for one of your own
-// skills the account remote holds and this machine does not: its name, the
-// kind and state it is listed with, and where it is published to, the
-// account remote.
+// installableRow is one line of the human listing for a hub skill the hub
+// holds and this machine does not: its name, the kind and state it is
+// listed with, and where it is published to, the hub.
 func installableRow(out *writer, ev installableSkillEvent) []cell {
 	return []cell{c("  "+sanitised(ev.Name), heading), c(lineage.KindManaged, muted), c(installRemoteRow, infoStyle), sourceCell(true, ev.Source, nil, ev.Upstream, ev.UpstreamSubpath, ev.Source)}
 }
 
 // accountAddCommand is the command line that installs the skill called
-// name from the account remote.
+// name from the hub.
 func accountAddCommand(name string) string {
 	return "agentx skill add --name " + shellWord(name)
 }
 
-// listRemoteHint is the hint of a refusal to install a name the account
-// remote does not offer.
-const listRemoteHint = "run 'agentx skill list --remote' to see the skills the account remote holds"
+// listRemoteHint is the hint of a refusal to install a name the hub does
+// not offer.
+const listRemoteHint = "run 'agentx skill list --remote' to see the skills the hub holds"
 
 // libraryHolds is what the library path of a skill being installed from
-// the account remote holds, as fromAccountPlan decides on it.
+// the hub holds, as fromAccountPlan decides on it.
 type libraryHolds int
 
 const (
@@ -168,7 +167,7 @@ const (
 	holdsFile                          // a file, or anything else that is neither a directory nor a symlink
 )
 
-// accountAction is what an install from the account remote does at the
+// accountAction is what an install from the hub does at the
 // library path.
 type accountAction int
 
@@ -178,7 +177,7 @@ const (
 )
 
 // fromAccountPlan decides, with no I/O, what installing the skill called
-// name from the account remote does with what its library path, libPath,
+// name from the hub does with what its library path, libPath,
 // holds, and refuses what it cannot take: a managed copy of the skill's
 // upstream that still holds its base version is superseded; a directory of
 // anything else, an edited copy included, a symlink and a file are refused,
@@ -200,7 +199,7 @@ func fromAccountPlan(name, libPath string, holds libraryHolds) (accountAction, *
 		"move it aside, then run '"+accountAddCommand(name)+"' again")
 }
 
-// accountInstall is one skill being installed from the account remote, as
+// accountInstall is one skill being installed from the hub, as
 // the command found it before the lock and checks again under it.
 type accountInstall struct {
 	site     forkSite            // the fork as it will be: rec is its branch at the remote tip
@@ -210,21 +209,21 @@ type accountInstall struct {
 	managed  *lineage.Record // the managed skill of the name the fork takes the place of, nil for none
 	libState string          // what the library path held, as captured before it was judged
 	ignored  []string        // the files git ignores in a superseded copy, carried into the worktree
-	remote   string          // the account remote's git remote, which the fork's branch tracks
+	remote   string          // the hub's git remote, which the fork's branch tracks
 }
 
-// addFromAccount is skill add with no source: it fetches the account
-// remote once, then installs the skills of it the selection names, or with
-// --all every one this machine lacks but those --except names, one after
-// the other, each in a journaled mutation of its own, see installOne. A
-// skill that cannot be installed does not cost the others: the run goes
-// on, and answers with what failed, as an install from a source does.
+// addFromAccount is skill add with no source: it fetches the hub once, then
+// installs the skills of it the selection names, or with --all every one
+// this machine lacks but those --except names, one after the other, each in
+// a journaled mutation of its own, see installOne. A skill that cannot be
+// installed does not cost the others: the run goes on, and answers with
+// what failed, as an install from a source does.
 func (inv *invocation) addFromAccount(ctx context.Context, sel selection, to []string, asCopy, fetch bool) error {
 	switch {
 	case fetch:
-		return fail(exitUsage, "--fetch applies to a source; the account remote is fetched every time", "run the command again without --fetch")
+		return fail(exitUsage, "--fetch applies to a source; the hub is fetched every time", "run the command again without --fetch")
 	case !sel.all && len(sel.names) == 0:
-		return fail(exitUsage, "skill add needs a source, or --name or --all to install from the account remote", listRemoteHint)
+		return fail(exitUsage, "skill add needs a source, or --name or --all to install from the hub", listRemoteHint)
 	}
 	var names []string
 	for _, name := range sel.names {
@@ -258,7 +257,7 @@ func (inv *invocation) addFromAccount(ctx context.Context, sel selection, to []s
 			return err
 		}
 	}
-	run := refusals{verb: "installed", mixed: "run 'agentx skill list --remote' to see what the account remote holds, then install the rest one at a time"}
+	run := refusals{verb: "installed", mixed: "run 'agentx skill list --remote' to see what the hub holds, then install the rest one at a time"}
 	var installed []string
 	for _, name := range names {
 		err := inv.installOne(ctx, gitDir, remote, name, targets, to, asCopy)
@@ -276,7 +275,7 @@ func (inv *invocation) addFromAccount(ctx context.Context, sel selection, to []s
 		}
 	}
 	if len(names) > 1 {
-		inv.summary = "installed " + strconv.Itoa(len(installed)) + " of " + plural(len(names), "skill") + " from the account remote"
+		inv.summary = "installed " + strconv.Itoa(len(installed)) + " of " + plural(len(names), "skill") + " from the hub"
 		if len(installed) > 0 {
 			inv.summary += ": " + strings.Join(installed, ", ")
 		}
@@ -287,13 +286,13 @@ func (inv *invocation) addFromAccount(ctx context.Context, sel selection, to []s
 	return nil
 }
 
-// everyAccountSkillBut is --all with no source: every skill the account
-// remote holds that this machine lacks, as skill list --remote lists them,
-// less those except names, matched exactly. A branch that cannot be
-// installed is left out with a warning. An --except naming no such skill is
-// refused, exit code 5, even when the account remote holds nothing to
-// install; otherwise such an account remote says so and installs nothing,
-// which is no failure, and an --except that leaves nothing is exit code 1.
+// everyAccountSkillBut is --all with no source: every skill the hub holds
+// that this machine lacks, as skill list --remote lists them, less those
+// except names, matched exactly. A branch that cannot be installed is left
+// out with a warning. An --except naming no such skill is refused, exit
+// code 5, even when the hub holds nothing to install; otherwise such a hub
+// says so and installs nothing, which is no failure, and an --except that
+// leaves nothing is exit code 1.
 func (inv *invocation) everyAccountSkillBut(ctx context.Context, gitDir string, account home.Source, except []string) ([]string, error) {
 	records, err := inv.forkRecords(ctx, gitDir)
 	if err != nil {
@@ -313,11 +312,11 @@ func (inv *invocation) everyAccountSkillBut(ctx context.Context, gitDir string, 
 		}
 	}
 	if len(unknown) > 0 {
-		return nil, fail(exitNotFound, "the account remote holds no skill this machine lacks called "+quoted(unknown), listRemoteHint)
+		return nil, fail(exitNotFound, "the hub holds no skill this machine lacks called "+quoted(unknown), listRemoteHint)
 	}
 	if len(installable) == 0 {
-		inv.out.print("The account remote holds no skill this machine lacks.")
-		inv.summary = "the account remote holds no skill this machine lacks"
+		inv.out.print("The hub holds no skill this machine lacks.")
+		inv.summary = "the hub holds no skill this machine lacks"
 		return nil, nil
 	}
 	var names []string
@@ -332,7 +331,7 @@ func (inv *invocation) everyAccountSkillBut(ctx context.Context, gitDir string, 
 	return names, nil
 }
 
-// installOne installs the skill called name from the account remote, the
+// installOne installs the skill called name from the hub, the
 // git remote called remote, which the run has fetched, see accountInstall,
 // in one journaled mutation: the local branch at the remote tip, its
 // worktree, the skill directory laid out from the tip, the library
@@ -342,7 +341,7 @@ func (inv *invocation) everyAccountSkillBut(ctx context.Context, gitDir string, 
 // and upstream-removed marker are deleted last. The skill's upstream source
 // is added first when the settings lack it, as source add adds one, so that
 // update checks cover it here as on the machine that published it. The
-// branch is set to track the account remote's just before the journal is
+// branch is set to track the hub's just before the journal is
 // written.
 func (inv *invocation) installOne(ctx context.Context, gitDir, remote, name string, targets []placeTarget, to []string, asCopy bool) error {
 	in, err := inv.judgeAccountInstall(ctx, gitDir, remote, name)
@@ -376,9 +375,9 @@ func (inv *invocation) installOne(ctx context.Context, gitDir, remote, name stri
 }
 
 // judgeAccountInstall reads what installing the skill called name from the
-// account remote, the git remote called remote, takes, after the fetch and
+// hub, the git remote called remote, takes, after the fetch and
 // before the lock, and refuses what it cannot do, changing nothing: a skill
-// the account remote does not hold, and a content to install that holds no
+// the hub does not hold, and a content to install that holds no
 // SKILL.md, exit code 5; one this machine has a branch of already, a name
 // another branch holds whatever its case, a remote history that records no
 // fork id, a worktree directory in the way, and a library path
@@ -393,7 +392,7 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, 
 	}
 	tip := tips[name]
 	if tip == "" {
-		return nil, fail(exitNotFound, "the account remote holds no skill called "+sanitised(name), listRemoteHint)
+		return nil, fail(exitNotFound, "the hub holds no skill called "+sanitised(name), listRemoteHint)
 	}
 	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
@@ -408,7 +407,7 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, 
 		// A pending merge comes before what the library holds: until it is
 		// finished or aborted, the library directory is the merge's.
 		if inv.mergePending(name) {
-			return nil, pendingMergeRefusal(name, "replaced by the account remote's skill")
+			return nil, pendingMergeRefusal(name, "replaced by the hub's skill")
 		}
 	}
 	if err := inv.checkForkName(ctx, records, name, name, "remove it first, then run '"+accountAddCommand(name)+"' again"); err != nil {
@@ -423,7 +422,7 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, 
 		// The account step and a publish refuse a fork whose two histories
 		// do not both record its id, so a fork installed from this branch
 		// could never sync.
-		return nil, fail(exitRefused, "the history of the account remote's skills/"+sanitised(name)+" records no fork id, so nothing tells which skill it is and "+sanitised(name)+" cannot be installed",
+		return nil, fail(exitRefused, "the history of the hub's skills/"+sanitised(name)+" records no fork id, so nothing tells which skill it is and "+sanitised(name)+" cannot be installed",
 			"publish it from a skill agentx made, one 'agentx skill new' or 'agentx skill fork' creates, on the machine that holds it")
 	}
 	rec := lineage.Record{Name: name, Kind: lineage.KindFork, Ref: lineage.ForkRef(name), Commit: tip, Fork: &in.there}
@@ -475,8 +474,8 @@ func (inv *invocation) tipHoldsSkill(ctx context.Context, gitDir, tip, dir strin
 }
 
 // installedRefusal refuses to install a fork this machine has a branch of
-// already, exit code 6: an update brings it to the version the account
-// remote holds, and skill place lays out one that was never placed here.
+// already, exit code 6: an update brings it to the version the hub holds,
+// and skill place lays out one that was never placed here.
 func (inv *invocation) installedRefusal(gitDir string, rec lineage.Record) error {
 	name := rec.Name
 	if classifyFork(inv.forkFactsOf(inv.forkPlace(gitDir, rec))).outcome == outcomeInstallable {
@@ -489,7 +488,7 @@ func (inv *invocation) installedRefusal(gitDir string, rec lineage.Record) error
 
 // tipDir is the skill directory a fork's tip holds at its root: the one
 // directory there, read with one ls-tree. A tip holding none or several is
-// the account remote's to sort out, exit code 8, as for a fork placed here.
+// the hub's to sort out, exit code 8, as for a fork placed here.
 func (inv *invocation) tipDir(ctx context.Context, gitDir string, rec lineage.Record) (string, error) {
 	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", "-d", "--name-only", rec.Commit)
 	if err != nil {
@@ -502,8 +501,8 @@ func (inv *invocation) tipDir(ctx context.Context, gitDir string, rec lineage.Re
 		}
 	}
 	if len(dirs) != 1 {
-		return "", fail(exitAccountRepo, fmt.Sprintf("the account remote's branch %s holds %d directories at its root, not the one skill directory a skill's branch holds", strings.TrimPrefix(rec.Ref, "refs/heads/"), len(dirs)),
-			"fix the branch on the account remote, then run '"+accountAddCommand(rec.Name)+"' again")
+		return "", fail(exitAccountRepo, fmt.Sprintf("the hub's branch %s holds %d directories at its root, not the one skill directory a skill's branch holds", strings.TrimPrefix(rec.Ref, "refs/heads/"), len(dirs)),
+			"fix the branch on the hub, then run '"+accountAddCommand(rec.Name)+"' again")
 	}
 	return dirs[0], nil
 }
@@ -612,7 +611,7 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 	if in.managed != nil {
 		in.managed = &rec // its candidate and marker as they are now
 		if inv.mergePending(f.name) {
-			return pendingMergeRefusal(f.name, "replaced by the account remote's skill")
+			return pendingMergeRefusal(f.name, "replaced by the hub's skill")
 		}
 	}
 	if lexists(f.root) {
@@ -695,14 +694,14 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 			m.Ref(f.gitDir, lineage.UpstreamRemovedRef(f.name), in.managed.UpstreamRemoved, "")
 		}
 	}
-	// The branch tracks the account remote's, for git status in the
+	// The branch tracks the hub's, for git status in the
 	// worktree. It is set before the journal is written, so that an
 	// install a later command finishes tracks it too; a section left for a
 	// branch the journal never makes is harmless and set again by the next
 	// install. agentx reads the remote-tracking branch by its name and never
 	// needs it, so a failure is a warning and the install goes on.
 	if err := inv.git.SetTracking(ctx, f.gitDir, in.remote, f.branch); err != nil {
-		inv.out.warn("could not set " + f.branch + " to track the account remote's branch: " + trimGit(err.Error()))
+		inv.out.warn("could not set " + f.branch + " to track the hub's branch: " + trimGit(err.Error()))
 	}
 	return m.Apply(inv.refs(ctx))
 }
@@ -711,7 +710,7 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 // installed from, the remote tip's skill directory, holds no SKILL.md: no
 // listing would show it as a skill. Nothing is changed.
 func noAccountSkill(f forkSite) error {
-	return fail(exitNotFound, "the account remote's branch "+sanitised(f.branch)+" holds no SKILL.md in "+sanitised(f.dir)+", so there is no skill to install and nothing was changed",
+	return fail(exitNotFound, "the hub's branch "+sanitised(f.branch)+" holds no SKILL.md in "+sanitised(f.dir)+", so there is no skill to install and nothing was changed",
 		"add a SKILL.md to "+sanitised(f.dir)+" on the machine that published "+sanitised(f.name)+" and run '"+publishCommand(f.name)+"' there, then run '"+accountAddCommand(f.name)+"' again")
 }
 
@@ -740,8 +739,8 @@ func (inv *invocation) reportAccountInstall(ctx context.Context, in *accountInst
 	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, covered)
 	inv.out.emit(ev)
 	out, name := inv.out, sanitised(f.name)
-	line := "installed " + out.paint(heading, name) + " from the account remote at " + short(f.rec.Commit)
-	inv.summary = "installed " + name + " from the account remote"
+	line := "installed " + out.paint(heading, name) + " from the hub at " + short(f.rec.Commit)
+	inv.summary = "installed " + name + " from the hub"
 	if in.managed != nil {
 		const kept = "it replaces the managed skill wherever it was"
 		out.done(line + "; " + kept)

@@ -223,7 +223,7 @@ func TestStderrFor(t *testing.T) {
 // commit onto one branch, leased on the commit it was read at, signing
 // nothing, running no hook, sending no thin pack and fetching nothing
 // lazily, and never forced, mirrored or carrying every branch or tag. The
-// account remote's pushes, of fork branches and of a deletion, sign
+// hub's pushes, of fork branches and of a deletion, sign
 // nothing and carry no push option or tag of the user's either.
 func TestPushBranchNeverForces(t *testing.T) {
 	t.Parallel()

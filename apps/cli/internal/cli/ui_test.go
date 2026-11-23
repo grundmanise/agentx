@@ -197,7 +197,7 @@ func TestHelpSections(t *testing.T) {
 		"\nINVENTORY AND DIAGNOSTICS\n  scan  ",
 		"\nExamples:\n" +
 			"  agentx skill add anthropics/skills --name pdf  install one skill into every enabled client\n" +
-			"  agentx skill new release-notes                 create a skill of your own\n" +
+			"  agentx skill new release-notes                 create a hub skill\n" +
 			"  agentx skill check-updates                     see what changed upstream before you update\n" +
 			"  agentx snapshot save --machine cloud           seed the cloud machine with this one's skills\n" +
 			"\nGlobal flags:\n" +
@@ -537,7 +537,7 @@ func TestHelpGolden(t *testing.T) {
 	h.env["COLUMNS"] = "80"
 	out = h.run("skill", "place", "--help")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "      --machine string  place the skill on this machine instead, by its branch\n                        on the account remote; only cloud is accepted\n")
+	contains(t, "stdout", out.stdout, "      --machine string  place the skill on this machine instead, by its branch\n                        on the hub; only cloud is accepted\n")
 	for _, line := range strings.Split(out.stdout, "\n") {
 		if strings.HasPrefix(line, "      --") && len(line) > 80 {
 			t.Errorf("a flag row runs past 80 columns: %q", line)
@@ -547,5 +547,5 @@ func TestHelpGolden(t *testing.T) {
 	contains(t, "stderr", out.stderr, "      --machine string  place the skill on this machine instead, by its branch\n")
 	delete(h.env, "COLUMNS")
 	out = h.run("skill", "place", "--help")
-	contains(t, "stdout", out.stdout, "      --machine string  place the skill on this machine instead, by its branch on the account remote; only cloud is accepted\n")
+	contains(t, "stdout", out.stdout, "      --machine string  place the skill on this machine instead, by its branch on the hub; only cloud is accepted\n")
 }

@@ -78,7 +78,7 @@ test("exit 0 with warnings shows an attention toast with the success text and th
 }) => {
   await launch(cli, page);
   const warning =
-    "cursor: /home/me/.cursor/skills/pdf is a directory of yours and was left as it is";
+    "cursor: /home/me/.cursor/skills/pdf is not a placement agentx made and was left as it is";
   cli.register(["skill", "place", "pdf"], {
     events: [
       {

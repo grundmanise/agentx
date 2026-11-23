@@ -27,15 +27,15 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 			"file turned into a symlink included. Files git ignores do not. Nothing is\n" +
 			"written to the library. With --update, show instead what the update\n" +
 			"'" + checkUpdatesCommand + "' found changes in the base version.\n\n" +
-			"For one of your own skills, show its unpublished edits: how its skill directory\n" +
+			"For a hub skill, show its unpublished edits: how its skill directory\n" +
 			"differs from its last published version, the newest commit of its branch the\n" +
-			"account remote holds as last fetched, or from the commit that created it when the\n" +
-			"account remote holds none, so edits an update or a fork recorded show until they\n" +
+			"hub holds as last fetched, or from the commit that created it when the\n" +
+			"hub holds none, so edits an update or a fork recorded show until they\n" +
 			"are published; or, with --commit <id>, how it differs from that commit.",
 		Example: examples(
 			"agentx skill diff pdf", "edits not yet published",
 			"agentx skill diff pdf --update", "what the update the last check found changes",
-			"agentx skill diff release-notes --commit e07d5b2", "one of your own against a commit",
+			"agentx skill diff release-notes --commit e07d5b2", "a hub skill against a commit",
 		),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -51,7 +51,7 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&update, "update", false, "compare the base version with the update the last check found")
-	cmd.Flags().StringVar(&commit, "commit", "", "compare one of your own skills with this commit instead of its last published version")
+	cmd.Flags().StringVar(&commit, "commit", "", "compare a hub skill with this commit instead of its last published version")
 	return cmd
 }
 
@@ -91,7 +91,7 @@ type fileDiff struct {
 // modified: a directory holding something git cannot record is not the
 // base version, even when every path git can record is.
 //
-// One of your own skills is compared with its last published version, or
+// A hub skill is compared with its last published version, or
 // with the commit given, see forkDiff.
 func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error {
 	gitDir, rec, held, err := inv.accountRecord(ctx, name)

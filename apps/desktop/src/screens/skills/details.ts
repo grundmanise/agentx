@@ -46,7 +46,7 @@ const linked = (detail: Detail, link: DetailLink | undefined): Detail =>
 const at = (source: string, subpath: string | undefined) =>
   subpath === undefined || subpath === "" ? source : `${source}/${subpath}`;
 
-/** The directory one of your own skills is checked out in, as the library occurrence resolves. */
+/** The directory a hub skill is checked out in, as the library occurrence resolves. */
 const worktreeOf = (row: SkillRow): string | undefined => {
   const library = row.entry?.placements.find((p) => p.mode === "library");
   const occurrence =

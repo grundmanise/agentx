@@ -109,7 +109,7 @@ type Occurrence struct {
 type LibraryEntry struct {
 	Name            string             `json:"name"`
 	Kind            string             `json:"kind"`                       // managed or unmanaged
-	ForkID          string             `json:"fork_id,omitempty"`          // one of your own skills' permanent id, from the commit that created it
+	ForkID          string             `json:"fork_id,omitempty"`          // a hub skill's permanent id, from the commit that created it
 	Source          string             `json:"source,omitempty"`           // the canonical URL of the source it is published to
 	Subpath         *string            `json:"subpath,omitempty"`          // the directory in the source, "" for its root
 	Upstream        string             `json:"upstream,omitempty"`         // the canonical URL a forked skill came from

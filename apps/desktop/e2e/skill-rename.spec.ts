@@ -1,4 +1,4 @@
-// Rename, for one of your own skills, in the action row: renames the skill and selects it under its
+// Rename, for a hub skill, in the action row: renames the skill and selects it under its
 // new name; with a name another skill has, it keeps the dialog open with the CLI's words.
 import type { Page } from "@playwright/test";
 
@@ -94,8 +94,7 @@ test("Rename with a name another skill has: the dialog stays open with the CLI's
       {
         code: "refused",
         hint: "choose another name with 'agentx skill rename commit-helper <new>'",
-        message:
-          "the account repo already holds release-notes as one of your own skills",
+        message: "the account repo already holds release-notes as a hub skill",
         type: "error",
       },
     ],
@@ -107,7 +106,7 @@ test("Rename with a name another skill has: the dialog stays open with the CLI's
   await dialog.getByRole("button", { name: "Rename" }).click();
   const alert = dialog.getByRole("alert");
   await expect(alert).toHaveText(
-    "The account repo already holds release-notes as one of your own skills. Choose another name."
+    "The account repo already holds release-notes as a hub skill. Choose another name."
   );
   // The field takes edits again once the inventory that follows the refusal has arrived.
   await expect(field).toBeDisabled();
