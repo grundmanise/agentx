@@ -15,13 +15,13 @@ import type { Configuration, Install } from "#/cli/events.gen.ts";
 import { CodePane } from "#/components/code-pane.tsx";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { RemoveSwap } from "#/components/remove-swap.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import {
   Tooltip,

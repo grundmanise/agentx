@@ -9,7 +9,6 @@
 import { useState } from "react";
 
 import type { UpdateAvailableEvent } from "#/cli/events.gen.ts";
-import { Spinner } from "#/components/spinner.tsx";
 import {
   StatusAnnouncement,
   StatusButton,
@@ -28,6 +27,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#/components/ui/popover.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { formatAgo } from "#/lib/dates.ts";
 import { navigateTo } from "#/lib/navigate.ts";
 import { useNow } from "#/lib/now.ts";

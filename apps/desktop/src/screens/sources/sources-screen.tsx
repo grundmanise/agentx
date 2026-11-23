@@ -10,10 +10,10 @@ import type {
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
 import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
-import { Spinner } from "#/components/spinner.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { problemSentence, skillNamesOf } from "#/lib/problem-text.ts";
 import { FloatingActionBar } from "#/screens/sources/action-bar.tsx";
 import { addProblem } from "#/screens/sources/add-problem.ts";

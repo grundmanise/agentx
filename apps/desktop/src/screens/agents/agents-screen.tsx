@@ -18,7 +18,6 @@ import type {
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { Segmented } from "#/components/filter-controls.tsx";
 import { MoreIcon } from "#/components/icons/more.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -26,6 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { againRule, withAppHint } from "#/lib/app-hint.ts";
 import { plural } from "#/lib/plural.ts";

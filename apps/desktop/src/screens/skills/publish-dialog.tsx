@@ -12,7 +12,6 @@ import { useId, useRef, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { DiffEvent, ProgressEvent } from "#/cli/events.gen.ts";
-import { Spinner } from "#/components/spinner.tsx";
 import { notify, notifySuccess } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -26,6 +25,7 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
 import { accountRemoteOf, notPublished } from "#/screens/skills/banners.ts";
 import { fileStatusLabels } from "#/screens/skills/files.tsx";
