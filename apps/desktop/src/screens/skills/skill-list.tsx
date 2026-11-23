@@ -19,12 +19,17 @@ import {
   SortToggle,
 } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
+import { SearchIcon } from "#/components/icons/search.tsx";
 import { LIST_GUIDE, LIST_GUIDE_NESTED } from "#/components/list-guide.ts";
-import { SearchField } from "#/components/search-field.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import {
   Tooltip,
@@ -863,14 +868,21 @@ export const SkillList = ({
         </div>
       </div>
       <div className="pt-split-toolbar-top px-split-toolbar pb-split-toolbar-bottom gap-split-toolbar flex flex-col">
-        <SearchField
-          label="Filter skills by name"
-          placeholder="Search"
-          value={filters.name}
-          onChange={(name) => {
-            onFilters({ ...filters, name });
-          }}
-        />
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon size="xs" />
+          </InputGroupAddon>
+          <InputGroupInput
+            kind="list-search"
+            type="search"
+            aria-label="Filter skills by name"
+            placeholder="Search"
+            value={filters.name}
+            onChange={(e) => {
+              onFilters({ ...filters, name: e.target.value });
+            }}
+          />
+        </InputGroup>
         <div className="gap-split-filter flex min-w-0 items-center">
           <FilterPopover
             rows={rows}

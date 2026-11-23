@@ -15,9 +15,14 @@ const inputVariants = cva(
       kind: {
         // `input.height`, `input.radius`, `input.padding-x`.
         default: "rounded-input h-input px-input type-input",
-        // The same, in the mono face: a URL or a command.
+        // The search field at the top of a list: a pill of `input.search-height` in
+        // `type.secondary`, with room at its left for the magnifier of its `InputGroupAddon`.
+        "list-search":
+          "rounded-input-search h-input-search pr-input-search-right pl-input-search-left type-secondary py-0",
+        // The default, in the mono face: a URL or a command.
         mono: "rounded-input h-input px-input type-input-mono",
-        // The Add skills search: a pill of `add-search.height` with room for the icon at its left.
+        // The Sources search: a pill of `add-search.height` with room at its left for the
+        // magnifier of its `InputGroupAddon`.
         search:
           "rounded-input-search h-add-search pr-input-search-right pl-input-search-left type-input py-0",
       },
