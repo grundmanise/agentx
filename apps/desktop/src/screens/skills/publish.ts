@@ -15,7 +15,7 @@ import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { navigateTo } from "#/lib/navigate.ts";
 import {
-  accountRemoteOf,
+  hubOf,
   hasEditsToPublish,
   notPublished,
 } from "#/screens/skills/banners.ts";
@@ -134,21 +134,18 @@ const nonePublished = (judged: number) =>
  * Whether a publish was refused for want of a hub: refused before any skill was
  * judged, with none set or with the CLI saying so.
  */
-export const refusedForAccountRemote = (
-  outcome: Outcome,
-  accountRemoteSet: boolean
-) => {
+export const refusedForHub = (outcome: Outcome, hubSet: boolean) => {
   const judged = outcome.events.some((e) => e.type === "publish");
   const error = outcome.events.find((e) => e.type === "error");
   return (
     outcome.exitCode === EXIT_CODES.refused &&
     !judged &&
-    (!accountRemoteSet || error?.message === "no hub is set")
+    (!hubSet || error?.message === "no hub is set")
   );
 };
 
 /** "Set a hub to publish", with Open Settings. */
-export const notifyNoAccountRemote = () => {
+export const notifyNoHub = () => {
   notify(
     "Set a hub to publish",
     {
@@ -309,10 +306,9 @@ export const publishAll = async (names: readonly string[]) => {
       useProgressStore.setState({ progress: undefined });
     }
   });
-  const accountRemoteSet =
-    accountRemoteOf(useAppStore.getState().sources) !== undefined;
-  if (refusedForAccountRemote(outcome, accountRemoteSet)) {
-    notifyNoAccountRemote();
+  const hubSet = hubOf(useAppStore.getState().sources) !== undefined;
+  if (refusedForHub(outcome, hubSet)) {
+    notifyNoHub();
     return;
   }
   reportPublishAll(outcome);

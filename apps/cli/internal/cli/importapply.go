@@ -49,7 +49,7 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 	if err != nil {
 		return err
 	}
-	account := documentAccount(doc.Settings)
+	hub := documentHub(doc.Settings)
 	records, err := inv.lineageRecords(ctx)
 	if err != nil {
 		return err
@@ -58,12 +58,12 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 	if err != nil {
 		return err
 	}
-	states := restoreStates(doc.Skills, records, remote, account)
+	states := restoreStates(doc.Skills, records, remote, hub)
 	if err := inv.confirmImport(origin, doc, in, yes); err != nil {
 		return err
 	}
 	forgetAccess(&doc.Settings)
-	keepAccountRemote(&doc.Settings, here)
+	keepHubRemote(&doc.Settings, here)
 	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		return home.SaveSettings(inv.dirs.Home, doc.Settings)
 	}); err != nil {
@@ -74,7 +74,7 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 	if err != nil {
 		return err
 	}
-	run := newApplyRun(inv, account, adding)
+	run := newApplyRun(inv, hub, adding)
 	if err := run.apply(ctx, states); err != nil {
 		return err
 	}
@@ -118,9 +118,9 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 // plugins are not applied.
 type applyRun struct {
 	inv     *invocation
-	account string // the hub the snapshot's settings set, which the snapshot is read against
+	hub     string // the hub the snapshot's settings set, which the snapshot is read against
 	gitDir  string
-	records map[string]lineage.Record    // the branches of the account repo by name, before the run
+	records map[string]lineage.Record    // the branches of the store by name, before the run
 	library map[string]scan.LibrarySkill // the library before the run
 	held    map[string]librarySkillEvent // what the library holds of each entry before the run
 	targets []placeTarget                // every detected configuration a placement can be made in
@@ -145,9 +145,9 @@ type applyRun struct {
 }
 
 // newApplyRun is the application of a snapshot whose settings set the
-// hub account, adding the sources in adding.
-func newApplyRun(inv *invocation, account string, adding []home.Source) *applyRun {
-	r := &applyRun{inv: inv, account: account, fetched: map[string]bool{}, sources: map[string]*sharedFetch{},
+// hub at the URL hub, adding the sources in adding.
+func newApplyRun(inv *invocation, hub string, adding []home.Source) *applyRun {
+	r := &applyRun{inv: inv, hub: hub, fetched: map[string]bool{}, sources: map[string]*sharedFetch{},
 		adding: map[string]bool{}, added: map[string]sourceEvent{}, failed: map[string]*failure{}, total: len(adding)}
 	for _, src := range adding {
 		r.adding[src.URL] = true
@@ -225,7 +225,7 @@ func (r *applyRun) read(ctx context.Context, states []importSkillEvent) error {
 	if err != nil {
 		return err
 	}
-	r.gitDir = gitx.AccountRepoPath(inv.dirs.Home)
+	r.gitDir = gitx.StorePath(inv.dirs.Home)
 	r.records = sc.records
 	r.library = librarySkills(inv.dirs.Library)
 	r.held = map[string]librarySkillEvent{}
@@ -251,7 +251,7 @@ func (r *applyRun) read(ctx context.Context, states []importSkillEvent) error {
 // reaches no remote. A source that cannot be fetched skips its entries; it
 // costs no other.
 func (r *applyRun) fetch(ctx context.Context, states []importSkillEvent) error {
-	account := false
+	hub := false
 	for _, st := range states {
 		e := st.snapshotSkill
 		if e.Kind == lineage.KindUnmanaged || r.gone(e) != nil {
@@ -260,8 +260,8 @@ func (r *applyRun) fetch(ctx context.Context, states []importSkillEvent) error {
 		if rec, ok := r.records[e.Name]; ok && e.Commit != "" && rec.Commit == e.Commit {
 			continue
 		}
-		if ownRecord(e, r.account) {
-			account = true
+		if hubRecord(e, r.hub) {
+			hub = true
 			continue
 		}
 		if _, ok := r.sources[e.Source]; ok {
@@ -273,8 +273,8 @@ func (r *applyRun) fetch(ctx context.Context, states []importSkillEvent) error {
 		}
 		r.sources[e.Source] = fx
 	}
-	if account {
-		return r.fetchAccount(ctx)
+	if hub {
+		return r.fetchHub(ctx)
 	}
 	return nil
 }
@@ -304,13 +304,13 @@ func (r *applyRun) fetchShared(ctx context.Context, url string) (*sharedFetch, e
 	return fx, nil
 }
 
-// fetchAccount fetches the hub, as skill add with no source does,
+// fetchHub fetches the hub, as skill add with no source does,
 // and reads the tip of each hub skill it holds. A hub
 // this machine has not added, see unadded, is added instead, as source add
 // --hub adds it, which fetches it as well.
-func (r *applyRun) fetchAccount(ctx context.Context) error {
+func (r *applyRun) fetchHub(ctx context.Context) error {
 	inv := r.inv
-	entry, remote, ok, err := inv.accountSource()
+	entry, remote, ok, err := inv.hubSource()
 	if err != nil {
 		return err
 	}
@@ -319,14 +319,14 @@ func (r *applyRun) fetchAccount(ctx context.Context) error {
 		return nil
 	}
 	r.missing, err = r.reach(ctx, entry.URL, func() error {
-		gitDir := gitx.AccountRepoPath(inv.dirs.Home)
+		gitDir := gitx.StorePath(inv.dirs.Home)
 		if r.adding[entry.URL] {
-			if err := inv.addAccount(ctx, entry.URL); err != nil {
+			if err := inv.addHub(ctx, entry.URL); err != nil {
 				return err
 			}
 		} else {
 			var err error
-			if gitDir, entry, remote, err = inv.accountRemote(ctx); err != nil {
+			if gitDir, entry, remote, err = inv.hubRemote(ctx); err != nil {
 				return err
 			}
 			if err := inv.fetchRemote(ctx, gitDir, remote, entry.URL); err != nil {
@@ -334,11 +334,11 @@ func (r *applyRun) fetchAccount(ctx context.Context) error {
 			}
 		}
 		if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 		tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 		if err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 		r.gitDir, r.remote, r.tips = gitDir, remote, tips
 		return nil
@@ -362,8 +362,8 @@ func (r *applyRun) addRest(ctx context.Context) error {
 			continue
 		}
 		var err error
-		if src.Account {
-			_, err = r.reach(ctx, src.URL, func() error { return inv.addAccount(ctx, src.URL) })
+		if src.Hub {
+			_, err = r.reach(ctx, src.URL, func() error { return inv.addHub(ctx, src.URL) })
 		} else {
 			_, err = r.reach(ctx, src.URL, func() error {
 				_, _, err := inv.addSource(ctx, source.Source{URL: src.URL, Ref: src.Pin})
@@ -430,8 +430,8 @@ func (r *applyRun) entry(ctx context.Context, st *importSkillEvent) error {
 	switch {
 	case e.Kind == lineage.KindUnmanaged:
 		action, err = r.unmanaged(ctx, e)
-	case ownRecord(e, r.account):
-		action, err = r.ownSkill(ctx, e)
+	case hubRecord(e, r.hub):
+		action, err = r.hubSkill(ctx, e)
 	default:
 		action, err = r.sharedSkill(ctx, e)
 	}
@@ -455,7 +455,7 @@ func skipped(ctx context.Context, err error) (*failure, bool) {
 	return f, true
 }
 
-// gone skips an entry of a skill the account repo holds a branch of and the
+// gone skips an entry of a skill the store holds a branch of and the
 // library holds no skill directory of, its directory, or its fork's
 // worktree, deleted by hand: such a skill is not at its version and placed,
 // so it is not kept, and the way back is the one skill list names. nil for
@@ -488,8 +488,8 @@ func (r *applyRun) unmanaged(ctx context.Context, e snapshotSkill) (string, erro
 	return r.place(ctx, e, importKept)
 }
 
-// ownSkill applies an entry of a hub skill, see applyRun.
-func (r *applyRun) ownSkill(ctx context.Context, e snapshotSkill) (string, error) {
+// hubSkill applies an entry of a hub skill, see applyRun.
+func (r *applyRun) hubSkill(ctx context.Context, e snapshotSkill) (string, error) {
 	if r.missing != nil {
 		return "", r.missing
 	}
@@ -608,7 +608,7 @@ func (r *applyRun) sharedSkill(ctx context.Context, e snapshotSkill) (string, er
 
 // version is the skill an entry of a shared source names in fx and the
 // commit of the source to read it at: for an exact entry the upstream
-// commit it records, which the account repo holds once the source's history
+// commit it records, which the store holds once the source's history
 // is fetched; for one that follows the commit the run fetched. found is
 // false when the source holds no skill there at that commit.
 func (r *applyRun) version(ctx context.Context, fx *sharedFetch, e snapshotSkill) (sk source.Skill, tip string, found bool, err error) {
@@ -628,7 +628,7 @@ func (r *applyRun) version(ctx context.Context, fx *sharedFetch, e snapshotSkill
 	out, status, err := r.inv.git.IsolatedStatus(ctx, r.gitDir, 128, "rev-parse",
 		tip+":"+subpath, tip+":"+path.Join(subpath, "SKILL.md"))
 	if err != nil {
-		return source.Skill{}, "", false, accountRepoFailure(err)
+		return source.Skill{}, "", false, storeFailure(err)
 	}
 	ids := strings.Fields(out)
 	if status != 0 || len(ids) != 2 {
@@ -785,7 +785,7 @@ func (r *applyRun) placeInto(want []string) []placeTarget {
 }
 
 // ancestor reports whether the commit a is b or one b descends from, as
-// git merge-base --is-ancestor says in the account repo. A commit the repo
+// git merge-base --is-ancestor says in the store. A commit the repo
 // does not hold descends from nothing.
 func (r *applyRun) ancestor(ctx context.Context, a, b string) bool {
 	if a == b {
@@ -801,7 +801,7 @@ func (r *applyRun) remoteHolds(ctx context.Context, commit, tip string) bool {
 	return tip != "" && r.ancestor(ctx, commit, tip)
 }
 
-// branchAt is the commit ref points at in the account repo, "" for none.
+// branchAt is the commit ref points at in the store, "" for none.
 func (r *applyRun) branchAt(ctx context.Context, ref string) (string, error) {
 	out, err := r.inv.git.Isolated(ctx, r.gitDir, "for-each-ref", "--format=%(objectname)", ref)
 	return strings.TrimSpace(out), err

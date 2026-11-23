@@ -115,7 +115,7 @@ func (inv *invocation) tipPublished(ctx context.Context, rec lineage.Record, rem
 				return b.base
 			}
 		}
-		out, status, err := inv.git.IsolatedStatus(ctx, gitx.AccountRepoPath(inv.dirs.Home), 1, "merge-base", rec.Commit, remoteTip)
+		out, status, err := inv.git.IsolatedStatus(ctx, gitx.StorePath(inv.dirs.Home), 1, "merge-base", rec.Commit, remoteTip)
 		if err != nil {
 			inv.out.debugf("cannot tell whether the hub holds %s: %v", rec.Name, err)
 			return remoteTip // unknown, which reads as unpublished
@@ -359,7 +359,7 @@ func driftOf(obs observation, sourceRemoved, upstreamRemoved bool) []string {
 }
 
 // absentManaged are the names of the managed skills whose library
-// directory is not among libs, sorted: an import branch the account repo
+// directory is not among libs, sorted: an import branch the store
 // holds for a skill the library no longer holds, because its directory was
 // deleted, or lost its SKILL.md, outside agentx. Such a skill has no entry
 // to carry a state or a drift: there is no directory to compare with its
@@ -419,10 +419,10 @@ func (sc skillContext) absentNotice(inv *invocation, name string) (what, wayOut 
 	remove := "'" + skillCommand("remove", name) + "'"
 	libPath := quotedPath(inv.libraryPath(name))
 	if _, err := os.Lstat(inv.libraryPath(name)); err == nil {
-		return name + " is managed in the account repo but " + libPath + " holds no SKILL.md",
+		return name + " is managed in the store but " + libPath + " holds no SKILL.md",
 			"move " + libPath + " aside, then run " + add + " to install it again, or run " + remove + " to stop managing it"
 	}
-	return name + " is managed in the account repo but the library holds no skill directory for it",
+	return name + " is managed in the store but the library holds no skill directory for it",
 		"run " + add + " to install it again, or " + remove + " to stop managing it"
 }
 
@@ -434,13 +434,13 @@ func newSkillContext(ctx context.Context, inv *invocation, records map[string]li
 	if err != nil {
 		inv.out.debugf("cannot read the pending merges: %v", err)
 	}
-	account, _ := accountEntry(s)
+	hub, _ := hubEntry(s)
 	published, read := inv.publishedTips(ctx, records, s)
 	return skillContext{
 		records:       records,
 		modes:         modes,
 		sources:       sourceURLs(s),
-		account:       account.URL,
+		hub:           hub.URL,
 		disabled:      s.DisabledConfigurations,
 		targets:       withCopies(inv.detectedTargets(), s.CopyConfigurations),
 		merges:        merges,
@@ -457,15 +457,15 @@ func newSkillContext(ctx context.Context, inv *invocation, records map[string]li
 // with the commits that created them, and none is judged not published, as
 // a failed read says nothing of what the hub holds.
 func (inv *invocation) publishedTips(ctx context.Context, records map[string]lineage.Record, s home.Settings) (tips map[string]string, read bool) {
-	own := false
+	hubSkill := false
 	for _, rec := range records {
-		own = own || rec.Kind == lineage.KindFork
+		hubSkill = hubSkill || rec.Kind == lineage.KindFork
 	}
-	entry, ok := accountEntry(s)
-	if !own || !ok {
+	entry, ok := hubEntry(s)
+	if !hubSkill || !ok {
 		return nil, true
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), source.RemoteName(source.ID(entry.URL)))
+	tips, err := lineage.ListRemote(ctx, inv.git, gitx.StorePath(inv.dirs.Home), source.RemoteName(source.ID(entry.URL)))
 	if err != nil {
 		inv.out.debugf("cannot read what the hub holds: %v", err)
 		return nil, false

@@ -7,7 +7,7 @@ import type { HintRule } from "#/lib/app-hint.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 /** Whether `skill rename` takes `row`: a hub skill, which a fork branch holds. */
-export const canRename = (row: SkillRow) => row.kind === "yours";
+export const canRename = (row: SkillRow) => row.kind === "hub";
 
 /** `skill rename <old> <new>`. */
 export const renameArgs = (old: string, newName: string): string[] => [

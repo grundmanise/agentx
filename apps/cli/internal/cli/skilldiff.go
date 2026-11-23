@@ -94,7 +94,7 @@ type fileDiff struct {
 // A hub skill is compared with its last published version, or
 // with the commit given, see forkDiff.
 func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error {
-	gitDir, rec, held, err := inv.accountRecord(ctx, name)
+	gitDir, rec, held, err := inv.hubRecord(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -127,12 +127,12 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 	}
 	wt, err := inv.openWorkTree(ctx, gitDir, lib.ResolvedPath)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	defer wt.Close()
 	written, err := writeWorkTree(ctx, wt, base)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	var files []fileDiff
 	if !base.holds(written) {
@@ -141,7 +141,7 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 			files, err = parseDiff(status, patch)
 		}
 		if err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 	}
 	inv.reportDiff(subject, name, against, files, len(tree.Unrecordable))
@@ -152,7 +152,7 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 // managed skill does to its base version: the base's directory against the
 // candidate's, each the upstream directory of its import commit, so that
 // every path is relative to the skill's directory. Both trees are in the
-// account repo already, so this reads nothing else, writes nothing and
+// store already, so this reads nothing else, writes nothing and
 // never reaches the network: the candidate is what the check pinned, not
 // what the source holds now. A skill with no candidate, or with one its
 // branch already holds, has nothing to show, and the refusal says how to
@@ -166,7 +166,7 @@ func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
 		return inv.noLibrarySkill(name)
 	}
-	gitDir, rec, held, err := inv.accountRecord(ctx, name)
+	gitDir, rec, held, err := inv.hubRecord(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	}
 	files, err := diffTrees(ctx, inv.git, gitDir, rec.Commit+":"+rec.Import.Dir(), c.Commit+":"+c.Import.Dir())
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	at := " at " + short(c.Import.Commit)
 	subject := diffSubject{plain: "the update of " + name + at, painted: "the update of " + inv.out.paint(heading, sanitised(name)) + at}
@@ -283,7 +283,7 @@ func patchLine(line string) string {
 	return b.String()
 }
 
-// diffTrees is the diff between two trees of the account repo, read as
+// diffTrees is the diff between two trees of the store, read as
 // parseDiff reads it. Two reads that do not depend on each other, run at
 // once: the status of every file and the diff itself.
 func diffTrees(ctx context.Context, r *gitx.Runner, gitDir, from, to string) ([]fileDiff, error) {

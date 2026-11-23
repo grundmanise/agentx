@@ -18,7 +18,7 @@ func TestSourcesRefusal(t *testing.T) {
 		checked = "2026-10-02T10:00:00Z"
 	)
 	tree := home.Source{URL: repo, Access: home.AccessWritable, AccessChecked: checked, DefaultBranch: "main", LastFetched: checked}
-	account := home.Source{URL: forks, Account: true, AccessChecked: checked}
+	hub := home.Source{URL: forks, Hub: true, AccessChecked: checked}
 	with := func(base home.Source, change func(*home.Source)) []home.Source {
 		change(&base)
 		return []home.Source{base}
@@ -28,12 +28,12 @@ func TestSourcesRefusal(t *testing.T) {
 		sources []home.Source
 		says    string // "" for a list agentx writes
 	}{
-		{"what agentx writes", []home.Source{tree, account}, ""},
-		{"the hub pinned to a branch", with(account, func(s *home.Source) { s.Pin = "skills/pdf" }),
+		{"what agentx writes", []home.Source{tree, hub}, ""},
+		{"the hub pinned to a branch", with(hub, func(s *home.Source) { s.Pin = "skills/pdf" }),
 			forks + " is pinned to skills/pdf, and the hub is a whole repository"},
-		{"two hubs", []home.Source{account, {URL: "https://github.com/me/more", Account: true}},
+		{"two hubs", []home.Source{hub, {URL: "https://github.com/me/more", Hub: true}},
 			"both " + forks + " and https://github.com/me/more are marked as the hub"},
-		{"a shared source and the hub of one repository", []home.Source{{URL: forks, Account: true},
+		{"a shared source and the hub of one repository", []home.Source{{URL: forks, Hub: true},
 			{URL: "https://github.com/me/forks.git.backup"}, {URL: "ssh://git@github.com/me/forks"}},
 			"ssh://git@github.com/me/forks and the hub " + forks + " name one repository"},
 		{"an access agentx does not write", with(tree, func(s *home.Source) { s.Access = home.AccessUnknown }), "the access unknown"},
@@ -60,7 +60,7 @@ func TestForkSourceRefusal(t *testing.T) {
 	const forks = "https://github.com/me/forks"
 	s := home.Settings{Sources: []home.Source{
 		{URL: "https://github.com/acme/skills"},
-		{URL: forks, Account: true},
+		{URL: forks, Hub: true},
 	}}
 	resolve := func(host string) string {
 		if host == "github-work" {

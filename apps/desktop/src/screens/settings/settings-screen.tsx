@@ -11,13 +11,13 @@
 // keep the comment.
 import type { ComponentType } from "react";
 
-import { AccountRemoteSection } from "#/screens/settings/account-remote.tsx";
 import { ActivityLogSection } from "#/screens/settings/activity-log.tsx";
 import { AdoptSkillsSection } from "#/screens/settings/adopt-skills.tsx";
 import { ApplySnapshotSection } from "#/screens/settings/apply-snapshot.tsx";
 import { CommandLineSection } from "#/screens/settings/command-line.tsx";
 import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
 import { EditorSection } from "#/screens/settings/editor.tsx";
+import { HubSection } from "#/screens/settings/hub.tsx";
 import { SaveSnapshotSection } from "#/screens/settings/save-snapshot.tsx";
 import { StorageSection } from "#/screens/settings/storage.tsx";
 import { ThisMachineSection } from "#/screens/settings/this-machine.tsx";
@@ -32,7 +32,7 @@ interface Section {
 const sections: Section[] = [
   { Section: ThisMachineSection, id: "this-machine" },
   // Slot: Hub.
-  { Section: AccountRemoteSection, id: "account-remote" },
+  { Section: HubSection, id: "hub" },
   { Section: AdoptSkillsSection, id: "adopt-skills" },
   { Section: ComparingEditsSection, id: "comparing-edits" },
   { Section: EditorSection, id: "editor" },

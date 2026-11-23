@@ -194,7 +194,7 @@ test("the open source's card: its name, its full URL linking to the repository, 
   // The hub is managed in Settings: its card has no Remove.
   await pill(page, "Hub").click();
   await expect(
-    details(page).getByRole("heading", { name: "me/account" })
+    details(page).getByRole("heading", { name: "me/hub" })
   ).toBeVisible();
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
@@ -202,7 +202,7 @@ test("the open source's card: its name, its full URL linking to the repository, 
   // A search answers across every source: the card stays.
   await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
   await expect(
-    details(page).getByRole("heading", { name: "me/account" })
+    details(page).getByRole("heading", { name: "me/hub" })
   ).toBeVisible();
 });
 
@@ -1190,13 +1190,13 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
     ],
     exitCode: 3,
   });
-  cli.register(["source", "add", "me/account"], {
+  cli.register(["source", "add", "me/hub"], {
     events: [
       {
         code: "refused",
         hint: "run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one",
         message:
-          "https://github.com/me/account is the hub: it holds one branch per skill rather than skills on one branch",
+          "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch",
         type: "error",
       },
     ],
@@ -1211,16 +1211,16 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
     "Couldn't reach bad/repo. Check that the repository exists and that you can read it."
   );
 
-  await urlField(page).fill("me/account");
+  await urlField(page).fill("me/hub");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   // The CLI's hint names commands: the dialog names the place in the app instead.
   await expect(alert).toHaveText(
-    "https://github.com/me/account is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub."
+    "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub."
   );
   await expect(dialog(page)).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([
     "source add bad/repo",
-    "source add me/account",
+    "source add me/hub",
   ]);
 });
 

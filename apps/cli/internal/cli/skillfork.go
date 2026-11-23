@@ -28,7 +28,7 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 			"provides, or a hub skill. The fork is a hub skill: a managed\n" +
 			"skill whose source is your hub, which 'agentx skill publish <name>'\n" +
 			"publishes it to; no hub needs to be set until then. It gets its own\n" +
-			"branch, skills/<name>, in the account repo, whose first commit holds the skill\n" +
+			"branch, skills/<name>, in the store, whose first commit holds the skill\n" +
 			"as it is now, edits included, checked out as a worktree in agentx home, and the\n" +
 			"library holds a symlink to it. The fork of a skill of a shared source keeps that\n" +
 			"source as its upstream, so newer versions can be merged in. An unmanaged skill\n" +
@@ -154,21 +154,21 @@ func (inv *invocation) planFork(ctx context.Context, arg, newName string, mode f
 }
 
 // beginFork finishes any unfinished journal and reads what a fork is
-// planned from, before its source is found: the account repo's branches,
-// empty when this machine has no account repo yet, and a scan run the
+// planned from, before its source is found: the store's branches,
+// empty when this machine has no store yet, and a scan run the
 // first time it is asked for.
 func (inv *invocation) beginFork(ctx context.Context, mode forkMode) (*forking, map[string]lineage.Record, error) {
 	if err := inv.finishJournals(ctx); err != nil {
 		return nil, nil, err
 	}
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return nil, nil, accountRepoFailure(err)
+		return nil, nil, storeFailure(err)
 	}
 	records := map[string]lineage.Record{}
 	if exists {
 		if records, err = inv.listLineage(ctx, gitDir); err != nil {
-			return nil, nil, accountRepoFailure(err)
+			return nil, nil, storeFailure(err)
 		}
 	}
 	fk := &forking{gitDir: gitDir, mode: mode}
@@ -207,13 +207,13 @@ func (inv *invocation) forkOf(ctx context.Context, fk *forking, src forkSource, 
 // applies the fork in one journaled mutation, then reports it.
 func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 	src := fk.src
-	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err := gitx.OpenStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	fk.gitDir = gitDir
 	if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	// The writer reads the user's identity and their core.excludesFile in
 	// one read of their configuration, before git reads the skill, so the
@@ -250,14 +250,14 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 		message.trailers.Origin = lineage.Origin{}
 		recs := map[string]lineage.Record{src.name: src.rec}
 		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 		if l := recs[src.name].Fork; l != nil && l.ID != "" {
 			message.trailers = lineage.ForkTrailers{}
 		}
 	}
 	if fk.commit, err = w.commit(ctx, root, parents, message); err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	if !fk.inPlace {
 		s, err := fk.scanned()
@@ -315,7 +315,7 @@ func (fk *forking) installs(id string) (added, removed []home.Install) {
 }
 
 // checkForking runs the refusals of a fork that need no git but the
-// account repo's branches, before anything changes: a fork forked under
+// store's branches, before anything changes: a fork forked under
 // its own name, a name agentx cannot give the fork or that a branch
 // already holds, a library path or worktree that is taken, and a skill
 // whose update left a merge pending. Then the commit that records a fork's
@@ -357,7 +357,7 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 	}
 	if src.kind == lineage.KindManaged && !src.rec.HasImport {
 		return fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", src.rec.Ref),
-			"run 'agentx doctor' and check the account repo it names")
+			"run 'agentx doctor' and check the store it names")
 	}
 	if fk.inPlace {
 		if err := inv.inPlaceRoom(fk); err != nil {
@@ -397,7 +397,7 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 
 // takenHint is the hint of a name the fork cannot take because a skill
 // already has it, in the words of the command that gave the name. records
-// are the account repo's branches, which say what an adoption, which has no
+// are the store's branches, which say what an adoption, which has no
 // flag to give another name with, can do about the one in its way.
 func (fk *forking) takenHint(records map[string]lineage.Record) string {
 	switch fk.mode {
@@ -418,7 +418,7 @@ func (fk *forking) changed() error {
 	return fail(exitRefused, sanitised(fk.src.name)+" changed while it was being "+fk.mode.done()+", so nothing was changed", "run the command again")
 }
 
-// taken is the refusal of a fork whose name the account repo already
+// taken is the refusal of a fork whose name the store already
 // holds a branch of, nil when it holds none, in the words of its mode.
 func (fk *forking) taken(records map[string]lineage.Record) error {
 	if fk.mode == modeAdopt {
@@ -566,7 +566,7 @@ func (inv *invocation) forkContent(ctx context.Context, fk *forking) (string, []
 	j, err := inv.judgeFork(ctx, fk.gitDir, src.dir, v, false)
 	switch {
 	case err != nil:
-		return "", nil, accountRepoFailure(err)
+		return "", nil, storeFailure(err)
 	case len(j.exposed) > 0 && fk.mode == modeAdopt:
 		return "", nil, adoptNestedRepoRefusal(src.name, j.exposed[0])
 	case len(j.exposed) > 0:
@@ -576,7 +576,7 @@ func (inv *invocation) forkContent(ctx context.Context, fk *forking) (string, []
 	}
 	root, err := inv.git.ReplaceEntry(ctx, fk.gitDir, "", fk.dir, j.written)
 	if err != nil {
-		return "", nil, accountRepoFailure(err)
+		return "", nil, storeFailure(err)
 	}
 	return root, parents, nil
 }
@@ -591,7 +591,7 @@ func (inv *invocation) forkContent(ctx context.Context, fk *forking) (string, []
 func (inv *invocation) skillDirAlone(ctx context.Context, gitDir string, rec lineage.Record, dir string) (string, error) {
 	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", rec.Commit)
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return "", storeFailure(err)
 	}
 	var subtree string
 	others := 0
@@ -607,15 +607,15 @@ func (inv *invocation) skillDirAlone(ctx context.Context, gitDir string, rec lin
 		}
 	}
 	if subtree == "" {
-		return "", fail(exitAccountRepo, fmt.Sprintf("the branch %s holds no directory %s at its root", rec.Ref, dir),
-			"run 'agentx doctor' and check the account repo it names")
+		return "", fail(exitStore, fmt.Sprintf("the branch %s holds no directory %s at its root", rec.Ref, dir),
+			"run 'agentx doctor' and check the store it names")
 	}
 	if others == 0 {
 		return rec.Tree, nil
 	}
 	root, err := inv.git.ReplaceEntry(ctx, gitDir, "", dir, subtree)
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return "", storeFailure(err)
 	}
 	return root, nil
 }
@@ -628,7 +628,7 @@ func (inv *invocation) renameSkill(ctx context.Context, gitDir, root, dir, name 
 	path := dir + "/SKILL.md"
 	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", root, "--", path)
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return "", storeFailure(err)
 	}
 	meta, _, _ := strings.Cut(strings.TrimSuffix(out, "\x00"), "\t")
 	fields := strings.Fields(meta)
@@ -638,7 +638,7 @@ func (inv *invocation) renameSkill(ctx context.Context, gitDir, root, dir, name 
 	}
 	bodies, err := source.ReadBlobs(ctx, inv.git, gitDir, []string{fields[2]})
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return "", storeFailure(err)
 	}
 	renamed, err := renameFrontmatter([]byte(bodies[fields[2]]), name)
 	if err != nil {
@@ -647,7 +647,7 @@ func (inv *invocation) renameSkill(ctx context.Context, gitDir, root, dir, name 
 	}
 	tree, err := inv.git.EditTree(ctx, gitDir, root, []gitx.TreeEdit{{Path: path, Mode: fields[0], Content: renamed}})
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return "", storeFailure(err)
 	}
 	return tree, nil
 }
@@ -733,7 +733,7 @@ func (inv *invocation) applyFork(ctx context.Context, fk *forking, done *placeme
 	src := fk.src
 	records, err := inv.listLineage(ctx, fk.gitDir)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	if err := fk.taken(records); err != nil {
 		return err
@@ -847,7 +847,7 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 		out.emit(ev)
 		inv.summary = "forked " + name + "; the fork replaces it wherever it was"
 		out.done("forked " + out.paint(heading, name) + "; the fork replaces it wherever it was")
-		inv.noAccountRemoteHint(ev)
+		inv.noHubRemoteHint(ev)
 		return nil
 	}
 	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(done.placed))
@@ -892,7 +892,7 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 			out.print(out.paint(infoStyle, glyphInfo), " ", strings.Join(both, ", "), " now see more than one skill named ", name, "; rename the fork with 'agentx skill rename ", name, " <new>' to keep them apart")
 		}
 	}
-	inv.noAccountRemoteHint(ev)
+	inv.noHubRemoteHint(ev)
 	inv.summary += universalClause(ev.Universal)
 	return nil
 }

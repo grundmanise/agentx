@@ -238,9 +238,9 @@ func TestAdoptPreviewWritesNothing(t *testing.T) {
 	if after := names(t, h.agentx); after != before {
 		t.Errorf("the preview changed agentx home: it held %q and now holds %q", before, after)
 	}
-	// Nothing was taken, created or signalled: no account repo, no lock file,
+	// Nothing was taken, created or signalled: no store, no lock file,
 	// no mutation counter and no journals directory.
-	for _, gone := range []string{"account.git", "lock", "version", "mutations"} {
+	for _, gone := range []string{"store.git", "lock", "version", "mutations"} {
 		if _, err := os.Stat(filepath.Join(h.agentx, gone)); err == nil {
 			t.Errorf("the preview created %s in agentx home", gone)
 		}
@@ -335,7 +335,7 @@ func progressPhases(events []jsonEvent) []string {
 // names it and nothing holds it, or a record holds it for a directory this
 // machine no longer has. The rest name a skill no record covers, which is
 // refused as agentx skill import refuses an unmanaged skill: one agentx manages
-// already, a name the library, the account repo or the hub
+// already, a name the library, the store or the hub
 // holds for another skill, directories that differ between two clients, a
 // symlink where the directory would be, and what keeps a directory from
 // moving into a worktree.
@@ -347,14 +347,14 @@ func TestAdoptRefusesAName(t *testing.T) {
 		"gone":  {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/gone"},
 	})
 	h.mustRun("skill", "new", "mine")
-	h.setAccount(newAccountRemote(t, h))
-	// Branches for the names the account repo and the hub hold.
+	h.setHub(newHubRemote(t, h))
+	// Branches for the names the store and the hub hold.
 	tip := h.ref(lineage.ForkRef("mine"))
 	for _, ref := range []string{
 		lineage.ManagedRef("shared"), lineage.ManagedRef("dup"), lineage.ManagedRef("lost"),
-		lineage.RemoteForkPrefix(accountRemoteName(t, h)) + "published",
+		lineage.RemoteForkPrefix(hubRemoteName(t, h)) + "published",
 	} {
-		h.accountGit("update-ref", ref, tip)
+		h.storeGit("update-ref", ref, tip)
 	}
 	claude, cortex := filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".snowflake/cortex", "skills")
 	for _, dir := range []string{
@@ -392,7 +392,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 	// every command, reads a bare name as no plugin's.
 	plugin := pluginHome(t, h)[0]
 	writeFile(t, mkdirs(t, filepath.Join(plugin, "skills", "tidy"), "SKILL.md"), skill("tidy", "Tidy up"))
-	refs, worktrees := h.accountGit("for-each-ref"), names(t, filepath.Join(h.agentx, "worktrees"))
+	refs, worktrees := h.storeGit("for-each-ref"), names(t, filepath.Join(h.agentx, "worktrees"))
 
 	for _, c := range []struct {
 		name string
@@ -427,7 +427,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 			equal(t, "dup: the hint", e["hint"], "rename the folder and import it under the new name, or replace it with 'agentx skill place dup --to claude-code --force', which discards what it holds")
 		}
 	}
-	equal(t, "the refs", h.accountGit("for-each-ref"), refs)
+	equal(t, "the refs", h.storeGit("for-each-ref"), refs)
 	equal(t, "the worktrees", names(t, filepath.Join(h.agentx, "worktrees")), worktrees)
 
 	// Adopting every skill lists, in the preview's words, each one that
@@ -466,10 +466,10 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	equal(t, "the text output", text.stdout, "✓ imported notes\n"+
 		"No hub is set: run 'agentx source add <url> --hub', then 'agentx skill publish notes' to publish it.\n")
 	tip := h.ref(lineage.ForkRef("notes"))
-	equal(t, "the history", h.accountGit("rev-list", "--parents", lineage.ForkRef("notes")), tip)
-	equal(t, "the author", h.accountGit("log", "-1", "--format=%an <%ae>", tip), "Ada Lovelace <ada@example.com>")
-	equal(t, "the subject", h.accountGit("log", "-1", "--format=%s", tip), "Adopt notes")
-	equal(t, "the tree", h.accountGit("ls-tree", "-r", "--name-only", tip), "notes/SKILL.md")
+	equal(t, "the history", h.storeGit("rev-list", "--parents", lineage.ForkRef("notes")), tip)
+	equal(t, "the author", h.storeGit("log", "-1", "--format=%an <%ae>", tip), "Ada Lovelace <ada@example.com>")
+	equal(t, "the subject", h.storeGit("log", "-1", "--format=%s", tip), "Adopt notes")
+	equal(t, "the tree", h.storeGit("ls-tree", "-r", "--name-only", tip), "notes/SKILL.md")
 	if link, _ := os.Readlink(filepath.Join(h.library, "notes")); link != "../../../agentx/worktrees/notes/notes" {
 		t.Errorf("the library symlink is %q", link)
 	}
@@ -489,7 +489,7 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	equal(t, "from the clients: kind", h.librarySkill(out.stdout, "jot")["kind"], lineage.KindManaged)
 	equal(t, "from the clients: the summary", h.one(out.stdout, "result")["summary"],
 		"imported jot from "+clients[".claude"]+" in 3 configurations; always available to universal clients: codex, gemini-cli")
-	equal(t, "from the clients: the tree", h.accountGit("ls-tree", "-r", "--name-only", h.ref(lineage.ForkRef("jot"))), "jot/SKILL.md\njot/pad.md")
+	equal(t, "from the clients: the tree", h.storeGit("ls-tree", "-r", "--name-only", h.ref(lineage.ForkRef("jot"))), "jot/SKILL.md\njot/pad.md")
 	equal(t, "from the clients: the moved file", fileBody(t, filepath.Join(h.agentx, "worktrees", "jot", "jot", "pad.md")), "a pad\n")
 	if link, _ := os.Readlink(filepath.Join(h.library, "jot")); link != "../../../agentx/worktrees/jot/jot" {
 		t.Errorf("from the clients: the library symlink is %q", link)
@@ -516,7 +516,7 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	equal(t, "installed from no git repository: the adoption", h.one(out.stdout, "adoption")["state"], adoptAdopted)
 	equal(t, "installed from no git repository: the summary", h.one(out.stdout, "result")["summary"], "imported beta")
 	equal(t, "installed from no git repository: the edit", fileBody(t, filepath.Join(h.agentx, "worktrees", "beta", "beta", "notes.md")), "an edit of mine\n")
-	equal(t, "installed from no git repository: the subject", h.accountGit("log", "-1", "--format=%s", h.ref(lineage.ForkRef("beta"))), "Adopt beta")
+	equal(t, "installed from no git repository: the subject", h.storeGit("log", "-1", "--format=%s", h.ref(lineage.ForkRef("beta"))), "Adopt beta")
 	again := h.run("--json", "skill", "import", "--all")
 	equal(t, "adopted already: exit", again.exit, 0)
 	equal(t, "adopted already: the adoption", h.one(again.stdout, "adoption")["state"], adoptManaged)
