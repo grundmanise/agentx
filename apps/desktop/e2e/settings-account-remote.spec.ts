@@ -61,9 +61,10 @@ test("the account remote with what the Sources slice reports", async ({
     "The Git repository your own skills publish to."
   );
   await expect(remote.getByText(ACCOUNT, { exact: true })).toBeVisible();
-  await expect(
-    remote.getByText("3 of your skills on it · fetched 2 hours ago")
-  ).toBeVisible();
+  // No line under the URL: the count was skills published there, not skills installed.
+  await expect(remote.getByText(/of your skills on it|fetched/u)).toHaveCount(
+    0
+  );
   // Write access is the norm, so it shows no tag.
   await expect(remote.getByText("Read-only", { exact: true })).toHaveCount(0);
   await expect(remote.getByRole("button", { name: "Change…" })).toBeVisible();
@@ -108,9 +109,7 @@ test("set the account remote: Save runs source add --account, and the row comes 
   });
   await urlField(page).fill("git@github.com:me/account.git");
   await urlField(page).press("Enter");
-  await expect(
-    toasts(page).getByText(`Saved. Reached ${ACCOUNT}`)
-  ).toBeVisible();
+  await expect(toasts(page).getByText("Linked account remote")).toBeVisible();
   // The field stays until `source list` reports the account remote.
   await relisted.started;
   await expect(urlField(page)).toBeVisible();
@@ -218,7 +217,7 @@ test("Change… warns before it replaces the account remote", async ({
   });
   await save.click();
   await confirm.getByRole("button", { name: "Change" }).click();
-  await expect(toasts(page).getByText(`Saved. Reached ${next}`)).toBeVisible();
+  await expect(toasts(page).getByText("Linked account remote")).toBeVisible();
   await expect(urlField(page)).toHaveCount(0);
   expect(commandLines(cli)).toEqual([`source add ${next} --account`]);
 });
@@ -233,9 +232,8 @@ test("Unlink warns, runs source remove and shows the field once source list has 
     name: "Unlink the account remote?",
   });
   await expect(confirm).toContainText(
-    "agentx stops publishing here. Nothing is deleted."
+    `This will disconnect ${ACCOUNT} from the app, but keep all current skills in place.`
   );
-  await expect(confirm).toContainText(ACCOUNT);
   cli.register(["source", "remove", ACCOUNT], {
     events: [{ id: account.id, type: "source", url: ACCOUNT }],
   });

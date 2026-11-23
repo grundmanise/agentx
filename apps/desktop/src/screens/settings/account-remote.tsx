@@ -1,11 +1,11 @@
 // The Account remote section of Settings: the Git repository your own skills publish to. With none
-// set, a URL field and Save, which runs `source add <url> --account`. With one set, its URL, how
-// many of your skills it holds and when it was fetched, a Read-only tag when access is limited, and
-// Change… (a new URL, after the replace warning) and Unlink (`source remove <url>`, after its warning).
+// set, a URL field and Save, which runs `source add <url> --account`. With one set, its URL, a
+// Read-only tag when access is limited, and Change… (a new URL, after the replace warning) and Unlink (`source remove <url>`, after its warning).
 // What it shows is the Sources slice, which `source list` fills again after each command; a
 // failure of Save shows under the field, in the CLI's words as one sentence-cased paragraph, a
 // hint that names a command put in the app's words (docs/help-center/cli/source.mdx).
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { Pill } from "#/components/pill.tsx";
@@ -24,9 +24,8 @@ import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
-import { useNow } from "#/lib/now.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
-import { accountLine, accountRemote } from "#/screens/settings/source-rows.ts";
+import { accountRemote } from "#/screens/settings/source-rows.ts";
 import { agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
@@ -37,13 +36,12 @@ export const SAVE_ACCOUNT_LABEL = "save account remote";
 /** The pending label of `source remove <url>` of the account remote. */
 export const DETACH_ACCOUNT_LABEL = "detach account remote";
 
-/** A confirmation: its title, an optional URL, its warning, Cancel and the button that goes ahead. */
+/** A confirmation: its title, its warning, Cancel and the button that goes ahead. */
 const Confirm = ({
   open,
   onOpenChange,
   title,
   warning,
-  detail,
   action,
   danger = false,
   onConfirm,
@@ -51,9 +49,7 @@ const Confirm = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  warning: string;
-  /** A URL, in `type.technical`, broken anywhere so a long one wraps inside the dialog. */
-  detail?: string;
+  warning: ReactNode;
   action: string;
   danger?: boolean;
   onConfirm: () => void;
@@ -62,11 +58,6 @@ const Confirm = ({
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle>{title}</AlertDialogTitle>
-        {detail !== undefined && (
-          <p className="type-technical text-text-caption m-0 break-all">
-            {detail}
-          </p>
-        )}
         <AlertDialogDescription>{warning}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
@@ -148,10 +139,7 @@ const RemoteForm = ({
     const outcome = await agentx(["source", "add", typed, "--account"], {
       label: SAVE_ACCOUNT_LABEL,
       ownFailure: true,
-      success: (events) => {
-        const source = events.find((e) => e.type === "source");
-        return `Saved. Reached ${source?.url ?? typed}`;
-      },
+      success: "Linked account remote",
     });
     if (outcome.exitCode === EXIT_CODES.ok) {
       onDone?.();
@@ -222,16 +210,14 @@ const RemoteForm = ({
 };
 
 /**
- * The account remote set now: its URL, a Read-only tag when access is limited, its skills and
- * fetch, Change… and Unlink. Like a source's card, it shows a tag only for a limit.
+ * The account remote set now: its URL, a Read-only tag when access is limited, Change… and
+ * Unlink. Like a source's card, it shows a tag only for a limit.
  */
 const AccountRemoteRow = ({
   url,
-  line,
   readOnly,
 }: {
   url: string;
-  line: string;
   readOnly: boolean;
 }) => {
   const [changing, setChanging] = useState(false);
@@ -247,15 +233,10 @@ const AccountRemoteRow = ({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        {/* Baseline, not center: the mono URL then sits on the middle of the pill. */}
-        <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-          <p className="type-technical text-text-primary m-0 break-all">
-            {url}
-          </p>
-          {readOnly && <Pill tone="neutral">Read-only</Pill>}
-        </div>
-        <p className="type-secondary text-text-muted m-0">{line}</p>
+      {/* Baseline, not center: the mono URL then sits on the middle of the pill. */}
+      <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+        <p className="type-technical text-text-primary m-0 break-all">{url}</p>
+        {readOnly && <Pill tone="neutral">Read-only</Pill>}
       </div>
       {changing ? (
         <RemoteForm
@@ -293,8 +274,16 @@ const AccountRemoteRow = ({
         open={detaching}
         onOpenChange={setDetaching}
         title="Unlink the account remote?"
-        warning="agentx stops publishing here. Nothing is deleted."
-        detail={url}
+        warning={
+          <>
+            This will disconnect{" "}
+            {/* Broken anywhere, so a long URL wraps inside the dialog. */}
+            <span className="type-technical text-text-caption break-all">
+              {url}
+            </span>{" "}
+            from the app, but keep all current skills in place.
+          </>
+        }
         action="Unlink"
         danger
         onConfirm={detach}
@@ -306,7 +295,6 @@ const AccountRemoteRow = ({
 /** The Account remote section, from the Sources slice. */
 export const AccountRemoteSection = () => {
   const account = useAppStore((s) => accountRemote(s.sources));
-  const now = useNow();
   return (
     <SettingsSection
       title="Account remote"
@@ -319,7 +307,6 @@ export const AccountRemoteSection = () => {
           // A new account remote starts with its field closed.
           key={account.url}
           url={account.url}
-          line={accountLine(account, now)}
           readOnly={account.access === "read-only"}
         />
       )}
