@@ -1,10 +1,11 @@
 // shadcn/ui Button (`pnpm dlx shadcn@latest add button`), on our tokens: DESIGN.md §6 "Buttons".
 // It keeps shadcn's shape (`asChild` renders the child element with the button's look, through
 // Slot; `data-slot="button"`) with our variants and sizes. Disabled is 30% opacity and inert,
-// never a grey fill. `aria-disabled` looks the same but stays hoverable and focusable, for a
-// button whose Tooltip says why it does nothing. A button is one line, except `sm-wrap`: a small button whose label wraps, as
-// tall as its lines, for a label that is a sentence, and `inline`, a `plain` button as tall as its
-// text (a commit's subject in the History sheet).
+// never a grey fill; the filter row's toggles fade to 50%, like a pending segmented control.
+// `aria-disabled` looks the same but stays hoverable and focusable, for a button whose Tooltip
+// says why it does nothing. A button is one line, except `sm-wrap`: a small button whose label
+// wraps, as tall as its lines, for a label that is a sentence, and `inline`, a `plain` button as
+// tall as its text (a commit's subject in the History sheet).
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
@@ -12,13 +13,41 @@ import { Slot } from "radix-ui";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const buttonVariants = cva(
-  "rounded-button inline-flex shrink-0 gap-2 transition-opacity duration-200 disabled:pointer-events-none disabled:opacity-30 aria-disabled:opacity-30",
+  "rounded-button inline-flex shrink-0 gap-2 transition-opacity duration-200 disabled:pointer-events-none",
   {
+    compoundVariants: [
+      {
+        className: "disabled:opacity-30 aria-disabled:opacity-30",
+        variant: [
+          "accent",
+          "danger",
+          "filter",
+          "filter-active",
+          "filter-chip",
+          "ghost",
+          "link",
+          "plain",
+          "primary",
+          "secondary",
+        ],
+      },
+      { className: "disabled:opacity-50", variant: "filter-toggle" },
+    ],
     defaultVariants: { size: "default", variant: "secondary" },
     variants: {
       size: {
+        // The cross of a filter chip, inside the chip.
+        chip: "size-5.5 items-center justify-center p-0",
         default:
           "type-button h-9.5 items-center justify-center px-4 whitespace-nowrap",
+        // The Filter button, `filter.height` tall.
+        filter:
+          "type-button-sm h-filter items-center justify-center px-3 whitespace-nowrap",
+        // The expand toggle of the filter row: a 28px square.
+        "filter-icon": "size-7 items-center justify-center p-0",
+        // The sort toggle of the filter row.
+        "filter-toggle":
+          "type-button-sm h-7 items-center justify-center px-2 whitespace-nowrap",
         icon: "type-button size-8 items-center justify-center p-0 whitespace-nowrap",
         // A square as tall as a small button, as shadcn pairs `icon-sm` with `sm`.
         "icon-sm":
@@ -37,6 +66,17 @@ const buttonVariants = cva(
           "text-accent-primary hover:text-accent-primary-hover font-medium",
         danger:
           "text-button-danger-text bg-button-danger-bg hover:bg-button-danger-hover font-medium",
+        // The Filter button (DESIGN.md §2.2 "Filter row"): `filter.bg` at rest, `filter.active-bg`
+        // in `filter.active-text` while any filter is applied.
+        filter:
+          "bg-filter-bg text-filter-text hover:text-text-primary font-medium",
+        "filter-active":
+          "bg-filter-active-bg text-filter-active-text font-medium",
+        // The cross that clears a filter chip: the chip's text, `filter.chip-hover` on hover.
+        "filter-chip": "hover:bg-filter-chip-hover hover:text-text-primary",
+        // The sort and expand toggles of the filter row: `filter.sort-text` on the ghost fill.
+        "filter-toggle":
+          "text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary font-medium",
         ghost:
           "text-button-ghost-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary font-medium",
         // A link inside a line of text that opens something, such as See changes on a row of the

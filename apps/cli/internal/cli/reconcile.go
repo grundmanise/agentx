@@ -15,7 +15,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
-// Reconciliation matches the branches of the account repo against what is
+// Reconciliation matches the branches of the store against what is
 // on disk, so that agentx installed again over an existing agentx home, or
 // a fork's worktree deleted by mistake, comes back as it was: every skill
 // is recognised from its branch and its library entry, a fork whose
@@ -42,9 +42,9 @@ const (
 	// outcomeModified is a managed skill whose library directory does not
 	// hold its base version.
 	outcomeModified = "modified"
-	// outcomeInstallable is a skill the account repo holds and the library
+	// outcomeInstallable is a skill the store holds and the library
 	// does not: a managed skill whose library directory is gone, a fork
-	// never placed on this machine, and a fork only the account remote's
+	// never placed on this machine, and a fork only the hub's
 	// branches hold.
 	outcomeInstallable = "installable"
 	// outcomeUnmanaged is a skill of the library no branch names.
@@ -78,7 +78,7 @@ type rootKind int
 const (
 	rootAbsent   rootKind = iota // nothing
 	rootEmpty                    // an empty directory, or one holding nothing but a .git file that is not registered: what a worktree add stopped part way leaves
-	rootWorktree                 // a worktree the account repo registers, whatever branch it is on
+	rootWorktree                 // a worktree the store registers, whatever branch it is on
 	rootMoved                    // a .git file whose pointers no longer meet, as moving agentx home leaves them; git can repair it
 	rootOrphan                   // a directory holding more than a lone .git file that is not a registered worktree
 )
@@ -87,7 +87,7 @@ const (
 type forkFacts struct {
 	lib        libKind
 	root       rootKind
-	registered bool // a registration of the account repo names the worktree, whatever is there now
+	registered bool // a registration of the store names the worktree, whatever is there now
 	onBranch   bool // rootWorktree: its HEAD is the fork's branch
 	skillDir   bool // rootWorktree: it holds the skill's directory
 	busy       bool // rootWorktree: a git command the user ran stopped part way in it, or a running git holds its index
@@ -198,7 +198,7 @@ func (inv *invocation) forkFactsOf(f forkSite) forkFacts {
 // at root, which no longer meet, as git worktree repair finds the
 // registration: the admin directory its .git file names, whose gitdir then
 // names another path, or, when that directory is not there, as moving
-// agentx home as a whole leaves it, the one of the same name in the account
+// agentx home as a whole leaves it, the one of the same name in the home
 // repo at gitDir. A worktree whose registration is gone either way, as one
 // removed by hand leaves it, is a directory git does not know, and so is a
 // copy of another worktree, whose registration names that worktree, which
@@ -298,7 +298,7 @@ func adoptRefusal(f forkSite, v forkVerdict, facts forkFacts) (what, wayOut stri
 // since finding it otherwise takes git, and no listing runs git for a
 // warning.
 func (inv *invocation) forkWarnings(records map[string]lineage.Record, except string) []string {
-	gitDir := gitx.AccountRepoPath(inv.dirs.Home)
+	gitDir := gitx.StorePath(inv.dirs.Home)
 	var warnings []string
 	for _, name := range slices.Sorted(maps.Keys(records)) {
 		rec := records[name]
@@ -342,7 +342,7 @@ func (inv *invocation) linkedForkDir(name string) (string, bool) {
 }
 
 // listLineage is lineage.List for a command, which reads the branches of
-// the account repo at gitDir, and, the first time this run reads them,
+// the store at gitDir, and, the first time this run reads them,
 // warns of every fork the listing would warn of, see forkWarnings, so that
 // a fork whose worktree is missing is named by whatever command runs next,
 // not only by skill list. It reads files alone for the warnings. A command
@@ -400,9 +400,9 @@ func (inv *invocation) serveReconcile(ctx context.Context) error {
 // reconcile is serveReconcile's work under the lock: what it repairs, and
 // the events it reports.
 func (inv *invocation) reconcile(ctx context.Context) ([]reconcileEvent, error) {
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	sc, err := inv.skillContext(ctx)
 	if err != nil {
@@ -513,8 +513,8 @@ func verdictPath(f forkSite, v forkVerdict) string {
 	return ""
 }
 
-// prepareWorktrees readies git's worktrees of the account repo at gitDir
-// for reconciliation, and, while an account remote is set, reads the fork
+// prepareWorktrees readies git's worktrees of the store at gitDir
+// for reconciliation, and, while a hub is set, reads the fork
 // branches it holds, by name: registrations whose directory is gone are
 // pruned, which every locked worktree survives, and the pointers of every
 // fork's worktree of roots that no longer meet, as moving agentx home
@@ -527,11 +527,11 @@ func verdictPath(f forkSite, v forkVerdict) string {
 func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, roots []string) (remote, repointed map[string]bool, err error) {
 	list, err := inv.git.Worktrees(ctx, gitDir)
 	if err != nil {
-		return nil, nil, accountRepoFailure(err)
+		return nil, nil, storeFailure(err)
 	}
 	if slices.ContainsFunc(list, func(w gitx.Worktree) bool { return w.Prunable }) {
 		if err := inv.git.PruneWorktrees(ctx, gitDir); err != nil {
-			return nil, nil, accountRepoFailure(err)
+			return nil, nil, storeFailure(err)
 		}
 	}
 	var moved []string
@@ -552,16 +552,16 @@ func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, root
 		}
 	}
 	remote = map[string]bool{}
-	_, account, ok, err := inv.accountSource()
+	_, hub, ok, err := inv.hubSource()
 	if err != nil {
 		return nil, nil, err
 	}
 	if !ok {
 		return remote, repointed, nil
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, account)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, hub)
 	if err != nil {
-		return nil, nil, accountRepoFailure(err)
+		return nil, nil, storeFailure(err)
 	}
 	for name := range tips {
 		remote[name] = true
@@ -618,7 +618,7 @@ func (inv *invocation) stageForkRepair(ctx context.Context, m *home.Mutation, f 
 		fp, err := inv.stageForkContent(ctx, f.gitDir, f.rec.Commit, f.dir, staged, "", nil)
 		if err != nil {
 			_ = home.RemoveTree(staged)
-			return "", accountRepoFailure(err)
+			return "", storeFailure(err)
 		}
 		m.Publish(f.skillDir, staged, fp)
 		from = staged
@@ -663,7 +663,7 @@ func (inv *invocation) stageForkWorktree(ctx context.Context, m *home.Mutation, 
 func (inv *invocation) besideSkillDir(ctx context.Context, gitDir, commit, dir string) ([]string, error) {
 	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", "--name-only", commit)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	var names []string
 	for _, name := range strings.Split(out, "\x00") {

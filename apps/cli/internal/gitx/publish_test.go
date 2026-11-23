@@ -223,7 +223,7 @@ func TestStderrFor(t *testing.T) {
 // commit onto one branch, leased on the commit it was read at, signing
 // nothing, running no hook, sending no thin pack and fetching nothing
 // lazily, and never forced, mirrored or carrying every branch or tag. The
-// account remote's pushes, of fork branches and of a deletion, sign
+// hub's pushes, of fork branches and of a deletion, sign
 // nothing and carry no push option or tag of the user's either.
 func TestPushBranchNeverForces(t *testing.T) {
 	t.Parallel()
@@ -232,7 +232,7 @@ func TestPushBranchNeverForces(t *testing.T) {
 	script := "#!/bin/sh\n{ echo \"$@\"; /usr/bin/env; } > \"$SEEN\"\n"
 	testshim.Write(t, filepath.Join(dir, "git"), script)
 	r := New(map[string]string{"PATH": dir, "HOME": "/home/someone", "SEEN": out}, false, func(string, ...any) {})
-	_, found, _, exit, err := r.PushBranch(context.Background(), "/srv/account.git", "src-abc", "c0ffee", "main", "beef")
+	_, found, _, exit, err := r.PushBranch(context.Background(), "/srv/store.git", "src-abc", "c0ffee", "main", "beef")
 	if err != nil || found || exit != 0 {
 		t.Fatalf("PushBranch = found %v, exit %d, %v; want git's silence read as no status", found, exit, err)
 	}
@@ -265,10 +265,10 @@ func TestPushBranchNeverForces(t *testing.T) {
 		push          func()
 	}{
 		{"Push", "refs/heads/skills/pdf:refs/heads/skills/pdf", func() {
-			_, _, _, _ = r.Push(context.Background(), "/srv/account.git", "src-abc", []string{"skills/pdf"})
+			_, _, _, _ = r.Push(context.Background(), "/srv/store.git", "src-abc", []string{"skills/pdf"})
 		}},
 		{"DeleteRemoteBranch", ":refs/heads/skills/pdf", func() {
-			_, _ = r.DeleteRemoteBranch(context.Background(), "/srv/account.git", "src-abc", "skills/pdf", "beef")
+			_, _ = r.DeleteRemoteBranch(context.Background(), "/srv/store.git", "src-abc", "skills/pdf", "beef")
 		}},
 	} {
 		if err := os.Remove(out); err != nil && !os.IsNotExist(err) {

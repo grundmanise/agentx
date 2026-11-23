@@ -17,7 +17,6 @@ import { CheckIcon } from "#/components/icons/check.tsx";
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
@@ -34,6 +33,7 @@ import {
   DialogStatus,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { formatAgo, formatDate } from "#/lib/dates.ts";
 import { useNow } from "#/lib/now.ts";
 import { plural } from "#/lib/plural.ts";

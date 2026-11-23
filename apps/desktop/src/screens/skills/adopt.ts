@@ -275,10 +275,10 @@ const failureOf = (outcome: Outcome): Problem => {
     : { hint, message: error.message };
 };
 
-/** Whether a run ended in a way the runner answers itself: the lock, the account repo, a cancel. */
+/** Whether a run ended in a way the runner answers itself: the lock, the store, a cancel. */
 const answeredByRunner = (outcome: Outcome) =>
   outcome.exitCode === EXIT_CODES.locked ||
-  outcome.exitCode === EXIT_CODES.account_repo ||
+  outcome.exitCode === EXIT_CODES.store ||
   outcome.cancelled;
 
 /**

@@ -16,7 +16,6 @@ import type {
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Dialog,
@@ -28,6 +27,7 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { doctorRule } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { openSkill } from "#/screens/skills/open.ts";
@@ -62,7 +62,7 @@ export const FIND_SKILLS_LABEL = "find skills";
 
 /**
  * The hints of `source skills` and `skill add` that name a command, in the app's words: the
- * account remote's skills are under Personal, and Sources shows what a source holds.
+ * hub's skills are under Hub, and Sources shows what a source holds.
  */
 const linkHintRules: HintRule[] = [
   ...addSourceHintRules,

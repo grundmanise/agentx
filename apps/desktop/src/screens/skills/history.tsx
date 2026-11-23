@@ -335,7 +335,7 @@ const HistorySheet = ({
 );
 
 /**
- * HISTORY in the detail pane, for one of your own skills: the latest commits of its branch from
+ * HISTORY in the detail pane, for a hub skill: the latest commits of its branch from
  * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. In the
  * subject of the commit that created a fork, the origin's name links to its page, when the CLI
  * knows one. Other skills have no history of their own, and the pane shows no section for them.

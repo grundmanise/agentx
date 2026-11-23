@@ -9,7 +9,6 @@ import { CheckIcon } from "#/components/icons/check.tsx";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Collapsible,
@@ -26,6 +25,7 @@ import {
   DialogStatus,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { plural } from "#/lib/plural.ts";
 import { problemSentence } from "#/lib/problem-text.ts";
 import {

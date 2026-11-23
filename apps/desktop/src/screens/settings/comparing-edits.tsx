@@ -3,7 +3,7 @@
 // pending while the command runs and while the settings are read again after it.
 import { useId } from "react";
 
-import { Spinner } from "#/components/spinner.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { loadLabel } from "#/store/loaders.ts";

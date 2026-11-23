@@ -200,7 +200,7 @@ var valueLists = []valueList{
 	{name: "MachineDerivation", values: []string{home.DerivedPlatform, home.DerivedRandom}, fields: []fieldRef{
 		{machineEvent{}, "Derivation"},
 	}},
-	{name: "UpdateCheckScope", values: []string{checkScopeAll, checkScopeAccount}, fields: []fieldRef{
+	{name: "UpdateCheckScope", values: []string{checkScopeAll, checkScopeHub}, fields: []fieldRef{
 		{updateCheckEvent{}, "Scope"},
 	}},
 	{name: "SourceAccess", values: []string{home.AccessWritable, home.AccessReadOnly, home.AccessUnknown}, fields: []fieldRef{

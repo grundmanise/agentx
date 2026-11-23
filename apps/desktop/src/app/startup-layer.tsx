@@ -4,8 +4,8 @@ import { useNavigate } from "react-router";
 import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { CheckRow } from "#/components/check-row.tsx";
 import { CopyButton } from "#/components/copy-button.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { readChecks, report } from "#/startup/checks.ts";
 import { closeChecks, retry, useStartup } from "#/startup/startup.ts";
 

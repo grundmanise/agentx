@@ -14,9 +14,9 @@ import (
 func newSkillRenameCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:         "rename <old> <new>",
-		Short:       "Rename one of your own skills",
+		Short:       "Rename a hub skill",
 		Annotations: map[string]string{annotationSection: "skills"},
-		Long: "Rename the skill called <old>, one of your own skills, to <new> on this machine,\n" +
+		Long: "Rename the skill called <old>, a hub skill, to <new> on this machine,\n" +
 			"placed where <old> was. The renamed skill is the same skill: it keeps its id and\n" +
 			"its history, and a commit on top writes the new name into SKILL.md. Everything\n" +
 			"the rename needs is checked before anything changes, so a merge pending or a\n" +
@@ -24,7 +24,7 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 			"Unpublished edits are recorded on the old branch first, and the renamed skill\n" +
 			"keeps them, still unpublished. Files git ignores in the old worktree are deleted\n" +
 			"with it. The rename stays on this machine until <new> is first published, by\n" +
-			"name or by a bare publish, which pushes skills/<new> to the account remote and\n" +
+			"name or by a bare publish, which pushes skills/<new> to the hub and\n" +
 			"deletes skills/<old> there when <new> holds everything it holds. Only that first\n" +
 			"publish of <new> does: an old branch it keeps or cannot delete is warned of\n" +
 			"once; delete it with 'agentx skill remove <old> --remote'. Another machine keeps\n" +
@@ -39,11 +39,11 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 	}
 }
 
-// skillRename renames old, one of your own skills, to newName on this
+// skillRename renames old, a hub skill, to newName on this
 // machine. It is the fork of a fork followed by the fork's removal, each
 // its own journaled mutation; the fork step writes no fork id, see
 // makeFork, so newName keeps old's, and the publish that creates
-// newName's branch on the account remote deletes old's there, once it is
+// newName's branch on the hub deletes old's there, once it is
 // the same skill by that fork id, see dropRenamed. Before either step
 // runs, everything either would refuse is asked: what skill fork refuses
 // of old and of newName, see planFork, an unmanaged skill, which is sent
@@ -62,7 +62,7 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string) err
 		return err
 	}
 	if fk.src.kind != lineage.KindFork {
-		return fail(exitRefused, sanitised(old)+" is not a skill of the account remote, so it cannot be renamed",
+		return fail(exitRefused, sanitised(old)+" is not a skill of the hub, so it cannot be renamed",
 			"fork it under the new name with '"+skillCommand("fork", old, "--name", newName)+"', then remove it with '"+skillCommand("remove", old)+"'")
 	}
 	if err := inv.keepCopies(fk); err != nil {

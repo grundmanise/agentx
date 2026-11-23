@@ -2,12 +2,19 @@
 // with its button: See changes and Update on the lime banners of an update (See changes opens the
 // What's new sheet), Show folder, Discard my edits and Apply merge on the amber one of a pending merge, Add to
 // agents on the gray "Not in any agent" banner, Reconnect on the amber one of a displaced skill,
-// Adopt or Add source on the others, Publish or Settings on your own skills' banners, and
+// Adopt or Add source on the others, Publish or Settings on hub skills' banners, and
 // Publish to on an edited skill of a source this machine can write to. The banner of a skill gone
 // from its source has no button: Fork is in the action row. The buttons are in
 // src/screens/skills/actions.tsx, but Publish and Settings (src/screens/skills/publish-dialog.tsx).
-// The box itself is a Callout (src/components/callout.tsx).
-import { Callout } from "#/components/callout.tsx";
+// The box itself is an Alert (src/components/ui/alert.tsx).
+import {
+  Alert,
+  AlertAction,
+  AlertContent,
+  AlertDescription,
+  AlertTile,
+  AlertTitle,
+} from "#/components/ui/alert.tsx";
 import {
   AddSource,
   AddToAgents,
@@ -88,11 +95,16 @@ export const BannerView = ({
   row: SkillRow;
   banner: Banner;
 }) => (
-  <Callout
-    tone={banner.tone}
-    icon={banner.icon === "update" ? "update" : "alert"}
-    title={banner.title}
-    text={banner.text}
-    actions={<BannerActions row={row} banner={banner} />}
-  />
+  <Alert tone={banner.tone} aria-label={banner.title}>
+    <AlertTile tone={banner.tone} icon={banner.icon} />
+    <AlertContent>
+      <AlertTitle>{banner.title}</AlertTitle>
+      {banner.text !== undefined && (
+        <AlertDescription>{banner.text}</AlertDescription>
+      )}
+    </AlertContent>
+    <AlertAction>
+      <BannerActions row={row} banner={banner} />
+    </AlertAction>
+  </Alert>
 );

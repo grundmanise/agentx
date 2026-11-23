@@ -1,5 +1,5 @@
 // The machine the Skills tests run against: an inventory with a skill of every kind the screen
-// shows, the configurations that see them, and the history of one of your own skills. Inline
+// shows, the configurations that see them, and the history of a hub skill. Inline
 // events with only the fields the tests check, typed by the generated event types.
 import type {
   AdoptionEvent,
@@ -19,7 +19,7 @@ import type { InlineEvent } from "../harness/cli.ts";
 
 export const ACME = "https://github.com/acme/skills";
 export const ZETA = "https://gitlab.com/zeta/tools.git";
-export const ACCOUNT = "git@github.com:me/account.git";
+export const HUB = "git@github.com:me/hub.git";
 const LIBRARY = "/home/me/.agents/skills";
 const WORKTREES = "/home/me/.agentx/worktrees";
 
@@ -99,7 +99,7 @@ export const library: LibraryEntry[] = [
       placement("claude-code", "pdf-letters"),
       ...libraryPlacements("pdf-letters"),
     ],
-    source: ACCOUNT,
+    source: HUB,
     state: "current",
     universal,
     upstream: ACME,
@@ -116,7 +116,7 @@ export const library: LibraryEntry[] = [
       placement("cursor", "release-notes", "symlink", "directory"),
       ...libraryPlacements("release-notes"),
     ],
-    source: ACCOUNT,
+    source: HUB,
     state: "modified",
     universal,
   },
@@ -484,7 +484,7 @@ export const reviewDiffs: DiffEvent[] = [
   ),
 ];
 
-/** The edits of `release-notes`, one of your own skills: SKILL.md edited since the last publish. */
+/** The edits of `release-notes`, a hub skill: SKILL.md edited since the last publish. */
 export const releaseNotesDiffs: DiffEvent[] = [
   diffEvent(
     "release-notes",
