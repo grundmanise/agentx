@@ -9,7 +9,6 @@ import type { ReactNode } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -22,6 +21,7 @@ import {
 import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";

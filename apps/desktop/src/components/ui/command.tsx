@@ -5,13 +5,13 @@ import { Command as CommandPrimitive } from "cmdk";
 import type { ReactNode } from "react";
 
 import { SearchIcon } from "#/components/icons/search.tsx";
-import { KeyHint } from "#/components/key-hint.tsx";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
+import { Kbd, KbdGroup } from "#/components/ui/kbd.tsx";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const Command = ({ ...props }: OwnProps<typeof CommandPrimitive>) => (
@@ -69,7 +69,11 @@ const CommandInput = ({
       className="type-palette-input h-full flex-1 border-0 bg-transparent outline-none focus-visible:outline-none"
       {...props}
     />
-    {escapeHint && <KeyHint keys={["esc"]} />}
+    {escapeHint && (
+      <KbdGroup>
+        <Kbd>esc</Kbd>
+      </KbdGroup>
+    )}
   </div>
 );
 
