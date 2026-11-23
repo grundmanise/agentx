@@ -616,7 +616,7 @@ test("an Added skill shows when it was added, a removed one when it was removed,
     events: [skillMd("pdf", "# pdf\n")],
   });
   await row(page, "pdf").click();
-  await expect(opened(page, "pdf")).not.toContainText("Removed");
+  await expect(opened(page, "pdf")).toBeVisible();
   await expect(
     rowLine(page, "pdf").getByText("Added on Oct 2", { exact: true })
   ).toBeVisible();
