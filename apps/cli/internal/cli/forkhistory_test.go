@@ -99,24 +99,17 @@ func TestSkillHistoryListsEveryCommit(t *testing.T) {
 	equal(t, "the foreign commit's message", events[0]["message"], "By hand\n\nWith a body.")
 	equal(t, "the result", h.one(out.stdout, "result")["summary"], "alpha has 4 commits")
 	for i, want := range []struct {
-		kind, label string
-		generated   bool
+		kind      string
+		generated bool
 	}{
-		{historyGit, "", false},
-		{historyEdit, "test-host", true},
-		{historyFork, "", true},
-		{historyUpstreamKind, "", false},
+		{historyGit, false},
+		{historyEdit, true},
+		{historyFork, true},
+		{historyUpstreamKind, false},
 	} {
 		ev := events[i]
 		equal(t, ev["subject"].(string)+": kind", ev["kind"], want.kind)
 		equal(t, ev["subject"].(string)+": generated", ev["generated"] == true, want.generated)
-		if want.label == "" {
-			if _, ok := ev["machine_label"]; ok {
-				t.Errorf("%s: machine_label %v, want none", ev["subject"], ev["machine_label"])
-			}
-		} else {
-			equal(t, ev["subject"].(string)+": machine_label", ev["machine_label"], want.label)
-		}
 	}
 	// The commits agentx wrote name their kind, so the kind is read, not
 	// guessed from the subject.
@@ -251,61 +244,48 @@ func TestDescribeHistory(t *testing.T) {
 	imp := lineage.Import{Source: "https://github.com/acme/skills", Path: "pdf", Commit: upstream, Hash: strings.Repeat("b", 64)}
 	imported := &forkLogCommit{id: "i", parents: []string{}, time: "2026-09-16T10:00:00+00:00", message: imp.Message()}
 	tip := &forkLogCommit{id: "t", parents: []string{"i"}, message: "x\n"}
-	edited := []changedFile{{"SKILL.md", diffModified}, {"examples.md", diffAdded}}
 	wantUpstream := &historyUpstream{Source: imp.Source, Path: "pdf", Commit: upstream, Time: imported.time, URL: imp.Source,
 		SkillURL: "https://github.com/acme/skills/tree/" + upstream + "/pdf"}
 	for _, tc := range []struct {
 		name, subject string
 		t             lineage.ForkTrailers
-		origin        *forkOrigin
 		parents       []string
 		first, second *forkLogCommit
-		files         []changedFile
-		kind, label   string
+		kind          string
 		generated     bool
 		renamedFrom   string
 		upstream      *historyUpstream
 	}{
-		{name: "a fork of a source's skill", subject: "Fork pdf-letters from https://github.com/acme/skills/pdf at aaaaaaa", t: created,
-			origin: &forkOrigin{Kind: originSource}, parents: []string{"i"}, first: imported, kind: historyFork, generated: true, upstream: wantUpstream},
-		{name: "a fork of a plugin's skill", subject: "Fork fmt from plugin formatter", t: created, origin: &forkOrigin{Kind: originPlugin},
-			kind: historyFork, generated: true},
-		{name: "skill new's", subject: "Create notes", t: created, kind: historyCreate, generated: true},
-		{name: "skill import's", subject: "Adopt notes", t: created, kind: historyAdopt, generated: true},
-		{name: "a rename", subject: "Rename pdf-notes to pdf-letters", t: machine, parents: []string{"t"}, first: tip,
-			kind: historyRename, generated: true, renamedFrom: "pdf-notes"},
-		{name: "a rename that gives a fork id", subject: "Rename notes to jot", t: created, parents: []string{"t"}, first: tip,
-			kind: historyRename, generated: true, renamedFrom: "notes"},
-		{name: "an update", subject: "pdf-letters: merge upstream aaaaaaa (laptop)", t: machine, parents: []string{"t", "i"}, first: tip, second: imported,
-			kind: historyUpdate, label: "laptop", generated: true, upstream: wantUpstream},
-		{name: "an update the user committed", subject: "Take the new examples", t: machine, parents: []string{"t", "i"}, first: tip, second: imported,
-			kind: historyUpdate, upstream: wantUpstream},
-		{name: "another machine's edits", subject: "pdf-letters: merge the account remote (studio mac)", t: machine, parents: []string{"t", "o"}, first: tip,
-			kind: historySync, label: "studio mac", generated: true},
-		{name: "recorded edits", subject: "pdf-letters: edit SKILL.md and add examples.md (laptop)", t: machine, parents: []string{"t"}, first: tip,
-			files: edited, kind: historyEdit, label: "laptop", generated: true},
-		{name: "edits with the user's message", subject: "Tighten the examples (draft)", t: machine, parents: []string{"t"}, first: tip,
-			files: edited, kind: historyEdit},
 		// A commit that names its kind is told by it, whatever its subject.
-		{name: "an edit by its kind", subject: "pdf-letters: edit SKILL.md (old) (laptop)", t: kinded(machine, historyEdit), parents: []string{"t"}, first: tip,
-			files: edited, kind: historyEdit, label: "laptop", generated: true},
-		{name: "an update by its kind", subject: "pdf-letters: merge upstream aaaaaaa (laptop)", t: kinded(machine, historyUpdate), parents: []string{"t", "i"},
-			first: tip, second: imported, kind: historyUpdate, label: "laptop", generated: true, upstream: wantUpstream},
-		{name: "a sync by its kind", subject: "pdf-letters: merge the account remote (studio mac)", t: kinded(machine, historySync), parents: []string{"t", "o"},
-			first: tip, kind: historySync, label: "studio mac", generated: true},
-		{name: "a fork by its kind", subject: "Fork pdf-letters from https://github.com/acme/skills/pdf at aaaaaaa", t: kinded(created, historyFork),
+		{name: "a fork", subject: "Fork pdf-letters from https://github.com/acme/skills/pdf at aaaaaaa", t: kinded(created, historyFork),
 			parents: []string{"i"}, first: imported, kind: historyFork, generated: true, upstream: wantUpstream},
-		{name: "an import from disk by its kind", subject: "Adopt notes", t: kinded(created, historyAdopt), kind: historyAdopt, generated: true},
-		{name: "a rename by its kind", subject: "Rename notes to jot", t: kinded(machine, historyRename), parents: []string{"t"}, first: tip,
+		{name: "a fork of a plugin's skill", subject: "Fork fmt from plugin formatter", t: kinded(created, historyFork), kind: historyFork, generated: true},
+		{name: "skill new's", subject: "Create notes", t: kinded(created, historyCreate), kind: historyCreate, generated: true},
+		{name: "skill import's", subject: "Adopt notes", t: kinded(created, historyAdopt), kind: historyAdopt, generated: true},
+		{name: "a rename", subject: "Rename notes to jot", t: kinded(machine, historyRename), parents: []string{"t"}, first: tip,
 			kind: historyRename, generated: true, renamedFrom: "notes"},
+		{name: "an update", subject: "pdf-letters: merge upstream aaaaaaa (laptop)", t: kinded(machine, historyUpdate), parents: []string{"t", "i"},
+			first: tip, second: imported, kind: historyUpdate, generated: true, upstream: wantUpstream},
+		{name: "another machine's edits", subject: "pdf-letters: merge the account remote (studio mac)", t: kinded(machine, historySync), parents: []string{"t", "o"},
+			first: tip, kind: historySync, generated: true},
+		{name: "recorded edits", subject: "pdf-letters: edit SKILL.md and add examples.md (laptop)", t: kinded(machine, historyEdit), parents: []string{"t"}, first: tip,
+			kind: historyEdit, generated: true},
 		{name: "a kind this agentx does not know", subject: "Pick from main", t: kinded(machine, "cherry-pick"), parents: []string{"t"}, first: tip,
 			kind: "cherry-pick", generated: true},
+		// One without, a message the user gave or an older commit, is told by
+		// its parents, and its subject is not agentx's.
+		{name: "edits with the user's message", subject: "Tighten the examples", t: machine, parents: []string{"t"}, first: tip, kind: historyEdit},
+		{name: "an update the user committed", subject: "Take the new examples", t: machine, parents: []string{"t", "i"}, first: tip, second: imported,
+			kind: historyUpdate, upstream: wantUpstream},
+		{name: "a merge the user committed", subject: "Merge my laptop's edits", t: machine, parents: []string{"t", "o"}, first: tip, kind: historySync},
+		{name: "an older rename", subject: "Rename pdf-notes to pdf-letters", t: machine, parents: []string{"t"}, first: tip, kind: historyEdit},
+		{name: "an older fork", subject: "Fork pdf-letters from https://github.com/acme/skills/pdf at aaaaaaa", t: created, parents: []string{"i"},
+			first: imported, kind: historyEdit},
 	} {
-		ev := historyEvent{Name: "pdf-letters", Subject: tc.subject, Message: tc.subject, Parents: tc.parents, Files: tc.files, Origin: tc.origin}
+		ev := historyEvent{Name: "pdf-letters", Subject: tc.subject, Message: tc.subject, Parents: tc.parents}
 		describeHistory(&ev, tc.t, tc.first, tc.second)
 		equal(t, tc.name+": kind", ev.Kind, tc.kind)
 		equal(t, tc.name+": generated", ev.Generated, tc.generated)
-		equal(t, tc.name+": machine label", ev.MachineLabel, tc.label)
 		equal(t, tc.name+": renamed from", ev.RenamedFrom, tc.renamedFrom)
 		if !reflect.DeepEqual(ev.Upstream, tc.upstream) {
 			t.Errorf("%s: upstream %+v, want %+v", tc.name, ev.Upstream, tc.upstream)

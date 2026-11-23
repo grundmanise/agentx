@@ -477,7 +477,6 @@ export interface HistoryEvent {
   origin?: ForkOrigin;
   kind: HistoryKind;
   generated?: boolean;
-  machine_label?: string;
   renamed_from?: string;
   upstream?: HistoryUpstream;
 }

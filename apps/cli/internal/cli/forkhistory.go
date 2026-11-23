@@ -45,16 +45,13 @@ type historyEvent struct {
 	Machine string        `json:"machine,omitempty"`
 	Files   []changedFile `json:"files"`
 	Origin  *forkOrigin   `json:"origin,omitempty"`
-	// Kind is what the commit did to the skill, read off its trailers and
-	// parents, see historyKindOf. Generated, MachineLabel, RenamedFrom and
-	// Upstream are the facts a reader needs to say it in words. MachineLabel
-	// is the label the machine had when it wrote the commit; a view that
-	// knows the machine's label now, by Machine, shows that one.
-	Kind         string           `json:"kind"`
-	Generated    bool             `json:"generated,omitempty"`
-	MachineLabel string           `json:"machine_label,omitempty"`
-	RenamedFrom  string           `json:"renamed_from,omitempty"`
-	Upstream     *historyUpstream `json:"upstream,omitempty"`
+	// Kind is what the commit did to the skill, see describeHistory.
+	// Generated, RenamedFrom and Upstream are the facts a reader needs to
+	// say it in words.
+	Kind        string           `json:"kind"`
+	Generated   bool             `json:"generated,omitempty"`
+	RenamedFrom string           `json:"renamed_from,omitempty"`
+	Upstream    *historyUpstream `json:"upstream,omitempty"`
 }
 
 // historyUpstream is the version of a source's skill a commit took in: the
@@ -308,55 +305,27 @@ func upstreamOf(c *forkLogCommit) *historyUpstream {
 // describeHistory sets the kind of ev, a commit agentx wrote, whose
 // trailers are t and whose first and second parents, as the history holds
 // them, are first and second, nil for none, and the facts that kind is
-// told with. A commit that names its kind in the Agentx-Kind trailer is
-// described by describeKind. One written before agentx wrote that trailer,
-// or with a subject the user gave, is told by its subject and parents: it
-// is a rename when its subject is the one skill rename
-// writes, then a fork's creation when it carries a fork id: of another
-// skill when it records an origin or its subject is skill fork's, else
-// skill import's, by its subject, or skill new's. A merge is an update
-// when it took in an import commit, and the edits of another machine
-// otherwise; every other commit records edits. Generated says the subject
-// is the one agentx writes for the kind, which, for edits and merges, also
-// names the label of the machine they were made on. Pure.
+// told with. The kind is the one the Agentx-Kind trailer names, which
+// agentx writes beside every subject of its own; Generated then says the
+// subject is agentx's. A commit without one, a message the user gave or a
+// commit written before that trailer, is told by its parents alone: a
+// merge is an update when it took in an import commit and the edits of
+// another machine otherwise, and every other commit records edits. A kind
+// this agentx does not know is kept as it is, for a view to show the
+// subject of. Pure.
 func describeHistory(ev *historyEvent, t lineage.ForkTrailers, first, second *forkLogCommit) {
-	if t.Kind != "" {
-		describeKind(ev, t.Kind, first, second)
-		return
+	ev.Kind, ev.Generated = t.Kind, t.Kind != ""
+	if ev.Kind == "" {
+		switch {
+		case second != nil && second.isImport():
+			ev.Kind = historyUpdate
+		case len(ev.Parents) > 1:
+			ev.Kind = historySync
+		default:
+			ev.Kind = historyEdit
+		}
 	}
-	name, label, labelled := subjectLabel(ev.Subject)
-	switch {
-	case lineage.RenamedFrom(ev.Message) != "":
-		ev.Kind, ev.Generated, ev.RenamedFrom = historyRename, true, lineage.RenamedFrom(ev.Message)
-	case t.ForkID != "" && (ev.Origin != nil || strings.HasPrefix(ev.Subject, "Fork ")):
-		ev.Kind, ev.Generated, ev.Upstream = historyFork, true, upstreamOf(first)
-	case t.ForkID != "" && strings.HasPrefix(ev.Subject, "Adopt "):
-		ev.Kind, ev.Generated = historyAdopt, true
-	case t.ForkID != "":
-		ev.Kind, ev.Generated = historyCreate, true
-	case second != nil && second.isImport():
-		ev.Kind, ev.Upstream = historyUpdate, upstreamOf(second)
-		ev.Generated = labelled && upstreamMergeSubject(name, label, ev.Upstream.Commit) == ev.Subject
-	case len(ev.Parents) > 1:
-		ev.Kind = historySync
-		ev.Generated = labelled && accountMergeSubject(name, label) == ev.Subject
-	default:
-		ev.Kind = historyEdit
-		ev.Generated = labelled && commitSubject(name, label, ev.Files) == ev.Subject
-	}
-	if ev.Generated && labelled && (ev.Kind == historyEdit || ev.Kind == historyUpdate || ev.Kind == historySync) {
-		ev.MachineLabel = label
-	}
-}
-
-// describeKind is describeHistory for a commit that names its kind in the
-// Agentx-Kind trailer, which agentx writes beside a subject of its own:
-// the kind is read, not guessed from the subject, and only the facts it is
-// told with are looked up. A kind this agentx does not know is kept as it
-// is, for a view to show the subject of. Pure.
-func describeKind(ev *historyEvent, kind string, first, second *forkLogCommit) {
-	ev.Kind, ev.Generated = kind, true
-	switch kind {
+	switch ev.Kind {
 	case historyRename:
 		ev.RenamedFrom = lineage.RenamedFrom(ev.Message)
 	case historyFork:
@@ -364,23 +333,6 @@ func describeKind(ev *historyEvent, kind string, first, second *forkLogCommit) {
 	case historyUpdate:
 		ev.Upstream = upstreamOf(second)
 	}
-	if kind == historyEdit || kind == historyUpdate || kind == historySync {
-		if _, label, ok := subjectLabel(ev.Subject); ok {
-			ev.MachineLabel = label
-		}
-	}
-}
-
-// subjectLabel splits a subject agentx writes for edits and merges,
-// "<name>: <what> (<label>)", into the name and the label; ok is false
-// for a subject of another shape. Pure.
-func subjectLabel(subject string) (name, label string, ok bool) {
-	name, _, found := strings.Cut(subject, ": ")
-	open := strings.LastIndex(subject, " (")
-	if !found || open == -1 || !strings.HasSuffix(subject, ")") {
-		return "", "", false
-	}
-	return name, subject[open+len(" (") : len(subject)-1], true
 }
 
 // historyPath is the path p of a commit's tree relative to the skill
