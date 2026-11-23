@@ -243,9 +243,12 @@ var fixtures = map[string]fixture{
 		},
 	},
 	"plugins": {
-		dirs: []string{".codex", ".cursor"},
+		dirs: []string{".codex", ".cursor", ".claude/plugins/cache/acme-tools/linter/0.9.0", ".claude/plugins/cache/acme-tools/tester/2.1.0"},
 		files: map[string]string{
-			".claude/plugins/installed_plugins.json": `{"version": 2, "plugins": {"formatter@acme-tools": [{"scope": "user", "installPath": "$HOME/.claude/plugins/cache/acme-tools/formatter/1.2.0", "version": "1.2.0", "installedAt": "2026-09-01T00:00:00Z"}], "legacy@acme-tools": {"version": "0.1.0"}, "gone@acme-tools": [{"installPath": "$HOME/.claude/plugins/cache/acme-tools/gone/2.0.0", "version": "2.0.0"}]}}`,
+			".claude/plugins/installed_plugins.json": `{"version": 2, "plugins": {"formatter@acme-tools": [{"scope": "user", "installPath": "$HOME/.claude/plugins/cache/acme-tools/formatter/1.2.0", "version": "1.2.0", "installedAt": "2026-09-01T00:00:00Z"}], "linter@acme-tools": [{"scope": "user", "installPath": "$HOME/.claude/plugins/cache/acme-tools/linter/0.9.0", "version": "0.9.0"}], "tester@acme-tools": [{"scope": "user", "installPath": "$HOME/.claude/plugins/cache/acme-tools/tester/2.1.0", "version": "2.1.0"}], "legacy@acme-tools": {"version": "0.1.0"}, "gone@acme-tools": [{"installPath": "$HOME/.claude/plugins/cache/acme-tools/gone/2.0.0", "version": "2.0.0"}]}}`,
+			// The settings turn formatter on and linter off, and do not name
+			// tester, which has no enabled state.
+			".claude/settings.json": `{"enabledPlugins": {"formatter@acme-tools": true, "linter@acme-tools": false}}`,
 			// formatter: hooks in the default file and in both shapes the
 			// manifest declares them, a file and an inline event map, all
 			// read; a PNG icon inside the plugin.

@@ -124,7 +124,7 @@ agentx skill fork formatter:format
 ```
 
 - The plugin keeps its skill. agentx cannot change or remove it.
-- The fork goes into your library and into the enabled clients that have the plugin. Clients that read the library also see it.
+- The fork goes into your library and into the enabled clients that have the plugin. A client where you turned the plugin off gets no placement. Clients that read the library also see it.
 - A client that has the plugin and sees the fork has more than one skill named `format`. The client decides which one it uses. The last line names those clients.
 - To avoid two skills with the same name, fork it under a new name: `agentx skill fork formatter:format --name my-format`. In the desktop app, **Use a different name** starts on for a plugin's skill.
 - The skill's name alone, `agentx skill fork format`, names a skill of your library, never a plugin's.

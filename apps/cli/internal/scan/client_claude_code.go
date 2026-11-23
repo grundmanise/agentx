@@ -35,7 +35,11 @@ func (claudeCode) MCPConfigs(d home.Dirs) []MCPConfig {
 // plugin declares servers in .mcp.json at its root, and its hooks in
 // hooks/hooks.json and in the hooks its manifest declares, both read; the
 // manifest's icon names its icon. Its URL is the manifest's, else its
-// marketplace's, see marketplaceURLs.
+// marketplace's, see marketplaceURLs. It is on or off as enabledPlugins in
+// the user settings, ~/.claude/settings.json, sets it:
+// `{"<name>@<marketplace>": true}` or false. A plugin with no boolean there
+// is reported without an enabled state: Claude Code then follows a default
+// the plugin and its marketplace give, which is not read.
 func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 	path := filepath.Join(c.ConfigDir(d), "plugins", "installed_plugins.json")
 	var file struct {
@@ -44,6 +48,10 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 	if !readJSON(path, &file, warn) {
 		return nil
 	}
+	var settings struct {
+		Enabled map[string]any `json:"enabledPlugins"`
+	}
+	readJSON(filepath.Join(c.ConfigDir(d), "settings.json"), &settings, warn)
 	var marketplaces map[string]string // read once, for the first plugin with no URL of its own
 	var plugins []InstalledPlugin
 	for _, key := range slices.Sorted(maps.Keys(file.Plugins)) {
@@ -80,6 +88,9 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 					Format: mcp.JSON,
 					Vars:   map[string]string{"CLAUDE_PLUGIN_ROOT": r.InstallPath},
 				},
+			}
+			if on, ok := settings.Enabled[key].(bool); ok {
+				p.Enabled = &on
 			}
 			var m pluginManifest
 			manifest := filepath.Join(r.InstallPath, ".claude-plugin", "plugin.json")
