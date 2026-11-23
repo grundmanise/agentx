@@ -54,12 +54,6 @@
   "contextual": {
     "options": ["copy", "view", "claude", "chatgpt", "cursor"]
   },
-  "redirects": [
-    {
-      "source": "/account-remote",
-      "destination": "/hub"
-    }
-  ],
   "navbar": {
     "links": [
       {
