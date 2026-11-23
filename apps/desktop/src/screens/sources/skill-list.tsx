@@ -34,7 +34,11 @@ import { formatSize } from "#/screens/skills/files.tsx";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
 import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
-import { addedName, statusLabels } from "#/screens/sources/projection.ts";
+import {
+  addedName,
+  statusLabels,
+  statusText,
+} from "#/screens/sources/projection.ts";
 import type {
   CardGroup,
   SkillCard,
@@ -125,16 +129,29 @@ const CheckMark = ({ checked }: { checked: boolean }) => (
   </svg>
 );
 
-export const statusVariants = cva("type-secondary flex-none font-medium", {
+const statusVariants = cva("type-secondary flex-none font-medium", {
   variants: {
     status: {
       added: "text-add-card-status-added",
       forked: "text-add-card-status-forked",
-      "name-in-use": "text-add-card-status-in-use",
-      "on-disk": "text-add-card-status-disk",
+      "name-taken": "text-add-card-status-taken",
     },
   },
 });
+
+/** A card's status in its colour, then for a name taken, what holds the name, muted. */
+export const StatusLabel = ({ card }: { card: SkillCard }) =>
+  card.status === undefined ? null : (
+    <span
+      title={statusText(card)}
+      className={statusVariants({ status: card.status })}
+    >
+      {statusLabels[card.status]}
+      {card.holder !== undefined && (
+        <span className="text-text-muted font-normal"> by {card.holder}</span>
+      )}
+    </span>
+  );
 
 /** A line in the code pane's place while SKILL.md is not shown. */
 const PaneHint = ({ children }: { children: string }) => (
@@ -331,9 +348,7 @@ const SkillItemView = ({
       void loadSkillMd(card.key, { source, subpath, tree });
     }
   }, [wanted, card.key, source, subpath, tree]);
-  const status =
-    card.status === undefined ? undefined : statusLabels[card.status];
-  const description = [status, markdownText(card.description)]
+  const description = [statusText(card), markdownText(card.description)]
     .filter((part) => part !== undefined && part !== "")
     .join(". ");
   let action: ReactNode;
@@ -362,10 +377,8 @@ const SkillItemView = ({
         open={open}
         busy={loading}
         meta={
-          status === undefined || card.status === "added" ? undefined : (
-            <span className={statusVariants({ status: card.status })}>
-              {status}
-            </span>
+          card.status === undefined || card.status === "added" ? undefined : (
+            <StatusLabel card={card} />
           )
         }
         action={action}
