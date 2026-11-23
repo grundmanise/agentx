@@ -10,6 +10,7 @@ import {
   webUrl,
 } from "#/screens/sources/projection.ts";
 
+import { filesOf } from "./fixtures/skills.ts";
 import {
   ACME,
   ACME_ID,
@@ -234,8 +235,8 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   const states: [string, string][] = [
     ["letters", "Forked"],
     ["pdf", "Added"],
-    ["scratch", "Already in library"],
-    ["xlsx", "Name in use"],
+    ["scratch", "Name taken"],
+    ["xlsx", "Name taken"],
   ];
   await Promise.all(
     states.flatMap(([name, label]) => [
@@ -257,11 +258,14 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   await row(page, "xlsx").click();
   await row(page, "scratch").click();
   await expect(opened(page, "xlsx")).toContainText(
-    "Remove or rename xlsx first"
+    "Your library has xlsx skill from zeta/tools. Remove or rename it to add this skill."
   );
   await expect(opened(page, "scratch")).toContainText(
-    "A folder named scratch is already in your library, added outside agentx. Import it in Skills to manage it, or remove it to add this one."
+    "Your library has a scratch folder that agentx doesn't manage. Import or remove it to add this skill."
   );
+  await expect(
+    opened(page, "scratch").getByRole("link", { exact: true, name: "scratch" })
+  ).toHaveAttribute("href", "#/skills/scratch");
 
   // Opening another pill reads that source's listing.
   await pill(page, "zeta/tools").click();
@@ -272,6 +276,22 @@ test("a source listing: the skills A to Z, each state with its label and, once o
     `source read ${ACME_ID} skills/scratch`,
     `source skills ${ZETA_ID}`,
   ]);
+});
+
+test("the name of the skill that holds a Name taken card's name opens it in Skills", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  cli.register(["source", "read", ACME_ID, "skills/xlsx"], {
+    events: [skillMd("xlsx", "# xlsx\n")],
+  });
+  await row(page, "xlsx").click();
+  cli.register(["skill", "files", "xlsx"], { events: filesOf("xlsx") });
+  await opened(page, "xlsx")
+    .getByRole("link", { exact: true, name: "xlsx" })
+    .click();
+  await expect(page).toHaveURL(/#\/skills\/xlsx$/u);
 });
 
 /**
@@ -368,7 +388,7 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
 
   // The later skill of a name cannot be selected, and says why once open.
   const second = rowLine(page, "skill-89").last();
-  await expect(second.getByText("Name in use", { exact: true })).toBeVisible();
+  await expect(second.getByText("Name taken", { exact: true })).toBeVisible();
   await expect(
     second.getByRole("button", { name: "Select skill-89" })
   ).toHaveCount(0);
@@ -377,7 +397,7 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   });
   await row(page, "skill-89").last().click();
   await expect(opened(page, "skill-89")).toContainText(
-    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added"
+    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added."
   );
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
