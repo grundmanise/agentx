@@ -60,9 +60,9 @@ const runChecks = async (page: Page) => {
 };
 
 const unusableRepo = {
-  check: "home_repo",
-  detail: "/home/me/.agentx/home.git: not a git repository",
-  hint: "move /home/me/.agentx/home.git aside, then run agentx doctor again",
+  check: "store",
+  detail: "/home/me/.agentx/store.git: not a git repository",
+  hint: "move /home/me/.agentx/store.git aside, then run agentx doctor again",
   status: "fail",
   type: "doctor",
 } as const;
@@ -271,7 +271,7 @@ test("a machine with no skills and no agents passes", async ({ cli, page }) => {
 
   await runChecks(page);
   await expect(title(page)).toHaveText("You're all set");
-  await expect(row(page, "Home repo opens")).toContainText("No skills yet");
+  await expect(row(page, "Store opens")).toContainText("No skills yet");
   await expect(row(page, "Watching this machine")).toContainText(
     "No agents found"
   );
@@ -306,13 +306,13 @@ test("an old git blocks with the CLI's hint as the fix", async ({
   expect(cli.commands).toEqual(launchLines);
 });
 
-test("an unusable home repo blocks at check 4", async ({ cli, page }) => {
+test("an unusable store blocks at check 4", async ({ cli, page }) => {
   cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
   await page.goto("/");
-  await expect(title(page)).toHaveText("agentx can't open its home repo");
-  const homeRepo = row(page, "Home repo opens");
-  await expect(homeRepo.getByText("Failed:", { exact: true })).toBeVisible();
-  await expect(homeRepo).toContainText("not a git repository");
+  await expect(title(page)).toHaveText("agentx can't open its store");
+  const store = row(page, "Store opens");
+  await expect(store.getByText("Failed:", { exact: true })).toBeVisible();
+  await expect(store).toContainText("not a git repository");
   expect(cli.commands).toEqual(launchLines);
 });
 
@@ -335,12 +335,12 @@ test("a warning does not block, and manual mode shows it", async ({
 
   await runChecks(page);
   await expect(title(page)).toHaveText("You're all set");
-  const homeRepo = row(page, "Home repo opens");
+  const store = row(page, "Store opens");
   await expect(
-    homeRepo.getByText("Passed with a warning:", { exact: true })
+    store.getByText("Passed with a warning:", { exact: true })
   ).toBeVisible();
-  await expect(homeRepo).toContainText(lock.detail);
-  await expect(homeRepo.getByRole("paragraph")).toHaveText(`Fix: ${lock.hint}`);
+  await expect(store).toContainText(lock.detail);
+  await expect(store.getByRole("paragraph")).toHaveText(`Fix: ${lock.hint}`);
 });
 
 test("serve refused fails check 5 with serve's message and hint", async ({
@@ -502,7 +502,7 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
     `${cliVersion} at ${bundled}`
   );
   await expect(row(page, "git 2.40 or newer")).toContainText("git 2.43.0");
-  await expect(row(page, "Home repo opens")).toContainText(
+  await expect(row(page, "Store opens")).toContainText(
     "2 hub skills, 1 from sources"
   );
   await expect(row(page, "Watching this machine")).toContainText(
@@ -585,7 +585,7 @@ test("the layer closes the palette, which stays closed after it", async ({
 
   cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
   await cli.serveExit(8, [], null);
-  await expect(title(page)).toHaveText("agentx can't open its home repo");
+  await expect(title(page)).toHaveText("agentx can't open its store");
   cli.register(["doctor"], { events: doctorWith() });
   await page.getByRole("button", { name: "Retry" }).click();
   await expect(skills(page)).toBeVisible();
@@ -602,11 +602,11 @@ test("a serve exit with code 8 after launch brings the checks back", async ({
 
   cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
   await cli.serveExit(8, [], null);
-  await expect(title(page)).toHaveText("agentx can't open its home repo");
+  await expect(title(page)).toHaveText("agentx can't open its store");
   expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
 });
 
-test("a home repo error serve reports after launch brings the checks back", async ({
+test("a store error serve reports after launch brings the checks back", async ({
   cli,
   page,
 }) => {
@@ -617,12 +617,12 @@ test("a home repo error serve reports after launch brings the checks back", asyn
   cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
   await cli.serveEmit([
     {
-      code: "home_repo",
-      message: "the home repo is not a git repository",
+      code: "store",
+      message: "the store is not a git repository",
       type: "error",
     },
   ]);
-  await expect(title(page)).toHaveText("agentx can't open its home repo");
+  await expect(title(page)).toHaveText("agentx can't open its store");
   expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
 });
 
@@ -639,7 +639,7 @@ test("a run exiting with code 8 brings the checks back", async ({
   cli.register(["doctor"], { events: [unusableRepo], exitCode: 8 });
   cli.register(["scan"], { exitCode: 8 });
   await page.evaluate(() => window.transport.run(["scan"]));
-  await expect(title(page)).toHaveText("agentx can't open its home repo");
+  await expect(title(page)).toHaveText("agentx can't open its store");
   expect(cli.commands).toEqual([
     ...launchLines,
     ...loadLines,

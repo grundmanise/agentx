@@ -82,7 +82,7 @@ func exportedFrom(t *testing.T) (*harness, string) {
 }
 
 // plainExport is a snapshot a test can import without installing anything:
-// a machine with settings of its own and no home repo, exported by the
+// a machine with settings of its own and no store, exported by the
 // command itself, with one sound entry put into the snapshot afterwards, an
 // unmanaged skill, which an import skips without reaching any source.
 // Writing that entry rather than installing a skill for it keeps a test
@@ -211,7 +211,7 @@ func TestImportRestoresAMachine(t *testing.T) {
 		actions[e["name"].(string)] = e
 	}
 	equal(t, "alpha deleted by hand", actions["alpha"]["action"], importSkipped)
-	contains(t, "its reason", actions["alpha"]["reason"].(string), "alpha is managed in the home repo but the library holds no skill directory for it; run 'agentx skill add ")
+	contains(t, "its reason", actions["alpha"]["reason"].(string), "alpha is managed in the store but the library holds no skill directory for it; run 'agentx skill add ")
 }
 
 // TestImportSkipsASkillTheLibraryLost: an entry whose branch the home
@@ -255,7 +255,7 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--all")
 	old := h.exportSnapshot("old")
-	oldAlpha := h.homeGit("rev-parse", "refs/heads/managed/alpha")
+	oldAlpha := h.storeGit("rev-parse", "refs/heads/managed/alpha")
 
 	s.skill("skills/alpha", "alpha", "The first skill, once more", nil)
 	s.skill("skills/beta", "beta", "The second skill, revised", nil)
@@ -284,7 +284,7 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 	h.mustRun("skill", "remove", "alpha")
 	out = h.mustRun("--json", "snapshot", "apply", old, "--yes")
 	equal(t, "the old snapshot without alpha", h.one(out.stdout, "result")["summary"], "snapshot applied: 1 skill added, 1 skill already up to date")
-	equal(t, "alpha's branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), oldAlpha)
+	equal(t, "alpha's branch", h.storeGit("rev-parse", "refs/heads/managed/alpha"), oldAlpha)
 }
 
 // importChildEnv marks the process TestImportIsFinishedAfterAKill starts
@@ -735,11 +735,11 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 	equal(t, "its placements", fmt.Sprint(snap.Skills[0].Placements), "[claude-code]")
 }
 
-// TestImportListsWhatTheHomeRepoHas: each import_skill event says what
-// this machine's home repo held of the skill before the run, which it
+// TestImportListsWhatTheStoreHas: each import_skill event says what
+// this machine's store held of the skill before the run, which it
 // holds, is missing, or holds at another version, beside what the import
 // did about it.
-func TestImportListsWhatTheHomeRepoHas(t *testing.T) {
+func TestImportListsWhatTheStoreHas(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	other := h.newSourceRepo("third", true)
@@ -752,8 +752,8 @@ func TestImportListsWhatTheHomeRepoHas(t *testing.T) {
 	file := h.exportSnapshot("export")
 
 	// beta's branch moves to another commit, and gamma leaves the machine.
-	alpha := h.homeGit("rev-parse", "refs/heads/managed/alpha")
-	h.homeGit("update-ref", "refs/heads/managed/beta", alpha)
+	alpha := h.storeGit("rev-parse", "refs/heads/managed/alpha")
+	h.storeGit("update-ref", "refs/heads/managed/beta", alpha)
 	equal(t, "remove", h.run("skill", "remove", "gamma").exit, 0)
 
 	out := h.run("--json", "snapshot", "apply", file, "--yes")
@@ -784,7 +784,7 @@ func TestImportListsWhatTheHomeRepoHas(t *testing.T) {
 // hub skills, with the hub or no source at all, under
 // skills/, and a shared source's under managed/. A branch of the name
 // decides the state whatever the hub holds, and the remote's
-// branch stands in only for a hub skill the home repo holds
+// branch stands in only for a hub skill the store holds
 // no branch of, never for a shared source's.
 func TestRestoreStates(t *testing.T) {
 	t.Parallel()
@@ -828,13 +828,13 @@ func TestRestoreStates(t *testing.T) {
 	}
 }
 
-// TestHomeRepository is when a source names the repository of the
+// TestHubRepository is when a source names the repository of the
 // hub: by its repository, over HTTPS and over SSH alike, and
 // never through a host alias, since a snapshot is read with no SSH
 // configuration. An entry of hub skills is one whose source does, so
 // a snapshot written where the hub is an SSH URL reads the same
 // on the cloud machine, which reaches it over HTTPS.
-func TestHomeRepository(t *testing.T) {
+func TestHubRepository(t *testing.T) {
 	t.Parallel()
 	const hub = "https://github.com/me/agentx-hub"
 	for _, c := range []struct {
@@ -897,11 +897,11 @@ func TestKeepHubRemote(t *testing.T) {
 	}
 }
 
-// TestImportOntoAMachineWithNoHomeRepo: everything the export lists is
+// TestImportOntoAMachineWithNoStore: everything the export lists is
 // missing, and the repo is not created to find that out, also when the
 // machine's settings name a hub, as an earlier import leaves
 // them, since no fetch of it has happened there yet.
-func TestImportOntoAMachineWithNoHomeRepo(t *testing.T) {
+func TestImportOntoAMachineWithNoStore(t *testing.T) {
 	t.Parallel()
 	_, file := plainExport(t)
 	to := newHarness(t)
@@ -924,8 +924,8 @@ func TestImportOntoAMachineWithNoHomeRepo(t *testing.T) {
 		for _, e := range skills {
 			equal(t, settings+": "+e["name"].(string)+" state", e["state"], "missing")
 		}
-		if _, err := os.Stat(filepath.Join(to.agentx, "home.git")); err == nil {
-			t.Errorf("%s: the import created a home repo", settings)
+		if _, err := os.Stat(filepath.Join(to.agentx, "store.git")); err == nil {
+			t.Errorf("%s: the import created a store", settings)
 		}
 	}
 }
@@ -1220,7 +1220,7 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 		t.Error("alpha is not placed in claude-code")
 	}
 
-	remotes := source.Remotes(context.Background(), gitx.New(to.env, false, func(string, ...any) {}), gitx.HomeRepoPath(to.agentx))
+	remotes := source.Remotes(context.Background(), gitx.New(to.env, false, func(string, ...any) {}), gitx.StorePath(to.agentx))
 	if r, ok := remotes[source.ID(hub)]; ok {
 		t.Errorf("the hub that could not be added left a remote: %+v", r)
 	}
@@ -1259,7 +1259,7 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 
 // TestCommandsNameThePinOfASourceNeverFetched: settings can name a source
 // this machine never fetched, as an import stopped before it added it
-// leaves them, with no home repo yet. skill add, source fetch and source
+// leaves them, with no store yet. skill add, source fetch and source
 // skills of it answer that it was never fetched, with a source add to run
 // that names the pin the settings hold: source add writes the pin its
 // argument names, so a bare URL would unpin the very source the settings

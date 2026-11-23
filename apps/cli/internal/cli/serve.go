@@ -349,8 +349,8 @@ type serveChecks struct {
 // update_available per update, with this process's instance id, a warning
 // for each thing the check could not check, and its update_check. A
 // machine with no source runs no git at all, and neither does one with no
-// home repo; a source an import wrote stays a source not fetched,
-// home repo or not, until source add adds it. The rescan its write of
+// store; a source an import wrote stays a source not fetched,
+// store or not, until source add adds it. The rescan its write of
 // the version file sets off brings the candidates and markers it wrote
 // into the next inventory, and every source ref it moved into the source
 // index.
@@ -371,7 +371,7 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 // hub is the check the serve child repeats while it runs, see
 // hubCheckEvery: what another machine published to hub skills
 // since the last fetch of the hub. With no hub set,
-// or no home repo, it runs no git and reports nothing. Otherwise one
+// or no store, it runs no git and reports nothing. Otherwise one
 // git ls-remote asks the hub for its fork branches, see
 // gitx.Runner.ForkTips, and when they are what the remote-tracking
 // branches the last fetch left hold, read in one for-each-ref, it fetches
@@ -390,8 +390,8 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 		return nil
 	}
 	if err == nil {
-		if _, err := os.Stat(gitx.HomeRepoPath(inv.dirs.Home)); err != nil {
-			return nil // no home repo yet: nothing was ever fetched into one
+		if _, err := os.Stat(gitx.StorePath(inv.dirs.Home)); err != nil {
+			return nil // no store yet: nothing was ever fetched into one
 		}
 	}
 	var rep checkReport
@@ -414,7 +414,7 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 
 // checkHubRemote is the hub check of the serve child, see
 // serveChecks.hub, of the hub at url, the git remote
-// called remote in the home repo: an empty report, neither idle nor
+// called remote in the store: an empty report, neither idle nor
 // fetched, when the hub holds the fork branches its
 // remote-tracking branches hold, and otherwise the report of the update
 // check of the hub alone. An ls-remote that fails is reported
@@ -425,9 +425,9 @@ func (inv *invocation) checkHubRemote(ctx context.Context, url, remote string) (
 		f := uncheckedHub(url, fmt.Errorf("%w: %v", source.ErrUnreachable, err))
 		return checkReport{hubFailed: true, failures: []checkFailure{{source: url, fetch: true, f: f}}}, nil
 	}
-	ours, err := lineage.ListRemote(ctx, inv.git, gitx.HomeRepoPath(inv.dirs.Home), remote)
+	ours, err := lineage.ListRemote(ctx, inv.git, gitx.StorePath(inv.dirs.Home), remote)
 	if err != nil {
-		return checkReport{}, homeRepoFailure(err)
+		return checkReport{}, storeFailure(err)
 	}
 	if maps.Equal(theirs, ours) {
 		return checkReport{}, nil
@@ -479,19 +479,19 @@ func (inv *invocation) reportUpdateCheck(scope string, at time.Time, ok, fetched
 
 // watchedDirs are the directories a change signal can come from, most
 // important first: agentx home holds the version file every mutation
-// rewrites; the home repo, the worktrees, the library and every agent
+// rewrites; the store, the worktrees, the library and every agent
 // client's user-scope skills directory hold content. Everything but agentx
-// home and the home repo is a tree: an edit anywhere inside a skill is a
+// home and the store is a tree: an edit anywhere inside a skill is a
 // signal too, wherever the scan reads that skill from. A skills directory a
 // client shares with another, and the library itself, are watched once.
 //
 // The reflogs of the fork branches are a tree too: a commit made with git
 // in a fork's worktree writes nothing in the worktree or in agentx home,
-// only in the home repo, where it appends to its branch's reflog, so
+// only in the store, where it appends to its branch's reflog, so
 // that is how serve learns the fork moved. So are the reflogs of the
 // remote-tracking branches: a publish with nothing to record, as of a
 // commit made with git, moves only the hub's branch as the
-// home repo tracks it, which is what a fork's state is judged against,
+// store tracks it, which is what a fork's state is judged against,
 // see unpublished. Those reflog trees appear with the first ref of their
 // kind, a skill's first publish creating logs/refs/remotes and every
 // directory below it at once, so logs and logs/refs are watched too: the
@@ -500,7 +500,7 @@ func (inv *invocation) reportUpdateCheck(scope string, at time.Time, ok, fetched
 // there on every status, which would be a signal of its own.
 func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	h := inv.dirs.Home
-	logs := filepath.Join(gitx.HomeRepoPath(h), "logs")
+	logs := filepath.Join(gitx.StorePath(h), "logs")
 	refs := filepath.Join(logs, "refs")
 	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library, filepath.Join(refs, "heads", "skills"), filepath.Join(refs, "remotes")}
 	for _, dir := range scan.UserSkillsDirs(inv.dirs) {
@@ -508,11 +508,11 @@ func (inv *invocation) watchedDirs() (dirs, trees []string) {
 			trees = append(trees, dir)
 		}
 	}
-	return append([]string{h, gitx.HomeRepoPath(h), logs, refs}, trees...), trees
+	return append([]string{h, gitx.StorePath(h), logs, refs}, trees...), trees
 }
 
 // sourceIndex builds the index serve answers searches from: the sources of
-// the machine settings, each listed from its ref in the home repo. The
+// the machine settings, each listed from its ref in the store. The
 // settings are read under the shared lock, as a scan reads them, so a
 // source being added or removed is never seen half written; the listing
 // itself reads objects, which no mutation rewrites. A search reads the
@@ -531,7 +531,7 @@ func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx
 		for _, src := range shared {
 			urls = append(urls, src.URL)
 		}
-		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.HomeRepoPath(inv.dirs.Home), urls, prev)
+		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.StorePath(inv.dirs.Home), urls, prev)
 		return err
 	})
 	return idx, warnings, err

@@ -44,7 +44,7 @@ func (h *harness) record(name string) string {
 	h.t.Helper()
 	ctx := context.Background()
 	inv := h.invocation()
-	gitDir := gitx.HomeRepoPath(h.agentx)
+	gitDir := gitx.StorePath(h.agentx)
 	records, err := lineage.List(ctx, inv.git, gitDir)
 	if err != nil {
 		h.t.Fatal(err)
@@ -166,15 +166,15 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 		equal(t, n+": source", ev["source"], "file://"+remote)
 		equal(t, n+": commit", ev["commit"], tip)
 		equal(t, n+": the remote's branch", remoteGit(t, h, remote, "rev-parse", "refs/heads/skills/"+n), tip)
-		equal(t, n+": the commit and its parent", h.homeGit("rev-list", "--parents", "-n", "1", tip), tip+" "+before[n])
-		equal(t, n+": the author", h.homeGit("log", "-1", "--format=%an <%ae>", tip), "Ada Lovelace <ada@example.com>")
-		equal(t, n+": the message", h.homeGit("log", "-1", "--format=%B", tip),
+		equal(t, n+": the commit and its parent", h.storeGit("rev-list", "--parents", "-n", "1", tip), tip+" "+before[n])
+		equal(t, n+": the author", h.storeGit("log", "-1", "--format=%an <%ae>", tip), "Ada Lovelace <ada@example.com>")
+		equal(t, n+": the message", h.storeGit("log", "-1", "--format=%B", tip),
 			"Tighten the notes\n\nThey were too long.\n\nAgentx-Machine: "+machine)
 		equal(t, n+": git status in the worktree", gitIn(t, h, filepath.Join(h.agentx, "worktrees", n), "status", "--porcelain"), "")
 		equal(t, n+": the state", h.librarySkill(out.stdout, n)["state"], stateCurrent)
 	}
-	equal(t, "jot's tree, the repository its .gitignore covers left out", h.homeGit("ls-tree", "-r", "--name-only", lineage.ForkRef("jot")), "jot/.gitignore\njot/SKILL.md")
-	equal(t, "notes's tree, the file the commit made with git put beside it kept", h.homeGit("ls-tree", "-r", "--name-only", lineage.ForkRef("notes")), "README.md\nnotes/SKILL.md")
+	equal(t, "jot's tree, the repository its .gitignore covers left out", h.storeGit("ls-tree", "-r", "--name-only", lineage.ForkRef("jot")), "jot/.gitignore\njot/SKILL.md")
+	equal(t, "notes's tree, the file the commit made with git put beside it kept", h.storeGit("ls-tree", "-r", "--name-only", lineage.ForkRef("notes")), "README.md\nnotes/SKILL.md")
 	if _, err := os.Stat(filepath.Join(h.library, "jot", ".DS_Store")); err != nil {
 		t.Errorf("the ignored file is gone: %v", err)
 	}
@@ -185,9 +185,9 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	out = h.mustRun("--json", "skill", "publish", "notes")
 	tip := h.ref(lineage.ForkRef("notes"))
 	equal(t, "an edit over a tip the remote holds: outcome", h.one(out.stdout, "publish")["outcome"], publishPushed)
-	equal(t, "its parent", h.homeGit("rev-parse", tip+"^"), published)
-	equal(t, "its tree, the file beside the skill kept", h.homeGit("ls-tree", "-r", "--name-only", tip), "README.md\nnotes/SKILL.md")
-	equal(t, "its subject", h.homeGit("log", "-1", "--format=%s", tip), "notes: edit SKILL.md (test-host)")
+	equal(t, "its parent", h.storeGit("rev-parse", tip+"^"), published)
+	equal(t, "its tree, the file beside the skill kept", h.storeGit("ls-tree", "-r", "--name-only", tip), "README.md\nnotes/SKILL.md")
+	equal(t, "its subject", h.storeGit("log", "-1", "--format=%s", tip), "notes: edit SKILL.md (test-host)")
 	equal(t, "the remote's notes", remoteGit(t, h, remote, "rev-parse", "refs/heads/skills/notes"), tip)
 	out = h.mustRun("skill", "publish", "notes", "-m", "unused")
 	contains(t, "-m with nothing to record", out.stderr, "notes has no edits to record, so -m was not used")
@@ -290,7 +290,7 @@ exec `+real+` "$@"
 	equal(t, "library_skill events", len(h.eventsOfType(out.stdout, "library_skill")), 1)
 	equal(t, "the event's skill", h.librarySkill(out.stdout, "notes")["name"], "notes")
 	recorded := h.ref(lineage.ForkRef("notes"))
-	equal(t, "the recorded commit's parent", h.homeGit("rev-parse", recorded+"^"), tip)
+	equal(t, "the recorded commit's parent", h.storeGit("rev-parse", recorded+"^"), tip)
 	equal(t, "the remote", remoteGit(t, h, remote, "for-each-ref"), "")
 
 	stubGit(t, h, `#!/bin/sh
@@ -358,7 +358,7 @@ exec %GIT% "$@"
 	}
 	equal(t, "journals after recovery", journalCount(t, h), 0)
 	recorded := h.ref(lineage.ForkRef("notes"))
-	equal(t, "the commit's parent", h.homeGit("rev-parse", recorded+"^"), tip)
+	equal(t, "the commit's parent", h.storeGit("rev-parse", recorded+"^"), tip)
 	equal(t, "git status in the worktree", gitIn(t, h, root, "status", "--porcelain"), "")
 	equal(t, "the remote, before the next publish", remoteGit(t, h, remote, "for-each-ref"), "")
 	h.mustRun("skill", "publish", "notes")

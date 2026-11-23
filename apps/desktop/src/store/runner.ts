@@ -343,7 +343,7 @@ const report = (
     logFailure(options, outcome, problem);
   }
   // Exit 8: the startup layer comes back (src/startup/startup.ts) and says why.
-  if (exitCode === EXIT_CODES.home_repo) {
+  if (exitCode === EXIT_CODES.store) {
     return;
   }
   // Exit 4: the skill with the pending merge opens, where the merge is finished or cancelled.

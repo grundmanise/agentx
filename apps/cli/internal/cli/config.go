@@ -105,10 +105,10 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 				if err := home.SaveSettings(inv.dirs.Home, s); err != nil {
 					return err
 				}
-				// The list follows the setting at once in a home repo
+				// The list follows the setting at once in a store
 				// that exists; one created later gets it with the first
 				// git run over a skill directory.
-				gitDir := gitx.HomeRepoPath(inv.dirs.Home)
+				gitDir := gitx.StorePath(inv.dirs.Home)
 				if _, err := os.Stat(gitDir); err == nil && args[0] == "ignore_system_files" {
 					return home.SyncExclude(gitDir, s.IgnoreSystemFiles)
 				}

@@ -127,7 +127,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	u := &updating{name: name, libPath: site.libPath, checkout: inv.checkoutPath(name), fork: &forkUpdate{site: site}}
 	p, err := inv.readForkMerge(ctx, u.checkout)
 	if err != nil {
-		return nil, failureOf(homeRepoFailure(err))
+		return nil, failureOf(storeFailure(err))
 	}
 	if p.theirs == "" {
 		p.theirs = rec.CandidateCommit() // no merge in progress: the update it would merge
@@ -144,7 +144,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	}
 	walked, err := lineage.Walk(ctx, inv.git, gitDir, tips)
 	if err != nil {
-		return nil, failureOf(homeRepoFailure(err))
+		return nil, failureOf(storeFailure(err))
 	}
 	mine := walked[p.mine]
 	resolved := len(p.unmerged) == 0 && (p.tree != "" || p.merged != "")
@@ -180,7 +180,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		u.merge = lineage.Merge{Base: mine.Base, Mine: p.mine, Theirs: p.theirs}
 		if u.fork.remerge {
 			if u.merge.Base, err = inv.git.Isolated(ctx, gitDir, "merge-base", p.mine, p.theirs); err != nil {
-				return nil, failureOf(homeRepoFailure(err))
+				return nil, failureOf(storeFailure(err))
 			}
 			// A completed merge is only ever written here, so a theirs the
 			// remote-tracking branch holds is what the hub step merged,
@@ -198,7 +198,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		}
 		files, err := conflictFiles(p.unmerged, site.dir)
 		if err != nil {
-			return nil, failureOf(homeRepoFailure(err))
+			return nil, failureOf(storeFailure(err))
 		}
 		u.merged.conflicted, u.conflict = true, conflictOfSkill(name, u.merge, files)
 		return u, nil
@@ -210,7 +210,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		held, err := inv.isAncestor(ctx, gitDir, p.mine, rec.Commit)
 		switch {
 		case err != nil:
-			return nil, failureOf(homeRepoFailure(err))
+			return nil, failureOf(storeFailure(err))
 		case !held:
 			return nil, refuse(exitRefused, "the branch "+rec.Ref+" moved outside agentx while the merge of "+sanitised(name)+" was pending, so the merge cannot be applied",
 				"run '"+skillCommand("update", name, "--abort")+"' to give it up, then update again")
@@ -242,12 +242,12 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 			message, err = w.keptMessage(p.message, recorded)
 		}
 		if err != nil {
-			return nil, failureOf(homeRepoFailure(err))
+			return nil, failureOf(storeFailure(err))
 		}
 	}
 	if merged == "" {
 		if merged, err = w.commitText(ctx, tree, []string{p.mine, p.theirs}, message); err != nil {
-			return nil, failureOf(homeRepoFailure(err))
+			return nil, failureOf(storeFailure(err))
 		}
 	}
 	u.fork.base = recorded
@@ -264,7 +264,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	}
 	u.merge = lineage.Merge{Base: p.mine, Mine: rec.Commit, Theirs: merged}
 	if u.merged, err = mergeVersions(ctx, inv.git, gitDir, u.merge); err != nil {
-		return nil, failureOf(homeRepoFailure(err))
+		return nil, failureOf(storeFailure(err))
 	}
 	subject, _, _ := strings.Cut(message, "\n")
 	if u.merged.conflicted {
@@ -273,7 +273,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 			u.fork.message, err = w.mergeMessage(subject, u.fork.base)
 		}
 		if err != nil {
-			return nil, failureOf(homeRepoFailure(err))
+			return nil, failureOf(storeFailure(err))
 		}
 		u.conflict = conflictOfSkill(name, u.merge, files)
 		u.fork.start, u.fork.remerge = true, true
@@ -282,7 +282,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	u.fork.stale = inv.staleCandidate(ctx, gitDir, rec, u.fork.base, u.next.Import)
 	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, merged}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Base: u.fork.base}})
 	if err != nil {
-		return nil, failureOf(homeRepoFailure(err))
+		return nil, failureOf(storeFailure(err))
 	}
 	return u, inv.layFork(ctx, u, commit)
 }
@@ -297,7 +297,7 @@ func (inv *invocation) mergedWithHub(ctx context.Context, gitDir, name, theirs s
 	}
 	on, err := inv.git.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", "--contains", theirs, lineage.RemoteForkRef(remote, name))
 	if err != nil {
-		return false, homeRepoFailure(err)
+		return false, storeFailure(err)
 	}
 	return on != "", nil
 }
@@ -320,7 +320,7 @@ func (inv *invocation) remergeIn(ctx context.Context, dir string, in mergeStart)
 	ctx = interrupt.Uninterruptible(ctx)
 	paths, err := inv.gitPaths(ctx, dir, "MERGE_HEAD", "ORIG_HEAD")
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	if err := os.Remove(paths[0]); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -329,10 +329,10 @@ func (inv *invocation) remergeIn(ctx context.Context, dir string, in mergeStart)
 		return err
 	}
 	if _, err := inv.git.InCheckout(ctx, dir, "update-ref", "--no-deref", "HEAD", in.mine); err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	if err := inv.mergeIn(ctx, dir, in); err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	return nil
 }

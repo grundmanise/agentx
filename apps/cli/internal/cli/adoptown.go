@@ -508,7 +508,7 @@ func (inv *invocation) adoptSites(name string) (dirs []adoptPlace, links []strin
 }
 
 // adoptTakenHint is the hint of an adoption whose name a branch of the
-// home repo already holds, records being its branches. The directory
+// store already holds, records being its branches. The directory
 // can be renamed, and one found in an agent client's own skills directory
 // may also be in the way of the skill the branch is, whose library entry
 // is gone: a hub skill is put back, and any other let go of.
@@ -524,7 +524,7 @@ func (fk *forking) adoptTakenHint(records map[string]lineage.Record) string {
 	return rename + ", or stop managing the other with '" + skillCommand("remove", rec.Name) + "'"
 }
 
-// adoptTaken refuses an adoption whose name the home repo already
+// adoptTaken refuses an adoption whose name the store already
 // holds a branch of, whatever its case, see nameTaken; nil when it holds
 // none. It is takenRefusal in an adoption's words: a branch is no word of
 // the user's, and the name is all there is to change.

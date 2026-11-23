@@ -163,7 +163,7 @@ type checkReport struct {
 	// idle is a check with nothing to fetch: no managed skill or fork comes
 	// from a source this machine has, no source at all for the serve child,
 	// or every one the check set out to fetch was removed while it ran. A
-	// serve child whose settings name sources it has no home repo for is
+	// serve child whose settings name sources it has no store for is
 	// not idle, each of them being a failure.
 	idle      bool
 	refreshed map[string]bool // the sources that were fetched and that the settings still hold, by canonical URL
@@ -298,7 +298,7 @@ func checkRefusal(failures []checkFailure) error {
 	}
 	hint := "the warnings name each failure"
 	switch st {
-	case exitSource, exitNotFound, exitHomeRepo: // what a run of several sources that failed that way says
+	case exitSource, exitNotFound, exitStore: // what a run of several sources that failed that way says
 		if sources {
 			hint += "; " + refusalHint(st)
 		}
@@ -327,7 +327,7 @@ func checkRefusal(failures []checkFailure) error {
 // fetches every source of the settings, a source no skill was installed
 // from included, so that its one check refreshes them all in this pass,
 // each fetched once, and the source index serve answers searches from
-// follows them; on a machine with no home repo, where nothing can be
+// follows them; on a machine with no store, where nothing can be
 // fetched, each is reported as not fetched rather than passed over. It
 // takes the lock as the serve child does, waiting for a holder. And it
 // reports no progress, where skill check-updates reports a progress event
@@ -347,7 +347,7 @@ func checkRefusal(failures []checkFailure) error {
 // fail nor slow that run. The hub's URL is the hub
 // alone, as the serve child's periodic check runs it, see
 // serveChecks.hub: it is fetched whether or not a hub skill
-// is placed here, no shared source is, and a machine with no home repo
+// is placed here, no shared source is, and a machine with no store
 // is idle. "" is every source, as above.
 func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only string) (checkReport, error) {
 	var rep checkReport
@@ -361,9 +361,9 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	}
 	hub, _ := hubEntry(s)
 	hubOnly := only != "" && only == hub.URL
-	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return rep, homeRepoFailure(err)
+		return rep, storeFailure(err)
 	}
 	if !exists && (!serving || hubOnly) { // no managed skill, and nothing a source was fetched into
 		rep.idle = true
@@ -597,7 +597,7 @@ func (inv *invocation) checkHub(ctx context.Context, gitDir string, ac *hubCheck
 	ac.fetched = true
 	tips, err := lineage.ListRemoteTips(ctx, inv.git, gitDir, source.RemoteName(source.ID(url)))
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	unchecked := func(rec lineage.Record, err error) error {
 		var f *failure
@@ -622,7 +622,7 @@ func (inv *invocation) checkHub(ctx context.Context, gitDir string, ac *hubCheck
 		out, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", rec.Commit, tip)
 		base := strings.TrimSpace(out)
 		if err != nil {
-			if err := unchecked(rec, homeRepoFailure(err)); err != nil {
+			if err := unchecked(rec, storeFailure(err)); err != nil {
 				return err
 			}
 			continue
@@ -650,11 +650,11 @@ func (inv *invocation) checkHub(ctx context.Context, gitDir string, ac *hubCheck
 	}
 	out, err := inv.git.Isolated(ctx, gitDir, args...)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	trees := strings.Fields(out)
 	if len(trees) != 2*len(behind) {
-		return homeRepoFailure(fmt.Errorf("git rev-parse answered %d of %d trees", len(trees), 2*len(behind)))
+		return storeFailure(fmt.Errorf("git rev-parse answered %d of %d trees", len(trees), 2*len(behind)))
 	}
 	var pairs strings.Builder
 	for i := range behind {
@@ -662,11 +662,11 @@ func (inv *invocation) checkHub(ctx context.Context, gitDir string, ac *hubCheck
 	}
 	out, err = inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(pairs.String()), "diff-tree", "--stdin", "-r", "-z", "--no-renames", "--name-status")
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	changes, err := parsePairDiffs(out)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	for i, p := range behind {
 		ev := updateAvailableEvent{
@@ -704,7 +704,7 @@ func uncheckedHub(url string, err error) *failure {
 // as is one whose history does not say which import is its base.
 //
 // hubSkills are the hub skills, every fork, by name, each with its branch and its tip
-// as the home repo holds them, which is what the hub's branch of it is
+// as the store holds them, which is what the hub's branch of it is
 // compared with, see checkHub.
 func (inv *invocation) checkLineage(ctx context.Context, gitDir string) (records, hubSkills map[string]lineage.Record, err error) {
 	records, err = inv.listLineage(ctx, gitDir)
@@ -712,7 +712,7 @@ func (inv *invocation) checkLineage(ctx context.Context, gitDir string) (records
 		err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
 	}
 	if err != nil {
-		return nil, nil, homeRepoFailure(fmt.Errorf("home repo %s: %w", gitDir, err))
+		return nil, nil, storeFailure(fmt.Errorf("store %s: %w", gitDir, err))
 	}
 	hubSkills = map[string]lineage.Record{}
 	for name, rec := range records {
@@ -829,7 +829,7 @@ func (c *checkRun) compare(ctx context.Context, res source.Result, recs []lineag
 	unchecked := func(subpaths []string, err error) {
 		var f *failure
 		if !errors.As(err, &f) {
-			f = refuse(exitHomeRepo, err.Error(), "run 'agentx doctor' and check the home repo it names")
+			f = refuse(exitStore, err.Error(), "run 'agentx doctor' and check the store it names")
 		}
 		var left []string
 		for _, p := range subpaths {
@@ -926,7 +926,7 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 	}
 	commits, trees, err := lineage.WriteAll(ctx, c.inv.git, c.gitDir, run, list)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	for i, v := range c.versions {
 		v.commit, v.tree = commits[i], trees[i]
@@ -1074,19 +1074,19 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir, hub strin
 	}
 	out, err := inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(pairs.String()), "diff-tree", "--stdin", "-r", "-z", "--no-renames", "--name-status")
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	changes, err := parsePairDiffs(out)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	out, err = inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(blobs.String()), "cat-file", "--batch")
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	bodies, err := batchInOrder(out, n)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	events := make([]updateAvailableEvent, len(recs))
 	for i, rec := range recs {

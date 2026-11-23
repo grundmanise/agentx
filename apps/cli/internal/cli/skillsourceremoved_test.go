@@ -88,7 +88,7 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	if _, ok := before["drift"]; ok {
 		t.Fatalf("a skill whose source is added carries drift: %v", before["drift"])
 	}
-	branch := h.homeGit("rev-parse", "refs/heads/managed/alpha")
+	branch := h.storeGit("rev-parse", "refs/heads/managed/alpha")
 
 	h.mustRun("source", "remove", s.url)
 
@@ -132,10 +132,10 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	equal(t, "code", e["code"], "not_found")
 	contains(t, "message", e["message"].(string), s.url)
 	equal(t, "hint", e["hint"], removedHint(s.url))
-	if got := h.homeGit("rev-parse", "refs/heads/managed/alpha"); got != branch {
+	if got := h.storeGit("rev-parse", "refs/heads/managed/alpha"); got != branch {
 		t.Errorf("the refused install moved the import branch from %s to %s", branch, got)
 	}
-	if _, err := h.homeGitErr("rev-parse", "--verify", "refs/heads/managed/beta"); err == nil {
+	if _, err := h.storeGitErr("rev-parse", "--verify", "refs/heads/managed/beta"); err == nil {
 		t.Error("the refused install wrote an import branch for beta")
 	}
 
@@ -143,7 +143,7 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	// the listing, which carries the library directory's content hash, the
 	// coordinates and every placement, is the one from before the removal.
 	h.mustRun("source", "add", s.url)
-	equal(t, "import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), branch)
+	equal(t, "import branch", h.storeGit("rev-parse", "refs/heads/managed/alpha"), branch)
 	if got := h.mustRun("--json", "skill", "list").stdout; got != beforeJSON {
 		t.Errorf("the JSON listing differs from before the removal:\nbefore:\n%safter:\n%s", beforeJSON, got)
 	}
@@ -158,14 +158,14 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	again := h.run("--json", "skill", "add", id, "--name", "beta")
 	equal(t, "exit after adding the source again", again.exit, 0)
 	equal(t, "beta's add event drift", drift(h.librarySkill(again.stdout, "beta")), "")
-	h.homeGit("rev-parse", "--verify", "refs/heads/managed/beta")
+	h.storeGit("rev-parse", "--verify", "refs/heads/managed/beta")
 	list := h.mustRun("--json", "skill", "list").stdout
 	for _, name := range []string{"alpha", "beta"} {
 		if got := drift(h.librarySkill(list, name)); got != "" {
 			t.Errorf("%s carries drift %q once the source is back", name, got)
 		}
 	}
-	equal(t, "alpha's import branch after the install", h.homeGit("rev-parse", "refs/heads/managed/alpha"), branch)
+	equal(t, "alpha's import branch after the install", h.storeGit("rev-parse", "refs/heads/managed/alpha"), branch)
 }
 
 // TestSourceRemovedIsReadFromTheSettings takes the source entry out of the
@@ -173,7 +173,7 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 // at all: the remote and the ref stay, and nothing but the entry changes.
 // The state follows the entry both ways, so it is read from the settings
 // on every read, and nothing that records it, in agentx home or in the
-// home repo, is what a command that changes the settings has to keep.
+// store, is what a command that changes the settings has to keep.
 func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -202,8 +202,8 @@ func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 	}
 
 	editSettings(func(st *home.Settings) { st.RemoveSource(s.url) })
-	refs := h.homeGit("for-each-ref")
-	contains(t, "home repo refs", refs, source.Ref(source.ID(s.url)))
+	refs := h.storeGit("for-each-ref")
+	contains(t, "store refs", refs, source.Ref(source.ID(s.url)))
 	entries := entriesOf(t, h.agentx)
 
 	after := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
@@ -217,7 +217,7 @@ func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 	equal(t, "refused hint", h.one(refused.stdout, "error")["hint"], removedHint(s.url))
 
 	// Reading the state wrote nothing for it, anywhere.
-	equal(t, "home repo refs after the reads", h.homeGit("for-each-ref"), refs)
+	equal(t, "store refs after the reads", h.storeGit("for-each-ref"), refs)
 	if got := entriesOf(t, h.agentx); !reflect.DeepEqual(got, entries) {
 		t.Errorf("agentx home after the reads = %v, want %v", got, entries)
 	}
@@ -234,7 +234,7 @@ func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 // may not, and then settings that do, on a machine that cannot reach the
 // source. The first leaves the skill source removed although no source was
 // removed here, and the second clears it although it could not add the
-// source and so fetched nothing: an entry whose ref the home repo does
+// source and so fetched nothing: an entry whose ref the store does
 // not hold is a source not fetched, not a source removed.
 func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 	t.Parallel()
@@ -251,8 +251,8 @@ func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 	h.mustRun("source", "remove", s.url) // takes the ref the import left behind, and no entry
 	h.offline()
 	h.mustRun("snapshot", "apply", here, "--yes")
-	if _, err := h.homeGitErr("rev-parse", "--verify", source.Ref(source.ID(s.url))); err == nil {
-		t.Fatal("the home repo holds the source ref; the test proves nothing")
+	if _, err := h.storeGitErr("rev-parse", "--verify", source.Ref(source.ID(s.url))); err == nil {
+		t.Fatal("the store holds the source ref; the test proves nothing")
 	}
 	if got := h.mustRun("--json", "skill", "list").stdout; got != beforeJSON {
 		t.Errorf("the JSON listing differs once the settings hold the source again:\nbefore:\n%safter:\n%s", beforeJSON, got)
@@ -267,7 +267,7 @@ func TestSourceRemovedIsForManagedSkillsAlone(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
-	h.homeGit("update-ref", "refs/heads/skills/beta", h.homeGit("rev-parse", "refs/heads/managed/alpha"))
+	h.storeGit("update-ref", "refs/heads/skills/beta", h.storeGit("rev-parse", "refs/heads/managed/alpha"))
 	copyTree(t, filepath.Join(h.library, "alpha"), filepath.Join(h.library, "beta"))
 	copyTree(t, filepath.Join(h.library, "alpha"), filepath.Join(h.library, "gamma"))
 	h.mustRun("source", "remove", s.url)
@@ -372,8 +372,8 @@ func TestAForkDoesNotNameARemovedSource(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
-	h.homeGit("update-ref", "refs/heads/skills/alpha", h.homeGit("rev-parse", "refs/heads/managed/alpha"))
-	h.homeGit("update-ref", "-d", "refs/heads/managed/alpha")
+	h.storeGit("update-ref", "refs/heads/skills/alpha", h.storeGit("rev-parse", "refs/heads/managed/alpha"))
+	h.storeGit("update-ref", "-d", "refs/heads/managed/alpha")
 	h.mustRun("source", "remove", s.url)
 
 	out := h.run("--json", "source", "skills", source.ID(s.url))
@@ -386,9 +386,9 @@ func TestAForkDoesNotNameARemovedSource(t *testing.T) {
 }
 
 // TestUnreadableLineageLeavesTheRefusalOfAnId breaks the refs of the
-// home repo after a source whose skill still records it was removed.
+// store after a source whose skill still records it was removed.
 // The lineage is read for the hint alone, and the command was not asked
-// about the home repo, so the refusal is what it is without the
+// about the store, so the refusal is what it is without the
 // lineage: exit code 5 and the hint to list the sources, not exit code 8.
 func TestUnreadableLineageLeavesTheRefusalOfAnId(t *testing.T) {
 	t.Parallel()
@@ -396,10 +396,10 @@ func TestUnreadableLineageLeavesTheRefusalOfAnId(t *testing.T) {
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	h.mustRun("source", "remove", s.url)
 	// rev-parse --is-bare-repository still succeeds on this, so the check
-	// of the home repo passes and the lineage read is what fails.
-	writeFile(t, filepath.Join(gitx.HomeRepoPath(h.agentx), "packed-refs"), "this is not a packed-refs line\n")
-	if _, err := h.homeGitErr("for-each-ref", "refs/heads/"); err == nil {
-		t.Fatal("the home repo is still readable; the test proves nothing")
+	// of the store passes and the lineage read is what fails.
+	writeFile(t, filepath.Join(gitx.StorePath(h.agentx), "packed-refs"), "this is not a packed-refs line\n")
+	if _, err := h.storeGitErr("for-each-ref", "refs/heads/"); err == nil {
+		t.Fatal("the store is still readable; the test proves nothing")
 	}
 
 	out := h.run("--json", "source", "skills", source.ID(s.url))

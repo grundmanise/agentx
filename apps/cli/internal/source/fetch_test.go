@@ -14,7 +14,7 @@ import (
 )
 
 // TestAFetchWritesNoConfig: a fetch runs outside agentx's lock, so it never
-// writes the home repo's config, where it could fail another command's
+// writes the store's config, where it could fail another command's
 // git config and leave a remote behind. git's fetch with --filter writes a
 // remote's promisor settings, and moves repositoryformatversion to 1, when
 // the config lacks them: a remote source remove deleted while the fetch
@@ -45,7 +45,7 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 			up.run("config", "uploadpack.allowFilter", "true")
 			up.skill("skills/alpha", "alpha", "The first skill")
 			up.commit()
-			git, gitDir := homeRepo(t)
+			git, gitDir := store(t)
 			src := source.Source{URL: up.url}
 			c.remote(t, git, gitDir, src)
 			config := filepath.Join(gitDir, "config")
@@ -62,7 +62,7 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 			if string(after) != string(before) {
-				t.Errorf("the fetch wrote the home repo's config:\n--- before\n%s--- after\n%s", before, after)
+				t.Errorf("the fetch wrote the store's config:\n--- before\n%s--- after\n%s", before, after)
 			}
 		})
 	}
@@ -76,7 +76,7 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 func TestConfigureWritesTheRemoteOfEachKind(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	git, gitDir := homeRepo(t)
+	git, gitDir := store(t)
 	const url = "https://github.com/acme/skills"
 	id := source.ID(url)
 	key := "remote." + source.RemoteName(id) + "."

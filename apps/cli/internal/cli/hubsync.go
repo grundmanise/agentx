@@ -80,7 +80,7 @@ func (inv *invocation) walkRemoteForks(ctx context.Context, gitDir, remote strin
 	}
 	walked, err := lineage.Walk(ctx, inv.git, gitDir, walk)
 	if err != nil {
-		return remoteForks{}, homeRepoFailure(err)
+		return remoteForks{}, storeFailure(err)
 	}
 	return remoteForks{remote: remote, tips: tips, walked: walked}, nil
 }
@@ -170,7 +170,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	base := strings.TrimSpace(out)
 	switch {
 	case err != nil:
-		return "", nil, failureOf(homeRepoFailure(err))
+		return "", nil, failureOf(storeFailure(err))
 	case status != 0:
 		return "", nil, refuse(exitRefused, sanitised(name)+" and the hub's "+strings.TrimPrefix(rec.Ref, "refs/heads/")+" share no commit, so they cannot be merged",
 			"run '"+skillCommand("history", name)+"' to read the history of yours")
@@ -219,7 +219,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	fork.judged = judged
 	u.merge = lineage.Merge{Mine: rec.Commit, Theirs: theirs}
 	if u.merged, err = mergeVersions(ctx, inv.git, gitDir, u.merge); err != nil {
-		return "", nil, failureOf(homeRepoFailure(err))
+		return "", nil, failureOf(storeFailure(err))
 	}
 	u.merge.Base = base
 	if rec.Fork != nil {
@@ -232,7 +232,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 			fork.message, err = w.mergeMessage(subject, fork.base)
 		}
 		if err != nil {
-			return "", nil, failureOf(homeRepoFailure(err))
+			return "", nil, failureOf(storeFailure(err))
 		}
 		u.conflict, fork.start = conflictOfSkill(name, u.merge, files), true
 		return pullConflict, u, nil
@@ -242,7 +242,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	fork.stale = inv.staleCandidate(ctx, gitDir, rec, fork.base, there.Import)
 	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, theirs}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Base: fork.base}})
 	if err != nil {
-		return "", nil, failureOf(homeRepoFailure(err))
+		return "", nil, failureOf(storeFailure(err))
 	}
 	if f := inv.layFork(ctx, u, commit); f != nil {
 		return "", nil, f
@@ -280,7 +280,7 @@ func hubMergeSubject(name, label string) string {
 	return name + ": merge the hub (" + sanitised(label) + ")"
 }
 
-// forkRecords is the lineage of the home repo with every fork's
+// forkRecords is the lineage of the store with every fork's
 // history read, see lineage.ReadForks.
 func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[string]lineage.Record, error) {
 	records, err := inv.listLineage(ctx, gitDir)
@@ -288,7 +288,7 @@ func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[stri
 		err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
 	}
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	return records, nil
 }
@@ -361,7 +361,7 @@ func (inv *invocation) forkPlaced(name string) bool {
 // remote, held a fork called name at the last fetch, by its remote-tracking
 // branch; a read that fails says it does not.
 func (inv *invocation) remoteHolds(ctx context.Context, remote, name string) bool {
-	tips, err := lineage.ListRemote(ctx, inv.git, gitx.HomeRepoPath(inv.dirs.Home), remote)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitx.StorePath(inv.dirs.Home), remote)
 	return err == nil && tips[name] != ""
 }
 

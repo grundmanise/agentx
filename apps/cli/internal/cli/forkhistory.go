@@ -147,11 +147,11 @@ func (inv *invocation) skillHistory(ctx context.Context, name string) error {
 	}
 	out, err := inv.git.Isolated(ctx, gitDir, "log", "--no-renames", "--diff-merges=first-parent", "--root", "--name-status", "-z", historyFormat, rec.Commit)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	commits, err := parseForkLog(out)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	inv.reportHistory(name, dir, commits)
 	return nil

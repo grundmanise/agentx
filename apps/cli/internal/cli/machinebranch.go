@@ -59,9 +59,9 @@ func cloudOnly(id string) error {
 }
 
 // machineBranch is a machine's branch on the hub as one read
-// found it: the home repo, the hub's git remote and URL, the
+// found it: the store, the hub's git remote and URL, the
 // machine id, and the commit the branch held, "" when the remote holds no
-// such branch. A tip is in the home repo, fetched into its
+// such branch. A tip is in the store, fetched into its
 // gitx.MachineTracking ref.
 type machineBranch struct {
 	gitDir, remote, url, id string
@@ -104,7 +104,7 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch) (sna
 	data, size, held, err := inv.git.SnapshotAt(ctx, b.gitDir, b.tip, documentLimit)
 	switch {
 	case err != nil:
-		return snapshot{}, false, homeRepoFailure(err)
+		return snapshot{}, false, storeFailure(err)
 	case !held:
 		return snapshot{}, false, fail(exitRefused, b.name()+" on the hub holds no "+gitx.SnapshotFile,
 			"write a snapshot to it with 'agentx snapshot save --machine "+b.id+"'")
@@ -165,13 +165,13 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 	}
 	tree, err := inv.git.SnapshotTree(ctx, b.gitDir, append(data, '\n'))
 	if err != nil {
-		return "", false, homeRepoFailure(err)
+		return "", false, storeFailure(err)
 	}
 	var parents []string
 	if b.tip != "" {
 		held, err := inv.git.TreeOf(ctx, b.gitDir, b.tip)
 		if err != nil {
-			return "", false, homeRepoFailure(err)
+			return "", false, storeFailure(err)
 		}
 		if held == tree {
 			return b.tip, false, nil
@@ -185,7 +185,7 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 	op.ID = lineage.NewOperationID()
 	commit, err = w.commitOperation(ctx, tree, parents, subject, op)
 	if err != nil {
-		return "", false, homeRepoFailure(err)
+		return "", false, storeFailure(err)
 	}
 	branch := b.name()
 	s, found, stderr, exit, err := inv.git.PushBranch(ctx, b.gitDir, b.remote, commit, branch, b.tip)

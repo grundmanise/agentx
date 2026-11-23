@@ -185,8 +185,8 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	one, two := h.fetchSources(t)
-	h.homeGit("remote", "remove", source.RemoteName(source.ID(two.url)))
-	h.homeGit("update-ref", "-d", source.Ref(source.ID(two.url)))
+	h.storeGit("remote", "remove", source.RemoteName(source.ID(two.url)))
+	h.storeGit("update-ref", "-d", source.Ref(source.ID(two.url)))
 	err := home.Mutate(h.agentx, nil, func() error {
 		settings, err := home.LoadSettings(h.agentx)
 		if err != nil {
@@ -324,8 +324,8 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 // TestServeWarnsAboutSourcesAnImportBrought runs serve on a machine whose
 // settings name two sources it never fetched, as an import stopped before
 // it added them leaves them, written here as such an import writes them, so
-// that it has no home repo to fetch into until source add creates one.
-// The check at launch fetches nothing, creates no home repo and writes
+// that it has no store to fetch into until source add creates one.
+// The check at launch fetches nothing, creates no store and writes
 // nothing, but warns about each source as not fetched, as source fetch
 // refuses it. skill check-updates, which checks only the sources a managed
 // skill came from, still has nothing to check there.
@@ -343,9 +343,9 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	editSettings(t, h, func(s *home.Settings) { *s = exported })
-	homeRepo := filepath.Join(h.agentx, "home.git")
-	if _, err := os.Stat(homeRepo); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("the settings write left %s behind, or it cannot be told: %v", homeRepo, err)
+	store := filepath.Join(h.agentx, "store.git")
+	if _, err := os.Stat(store); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the settings write left %s behind, or it cannot be told: %v", store, err)
 	}
 	version := mutationVersion(t, h)
 	calls := countingGit(t, h)
@@ -367,11 +367,11 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 	}
 	for _, call := range calls() {
 		if slices.Contains(strings.Fields(call), "fetch") {
-			t.Errorf("serve fetched on a machine with no home repo: %s", call)
+			t.Errorf("serve fetched on a machine with no store: %s", call)
 		}
 	}
-	if _, err := os.Stat(homeRepo); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("serve created %s: %v", homeRepo, err)
+	if _, err := os.Stat(store); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("serve created %s: %v", store, err)
 	}
 	equal(t, "the version file", mutationVersion(t, h), version)
 	equal(t, "skill check-updates", h.mustRun("skill", "check-updates").stdout,

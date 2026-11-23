@@ -58,10 +58,10 @@ func targetRemote(url string) []string {
 
 // throwawayRepo makes an empty git directory in the temporary directory,
 // for a git run that must see the user's configuration as it applies to
-// one source and nothing of the home repo's: a HEAD, objects and refs,
+// one source and nothing of the store's: a HEAD, objects and refs,
 // all git asks of a repository, and no config file. Users key settings on a
 // remote's URL with includeIf "hasconfig:remote.*.url:...", and inside the
-// home repo every source's URL matches at once, so that a setting
+// store every source's URL matches at once, so that a setting
 // included for one source, an SSH command, a credential or a proxy, would
 // apply to every other. remove deletes the directory.
 func throwawayRepo() (gitDir string, remove func(), err error) {

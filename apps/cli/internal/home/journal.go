@@ -616,7 +616,7 @@ func applyRefs(steps, later []step, u RefUpdater) (bool, error) {
 	}
 	if u == nil {
 		first := byDir[dirs[0]][0]
-		return false, fmt.Errorf("%w: %s in %s needs git to finish; run a command that uses the home repo", ErrRecovery, first.Ref, first.GitDir)
+		return false, fmt.Errorf("%w: %s in %s needs git to finish; run a command that uses the store", ErrRecovery, first.Ref, first.GitDir)
 	}
 	moved := false
 	for _, dir := range dirs {
@@ -691,7 +691,7 @@ func (r refusedRef) Unwrap() error { return ErrRecovery }
 func applyWorktree(s step, u RefUpdater) (bool, error) {
 	w, ok := u.(Worktrees)
 	if !ok {
-		return false, fmt.Errorf("%w: the worktree %s needs git to finish; run a command that uses the home repo", ErrRecovery, s.Path)
+		return false, fmt.Errorf("%w: the worktree %s needs git to finish; run a command that uses the store", ErrRecovery, s.Path)
 	}
 	branch := strings.TrimPrefix(s.New, worktreeOn)
 	added := false

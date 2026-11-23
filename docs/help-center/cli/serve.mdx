@@ -5,7 +5,7 @@ description: "Keep watching and report whenever something changes."
 
 `agentx serve` is what the desktop app runs in the background. It scans the machine once, then rescans when a skill or agentx's own state changes. It reports again only when the inventory changed. It also checks your skills for updates when it starts. You rarely need to run it yourself.
 
-This page uses the terms [agentx home](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) (`~/.agentx`) and [home repo](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md).
+This page uses the terms [agentx home](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) (`~/.agentx`) and [store](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md).
 
 ## Run it
 
@@ -77,7 +77,7 @@ Serve does not fetch a source that your settings name and this machine never add
 
 ## Maintenance
 
-When serve starts, it tidies the home repo (`~/.agentx/home.git`) in the background, at most once a day. It deletes nothing.
+When serve starts, it tidies the store (`~/.agentx/store.git`) in the background, at most once a day. It deletes nothing.
 
 ## Run one pass
 

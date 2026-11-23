@@ -24,7 +24,7 @@ func TestStagedAndPreviousReadBothRefsAtOnce(t *testing.T) {
 	}
 	r := gitx.New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
 	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "home.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	git := func(stdin string, args ...string) string {
 		t.Helper()
 		out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(stdin), args...)

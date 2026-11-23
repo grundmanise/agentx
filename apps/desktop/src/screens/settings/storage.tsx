@@ -1,4 +1,4 @@
-// Storage: where the library is and how much disk the home repo takes, as the `machine` event
+// Storage: where the library is and how much disk the store takes, as the `machine` event
 // reports them. The app computes nothing about the machine.
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { useAppStore } from "#/store/store.ts";
@@ -34,17 +34,17 @@ export const StorageSection = () => {
     return null;
   }
   let repo = "Not created yet";
-  if (machine.home_repo !== undefined) {
+  if (machine.store !== undefined) {
     repo =
-      machine.home_repo_bytes === undefined
+      machine.store_bytes === undefined
         ? "Size unknown"
-        : sizeText(machine.home_repo_bytes);
+        : sizeText(machine.store_bytes);
   }
   return (
     <SettingsSection title="Storage">
       <dl className="gap-settings-section m-0 flex flex-col">
         <Place name="Library" value={machine.library} />
-        <Place name="Home repo" value={repo} />
+        <Place name="Store" value={repo} />
       </dl>
     </SettingsSection>
   );

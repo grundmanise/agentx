@@ -84,7 +84,7 @@ func TestPublishToASharedSource(t *testing.T) {
 		"Ada Lovelace <ada@example.com>|Ada Lovelace <ada@example.com>|Tighten the notes")
 	equal(t, "the symlink the source holds", strings.Fields(s.query("ls-tree", tip, "skills/alpha/link"))[0], "120000")
 	equal(t, "the source's refs", s.query("for-each-ref", "--format=%(refname)"), "refs/heads/main")
-	equal(t, "the home repo's fetch of the source, blobless", h.homeGit("config", "remote."+source.RemoteName(source.ID(s.url))+".partialclonefilter"), "blob:none")
+	equal(t, "the store's fetch of the source, blobless", h.storeGit("config", "remote."+source.RemoteName(source.ID(s.url))+".partialclonefilter"), "blob:none")
 	lib0 := h.librarySkill(out.stdout, "alpha")
 	equal(t, "alpha's kind", lib0["kind"], "managed")
 	equal(t, "alpha's state", lib0["state"], stateCurrent)
@@ -211,7 +211,7 @@ exec `+real+` "$@"
 	if err := os.Remove(filepath.Join(s.gitDir, "hooks", "pre-receive")); err != nil {
 		t.Fatal(err)
 	}
-	move := real + " --git-dir=" + shellWord(gitx.HomeRepoPath(h.agentx)) + " update-ref " + lineage.ManagedRef("alpha") + " " + installed
+	move := real + " --git-dir=" + shellWord(gitx.StorePath(h.agentx)) + " update-ref " + lineage.ManagedRef("alpha") + " " + installed
 	for _, at := range []string{"fetch", "push"} {
 		stubGit(t, h, `#!/bin/sh
 case " $* " in
@@ -229,7 +229,7 @@ exec `+real+` "$@"
 			equal(t, "moved before the push: exit", out.exit, exitRefused.exit)
 			contains(t, "moved before the push: message", h.one(out.stdout, "error")["message"].(string), "alpha changed while it was being published, so nothing was published")
 			equal(t, "moved before the push: the source", s.query("rev-parse", "main"), upstream)
-			h.homeGit("update-ref", lineage.ManagedRef("alpha"), managed)
+			h.storeGit("update-ref", lineage.ManagedRef("alpha"), managed)
 			continue
 		}
 		equal(t, "moved after the push: exit", out.exit, 0)
@@ -377,11 +377,11 @@ func TestSharedFailure(t *testing.T) {
 		says string
 	}{
 		{"a lock another command holds", home.ErrLocked, exitLocked, "wait for the command holding"},
-		{"a lock, through the home repo's failure", homeRepoFailure(fmt.Errorf("fetch: %w", home.ErrLocked)), exitLocked, "wait for the command holding"},
+		{"a lock, through the store's failure", storeFailure(fmt.Errorf("fetch: %w", home.ErrLocked)), exitLocked, "wait for the command holding"},
 		{"a ref that moved", home.ErrMovedBeforeApply, exitRefused, "run the command again"},
 		{"a journal that could not be finished", home.ErrRecovery, exitRefused, "move the journal aside"},
 		{"a refusal", refuse(exitSource, "cannot reach it", "check it"), exitSource, "check it"},
-		{"a home repo git cannot read", homeRepoFailure(errors.New("bad object")), exitHomeRepo, "agentx doctor"},
+		{"a store git cannot read", storeFailure(errors.New("bad object")), exitStore, "agentx doctor"},
 		{"anything else", errors.New("boom"), exitInternal, ""},
 	} {
 		f := inv.sharedFailure(tc.err)

@@ -213,7 +213,7 @@ type updateRun struct {
 // once, before it selected anything, see updateRun.fetchHub.
 type hubFetch struct {
 	entry  home.Source       // the hub's settings entry
-	remote string            // its git remote in the home repo
+	remote string            // its git remote in the store
 	tips   map[string]string // the tip of each skill it holds, by name, as its remote-tracking branches hold them
 	err    error             // why git could not fetch it, which leaves the tips of the fetch before; nil when it fetched
 }
@@ -330,9 +330,9 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 		all:      len(names) == 0,
 		names:    names,
 	}
-	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	r.gitDir = gitDir
 	// An unfinished journal is finished before anything is read. A stopped
@@ -351,7 +351,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 			err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
 		}
 		if err != nil {
-			return homeRepoFailure(fmt.Errorf("home repo %s: %w", gitDir, err))
+			return storeFailure(fmt.Errorf("store %s: %w", gitDir, err))
 		}
 	}
 	s, err := inv.loadSettings()
@@ -553,7 +553,7 @@ func (r *updateRun) fetchHub(ctx context.Context, records map[string]lineage.Rec
 	a := &hubFetch{entry: entry, remote: remote, err: inv.fetchForks(ctx, r.gitDir, remote, false)}
 	if a.err == nil || r.all {
 		if a.tips, err = lineage.ListRemote(ctx, inv.git, r.gitDir, remote); err != nil {
-			return homeRepoFailure(err)
+			return storeFailure(err)
 		}
 	}
 	r.hub = a
@@ -777,7 +777,7 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 		return nil, refuse(exitRefused, what+", so there is nothing to update", wayOut)
 	case !rec.HasImport:
 		return nil, refuse(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
-			"run 'agentx doctor' and check the home repo it names")
+			"run 'agentx doctor' and check the store it names")
 	case !sources[rec.Import.Source]:
 		return nil, removedSourceRefusal(name, rec.Import.Source)
 	case rec.UpstreamRemoved != "":
@@ -820,7 +820,7 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 	}
 	j, err := inv.judgeDir(ctx, gitDir, lib.ResolvedPath, tree, v, true)
 	if err != nil {
-		return nil, failureOf(homeRepoFailure(err))
+		return nil, failureOf(storeFailure(err))
 	}
 	if u.checkout != "" && !j.holds {
 		return nil, refuse(exitRefused, name+" was edited while its merge was pending, so the merge cannot be applied",
@@ -844,13 +844,13 @@ func (inv *invocation) judgePending(ctx context.Context, gitDir string, u *updat
 	u.checkout = inv.checkoutPath(u.name)
 	s, err := inv.readMerge(ctx, u.checkout)
 	if err != nil {
-		return failureOf(homeRepoFailure(err))
+		return failureOf(storeFailure(err))
 	}
 	if s.theirs == "" {
 		s.theirs = u.rec.CandidateCommit() // no merge in progress: the update it would merge
 	}
 	if u.next, err = u.rec.At(ctx, inv.git, gitDir, s.theirs); err != nil {
-		return failureOf(homeRepoFailure(err))
+		return failureOf(storeFailure(err))
 	}
 	dir := u.rec.Import.Dir()
 	u.merge = lineage.Merge{Base: s.base, Mine: s.mine, Theirs: s.theirs}
@@ -858,7 +858,7 @@ func (inv *invocation) judgePending(ctx context.Context, gitDir string, u *updat
 	if s.tree == "" {
 		files, err := conflictFiles(s.unmerged, dir)
 		if err != nil {
-			return failureOf(homeRepoFailure(err))
+			return failureOf(storeFailure(err))
 		}
 		u.merged.conflicted, u.conflict = true, conflictOfSkill(u.name, u.merge, files)
 		return nil
@@ -898,7 +898,7 @@ func (r *updateRun) read(ctx context.Context) error {
 	for _, u := range r.ready {
 		theirs, err := lineage.ReadBase(ctx, r.inv.git, r.gitDir, u.next)
 		if err != nil {
-			r.drop(u.name, failureOf(homeRepoFailure(err)))
+			r.drop(u.name, failureOf(storeFailure(err)))
 			continue
 		}
 		u.theirs, u.base = theirs, theirs
@@ -922,7 +922,7 @@ func (r *updateRun) read(ctx context.Context) error {
 	}
 	bodies, err := source.ReadBlobs(ctx, r.inv.git, r.gitDir, ids)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	r.bodies = bodies
 	for _, u := range ready {
@@ -953,23 +953,23 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 	git, gitDir := r.inv.git, r.gitDir
 	dir := u.rec.Import.Dir()
 	if u.next.Import.Dir() != dir {
-		return refuse(exitHomeRepo, "the update candidate "+lineage.CandidateRef(u.name)+" holds "+u.name+" under another directory than its import branch",
+		return refuse(exitStore, "the update candidate "+lineage.CandidateRef(u.name)+" holds "+u.name+" under another directory than its import branch",
 			"run '"+checkUpdatesCommand+"' to pin the update again")
 	}
 	if u.checkout == "" {
 		mine, err := lineage.CommitDir(ctx, git, gitDir, dir, u.written, u.rec.Commit, "library directory of "+u.name+"\n")
 		if err != nil {
-			return failureOf(homeRepoFailure(err))
+			return failureOf(storeFailure(err))
 		}
 		u.merge = lineage.Merge{Base: u.rec.Commit, Mine: mine, Theirs: u.next.Commit}
 		u.mine = treeVersion(u.written)
 		if u.merged, err = mergeVersions(ctx, git, gitDir, u.merge); err != nil {
-			return failureOf(homeRepoFailure(err))
+			return failureOf(storeFailure(err))
 		}
 		if u.merged.conflicted {
 			files, err := conflictFiles(u.merged.stages, dir)
 			if err != nil {
-				return failureOf(homeRepoFailure(err))
+				return failureOf(storeFailure(err))
 			}
 			u.conflict = conflictOfSkill(u.name, u.merge, files)
 			return nil
@@ -977,7 +977,7 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 	}
 	merged, err := lineage.ReadMerged(ctx, git, gitDir, u.merged.tree, dir)
 	if err != nil {
-		return failureOf(homeRepoFailure(err))
+		return failureOf(storeFailure(err))
 	}
 	u.base = merged
 	u.target = treeVersion(merged.ID())
@@ -1038,7 +1038,7 @@ func (r *updateRun) apply(ctx context.Context) error {
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.git.Refs(ctx).RefValues(r.gitDir, refs)
 		if err != nil {
-			return homeRepoFailure(err)
+			return storeFailure(err)
 		}
 		edit, err := inv.beginSettings()
 		if err != nil {
@@ -1111,7 +1111,7 @@ func (r *updateRun) apply(ctx context.Context) error {
 		for _, u := range conflicted {
 			start := mergeStart{mine: u.merge.Mine, theirs: u.merge.Theirs, merged: u.merged, message: updateMergeMessage(u.name, u.rec, u.next)}
 			if err := inv.startMerge(ctx, r.gitDir, u.name, start); err != nil {
-				r.drop(u.name, failureOf(homeRepoFailure(err)))
+				r.drop(u.name, failureOf(storeFailure(err)))
 				continue
 			}
 			pending = append(pending, u)

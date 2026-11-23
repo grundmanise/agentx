@@ -19,13 +19,13 @@ import (
 // Every comparison of a skill directory with a version goes through this
 // file, whichever command makes it: drift, diff, update, adoption and the
 // copy step. A skill directory is a git work tree: git runs with the
-// home repo as its git directory, the skill directory as its work tree
+// store as its git directory, the skill directory as its work tree
 // and a throwaway index loaded from the version, then add -A and
 // write-tree, and the directory holds the version when the tree git writes
 // is the version's. So git applies the rules it applies to any work tree:
 // the skill's own .gitignore and .gitattributes files, the user's global
 // ignore file and, while ignore_system_files is on, the list agentx keeps
-// in the home repo's info/exclude. A file the version holds always
+// in the store's info/exclude. A file the version holds always
 // counts, since the index tracks it.
 //
 // The in-process tree id is the fast path: when it equals the version's,
@@ -35,7 +35,7 @@ import (
 
 // version is what a directory is compared with.
 type version struct {
-	load  string               // the tree-ish git loads into the index: "<commit>:<dir>" or a tree id the home repo holds
+	load  string               // the tree-ish git loads into the index: "<commit>:<dir>" or a tree id the store holds
 	holds func(id string) bool // whether a directory whose tree id is id holds the version
 }
 
@@ -44,7 +44,7 @@ func baseVersion(rec lineage.Record) version {
 	return version{load: rec.Commit + ":" + rec.Import.Dir(), holds: rec.HoldsID}
 }
 
-// treeVersion is a tree the home repo holds, such as one git wrote of a
+// treeVersion is a tree the store holds, such as one git wrote of a
 // directory.
 func treeVersion(tree string) version {
 	return version{load: tree, holds: func(id string) bool { return id == tree }}
@@ -98,7 +98,7 @@ func (inv *invocation) judgeDir(ctx context.Context, gitDir, dir string, t treei
 	return j, err
 }
 
-// openWorkTree opens dir as a work tree of the home repo, with
+// openWorkTree opens dir as a work tree of the store, with
 // info/exclude brought in line with ignore_system_files first.
 func (inv *invocation) openWorkTree(ctx context.Context, gitDir, dir string) (*gitx.WorkTree, error) {
 	return inv.openWorkTreeWithin(ctx, gitDir, dir, dir)
@@ -151,7 +151,7 @@ func (inv *invocation) holdsBase(ctx context.Context, lib scan.LibrarySkill, rec
 	}
 	v := baseVersion(rec)
 	return inv.verdict(lib.Name, "its base version", tree, v, func() (bool, error) {
-		j, err := inv.judgeDir(ctx, gitx.HomeRepoPath(inv.dirs.Home), lib.ResolvedPath, tree, v, false)
+		j, err := inv.judgeDir(ctx, gitx.StorePath(inv.dirs.Home), lib.ResolvedPath, tree, v, false)
 		return j.holds, err
 	})
 }

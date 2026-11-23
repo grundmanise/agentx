@@ -36,8 +36,8 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 
 // skillList reports the skills of the library: what each one is, where it
 // came from and where it is seen from. The lineage comes from the branches
-// of the home repo alone, read in one for-each-ref over both namespaces,
-// so what a source holds, and whether its ref is in the home repo at
+// of the store alone, read in one for-each-ref over both namespaces,
+// so what a source holds, and whether its ref is in the store at
 // all, changes nothing here. Whether the source is still added does: a
 // managed skill whose source has no entry in the settings is listed as
 // source removed, which is read from the settings this command reads
@@ -45,7 +45,7 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 //
 // A managed skill whose library directory is gone has no row: there is
 // nothing to list, compare or place. It is named in a warning of its own
-// after the rows, see absentWarnings, so that a branch the home repo
+// after the rows, see absentWarnings, so that a branch the store
 // still holds is never silently left out.
 //
 // With remote, the hub is fetched first, outside the lock, and

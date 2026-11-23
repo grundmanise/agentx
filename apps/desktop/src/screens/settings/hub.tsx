@@ -95,7 +95,7 @@ const saveProblem = (
   // the startup layer back, which says why.
   if (
     outcome.exitCode === EXIT_CODES.locked ||
-    outcome.exitCode === EXIT_CODES.home_repo
+    outcome.exitCode === EXIT_CODES.store
   ) {
     return undefined;
   }

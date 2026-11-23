@@ -9,15 +9,15 @@ import (
 
 func TestAcceptKeepsTheDirectoriesTheWatchesCover(t *testing.T) {
 	t.Parallel()
-	flat := []string{"/h/agentx", "/h/agentx/home.git"}
+	flat := []string{"/h/agentx", "/h/agentx/store.git"}
 	trees := []string{"/h/agentx/worktrees", "/h/library"}
 	tests := []struct {
 		dir  string
 		want bool
 	}{
 		{"/h/agentx", true},
-		{"/h/agentx/home.git", true},
-		{"/h/agentx/home.git/refs", false},
+		{"/h/agentx/store.git", true},
+		{"/h/agentx/store.git/refs", false},
 		{"/h/agentx/mutations", false},
 		{"/h/library", true},
 		{"/h/library/commit", true},

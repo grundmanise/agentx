@@ -17,7 +17,7 @@ import (
 // the fork's branch, its update candidate and its copy modes. The journal
 // retains the worktree until the removal is complete, so a removal that
 // stops part way loses nothing a recovery cannot put back. The worktree's
-// registration in the home repo goes once the journal is applied, see
+// registration in the store goes once the journal is applied, see
 // pruneMerges for what an interrupted removal leaves of it. With --remote
 // the hub's branch is deleted as well, after the removal here,
 // and nothing on any other machine changes either way: a machine that
@@ -30,7 +30,7 @@ type forkRemoval struct {
 	tip    string // what the fork's branch held when it was judged; "" when this machine has no fork of the name
 	remote bool   // the hub's branch goes too
 	url    string // the hub's, with remote
-	// hub is the hub's git remote in the home repo,
+	// hub is the hub's git remote in the store,
 	// with remote.
 	hub   string
 	there string // what the hub's branch held at the fetch; "" when it holds none
@@ -74,9 +74,9 @@ func (inv *invocation) removeFork(ctx context.Context, name string, remote bool)
 // returns nil and no error when name is no fork of this machine and remote
 // is not asked for.
 func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote bool) (*forkRemoval, error) {
-	gitDir, hasRepo, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, hasRepo, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	values := map[string]string{}
 	if hasRepo {
@@ -120,7 +120,7 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 	}
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, r.hub)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	r.there = tips[name]
 	switch {
@@ -134,7 +134,7 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 		}
 		walked, err := lineage.Walk(ctx, inv.git, gitDir, []string{r.there})
 		if err != nil {
-			return nil, homeRepoFailure(err)
+			return nil, storeFailure(err)
 		}
 		if f := sameForkRefusal(records[name], walked[r.there], "removed from the hub"); f != nil {
 			f.hint = "remove it from this machine alone with '" + skillCommand("remove", name) + "'"

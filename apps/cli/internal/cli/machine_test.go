@@ -65,7 +65,7 @@ func TestMachineFromPlatformID(t *testing.T) {
 }
 
 // The machine event says where agentx keeps its files, as AGENTX_HOME and
-// AGENTX_LIBRARY resolve them, and names the home repo with its size once
+// AGENTX_LIBRARY resolve them, and names the store with its size once
 // it exists.
 func TestMachinePaths(t *testing.T) {
 	t.Parallel()
@@ -75,30 +75,30 @@ func TestMachinePaths(t *testing.T) {
 	equal(t, "home", before["home"], h.agentx)
 	equal(t, "settings_file", before["settings_file"], filepath.Join(h.agentx, "settings.json"))
 	equal(t, "library", before["library"], h.library)
-	for _, key := range []string{"home_repo", "home_repo_bytes"} {
+	for _, key := range []string{"store", "store_bytes"} {
 		if v, ok := before[key]; ok {
-			t.Errorf("%s = %v before the home repo exists", key, v)
+			t.Errorf("%s = %v before the store exists", key, v)
 		}
 	}
 	out := h.run("machine")
 	contains(t, "stdout", out.stdout, "Home        "+h.agentx+"\n")
-	contains(t, "stdout", out.stdout, "Home repo   not created yet\n")
+	contains(t, "stdout", out.stdout, "Store       not created yet\n")
 
-	h.mustRun("skill", "new", "notes") // the first command that needs the home repo creates it
-	repo := filepath.Join(h.agentx, "home.git")
+	h.mustRun("skill", "new", "notes") // the first command that needs the store creates it
+	repo := filepath.Join(h.agentx, "store.git")
 	size, err := dirSize(repo)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if size == 0 {
-		t.Fatal("the home repo is empty")
+		t.Fatal("the store is empty")
 	}
 	after := showMachine(t, h)
-	equal(t, "home_repo", after["home_repo"], repo)
-	equal(t, "home_repo_bytes", after["home_repo_bytes"], float64(size))
+	equal(t, "store", after["store"], repo)
+	equal(t, "store_bytes", after["store_bytes"], float64(size))
 
 	out = h.run("machine")
-	contains(t, "stdout", out.stdout, "Home repo   "+repo+" ("+formatBytes(size)+")\n")
+	contains(t, "stdout", out.stdout, "Store       "+repo+" ("+formatBytes(size)+")\n")
 }
 
 func TestDirSize(t *testing.T) {

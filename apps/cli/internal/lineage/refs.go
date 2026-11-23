@@ -7,7 +7,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
-// The two namespaces of the home repo a skill's lineage lives in: one
+// The two namespaces of the store a skill's lineage lives in: one
 // branch per managed skill, pointing at its import commit, and one per fork,
 // pointing at the fork's own history. A skill in the library with a branch
 // in neither is unmanaged.
@@ -54,7 +54,7 @@ func ManagedRef(name string) string { return ManagedPrefix + name }
 // ForkRef is the branch of the fork called name.
 func ForkRef(name string) string { return ForkPrefix + name }
 
-// Record is what the home repo holds for one skill name: the branch, the
+// Record is what the store holds for one skill name: the branch, the
 // commit it points at, that commit's tree and committer time and, when that
 // commit carries them, the four lineage trailers. A managed skill's tip is its import
 // commit. A fork's tip is a commit of its own history, whose lineage
@@ -72,7 +72,7 @@ type Record struct {
 	Import          Import
 	HasImport       bool
 	Parentless      bool         // the commit has no parent, as an import commit never has
-	Candidate       *Candidate   // the update candidate, nil when the home repo holds none
+	Candidate       *Candidate   // the update candidate, nil when the store holds none
 	UpstreamRemoved string       // the source commit the upstream-removed marker names, "" when there is none
 	Fork            *ForkLineage // a fork's lineage, read by ReadForks; nil for a managed skill and until then
 }
@@ -149,7 +149,7 @@ func (rec Record) CandidateCommit() string {
 	return rec.Candidate.Commit
 }
 
-// List reads every lineage branch of the home repo in one for-each-ref
+// List reads every lineage branch of the store in one for-each-ref
 // over both namespaces, trees, committer times and trailers and all, and
 // returns them by skill name. The committer time dates the version a commit
 // holds: an import commit is dated with the upstream commit's, see WriteAll,

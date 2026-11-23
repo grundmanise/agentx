@@ -27,7 +27,7 @@ func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "codex")
-	head := h.homeGit("rev-parse", "refs/heads/managed/alpha")
+	head := h.storeGit("rev-parse", "refs/heads/managed/alpha")
 	before := mutationVersion(t, h)
 
 	out := h.run("--json", "skill", "place", "alpha", "--to", "cortex")
@@ -37,7 +37,7 @@ func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 	if !ok || target != filepath.Join(h.library, "alpha") {
 		t.Errorf("the placement is %q (symlink %v), want a link to the library", target, ok)
 	}
-	equal(t, "the import branch", h.homeGit("rev-parse", "refs/heads/managed/alpha"), head)
+	equal(t, "the import branch", h.storeGit("rev-parse", "refs/heads/managed/alpha"), head)
 	equal(t, "mutations", mutationVersion(t, h), before+1)
 	equal(t, "journals left behind", journalCount(t, h), 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")

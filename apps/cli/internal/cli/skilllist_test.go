@@ -91,12 +91,12 @@ func TestSkillListReadsLineageFromTheBranchesAlone(t *testing.T) {
 	beforeText := h.mustRun("skill", "list")
 
 	// Every source ref goes, with plain git, behind agentx's back.
-	for _, ref := range strings.Split(h.homeGit("for-each-ref", "--format=%(refname)", "refs/agentx/sources/"), "\n") {
+	for _, ref := range strings.Split(h.storeGit("for-each-ref", "--format=%(refname)", "refs/agentx/sources/"), "\n") {
 		if ref != "" {
-			h.homeGit("update-ref", "-d", ref)
+			h.storeGit("update-ref", "-d", ref)
 		}
 	}
-	if refs := h.homeGit("for-each-ref", "refs/agentx/sources/"); refs != "" {
+	if refs := h.storeGit("for-each-ref", "refs/agentx/sources/"); refs != "" {
 		t.Fatalf("source refs are still there:\n%s", refs)
 	}
 	for _, c := range []struct{ what, before, after string }{
@@ -119,7 +119,7 @@ func TestSkillListReportsAFork(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
-	h.homeGit("update-ref", "refs/heads/skills/beta", h.homeGit("rev-parse", "refs/heads/managed/alpha"))
+	h.storeGit("update-ref", "refs/heads/skills/beta", h.storeGit("rev-parse", "refs/heads/managed/alpha"))
 	copyTree(t, filepath.Join(h.library, "alpha"), filepath.Join(h.library, "beta"))
 
 	out := h.run("--json", "skill", "list")
@@ -172,17 +172,17 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	remove(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "beta"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
 	writeFile(t, filepath.Join(h.library, "beta", ".DS_Store"), "finder\n")
-	h.homeGit("update-ref", "refs/heads/managed/ghost", h.homeGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))
+	h.storeGit("update-ref", "refs/heads/managed/ghost", h.storeGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))
 	// A candidate is a commit of its own, as a check pins it: here alpha's
 	// version again, with its lineage, on top of the branch. One the branch
 	// already holds is no update, and lists as none.
-	message := h.homeGit("log", "-1", "--format=%B", "refs/heads/managed/alpha")
-	candidate := strings.TrimSpace(h.homeGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", "refs/heads/managed/alpha", "-m", message))
-	h.homeGit("update-ref", "refs/agentx/candidate/alpha", candidate)
-	h.homeGit("update-ref", "refs/agentx/upstream-removed/beta", "refs/agentx/sources/"+source.ID(s.url))
-	// A pending merge is a checkout of the home repo, as an update adds
+	message := h.storeGit("log", "-1", "--format=%B", "refs/heads/managed/alpha")
+	candidate := strings.TrimSpace(h.storeGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", "refs/heads/managed/alpha", "-m", message))
+	h.storeGit("update-ref", "refs/agentx/candidate/alpha", candidate)
+	h.storeGit("update-ref", "refs/agentx/upstream-removed/beta", "refs/agentx/sources/"+source.ID(s.url))
+	// A pending merge is a checkout of the store, as an update adds
 	// one.
-	h.homeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
+	h.storeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
 		pendingCheckout(h, "alpha"), h.ref(lineage.ManagedRef("alpha")))
 	h.mustRun("skill", "new", "fresh")
 	h.mustRun("skill", "new", "edited")
@@ -228,7 +228,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 		sort.Strings(ran)
 		equal(t, what+": git runs", strings.Join(ran, " "), "add add config for-each-ref log read-tree read-tree write-tree write-tree")
 	}
-	ghost := "ghost is managed in the home repo but the library holds no skill directory for it;" +
+	ghost := "ghost is managed in the store but the library holds no skill directory for it;" +
 		" run 'agentx skill add <source> --name ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
 	list := h.mustRun("skill", "list")
 	equal(t, "skill list's warning", list.stderr, "warning: "+ghost+"\n")

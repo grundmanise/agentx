@@ -378,7 +378,7 @@ func (inv *invocation) export(ctx context.Context, path string, force bool) erro
 // hostname when the setting is empty, and writing that into a snapshot
 // would give the machine that imports it the exporting machine's hostname.
 //
-// The lineage is read as skill list reads it, so that a home repo git
+// The lineage is read as skill list reads it, so that a store git
 // cannot read is exit code 8 here rather than a snapshot that lists every
 // managed skill as unmanaged; the scan that follows is the one skill list
 // runs for the placements, which judges no drift, since a snapshot carries

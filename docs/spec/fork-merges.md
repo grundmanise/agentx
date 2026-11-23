@@ -10,7 +10,7 @@ A fork takes in two kinds of change: a newer version of its upstream, and what a
 - Verify the canonical source and subpath: an upstream version is merged into a fork only when it holds the skill under the same source and directory as the fork's base.
 - Record the fork's unpublished edits first, edits its skill directory holds that no commit records, as one commit on its branch, and merge from the tip that holds them, so they are never merged over or lost. They stay unpublished until a publish pushes them. Ignored files are never edits. Edits made while the merge runs are refused under the lock, as `git merge` refuses over a work tree with changes it would overwrite.
 - Follow the [mutation-safety](mutation-safety.md) contract: a branch moves with its old tip as the expected value, and the worktree follows through the mutation journal.
-- Never write conflict markers where an agent reads: a merge that conflicts is left pending in a hidden worktree of the home repo, and the fork's worktree and branch stay as they are until it is resolved there and completed, or given up.
+- Never write conflict markers where an agent reads: a merge that conflicts is left pending in a hidden worktree of the store, and the fork's worktree and branch stay as they are until it is resolved there and completed, or given up.
 
 ## Updating from upstream
 
@@ -35,7 +35,7 @@ Every merge commit agentx writes on a fork's branch carries `Agentx-Base`, namin
 For a merge of two histories of one fork:
 
 - When both sides name the same import, that is the base.
-- When they name two versions of the same source and subpath, the newer one is the base when the source history the home repo has fetched proves it: `merge-base --is-ancestor` over the two `Agentx-Upstream-Commit` values, after confirming both commits are present without reaching any remote.
+- When they name two versions of the same source and subpath, the newer one is the base when the source history the store has fetched proves it: `merge-base --is-ancestor` over the two `Agentx-Upstream-Commit` values, after confirming both commits are present without reaching any remote.
 - Otherwise the local side's base stays: a version whose history was never fetched, a force-pushed source, versions on diverged branches, or bases of different sources or subpaths.
 
 A wrong base costs at most a conflict on the next upstream update. No content is lost over it, since the merge itself is Git's.

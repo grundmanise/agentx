@@ -73,11 +73,11 @@ func unmanagedRefusal(name string, mode forkMode) error {
 }
 
 // forkSourceOf finds the skill arg names. The library comes first, its
-// entry's branch saying what it is; then the home repo, for a fork
+// entry's branch saying what it is; then the store, for a fork
 // whose library entry is gone, which is forked from its branch all the
 // same; then the plugins the scan found. A plugin's skill is named as
 // <plugin>:<skill>, its plugin and its directory. scanned is the scan the plugins are read from, run
-// only when the name is none of the library's or the home repo's. A
+// only when the name is none of the library's or the store's. A
 // library entry no branch records is unmanaged, and refused unless mode
 // takes one, see forkMode.takesUnmanaged.
 func (inv *invocation) forkSourceOf(arg string, records map[string]lineage.Record, scanned func() (scan.Inventory, error), mode forkMode) (forkSource, error) {

@@ -225,7 +225,7 @@ func (inv *invocation) publish(ctx context.Context, named []string, message stri
 	}
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, hub)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	names := named
 	if len(named) == 0 {
@@ -367,16 +367,16 @@ func (inv *invocation) pushFailed(ctx context.Context, list []*publishing, named
 // source named beside others, exit code 1, see sharedBesideOthers. The
 // lineage is read once for every name.
 func (inv *invocation) publishable(ctx context.Context, names []string) (shared bool, err error) {
-	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return false, homeRepoFailure(err)
+		return false, storeFailure(err)
 	}
 	// The records are read without the fork warnings, which the read after
 	// finishJournals gives once any journal left is finished.
 	records := map[string]lineage.Record{}
 	if exists {
 		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
-			return false, homeRepoFailure(err)
+			return false, storeFailure(err)
 		}
 	}
 	var others []string
@@ -399,7 +399,7 @@ func (inv *invocation) publishable(ctx context.Context, names []string) (shared 
 }
 
 // unpublishable is the refusal of a named skill that is no branch of the
-// home repo: an unmanaged skill, exit code 6, or one the library does
+// store: an unmanaged skill, exit code 6, or one the library does
 // not hold, exit code 5, see publishable.
 func (inv *invocation) unpublishable(ctx context.Context, name string) error {
 	_, held := librarySkill(inv.dirs.Library, name)
@@ -504,7 +504,7 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 	}
 	switch {
 	case err != nil:
-		p.outcome, p.f = publishRefused, failureOf(homeRepoFailure(err))
+		p.outcome, p.f = publishRefused, failureOf(storeFailure(err))
 	case ahead: // the hub holds nothing the skill lacks
 		p.push = true
 		if strings.TrimSpace(message) != "" {
@@ -583,7 +583,7 @@ func (inv *invocation) foldable(ctx context.Context, gitDir, theirs, tip, base s
 	const recordEnd = "\x01"
 	out, err := inv.git.Isolated(ctx, gitDir, "log", "--format=%P%x00%B"+recordEnd, theirs+".."+tip)
 	if err != nil {
-		return false, homeRepoFailure(err)
+		return false, storeFailure(err)
 	}
 	for _, record := range strings.Split(out, recordEnd) {
 		record = strings.TrimPrefix(record, "\n")
@@ -675,11 +675,11 @@ func (inv *invocation) writeCommits(ctx context.Context, w *forkWriter, gitDir s
 	}
 	out, err := inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(pairs.String()), "diff-tree", "--stdin", "-r", "-z", "--no-renames", "--name-status")
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	changes, err := parsePairDiffs(out)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	for _, c := range ready {
 		prefix := c.site.dir + "/"
@@ -700,7 +700,7 @@ func (inv *invocation) writeCommits(ctx context.Context, w *forkWriter, gitDir s
 			// checkMessage, so this is a backstop.
 			return trailerInMessage()
 		case err != nil:
-			return homeRepoFailure(err)
+			return storeFailure(err)
 		}
 	}
 	return nil
@@ -725,7 +725,7 @@ func (inv *invocation) applyCommits(ctx context.Context, gitDir string, ready []
 		}
 		values, err := inv.git.Refs(ctx).RefValues(gitDir, refs)
 		if err != nil {
-			return homeRepoFailure(err)
+			return storeFailure(err)
 		}
 		m := home.NewMutation(inv.dirs.Home)
 		for _, c := range ready {
@@ -814,7 +814,7 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url string
 	}
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	again := "run '" + publishCommand(named...) + "' again"
 	for _, p := range list {

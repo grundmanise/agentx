@@ -22,7 +22,7 @@ func ForkRefspec(remote string) string {
 // it holds, every ref under it this remote's.
 func TrackingPrefix(remote string) string { return "refs/remotes/" + remote + "/" }
 
-// RemoteURL is the URL of the remote called remote as the home repo
+// RemoteURL is the URL of the remote called remote as the store
 // records it, "" when no such remote is set.
 func (r *Runner) RemoteURL(ctx context.Context, gitDir, remote string) (string, error) {
 	out, _, err := r.IsolatedStatus(ctx, gitDir, 1, "config", "--get", "remote."+remote+".url")
@@ -69,7 +69,7 @@ func (r *Runner) SetTracking(ctx context.Context, gitDir, remote, branch string)
 }
 
 // UnsetTracking takes the tracking configuration of branch out of the
-// home repo, the section SetTracking wrote, for a removal that deletes
+// store, the section SetTracking wrote, for a removal that deletes
 // the branch: a later branch of the name would otherwise track the
 // remote branch of another. A branch with none has nothing to take out.
 func (r *Runner) UnsetTracking(ctx context.Context, gitDir, branch string) error {
@@ -82,7 +82,7 @@ func (r *Runner) UnsetTracking(ctx context.Context, gitDir, branch string) error
 	return err
 }
 
-// UnsetRemote takes the remote called remote out of the home repo: its
+// UnsetRemote takes the remote called remote out of the store: its
 // configuration section, the tracking configuration of every fork branch
 // that names it, and every remote-tracking branch a fetch of it wrote. No
 // local branch is touched. Under the lock, as SetRemote. The remote-tracking
@@ -144,7 +144,7 @@ func (r *Runner) dropRemoteRefs(ctx context.Context, gitDir, remote string) erro
 // sets on top of the user's environment, whose credential helpers, SSH
 // configuration and URL rewrites apply as for any git of theirs: no hook of
 // theirs runs. A hooks path set in the user's global configuration belongs
-// to their projects, not to the home repo, and a hook that waits for
+// to their projects, not to the store, and a hook that waits for
 // input would hang the serve child.
 func networkConfig() []string { return []string{"-c", "core.hooksPath=" + os.DevNull} }
 

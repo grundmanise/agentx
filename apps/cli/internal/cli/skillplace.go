@@ -253,7 +253,7 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 	if err := plan.refusal(force); err != nil {
 		return err
 	}
-	gitDir := gitx.HomeRepoPath(inv.dirs.Home)
+	gitDir := gitx.StorePath(inv.dirs.Home)
 	again := "run " + plan.command() + " again"
 	var done placements
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
@@ -697,7 +697,7 @@ func (inv *invocation) reportPlaced(ctx context.Context, name string, targets []
 }
 
 // skillContext is what a report about library skills reads once: the
-// lineage branches of the home repo, the copy modes, the sources and the
+// lineage branches of the store, the copy modes, the sources and the
 // disabled configurations of the settings, and the configurations detected.
 // Reading them per skill would cost a git process per skill, which a run
 // over the whole library may not.
@@ -735,7 +735,7 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 }
 
 // librarySkillEventFor builds the library_skill event of one library directory from the
-// lineage the home repo holds and the placements the rescan found in the
+// lineage the store holds and the placements the rescan found in the
 // configurations the command covered. A nil covered reports every placement,
 // which is what a listing of the whole library does. The universal clients
 // are every one the rescan detected, covered or not: they see the skill
@@ -749,18 +749,18 @@ func (sc skillContext) librarySkillEventFor(ctx context.Context, inv *invocation
 	return skillFromLibrary(lib, rec, managed, sc.sources, sc.hub, places, universalClients(inventory), sc.observationOf(ctx, inv, lib))
 }
 
-// lineageRecords are the branches of the home repo by skill name, a
+// lineageRecords are the branches of the store by skill name, a
 // fork's with the lineage its history holds, see lineage.ReadForks, empty
-// when this machine has no home repo yet: a listing never creates one.
+// when this machine has no store yet: a listing never creates one.
 // Serve keeps the lineages it read by branch tip, so a rescan walks only the
 // forks whose branch moved.
-// Either failure names the home repo, as the check of it does, since
+// Either failure names the store, as the check of it does, since
 // what git says of refs it cannot read need not, and the hint and a scan's
 // warning both send the reader to that repo.
 func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.Record, error) {
-	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	if !exists {
 		return map[string]lineage.Record{}, nil
@@ -770,7 +770,7 @@ func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.R
 		err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
 	}
 	if err != nil {
-		return nil, homeRepoFailure(fmt.Errorf("home repo %s: %w", gitDir, err))
+		return nil, storeFailure(fmt.Errorf("store %s: %w", gitDir, err))
 	}
 	return records, nil
 }

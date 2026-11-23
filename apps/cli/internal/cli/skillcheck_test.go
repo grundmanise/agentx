@@ -68,27 +68,27 @@ func files(e jsonEvent) string {
 	return strings.Join(out, ", ")
 }
 
-// ref is what a ref of the home repo holds, "" when it does not exist,
+// ref is what a ref of the store holds, "" when it does not exist,
 // read with plain git.
 func (h *harness) ref(name string) string {
 	h.t.Helper()
-	return h.homeGit("for-each-ref", "--format=%(objectname)", name)
+	return h.storeGit("for-each-ref", "--format=%(objectname)", name)
 }
 
-// refLines is every ref of the home repo with what it holds, one
+// refLines is every ref of the store with what it holds, one
 // "<ref> <object>" line each, read with plain git in one for-each-ref; a
-// home with no home repo holds none, which is read with no git at all.
+// home with no store holds none, which is read with no git at all.
 func (h *harness) refLines() string {
 	h.t.Helper()
-	if _, err := os.Stat(gitx.HomeRepoPath(h.agentx)); err != nil {
+	if _, err := os.Stat(gitx.StorePath(h.agentx)); err != nil {
 		return ""
 	}
-	return h.homeGit("for-each-ref", "--format=%(refname) %(objectname)")
+	return h.storeGit("for-each-ref", "--format=%(refname) %(objectname)")
 }
 
 // refMap is refLines by ref, for a test that reads several refs at one
 // point: one git process for all of them, where ref is one each. A ref the
-// home repo does not hold reads "", as ref reads it.
+// store does not hold reads "", as ref reads it.
 func (h *harness) refMap() map[string]string {
 	h.t.Helper()
 	refs := map[string]string{}
@@ -173,7 +173,7 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 	// trailers, and beta has none.
 	candidate := h.ref(lineage.CandidateRef("alpha"))
 	equal(t, "the candidate ref", candidate, up["candidate"])
-	body := h.homeGit("cat-file", "commit", candidate)
+	body := h.storeGit("cat-file", "commit", candidate)
 	if strings.Contains(body, "\nparent ") {
 		t.Errorf("the candidate has a parent:\n%s", body)
 	}
@@ -181,7 +181,7 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 		contains(t, "the candidate", body, trailer)
 	}
 	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), "")
-	equal(t, "the source ref", h.homeGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), second)
+	equal(t, "the source ref", h.storeGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), second)
 
 	// The check applied nothing: the library holds the version it did, and
 	// skill list shows the update beside it.
@@ -364,7 +364,7 @@ func TestCheckRefusal(t *testing.T) {
 		return checkFailure{source: url, fetch: true, skills: skills, f: refuse(exitNotFound, url+": no such repository", "check the URL")}
 	}
 	broken := func(url string, skills ...string) checkFailure {
-		return checkFailure{source: url, skills: skills, f: refuse(exitHomeRepo, url+": cannot read it", "run 'agentx doctor'")}
+		return checkFailure{source: url, skills: skills, f: refuse(exitStore, url+": cannot read it", "run 'agentx doctor'")}
 	}
 	refused := func(name string) checkFailure {
 		return checkFailure{source: one, skill: true, skills: []string{name}, f: refuse(exitRefused, "we\\ird.md is no path agentx lays out", "ask the source")}
@@ -383,8 +383,8 @@ func TestCheckRefusal(t *testing.T) {
 			"could not check " + one + " (alpha), " + two + " (gamma)", warned + "; " + refusalHint(exitSource)},
 		{"two sources not found", []checkFailure{missing(one, "alpha"), missing(two, "gamma")}, exitNotFound,
 			"could not check " + one + " (alpha), " + two + " (gamma)", warned + "; " + refusalHint(exitNotFound)},
-		{"two sources whose home repo reads failed", []checkFailure{broken(one, "alpha"), broken(two, "gamma")}, exitHomeRepo,
-			"could not check " + one + " (alpha), " + two + " (gamma)", warned + "; " + refusalHint(exitHomeRepo)},
+		{"two sources whose store reads failed", []checkFailure{broken(one, "alpha"), broken(two, "gamma")}, exitStore,
+			"could not check " + one + " (alpha), " + two + " (gamma)", warned + "; " + refusalHint(exitStore)},
 		{"two sources that disagree", []checkFailure{missing(one, "alpha"), broken(two, "gamma")}, exitSource,
 			"could not check " + one + " (alpha), " + two + " (gamma)", warned + "; " + refusalHint(exitSource)},
 		{"two skills", []checkFailure{refused("alpha"), refused("beta")}, exitRefused,
@@ -866,7 +866,7 @@ done`)
 	refs := h.refMap()
 	equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], h.updateOf(check.stdout, "alpha")["candidate"])
 	equal(t, "the source ref", refs[source.Ref(source.ID(s.url))], second)
-	equal(t, "staging refs", h.homeGit("for-each-ref", "--format=%(refname)", source.StagingRefPrefix), "")
+	equal(t, "staging refs", h.storeGit("for-each-ref", "--format=%(refname)", source.StagingRefPrefix), "")
 }
 
 // TestSkillCheckBesideASourceRemoval removes a source while a check is
@@ -1043,8 +1043,8 @@ func TestSkillCheckRecordsNothingForWhatChangedMidRun(t *testing.T) {
 		// An update of alpha lands while the check is held: the branch moves
 		// to the version the last check pinned, and the candidate goes.
 		out := held(h, arm, func() {
-			h.homeGit("update-ref", lineage.ManagedRef("alpha"), pinned, tip)
-			h.homeGit("update-ref", "-d", lineage.CandidateRef("alpha"), pinned)
+			h.storeGit("update-ref", lineage.ManagedRef("alpha"), pinned, tip)
+			h.storeGit("update-ref", "-d", lineage.CandidateRef("alpha"), pinned)
 		})
 		equal(t, "exit", out.exit, 0)
 		nothingFor(t, h, out, "alpha")
@@ -1137,7 +1137,7 @@ func TestSkillCheckRefusesAHeldLock(t *testing.T) {
 			refs = h.refMap()
 			equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], candidate)
 			equal(t, "alpha's marker", refs[lineage.UpstreamRemovedRef("alpha")], marker)
-			equal(t, "staging refs of the import", h.homeGit("for-each-ref", "--format=%(refname)", lineage.ImportingPrefix), "")
+			equal(t, "staging refs of the import", h.storeGit("for-each-ref", "--format=%(refname)", lineage.ImportingPrefix), "")
 			equal(t, "mutations", mutationVersion(t, h), before)
 			equal(t, "last_fetched", lastFetched(t, h, s.url), fetched)
 			rows, _ := doctorRows(t, h.events(h.run("--json", "doctor").stdout))
@@ -1171,7 +1171,7 @@ func TestSkillCheckIgnoresWhatAnImportLeavesOut(t *testing.T) {
 			link(t, "SKILL.md", filepath.Join(s.work, "linked", "link.md"))
 			s.commit("the link moved")
 			// A candidate no update backs, which the check drops.
-			h.homeGit("update-ref", lineage.CandidateRef("linked"), h.ref(lineage.ManagedRef("linked")))
+			h.storeGit("update-ref", lineage.CandidateRef("linked"), h.ref(lineage.ManagedRef("linked")))
 		}
 		out := h.mustRun("--json", "skill", "check-updates")
 		if got := h.eventsOfType(out.stdout, "update_available"); len(got) != 0 {
@@ -1420,7 +1420,7 @@ exec `+real+` "$@"
 		t.Error("recovery did not write the last_fetched the check recorded")
 	}
 	equal(t, "the candidate after recovery", h.ref(lineage.CandidateRef("alpha")), candidate)
-	equal(t, "skill list", h.listed("alpha")["candidate"].(map[string]any)["upstream_commit"], h.homeGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)))
+	equal(t, "skill list", h.listed("alpha")["candidate"].(map[string]any)["upstream_commit"], h.storeGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)))
 }
 
 // TestServeChecksForUpdates runs serve: the check starts once the initial

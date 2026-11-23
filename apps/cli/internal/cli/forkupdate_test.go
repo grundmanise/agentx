@@ -56,7 +56,7 @@ func (h *harness) forkDir(name, dir string) string {
 
 // parents is the parents of commit, as rev-parse lists them.
 func (h *harness) parents(commit string) string {
-	return h.homeGit("rev-parse", commit+"^@")
+	return h.storeGit("rev-parse", commit+"^@")
 }
 
 // TestSkillUpdateMergesUpstreamIntoAFork updates two forks in one run of
@@ -115,14 +115,14 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 		}
 		tip, mine := h.ref(lineage.ForkRef(name)), tips[name]
 		if name == "beta" {
-			mine = h.homeGit("rev-parse", tip+"^1")
+			mine = h.storeGit("rev-parse", tip+"^1")
 			equal(t, "beta: the recorded commit's parent", h.parents(mine), tips[name])
-			equal(t, "beta: the recorded draft", h.homeGit("show", tip+":beta/draft.md"), "not yet recorded")
+			equal(t, "beta: the recorded draft", h.storeGit("show", tip+":beta/draft.md"), "not yet recorded")
 		}
 		equal(t, name+": the merge's parents", h.parents(tip), mine+"\n"+candidates[name])
 		equal(t, name+": its base", h.trailer(tip, lineage.TrailerBase), candidates[name])
-		equal(t, name+": its subject", h.homeGit("log", "-1", "--format=%s", tip), name+": merge upstream "+short(second)+" (test-host)")
-		equal(t, name+": its author", h.homeGit("log", "-1", "--format=%an <%ae>", tip), "Fork Writer <writer@example.com>")
+		equal(t, name+": its subject", h.storeGit("log", "-1", "--format=%s", tip), name+": merge upstream "+short(second)+" (test-host)")
+		equal(t, name+": its author", h.storeGit("log", "-1", "--format=%an <%ae>", tip), "Fork Writer <writer@example.com>")
 		equal(t, name+": the candidate", h.ref(lineage.CandidateRef(name)), "")
 		equal(t, name+": git status", gitIn(t, h, filepath.Join(h.agentx, "worktrees", name), "status", "--porcelain"), "")
 		noCheckout(t, h, name)
@@ -165,7 +165,7 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	second := s.commit("second version")
 	h.mustRun("skill", "check-updates")
 	tip, candidate := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
-	base := h.homeGit("rev-parse", tip+"~2") // the commit, then the fork's creation, then the import
+	base := h.storeGit("rev-parse", tip+"~2") // the commit, then the fork's creation, then the import
 
 	worktree := onDisk(t, filepath.Join(h.agentx, "worktrees", "alpha"))
 
@@ -213,7 +213,7 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	merge := h.ref(lineage.ForkRef("alpha"))
 	equal(t, "stdout of the completion", done.stdout, "✓ updated alpha from "+short(first)+" to "+short(second)+" with the merge you resolved, committed as "+short(merge)+"\n")
 	equal(t, "the merge's parents", h.parents(merge), tip+"\n"+candidate)
-	equal(t, "the merge's message", h.homeGit("log", "-1", "--format=%B", merge), strings.TrimSuffix(msg, "\n"))
+	equal(t, "the merge's message", h.storeGit("log", "-1", "--format=%B", merge), strings.TrimSuffix(msg, "\n"))
 	equal(t, "the notes", fileBody(t, filepath.Join(alpha, "notes.md")), resolved)
 	equal(t, "the ignored file", fileBody(t, filepath.Join(alpha, ".DS_Store")), "finder\n")
 	equal(t, "git status", gitIn(t, h, filepath.Join(h.agentx, "worktrees", "alpha"), "status", "--porcelain"), "")
@@ -235,7 +235,7 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	otherTip := h.ref(lineage.ForkRef("other"))
 	equal(t, "the renamed fork's SKILL.md", fileBody(t, filepath.Join(h.forkDir("other", "alpha"), "SKILL.md")), renamed)
 	equal(t, "the renamed fork's base", h.trailer(otherTip, lineage.TrailerBase), otherCandidate)
-	equal(t, "the renamed fork's subject", h.homeGit("log", "-1", "--format=%s", otherTip), "resolve other")
+	equal(t, "the renamed fork's subject", h.storeGit("log", "-1", "--format=%s", otherTip), "resolve other")
 	equal(t, "the renamed fork's candidate", h.ref(lineage.CandidateRef("other")), "")
 }
 
@@ -494,7 +494,7 @@ func TestForkUpdateRefusals(t *testing.T) {
 	was.check(t, h, "the update refused over a nested repository", 0)
 
 	remove(t, vendored)
-	h.homeGit("update-ref", lineage.CandidateRef("alpha"), h.ref(lineage.ManagedRef("beta")))
+	h.storeGit("update-ref", lineage.CandidateRef("alpha"), h.ref(lineage.ManagedRef("beta")))
 	was = h.unchangedHome()
 	out = h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit over a candidate of another directory", out.exit, 8)

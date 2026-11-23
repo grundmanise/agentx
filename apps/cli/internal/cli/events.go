@@ -25,7 +25,7 @@ func newEvent(typ string) event { return event{Type: typ, SchemaVersion: schemaV
 // eventKind is the kind an event reports for a skill whose lineage record
 // is of kind k: managed for a skill with a branch in either namespace, a
 // fork's included, and unmanaged for one with none. A fork branch is how
-// the home repo keeps hub skills, not a kind of skill: what tells
+// the store keeps hub skills, not a kind of skill: what tells
 // them from the skills of a shared source is their source, see
 // skillOrigin. The commands themselves decide on the record's kind.
 func eventKind(k string) string {

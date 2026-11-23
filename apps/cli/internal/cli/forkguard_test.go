@@ -25,7 +25,7 @@ func TestForkGuardsRefuseEditsMadeMeanwhile(t *testing.T) {
 	h.mustRun("skill", "new", "notes")
 	ctx := context.Background()
 	inv := h.invocation()
-	gitDir := gitx.HomeRepoPath(h.agentx)
+	gitDir := gitx.StorePath(h.agentx)
 	records, err := lineage.List(ctx, inv.git, gitDir)
 	if err != nil {
 		t.Fatal(err)

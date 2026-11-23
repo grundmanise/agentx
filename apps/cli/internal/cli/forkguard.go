@@ -153,7 +153,7 @@ func (inv *invocation) judgeSite(ctx context.Context, f forkSite, wantIgnored bo
 	}
 	j, err := inv.judgeTip(ctx, f, t, wantIgnored)
 	if err != nil {
-		return siteJudged{}, homeRepoFailure(err)
+		return siteJudged{}, storeFailure(err)
 	}
 	return siteJudged{forkJudged: j, captured: captured, wantIgnored: wantIgnored}, nil
 }

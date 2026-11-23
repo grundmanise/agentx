@@ -111,7 +111,7 @@ func TestForkWarningsSayWhatIsMissing(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	root := filepath.Join(dir, "worktrees", "notes")
-	admin := filepath.Join(dir, "home.git", "worktrees", "notes")
+	admin := filepath.Join(dir, "store.git", "worktrees", "notes")
 	writeFile(t, mkdirs(t, root, ".git"), "gitdir: "+admin+"\n")
 	writeFile(t, mkdirs(t, admin, "index.lock"), "")
 	f := forkSite{name: "notes", branch: "skills/notes", root: root, skillDir: filepath.Join(root, "notes"), libPath: filepath.Join(dir, "skills", "notes")}
@@ -214,13 +214,13 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	h.homeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(hub)), "far"), tip)
-	h.homeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(hub)), "mine"), tip)
+	h.storeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(hub)), "far"), tip)
+	h.storeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(hub)), "mine"), tip)
 	stray := filepath.Join(t.TempDir(), "stray")
-	h.homeGit("worktree", "add", "--quiet", "--detach", stray, tip)
+	h.storeGit("worktree", "add", "--quiet", "--detach", stray, tip)
 	remove(t, stray)
 	pending := pendingCheckout(h, "alpha")
-	h.homeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason, pending, h.ref(lineage.ManagedRef("alpha")))
+	h.storeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason, pending, h.ref(lineage.ManagedRef("alpha")))
 	version := mutationVersion(t, h)
 
 	p := h.serve(t, "--json")
@@ -251,19 +251,19 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	}
 	equal(t, "git status in the repaired worktree", gitIn(t, h, gone, "status", "--porcelain"), "")
 	forkLinked(t, filepath.Join(h.library, "gone"), filepath.Join(gone, "gone"))
-	if !home.RegisteredIn(gitx.HomeRepoPath(h.agentx), kept) {
+	if !home.RegisteredIn(gitx.StorePath(h.agentx), kept) {
 		t.Error("the copy of a worktree took its registration")
 	}
 	if !lexists(mergeHead) {
 		t.Error("the merge waiting in a worktree was lost")
 	}
 	sameTree(t, "the adopt candidate", libraryTree(t, orphan), orphanTree)
-	if home.RegisteredIn(gitx.HomeRepoPath(h.agentx), orphan) {
+	if home.RegisteredIn(gitx.StorePath(h.agentx), orphan) {
 		t.Error("the adopt candidate was registered")
 	}
 	contains(t, "the inventory's warnings", strings.Join(stringsOf(inventory["warnings"]), "\n"),
 		orphan+" is in the way of orphan's worktree; run 'agentx skill place orphan --force' to adopt it")
-	list := h.homeGit("worktree", "list", "--porcelain")
+	list := h.storeGit("worktree", "list", "--porcelain")
 	if strings.Contains(list, stray) {
 		t.Errorf("the registration of a worktree whose directory is gone survived:\n%s", list)
 	}
@@ -318,7 +318,7 @@ func TestServeRepairsWorktreesOfAMovedHome(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.setHub(newHubRemote(t, h))
-	_, _ = h.homeGitErr("config", "--unset", "worktree.useRelativePaths") // unset already on an older git
+	_, _ = h.storeGitErr("config", "--unset", "worktree.useRelativePaths") // unset already on an older git
 	h.mustRun("skill", "new", "notes")
 	h.moveTo(t, filepath.Join(t.TempDir(), "moved"))
 	root := filepath.Join(h.agentx, "worktrees", "notes")
@@ -330,6 +330,6 @@ func TestServeRepairsWorktreesOfAMovedHome(t *testing.T) {
 	equal(t, "the events", len(events), 1)
 	equal(t, "the outcome", events[0]["outcome"], outcomeRepaired)
 	equal(t, "exit", p.close(), 0)
-	contains(t, "the worktrees", h.homeGit("worktree", "list", "--porcelain"), "worktree "+root+"\n")
+	contains(t, "the worktrees", h.storeGit("worktree", "list", "--porcelain"), "worktree "+root+"\n")
 	equal(t, "git status in the worktree", gitIn(t, h, root, "status", "--porcelain"), "")
 }

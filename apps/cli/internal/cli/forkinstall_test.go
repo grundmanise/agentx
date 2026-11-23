@@ -46,8 +46,8 @@ func TestInstallAForkFromTheHub(t *testing.T) {
 	pushOwn(a, remote, "notes")
 	a.mustRun("skill", "publish")
 	tip := a.ref(lineage.ForkRef("alpha"))
-	handMade := a.homeGit("-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit-tree", "-m", "By hand", tip+"^{tree}")
-	a.homeGit("push", "-q", remote, handMade+":refs/heads/skills/zeta", handMade+":refs/heads/skills/Bad_Name")
+	handMade := a.storeGit("-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit-tree", "-m", "By hand", tip+"^{tree}")
+	a.storeGit("push", "-q", remote, handMade+":refs/heads/skills/zeta", handMade+":refs/heads/skills/Bad_Name")
 
 	out := b.mustRun("--json", "skill", "list", "--remote")
 	listed := map[string]jsonEvent{}
@@ -91,7 +91,7 @@ func TestInstallAForkFromTheHub(t *testing.T) {
 	equal(t, "upstream", ev["upstream"], s.url)
 	equal(t, "upstream subpath", ev["upstream_subpath"], "skills/alpha")
 	equal(t, "the source it added", b.one(out.stdout, "source")["url"], s.url)
-	equal(t, "tracking", b.homeGit("config", "--get", "branch.skills/alpha.remote")+" "+b.homeGit("config", "--get", "branch.skills/alpha.merge"),
+	equal(t, "tracking", b.storeGit("config", "--get", "branch.skills/alpha.remote")+" "+b.storeGit("config", "--get", "branch.skills/alpha.merge"),
 		hubRemoteName(t, b)+" refs/heads/skills/alpha")
 	rootB := filepath.Join(b.agentx, "worktrees", "alpha")
 	equal(t, "the .gitignore beside the skill", fileBody(t, filepath.Join(rootB, ".gitignore")), "*.log\n")
@@ -160,7 +160,7 @@ func TestInstallAForkFromTheHub(t *testing.T) {
 	if err := os.Remove(filepath.Join(b.library, "alpha")); err != nil {
 		t.Fatal(err)
 	}
-	b.homeGit("worktree", "remove", "--force", "--force", filepath.Join(b.agentx, "worktrees", "alpha"))
+	b.storeGit("worktree", "remove", "--force", "--force", filepath.Join(b.agentx, "worktrees", "alpha"))
 	out = b.run("--json", "skill", "add", "--name", "alpha")
 	equal(t, "an unplaced fork: exit", out.exit, 6)
 	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "agentx skill place alpha")
@@ -401,7 +401,7 @@ exec %GIT% "$@"
 				t.Errorf("claude-code's placement points at %q", target)
 			}
 			equal(t, "kind", b.listed("alpha")["kind"], lineage.KindManaged)
-			equal(t, "the branch's tracking", b.homeGit("config", "--get", "branch.skills/alpha.remote"), hubRemoteName(t, b))
+			equal(t, "the branch's tracking", b.storeGit("config", "--get", "branch.skills/alpha.remote"), hubRemoteName(t, b))
 			for _, dir := range []string{b.library, filepath.Join(b.agentx, "worktrees")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}

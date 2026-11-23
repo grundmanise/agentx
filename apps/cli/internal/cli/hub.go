@@ -16,7 +16,7 @@ import (
 // The hub is the source its settings entry marks with the
 // hub flag: a Git repository the user owns,
 // holding one branch per fork, which forks are published to and another
-// machine of the user's installs them from. Its remote in the home repo
+// machine of the user's installs them from. Its remote in the store
 // is named after its id, src-<id>, as every source's is, with one fetch
 // refspec: every fork branch onto a remote-tracking branch of the same
 // name, see source.RemoteOf. Only fork branches travel, both ways: import
@@ -43,7 +43,7 @@ func hubEntry(s home.Settings) (entry home.Source, ok bool) {
 }
 
 // hubSource is the hub as the settings record it: its
-// entry, and the name of its git remote in the home repo, which every
+// entry, and the name of its git remote in the store, which every
 // command that reads, fetches or pushes the hub's fork branches
 // works with. ok is false when no hub is set. It runs no git.
 func (inv *invocation) hubSource() (entry home.Source, remote string, ok bool, err error) {
@@ -57,9 +57,9 @@ func (inv *invocation) hubSource() (entry home.Source, remote string, ok bool, e
 	return home.Source{}, "", false, nil
 }
 
-// hubRemote is the home repo and the hub, see
+// hubRemote is the store and the hub, see
 // hubSource, for a command that fetches the remote, refusing, exit code
-// 6, when no remote is set. The home repo is created when this machine
+// 6, when no remote is set. The store is created when this machine
 // has none yet, as settings an import wrote leave it, and the remote is
 // written into it when it is not the one the entry wants, see alignHub.
 func (inv *invocation) hubRemote(ctx context.Context) (gitDir string, entry home.Source, remote string, err error) {
@@ -70,9 +70,9 @@ func (inv *invocation) hubRemote(ctx context.Context) (gitDir string, entry home
 	if !ok {
 		return "", home.Source{}, "", noRemoteRefusal()
 	}
-	gitDir, _, err = gitx.OpenHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err = gitx.OpenStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return "", home.Source{}, "", homeRepoFailure(err)
+		return "", home.Source{}, "", storeFailure(err)
 	}
 	if err := inv.alignHub(ctx, gitDir, entry); err != nil {
 		return "", home.Source{}, "", err
@@ -81,7 +81,7 @@ func (inv *invocation) hubRemote(ctx context.Context) (gitDir string, entry home
 }
 
 // alignHub writes the remote of the hub's entry into the
-// home repo when the remote there is not the one the entry wants, see
+// store when the remote there is not the one the entry wants, see
 // source.RemoteOf: missing, as settings an import wrote leave it, or
 // rewritten, as a run cut short leaves it. The remotes
 // are read in one git process, and only a remote that disagrees is written,
@@ -96,13 +96,13 @@ func (inv *invocation) alignHub(ctx context.Context, gitDir string, entry home.S
 	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
 		return source.Configure(ctx, inv.git, gitDir, entry)
 	}); err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	inv.awaitWholeFetch(remotes, entry)
 	return nil
 }
 
-// fetchedWhole reports whether remotes, the home repo's as
+// fetchedWhole reports whether remotes, the store's as
 // source.Remotes reads them, hold the remote of id as only a fetch of the
 // hub leaves it: with the fork refspec. A remote that is
 // missing, or that a shared source of the same repository left, as an
@@ -147,7 +147,7 @@ func (inv *invocation) fetchRemote(ctx context.Context, gitDir, remote, url stri
 // the first fetch after an alignment wrote the remote over one never
 // fetched whole, see awaitWholeFetch, once a probe of the repository finds
 // a fork branch there; a fetch so made that fails takes the remote out of
-// the home repo again, under the lock, so that the next run writes it
+// the store again, under the lock, so that the next run writes it
 // and refetches in turn rather than read a remote with the fork refspec as
 // fetched whole.
 func (inv *invocation) fetchForks(ctx context.Context, gitDir, remote string, refetch bool) error {
@@ -228,21 +228,21 @@ func hubRefusal(s home.Settings, want home.Source, resolve func(host string) str
 // the settings naming the same repository refuses it, see hubRefusal,
 // exit code 6. The repository is reached first, in the user's environment,
 // so that a URL git cannot reach changes nothing, exit code 3, a home
-// repo included. Then the home repo is opened, created when this is its
+// repo included. Then the store is opened, created when this is its
 // first use, its remote is written under the lock, its fork branches are
 // fetched outside it, see fetchForks, and what this machine may do there is
-// checked, see checkSource. The fetch of a remote the home repo did not
+// checked, see checkSource. The fetch of a remote the store did not
 // hold as fetched whole, see fetchedWhole, from a repository the probe
 // found holding fork branches, is made with --refetch: a shared source of
 // the same repository, removed before or replaced by an import, may have
-// left objects fetched without their blobs in the home repo, and git
+// left objects fetched without their blobs in the store, and git
 // would otherwise leave those blobs out of this fetch. That is decided by
-// the home repo, not the settings, which an import can name the
+// the store, not the settings, which an import can name the
 // hub in before this machine fetched it. A repository with no
 // fork branch has nothing to refetch, and git would wait on it for good,
 // see gitx.FetchRemote. Last, in one hold of the lock, the settings
 // entry is written, and the hub it replaces, if any, is taken
-// out of the settings and its remote out of the home repo, its
+// out of the settings and its remote out of the store, its
 // remote-tracking branches first, then its source ref and staging refs.
 // Local forks stay as they are: those of a replaced hub are
 // published to the new one by name, see remoteSelection. A run that gets
@@ -267,9 +267,9 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 	if err != nil {
 		return unreachableRemote(src.URL, err)
 	}
-	gitDir, _, err := gitx.OpenHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err := gitx.OpenStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	id, remote := src.ID(), source.RemoteName(src.ID())
 	whole := fetchedWhole(source.Remotes(ctx, inv.git, gitDir), id)
@@ -302,7 +302,7 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
 		return source.Configure(ctx, inv.git, gitDir, want)
 	}); err != nil {
-		return homeRepoFailure(err)
+		return storeFailure(err)
 	}
 	if err := inv.fetchForks(ctx, gitDir, remote, seen && !whole); err != nil {
 		if ctx.Err() != nil {
@@ -317,7 +317,7 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 	}
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
-		return takeBack(homeRepoFailure(err))
+		return takeBack(storeFailure(err))
 	}
 	entry := want
 	entry.LastFetched = time.Now().UTC().Format(time.RFC3339)
@@ -354,16 +354,16 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 		if replaced.URL != "" {
 			old := source.RemoteName(source.ID(replaced.URL))
 			if err := inv.retrack(ctx, gitDir, old, remote); err != nil {
-				return homeRepoFailure(err)
+				return storeFailure(err)
 			}
 			if err := inv.git.UnsetRemote(ctx, gitDir, old); err != nil {
-				return homeRepoFailure(err)
+				return storeFailure(err)
 			}
 			// Then its source ref and the staging refs a killed fetch of
 			// its URL can have left, as a shared source add of that URL
 			// cut short does, see removeHub.
 			if err := source.Remove(ctx, inv.git, gitDir, source.ID(replaced.URL)); err != nil {
-				return homeRepoFailure(err)
+				return storeFailure(err)
 			}
 		}
 		return nil
@@ -386,7 +386,7 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 }
 
 // removeHub detaches the hub entry names in one hold of the
-// lock: its remote is taken out of the home repo, see gitx.UnsetRemote,
+// lock: its remote is taken out of the store, see gitx.UnsetRemote,
 // the remote-tracking branches first, then its source ref and every
 // staging ref a killed fetch of its URL can have left, as a shared source
 // add of that URL cut short does, see source.Remove, then its settings
@@ -397,16 +397,16 @@ func (inv *invocation) removeHub(ctx context.Context, entry home.Source) error {
 	id := source.ID(entry.URL)
 	remote := source.RemoteName(id)
 	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+		gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 		if err != nil {
-			return homeRepoFailure(err)
+			return storeFailure(err)
 		}
 		if exists {
 			if err := inv.git.UnsetRemote(ctx, gitDir, remote); err != nil {
-				return homeRepoFailure(err)
+				return storeFailure(err)
 			}
 			if err := source.Remove(ctx, inv.git, gitDir, id); err != nil {
-				return homeRepoFailure(err)
+				return storeFailure(err)
 			}
 		}
 		s, err := inv.loadSettings()
@@ -468,7 +468,7 @@ func (inv *invocation) retrack(ctx context.Context, gitDir, from, to string) err
 }
 
 // shownURL is a remote URL as agentx prints it: a password someone wrote
-// into the home repo's configuration by hand is never shown.
+// into the store's configuration by hand is never shown.
 func shownURL(raw string) string {
 	if u, err := url.Parse(raw); err == nil && u.User != nil {
 		if _, ok := u.User.Password(); ok {

@@ -48,7 +48,7 @@ func TestParsePushPorcelain(t *testing.T) {
 }
 
 // TestUnsetRemoteTakesOutOnlyTheRemoteItNames: two remotes of fork
-// branches in one home repo, each with a fork branch tracking it and a
+// branches in one store, each with a fork branch tracking it and a
 // remote-tracking branch, and unsetting one leaves the other's
 // configuration, tracking and remote-tracking branch as they were.
 func TestUnsetRemoteTakesOutOnlyTheRemoteItNames(t *testing.T) {
@@ -57,7 +57,7 @@ func TestUnsetRemoteTakesOutOnlyTheRemoteItNames(t *testing.T) {
 		t.Skip("git is not installed")
 	}
 	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "home.git")
+	gitDir := filepath.Join(t.TempDir(), "store.git")
 	r := New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
 	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
 		t.Fatal(err)

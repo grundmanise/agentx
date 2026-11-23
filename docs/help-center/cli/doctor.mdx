@@ -1,6 +1,6 @@
 ---
 title: "agentx doctor"
-description: "Check that agentx can run: git, agentx home and the home repo."
+description: "Check that agentx can run: git, agentx home and the store."
 ---
 
 Run `agentx doctor` before your first install, or whenever something looks wrong.
@@ -20,7 +20,7 @@ App
   ✓ lock                ok    no other agentx command is running
   ✓ mutations           ok    no interrupted changes
   ✓ settings            ok    defaults: /home/me/.agentx/settings.json is not written yet
-  ✓ home_repo           ok    not created yet: /home/me/.agentx/home.git
+  ✓ store           ok    not created yet: /home/me/.agentx/store.git
   ✓ library             ok    not created yet: /home/me/.agents/skills; the first install creates it
 
 Clients  2 of 75 registered clients detected
@@ -68,22 +68,22 @@ Each row has a status and a mark. In a terminal, the mark and the status are col
 | `lock` | No other agentx command holds the lock. When one does, the detail names its process id. |
 | `mutations` | No change to agentx home was cut short, for example by a crash. If one was, the row names its journal, the file where agentx recorded the change. Run `agentx scan` to finish the change. If `scan` refuses, restore the file it names, or move the journal aside. |
 | `settings` | `settings.json` is valid. |
-| `home_repo` | The [home repo](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) opens, or does not exist yet. The first command that needs it creates it, such as `agentx source add`, `agentx skill add` or `agentx skill new`. |
-| `source_remotes` | Every source remote in the home repo belongs to a source in your settings. A source remote is the link from the home repo to a source's git repository. A killed run can leave a remote with no source. To fix it, run the command in the hint: it adds the source back with `agentx source add`, or clears the remote with `agentx source remove <id>`. If the URL may hold a token, the row shows the source id in its place. |
-| `staged_imports` | No install or update check left unfinished data behind. A killed run can leave git refs (named pointers) under `refs/agentx/importing/`. They keep unused data in the home repo. To remove them, stop `agentx serve` and wait until no other agentx command runs. Then run the `git update-ref -d` command in the hint for each ref. |
+| `store` | The [store](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md) opens, or does not exist yet. The first command that needs it creates it, such as `agentx source add`, `agentx skill add` or `agentx skill new`. |
+| `source_remotes` | Every source remote in the store belongs to a source in your settings. A source remote is the link from the store to a source's git repository. A killed run can leave a remote with no source. To fix it, run the command in the hint: it adds the source back with `agentx source add`, or clears the remote with `agentx source remove <id>`. If the URL may hold a token, the row shows the source id in its place. |
+| `staged_imports` | No install or update check left unfinished data behind. A killed run can leave git refs (named pointers) under `refs/agentx/importing/`. They keep unused data in the store. To remove them, stop `agentx serve` and wait until no other agentx command runs. Then run the `git update-ref -d` command in the hint for each ref. |
 | `library` | The library is a writable directory, or does not exist yet. The first install creates it. |
 | `client:<id>` | One row per detected agent configuration, naming the client and its configuration directory. |
 | `clients` | How many of the agent clients agentx knows are on this machine. The text report shows the count next to the `Clients` title. If none is found, the check warns: install an agent client, or check that `HOME` points at the right user. |
 
-The `source_remotes` and `staged_imports` rows appear only when the home repo exists and opens.
+The `source_remotes` and `staged_imports` rows appear only when the store exists and opens.
 
 Add `--verbose` to see every git command doctor ran and what git printed.
 
 ## Exit codes
 
-doctor exits `0` even when some rows warn or fail. Only the `git` and `home_repo` checks, or a stop, give another code. See [Exit codes](/cli/output#exit-codes) for what each code means.
+doctor exits `0` even when some rows warn or fail. Only the `git` and `store` checks, or a stop, give another code. See [Exit codes](/cli/output#exit-codes) for what each code means.
 
 - `0`: any other result, including warnings and other failed rows.
 - `2`: git is missing or older than 2.40. The hint names the fix. Ubuntu 22.04 ships git 2.34: install a newer git, or upgrade the distribution. Until you fix git, every other command except `version` and `help` refuses to run.
-- `8`: agentx cannot read `home.git` in agentx home as a git repository. Check the directory, or move it aside.
+- `8`: agentx cannot read `store.git` in agentx home as a git repository. Check the directory, or move it aside.
 - `9`: you stopped the run with Ctrl-C, or something sent it a `SIGTERM`. See [Exit codes](/cli/output#exit-codes).

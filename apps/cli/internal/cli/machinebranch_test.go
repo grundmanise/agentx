@@ -123,7 +123,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	}
 	hub, _ := hubEntry(settings)
 	equal(t, "the second home's hub", hub.URL, overHTTPS)
-	if _, err := b.homeGitErr("rev-parse", "--verify", "--quiet", lineage.ForkRef("alpha")); err != nil {
+	if _, err := b.storeGitErr("rev-parse", "--verify", "--quiet", lineage.ForkRef("alpha")); err != nil {
 		t.Errorf("alpha is not a hub skill on the second home: %v", err)
 	}
 	for _, name := range []string{"alpha", "beta"} {
@@ -215,7 +215,7 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	h.setHub(remote)
 	disk := func() []string {
 		return slices.DeleteFunc(diskState(t, h), func(e string) bool {
-			return strings.HasPrefix(e, gitx.HomeRepoPath(h.agentx))
+			return strings.HasPrefix(e, gitx.StorePath(h.agentx))
 		})
 	}
 	before := disk()

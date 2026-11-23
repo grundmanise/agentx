@@ -43,7 +43,7 @@ type importSkillEvent struct {
 	event
 	snapshotSkill
 	State       string `json:"state"`                  // present, missing or different, before the import
-	LocalCommit string `json:"local_commit,omitempty"` // the commit the home repo held the name at before the import, when it held it
+	LocalCommit string `json:"local_commit,omitempty"` // the commit the store held the name at before the import, when it held it
 	Action      string `json:"action"`                 // what the import did, see importActions
 	Reason      string `json:"reason,omitempty"`       // why it was skipped, for the action skipped alone
 }
@@ -612,7 +612,7 @@ func placementsRefusal(e snapshotSkill) string {
 // branch is at its commit and different when that is at another. An
 // unmanaged skill has no branch anywhere: it is different when the repo
 // holds a branch of its name and missing otherwise. A machine with no
-// home repo holds nothing, and creating one is not this command's to do,
+// store holds nothing, and creating one is not this command's to do,
 // so every entry is then missing.
 func restoreStates(skills []snapshotSkill, records map[string]lineage.Record, remote map[string]string, hub string) []importSkillEvent {
 	states := make([]importSkillEvent, 0, len(skills))
@@ -653,16 +653,16 @@ func (inv *invocation) remoteTips(ctx context.Context) (map[string]string, error
 	if err != nil || !ok {
 		return nil, err
 	}
-	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	if !exists {
 		return nil, nil
 	}
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	return tips, nil
 }
@@ -827,7 +827,7 @@ func printSkillSection(out *writer, title string, states []importSkillEvent, nam
 }
 
 // unadded is the sources of settings, the settings an import just wrote,
-// that this machine has not added: those the home repo holds no remote
+// that this machine has not added: those the store holds no remote
 // of, or a remote that is not the one the entry wants, as an import of
 // settings naming another pin leaves it, and those it never fetched, whose
 // source ref it does not hold or, for the hub, of which it holds
@@ -838,16 +838,16 @@ func printSkillSection(out *writer, title string, states []importSkillEvent, nam
 // was fetched needs nothing, so a second import of an unchanged snapshot
 // reaches no remote for it. The sources are in the settings' order.
 func (inv *invocation) unadded(ctx context.Context, settings home.Settings) ([]home.Source, error) {
-	gitDir, exists, err := gitx.CheckHomeRepo(ctx, inv.git, inv.dirs.Home)
+	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return nil, homeRepoFailure(err)
+		return nil, storeFailure(err)
 	}
 	var remotes map[string]source.Remote
 	var commits map[string]string
 	if exists {
 		remotes = source.Remotes(ctx, inv.git, gitDir)
 		if commits, err = source.Commits(ctx, inv.git, gitDir); err != nil {
-			return nil, homeRepoFailure(err)
+			return nil, storeFailure(err)
 		}
 	}
 	var missing []home.Source
@@ -857,7 +857,7 @@ func (inv *invocation) unadded(ctx context.Context, settings home.Settings) ([]h
 		inLine, fetched := ok && r == source.RemoteOf(src), commits[id] != ""
 		if inLine && src.Hub {
 			if _, fetched, err = inv.forkCount(ctx, gitDir, src, source.RemoteName(id)); err != nil {
-				return nil, homeRepoFailure(err)
+				return nil, storeFailure(err)
 			}
 		}
 		if inLine && fetched {
