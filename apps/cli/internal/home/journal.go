@@ -462,7 +462,7 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 // reader to do. It becomes a recovery instead, naming the path and the
 // journal, which the exit code table calls a refusal and whose hint says
 // how to get out of it. A live path that holds what the mutation did not
-// put there is already a recovery, and a ref step's failure is the account
+// put there is already a recovery, and a ref step's failure is the home
 // repo's own answer; neither is reworded.
 func unfinished(journalPath string, s step, err error) error {
 	if err == nil || s.Kind == stepRef || s.Kind == stepWorktree || errors.Is(err, ErrRecovery) {
@@ -616,7 +616,7 @@ func applyRefs(steps, later []step, u RefUpdater) (bool, error) {
 	}
 	if u == nil {
 		first := byDir[dirs[0]][0]
-		return false, fmt.Errorf("%w: %s in %s needs git to finish; run a command that uses the account repo", ErrRecovery, first.Ref, first.GitDir)
+		return false, fmt.Errorf("%w: %s in %s needs git to finish; run a command that uses the store", ErrRecovery, first.Ref, first.GitDir)
 	}
 	moved := false
 	for _, dir := range dirs {
@@ -691,7 +691,7 @@ func (r refusedRef) Unwrap() error { return ErrRecovery }
 func applyWorktree(s step, u RefUpdater) (bool, error) {
 	w, ok := u.(Worktrees)
 	if !ok {
-		return false, fmt.Errorf("%w: the worktree %s needs git to finish; run a command that uses the account repo", ErrRecovery, s.Path)
+		return false, fmt.Errorf("%w: the worktree %s needs git to finish; run a command that uses the store", ErrRecovery, s.Path)
 	}
 	branch := strings.TrimPrefix(s.New, worktreeOn)
 	added := false

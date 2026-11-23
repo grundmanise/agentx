@@ -12,32 +12,32 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
-// TestInstallAForkFromTheAccount lists on machine b, which installed
+// TestInstallAForkFromTheHub lists on machine b, which installed
 // nothing and added no source, the skills machine a published, and
 // installs one by name, then the rest with --all. skill list --remote
-// fetches the account remote and lists alpha, beta and notes, made by
+// fetches the hub and lists alpha, beta and notes, made by
 // skill new, as installable, each with the fork id and the upstream its own
 // commits record, notes with none. Two branches pushed by hand are left
 // out with a warning each: one whose name is outside the fork name
 // grammar, and zeta, whose history records no fork id, which an install
 // refuses too. Installing alpha creates b's branch at a's commit, so the
-// fork keeps its id and its history, tracking the account remote's
+// fork keeps its id and its history, tracking the hub's
 // branch, where a publish of it before was exit 5 naming the install;
 // checks its worktree out with the .gitignore a commit put beside the
 // skill directory, so git status there is clean; links the library to it
 // and places it into the enabled configuration. It adds the fork's
 // upstream source, which b lacked, so that b's update check finds the
-// source's next version for alpha. Listed again, the account remote holds
+// source's next version for alpha. Listed again, the hub holds
 // two skills b has not installed. With an unmanaged directory at notes'
 // library path, skill add --all installs beta and refuses notes, exit 6,
 // with a warning and an error naming it; once the directory is gone, the
-// next --all installs notes, with one fetch of the account remote and
+// next --all installs notes, with one fetch of the hub and
 // both hand-pushed branches left out with a warning each, and a third
 // finds nothing left to install. alpha is refused as installed already,
 // with skill place named once its worktree and library entry are gone.
-func TestInstallAForkFromTheAccount(t *testing.T) {
+func TestInstallAForkFromTheHub(t *testing.T) {
 	t.Parallel()
-	a, b, s, remote := accountHomes(t)
+	a, b, s, remote := hubHomes(t)
 	rootA := filepath.Join(a.agentx, "worktrees", "alpha")
 	writeFile(t, filepath.Join(rootA, ".gitignore"), "*.log\n")
 	gitIn(t, a, rootA, "add", ".gitignore")
@@ -46,8 +46,8 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	pushOwn(a, remote, "notes")
 	a.mustRun("skill", "publish")
 	tip := a.ref(lineage.ForkRef("alpha"))
-	handMade := a.accountGit("-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit-tree", "-m", "By hand", tip+"^{tree}")
-	a.accountGit("push", "-q", remote, handMade+":refs/heads/skills/zeta", handMade+":refs/heads/skills/Bad_Name")
+	handMade := a.storeGit("-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit-tree", "-m", "By hand", tip+"^{tree}")
+	a.storeGit("push", "-q", remote, handMade+":refs/heads/skills/zeta", handMade+":refs/heads/skills/Bad_Name")
 
 	out := b.mustRun("--json", "skill", "list", "--remote")
 	listed := map[string]jsonEvent{}
@@ -70,7 +70,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 		t.Errorf("notes, made by skill new, is listed with an upstream: %v", listed["notes"])
 	}
 	text := b.mustRun("skill", "list", "--remote").stdout
-	contains(t, "the text listing", text, "3 installable skills on the account remote")
+	contains(t, "the text listing", text, "3 installable skills on the hub")
 	contains(t, "the text listing", text, "agentx skill add --name <name>")
 
 	out = b.run("--json", "skill", "add", "--name", "zeta")
@@ -91,8 +91,8 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	equal(t, "upstream", ev["upstream"], s.url)
 	equal(t, "upstream subpath", ev["upstream_subpath"], "skills/alpha")
 	equal(t, "the source it added", b.one(out.stdout, "source")["url"], s.url)
-	equal(t, "tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote")+" "+b.accountGit("config", "--get", "branch.skills/alpha.merge"),
-		accountRemoteName(t, b)+" refs/heads/skills/alpha")
+	equal(t, "tracking", b.storeGit("config", "--get", "branch.skills/alpha.remote")+" "+b.storeGit("config", "--get", "branch.skills/alpha.merge"),
+		hubRemoteName(t, b)+" refs/heads/skills/alpha")
 	rootB := filepath.Join(b.agentx, "worktrees", "alpha")
 	equal(t, "the .gitignore beside the skill", fileBody(t, filepath.Join(rootB, ".gitignore")), "*.log\n")
 	writeFile(t, filepath.Join(rootB, "alpha", "build.log"), "ignored\n")
@@ -103,7 +103,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	if real, err := filepath.EvalSymlinks(filepath.Join(b.library, "alpha")); err != nil || filepath.Base(filepath.Dir(real)) != "alpha" || !strings.Contains(real, "worktrees") {
 		t.Errorf("the library entry leads to %q, %v", real, err)
 	}
-	equal(t, "the result", b.one(out.stdout, "result")["summary"], "installed alpha from the account remote in 1 configuration")
+	equal(t, "the result", b.one(out.stdout, "result")["summary"], "installed alpha from the hub in 1 configuration")
 	if storedInstall(t, b, "", "", alpha["fork_id"].(string)).Added == "" {
 		t.Error("no date alpha entered b's library")
 	}
@@ -142,7 +142,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 			fetches++
 		}
 	}
-	equal(t, "fetches of the account remote", fetches, 1)
+	equal(t, "fetches of the hub", fetches, 1)
 	var all []string
 	for _, ev := range b.eventsOfType(out.stdout, "library_skill") {
 		all = append(all, ev["name"].(string))
@@ -150,7 +150,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	equal(t, "what --all installed", strings.Join(all, " "), "notes")
 	contains(t, "the warnings", out.stderr, "skills/zeta is left out, since its history records no fork id")
 	contains(t, "the warnings", out.stderr, "skills/Bad_Name is left out, since it cannot be installed")
-	contains(t, "the result", b.one(out.stdout, "result")["summary"].(string), "installed notes from the account remote")
+	contains(t, "the result", b.one(out.stdout, "result")["summary"].(string), "installed notes from the hub")
 	contains(t, "--all with nothing left", b.mustRun("skill", "add", "--all").stdout, "holds no skill this machine lacks")
 	out = b.run("--json", "skill", "add", "--name", "alpha")
 	equal(t, "installing alpha again: exit", out.exit, 6)
@@ -163,14 +163,14 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	if err := os.Remove(filepath.Join(b.library, "alpha")); err != nil {
 		t.Fatal(err)
 	}
-	b.accountGit("worktree", "remove", "--force", "--force", filepath.Join(b.agentx, "worktrees", "alpha"))
+	b.storeGit("worktree", "remove", "--force", "--force", filepath.Join(b.agentx, "worktrees", "alpha"))
 	out = b.run("--json", "skill", "add", "--name", "alpha")
 	equal(t, "an unplaced fork: exit", out.exit, 6)
 	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "agentx skill place alpha")
 }
 
-// TestFromAccountSupersedesAnUnmodifiedCopy installs alpha from the
-// account remote on machine b, which installed the same upstream version
+// TestFromHubSupersedesAnUnmodifiedCopy installs alpha from the
+// hub on machine b, which installed the same upstream version
 // of alpha from the source first, removed it from Cortex Code, left a .DS_Store
 // in it, and had a check pin the source's next version for it. The copy
 // holds its base version, so the fork takes its place: the import branch,
@@ -179,9 +179,9 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 // placements are as they were, Claude Code's leading to the fork and
 // Cortex Code still without one, though the install was given --to cortex,
 // which a warning says places nothing.
-func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
+func TestFromHubSupersedesAnUnmodifiedCopy(t *testing.T) {
 	t.Parallel()
-	_, b, s, _ := accountHomes(t)
+	_, b, s, _ := hubHomes(t)
 	if err := os.MkdirAll(filepath.Join(b.home, ".snowflake/cortex"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -218,10 +218,10 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, b.library), " "), "")
 }
 
-// TestAddFromAccountRefuses installs from the account remote on machine
+// TestAddFromHubRefuses installs from the hub on machine
 // b over what its library holds. Each refusal changes nothing, the
 // settings included, which lack the skills' source: a name agentx cannot
-// use for a skill, exit 6; a skill the account remote does not hold,
+// use for a skill, exit 6; a skill the hub does not hold,
 // exit 5; an unmanaged directory at alpha's library path, exit 6, and a
 // publish of it says to move it aside; a symlink at beta's, exit 6;
 // --all over both, exit 6 naming each; an --except naming nothing to
@@ -231,9 +231,9 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 // whose library directory is gone, exit 6; an edited managed copy of
 // beta's upstream whose update merge is pending, exit 4, and once it is
 // aborted, exit 6, with a hint that keeps the edits out of harm's way.
-func TestAddFromAccountRefuses(t *testing.T) {
+func TestAddFromHubRefuses(t *testing.T) {
 	t.Parallel()
-	_, b, s, _ := accountHomes(t)
+	_, b, s, _ := hubHomes(t)
 	alphaLib, betaLib := filepath.Join(b.library, "alpha"), filepath.Join(b.library, "beta")
 	if err := os.MkdirAll(alphaLib, 0o755); err != nil {
 		t.Fatal(err)
@@ -249,7 +249,7 @@ func TestAddFromAccountRefuses(t *testing.T) {
 		says string
 	}{
 		{[]string{"--name", "Bad_Name"}, 6, "is not a valid skill name"},
-		{[]string{"--name", "gamma"}, 5, "the account remote holds no skill called gamma"},
+		{[]string{"--name", "gamma"}, 5, "the hub holds no skill called gamma"},
 		{[]string{"--name", "alpha"}, 6, "the library already holds"},
 		{[]string{"--name", "beta"}, 6, "a symlink, so beta was not installed"},
 		{[]string{"--all"}, 6, "2 of 2 skills could not be installed"},
@@ -303,7 +303,7 @@ func TestAddFromAccountRefuses(t *testing.T) {
 	}
 	out = b.run("--json", "skill", "add", "--name", "beta")
 	equal(t, "a pending merge: exit", out.exit, 4)
-	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "replaced by the account remote's skill")
+	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "replaced by the hub's skill")
 	b.mustRun("skill", "update", "beta", "--abort")
 	out = b.run("--json", "skill", "add", "--name", "beta")
 	equal(t, "an edited copy: exit", out.exit, 6)
@@ -312,13 +312,13 @@ func TestAddFromAccountRefuses(t *testing.T) {
 	equal(t, "its hint", e["hint"], "move it aside, or run 'agentx skill remove beta', then run 'agentx skill add --name beta' again")
 }
 
-// TestFromAccountPlan is what an install from the account remote does
+// TestFromHubPlan is what an install from the hub does
 // with what the library path holds.
-func TestFromAccountPlan(t *testing.T) {
+func TestFromHubPlan(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		holds   libraryHolds
-		want    accountAction
+		want    hubAction
 		refusal string // a word of the refusal, "" for none
 	}{
 		{holdsNothing, installFresh, ""},
@@ -327,7 +327,7 @@ func TestFromAccountPlan(t *testing.T) {
 		{holdsLink, 0, "a symlink"},
 		{holdsFile, 0, "neither a directory nor a symlink"},
 	} {
-		got, f := fromAccountPlan("notes", "/lib/notes", tc.holds)
+		got, f := fromHubPlan("notes", "/lib/notes", tc.holds)
 		switch {
 		case tc.refusal == "" && f != nil:
 			t.Errorf("%d: refused: %s", tc.holds, f.message)
@@ -342,7 +342,7 @@ func TestFromAccountPlan(t *testing.T) {
 	}
 }
 
-// TestHeldUnderAnotherName: an account remote branch is a skill this
+// TestHeldUnderAnotherName: a hub branch is a skill this
 // machine holds under another name when a skill of the same fork id holds
 // its tip, as the renamed skill does of its old name's branch; one whose
 // tip is ahead of that skill's, or of another fork id, is not.
@@ -365,14 +365,14 @@ func TestHeldUnderAnotherName(t *testing.T) {
 	}
 }
 
-// TestFromAccountRecoversWhereItWasKilled kills an install from the
-// account remote with SIGKILL at two of its boundaries: once its journal
+// TestFromHubRecoversWhereItWasKilled kills an install from the
+// hub with SIGKILL at two of its boundaries: once its journal
 // is on disk, before anything changed, and right after git added the
 // worktree. Every boundary in between is the journal's, which the home
 // package replays without git. The next command finishes it: the branch at
 // the remote tip, the worktree on it and clean, the library symlink and
 // the placement, nothing staged left behind.
-func TestFromAccountRecoversWhereItWasKilled(t *testing.T) {
+func TestFromHubRecoversWhereItWasKilled(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, script string }{
 		{"once the journal is on disk", killedUpdateScript},
@@ -388,7 +388,7 @@ exec %GIT% "$@"
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			a, b, _, _ := accountHomes(t)
+			a, b, _, _ := hubHomes(t)
 			b.mustRun("source", "add", a.listed("alpha")["source"].(string))
 			out := killedChild(t, b, "TestInstallChildProcess", installChildEnv, "--name\nalpha", tc.script)
 			_, kinds := journalKinds(t, b)
@@ -404,7 +404,7 @@ exec %GIT% "$@"
 				t.Errorf("claude-code's placement points at %q", target)
 			}
 			equal(t, "kind", b.listed("alpha")["kind"], lineage.KindManaged)
-			equal(t, "the branch's tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote"), accountRemoteName(t, b))
+			equal(t, "the branch's tracking", b.storeGit("config", "--get", "branch.skills/alpha.remote"), hubRemoteName(t, b))
 			for _, dir := range []string{b.library, filepath.Join(b.agentx, "worktrees")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}

@@ -67,17 +67,17 @@ func adoptCommand(name string) string {
 func unmanagedRefusal(name string, mode forkMode) error {
 	message := sanitised(name) + " is not managed by agentx, so it cannot be forked"
 	if mode == modeRename {
-		message = sanitised(name) + " is not a skill of the account remote, so it cannot be renamed"
+		message = sanitised(name) + " is not a skill of the hub, so it cannot be renamed"
 	}
 	return fail(exitRefused, message, "import it first with '"+adoptCommand(name)+"'")
 }
 
 // forkSourceOf finds the skill arg names. The library comes first, its
-// entry's branch saying what it is; then the account repo, for a fork
+// entry's branch saying what it is; then the store, for a fork
 // whose library entry is gone, which is forked from its branch all the
 // same; then the plugins the scan found. A plugin's skill is named as
 // <plugin>:<skill>, its plugin and its directory. scanned is the scan the plugins are read from, run
-// only when the name is none of the library's or the account repo's. A
+// only when the name is none of the library's or the store's. A
 // library entry no branch records is unmanaged, and refused unless mode
 // takes one, see forkMode.takesUnmanaged.
 func (inv *invocation) forkSourceOf(arg string, records map[string]lineage.Record, scanned func() (scan.Inventory, error), mode forkMode) (forkSource, error) {

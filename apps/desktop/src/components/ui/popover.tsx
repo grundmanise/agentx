@@ -39,8 +39,8 @@ const popoverContentVariants = cva(
         rows: "p-2",
       },
       // `popover.width`; with `fit`, at least that and as wide as its content needs, up to
-      // `popover.max-width`, so a line that must show in full, such as the sync popover's account
-      // remote, widens it.
+      // `popover.max-width`, so a line that must show in full, such as the sync popover's hub,
+      // widens it.
       width: {
         fit: "min-w-popover max-w-popover w-max",
         fixed: "w-popover",

@@ -111,7 +111,7 @@ export const CommandPalette = ({
   }
   const rows = useSkillRows();
   const sync = useSyncState();
-  const outgoing = sync?.kind === "account-remote" ? sync.outgoing : [];
+  const outgoing = sync?.kind === "hub" ? sync.outgoing : [];
 
   const actions: PaletteItem[] = [];
   if (outgoing.length > 0) {

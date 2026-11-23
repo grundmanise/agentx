@@ -10,7 +10,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// forkCommit is a commit of the account repo a fork's skill directory is
+// forkCommit is a commit of the store a fork's skill directory is
 // compared with or put back to, as a user named it: the commit, and the
 // tree of the fork's skill directory in it.
 type forkCommit struct {
@@ -27,13 +27,13 @@ func (c forkCommit) version() version {
 }
 
 // resolveForkCommit finds the commit arg names, an id or anything else git
-// reads as one, for the fork f, in one cat-file of the account repo: the
+// reads as one, for the fork f, in one cat-file of the store: the
 // commit itself and its tree at the fork's skill directory. A name that is
 // no commit, or several, is exit code 6, and so is a commit that holds no
 // skill directory under the fork's directory name, which the fork's
 // content cannot be compared with.
 func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg string) (forkCommit, error) {
-	unknown := fail(exitRefused, "the account repo holds no commit "+sanitised(arg),
+	unknown := fail(exitRefused, "the store holds no commit "+sanitised(arg),
 		"name a commit by its id, as '"+skillCommand("history", f.name)+"' lists them")
 	if strings.ContainsAny(arg, "\r\n\x00") {
 		return forkCommit{}, unknown
@@ -41,16 +41,16 @@ func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg st
 	query := arg + "^{commit}\n" + arg + "^{commit}:" + f.dir + "\n"
 	out, err := inv.git.IsolatedInput(ctx, f.gitDir, strings.NewReader(query), "cat-file", "--batch-check=%(objectname) %(objecttype)")
 	if err != nil {
-		return forkCommit{}, accountRepoFailure(err)
+		return forkCommit{}, storeFailure(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
 	if len(lines) != 2 {
-		return forkCommit{}, accountRepoFailure(fmt.Errorf("git cat-file answered %q for two names", out))
+		return forkCommit{}, storeFailure(fmt.Errorf("git cat-file answered %q for two names", out))
 	}
 	commit, commitType, _ := strings.Cut(lines[0], " ")
 	switch {
 	case strings.HasSuffix(lines[0], " ambiguous"):
-		return forkCommit{}, fail(exitRefused, sanitised(arg)+" names more than one object of the account repo",
+		return forkCommit{}, fail(exitRefused, sanitised(arg)+" names more than one object of the store",
 			"give more of the commit id")
 	case commitType != "commit":
 		return forkCommit{}, unknown
@@ -69,7 +69,7 @@ func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg st
 // how its skill directory differs from its last published version, see
 // publishedVersion, so edits an update, a fork or a failed push recorded
 // stay in the diff until they are published, or, when commit names one,
-// from that commit, any commit of the account repo whose tree holds the
+// from that commit, any commit of the store whose tree holds the
 // fork's skill directory. Only the skill directory is compared, and every
 // path is relative to it.
 //
@@ -125,7 +125,7 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 	}
 	files, left, err := inv.diffForkDir(ctx, f, t, v)
 	if err != nil {
-		return accountRepoFailure(err)
+		return storeFailure(err)
 	}
 	for _, p := range left {
 		inv.out.warn(quotedPath(filepath.Join(f.skillDir, filepath.FromSlash(p))) + " cannot be recorded by git and is left out of the diff")
@@ -136,12 +136,12 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 
 // publishedVersion is the commit skill diff compares the fork whose branch
 // is rec with, and how its line names it: the newest commit of its history
-// the account remote's branch holds, as the last fetch left it, which is
+// the hub's branch holds, as the last fetch left it, which is
 // its last published version, read with one merge-base; for a renamed
 // skill not yet published under its new name, the old name's branch, see
-// publishedName. A fork the account remote holds no branch of, or none
+// publishedName. A fork the hub holds no branch of, or none
 // that shares its history, never published, removed there by another
-// machine or with no account remote set, is compared with its creation
+// machine or with no hub set, is compared with its creation
 // commit, the one skill new or skill fork wrote, and one whose history
 // carries no fork id with its tip. Either way it is what its state is
 // judged against, see unpublished.
@@ -152,12 +152,12 @@ func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec 
 		}
 		recs := map[string]lineage.Record{rec.Name: rec}
 		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
-			return accountRepoFailure(err)
+			return storeFailure(err)
 		}
 		rec = recs[rec.Name]
 		return nil
 	}
-	_, remote, ok, err := inv.accountSource()
+	_, remote, ok, err := inv.hubSource()
 	if err != nil {
 		return "", "", err
 	}
@@ -183,7 +183,7 @@ func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec 
 		if there != "" {
 			out, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", rec.Commit, there)
 			if err != nil {
-				return "", "", accountRepoFailure(err)
+				return "", "", storeFailure(err)
 			}
 			if base := strings.TrimSpace(out); status == 0 && base != "" {
 				return base, "its last published version " + short(base), nil
@@ -199,14 +199,14 @@ func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec 
 	return rec.Commit, "its last commit " + short(rec.Commit), nil
 }
 
-// remoteForkTip is the tip of the account remote's branch of the skill
+// remoteForkTip is the tip of the hub's branch of the skill
 // called name, the git remote called remote, as last fetched; "" when it
 // holds none.
 func (inv *invocation) remoteForkTip(ctx context.Context, gitDir, remote, name string) (string, error) {
 	ref := lineage.RemoteForkRef(remote, name)
 	values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{ref})
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return "", storeFailure(err)
 	}
 	return values[ref], nil
 }

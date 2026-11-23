@@ -46,12 +46,12 @@ type observation struct {
 	modified     bool     // the directory does not hold its base version, see holdsBase, or holds edits not yet published, see unpublished
 	placed       []string // the drift states of the placements, sorted
 	pending      bool     // an update left a merge pending for the skill, see pendingMerges
-	notPublished bool     // one of your own skills the account remote holds no branch of, see driftNotPublished
+	notPublished bool     // a hub skill the hub holds no branch of, see driftNotPublished
 }
 
 // observe reads what a skill's drift is judged from: a managed skill's
 // directory against its base version, a fork's skill directory against
-// what the account remote holds of it, see unpublished, and the places of
+// what the hub holds of it, see unpublished, and the places of
 // either. An unmanaged skill has nothing to
 // drift from, and nor does a fork whose library entry does not lead into
 // its worktree: a directory of its own there, or one the fork has no
@@ -81,14 +81,13 @@ func (sc skillContext) observe(ctx context.Context, inv *invocation, lib scan.Li
 	return observation{}
 }
 
-// publishedName is the name of the account remote's branch that holds
-// the published versions of the fork called name, tips being the account
-// remote's branches by name as last fetched: its own, and, for a renamed
-// skill not yet published under its new name, the branch of the nearest
-// name its history records it was renamed from, renamed, nearest first,
-// see lineage.ForkLineage. So a renamed skill holds nothing unpublished
-// that was published under its old name. "" when tips holds none of them.
-// Pure.
+// publishedName is the name of the hub's branch that holds the published
+// versions of the fork called name, tips being the hub's branches by name
+// as last fetched: its own, and, for a renamed skill not yet published
+// under its new name, the branch of the nearest name its history records it
+// was renamed from, renamed, nearest first, see lineage.ForkLineage. So a
+// renamed skill holds nothing unpublished that was published under its old
+// name. "" when tips holds none of them. Pure.
 func publishedName(name string, renamed []string, tips map[string]string) string {
 	for _, n := range append([]string{name}, renamed...) {
 		if tips[n] != "" {
@@ -99,7 +98,7 @@ func publishedName(name string, renamed []string, tips map[string]string) string
 }
 
 // tipPublished reports whether the branch tip of the fork rec is
-// published, remoteTip being the tip of its branch on the account remote,
+// published, remoteTip being the tip of its branch on the hub,
 // see publishedName: it is the version skill diff compares with, see
 // unpublished.
 // The merge base git reads for it is kept by skill name, with the pair of
@@ -116,9 +115,9 @@ func (inv *invocation) tipPublished(ctx context.Context, rec lineage.Record, rem
 				return b.base
 			}
 		}
-		out, status, err := inv.git.IsolatedStatus(ctx, gitx.AccountRepoPath(inv.dirs.Home), 1, "merge-base", rec.Commit, remoteTip)
+		out, status, err := inv.git.IsolatedStatus(ctx, gitx.StorePath(inv.dirs.Home), 1, "merge-base", rec.Commit, remoteTip)
 		if err != nil {
-			inv.out.debugf("cannot tell whether the account remote holds %s: %v", rec.Name, err)
+			inv.out.debugf("cannot tell whether the hub holds %s: %v", rec.Name, err)
 			return remoteTip // unknown, which reads as unpublished
 		}
 		base := ""
@@ -130,19 +129,19 @@ func (inv *invocation) tipPublished(ctx context.Context, rec lineage.Record, rem
 	})
 }
 
-// publishedBase is the merge base of a fork's tip and the account remote's
+// publishedBase is the merge base of a fork's tip and the hub's
 // tip of it, "" when they share no commit.
 type publishedBase struct{ tip, remoteTip, base string }
 
-// unpublished is whether one of your own skills holds edits not yet
+// unpublished is whether a hub skill holds edits not yet
 // published, measured against the version skill diff compares it with,
 // see publishedVersion: its skill directory does not hold its branch tip,
 // holdsTip false, or the tip is not that version. The version is the
-// newest commit of its history the account remote's branch of it holds,
+// newest commit of its history the hub's branch of it holds,
 // remoteTip as last fetched, which mergeBase answers when the two differ:
 // the merge base of the tip and remoteTip, "" when they share no commit.
-// A skill the account remote holds no branch of that shares a commit with
-// it, never published or with no account remote set, is compared with
+// A skill the hub holds no branch of that shares a commit with
+// it, never published or with no hub set, is compared with
 // created, the commit skill new or skill fork wrote, so that it holds
 // nothing unpublished until it is edited, and one whose history names no
 // creation commit with its tip. Pure but for mergeBase, which is asked
@@ -338,8 +337,8 @@ func (p placeSite) drift(libPath string) string {
 // driftOf is the drift list of a skill: the states of its placements,
 // source removed and upstream removed, sorted, or nil when it is in none. A
 // fork is never source removed or upstream removed: the source that
-// matters to it is the account remote, and nothing marks its upstream. It
-// is not published instead when the account remote holds no branch of it,
+// matters to it is the hub, and nothing marks its upstream. It
+// is not published instead when the hub holds no branch of it,
 // see driftNotPublished.
 func driftOf(obs observation, sourceRemoved, upstreamRemoved bool) []string {
 	drift := append([]string(nil), obs.placed...)
@@ -360,7 +359,7 @@ func driftOf(obs observation, sourceRemoved, upstreamRemoved bool) []string {
 }
 
 // absentManaged are the names of the managed skills whose library
-// directory is not among libs, sorted: an import branch the account repo
+// directory is not among libs, sorted: an import branch the store
 // holds for a skill the library no longer holds, because its directory was
 // deleted, or lost its SKILL.md, outside agentx. Such a skill has no entry
 // to carry a state or a drift: there is no directory to compare with its
@@ -420,10 +419,10 @@ func (sc skillContext) absentNotice(inv *invocation, name string) (what, wayOut 
 	remove := "'" + skillCommand("remove", name) + "'"
 	libPath := quotedPath(inv.libraryPath(name))
 	if _, err := os.Lstat(inv.libraryPath(name)); err == nil {
-		return name + " is managed in the account repo but " + libPath + " holds no SKILL.md",
+		return name + " is managed in the store but " + libPath + " holds no SKILL.md",
 			"move " + libPath + " aside, then run " + add + " to install it again, or run " + remove + " to stop managing it"
 	}
-	return name + " is managed in the account repo but the library holds no skill directory for it",
+	return name + " is managed in the store but the library holds no skill directory for it",
 		"run " + add + " to install it again, or " + remove + " to stop managing it"
 }
 
@@ -435,13 +434,13 @@ func newSkillContext(ctx context.Context, inv *invocation, records map[string]li
 	if err != nil {
 		inv.out.debugf("cannot read the pending merges: %v", err)
 	}
-	account, _ := accountEntry(s)
+	hub, _ := hubEntry(s)
 	published, read := inv.publishedTips(ctx, records, s)
 	return skillContext{
 		records:       records,
 		modes:         modes,
 		sources:       sourceURLs(s),
-		account:       account.URL,
+		hub:           hub.URL,
 		disabled:      s.DisabledConfigurations,
 		targets:       withCopies(inv.detectedTargets(), s.CopyConfigurations),
 		merges:        merges,
@@ -450,25 +449,25 @@ func newSkillContext(ctx context.Context, inv *invocation, records map[string]li
 	}
 }
 
-// publishedTips is what the account remote held of your own skills at its
+// publishedTips is what the hub held of hub skills at its
 // last fetch, the tip of each one's branch there by name, read in one
 // for-each-ref of its remote-tracking branches, and nothing when records
-// holds none of your own skills or no account remote is set. read is false
+// holds none of hub skills or no hub is set. read is false
 // only when that read fails, said at debug level: the skills then compare
 // with the commits that created them, and none is judged not published, as
-// a failed read says nothing of what the account remote holds.
+// a failed read says nothing of what the hub holds.
 func (inv *invocation) publishedTips(ctx context.Context, records map[string]lineage.Record, s home.Settings) (tips map[string]string, read bool) {
-	own := false
+	hubSkill := false
 	for _, rec := range records {
-		own = own || rec.Kind == lineage.KindFork
+		hubSkill = hubSkill || rec.Kind == lineage.KindFork
 	}
-	entry, ok := accountEntry(s)
-	if !own || !ok {
+	entry, ok := hubEntry(s)
+	if !hubSkill || !ok {
 		return nil, true
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), source.RemoteName(source.ID(entry.URL)))
+	tips, err := lineage.ListRemote(ctx, inv.git, gitx.StorePath(inv.dirs.Home), source.RemoteName(source.ID(entry.URL)))
 	if err != nil {
-		inv.out.debugf("cannot read what the account remote holds: %v", err)
+		inv.out.debugf("cannot read what the hub holds: %v", err)
 		return nil, false
 	}
 	return tips, true

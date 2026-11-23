@@ -118,7 +118,7 @@ test.describe("the list", () => {
     await openSkills(cli, page);
     await expect(page.getByLabel("9 skills")).toHaveText("9");
     expect(await names(list(page).getByRole("region"))).toEqual([
-      "PERSONAL (3)",
+      "HUB (3)",
       "ACME/SKILLS (2)",
       "ZETA/TOOLS (1)",
       "PLUGINS (1)",
@@ -130,7 +130,7 @@ test.describe("the list", () => {
       .getByText("ACME/SKILLS", { exact: true })
       .hover();
     await expect(page.getByRole("tooltip")).toHaveText(ACME);
-    expect(await rowNames(group(page, "PERSONAL (3)"))).toEqual([
+    expect(await rowNames(group(page, "HUB (3)"))).toEqual([
       "draft",
       "pdf-letters",
       "release-notes",
@@ -168,7 +168,7 @@ test.describe("the list", () => {
     const header = (name: string) =>
       list(page).getByRole("button", { exact: true, name });
     for (const name of [
-      "PERSONAL 3",
+      "HUB 3",
       "ACME/SKILLS 2",
       "ZETA/TOOLS 1",
       "PLUGINS 1",
@@ -237,7 +237,7 @@ test.describe("the list", () => {
       draft.getByText("Not published", { exact: true })
     ).toBeVisible();
     await expect(draft).toHaveAccessibleDescription(
-      "Personal skill · Enabled. Not published. Turn a design doc into a task list"
+      "Hub skill · Enabled. Not published. Turn a design doc into a task list"
     );
     expect(await names(draft.getByRole("img"))).toEqual([
       "Codex",
@@ -358,7 +358,7 @@ test.describe("filters", () => {
     await page.getByRole("button", { name: "Filter" }).click();
     await filters(page)
       .getByRole("group", { name: "Show" })
-      .getByRole("radio", { name: "Personal 1" })
+      .getByRole("radio", { name: "Hub 1" })
       .check();
     await page.keyboard.press("Escape");
     expect(await rowNames(list(page))).toEqual(["pdf-letters"]);
@@ -384,12 +384,12 @@ test.describe("filters", () => {
     await expect(show).toMatchAriaSnapshot(`
       - group "Show":
         - radio "All skills 9" [checked]
-        - radio "Personal 3"
+        - radio "Hub 3"
         - radio "Plugins 1"
         - radio "Unmanaged 2"
         - radio "Updates 1"
     `);
-    await show.getByRole("radio", { name: "Personal 3" }).check();
+    await show.getByRole("radio", { name: "Hub 3" }).check();
     expect(await rowNames(list(page))).toEqual([
       "draft",
       "pdf-letters",
@@ -578,7 +578,7 @@ test.describe("filters", () => {
         universal: [],
       })),
     });
-    const personal = group(page, "PERSONAL (3)");
+    const personal = group(page, "HUB (3)");
     // A-Z at first: by name alone, whatever the state.
     const toggle = page.getByRole("button", { name: /^Sort: /u });
     await expect(toggle).toHaveAccessibleName("Sort: A to Z");
@@ -599,7 +599,7 @@ test.describe("filters", () => {
     ]);
     // The groups keep their order.
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
-      "PERSONAL (3)"
+      "HUB (3)"
     );
     // A-Z again.
     await toggle.click();
@@ -631,7 +631,7 @@ test.describe("keyboard", () => {
       "true"
     );
     await page.keyboard.press("ArrowDown");
-    // From the last of PERSONAL into the first source.
+    // From the last of HUB into the first source.
     await expect(row(page, "pdf")).toHaveAttribute("aria-current", "true");
     await expect(pane(page, "pdf")).toBeVisible();
     await page.keyboard.press("k");
@@ -696,7 +696,7 @@ test.describe("the detail pane", () => {
     await expect(list(page).locator("[aria-current=true]")).toHaveCount(1);
   });
 
-  test("one of your own skills: its history, with Show all opening the sheet", async ({
+  test("a hub skill: its history, with Show all opening the sheet", async ({
     cli,
     page,
   }) => {
@@ -708,7 +708,7 @@ test.describe("the detail pane", () => {
     ]);
     await expect(article).toMatchAriaSnapshot(`
       - article "pdf-letters":
-        - text: Personal skill · Enabled
+        - text: Hub skill · Enabled
         - heading "pdf-letters" [level=1]
         - link "from acme/skills"
         - paragraph: Read PDFs and write letters from them
@@ -725,7 +725,7 @@ test.describe("the detail pane", () => {
           - definition:
             - link "https://github.com/acme/skills/pdf"
           - term: Published to
-          - definition: git@github.com:me/account.git
+          - definition: git@github.com:me/hub.git
           - term: Files
           - definition:
             - link "/home/me/.agentx/worktrees/pdf-letters/pdf-letters"

@@ -712,7 +712,7 @@ test.describe("banners", () => {
 });
 
 test.describe("Remove", () => {
-  test("one of your own skills: the dialog lists the agents, and --remote is a choice", async ({
+  test("a hub skill: the dialog lists the agents, and --remote is a choice", async ({
     cli,
     page,
   }) => {
@@ -737,7 +737,7 @@ test.describe("Remove", () => {
       "Edits you have not published are deleted."
     );
     const remote = dialog.getByRole("checkbox", {
-      name: /^Also delete it from your account remote/u,
+      name: /^Also delete it from your hub/u,
     });
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
@@ -773,7 +773,7 @@ test.describe("Remove", () => {
       name: "Remove pdf-letters from this machine?",
     });
     const remote = dialog.getByRole("checkbox", {
-      name: /^Also delete it from your account remote/u,
+      name: /^Also delete it from your hub/u,
     });
     cli.register(["skill", "remove", "pdf-letters"]);
 
@@ -797,7 +797,7 @@ test.describe("Remove", () => {
     expect(later(cli)).toEqual([["skill", "remove", "pdf-letters", "--json"]]);
   });
 
-  test("one of your own skills not yet published: Remove runs skill remove", async ({
+  test("a hub skill not yet published: Remove runs skill remove", async ({
     cli,
     page,
   }) => {

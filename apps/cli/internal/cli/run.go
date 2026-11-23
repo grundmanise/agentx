@@ -28,8 +28,8 @@ type invocation struct {
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 	summary  string // what the result event says about a run that succeeded
 	// publishHintOnce says a run over many skills says once, once they are
-	// done, that the skills it made the user's own are not published, see
-	// noAccountRemoteHint; publishHintDue says one of them needs it said.
+	// done, that the skills it made hub skills are not published, see
+	// noHubRemoteHint; publishHintDue says one of them needs it said.
 	publishHintOnce, publishHintDue bool
 	// adoptForce is agentx skill import --force: an adoption replaces an agent
 	// client's folder of the skill that holds other files, see readAdoptCopies.
@@ -41,7 +41,7 @@ type invocation struct {
 	forkWalks    *lineage.WalkCache       // serve's fork lineages, by branch tip, shared by its goroutines; nil keeps none, see lineageRecords
 	forksWarned  bool                     // the forks to put back were warned of, or the command's own output names them; see listLineage
 	hosts        func(host string) string // the host names of the user's SSH configuration, read once per host; see sshHosts
-	unfetched    sync.Map                 // remote name -> URL of an account remote whose remote was just written over one never fetched whole; see fetchForks
+	unfetched    sync.Map                 // remote name -> URL of a hub whose remote was just written over one never fetched whole; see fetchForks
 	published    sync.Map                 // skill name -> the publishedBase last read for it; see tipPublished
 }
 
@@ -63,7 +63,7 @@ type invocation struct {
 func (inv *invocation) refs(ctx context.Context) home.RefUpdater {
 	ctx = interrupt.Uninterruptible(ctx)
 	return journalRefs{RefUpdater: inv.git.Refs(ctx), out: inv.out,
-		prune: func() error { return inv.pruneMerges(gitx.AccountRepoPath(inv.dirs.Home)) }}
+		prune: func() error { return inv.pruneMerges(gitx.StorePath(inv.dirs.Home)) }}
 }
 
 // journalRefs is the ref updater plus the command's stderr, the journal
@@ -155,7 +155,7 @@ func newRoot(inv *invocation) *cobra.Command {
 		Annotations: map[string]string{annotationGroup: "true"},
 		Example: examples(
 			"agentx skill add anthropics/skills --name pdf", "install one skill into every enabled client",
-			"agentx skill new release-notes", "create a skill of your own",
+			"agentx skill new release-notes", "create a hub skill",
 			"agentx skill check-updates", "see what changed upstream before you update",
 			"agentx snapshot save --machine cloud", "seed the cloud machine with this one's skills",
 		),
@@ -263,7 +263,7 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 // knownFailure is the failure a run reports for err when err is one it
 // knows: a refusal as it is, a lock another command holds, exit code 7, a
 // ref that moved before a mutation applied or a journal that could not be
-// finished, exit code 6, and an account repo git cannot use, exit code 8.
+// finished, exit code 6, and a store git cannot use, exit code 8.
 // It reports false for any other error, whose exit code depends on whether
 // the command line was parsed. dir is agentx home.
 func knownFailure(dir string, err error) (*failure, bool) {
@@ -279,11 +279,11 @@ func knownFailure(dir string, err error) (*failure, bool) {
 		f = &failure{status: exitRefused, message: err.Error() + ", so nothing was changed", hint: "run the command again"}
 	case errors.Is(err, home.ErrRecovery):
 		f = &failure{status: exitRefused, message: err.Error(), hint: "restore the file to let the change finish, or move the journal aside to keep the file as it is"}
-	case errors.Is(err, gitx.ErrAccountRepo):
-		// A journal's ref step reaches the account repo long after the
+	case errors.Is(err, gitx.ErrStore):
+		// A journal's ref step reaches the store long after the
 		// command that wrote the journal is gone, so any command can be the
 		// one that finds it unusable, and the table calls that 8.
-		f = &failure{status: exitAccountRepo, message: err.Error(), hint: "run 'agentx doctor' and check the account repo it names"}
+		f = &failure{status: exitStore, message: err.Error(), hint: "run 'agentx doctor' and check the store it names"}
 	default:
 		return nil, false
 	}

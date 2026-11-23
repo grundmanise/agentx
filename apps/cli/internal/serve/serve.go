@@ -53,7 +53,7 @@ type Options struct {
 	// itself or beside Check. nil repeats nothing, and so does Once.
 	Recheck      Job
 	RecheckEvery time.Duration
-	// Jobs are the other jobs serve runs once at start, such as the account
+	// Jobs are the other jobs serve runs once at start, such as the home
 	// repo's maintenance.
 	Jobs []Job
 
