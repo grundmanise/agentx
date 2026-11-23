@@ -1,5 +1,5 @@
-// The supervisor against a stub agentx: a shell script that prints NDJSON lines, sleeps and exits
-// with the code each case needs. It runs through a stub login shell profile, so the cases also
+// The supervisor against a stub agentx serve: a shell script that prints NDJSON lines, echoes what
+// it reads on stdin, sleeps and exits with the code each case needs. It runs through a stub login shell profile, so the cases also
 // show what a child gets from the user's shell.
 
 use std::collections::HashMap;
@@ -9,29 +9,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use agentx_desktop_lib::supervisor::{
-    Config, Emit, Supervisor, RUN_END, RUN_LINE, SERVE_EXIT, SERVE_LINE,
-};
+use agentx_desktop_lib::supervisor::{Config, Emit, Supervisor, SERVE_EXIT, SERVE_LINE};
 use serde_json::{json, Value};
 
 const STUB: &str = r#"#!/bin/sh
 case "$1" in
-lines)
-  echo '{"type":"version","schema_version":1,"cli_version":"1.0.0"}'
-  echo 'not json'
-  echo '{"type":"log","schema_version":1,"level":"warn","message":"careful"}' >&2
-  echo '{"type":"result","schema_version":1,"ok":false}'
-  exit 3
-  ;;
-hang)
-  sleep 60 &
-  echo "$!" > "$STUB_DIR/grandchild"
-  echo '{"type":"progress","schema_version":1}'
-  wait
-  ;;
-env)
-  printf '{"type":"env","profile":"%s","args":"%s"}\n' "$AGENTX_STUB_PROFILE" "$*"
-  ;;
 serve)
   mode=$(cat "$STUB_DIR/serve-mode")
   printf '{"type":"inventory","profile":"%s","args":"%s"}\n' "$AGENTX_STUB_PROFILE" "$*"
@@ -50,6 +32,11 @@ serve)
   locked)
     echo '{"type":"error","schema_version":1,"code":"refused","message":"another agentx serve holds serve.lock"}'
     exit 6
+    ;;
+  stuck)
+    sleep 60 &
+    echo "$!" > "$STUB_DIR/grandchild"
+    wait
     ;;
   esac
   ;;
@@ -113,11 +100,6 @@ impl Fixture {
             format!("export AGENTX_STUB_PROFILE={value}\n"),
         )
         .unwrap();
-    }
-
-    /// Makes the login shell take a second to start.
-    fn slow_profile(&self) {
-        fs::write(self.dir.join("home/.bash_profile"), "sleep 1\n").unwrap();
     }
 
     fn serve_mode(&self, mode: &str) {
@@ -217,130 +199,50 @@ async fn gone(pid: u32) -> bool {
     false
 }
 
-fn args(a: &[&str]) -> Vec<String> {
-    a.iter().map(|s| (*s).to_owned()).collect()
-}
-
 #[tokio::test(flavor = "multi_thread")]
-async fn a_one_shot_streams_its_lines_and_reports_its_end() {
-    let f = Fixture::new("lines");
-    let end = f
-        .sup
-        .run("r1".into(), args(&["lines"]), None)
-        .await
-        .unwrap();
-
-    assert_eq!(end.exit_code, Some(3));
-    assert_eq!(end.events.len(), 2);
-    assert_eq!(end.events[0]["type"], "version");
-    assert_eq!(end.events[1]["type"], "result");
-    assert_eq!(end.logs[0]["message"], "careful");
-    assert_eq!(end.invalid.len(), 1);
-    assert_eq!(end.invalid[0].line, "not json");
-    assert!(!end.cancelled && !end.timed_out);
-
-    let lines: Vec<Value> = f.emitted(RUN_LINE).into_iter().map(|(_, v)| v).collect();
-    assert_eq!(lines.len(), 4);
-    assert!(lines.iter().all(|l| l["run_id"] == "r1"));
-    let stdout: Vec<&Value> = lines.iter().filter(|l| l["kind"] != "log").collect();
-    assert_eq!(stdout[0]["kind"], "event");
-    assert_eq!(
-        stdout[1],
-        &json!({"run_id": "r1", "kind": "invalid", "stream": "stdout", "line": "not json"})
-    );
-    assert_eq!(stdout[2]["event"]["type"], "result");
-    assert!(lines
-        .iter()
-        .any(|l| l["kind"] == "log" && l["event"]["level"] == "warn"));
-
-    let ends = f.emitted(RUN_END);
-    assert_eq!(ends.len(), 1);
-    assert_eq!(ends[0].1["exit_code"], 3);
-    assert_eq!(ends[0].1["run_id"], "r1");
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_deadline_kills_the_whole_process_group() {
-    let f = Fixture::new("deadline");
-    let end = f
-        .sup
-        .run(
-            "r1".into(),
-            args(&["hang"]),
-            Some(Duration::from_millis(500)),
-        )
-        .await
-        .unwrap();
-
-    assert!(end.timed_out);
-    assert!(!end.cancelled);
-    assert_eq!(end.exit_code, None, "a signal ended the stub");
-    assert_eq!(end.events[0]["type"], "progress");
-    assert!(
-        gone(f.grandchild()).await,
-        "the grandchild sleep still runs"
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn cancel_kills_the_whole_process_group() {
-    let f = Fixture::new("cancel");
-    let sup = f.sup.clone();
-    let run = tokio::spawn(async move { sup.run("r1".into(), args(&["hang"]), None).await });
-    f.wait_for(RUN_LINE, 1).await;
-
-    assert!(!f.sup.cancel("r2"), "no such run");
-    assert!(f.sup.cancel("r1"));
-    let end = run.await.unwrap().unwrap();
-    assert!(end.cancelled);
-    assert!(!end.timed_out);
-    assert!(
-        gone(f.grandchild()).await,
-        "the grandchild sleep still runs"
-    );
-    assert!(!f.sup.cancel("r1"), "the run is over");
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_cancel_while_the_login_shell_is_read_stops_the_run_before_it_starts() {
-    let f = Fixture::new("early-cancel");
-    f.slow_profile();
-    let sup = f.sup.clone();
-    let run = tokio::spawn(async move { sup.run("r1".into(), args(&["hang"]), None).await });
-    tokio::time::sleep(Duration::from_millis(200)).await;
-
-    assert!(f.sup.cancel("r1"));
-    let end = run.await.unwrap().unwrap();
-    assert!(end.cancelled);
-    assert_eq!(end.exit_code, None);
-    assert!(end.events.is_empty());
-    assert!(!f.dir.join("grandchild").exists(), "the CLI started");
-    assert_eq!(f.emitted(RUN_END).len(), 1);
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_cancel_that_arrives_before_its_run_stops_it() {
-    let f = Fixture::new("cancel-first");
-    assert!(!f.sup.cancel("r1"), "no run r1 yet");
-    let end = f.sup.run("r1".into(), args(&["hang"]), None).await.unwrap();
-    assert!(end.cancelled);
-    assert!(!f.dir.join("grandchild").exists(), "the CLI started");
-    // The kept cancel was used up: the next run of another id runs.
-    let end = f.sup.run("r2".into(), args(&["env"]), None).await.unwrap();
-    assert!(!end.cancelled);
-    assert_eq!(end.exit_code, Some(0));
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_child_gets_the_login_shell_environment_and_json() {
+async fn serve_gets_the_login_shell_environment_and_json() {
     let f = Fixture::new("env");
+    f.serve_mode("echo");
     let resolution = f.sup.resolution().await;
     assert_eq!(resolution.path, Some(f.dir.join("bin/agentx")));
     assert_eq!(serde_json::to_value(resolution.found).unwrap(), "bundled");
 
-    let end = f.sup.run("r1".into(), args(&["env"]), None).await.unwrap();
-    assert_eq!(end.events[0]["profile"], "from-profile");
-    assert_eq!(end.events[0]["args"], "env --json");
+    f.sup.serve_start().await.unwrap();
+    let first = f.wait_for_serve("event", 1).await;
+    assert_eq!(first[0].1["event"]["profile"], "from-profile");
+    assert_eq!(first[0].1["event"]["args"], "serve --json");
+    f.sup.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn serve_start_called_many_times_at_once_starts_one_child() {
+    let f = Fixture::new("start-many");
+    f.serve_mode("echo");
+    let starts: Vec<_> = (0..8)
+        .map(|_| {
+            let sup = f.sup.clone();
+            tokio::spawn(async move { sup.serve_start().await })
+        })
+        .collect();
+    let mut ids = vec![];
+    for start in starts {
+        ids.push(start.await.unwrap().unwrap());
+    }
+    assert!(ids.iter().all(|id| *id == ids[0]), "{ids:?}");
+    f.wait_for_serve("event", 1).await;
+    // A request may start serve first: the child that runs takes it.
+    assert_eq!(f.sup.serve_start().await.unwrap(), ids[0]);
+    f.sup.shutdown().await;
+    f.wait_for(SERVE_EXIT, 1).await;
+    let inventories: Vec<Value> = f
+        .serve_lines("event")
+        .into_iter()
+        .map(|(_, l)| l)
+        .filter(|l| l["event"]["type"] == "inventory")
+        .collect();
+    assert_eq!(inventories.len(), 1, "one serve child");
+    assert_eq!(inventories[0]["child_id"], ids[0]);
+    assert_eq!(f.emitted(SERVE_EXIT).len(), 1);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -352,7 +254,7 @@ async fn serve_takes_requests_reports_and_logs_its_stderr_and_stops_with_the_win
     let first = f.wait_for_serve("event", 1).await;
     assert_eq!(first[0].1["child_id"], child);
     assert_eq!(first[0].1["event"]["type"], "inventory");
-    // Its stderr reaches the app as log lines, as a one-shot's does.
+    // Its stderr reaches the app as log lines.
     let logs = f.wait_for_serve("log", 1).await;
     assert_eq!(
         logs[0].1,
@@ -363,15 +265,22 @@ async fn serve_takes_requests_reports_and_logs_its_stderr_and_stops_with_the_win
         })
     );
 
-    let request = r#"{"type":"refresh","request_id":"q1"}"#;
-    f.sup.serve_request(request).await.unwrap();
-    let events = f.wait_for_serve("event", 2).await;
+    // A JSON-RPC request and a notification each go to serve as one line.
+    let request = r#"{"jsonrpc":"2.0","id":1,"method":"run","params":{"args":["version"]}}"#;
+    f.sup.serve_request(child, request).await.unwrap();
+    let cancel = r#"{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":1}}"#;
+    f.sup.serve_request(child, cancel).await.unwrap();
+    let events = f.wait_for_serve("event", 3).await;
     assert_eq!(
         events[1].1["event"]["request"],
-        json!({"type": "refresh", "request_id": "q1"})
+        json!({"jsonrpc": "2.0", "id": 1, "method": "run", "params": {"args": ["version"]}})
     );
-    assert!(f.sup.serve_request("not json").await.is_err());
-    assert!(f.sup.serve_request("[1]").await.is_err());
+    assert_eq!(
+        events[2].1["event"]["request"],
+        json!({"jsonrpc": "2.0", "method": "$/cancelRequest", "params": {"id": 1}})
+    );
+    assert!(f.sup.serve_request(child, "not json").await.is_err());
+    assert!(f.sup.serve_request(child, "[1]").await.is_err());
 
     f.sup.shutdown().await;
     let exits = f.wait_for(SERVE_EXIT, 1).await;
@@ -382,7 +291,10 @@ async fn serve_takes_requests_reports_and_logs_its_stderr_and_stops_with_the_win
     assert_eq!(f.serve_lines("log").len(), 1, "the one debug line");
     let log = fs::read_to_string(f.dir.join("logs/serve.log")).unwrap();
     assert!(log.contains("serve started"), "{log}");
-    assert!(f.sup.serve_request(request).await.is_err(), "serve is gone");
+    assert!(
+        f.sup.serve_request(child, request).await.is_err(),
+        "serve is gone"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -416,7 +328,7 @@ async fn serve_is_restarted_with_backoff_and_a_fresh_environment() {
     );
     // The exit carries the line that says why, not the debug line before it.
     assert_eq!(exits[0].1["stderr"], json!(["boom"]));
-    // A stderr line that is not a log event is reported as invalid, as a one-shot's is.
+    // A stderr line that is not a log event is reported as invalid.
     assert_eq!(
         f.serve_lines("invalid")[0].1,
         json!({"child_id": 1, "kind": "invalid", "stream": "stderr", "line": "boom"})
@@ -482,4 +394,78 @@ async fn a_refused_serve_is_not_restarted_in_a_loop() {
     let second = f.sup.serve_start().await.unwrap();
     assert_ne!(second, first);
     f.wait_for(SERVE_EXIT, 2).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_serve_that_does_not_end_with_its_stdin_is_killed_with_its_process_group() {
+    let f = Fixture::new("stuck");
+    f.serve_mode("stuck");
+    f.sup.serve_start().await.unwrap();
+    f.wait_for_serve("event", 1).await;
+    let start = Instant::now();
+    while fs::read_to_string(f.dir.join("grandchild")).map_or(true, |s| s.trim().is_empty()) {
+        assert!(start.elapsed() < Duration::from_secs(10), "no grandchild");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let grandchild = f.grandchild();
+    assert!(alive(grandchild));
+
+    f.sup.shutdown().await;
+    let exits = f.wait_for(SERVE_EXIT, 1).await;
+    assert_eq!(
+        exits[0].1["exit_code"],
+        Value::Null,
+        "a signal ended the stub"
+    );
+    assert_eq!(exits[0].1["restarting"], false);
+    assert!(gone(grandchild).await, "the grandchild sleep still runs");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn serve_start_during_the_restart_wait_starts_the_next_child_at_once() {
+    let f = Fixture::new("start-in-wait");
+    f.serve_mode("crash");
+    let first = f.sup.serve_start().await.unwrap();
+    let exits = f.wait_for(SERVE_EXIT, 1).await;
+    assert_eq!(exits[0].1["restart_in_ms"], 500);
+    f.serve_mode("echo");
+
+    // A request during the wait does not wait for the delay.
+    let second = f.sup.serve_start().await.unwrap();
+    assert_ne!(second, first);
+    assert!(exits[0].0.elapsed() < Duration::from_millis(450));
+    let inventories = || -> Vec<Value> {
+        f.serve_lines("event")
+            .into_iter()
+            .filter(|(_, l)| l["event"]["type"] == "inventory")
+            .map(|(_, l)| l["child_id"].clone())
+            .collect()
+    };
+    let start = Instant::now();
+    while !inventories().contains(&json!(second)) {
+        assert!(start.elapsed() < Duration::from_secs(10), "no second child");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        f.sup.serve_start().await.unwrap(),
+        second,
+        "one serve child"
+    );
+
+    // The wait ends without starting another child: the one started on request runs on.
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    assert_eq!(f.emitted(SERVE_EXIT).len(), 1);
+    assert_eq!(inventories(), [json!(first), json!(second)]);
+    let request = r#"{"jsonrpc":"2.0","id":1,"method":"run","params":{"args":["version"]}}"#;
+    // A request meant for the child that ended is not written to the next one.
+    let refused = f.sup.serve_request(first, request).await;
+    assert!(refused.is_err(), "{refused:?}");
+    f.sup.serve_request(second, request).await.unwrap();
+    f.wait_for_serve("event", 3).await;
+
+    f.sup.shutdown().await;
+    let exits = f.wait_for(SERVE_EXIT, 2).await;
+    assert_eq!(exits[1].1["child_id"], second);
+    assert_eq!(exits[1].1["exit_code"], 0);
+    assert_eq!(exits[1].1["restarting"], false);
 }

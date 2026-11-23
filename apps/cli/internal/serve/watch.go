@@ -11,8 +11,8 @@ import (
 )
 
 // watcher signals changes in the directories serve cares about, through
-// events and errors. Watching is a precondition of serve: when it cannot be
-// set up, or a directory cannot be watched later, the error ends serve.
+// events and errors. When it cannot be set up, or a directory cannot be
+// watched later, serve reports the error and stops watching.
 type watcher struct {
 	b     backend
 	dirs  []string // directories to watch, in order

@@ -1447,7 +1447,6 @@ func TestServeChecksForUpdates(t *testing.T) {
 	// The write that pinned it bumped the version file, and the rescan that
 	// sets off, or the one this refresh asks for, carries the candidate in
 	// the inventory the desktop app applies.
-	p.send(`{"type":"refresh","request_id":"after"}`)
 	events = append(events, p.until("after")...)
 	var last jsonEvent
 	for _, e := range events {
@@ -1597,7 +1596,6 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 	p.next("inventory")
 	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["name"] == "alpha" && e["candidate_upstream_commit"] == second })
 	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
-	p.send(`{"type":"refresh","request_id":"alive"}`)
 	p.until("alive")
 	equal(t, "exit", p.close(), 0)
 

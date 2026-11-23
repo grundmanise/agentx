@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"slices"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -216,6 +217,11 @@ func (d *doctor) run(ctx context.Context) error {
 	switch held, pid, err := home.LockHeld(inv.dirs.Home); {
 	case err != nil:
 		d.row("lock", rowFail, err.Error(), "")
+	case held && pid == strconv.Itoa(os.Getppid()):
+		// Doctor runs as a child of the agentx serve that holds the lock, as
+		// the desktop app runs it: serve scans or repairs for a moment, which
+		// is no other command at work.
+		d.row("lock", rowOK, "held by the agentx serve that runs this check", "")
 	case held && pid != "":
 		d.row("lock", rowWarn, "held by process "+pid+": "+lock, "wait for it to finish")
 	case held:

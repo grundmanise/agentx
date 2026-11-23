@@ -43,6 +43,14 @@ export interface Applied {
   counter: number;
 }
 
+/** A problem a serve child reported with an `error` event of its own, and kept running. */
+export interface ServeError {
+  childId: number;
+  /** The error event's code, such as `account_repo`. */
+  code: string;
+  problem: Problem;
+}
+
 /** How a serve child ended. */
 export interface ServeEnd {
   childId: number;
@@ -75,6 +83,11 @@ export interface AppState {
   refreshes: Record<string, number>;
   /** How the last serve child that ended did so. */
   serveEnd: ServeEnd | undefined;
+  /**
+   * The last problem a serve child reported, such as a scan that failed or the serve lock another
+   * serve holds: serve keeps running and answering, and reports it with an `error` event.
+   */
+  serveError: ServeError | undefined;
   /** The reconcile events of the active serve child's start. */
   reconciles: ReconcileEvent[];
   /** The update candidates, by skill name, from the last update check. */
@@ -196,6 +209,7 @@ export const useAppStore = create<AppState>()(() => ({
   reconciles: [],
   refreshes: {},
   serveEnd: undefined,
+  serveError: undefined,
   settings: undefined,
   skillMds: {},
   sources: [],

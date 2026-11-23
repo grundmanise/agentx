@@ -1,9 +1,8 @@
 // Calls the app's transport module and writes what it receives into the page, one list item per
 // line, result or serve exit, as JSON. Nothing in the app renders CLI data yet, so the tests drive
 // the transport through the functions this module puts on window.
-import type { ServeRequest } from "#/cli/events.gen.ts";
 import { cancel, run, serve } from "#/cli/transport.ts";
-import type { Run, RunLine } from "#/cli/transport.ts";
+import type { Run, RunLine, ServeRequest } from "#/cli/transport.ts";
 
 declare global {
   interface Window {

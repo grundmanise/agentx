@@ -58,7 +58,8 @@ func (h *harness) searchSources(t *testing.T) (alpha, beta *sourceRepo) {
 	return alpha, beta
 }
 
-// results reduces a search event to "<source> <subpath> <name>" per result.
+// results reduces the result of a search to "<source> <subpath> <name>" per
+// result.
 func results(e jsonEvent) []string {
 	var out []string
 	for _, r := range e["results"].([]any) {
@@ -68,14 +69,19 @@ func results(e jsonEvent) []string {
 	return out
 }
 
+// searched sends one search request and returns its result.
+func (p *serveProc) searched(id, query string) jsonEvent {
+	p.t.Helper()
+	p.request(id, "search", map[string]any{"query": query})
+	e := p.answered(id)
+	equal(p.t, "query", e["query"], query)
+	return e
+}
+
 // search sends one search request and returns the results of its answer.
 func (p *serveProc) search(id, query string) []string {
 	p.t.Helper()
-	p.send(`{"type":"search","request_id":"` + id + `","query":"` + query + `"}`)
-	e := p.next("search")
-	equal(p.t, "request_id", e["request_id"], id)
-	equal(p.t, "query", e["query"], query)
-	return results(e)
+	return results(p.searched(id, query))
 }
 
 func TestServeAnswersSearchFromTheSourceIndex(t *testing.T) {
@@ -85,8 +91,7 @@ func TestServeAnswersSearchFromTheSourceIndex(t *testing.T) {
 	p := h.serve(t, "--json")
 	inventory := p.next("inventory")
 
-	p.send(`{"type":"search","request_id":"s1","query":"commit"}`)
-	e := p.next("search")
+	e := p.searched("s1", "commit")
 	equal(t, "instance_id", e["instance_id"], inventory["instance_id"])
 	// Sorted by source canonical URL, then name: alpha before beta, and
 	// inside alpha the name match before the description match.
@@ -108,24 +113,10 @@ func TestServeAnswersSearchFromTheSourceIndex(t *testing.T) {
 	}
 	// A hidden directory is never listed, and no match is an empty array.
 	for _, query := range []string{"secret", "nothing matches this"} {
-		p.send(`{"type":"search","request_id":"s3","query":"` + query + `"}`)
-		if got := p.next("search")["results"]; !reflect.DeepEqual(got, []any{}) {
+		if got := p.searched("s3", query)["results"]; !reflect.DeepEqual(got, []any{}) {
 			t.Errorf("results for %q = %#v, want []", query, got)
 		}
 	}
-
-	// A search that is not one is a usage error, and serve keeps running.
-	p.send(`{"type":"search","query":"commit"}`)
-	e = p.next("error")
-	equal(t, "error.code", e["code"], "usage")
-	contains(t, "error.message", e["message"].(string), "request_id")
-	p.send(`{"type":"search","request_id":"s4"}`)
-	e = p.next("error")
-	equal(t, "error.code", e["code"], "usage")
-	contains(t, "error.message", e["message"].(string), "query")
-	contains(t, "error.hint", e["hint"].(string), `"search"`)
-	p.send(`{"type":"bogus"}`)
-	contains(t, "error.hint", p.next("error")["hint"].(string), "refresh, search")
 
 	equal(t, "exit", p.close(), 0)
 	equal(t, "result.ok", p.next("result")["ok"], true)
@@ -147,14 +138,13 @@ func TestServeAnswersSearchWhileAScanWaits(t *testing.T) {
 	// write, whose rescan rebuilds the index; once a refresh asked for after
 	// that write is acknowledged, serve has nothing left to run git for.
 	h.awaitWrite(t, version)
-	p.send(`{"type":"refresh","request_id":"settled"}`)
 	p.until("settled")
 
 	unlock := holdLock(t, h)
 	// No scan can finish while the lock is held, so nothing else runs git
 	// and what the wrapper records next is the searches alone.
 	before := len(calls())
-	p.send(`{"type":"refresh","request_id":"r1"}`)
+	p.refresh("r1")
 	if got, want := p.search("s1", "review"), []string{alpha.url + " review review"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("results = %q, want %q", got, want)
 	}
@@ -167,7 +157,7 @@ func TestServeAnswersSearchWhileAScanWaits(t *testing.T) {
 
 	// The refresh waited for the lock all along.
 	unlock()
-	equal(t, "request_id", p.next("refresh_complete")["request_id"], "r1")
+	p.answered("r1")
 	equal(t, "exit", p.close(), 0)
 }
 
@@ -195,8 +185,7 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	s.commit("first")
 	h.runBesideServe("source", "add", s.url)
 	// A refresh is satisfied by a scan begun after it, which follows the add.
-	p.send(`{"type":"refresh","request_id":"added"}`)
-	p.next("refresh_complete")
+	p.refreshed("added")
 	if got, want := p.search("s1", "commit"), []string{s.url + " commit commit"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("results after the add = %q, want %q", got, want)
 	}
@@ -204,8 +193,7 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	s.skill("release", "release", "Cut a release commit", nil)
 	s.commit("second")
 	h.runBesideServe("source", "add", s.url)
-	p.send(`{"type":"refresh","request_id":"fetched"}`)
-	p.next("refresh_complete")
+	p.refreshed("fetched")
 	want := []string{s.url + " commit commit", s.url + " release release"}
 	if got := p.search("s2", "commit"); !reflect.DeepEqual(got, want) {
 		t.Errorf("results after the re-fetch = %q, want %q", got, want)
@@ -216,34 +204,19 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	s.skill("hotfix", "hotfix", "Commit a hotfix", nil)
 	s.commit("third")
 	h.runBesideServe("source", "fetch", s.url)
-	p.send(`{"type":"refresh","request_id":"refetched"}`)
-	p.next("refresh_complete")
+	p.refreshed("refetched")
 	want = []string{s.url + " commit commit", s.url + " hotfix hotfix", s.url + " release release"}
 	if got := p.search("s3", "commit"); !reflect.DeepEqual(got, want) {
 		t.Errorf("results after the fetch = %q, want %q", got, want)
 	}
 
 	h.runBesideServe("source", "remove", s.url)
-	p.send(`{"type":"refresh","request_id":"removed"}`)
-	p.next("refresh_complete")
+	p.refreshed("removed")
 	if got := p.search("s4", "commit"); len(got) != 0 {
 		t.Errorf("results after the removal = %q", got)
 	}
 	equal(t, "exit", p.close(), 0)
 	equal(t, "stderr", p.stderr.String(), "")
-}
-
-func TestServePrintsSearchLines(t *testing.T) {
-	t.Parallel()
-	h := serveHarness(t)
-	h.searchSources(t)
-	p := h.serve(t)
-	p.line("inventory 1: 1 configuration, 0 skills")
-	p.send(`{"type":"search","request_id":"s1","query":"commit"}`)
-	p.line("search s1: 3 results")
-	p.send(`{"type":"search","request_id":"s2","query":"deploy"}`)
-	p.line("search s2: 1 result")
-	equal(t, "exit", p.close(), 0)
 }
 
 // TestSourceRefNeverShowsAnIncompleteFetch drives the window a fetch used to
@@ -287,8 +260,7 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 	// Mid-fetch. The source ref still names the commit whose blobs are all
 	// here, so a rebuild of the index now lists that commit's skills whole.
 	equal(t, "ref during the fetch", h.accountGit("rev-parse", source.Ref(id)), first)
-	p.send(`{"type":"refresh","request_id":"mid"}`)
-	p.next("refresh_complete")
+	p.refreshed("mid")
 	if got := p.search("s1", "commit"); !reflect.DeepEqual(got, whole) {
 		t.Errorf("results during the fetch = %q, want %q", got, whole)
 	}
@@ -302,8 +274,7 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 	release()
 	equal(t, "exit", (<-done).exit, 0)
 	equal(t, "ref after the fetch", h.accountGit("rev-parse", source.Ref(id)), second)
-	p.send(`{"type":"refresh","request_id":"after"}`)
-	p.next("refresh_complete")
+	p.refreshed("after")
 	want := []string{s.url + " commit commit", s.url + " release release"}
 	if got := p.search("s2", "commit"); !reflect.DeepEqual(got, want) {
 		t.Errorf("results after the fetch = %q, want %q", got, want)

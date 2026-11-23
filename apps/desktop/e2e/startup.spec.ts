@@ -353,7 +353,8 @@ test("serve refused fails check 5 with serve's message and hint", async ({
     message: "agentx serve is already running for /home/me/.agentx",
     type: "error",
   } as const;
-  cli.onServeStart({ events: [refused], exit: { code: 6 } });
+  // Serve keeps running and answering, and says why it does not watch.
+  cli.onServeStart({ events: [refused] });
   await page.goto("/");
   await expect(title(page)).toHaveText("agentx can't watch this machine");
   const watching = row(page, "Watching this machine");
@@ -363,6 +364,47 @@ test("serve refused fails check 5 with serve's message and hint", async ({
     `Fix: ${refused.hint}`
   );
   expect(cli.commands).toEqual(launchLines);
+
+  // Retry asks the same child to scan again, and its inventory passes the check.
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect.poll(() => cli.requestIds).toHaveLength(1);
+  await cli.serveEmit([
+    firstInventory(),
+    { ok: true, request_id: cli.requestIds[0], type: "refresh_complete" },
+  ]);
+  await expect(skills(page)).toBeVisible();
+  expect(cli.serveStarts).toBe(1);
+});
+
+test("a problem serve reports again on Retry shows at once", async ({
+  cli,
+  page,
+}) => {
+  const failed = {
+    code: "git",
+    message: "cannot scan /home/me/.agents/skills: git failed",
+    type: "error",
+  } as const;
+  cli.onServeStart({ events: [failed] });
+  await page.goto("/");
+  await expect(row(page, "Watching this machine")).toContainText(
+    failed.message
+  );
+
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect.poll(() => cli.requestIds).toHaveLength(1);
+  await cli.serveEmit([
+    {
+      error: "cannot scan /home/me/.agents/skills: git still failed",
+      ok: false,
+      request_id: cli.requestIds[0],
+      type: "refresh_complete",
+    },
+  ]);
+  await expect(row(page, "Watching this machine")).toContainText(
+    "git still failed"
+  );
+  await expect(page.getByRole("button", { name: "Retry" })).toBeEnabled();
 });
 
 test("Retry runs everything again", async ({ cli, page }) => {
@@ -564,7 +606,27 @@ test("a serve exit with code 8 after launch brings the checks back", async ({
   expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
 });
 
-test("a one-shot exiting with code 8 brings the checks back", async ({
+test("an account repo error serve reports after launch brings the checks back", async ({
+  cli,
+  page,
+}) => {
+  await page.goto("/");
+  await expect(skills(page)).toBeVisible();
+  await launched(cli);
+
+  cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
+  await cli.serveEmit([
+    {
+      code: "account_repo",
+      message: "the account repo is not a git repository",
+      type: "error",
+    },
+  ]);
+  await expect(title(page)).toHaveText("agentx can't open its account repo");
+  expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
+});
+
+test("a run exiting with code 8 brings the checks back", async ({
   cli,
   page,
 }) => {

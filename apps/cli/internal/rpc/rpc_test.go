@@ -258,15 +258,35 @@ func TestNotifyReachesEveryClientAndRetainsForLaterOnes(t *testing.T) {
 	t.Parallel()
 	d := open(t, nil)
 	first := d.dial(t)
-	d.Notify("event", map[string]int{"n": 1}, true)
-	d.Notify("event", map[string]int{"n": 2}, false)
+	d.Notify("event", map[string]int{"n": 1}, Retained)
+	d.Notify("event", map[string]int{"n": 2}, Passing)
 	first.want(`{"jsonrpc":"2.0","method":"event","params":{"n":1}}`)
 	first.want(`{"jsonrpc":"2.0","method":"event","params":{"n":2}}`)
 	second := d.dial(t)
-	d.Notify("event", map[string]int{"n": 3}, false)
+	d.Notify("event", map[string]int{"n": 3}, Passing)
 	second.want(`{"jsonrpc":"2.0","method":"event","params":{"n":1}}`)
 	second.want(`{"jsonrpc":"2.0","method":"event","params":{"n":3}}`)
 	first.want(`{"jsonrpc":"2.0","method":"event","params":{"n":3}}`)
+}
+
+// A note follows the retained notification for a later client, until the
+// next retained one drops it.
+func TestANoteFollowsTheRetainedNotificationUntilTheNext(t *testing.T) {
+	t.Parallel()
+	d := open(t, nil)
+	d.Notify("event", map[string]int{"n": 1}, Note)
+	first := d.dial(t)
+	first.want(`{"jsonrpc":"2.0","method":"event","params":{"n":1}}`)
+	d.Notify("event", map[string]int{"n": 2}, Retained)
+	d.Notify("event", map[string]int{"n": 3}, Note)
+	second := d.dial(t)
+	second.want(`{"jsonrpc":"2.0","method":"event","params":{"n":2}}`)
+	second.want(`{"jsonrpc":"2.0","method":"event","params":{"n":3}}`)
+	d.Notify("event", map[string]int{"n": 4}, Retained)
+	third := d.dial(t)
+	d.Notify("event", map[string]int{"n": 5}, Passing)
+	third.want(`{"jsonrpc":"2.0","method":"event","params":{"n":4}}`)
+	third.want(`{"jsonrpc":"2.0","method":"event","params":{"n":5}}`)
 }
 
 // A client that reads nothing is disconnected once its queue is full, and
@@ -278,7 +298,7 @@ func TestAClientThatFallsBehindIsDisconnected(t *testing.T) {
 	slow, quick := d.dial(t), d.dial(t)
 	big := strings.Repeat("x", 64<<10)
 	for range 400 { // more than the sockets and the queue hold between them
-		d.Notify("event", big, false)
+		d.Notify("event", big, Passing)
 		quick.next()
 	}
 	for { // the slow one gets what was sent before it fell behind, then the end

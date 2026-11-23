@@ -126,8 +126,7 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	listening := p.next("listening")
 	inventory := p.next("inventory")
 	c := dialDoor(t, listening, "http://localhost:1420")
-	p.send(`{"type":"refresh","request_id":"r1"}`)
-	p.next("refresh_complete")
+	p.refreshed("r1")
 
 	// The inventory serve last emitted is what a new client is sent first,
 	// and the answer to stdin's refresh is not sent at all.
@@ -166,6 +165,10 @@ func TestServeListenAnswersABrowser(t *testing.T) {
 	equal(t, "error.code", rpcError["code"], float64(-32602))
 	c.send(7, "search", map[string]any{})
 	_, rpcError, _, _ = c.answer(7)
+	equal(t, "error.code", rpcError["code"], float64(-32602))
+	// A deadline too long for a time.Duration would run with none.
+	c.send(8, "run", map[string]any{"args": []string{"version"}, "deadline_ms": int64(9223372036855)})
+	_, rpcError, _, _ = c.answer(8)
 	equal(t, "error.code", rpcError["code"], float64(-32602))
 
 	// Nothing of the door reaches stdout but where it is.

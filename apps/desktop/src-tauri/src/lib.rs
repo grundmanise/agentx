@@ -1,12 +1,13 @@
 // The Rust side hosts the window and supervises the CLI: it finds the CLI, reads the login shell's
-// environment, runs one-shot commands and keeps the serve child open. It has no file, git or
-// network code of its own beyond writing serve's log, reading its end back, and the app's
-// preferences, and starts no program but the login shell, agentx and, when the user asks, the
-// editor of their choice (ADR 0001, ADR 0013). Its calls to the operating system beside that are the opener plugin, which
-// shows a path selected in Finder (the file manager elsewhere) and opens a skill's file in the
-// system's default application when the user asks, and the dialog plugin's open dialog, in which
-// the user picks a snapshot to apply: it returns the path, and the app passes it to the CLI without
-// reading the file.
+// environment and keeps the serve child open, relaying the JSON-RPC messages the app exchanges
+// with it over its stdin and stdout; every command the app runs is a `run` request to serve. It
+// has no file, git or network code of its own beyond writing serve's log, reading its end back,
+// and the app's preferences, and starts no program but the login shell, agentx and, when the user
+// asks, the editor of their choice (ADR 0001, ADR 0013). Its calls to the operating system beside
+// that are the opener plugin, which shows a path selected in Finder (the file manager elsewhere)
+// and opens a skill's file in the system's default application when the user asks, and the dialog
+// plugin's open dialog, in which the user picks a snapshot to apply: it returns the path, and the
+// app passes it to the CLI without reading the file.
 
 mod editor;
 mod logfile;
@@ -17,11 +18,10 @@ pub mod supervisor;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use tauri::{Emitter, Manager, RunEvent, State};
 
-use supervisor::{Config, Resolution, RunEnd, Supervisor};
+use supervisor::{Config, Resolution, Supervisor};
 
 type Sup<'a> = State<'a, Arc<Supervisor>>;
 
@@ -31,36 +31,20 @@ async fn cli_resolve(sup: Sup<'_>) -> Result<Resolution, String> {
     Ok(sup.resolution().await)
 }
 
-/// Runs `agentx <args> --json`. Its lines arrive as `cli-run` events and its end as `cli-run-end`,
-/// each with `run_id`; the command resolves with the end too.
-#[tauri::command(rename_all = "snake_case")]
-async fn cli_run(
-    sup: Sup<'_>,
-    args: Vec<String>,
-    deadline_ms: Option<u64>,
-    run_id: String,
-) -> Result<RunEnd, String> {
-    sup.run(run_id, args, deadline_ms.map(Duration::from_millis))
-        .await
-}
-
-/// Stops a one-shot run. False when no such run is going.
-#[tauri::command(rename_all = "snake_case")]
-fn cli_cancel(sup: Sup<'_>, run_id: String) -> bool {
-    sup.cancel(&run_id)
-}
-
-/// Starts the serve child unless one is running, and returns its child id. Its stdout arrives as
-/// `serve-event` events and its end as `serve-exit`, each with `child_id`.
+/// Starts the serve child unless one is running, and returns its child id; it is safe to call
+/// before each request. Its stdout and stderr arrive as `serve-event` events and its end as
+/// `serve-exit`, each with `child_id`.
 #[tauri::command(rename_all = "snake_case")]
 async fn serve_start(sup: Sup<'_>) -> Result<u64, String> {
     sup.inner().serve_start().await
 }
 
-/// Writes one JSON request to the serve child's stdin.
+/// Writes one JSON-RPC message, a request or a notification, to the stdin of serve child
+/// `child_id` as one line, and refuses when that child is no longer the one running. Its answers
+/// arrive as `serve-event` events.
 #[tauri::command(rename_all = "snake_case")]
-async fn serve_request(sup: Sup<'_>, line: String) -> Result<(), String> {
-    sup.serve_request(&line).await
+async fn serve_request(sup: Sup<'_>, child_id: u64, line: String) -> Result<(), String> {
+    sup.serve_request(child_id, &line).await
 }
 
 /// The path of the serve log file, which holds everything serve wrote to stderr.
@@ -184,8 +168,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             cli_resolve,
-            cli_run,
-            cli_cancel,
             serve_start,
             serve_request,
             serve_log_path,
