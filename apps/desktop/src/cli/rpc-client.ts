@@ -189,7 +189,8 @@ export const peer = (
       (typeof id === "string" || typeof id === "number") &&
       // A response carries a result or an error, never both: anything else is no answer, and the
       // request keeps waiting for its own.
-      "result" in message !== isRpcError(message.error)
+      "result" in message !== "error" in message &&
+      (!("error" in message) || isRpcError(message.error))
     ) {
       const waiting = pending.get(id);
       pending.delete(id);
