@@ -126,6 +126,6 @@ Concrete evidence that the change works. Show a before and after. Evidence is re
 - For a visual change, use screenshots or a recording from the running product.
 - For an execution-based change, display the relevant console output from before and after the change.
 
-## Merge danger
+### Merge danger
 
 The blast radius is the potential impact or scope of the changes introduced by this PR. Consider all possibilities. Examples are layout shift, breakages for consumers, mobile responsiveness, etc.
