@@ -33,9 +33,9 @@ _Avoid_: device, host, node
 The stable identifier of a machine, derived from the computer's platform identity, so agentx reinstalled on the same computer is the same machine. A random id is used only where no platform identity exists.
 _Avoid_: device id, installation id
 
-**Telemetry id**:
-The anonymous id usage data is sent under, derived one way from the machine id, so it cannot be traced back to the machine. Exists only while the user has agreed to send usage data.
-_Avoid_: user id, anonymous id, distinct id
+**Anonymous id**:
+The id usage data is sent under: a keyed hash of the machine id that can't be turned back into it. Exists only while the user has agreed to send usage data.
+_Avoid_: telemetry id, user id, distinct id
 
 ### Identity
 

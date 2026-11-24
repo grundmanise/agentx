@@ -39,7 +39,7 @@ const settingsEvent = (telemetry?: "on" | "off", id = true): InlineEvent => {
     ...(telemetry === undefined ? {} : { telemetry }),
   };
   return telemetry === "on" && id
-    ? { settings, telemetry_id: ANONYMOUS_ID, type: "settings" }
+    ? { anonymous_id: ANONYMOUS_ID, settings, type: "settings" }
     : { settings, type: "settings" };
 };
 

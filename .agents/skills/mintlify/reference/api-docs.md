@@ -1,0 +1,321 @@
+# API documentation reference
+
+Setting up API documentation with OpenAPI, AsyncAPI, and MDX manual pages.
+
+## OpenAPI setup
+
+Spec requirements:
+- OpenAPI 3.0, 3.1, or 3.2, in JSON or YAML, stored in the repo or hosted at a public URL. 3.2 is backward compatible with 3.1: a 3.1 document works as 3.2 once its `openapi` version is updated.
+- `$ref` supports internal references only. External references are not supported.
+- Include a `servers` field with the API base URL. Without it, the playground falls back to simple mode because it can't send requests.
+- Define `components.securitySchemes` and `security` to get auth inputs in the playground.
+- Scopes listed in an operation's `security` requirement render in a Scopes section on the endpoint page and under the selected auth input in the playground, for every security option. OAuth2 scope descriptions come from `flows.*.scopes`, and OpenAPI 3.1 role lists on `apiKey` and `http` requirements render the same way.
+
+Add an `openapi` field to a navigation element (tab, group, anchor, and so on) to generate endpoint pages there. With no `pages`, every endpoint in the spec gets a page:
+
+```json
+"navigation": {
+  "tabs": [
+    { "tab": "API reference", "openapi": "openapi.json" }
+  ]
+}
+```
+
+- The value can be a path, a URL, an array of specs, or an object: `{ "source": "openapi.json", "directory": "api-reference" }`. `directory` sets where generated pages live (default `api-reference`).
+- The object form also accepts `slug`: `{ "source": "openapi.json", "directory": "api-reference", "slug": "operationId" }`. `slug` sets which operation field generates endpoint page URLs: `"summary"` (default) or `"operationId"`.
+- To mix endpoints with other pages, set `openapi` on the element and list endpoints in `pages` as `METHOD /path`. Child elements inherit the parent's spec unless they set their own.
+- To pull an endpoint from a specific spec without a default, use `"/path/to/spec.json POST /users"` as the page entry.
+- `api.openapi` in `docs.json` accepts the same values.
+- Hosted spec URLs don't trigger a redeploy when the spec changes. Call the trigger deployment API from the spec's CI to keep docs current.
+- Use `mint dev --local-schema` to preview a spec served from `http://localhost`. Production requires HTTPS URLs.
+- Generated pages take `title` from the operation `summary` (or method and path), `description` from `description`, and show a deprecated label when `deprecated: true`.
+
+```json
+{
+  "group": "Users",
+  "openapi": "openapi.json",
+  "pages": ["users/overview", "GET /users", "POST /users", "GET /users/{id}"]
+}
+```
+
+### Nested groups from tag hierarchies
+
+In OpenAPI 3.2 documents, tags can declare `parent`, `kind`, and `summary`, which Mintlify uses to build nested navigation groups for auto-populated pages. OpenAPI 3.0 and 3.1 documents keep one flat group per tag, based on each operation's first tag.
+
+- `parent`: Nests the tag's group inside the parent tag's group.
+- `summary`: Sets the group label. If the tag also has `x-group` or `x-displayName`, the extension wins (`x-group` first).
+- `kind`: `nav` or unset creates a navigation group. `badge` shows the tag's `summary` (or `name`) as a sidebar pill next to the endpoint and creates no group. Any other value (such as `audience`) creates neither.
+
+```yaml
+openapi: 3.2.0
+tags:
+  - name: store
+    summary: Store
+    kind: nav
+  - name: plants
+    summary: Plants
+    parent: store
+    kind: nav
+  - name: beta
+    summary: Beta
+    kind: badge
+paths:
+  /plants:
+    get:
+      summary: List plants
+      tags: [beta, plants]
+```
+
+Here **List plants** appears under **Store** > **Plants** with a **Beta** pill, and its URL follows `plants`.
+
+- With several tags, Mintlify places an operation using the first tag with `kind: nav`, else the first declared tag with no `kind`, else the first tag not declared in `tags`. The page URL follows that tag.
+- `tag` in `x-mint.metadata` overrides badge pills for that endpoint.
+- Mintlify validates the 3.2 tag tree: duplicate tag names, a `parent` referencing a missing tag, or cyclic parents fail validation.
+
+### Overlays
+
+Transform an OpenAPI spec without editing its source file using [OpenAPI Overlay](https://spec.openapis.org/overlay/v1.1.0.html) documents (Overlay versions 1.0 and 1.1). List overlays with the object form of `openapi`, which works anywhere `openapi` is accepted, including navigation elements and arrays:
+
+```json
+"openapi": {
+  "source": "openapi.json",
+  "overlays": ["overlays/rename-paths.yaml", "https://example.com/overlays/servers.yaml"]
+}
+```
+
+An overlay document has an `overlay` version, an `info` object with `title` and `version`, an optional `extends` field linking it to a spec, and an `actions` array. Each action selects nodes with an RFC 9535 JSONPath `target` and applies one modifier: `update` (merge value into node), `remove` (delete node when `true`), or `copy` (copy node from another JSONPath; Overlay 1.1 only).
+
+- Overlays apply in listed order, after parsing and before validation. Generated pages, navigation, `openapi` frontmatter references, and `mint validate` all use the transformed document, so frontmatter must reference post-overlay paths.
+- Overlay paths must point to files inside the docs repo; overlay URLs must use `https`. Referencing the same spec with different `overlays` lists in different places fails the build.
+- Auto-discovery: any JSON or YAML file with a top-level `overlay` key whose `extends` field resolves to one of your specs applies automatically, in alphabetical order of file paths. An explicit `overlays` list replaces auto-discovery for that spec. Set `"overlays": []` to disable all overlays for a spec.
+- Explicit overlays that fail to load or apply fail the spec's validation; failed auto-discovered overlays are skipped and the spec publishes without them.
+
+### File uploads
+
+For OpenAPI 3.1 and 3.2 specs, describe a file upload field as a string schema with a binary `contentMediaType` inside a `multipart/form-data` request body. The playground renders it as a file input and sends the request as multipart form data.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream"
+    }
+  },
+  "required": ["file"]
+}
+```
+
+- Binary media types such as `application/octet-stream`, images, audio, video, PDFs, and archives are treated as file uploads. Structured types such as `application/json` are not.
+- `contentEncoding` of `base64` or `base64url` sends the file as base64; other values use binary handling. A `contentEncoding` without a binary `contentMediaType` stays a text field.
+- The legacy `format: "binary"` and `format: "base64"` fields remain supported.
+
+### Conditional requirements
+
+OpenAPI 3.1 schemas can require a property only in some cases with `if`/`then`/`else`, `dependentRequired`, and `dependentSchemas`. Endpoint pages label each affected field with a "required" pill followed by its condition, for example "required if `method` = `card`", "required unless `method` = `card`" (from `else`), or "required if `tax_id` is set" (from `dependentRequired`).
+
+- Conditions are summarized when `if` tests sibling properties with `const`, `enum`, `type`, or presence (`required`). Anything more complex shows a generic "conditionally required" pill.
+- A property test in `if` also passes when the property is missing, so the tested property must be required (in the object's `required` or the `if` schema's `required`) to get a specific label. Otherwise the field shows "conditionally required".
+
+## OpenAPI extensions
+
+- `x-hidden`: Creates page but hides from navigation.
+- `x-excluded`: Completely excludes endpoint from docs.
+- `x-codeSamples`: Custom code examples per endpoint.
+- `x-mint.playground.expand`: Set to `false` on an operation to collapse nested object fields in the playground by default. Request sections (Authorization, Headers, Query, Path, Body) and the top-level body object stay expanded. Defaults to expanded when unset.
+
+```yaml
+paths:
+  /users:
+    get:
+      x-codeSamples:
+        - lang: "bash"
+          label: "List users"
+          source: |
+            curl https://api.example.com/users
+```
+
+## MDX pages from an OpenAPI spec
+
+Create an MDX page per endpoint to control its metadata, content, and position while keeping the generated reference. The method and path must exactly match the spec.
+
+```yaml
+---
+title: "Get users"
+openapi: "openapi/users.json GET /users"
+---
+```
+
+- Always include the spec file path when the repo contains more than one spec. Mintlify uploads every spec in the repo, even unreferenced ones, and `openapi: "GET /users"` without a path can resolve to the wrong spec.
+- The `openapi`, `api`, and `asyncapi` frontmatter values must each be a single string referencing one endpoint. A list or other non-string value fails the deployment.
+- Webhooks (OpenAPI 3.1+): `openapi: "openapi.json webhook orderUpdated"`, where the name matches a key in `webhooks`.
+- Data models: `openapi-schema: "openapi.json OrderItem"` renders a `components.schemas` entry. The file path is optional unless schema names collide across specs.
+- Generate MDX files from a spec with `npx @mintlify/scraping@latest openapi-file <path-to-spec> -o <folder>`.
+
+## MDX manual API pages
+
+For endpoints without an OpenAPI spec, set `api` in frontmatter and document parameters and responses with `ParamField` and `ResponseField`:
+
+```mdx
+---
+title: "Create user"
+api: "POST /users/{userId}"
+---
+
+<ParamField path="userId" type="string" required>
+  Unique identifier for the user.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  User's email address.
+</ParamField>
+
+<ResponseField name="id" type="string" required>
+  ID of the created user.
+</ResponseField>
+```
+
+- `api` takes a full URL (`POST https://api.example.com/users`, ignores `api.mdx.server`) or a relative path (requires `api.mdx.server` in `docs.json`). Wrap path parameters in `{}`.
+- Wrap request and response code samples in `<RequestExample>` and `<ResponseExample>` to show them in the right sidebar.
+- `playground` frontmatter (`interactive`, `simple`, `none`, `auth`) overrides `api.playground.display` for the page.
+- `authMethod` frontmatter (`bearer`, `basic`, `key`, `none`) overrides `api.mdx.auth.method` for the page. `none` disables auth.
+
+## AsyncAPI
+
+For WebSocket and event-driven APIs:
+
+```json
+"api": {
+  "asyncapi": "asyncapi.yaml"
+}
+```
+
+Add `asyncapi` to a navigation element (tab, group, and so on) to generate channel pages there. It takes a path, a URL, an array, or `{ "source": "asyncapi.json", "directory": "websockets" }` (default directory `api-reference`). A group with both `openapi` and `asyncapi` ignores `asyncapi`.
+
+Reference channels in frontmatter:
+
+```yaml
+---
+title: "WebSocket channel"
+asyncapi: "/path/to/asyncapi.json channelName"
+---
+```
+
+## GraphQL
+
+Generate pages from an SDL schema by adding `graphql` to a tab or group in `navigation`. Accepts a string (local path or HTTPS URL; HTTP is rejected) or an object with `source` (required) and `directory` (default `graphql-reference`).
+
+```json
+"navigation": {
+  "tabs": [
+    {
+      "tab": "GraphQL API",
+      "graphql": { "source": "schema.graphql", "directory": "api/graphql" }
+    }
+  ]
+}
+```
+
+- A tab with `graphql` may include `groups` only (no `pages`, `versions`, `languages`) and cannot also have `openapi` or `asyncapi`.
+- By default, Mintlify generates **Queries**, **Mutations**, and **Types** (object, input, enum, interface, union, custom scalar) sections.
+- To curate pages, list selectors in `pages` of the tab or group that declares `graphql` (or its nested groups): `QUERY <field>`, `MUTATION <field>`, `TYPE <name>`. Kinds must be uppercase. Dotted paths (`MUTATION cart.createCart`) select namespaced operations; `TYPE` does not accept dotted paths. The sidebar labels a nested operation with its last segment (`createCart`); the page URL keeps the full path (`.../cart/createCart`).
+- If any page is a selector, the full generated sections are skipped. Regular page paths still work alongside selectors. An unmatched selector fails the build.
+- Page URLs use names as written (`.../types/Cart`). When names differ only by case (`StoreFrontConfigType`, `StorefrontConfigType`), the one that sorts first keeps that URL and each other gets a kebab-case URL (`.../types/storefront-config-type`, with a short hash suffix when the kebab-case name is one word or not unique), and the build logs a warning.
+
+## API settings
+
+The `api` key in `docs.json` controls API sources, the playground, code examples, and MDX API pages. This is the full list of `api` fields:
+
+```json
+"api": {
+  "playground": {
+    "display": "interactive",
+    "proxy": true
+  },
+  "examples": {
+    "languages": ["bash", "javascript", "python"],
+    "defaults": "all",
+    "prefill": false,
+    "autogenerate": true
+  },
+  "mdx": {
+    "server": "https://api.example.com",
+    "auth": {
+      "method": "bearer"
+    }
+  }
+}
+```
+
+- `openapi`: Same values as `openapi` on a navigation element, including `overlays` (see "OpenAPI setup" and "Overlays").
+- `asyncapi`: Same values as `asyncapi` on a navigation element (see "AsyncAPI").
+- `playground.display`: `"interactive"`, `"simple"`, `"none"`, or `"auth"`.
+- `playground.proxy`: Route requests through Mintlify's proxy. Default: `true`.
+- `playground.credentials`: Include cookies and auth headers for cross-origin requests when proxy is `false`. Default: `false`.
+- `params.expanded`: Expand all parameters by default. `"all"` or `"closed"` (default).
+- `params.post`: OpenAPI schema field keys to surface as pills next to parameter names (array of strings).
+- `optional`: How optional request fields display in the playground. `"collapsed"` (default), `"expanded"`, or `"static"` (always shown, no toggle).
+- `url`: Set to `"full"` to show the base URL when there's only one. By default, a single base URL is hidden, and several base URLs show as a selector.
+- `examples.languages`: Supported values — `bash` (cURL), `python`, `javascript`, `node`, `php`, `go`, `java`, `ruby`, `powershell`, `swift`, `csharp`, `dotnet`, `typescript`, `c`, `c++`, `kotlin`, `rust`, `dart`.
+- `examples.defaults`: `"required"` or `"all"` (include optional params).
+- `examples.prefill`: Pre-fill playground fields (request body and path, query, header, and cookie parameters) with spec example values. Parameters use `x-default`, then the parameter's `example` or first `examples` entry, then the schema's `example` or `examples`, then `default`. Default: `false`.
+- `examples.autogenerate`: Generate code samples from API specs. Default: `true`.
+- `mdx.auth.method`: `"bearer"`, `"basic"`, `"key"`, `"cobo"`.
+- `mdx.auth.name`: Header name for the API key with `"key"`, such as `x-api-key`. Defaults to `Key` when unset.
+- `mdx.server`: Base URL, or an array of base URLs, for relative `api` frontmatter paths.
+
+### Runtime server variables
+
+Prefill OpenAPI server variables from custom JavaScript when values become available after page load (for example, after authentication or a tenant change). Runtime values take precedence over OpenAPI defaults and saved values. They apply to open and future playgrounds for the current page session, and reset on a full-page refresh. Do not use them for secrets.
+
+```js
+window.mintlify.api.playground.setServerVariables({
+  tenantDomain: "example.us.auth0.com",
+});
+
+// Clear runtime values
+window.mintlify.api.playground.clearServerVariables();
+```
+
+## Response rendering
+
+The playground renders responses automatically based on the `Content-Type` header:
+
+- `image/*` — rendered inline as an image.
+- `audio/*` — rendered with a built-in audio player.
+- `video/*` — rendered with a built-in video player.
+- All other types — displayed in a code block.
+
+When an operation's responses in the OpenAPI spec declare a streaming media type (`text/event-stream`, `application/jsonl`, `application/x-ndjson`, `application/json-seq`, or `multipart/mixed`), the playground streams the response as plain text as it arrives, and readers can click **Stop** to end it. Requests with a `multipart/form-data` body don't stream.
+
+## JSON request bodies
+
+When an endpoint takes a JSON request body (`application/json` or a `+json` media type), the playground body section has a **Form** and **JSON** toggle. Both views edit the same body, and the request and generated code examples always match it. The JSON view keeps and sends properties that aren't in the OpenAPI schema, and blocks sending until the JSON is valid. The playground remembers the chosen view across endpoints. Other body types, such as `multipart/form-data` or `application/x-www-form-urlencoded`, have no toggle.
+
+## Parameter anchor links
+
+Every parameter in the playground has a clickable anchor link. Hover over a parameter name to reveal the link icon, then click to copy a direct URL to that parameter. The URL format is `your-docs-url/endpoint-path#parameter-name`. For nested parameters, the anchor includes the parent path.
+
+## Custom endpoint pages
+
+Use the `x-mint` extension on an operation to customize its generated page while keeping everything in the spec. For full per-page control, create MDX pages from the spec instead.
+
+- `x-mint.metadata`: Any frontmatter field except `openapi` (for example `title`, `sidebarTitle`, `description`). Includes `playground`, `groups`, and `public`, so `{"playground": "auth", "groups": ["admin"], "public": true}` makes the page public while limiting the playground to authenticated `admin` users.
+- `x-mint.content`: MDX (any Mintlify component) rendered before the generated reference.
+- `x-mint.href`: Custom URL for the generated page.
+- `x-mint.playground.expand`: `false` collapses nested object fields in the playground (see OpenAPI extensions above).
+- `x-mint.pre` / `x-mint.post` (on any schema): Arrays of strings rendered as pills before or after the parameter name.
+
+```json
+"/users": {
+  "get": {
+    "summary": "Get users",
+    "x-mint": {
+      "metadata": { "title": "List all users", "sidebarTitle": "List users" },
+      "content": "## Prerequisites\n\n<Note>Requires an admin API key.</Note>",
+      "href": "/api-reference/users/list"
+    }
+  }
+}
+```

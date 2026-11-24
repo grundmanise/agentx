@@ -23,9 +23,7 @@ The CLI reads its environment once, at startup, from the variables below. Beyond
 | `AGENTX_HANDSHAKE_TIMEOUT` | the budget of one MCP handshake, a duration such as `500ms` | `10s` |
 | `GITHUB_TOKEN` | the token [`agentx update`](#update) reads GitHub's release list with, which only `--nightly` needs; GitHub allows 60 anonymous requests an hour | unset |
 | `AGENTX_INTERACTIVE` | `1` or `0`: whether a person is there to answer the [telemetry](#telemetry) question, for tests | stdin and stdout are both terminals |
-| `AGENTX_TELEMETRY_ENDPOINT` | the host [telemetry](#telemetry) is posted to, at `<host>/batch/` | the release build's; none in a source build |
-| `AGENTX_TELEMETRY_KEY` | the project key sent with each batch | the release build's, else `none` |
-| `AGENTX_TELEMETRY_FLUSH` | `inline` sends the spool before the command returns, for tests | a detached `agentx telemetry flush` |
+| `AGENTX_TELEMETRY_ENDPOINT` | the PostHog host [telemetry](#telemetry) is sent to, for tests | `https://eu.i.posthog.com` in a stable or nightly build; none in a source build |
 | `DO_NOT_TRACK` | any value but `0` or `false` turns [telemetry](#telemetry) off, its question included | unset |
 
 ## Streams
@@ -82,7 +80,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | Field | Type | Meaning |
 |---|---|---|
 | `settings` | object | the machine settings as they now are, in the shape of the settings file below, with `label` filled in from the hostname when it is not set |
-| `telemetry_id` | string | the [telemetry id](#telemetry), present exactly when `telemetry` is `on` and `DO_NOT_TRACK` is unset, so the desktop app sends under the same id, and only then |
+| `anonymous_id` | string | the [anonymous id](#telemetry), present exactly when `telemetry` is `on` and `DO_NOT_TRACK` is unset, so the desktop app sends under the same id, and only then |
 
 `config_removal`, emitted by `agentx config remove`, one per configuration it removed, sorted by `id`, before the `settings` event:
 
@@ -403,8 +401,6 @@ Everything the CLI keeps on the machine lives under agentx home. Durable entries
   maintained          derived   when the serve child last maintained the store, as RFC 3339 (see Serve);
                                 a missing one only makes the next serve child maintain it
   machine.json        derived   the machine id, only where no platform identity exists
-  telemetry/          transient the telemetry spool, one <unix nanoseconds>-<random>.json per record, and
-                                last-flush, whose modification time is the last flush attempt (see Telemetry)
   handshakes.json     derived   last MCP signature per server declaration
 ```
 
@@ -491,32 +487,27 @@ The machine id names one computer across reinstalls. It is derived, in this orde
 
 ## Telemetry
 
-Usage data is opt-in and anonymous. It is **offered** when a host is known, from `AGENTX_TELEMETRY_ENDPOINT` or set in the release build, and `DO_NOT_TRACK` is unset; a source build has no host and never offers, records or sends. It is **recorded** when it is offered and the `telemetry` setting is `on`. Nothing is recorded or sent while the setting is absent or `off`.
+Usage data is opt-in and anonymous, and goes to PostHog through its Go SDK (`posthog-go`). It is **offered** when a host is known, which a stable or nightly build has (`https://eu.i.posthog.com`, with the project's public client token in the code) and `AGENTX_TELEMETRY_ENDPOINT` replaces, and `DO_NOT_TRACK` is unset; a source build, whose version is `dev`, has no host and never offers or sends. It is **sent** when it is offered and the `telemetry` setting is `on`. Nothing is sent while the setting is absent or `off`.
 
 **Consent.** While telemetry is offered and the setting is absent, `agentx scan` without `--json` asks after it printed the inventory, when a person is there to answer (stdin and stdout are terminals, or `AGENTX_INTERACTIVE` is `1`): it prints what is sent and `Send anonymous usage data? [y/N] `, reads one line, and stores `on` for `y` or `yes`, in any case, and `off` for anything else, as a mutation. A run with no one to answer asks nothing and stores nothing, so a later run asks. `agentx scan --json` and `agentx serve` never ask: the desktop app reads the setting from the `settings` event, asks itself while `telemetry` is absent, and answers with `config set telemetry`. The setting is this machine's own: `snapshot save` leaves it out and `snapshot apply` keeps the machine's value.
 
-**The telemetry id** is HMAC-SHA256 with the key `agentx-telemetry-id/v1` over the machine id, rendered as the first 32 lowercase hex characters. It differs from the machine id, cannot be joined with it without the machine id itself, and changes with `agentx machine reset-id`.
+**The anonymous id** is HMAC-SHA256 with the key `agentx-anonymous-id/v1` over the machine id, rendered as the first 32 lowercase hex characters. It is the PostHog `distinct_id` of every event. It differs from the machine id, cannot be turned back into it, and changes with `agentx machine reset-id`. Events are personless (`process_person_profile: false`); the CLI never identifies.
 
-**Records.** When recorded, every run that parsed its command line spools one record when it ends, and `agentx serve` one more when it starts; the hidden `agentx telemetry flush` is never recorded. A record is one JSON file under `telemetry/` in agentx home with these fields and no other:
+**Events.** Every run that parsed its command line sends `command_run` when it ends, and `agentx serve` sends `serve_start` when it starts. Their properties are:
 
-| Field | Meaning |
+| Property | Meaning |
 |---|---|
-| `type` | `command`, or `serve_start` for the record serve writes when it starts |
-| `telemetry_id` | the telemetry id |
-| `cli_version` | as `agentx version` prints it |
-| `schema_version` | the output schema version |
-| `os`, `arch` | the Go runtime's, such as `darwin` and `arm64` |
 | `command` | the command words only, such as `skill add` or `config set`; never an argument or a flag value |
 | `exit_code` | the exit code; absent on `serve_start` |
 | `duration_ms` | wall time since the run started |
-| `json` | whether `--json` was given |
-| `at` | RFC 3339 in UTC, truncated to the minute |
+| `release_channel` | `nightly` when the version contains `-nightly.`, else `stable`, as `agentx update` decides |
+| `cli_version` | as `agentx version` prints it |
+| `schema_version` | the output schema version |
+| `arch` | the Go runtime's, such as `arm64` |
 
-The spool keeps at most 500 records, dropping the oldest, and drops any older than seven days. `config set telemetry off` deletes it.
+plus what the SDK adds itself, such as `$os`, `$os_version`, `$lib` and `$lib_version`. GeoIP is off. Before an event is sent, the SDK's `BeforeSend` hook replaces every path under `/Users/`, `/home/`, `/root/`, `/private/`, `/tmp/` or `/var/folders/` in any string it carries, an exception's messages, stack frames and binary path included, with `<path>`.
 
-**Flush.** A flush posts up to 100 records in one request to `<host>/batch/` within three seconds, with the body `{"api_key": <key>, "batch": [...]}`; the key is `AGENTX_TELEMETRY_KEY`, else the release build's, else `none`. Each record becomes one entry: `event` is `command_run` for `command` and `serve_start` for `serve_start`, `distinct_id` the telemetry id, `timestamp` the `at` value, and `properties` the remaining fields plus `$process_person_profile: false`, `$lib: "agentx-cli"` and `$lib_version`, the record's `cli_version`. A 2xx or 4xx answer deletes the records it carried; any other answer, or none, keeps them for the next flush, with no retry. A record that does not parse is deleted. The flush takes no lock: a record written meanwhile waits for the next one.
-
-After its `result` event, a run that recorded starts a detached `agentx telemetry flush`, with its stdio on the null device, and exits without waiting, unless the spool is empty or the last flush attempt is under ten minutes old; `AGENTX_TELEMETRY_FLUSH=inline` flushes in-process before the run returns instead. A long-running serve flushes in-process, off its loop, at start and every ten minutes.
+**Sending.** The SDK batches events in the background. A run makes one client on its first event and closes it when it ends, waiting at most one second for what is queued and dropping the rest; serve keeps its client open while it runs. A failed send is not retried after that, and never changes the exit code or the output.
 
 ## Lock and version file
 
