@@ -419,7 +419,7 @@ func (inv *invocation) knownReportOn(ctx context.Context, gitDir, remote string)
 //
 // The machine is disconnected whatever the hub answers: a deletion git
 // could not make, or one the repository rejected, is a warning that names
-// the branch left there and the git command that deletes it.
+// the branch left there.
 func (inv *invocation) dropReport(ctx context.Context, gitDir, url string, r knownReport) {
 	if r.tip == "" {
 		return
@@ -436,8 +436,7 @@ func (inv *invocation) dropReport(ctx context.Context, gitDir, url string, r kno
 		out.done("deleted this machine's report, " + out.paint(heading, r.branch) + ", from " + shownURL(url))
 		return
 	}
-	out.warnWith(shownURL(url)+" still holds "+r.branch+", this machine's report: "+why,
-		"delete it with 'git push "+shellWord(shownURL(url))+" --delete "+r.branch+"'")
+	out.warn(shownURL(url) + " still holds " + r.branch + ", this machine's report: " + why)
 }
 
 // writeReport writes data, a report document, as the one file of a commit
@@ -483,7 +482,6 @@ func (inv *invocation) writeReport(ctx context.Context, b reportBranch, data []b
 		return "", false, unreachableRemote(b.url, err)
 	}
 	class, reason := gitx.ClassifyPush(s, found, stderr, exit)
-	const run = "run 'agentx machine report' again"
 	switch {
 	case class == gitx.PushPushed, class == gitx.PushUpToDate:
 		if err := inv.git.SetTracked(ctx, b.gitDir, b.remote, branch, commit); err != nil {
@@ -491,16 +489,14 @@ func (inv *invocation) writeReport(ctx context.Context, b reportBranch, data []b
 		}
 		return commit, true, nil
 	case class == gitx.PushMoved:
-		return "", false, fail(exitRefused, branch+" on the hub changed since it was read, so nothing was pushed",
-			run+": it reads "+branch+" again first")
+		return "", false, fail(exitRefused, branch+" on the hub changed since it was read, so nothing was pushed", "")
 	case class == gitx.PushDeclined:
-		return "", false, fail(exitRefused, "the hub declined "+branch+": "+sanitised(reason),
-			"once the hub takes it, "+run)
+		return "", false, fail(exitRefused, "the hub declined "+branch+": "+sanitised(reason), "")
 	case class == gitx.PushDenied:
 		return "", false, fail(exitSource, "the hub "+shownURL(b.url)+" did not let this machine push "+branch+": "+sanitised(reason),
-			deniedHint(gitx.DeniedFix(reason))+", then "+run)
+			deniedHint(gitx.DeniedFix(reason)))
 	case found || exit == 0:
-		return "", false, fail(exitSource, "whether the hub took "+branch+" is not known: "+sanitised(reason), run)
+		return "", false, fail(exitSource, "whether the hub took "+branch+" is not known: "+sanitised(reason), "")
 	}
 	return "", false, unreachableRemote(b.url, errors.New(reason))
 }

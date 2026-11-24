@@ -165,7 +165,7 @@ func matchMachines(arg string, machines []fleetMachine) []fleetMachine {
 // noMachineGiven refuses an empty machine argument, exit code 1, which a
 // command gives before it reads anything.
 func noMachineGiven() error {
-	return fail(exitUsage, "no machine given", "give "+cloudMachine+", a machine's label, its id or the start of its id")
+	return fail(exitUsage, "no machine given", "")
 }
 
 // machineNamed is the machine of the fleet arg names, see matchMachines. A
@@ -184,14 +184,11 @@ func machineNamed(arg string, machines []fleetMachine) (fleetMachine, error) {
 		for _, m := range named {
 			candidates = append(candidates, sanitised(m.Machine.Label)+" ("+m.Machine.ID+")")
 		}
-		return fleetMachine{}, fail(exitRefused, clipped(sanitised(arg))+" names more than one machine: "+strings.Join(candidates, ", "),
-			"give the machine id, or enough of its start to name one")
+		return fleetMachine{}, fail(exitRefused, clipped(sanitised(arg))+" names more than one machine: "+strings.Join(candidates, ", "), "")
 	case arg == cloudMachine:
-		return fleetMachine{}, fail(exitNotFound, "the hub holds no "+gitx.MachineBranch(cloudMachine)+", so there is no "+cloudMachine+" machine to show",
-			"place a skill on it with 'agentx skill place <name> --machine "+cloudMachine+"', or seed it with 'agentx snapshot save --machine "+cloudMachine+"'")
+		return fleetMachine{}, fail(exitNotFound, "the hub holds no "+gitx.MachineBranch(cloudMachine)+", so there is no "+cloudMachine+" machine to show", "")
 	}
-	return fleetMachine{}, fail(exitNotFound, "the hub holds no report of a machine called "+clipped(sanitised(arg)),
-		"run 'agentx machine list' for the machines the hub holds; a machine shows there once you run 'agentx machine report' on it, or turn on its report_inventory setting")
+	return fleetMachine{}, fail(exitNotFound, "the hub holds no report of a machine called "+clipped(sanitised(arg)), "")
 }
 
 // machineList is agentx machine list: every machine the hub holds
