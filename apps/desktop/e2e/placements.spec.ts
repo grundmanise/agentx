@@ -8,7 +8,6 @@ import {
   LIBRARY,
   manyAgentsInventory,
   manyConfigurations,
-  sources,
 } from "./fixtures/agents.ts";
 import {
   adoption,
@@ -72,7 +71,6 @@ const openSkill = async (
 ) => {
   cli.onServeStart({ events: [machine] });
   cli.register(["skill", "import"], { events: records });
-  cli.register(["source", "list"], { events: sources });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });

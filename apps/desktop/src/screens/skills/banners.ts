@@ -89,8 +89,7 @@ interface BannerRule {
 }
 
 /** The hub, the one source added with `--hub`, when one is set. */
-export const hubOf = (sources: Source[]) =>
-  sources.find((s) => s.hub === true);
+export const hubOf = (sources: Source[]) => sources.find((s) => s.hub === true);
 
 /** Why Publish does nothing for a hub skill while the hub is read-only, as the last add or fetch of it found. */
 export const readOnlyHubReason = (sources: Source[]) => {

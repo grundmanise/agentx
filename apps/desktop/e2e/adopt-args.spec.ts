@@ -12,6 +12,7 @@ import { projectRows } from "#/screens/skills/projection.ts";
 
 import { inventory as refusedInventory } from "./fixtures/adoption.ts";
 import { inventory, linked, meetingNotes } from "./fixtures/skills.ts";
+import { thisMachine } from "./harness/cli.ts";
 
 /** The record the Skills CLI keeps of `name`, in the `state` the adoption preview gives it. */
 const record = (
@@ -74,10 +75,12 @@ const rowOf = (
     edges: [],
     installs: [],
     instance_id: "instance-1",
-    machine: { id: "machine-1", label: "studio-mac" },
+    machine: thisMachine,
     mcp_servers: [],
     scan_counter: 1,
     schema_version: 4,
+    settings: { ignore_system_files: true },
+    sources: [],
     type: "inventory",
     warnings: [],
     ...machine,

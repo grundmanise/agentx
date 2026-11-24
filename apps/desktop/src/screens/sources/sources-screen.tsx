@@ -47,11 +47,7 @@ import { SkillList } from "#/screens/sources/skill-list.tsx";
 import { SourceRow } from "#/screens/sources/source-row.tsx";
 import { useFetchedListings } from "#/screens/sources/use-fetched-listings.ts";
 import { search } from "#/store/feed.ts";
-import {
-  loadInstallable,
-  loadLabel,
-  loadListing,
-} from "#/store/loaders.ts";
+import { loadInstallable, loadLabel, loadListing } from "#/store/loaders.ts";
 import { cancelCommand, agentx, usePending } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 

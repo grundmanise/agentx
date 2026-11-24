@@ -23,7 +23,7 @@ import {
   sourceAddArgs,
 } from "#/screens/settings/transfer.ts";
 import { agentx } from "#/store/runner.ts";
-import { afterSettled, runUntilSettled, useSettling } from "#/store/settle.ts";
+import { runUntilSettled, settled, useSettling } from "#/store/settle.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 const APPLY_LABEL = "apply snapshot";
@@ -158,10 +158,10 @@ const ApplyFile = () => {
     }
     // The settings name the sources now; which of them this machine has downloaded is what the
     // inventory after the apply lists.
-    await new Promise<void>((resolve) => {
-      afterSettled(resolve);
-    });
-    const unreachable = await addMissingSources(sourcesOf(useAppStore.getState()));
+    await settled();
+    const unreachable = await addMissingSources(
+      sourcesOf(useAppStore.getState())
+    );
     return {
       skills: outcome.events.filter((e) => e.type === "import_skill"),
       unreachable,

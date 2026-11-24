@@ -10,7 +10,7 @@ import type {
   LibraryEntry,
   SearchResult,
   SkillFileEvent,
-  SourceEvent,
+  Source,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 
@@ -29,26 +29,22 @@ const DAY = 24 * HOUR;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
 /** acme: pinned to v2, read-only here, fetched three days ago. */
-export const acme: SourceEvent = {
+export const acme: Source = {
   access: "read-only",
   commit: "3f2a9c1e8d7b6a",
   default_branch: "main",
   id: ACME_ID,
   last_fetched: ago(3 * DAY + 2 * HOUR),
   pin: "v2",
-  schema_version: 4,
-  type: "source",
   url: ACME,
 };
 
-/** The sources `source list` reports: acme, zeta never fetched, the hub two hours ago. */
-export const sources: SourceEvent[] = [
+/** The sources the inventory lists: acme, zeta never fetched, the hub two hours ago. */
+export const sources: Source[] = [
   acme,
   {
     access: "unknown",
     id: ZETA_ID,
-    schema_version: 4,
-    type: "source",
     url: ZETA,
   },
   {
@@ -56,9 +52,7 @@ export const sources: SourceEvent[] = [
     hub: true,
     id: HUB_ID,
     last_fetched: ago(2 * HOUR),
-    schema_version: 4,
     skills: 2,
-    type: "source",
     url: HUB,
   },
 ];
@@ -155,6 +149,7 @@ export const inventory = {
   configurations,
   library,
   scan_counter: 1,
+  sources,
   type: "inventory",
 } satisfies InlineEvent;
 

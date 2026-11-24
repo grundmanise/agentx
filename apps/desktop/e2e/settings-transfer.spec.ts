@@ -20,7 +20,7 @@ import {
   UNMANAGED_REASON,
   unreachable,
 } from "./fixtures/settings-transfer.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -28,11 +28,14 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-/** The command lines the page ran after the launch and the loads. */
+/** The read of the store and its size, which Settings runs each time it shows. */
+const storeLines = [["machine", "--json"]];
+
+/** The command lines the page ran after the launch, the loads and the read of the store. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
     (l) =>
-      ![...launchLines, ...loadLines].some(
+      ![...launchLines, ...loadLines, ...storeLines].some(
         (known) => known.join(" ") === l.join(" ")
       )
   );
@@ -45,7 +48,9 @@ const applySnapshot = (page: Page) =>
   page.getByRole("region", { name: "Apply snapshot" });
 
 const openSettings = async (cli: MockCli, page: Page) => {
-  cli.register(["source", "list"], { events: sourcesBefore });
+  cli.onServeStart({
+    events: [{ ...firstInventory(), sources: sourcesBefore }],
+  });
   await page.goto("/#/settings");
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })
@@ -187,12 +192,25 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
     expect.objectContaining({ defaultPath: LIBRARY, multiple: false }),
   ]);
 
-  // The applied settings name sources this machine has not downloaded.
-  cli.register(["source", "list"], { events: sourcesAfterImport });
   await confirm.getByRole("button", { name: "Apply" }).click();
   await expect(toasts(page)).toContainText(
     "Applied snapshot agentx-snapshot.json"
   );
+  // The inventory after the apply lists the sources the applied settings name, which this machine
+  // has not downloaded: none is added before it comes.
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  expect(later(cli)).toEqual([
+    ["snapshot", "apply", SNAPSHOT, "--yes", "--json"],
+  ]);
+  await cli.serveEmit([
+    { ...firstInventory(), scan_counter: 2, sources: sourcesAfterImport },
+    {
+      ok: true,
+      request_id: cli.requestIds.at(-1) ?? "",
+      scan_counter: 2,
+      type: "refresh_complete",
+    },
+  ]);
 
   // The sources are added one after another, with no click, and Apply… waits for the last.
   await expect
@@ -249,6 +267,15 @@ test("a snapshot that installed, updated and skipped nothing says so", async ({
     })
     .getByRole("button", { name: "Apply" })
     .click();
+  // The result shows once the inventory after the apply has come.
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit([
+    {
+      ok: true,
+      request_id: cli.requestIds.at(-1) ?? "",
+      type: "refresh_complete",
+    },
+  ]);
   const result = section.getByRole("region", { name: "Apply result" });
   await expect(result.getByRole("paragraph")).toHaveText([
     "No skills were installed or updated.",

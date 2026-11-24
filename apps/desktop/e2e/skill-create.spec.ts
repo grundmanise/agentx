@@ -295,13 +295,6 @@ test("Add skill finds the skills under a link, and installs the two picked in th
   await expect(addDialog(page)).toBeHidden();
   await expect(row(page, "docx")).toHaveAttribute("aria-current", "true");
   await expect(pane(page, "docx")).toBeVisible();
-  // The sources are read again, so Sources lists the source the install added.
-  await expect
-    .poll(
-      () =>
-        cli.commands.filter((l) => l.join(" ") === "source list --json").length
-    )
-    .toBe(2);
   expect(later(cli)).toEqual([
     ["source", "skills", ADD_LINK, "--json"],
     [

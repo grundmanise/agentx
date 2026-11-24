@@ -1,10 +1,11 @@
 // The Settings page: This machine (the label, saved with `config set label`, and the machine id),
 // Comparing edits (`config set ignore_system_files`), Storage (the library's path and the home
 // repo's size from `machine`) and Command line (the versions and Run checks). Every row reads the
-// store, and every control runs exactly its command.
+// store, whose machine and settings come with the inventory, and every control runs exactly its
+// command.
 import type { Page } from "@playwright/test";
 
-import { MACHINE_ID, machine, settings } from "./fixtures/settings.ts";
+import { MACHINE_ID, inventoryWith, machine } from "./fixtures/settings.ts";
 import {
   cliVersion,
   expect,
@@ -20,8 +21,11 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
+/** The read of the store and its size, which Settings runs each time it shows. */
+const storeLines = [["machine", "--json"]];
+
 const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
+  [...launchLines, ...loadLines, ...storeLines].some(
     (known) => known.join(" ") === line.join(" ")
   );
 
@@ -42,9 +46,25 @@ const labelField = (page: Page) =>
 const ignoreSwitch = (page: Page) =>
   page.getByRole("switch", { name: "Ignore system files" });
 
+/** Sends the inventory that follows a command and answers every refresh request, as serve does. */
+const scanned = async (
+  cli: MockCli,
+  inventory: ReturnType<typeof inventoryWith>
+) => {
+  await cli.serveEmit([
+    inventory,
+    ...cli.requestIds.map((id) => ({
+      ok: true,
+      request_id: id,
+      scan_counter: inventory.scan_counter,
+      type: "refresh_complete" as const,
+    })),
+  ]);
+};
+
 const openSettings = async (cli: MockCli, page: Page, ignore = true) => {
+  cli.onServeStart({ events: [inventoryWith({ ignore })] });
   cli.register(["machine"], { events: [machine()] });
-  cli.register(["config", "list"], { events: [settings(ignore)] });
   await page.goto("/#/settings");
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })
@@ -106,7 +126,7 @@ test("a store not created yet says so", async ({ cli, page }) => {
   await expect(section(page, "Storage")).toContainText("StoreNot created yet");
 });
 
-test("Enter with a new label runs config set label and toasts; the field shows the label read again", async ({
+test("Enter with a new label runs config set label and toasts; the field shows the label of the next inventory", async ({
   cli,
   page,
 }) => {
@@ -119,13 +139,13 @@ test("Enter with a new label runs config set label and toasts; the field shows t
   await labelField(page).press("Enter");
   await set.started;
   await expect(labelField(page)).toHaveAttribute("aria-busy", "true");
-  // The machine reads its label again after the command.
-  cli.register(["machine"], { events: [machine("work laptop")] });
   set.release();
   await expect(toasts(page).getByText("Label saved")).toBeVisible();
-  await expect.poll(() => runs(cli, ["machine"])).toBe(2);
-  await expect(labelField(page)).toHaveValue("work laptop");
+  // The field waits for the inventory after the command, which brings the label.
+  await expect(labelField(page)).toHaveAttribute("aria-busy", "true");
+  await scanned(cli, inventoryWith({ label: "work laptop", scanCounter: 2 }));
   await expect(labelField(page)).not.toHaveAttribute("aria-busy");
+  await expect(labelField(page)).toHaveValue("work laptop");
 
   expect(later(cli)).toEqual([
     ["config", "set", "label", "work laptop", "--json"],
@@ -137,10 +157,10 @@ test("losing focus with a changed label saves it", async ({ cli, page }) => {
   cli.register(["config", "set", "label", "studio"], {
     events: [{ type: "settings" }],
   });
-  cli.register(["machine"], { events: [machine("studio")] });
   await labelField(page).fill("studio");
   await labelField(page).blur();
   await expect(toasts(page).getByText("Label saved")).toBeVisible();
+  await scanned(cli, inventoryWith({ label: "studio", scanCounter: 2 }));
   await expect(labelField(page)).toHaveValue("studio");
   expect(later(cli)).toEqual([["config", "set", "label", "studio", "--json"]]);
 });
@@ -166,11 +186,11 @@ test("a label the CLI refuses shows its message under the field, sentence-cased"
   // The field keeps what was typed.
   await expect(labelField(page)).toHaveValue(" ");
   expect(later(cli)).toEqual([["config", "set", "label", " ", "--json"]]);
+  await scanned(cli, inventoryWith({ scanCounter: 2 }));
   // Typing a new label and saving it takes the message away.
   cli.register(["config", "set", "label", "studio"], {
     events: [{ type: "settings" }],
   });
-  cli.register(["machine"], { events: [machine("studio")] });
   await labelField(page).fill("studio");
   await labelField(page).press("Enter");
   await expect(toasts(page).getByText("Label saved")).toBeVisible();
@@ -217,20 +237,20 @@ test("the switch runs config set ignore_system_files true, then false, each with
   await ignoreSwitch(page).click();
   await on.started;
   await expect(ignoreSwitch(page)).toHaveAttribute("aria-busy", "true");
-  // The switch shows the setting as the CLI reported it until the settings are read again.
+  // The switch shows the setting as the inventory lists it until the next inventory.
   await expect(ignoreSwitch(page)).not.toBeChecked();
-  cli.register(["config", "list"], { events: [settings(true)] });
   on.release();
   await expect(
     toasts(page).getByText("System files are ignored")
   ).toBeVisible();
+  await expect(ignoreSwitch(page)).toHaveAttribute("aria-busy", "true");
+  await scanned(cli, inventoryWith({ ignore: true, scanCounter: 2 }));
   await expect(ignoreSwitch(page)).toBeChecked();
   await expect(ignoreSwitch(page)).not.toHaveAttribute("aria-busy");
 
   cli.register(["config", "set", "ignore_system_files", "false"], {
     events: [{ type: "settings" }],
   });
-  cli.register(["config", "list"], { events: [settings(false)] });
   // The whole row is the hit target.
   await section(page, "Comparing edits")
     .getByText("Ignore system files", { exact: true })
@@ -238,6 +258,7 @@ test("the switch runs config set ignore_system_files true, then false, each with
   await expect(
     toasts(page).getByText("System files count as edits now")
   ).toBeVisible();
+  await scanned(cli, inventoryWith({ ignore: false, scanCounter: 3 }));
   await expect(ignoreSwitch(page)).not.toBeChecked();
   expect(later(cli)).toEqual([
     ["config", "set", "ignore_system_files", "true", "--json"],
