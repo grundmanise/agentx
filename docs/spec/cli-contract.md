@@ -21,6 +21,7 @@ The CLI reads its environment once, at startup, from the variables below. Beyond
 | `AGENTX_HOSTNAME` | the default machine label | the operating system's hostname |
 | `AGENTX_INSTANCE_ID` | the `instance_id` carried by inventories, so a script can fix it | a fresh random id per process |
 | `AGENTX_HANDSHAKE_TIMEOUT` | the budget of one MCP handshake, a duration such as `500ms` | `10s` |
+| `AGENTX_TEST_PANIC` | `1` makes `agentx scan` panic with a message that names `HOME` and agentx home, which is how the tests reach a crash | unset |
 | `GITHUB_TOKEN` | the token [`agentx update`](#update) reads GitHub's release list with, which only `--nightly` needs; GitHub allows 60 anonymous requests an hour | unset |
 | `AGENTX_INTERACTIVE` | `1` or `0`: whether a person is there to answer the [telemetry](#telemetry) question, for tests | stdin and stdout are both terminals |
 | `AGENTX_TELEMETRY_ENDPOINT` | the PostHog host [telemetry](#telemetry) is sent to, for tests | `https://eu.i.posthog.com` in a stable or nightly build; none in a source build |
@@ -350,7 +351,7 @@ An update another machine published to a hub skill, see **Checking for updates**
 | 7 | `locked` | another agentx command holds the lock |
 | 8 | `store` | the store is unusable: missing, corrupt, or a repository format this git cannot read |
 | 9 | `interrupted` | a stop signal ended the run before it finished, see [Stopping a run](#stopping-a-run) |
-| 10 | `internal` | an internal error, including a settings file or another tool's install record agentx cannot read |
+| 10 | `internal` | an internal error, including a settings file or another tool's install record agentx cannot read, and a panic: its message is the error's, `panic: ` and what was passed to `panic` |
 
 In JSON mode the `error` event carries the code as its `code` field.
 
@@ -506,6 +507,8 @@ Usage data is opt-in and anonymous, and goes to PostHog through its Go SDK (`pos
 | `arch` | the Go runtime's, such as `arm64` |
 
 plus what the SDK adds itself, such as `$os`, `$os_version`, `$lib` and `$lib_version`. GeoIP is off. Before an event is sent, the SDK's `BeforeSend` hook replaces every path under `/Users/`, `/home/`, `/root/`, `/private/`, `/tmp/` or `/var/folders/` in any string it carries, an exception's messages, stack frames and binary path included, with `<path>`.
+
+**Crashes.** A panic ends the run as an internal error, exit code 10, see [Exit codes](#exit-codes); a panic on a goroutine serve starts, its jobs, its watcher and the methods it answers requests with, ends serve the same way. While usage data is sent, the run also sends one `$exception` event to PostHog's error tracking: the Go type of the value passed to `panic`, the panic's message and the stack it was raised on, as the SDK reads it, the frames of agentx's own code marked `in_app`, with `mechanism.handled` false. The release build passes `-trimpath`, so the frames name module-relative files. The message on stderr, or in the `error` event, keeps its paths: it goes to the user's own terminal.
 
 **Sending.** The SDK batches events in the background. A run makes one client on its first event and closes it when it ends, waiting at most one second for what is queued and dropping the rest; serve keeps its client open while it runs. A failed send is not retried after that, and never changes the exit code or the output.
 

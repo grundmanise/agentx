@@ -144,7 +144,7 @@ Something of the user's where a fork placed on this machine belongs: a directory
 _Avoid_: orphan, stray directory
 
 **Hub**:
-The source whose settings entry carries the hub flag, added with `agentx source add <url> --hub`: the repository stores push forks to and fetch them from. In the MVP it is a Git repository: the user's own, one the user's machines share, or one someone else keeps to distribute skills, which may be read-only; later, hosted by agentx once the machine is signed in. Only hub skills' branches and snapshots travel through it.
+The source whose settings entry carries the hub flag, added with `agentx source add <url> --hub`: the one repository of the user's own that stores push forks to and fetch them from, and the only place agentx publishes to (ADR 0020). In the MVP it is a Git repository the user's machines share, which may be read-only for one of them; later, hosted by agentx once the machine is signed in. Only hub skills' branches and snapshots travel through it. A repository other people share, such as a company's, is a shared source, never the hub.
 _Avoid_: account remote (old name), personal, own, cloud, server, origin, fork source
 
 **Hub skill**:
