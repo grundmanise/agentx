@@ -59,7 +59,7 @@ const dialog = (page: Page) =>
   page.getByRole("alertdialog", { name: "Help improve agentx" });
 
 const usageSwitch = (page: Page) =>
-  page.getByRole("switch", { name: "Send usage data" });
+  page.getByRole("switch", { name: "Send anonymous usage data" });
 
 /** Registers `config set telemetry <value>`, and the settings it leaves. */
 const answers = (cli: MockCli, value: "on" | "off") => {
