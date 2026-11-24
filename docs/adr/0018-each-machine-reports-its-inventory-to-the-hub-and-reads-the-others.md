@@ -35,11 +35,13 @@ It leaves out every path on the machine, the machine settings, the MCP servers, 
 
 A report is one commit on the tip of the machine's branch, pushed leased on that tip and never forced, as a publish and a snapshot are, with the user's Git identity, or the machine's when the user set none. A push the hub refuses because the branch moved writes nothing: the writer reads the branch again and reports from its next scan. Serve and the command may both write. They scan the same disk, so they write the same report. When the disk changed between their two scans, the older scan can land last, until the next report.
 
+A machine's report leaves the hub when the machine disconnects from the hub: `agentx source remove` of the hub, and an `agentx source add --hub` that replaces it, delete that machine's branch there. No other machine deletes it, and turning `report_inventory` off keeps the last report on the hub.
+
 The cloud machine writes none. It has no scan, a cloud session holds a read-only token (ADR 0011), and its snapshot on `machines/cloud` is its whole state already.
 
 ## Who reads it
 
-Serve's check of the hub (ADR 0015) asks for `reports/*` and `machines/cloud` in the `ls-remote` it already makes every 10 minutes, and fetches a branch only when it moved. `agentx machine list` and `agentx machine show` make the same read when the user runs them. `agentx machine remove` deletes a machine's report from the hub; a machine that still reports writes it again at its next change.
+Serve's check of the hub (ADR 0015) asks for `reports/*` and `machines/cloud` in the `ls-remote` it already makes every 10 minutes, and fetches a branch only when it moved. `agentx machine list` and `agentx machine show` make the same read when the user runs them.
 
 Three views read the reports: the desktop app's Machines screen, the line of a skill's details that names the other machines that have it, and the tables of the two commands. Each view matches a skill across machines by its logical asset and compares content hashes; a report says neither "same" nor "differs". The cloud machine's row comes from its snapshot, through the one reader that knows a snapshot. A snapshot holds no content hash: a view compares the cloud machine's skills by the version the snapshot names, and says nothing of a skill it names none for.
 
@@ -76,6 +78,8 @@ A change on a machine that reports shows on another machine about a minute after
 Whoever can read the hub can read the reports: machine labels, which default to the hostname, the names of skills and plugins, and source URLs. On a hub several people write to, each sees the others' machines.
 
 A hub this machine cannot push to takes no report. Serve warns when its pushes start failing and stays quiet until one succeeds, as its checks do.
+
+A machine that is lost or reinstalled keeps its last report on the hub until that branch is deleted there with Git.
 
 Two computers with one machine id, as a cloned disk gives, write one branch in turn; `agentx machine reset-id` gives one of them its own. A skill inside a project is in no inventory serve emits, so it is in no report.
 
