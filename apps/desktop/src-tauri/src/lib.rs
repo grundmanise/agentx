@@ -2,9 +2,10 @@
 // environment and keeps the serve child open, relaying the JSON-RPC messages the app exchanges
 // with it over its stdin and stdout; every command the app runs is a `run` request to serve. It
 // has no file, git or network code of its own beyond writing serve's log, reading its end back,
-// the app's preferences, and the updater plugin, which checks for and installs the app's own
-// updates (ADR 0019). It starts no program but the login shell, agentx and, when the user asks,
-// the editor of their choice (ADR 0001, ADR 0013). Its calls to the operating system beside
+// the app's preferences, the updater plugin, which checks for and installs the app's own
+// updates (ADR 0019), and the PostHog SDK, which reports a panic of its own while the app's
+// usage data setting is on (panic_reports.rs). It starts no program but the login shell, agentx
+// and, when the user asks, the editor of their choice (ADR 0001, ADR 0013). Its calls to the operating system beside
 // that are the opener plugin, which shows a path selected in Finder (the file manager elsewhere)
 // and opens a skill's file in the system's default application when the user asks, and the dialog
 // plugin's open dialog, in which the user picks a snapshot to apply: it returns the path, and the
@@ -13,6 +14,7 @@
 mod app_update;
 mod editor;
 mod logfile;
+mod panic_reports;
 mod preferences;
 mod shell;
 pub mod supervisor;
@@ -219,7 +221,8 @@ pub fn run() {
             app_update::app_update_check,
             app_update::app_update_install,
             app_update::app_restart,
-            app_info
+            app_info,
+            panic_reports::set_telemetry
         ])
         .build(tauri::generate_context!())
         .expect("error while building the agentx desktop app");
