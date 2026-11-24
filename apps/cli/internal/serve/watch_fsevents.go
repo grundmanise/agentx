@@ -8,6 +8,8 @@ import (
 	"slices"
 
 	"github.com/fsnotify/fsevents"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/crash"
 )
 
 // fseventsBackend watches through FSEvents, which is recursive and costs no
@@ -62,6 +64,7 @@ func (b *fseventsBackend) sync(dirs, trees []string) error {
 	}
 	done := make(chan struct{})
 	go func() {
+		defer crash.Recover(b.sig.crashed)
 		for {
 			select {
 			case <-done:
