@@ -362,6 +362,16 @@ export class MockCli {
   private readonly missingPaths = new Set<string>();
   // The app's preferences file, which outlives a page reload as the file outlives a restart.
   private preferences: unknown = { editor: { kind: "system" } };
+  // The app update the next checks find, and how an install of it ends.
+  private appUpdate: { version: string; current_version: string } | null = null;
+  private holdingInstall = false;
+  /** How the held install ended, once the test ended it: failed or not. */
+  private installEnded: boolean | undefined;
+  private readonly installSignals = new EventTarget();
+  /** How many times the app checked for its own update. */
+  appUpdateChecks = 0;
+  /** How many times the app asked to restart, to run the update it installed. */
+  restarts = 0;
 
   constructor(page: Page) {
     this.page = page;
@@ -450,6 +460,32 @@ export class MockCli {
   /** Sets the app's preferences file, as an earlier run of the app would have left it. */
   savePreferences(preferences: unknown) {
     this.preferences = preferences;
+  }
+
+  /** The app update every later check finds, as `version` over `current`; null for none. */
+  offerAppUpdate(version: string | null, current = "0.3.0") {
+    this.appUpdate =
+      version === null ? null : { current_version: current, version };
+  }
+
+  /**
+   * Holds the next install of the app update until `endAppUpdateInstall`, so a test can send
+   * its progress with `appUpdateProgress` meanwhile.
+   */
+  holdAppUpdateInstall() {
+    this.holdingInstall = true;
+    this.installEnded = undefined;
+  }
+
+  /** Ends the held install: it succeeds, or fails as with a bad signature. */
+  endAppUpdateInstall({ failed = false } = {}) {
+    this.installEnded = failed;
+    this.installSignals.dispatchEvent(new CustomEvent("end"));
+  }
+
+  /** Sends the download's progress of the install going on, in bytes. */
+  async appUpdateProgress(downloaded: number, total: number) {
+    await this.emit("app-update-progress", [{ downloaded, total }]);
   }
 
   /** What the supervisor reports about the CLI. */
@@ -787,12 +823,41 @@ export class MockCli {
         this.preferences = field(args, "preferences");
         return null;
       }
+      case "app_update_check": {
+        this.appUpdateChecks += 1;
+        return this.appUpdate;
+      }
+      case "app_update_install": {
+        return this.installAppUpdate(field(args, "version"));
+      }
+      case "app_restart": {
+        this.restarts += 1;
+        return null;
+      }
       default: {
         return this.refuse(
           `the app called ${command}, which the supervisor does not have`
         );
       }
     }
+  }
+
+  private async installAppUpdate(version: unknown) {
+    if (this.appUpdate === null) {
+      throw new Error("no update was found to install");
+    }
+    // Held, a test can offer a newer update meanwhile, as a check that ends before the install
+    // starts does.
+    if (this.holdingInstall && this.installEnded === undefined) {
+      await nextDetail(this.installSignals, "end");
+    }
+    if (this.appUpdate.version !== version) {
+      return this.appUpdate.version;
+    }
+    if (this.installEnded === true) {
+      throw new Error("signature does not match");
+    }
+    return null;
   }
 
   /** Reads one JSON-RPC message from serve's stdin, as serve does. */
