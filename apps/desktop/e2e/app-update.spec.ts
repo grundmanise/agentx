@@ -1,6 +1,7 @@
 // The app's own updates: the check after the startup checks pass, the title bar's Update to,
-// Installing with the download's percent, Restart to update, and App updates in Settings with its
-// Check for updates switch and Check now. The Rust side's updater is the mocked CLI's.
+// Installing with the download's percent, Restart to update, App updates in Settings with its
+// Check for updates switch and Check now, and the macOS app menu's Settings… and Check for
+// Updates…. The Rust side's updater is the mocked CLI's.
 import type { Page } from "@playwright/test";
 
 import { launch } from "./fixtures/palette-publish.ts";
@@ -128,4 +129,31 @@ test("the switch saves Check for updates and keeps the editor", async ({
       check_updates: false,
       editor: { command: "code --wait", kind: "custom" },
     });
+});
+
+test("the app menu's Check for Updates… checks at once and says when there is none", async ({
+  cli,
+  page,
+}) => {
+  launch(cli, "synced");
+  await page.goto("/#/skills");
+  await expect.poll(() => cli.appUpdateChecks).toBe(1);
+
+  await cli.clickAppMenu("check-updates");
+  await expect(toasts(page)).toContainText("agentx is up to date");
+  expect(cli.appUpdateChecks).toBe(2);
+});
+
+test("the app menu's Settings… and ⌘, open Settings", async ({ cli, page }) => {
+  launch(cli, "synced");
+  await page.goto("/#/skills");
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+
+  await cli.clickAppMenu("settings");
+  await expect(page).toHaveURL(/#\/settings$/u);
+
+  await page.goto("/#/skills");
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+Comma");
+  await expect(page).toHaveURL(/#\/settings$/u);
 });
