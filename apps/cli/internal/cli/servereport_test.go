@@ -120,27 +120,37 @@ func TestServeWritesThisMachinesReport(t *testing.T) {
 // TestReportWrite: a report that failed is one warning prefixed "machine
 // report: " when the reports start failing and none while they go on
 // failing, a report the branch held already is nothing, and a failure
-// after a report that worked warns again.
+// after a report that worked warns again. So does the first failure after
+// the machine stopped reporting, which forgets the report its branch held
+// too.
 func TestReportWrite(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
 	c := &serveChecks{inv: &invocation{out: &writer{stdout: &stdout, stderr: &stderr}}}
 	held := writtenReport{data: []byte("{}\n")}
 	for _, step := range []struct {
-		name string
-		w    writtenReport
-		err  error
-		want string
+		name   string
+		forget bool // the machine stopped reporting before this report
+		w      writtenReport
+		err    error
+		want   string
 	}{
-		{"the first failure", writtenReport{}, errors.New("cannot reach the hub"), "warning: machine report: cannot reach the hub\n"},
-		{"a failure after a failure", writtenReport{}, errors.New("cannot reach the hub"), ""},
-		{"a report the branch held", held, nil, ""},
-		{"a failure after a report", writtenReport{}, errors.New("the hub rejected it"), "warning: machine report: the hub rejected it\n"},
+		{"the first failure", false, writtenReport{}, errors.New("cannot reach the hub"), "warning: machine report: cannot reach the hub\n"},
+		{"a failure after a failure", false, writtenReport{}, errors.New("cannot reach the hub"), ""},
+		{"a failure once the machine reports again", true, writtenReport{}, errors.New("cannot reach the hub"), "warning: machine report: cannot reach the hub\n"},
+		{"a report the branch held", false, held, nil, ""},
+		{"a failure after a report", false, writtenReport{}, errors.New("the hub rejected it"), "warning: machine report: the hub rejected it\n"},
 	} {
 		stderr.Reset()
+		if step.forget {
+			c.forgetReports()
+		}
 		c.reportWrite(step.w, step.err)
 		equal(t, step.name+": stderr", stderr.String(), step.want)
 	}
 	equal(t, "stdout", stdout.String(), "")
 	equal(t, "the report the branch is known to hold after a failure", string(c.reported), "")
+	c.reportWrite(held, nil)
+	c.forgetReports()
+	equal(t, "the report the branch is known to hold once the machine no longer reports", string(c.reported), "")
 }

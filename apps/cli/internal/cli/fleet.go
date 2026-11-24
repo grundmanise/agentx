@@ -199,7 +199,7 @@ func machineNamed(arg string, machines []fleetMachine) (fleetMachine, error) {
 			"place a skill on it with 'agentx skill place <name> --machine "+cloudMachine+"', or seed it with 'agentx snapshot save --machine "+cloudMachine+"'")
 	}
 	return fleetMachine{}, fail(exitNotFound, "the hub holds no report of a machine called "+clipped(sanitised(arg)),
-		"run 'agentx machine list' for the machines the hub holds; a machine shows there once it has run 'agentx machine report'")
+		"run 'agentx machine list' for the machines the hub holds; a machine shows there once you run 'agentx machine report' on it, or turn on its report_inventory setting")
 }
 
 // machineList is agentx machine list: every machine the hub holds
@@ -234,7 +234,8 @@ func (inv *invocation) machineList(ctx context.Context) error {
 		}
 		out.render(t, "")
 		if len(others) == 0 {
-			out.print("The hub holds no other machine. A machine shows here once it has run ", out.paint(label, "agentx machine report"), ".")
+			out.print("The hub holds no other machine. A machine shows here once you run ", out.paint(label, "agentx machine report"),
+				" on it, or turn on its report_inventory setting.")
 		}
 	}
 	for _, w := range f.warnings {
