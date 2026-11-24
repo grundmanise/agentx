@@ -150,6 +150,7 @@ export const AgentTargets = ({
       <TooltipTrigger asChild>
         <Toggle
           kind="logo"
+          track="agent-targets.toggle"
           pressed={targets.includes(c.id)}
           disabled={disabled}
           onPressedChange={() => {
@@ -177,6 +178,7 @@ export const AgentTargets = ({
           <Button
             variant="secondary"
             size="sm"
+            track="agent-targets.more"
             disabled={disabled}
             aria-haspopup="dialog"
             aria-label={moreLabel(hidden.length, hiddenChosen)}

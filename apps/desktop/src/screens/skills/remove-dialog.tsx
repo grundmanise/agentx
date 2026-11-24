@@ -128,6 +128,7 @@ export const RemoveDialog = ({
         {offersRemote && (
           <label htmlFor={checkboxId} className="flex items-start gap-2.5">
             <Checkbox
+              track="remove-dialog.toggle-delete-from-hub"
               id={checkboxId}
               checked={remote}
               onCheckedChange={(checked) => {
@@ -141,9 +142,15 @@ export const RemoveDialog = ({
         )}
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
-            <Button variant="ghost">Cancel</Button>
+            <Button track="remove-dialog.cancel" variant="ghost">
+              Cancel
+            </Button>
           </AlertDialogCancel>
-          <Button variant="danger" onClick={remove}>
+          <Button
+            track="remove-dialog.confirm"
+            variant="danger"
+            onClick={remove}
+          >
             Remove
           </Button>
         </AlertDialogFooter>

@@ -531,6 +531,7 @@ export const SourcesScreen = () => {
           <div className="gap-button flex items-center">
             <Button
               variant="secondary"
+              track="sources.refresh-all"
               aria-busy={refreshing}
               disabled={refreshing || pills.length === 0}
               onClick={() => {
@@ -542,6 +543,7 @@ export const SourcesScreen = () => {
             </Button>
             <Button
               variant="secondary"
+              track="sources.add"
               onClick={() => {
                 setDialogOpen(true);
               }}
@@ -581,6 +583,7 @@ export const SourcesScreen = () => {
         {allCards.length > 0 && (
           <SelectAllRow
             align="end"
+            track="sources.select-all"
             selected={selectedCount}
             total={selectable.length}
             onSelectAll={selectAll}

@@ -6,18 +6,22 @@
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
 
 import { CheckMark } from "#/components/check-mark.tsx";
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 export type CheckboxProps = Omit<
   OwnProps<typeof CheckboxPrimitive.Root>,
   "checked" | "defaultChecked"
-> & {
-  /** Always set: the caller holds the choice. */
-  checked: boolean | "indeterminate";
-};
+> &
+  Tracked & {
+    /** Always set: the caller holds the choice. */
+    checked: boolean | "indeterminate";
+  };
 
-const Checkbox = ({ checked, ...props }: CheckboxProps) => (
+const Checkbox = ({ checked, track, ...props }: CheckboxProps) => (
   <CheckboxPrimitive.Root
+    {...trackAttribute(track)}
     data-slot="checkbox"
     checked={checked}
     className="rounded-checkbox size-checkbox inline-flex shrink-0 items-center justify-center border-0 bg-transparent p-0 outline-none disabled:cursor-not-allowed disabled:opacity-50"

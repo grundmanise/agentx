@@ -102,6 +102,8 @@ export interface AppState {
    * inventory leaves them out, since every git write changes the size. Undefined before a read.
    */
   store: Pick<MachineEvent, "store" | "store_bytes"> | undefined;
+  /** Whether the telemetry question was answered this session: it is not asked again. */
+  telemetryAnswered: boolean;
   /** What `skill import` would take over, from its preview. */
   adoption: AdoptionEvent[];
   /** The controls whose command runs: label → run id. */
@@ -211,6 +213,7 @@ export const useAppStore = create<AppState>()(() => ({
   serveError: undefined,
   skillMds: {},
   store: undefined,
+  telemetryAnswered: false,
   updateDiffs: {},
   updates: {},
 }));

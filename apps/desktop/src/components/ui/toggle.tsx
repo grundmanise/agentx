@@ -6,6 +6,8 @@ import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { Toggle as TogglePrimitive } from "radix-ui";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const toggleVariants = cva("inline-flex shrink-0 outline-none", {
@@ -30,11 +32,13 @@ const toggleVariants = cva("inline-flex shrink-0 outline-none", {
 });
 
 export type ToggleProps = OwnProps<typeof TogglePrimitive.Root> &
-  VariantProps<typeof toggleVariants>;
+  VariantProps<typeof toggleVariants> &
+  Tracked;
 
 /** Style comes only from `kind`: Toggle takes no `className` or `style`. */
-const Toggle = ({ kind, ...props }: ToggleProps) => (
+const Toggle = ({ kind, track, ...props }: ToggleProps) => (
   <TogglePrimitive.Root
+    {...trackAttribute(track)}
     data-slot="toggle"
     className={toggleVariants({ kind })}
     {...props}

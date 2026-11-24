@@ -73,6 +73,7 @@ const SkillRowView = ({
     .join(". ");
   return (
     <ListRow
+      track="skills.row-open"
       label={row.name}
       description={description}
       selected={selected}

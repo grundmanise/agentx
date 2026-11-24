@@ -35,6 +35,7 @@ const IgnoreSystemFiles = ({ checked }: { checked: boolean }) => {
         )}
         <Switch
           id={id}
+          track="settings.ignore-system-files"
           aria-label="Ignore system files"
           aria-describedby={`${id}-line`}
           title={

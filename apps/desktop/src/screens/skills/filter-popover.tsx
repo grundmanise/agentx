@@ -160,6 +160,7 @@ export const AgentChoices = ({
     <div className="flex flex-col">
       {shown.map((c) => (
         <CheckOption
+          track="skills-filter.toggle-agent"
           key={c.id}
           checked={checked.includes(c.id)}
           onChange={(on) => {
@@ -172,6 +173,7 @@ export const AgentChoices = ({
       {(expanded || hidden > 0) && !short && (
         <div className="flex pt-1">
           <Button
+            track="skills-filter.show-more"
             variant="ghost"
             size="sm"
             aria-expanded={expanded}
@@ -221,11 +223,12 @@ export const FilterPopover = ({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <FilterButton count={count} />
+        <FilterButton track="skills.filter" count={count} />
       </PopoverTrigger>
       <PopoverContent aria-label="Filters">
         <ChoiceGroup caption="Show">
           <ChoicePills
+            track="skills-filter.show"
             options={shows.map((s) => ({ ...s, count: counts[s.value] }))}
             value={filters.show}
             onChange={(show) => {
@@ -235,6 +238,7 @@ export const FilterPopover = ({
         </ChoiceGroup>
         <ChoiceGroup caption="State">
           <Segmented
+            track="skills-filter.state"
             options={states}
             value={filters.state}
             onChange={(state) => {
@@ -252,6 +256,7 @@ export const FilterPopover = ({
         {count > 0 && (
           <div className="flex">
             <Button
+              track="skills-filter.reset"
               variant="ghost"
               size="sm"
               onClick={() => {

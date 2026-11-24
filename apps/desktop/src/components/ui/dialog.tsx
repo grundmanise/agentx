@@ -96,7 +96,12 @@ const DialogHeader = ({
     <div className="flex min-w-0 flex-1 flex-col gap-1">{children}</div>
     {showCloseButton && (
       <DialogClose asChild>
-        <Button variant="ghost" size="icon" aria-label="Close">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Close"
+          track="dialog.close"
+        >
           <CloseIcon />
         </Button>
       </DialogClose>

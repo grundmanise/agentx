@@ -232,9 +232,12 @@ const CreateSkillForm = ({
       </div>
       <DialogFooter>
         <DialogClose asChild>
-          <Button variant="ghost">Cancel</Button>
+          <Button track="create-dialog.cancel" variant="ghost">
+            Cancel
+          </Button>
         </DialogClose>
         <Button
+          track="create-dialog.create"
           type="submit"
           variant="primary"
           disabled={!isSkillName(name) || tooLong}

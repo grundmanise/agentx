@@ -141,6 +141,7 @@ const DebugOutput = () => {
         id={id}
         aria-describedby={`${id}-line`}
         checked={debug}
+        track="activity-log.debug-output"
         onCheckedChange={(on) => {
           setDebugOutput(on);
           void setServeDebug(on);
@@ -189,11 +190,13 @@ export const ActivityLogSheet = () => {
               label="Copy"
               size="sm"
               disabled={lines.length === 0}
+              track="activity-log.copy"
               text={() => logText(lines)}
             />
             <Button
               variant="ghost"
               size="sm"
+              track="activity-log.open-serve-log"
               onClick={() => {
                 void showServeLog();
               }}

@@ -30,7 +30,7 @@ export const PluginFilterPopover = ({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <FilterButton count={filters.agents.length} />
+        <FilterButton track="plugins.filter" count={filters.agents.length} />
       </PopoverTrigger>
       <PopoverContent aria-label="Filters">
         <ChoiceGroup caption="Agents">
@@ -53,6 +53,7 @@ export const PluginFilterPopover = ({
             <Button
               variant="ghost"
               size="sm"
+              track="plugins.filter-reset"
               onClick={() => {
                 onChange({ ...filters, agents: [] });
               }}

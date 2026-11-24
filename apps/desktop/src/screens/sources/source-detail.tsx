@@ -65,6 +65,7 @@ const SourceUrl = ({ source }: { source: Source }) => {
         <SelectableLink
           href={page}
           tone="muted"
+          track="source-detail.url-open"
           onOpen={() => {
             void openInBrowser(page);
           }}
@@ -127,6 +128,7 @@ export const SourceDetail = ({
         <Button
           variant="secondary"
           size="sm"
+          track="source-detail.refresh"
           aria-busy={refreshing}
           disabled={refreshing}
           onClick={onRefresh}
@@ -139,6 +141,7 @@ export const SourceDetail = ({
             ref={removeRef}
             variant="danger"
             size="sm"
+            track="source-detail.remove"
             aria-busy={removing}
             disabled={removing}
             onClick={onRemove}

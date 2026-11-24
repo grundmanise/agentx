@@ -14,6 +14,8 @@ import { Accordion as AccordionPrimitive } from "radix-ui";
 import type { ReactNode } from "react";
 
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import { cn } from "#/lib/utils.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
@@ -211,24 +213,26 @@ const AccordionTrigger = ({
   meta,
   action,
   actionShown = false,
+  track,
   children,
-}: VariantProps<typeof triggerVariants> & {
-  /** The row's accessible name: what the item is about. */
-  label: string;
-  /** The id of the element whose text is the row's accessible description. */
-  description?: string;
-  /** Whether the item is open, which turns the chevron down. */
-  open: boolean;
-  /** Whether what the item shows is being read, before it opens. */
-  busy?: boolean;
-  /** The text at the row's end, such as "6 lines". */
-  meta?: ReactNode;
-  /** A button over the meta text, such as an icon button. */
-  action?: ReactNode;
-  /** Keeps the action shown, and the meta hidden, while something of its own is open, such as its menu. */
-  actionShown?: boolean;
-  children: ReactNode;
-}) => {
+}: VariantProps<typeof triggerVariants> &
+  Tracked & {
+    /** The row's accessible name: what the item is about. */
+    label: string;
+    /** The id of the element whose text is the row's accessible description. */
+    description?: string;
+    /** Whether the item is open, which turns the chevron down. */
+    open: boolean;
+    /** Whether what the item shows is being read, before it opens. */
+    busy?: boolean;
+    /** The text at the row's end, such as "6 lines". */
+    meta?: ReactNode;
+    /** A button over the meta text, such as an icon button. */
+    action?: ReactNode;
+    /** Keeps the action shown, and the meta hidden, while something of its own is open, such as its menu. */
+    actionShown?: boolean;
+    children: ReactNode;
+  }) => {
   const list = variant === "list";
   // On a row with a control, the meta text gives way to it: it fades out while the row is hovered
   // or holds the focus, or while the control's menu is open.
@@ -265,6 +269,7 @@ const AccordionTrigger = ({
         className={headingVariants({ variant })}
       >
         <AccordionPrimitive.Trigger
+          {...trackAttribute(track)}
           aria-label={label}
           aria-describedby={description}
           aria-busy={busy}

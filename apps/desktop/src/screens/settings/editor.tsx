@@ -92,6 +92,7 @@ const EditorChoices = ({
         <RadioGroupItem
           value="system"
           label="System default"
+          track="settings.editor-system"
           checked={editor.kind === "system"}
         />
         {editors.map((e) => (
@@ -99,12 +100,14 @@ const EditorChoices = ({
             key={e.id}
             value={`app:${e.id}`}
             label={e.name}
+            track="settings.editor-app"
             checked={editor.kind === "app" && editor.id === e.id}
           />
         ))}
         <RadioGroupItem
           value="custom"
           label="Custom command"
+          track="settings.editor-custom"
           checked={editor.kind === "custom"}
         />
       </RadioGroup>

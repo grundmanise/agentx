@@ -1,3 +1,5 @@
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import { cn } from "#/lib/utils.ts";
 
 /**
@@ -11,7 +13,8 @@ export const RemoveSwap = ({
   label,
   busy = false,
   onClick,
-}: {
+  track,
+}: Tracked & {
   status: string;
   label: string;
   busy?: boolean;
@@ -19,6 +22,7 @@ export const RemoveSwap = ({
 }) => (
   <button
     type="button"
+    {...trackAttribute(track)}
     aria-label={label}
     aria-busy={busy ? true : undefined}
     disabled={busy}

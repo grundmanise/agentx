@@ -182,6 +182,7 @@ const ApplyFile = () => {
       <span>
         <Button
           variant="secondary"
+          track="settings.snapshot-apply"
           disabled={pending}
           aria-busy={pending ? true : undefined}
           onClick={() => {
@@ -203,6 +204,8 @@ const ApplyFile = () => {
         description="This will replace your current settings, install missing skills and may update existing skills."
         detail={picked}
         action="Apply"
+        track="apply-snapshot-dialog.confirm"
+        cancelTrack="apply-snapshot-dialog.cancel"
         onConfirm={() => {
           if (picked !== undefined) {
             void applyFile(picked);

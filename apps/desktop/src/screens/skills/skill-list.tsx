@@ -120,7 +120,11 @@ export const AgentFilterChip = ({
   );
   if (agents.length === 1) {
     return (
-      <FilterChip clearLabel="Clear agents" onClear={onClear}>
+      <FilterChip
+        track="skills.clear-agent-filter"
+        clearLabel="Clear agents"
+        onClear={onClear}
+      >
         {agents[0] !== UNIVERSAL && single !== undefined ? (
           <AgentLogo client={single} size={16} />
         ) : (
@@ -162,6 +166,7 @@ export const AgentFilterChip = ({
   });
   return (
     <FilterTagsChip
+      track="skills.agent-filter"
       summary={summary}
       label={agentChipLabel(agents, chosen)}
       tags={tags}
@@ -181,6 +186,7 @@ const CheckUpdates = () => {
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
+          track="skills.check-updates"
           variant="ghost"
           size="icon-sm"
           aria-label="Check updates"
@@ -208,7 +214,13 @@ const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
     return null;
   }
   return (
-    <Button variant="accent" size="inline" disabled={busy} onClick={onOpen}>
+    <Button
+      track="skills.import-all"
+      variant="accent"
+      size="inline"
+      disabled={busy}
+      onClick={onOpen}
+    >
       <span className="type-button-sm">Import all</span>
     </Button>
   );
@@ -696,6 +708,7 @@ const SkillGroups = ({
                     <div className={RAIL_SPAN}>
                       <div ref={railHeader} className={PINNED_GROUP}>
                         <SectionToggle
+                          track="skills.toggle-group"
                           level="group"
                           label={group.label}
                           title={group.source}
@@ -767,6 +780,7 @@ const SkillGroups = ({
                                     className={PINNED_SUBGROUP}
                                   >
                                     <SectionToggle
+                                      track="skills.toggle-subgroup"
                                       label={subgroup.label}
                                       count={subgroup.rows.length}
                                       detail={subgroup.marketplace}
@@ -804,6 +818,7 @@ const AddSkills = () => {
   return (
     <>
       <SplitButton
+        track="skills.add"
         size="sm"
         onClick={() => {
           setAdding(true);
@@ -811,6 +826,7 @@ const AddSkills = () => {
         menuLabel="More add actions"
         menu={
           <DropdownMenuItem
+            track="skills.create-skill"
             onSelect={() => {
               setCreating(true);
             }}
@@ -933,6 +949,7 @@ export const SkillList = ({
           )}
           <span className="flex-1" />
           <ExpandToggle
+            track="skills.expand-all"
             open={anyOpen}
             disabled={groups.length === 0}
             onToggle={() => {
@@ -940,6 +957,7 @@ export const SkillList = ({
             }}
           />
           <SortToggle
+            track="skills.sort"
             order={order}
             onToggle={() => {
               onOrder(nextOrder(order));

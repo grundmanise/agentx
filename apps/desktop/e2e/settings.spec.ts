@@ -5,7 +5,12 @@
 // command.
 import type { Page } from "@playwright/test";
 
-import { MACHINE_ID, inventoryWith, machine } from "./fixtures/settings.ts";
+import {
+  MACHINE_ID,
+  inventoryWith,
+  machine,
+  scanned,
+} from "./fixtures/settings.ts";
 import {
   cliVersion,
   expect,
@@ -46,22 +51,6 @@ const labelField = (page: Page) =>
 const ignoreSwitch = (page: Page) =>
   page.getByRole("switch", { name: "Ignore system files" });
 
-/** Sends the inventory that follows a command and answers every refresh request, as serve does. */
-const scanned = async (
-  cli: MockCli,
-  inventory: ReturnType<typeof inventoryWith>
-) => {
-  await cli.serveEmit([
-    inventory,
-    ...cli.requestIds.map((id) => ({
-      ok: true,
-      request_id: id,
-      scan_counter: inventory.scan_counter,
-      type: "refresh_complete" as const,
-    })),
-  ]);
-};
-
 const openSettings = async (cli: MockCli, page: Page, ignore = true) => {
   cli.onServeStart({ events: [inventoryWith({ ignore })] });
   cli.register(["machine"], { events: [machine()] });
@@ -86,6 +75,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
     /^Storage/u,
     /^Command line/u,
     /^Activity log/u,
+    /^Usage data/u,
     /^Save snapshot/u,
     /^Apply snapshot/u,
   ]);
@@ -104,6 +94,13 @@ test("each section shows what the store holds", async ({ cli, page }) => {
     ".DS_Store, Thumbs.db and editor backups never count as edits. A skill's own .gitignore always applies."
   );
   await expect(ignoreSwitch(page)).toBeChecked();
+
+  // The inventory carries no `telemetry` value: nothing is sent, so the switch is off.
+  await expect(
+    section(page, "Usage data").getByRole("switch", {
+      name: "Send anonymous usage data",
+    })
+  ).not.toBeChecked();
 
   await expect(section(page, "Storage")).toMatchAriaSnapshot(`
     - region "Storage":

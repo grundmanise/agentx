@@ -1,9 +1,9 @@
-// The machine the Settings tests run against: this machine and its settings as the inventory lists
-// them, and its `machine` event with the store and its size, which Storage reads.
+// The machine the Settings and telemetry tests run against: this machine and its settings as the
+// inventory lists them, and its `machine` event with the store and its size, which Storage reads.
 import type { Machine, MachineEvent } from "#/cli/events.gen.ts";
 
 import { firstInventory, libraryPath, machineLabel } from "../harness/cli.ts";
-import type { InlineEvent } from "../harness/cli.ts";
+import type { InlineEvent, MockCli } from "../harness/cli.ts";
 
 export const HOME = "/home/me/.agentx";
 export const STORE = "/home/me/.agentx/store.git";
@@ -29,17 +29,45 @@ export const machine = (): Omit<MachineEvent, "schema_version"> => ({
 });
 
 /**
- * An inventory of this machine, with its label and `ignore_system_files` as given, and
- * `scanCounter` as its scan counter.
+ * An inventory of this machine, with its label, `ignore_system_files` and `telemetry` as given,
+ * the anonymous id `anonymousId` names, if any, and `scanCounter` as its scan counter.
  */
 export const inventoryWith = ({
+  anonymousId,
   ignore = true,
   label = machineLabel,
   scanCounter = 1,
+  telemetry,
+}: {
+  anonymousId?: string;
+  ignore?: boolean;
+  label?: string;
+  scanCounter?: number;
+  telemetry?: "on" | "off";
 } = {}) =>
   ({
     ...firstInventory(),
     machine: thisMachine(label),
     scan_counter: scanCounter,
-    settings: { ignore_system_files: ignore },
+    settings: {
+      ignore_system_files: ignore,
+      ...(telemetry === undefined ? {} : { telemetry }),
+      ...(anonymousId === undefined ? {} : { anonymous_id: anonymousId }),
+    },
   }) satisfies InlineEvent;
+
+/** Sends the inventory that follows a command and answers every refresh request, as serve does. */
+export const scanned = async (
+  cli: MockCli,
+  inventory: ReturnType<typeof inventoryWith>
+) => {
+  await cli.serveEmit([
+    inventory,
+    ...cli.requestIds.map((id) => ({
+      ok: true,
+      request_id: id,
+      scan_counter: inventory.scan_counter,
+      type: "refresh_complete" as const,
+    })),
+  ]);
+};

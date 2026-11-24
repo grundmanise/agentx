@@ -39,6 +39,7 @@ export const StaleBar = () => {
             <Button
               size="sm"
               variant="ghost"
+              track="stale-bar.retry"
               onClick={() => {
                 void retryRefresh();
               }}
