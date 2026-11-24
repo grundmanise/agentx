@@ -67,7 +67,7 @@ export interface MachineView {
   agentx: string | undefined;
   /** When the machine's report last changed on the hub; this machine's state is live. */
   changedAt: string | undefined;
-  /** How many skills its agent clients see; for the cloud machine, how many its snapshot lists. */
+  /** How many skills its agents list: the names under them, each counted once. */
   skillCount: number;
   /** Its agent configurations, A to Z by name. */
   agents: AgentGroup[];
@@ -208,18 +208,25 @@ const agentsOf = (held: ReportContents): AgentGroup[] =>
     skills: skillsSeenBy(held, c.id),
   }));
 
+/**
+ * How many skills a machine's row counts: the skill names its agents list, each once, so that the
+ * row and the machine's details agree. A skill several agents see, or one an agent sees from two
+ * places, is one skill.
+ */
+const skillCountOf = (agents: readonly AgentGroup[]) =>
+  new Set(agents.flatMap((a) => a.skills.map((s) => s.name))).size;
+
 const viewOf = (machine: FleetMachine): MachineView => {
-  const cloud = machine.machine.id === CLOUD_ID;
+  const agents = agentsOf(machine);
   return {
-    agents: agentsOf(machine),
+    agents,
     agentx: machine.machine.agentx,
     changedAt: machine.changed_at,
     id: machine.machine.id,
-    kind: cloud ? "cloud" : "other",
+    kind: machine.machine.id === CLOUD_ID ? "cloud" : "other",
     label: machine.machine.label,
     os: machine.machine.os,
-    // Nothing has scanned the cloud machine: its skills are those its snapshot lists.
-    skillCount: cloud ? machine.library.length : machine.skills.length,
+    skillCount: skillCountOf(agents),
   };
 };
 
@@ -237,16 +244,16 @@ export const projectMachines = (
   const self = machine ?? inventory?.machine;
   const views: MachineView[] = [];
   if (inventory !== undefined && self !== undefined) {
-    const held = reportOf(inventory);
+    const agents = agentsOf(reportOf(inventory));
     views.push({
-      agents: agentsOf(held),
+      agents,
       agentx: undefined,
       changedAt: undefined,
       id: self.id,
       kind: "this",
       label: self.label,
       os: undefined,
-      skillCount: held.skills.length,
+      skillCount: skillCountOf(agents),
     });
   }
   const held = (fleet ?? [])

@@ -77,8 +77,9 @@ test("the list shows this machine, the other machines by label and the cloud mac
   await expect(row(page, "atelier")).toHaveAccessibleDescription(
     "Changed 2 hours ago · 1 skill"
   );
+  // A name counts once, however many agents see it: the four its details list.
   await expect(row(page, "workbench")).toHaveAccessibleDescription(
-    "Changed Mar 9, 2025 · 5 skills"
+    "Changed Mar 9, 2025 · 4 skills"
   );
   await expect(row(page, "Cloud machine")).toHaveAccessibleDescription(
     "Changed 3 days ago · 2 skills"
