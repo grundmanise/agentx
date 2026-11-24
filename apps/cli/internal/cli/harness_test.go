@@ -312,6 +312,33 @@ type serveProc struct {
 	passInventories bool
 }
 
+// withoutFetchTimes is an inventory event as a key that leaves out its
+// counter and the times its sources were fetched and checked: ok is false
+// for any other line. Each serve starts with an update check that fetches
+// every source, which gives an inventory that differs from the one before in
+// those times alone, whenever the check ends. The harness drops such an
+// inventory, so that a test about anything else reads the messages it is
+// about; a test about the fetch times reads them from the settings.
+func withoutFetchTimes(line string) (key string, ok bool) {
+	var e map[string]any
+	if json.Unmarshal([]byte(line), &e) != nil || e["type"] != "inventory" {
+		return "", false
+	}
+	delete(e, "scan_counter")
+	sources, _ := e["sources"].([]any)
+	for _, s := range sources {
+		if m, isMap := s.(map[string]any); isMap {
+			delete(m, "last_fetched")
+			delete(m, "access_checked")
+		}
+	}
+	b, err := json.Marshal(e)
+	if err != nil {
+		return "", false
+	}
+	return string(b), true
+}
+
 // lockedBuffer is a bytes.Buffer that one goroutine can write while another
 // reads it.
 type lockedBuffer struct {
@@ -356,10 +383,17 @@ func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 		defer outR.Close()
 		sc := bufio.NewScanner(outR)
 		sc.Buffer(nil, 16<<20)
+		var last string // the last inventory passed on, without its fetch times
 		for sc.Scan() {
 			line := sc.Text()
 			if rpc {
 				line = ownEvent(line)
+				if key, ok := withoutFetchTimes(line); ok {
+					if key == last {
+						continue
+					}
+					last = key
+				}
 			}
 			p.lines <- line
 		}

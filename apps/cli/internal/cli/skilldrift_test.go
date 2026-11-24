@@ -385,12 +385,7 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
 	first := p.next("inventory")
-	// The update check at start fetches the source, whose new last fetch is an
-	// inventory of its own: the refresh waits for it.
-	p.next("update_check")
-	p.passInventories = true
-	p.refreshed("start")
-	p.passInventories = false
+	p.refreshed("start") // the message after the first inventory
 
 	change := func(id string, do func()) jsonEvent {
 		t.Helper()
@@ -497,12 +492,7 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
 	p.next("inventory")
-	// The update check at start fetches the source, whose new last fetch is an
-	// inventory of its own: the refresh waits for it.
-	p.next("update_check")
-	p.passInventories = true
-	p.refreshed("start")
-	p.passInventories = false
+	p.refreshed("start") // the message after the first inventory
 
 	// One rename takes the whole directory away, so the watcher never sees
 	// the skill half deleted, which would be an edit of its own.
@@ -653,12 +643,7 @@ func TestServeReportsForkDrift(t *testing.T) {
 	p := h.serve(t, "--json")
 	first := p.next("inventory")["library"].([]any)
 	equal(t, "the fork's first state", first[0].(map[string]any)["state"], stateCurrent)
-	// The update check at start fetches the source, whose new last fetch is an
-	// inventory of its own: the refresh waits for it.
-	p.next("update_check")
-	p.passInventories = true
-	p.refreshed("start")
-	p.passInventories = false
+	p.refreshed("start") // the message after the first inventory
 	expect := func(what, state, previous string, drift ...string) {
 		t.Helper()
 		e := p.nextOf("drift")
