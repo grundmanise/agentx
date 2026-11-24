@@ -80,13 +80,12 @@ Supports 75 agents:
 
 ## Goals and non-goals
 
-agentx is for one person who keeps their skills in sync across their own machines and agents. Your hub, one Git repository of your own, is where you publish your skills and where your machines share them. Any other repository, your company's skills included, is a source you install from.
+Goals:
+- one person multi-machine and multi-agent workflows
 
 Not goals:
 
-- Distributing skills to a team or a company.
-- More than one place to publish to.
-- Running a shared repository's Git workflow. To change a skill there, use Git and that repository's own branches, commit messages and reviews.
+- company-wide skill distribution and sharing
 
 See [ADR 0020](docs/adr/0020-agentx-is-for-one-person-and-their-one-hub.md).
 
