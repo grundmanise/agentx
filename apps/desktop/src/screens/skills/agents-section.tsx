@@ -85,6 +85,7 @@ const toggle = (
     onClick: () => {
       toggle(row, c, !add, removed);
     },
+    track: "skill-agents.undo",
   };
   void runUntilSettled(
     add
@@ -119,6 +120,7 @@ const unlockAction = (row: SkillRow, lock: Lock): ToastAction | undefined =>
         onClick: () => {
           void adopt(row);
         },
+        track: "skill-agents.import",
       }
     : undefined;
 
@@ -141,6 +143,7 @@ const DirectChip = ({
   const pending = useSettling(chipLabel(row, c));
   return (
     <AgentChip
+      track="skill-agents.toggle-agent"
       logo={<AgentLogo client={c} size={28} tooltip={false} />}
       name={c.name}
       state={state}
@@ -274,6 +277,7 @@ export const AgentsSection = ({
     entries.push({
       chip: (
         <AgentChip
+          track="skill-agents.toggle-universal"
           logo={<LogoStack clients={universal} size={28} />}
           name="Universal"
           state={row.universal ? "on" : "off"}
@@ -370,6 +374,7 @@ export const AgentsSection = ({
         }
       >
         <Button
+          track="skill-agents.show-more"
           variant="ghost"
           size="sm"
           aria-expanded={expanded}

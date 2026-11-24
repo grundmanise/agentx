@@ -24,7 +24,7 @@ const settableKeys = "label, accept_operations, ignore_system_files, telemetry"
 type settingsEvent struct {
 	event
 	Settings    home.Settings `json:"settings"`
-	TelemetryID string        `json:"telemetry_id,omitempty"` // the id usage data is sent under, while telemetry is on
+	AnonymousID string        `json:"anonymous_id,omitempty"` // the id usage data is sent under, while telemetry is on
 }
 
 func newConfigCommand(inv *invocation) *cobra.Command {
@@ -118,9 +118,6 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 			})
 			if err != nil {
 				return err
-			}
-			if args[0] == "telemetry" && s.Telemetry == telemetryOff {
-				_ = os.RemoveAll(spoolDir(inv.dirs.Home)) // what was recorded before is not sent either
 			}
 			inv.emitSettings(s)
 			inv.out.done(inv.out.paint(label, args[0]) + " is now " + inv.out.paint(heading, args[1]))
@@ -401,9 +398,9 @@ func (inv *invocation) label(s home.Settings) string {
 }
 
 func (inv *invocation) emitSettings(s home.Settings) {
-	id := inv.settingsTelemetryID(s)
+	id := inv.settingsAnonymousID(s)
 	s.Label = inv.label(s)
-	inv.out.emit(settingsEvent{event: newEvent("settings"), Settings: s, TelemetryID: id})
+	inv.out.emit(settingsEvent{event: newEvent("settings"), Settings: s, AnonymousID: id})
 }
 
 type settingRow struct{ key, value string }

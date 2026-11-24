@@ -14,11 +14,11 @@ use serde_json::Value;
 
 /// What the app tells the Rust side about its usage data.
 #[derive(Clone, Debug, Default, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct Telemetry {
     /// Whether the setting is on and this build sends at all.
     pub on: bool,
-    /// `nightly` or `stable`.
+    /// `nightly` or `stable`; absent in a build that is no release.
     pub release_channel: String,
     /// The PostHog ingestion host and project token the app sends to.
     pub host: String,

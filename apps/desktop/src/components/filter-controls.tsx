@@ -17,6 +17,8 @@ import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group.tsx";
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import { cn } from "#/lib/utils.ts";
 
 /**
@@ -27,7 +29,7 @@ import { cn } from "#/lib/utils.ts";
 export const FilterButton = ({
   count,
   ...props
-}: {
+}: Tracked & {
   /** How many filters are applied; 0 shows the button at rest. */
   count: number;
   onClick?: () => void;
@@ -56,7 +58,8 @@ export const FilterChip = ({
   children,
   clearLabel,
   onClear,
-}: {
+  track,
+}: Tracked & {
   children: ReactNode;
   /** The accessible name of the cross. */
   clearLabel: string;
@@ -68,6 +71,7 @@ export const FilterChip = ({
       variant="filter-chip"
       size="chip"
       aria-label={clearLabel}
+      track={track}
       onClick={onClear}
     >
       <CloseIcon size="xs" />
@@ -91,14 +95,16 @@ export interface FilterTag {
  * `filter-tags.max-height`. The tags run to the panel's bottom edge, so a tag cut there says the
  * list scrolls; their bottom padding comes only at the end of the scroll. A tag is a button that
  * removes its value; pointing at it shows a cross over the end of its label. The panel has no
- * close control: it goes when the pointer or the focus leaves it.
+ * close control: it goes when the pointer or the focus leaves it. A click on any tag is sent under
+ * `track`.
  */
 export const FilterTagsChip = ({
   summary,
   label,
   tags,
   onRemove,
-}: {
+  track,
+}: Tracked & {
   /** The marks shown at rest, such as a few logos. */
   summary: ReactNode;
   /** The count, such as "17 agents"; it also names the tags' group. */
@@ -130,6 +136,7 @@ export const FilterTagsChip = ({
           <button
             key={tag.key}
             type="button"
+            {...trackAttribute(track)}
             aria-label={`Remove ${tag.label}`}
             onClick={() => {
               onRemove(tag.key);
@@ -161,7 +168,8 @@ const sortLabels = {
 export const SortToggle = ({
   order,
   onToggle,
-}: {
+  track,
+}: Tracked & {
   order: "asc" | "desc";
   onToggle: () => void;
 }) => (
@@ -170,6 +178,7 @@ export const SortToggle = ({
     size="filter-toggle"
     aria-label={`Sort: ${sortLabels[order].name}`}
     title={`Sort: ${sortLabels[order].name}`}
+    track={track}
     onClick={onToggle}
   >
     <span
@@ -202,13 +211,15 @@ export const ChoiceGroup = ({
 
 /**
  * The choices of a one-of group in the popover (SHOW): a pill per choice, with its count. The
- * fieldset of its `ChoiceGroup` names the radios, so the pills' own group adds no role.
+ * fieldset of its `ChoiceGroup` names the radios, so the pills' own group adds no role. A click on
+ * any pill is sent under `track`.
  */
 export const ChoicePills = <T extends string>({
   options,
   value,
   onChange,
-}: {
+  track,
+}: Tracked & {
   options: { value: T; label: string; count: number }[];
   value: T;
   onChange: (value: T) => void;
@@ -225,7 +236,7 @@ export const ChoicePills = <T extends string>({
     }}
   >
     {options.map((o) => (
-      <ToggleGroupItem key={o.value} value={o.value}>
+      <ToggleGroupItem key={o.value} value={o.value} track={track}>
         <span>{o.label}</span>
         <span
           className={cn(
@@ -242,7 +253,8 @@ export const ChoicePills = <T extends string>({
 
 /**
  * A segmented control of equal segments, one selected: STATE in the popover, and the placement
- * on an agent client card. While `busy`, its command runs: it is disabled and says so.
+ * on an agent client card. While `busy`, its command runs: it is disabled and says so. A click on
+ * any segment is sent under `track`.
  */
 export const Segmented = <T extends string>({
   options,
@@ -253,7 +265,8 @@ export const Segmented = <T extends string>({
   surface,
   disabled = false,
   busy = false,
-}: {
+  track,
+}: Tracked & {
   options: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
@@ -282,7 +295,7 @@ export const Segmented = <T extends string>({
     busy={busy}
   >
     {options.map((o) => (
-      <ToggleGroupItem key={o.value} value={o.value}>
+      <ToggleGroupItem key={o.value} value={o.value} track={track}>
         {o.label}
       </ToggleGroupItem>
     ))}
@@ -297,7 +310,8 @@ export const CheckOption = ({
   checked,
   onChange,
   children,
-}: {
+  track,
+}: Tracked & {
   checked: boolean;
   onChange: (checked: boolean) => void;
   children: ReactNode;
@@ -311,6 +325,7 @@ export const CheckOption = ({
       <Checkbox
         id={id}
         checked={checked}
+        track={track}
         onCheckedChange={(next) => {
           onChange(next === true);
         }}
@@ -329,7 +344,8 @@ export const ExpandToggle = ({
   open,
   disabled = false,
   onToggle,
-}: {
+  track,
+}: Tracked & {
   /** Whether any section is open. */
   open: boolean;
   disabled?: boolean;
@@ -343,6 +359,7 @@ export const ExpandToggle = ({
       aria-label={name}
       title={name}
       disabled={disabled}
+      track={track}
       onClick={onToggle}
     >
       {open ? <CollapseIcon size="xs" /> : <ExpandIcon size="xs" />}

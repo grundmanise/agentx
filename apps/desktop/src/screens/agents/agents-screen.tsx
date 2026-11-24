@@ -112,6 +112,7 @@ const PlacementControl = ({
               onClick: () => {
                 convert(c, mode);
               },
+              track: "placement-toast.convert",
             }
           : undefined,
       label: placementLabel(c),
@@ -134,6 +135,7 @@ const PlacementControl = ({
         )}
       </span>
       <Segmented
+        track="agents.card-placement"
         options={placements}
         value={value}
         onChange={onChange}
@@ -196,6 +198,7 @@ const AgentMenu = ({ c }: { c: Configuration }) => {
           <Button
             variant="ghost"
             size="icon"
+            track="agents.card-menu"
             aria-label={`More actions for ${c.name}`}
             disabled={pending}
           >
@@ -204,6 +207,7 @@ const AgentMenu = ({ c }: { c: Configuration }) => {
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem
+            track="agents.card-remove"
             onSelect={() => {
               setConfirming(true);
             }}
@@ -219,6 +223,8 @@ const AgentMenu = ({ c }: { c: Configuration }) => {
         description="Its configuration directory is deleted from this machine, with everything in it."
         detail={c.path}
         action="Remove"
+        track="remove-agent-dialog.confirm"
+        cancelTrack="remove-agent-dialog.cancel"
         onConfirm={() => {
           setConfirming(false);
           remove(c);
@@ -248,6 +254,7 @@ const AgentCard = ({
                 onClick: () => {
                   placeAll(c);
                 },
+                track: "enable-toast.place-all",
               }
             : undefined,
         label: switchLabel(c),
@@ -274,6 +281,7 @@ const AgentCard = ({
             </span>
           )}
           <Switch
+            track="agents.card-enable"
             aria-label="Enabled"
             title={
               c.enabled

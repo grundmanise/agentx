@@ -108,6 +108,7 @@ export const RemoveSourceDialog = ({
           <label htmlFor={checkboxId} className="flex items-start gap-2.5">
             <Checkbox
               id={checkboxId}
+              track="remove-source-dialog.with-skills"
               checked={withSkills}
               onCheckedChange={(checked) => {
                 setWithSkills(checked === true);
@@ -125,9 +126,15 @@ export const RemoveSourceDialog = ({
         )}
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
-            <Button variant="ghost">Cancel</Button>
+            <Button variant="ghost" track="remove-source-dialog.cancel">
+              Cancel
+            </Button>
           </AlertDialogCancel>
-          <Button variant="danger" onClick={remove}>
+          <Button
+            variant="danger"
+            track="remove-source-dialog.remove"
+            onClick={remove}
+          >
             Remove
           </Button>
         </AlertDialogFooter>

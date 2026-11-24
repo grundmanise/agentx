@@ -134,9 +134,16 @@ const AddSourceForm = ({
       </div>
       <DialogFooter>
         <DialogClose asChild>
-          <Button variant="ghost">Cancel</Button>
+          <Button variant="ghost" track="add-source-dialog.cancel">
+            Cancel
+          </Button>
         </DialogClose>
-        <Button type="submit" variant="primary" disabled={url.trim() === ""}>
+        <Button
+          type="submit"
+          variant="primary"
+          track="add-source-dialog.add"
+          disabled={url.trim() === ""}
+        >
           {pending && <Spinner />}
           Add
         </Button>

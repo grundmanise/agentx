@@ -153,6 +153,7 @@ export const notifyNoHub = () => {
       onClick: () => {
         navigateTo("/settings");
       },
+      track: "publish-toast.open-settings",
     },
     { kind: "warning" }
   );
@@ -213,6 +214,7 @@ const updateAction = (name: string): ToastAction | undefined => {
         onClick: () => {
           void updateSkill(row);
         },
+        track: "publish-toast.update",
       };
 };
 

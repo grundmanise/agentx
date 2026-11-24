@@ -11,6 +11,7 @@ export const ActivityLogSection = () => (
     <div className="flex">
       <Button
         variant="secondary"
+        track="settings.activity-log-show"
         onClick={() => {
           openActivityLog();
         }}

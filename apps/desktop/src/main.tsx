@@ -16,19 +16,22 @@ if (!root) {
   throw new Error("index.html has no #root element");
 }
 
-// Usage data follows the `telemetry` setting as the CLI reports it: on, and with the telemetry id,
-// which the CLI leaves out while DO_NOT_TRACK is set. The settings are read once the startup checks
-// found the CLI's version.
-useAppStore.subscribe(({ settings, telemetryId }) => {
+// Usage data follows the `telemetry` setting as the CLI reports it: on, and with the anonymous id,
+// which the CLI leaves out while DO_NOT_TRACK is set. The CLI's version, which the startup checks
+// find before any setting is read, says whether this is a release build, and its channel.
+const follow = () => {
+  const { settings, anonymousId } = useAppStore.getState();
   const { version } = useStartup.getState().findings;
   followTelemetry(
-    settings?.telemetry === "on" && telemetryId !== undefined,
-    telemetryId,
+    settings?.telemetry === "on",
+    anonymousId,
     version !== undefined && "cliVersion" in version
       ? version.cliVersion
       : undefined
   );
-});
+};
+useAppStore.subscribe(follow);
+useStartup.subscribe(follow);
 
 showKept();
 createRoot(root).render(

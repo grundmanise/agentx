@@ -106,6 +106,7 @@ export const openInEditor = async (absolutePath: string) => {
         onClick: () => {
           void revealInFinder(absolutePath);
         },
+        track: "toast.show-in-finder",
       }
     );
   }

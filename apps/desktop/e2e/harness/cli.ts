@@ -166,11 +166,11 @@ export const libraryPath = "/home/me/.agents/skills";
 /** The serve log file on the machine a passing launch reports. */
 export const serveLogPath = "/home/me/.local/state/agentx/logs/serve.log";
 
-/** The CLI version a passing launch reports. */
-export const cliVersion = "1.2.0";
-
-/** What the app's `app_info` reports: its version and platform, by the names the CLI uses. */
-export const appInfo = { arch: "amd64", os: "linux", version: "0.4.0" };
+/**
+ * The CLI version a passing launch reports: a source build's, which sends no usage data, so the
+ * telemetry question never shows unless a test reports a release version.
+ */
+export const cliVersion = "dev";
 
 /** Doctor's passing rows with `changes` put in place of the rows of the same check. */
 export const doctorWith = (...changes: InlineEvent[]): InlineEvent[] =>
@@ -339,6 +339,8 @@ export class MockCli {
 
   /** Every value the app set serve's debug level to (`serve_verbose`), in order. */
   readonly serveVerbose: boolean[] = [];
+  /** What the app told the Tauri shell of the telemetry setting, in order (`set_telemetry`). */
+  readonly telemetryTold: unknown[] = [];
 
   /** How many times the app started serve. */
   serveStarts = 0;
@@ -489,6 +491,11 @@ export class MockCli {
   /** Sends the download's progress of the install going on, in bytes. */
   async appUpdateProgress(downloaded: number, total: number) {
     await this.emit("app-update-progress", [{ downloaded, total }]);
+  }
+
+  /** Clicks an item of the macOS app menu: Settings… or Check for Updates…. */
+  async clickAppMenu(item: "settings" | "check-updates") {
+    await this.emit("app-menu", [item]);
   }
 
   /** What the supervisor reports about the CLI. */
@@ -819,8 +826,9 @@ export class MockCli {
       case "editor_detect": {
         return this.editors;
       }
-      case "app_info": {
-        return appInfo;
+      case "set_telemetry": {
+        this.telemetryTold.push(args);
+        return null;
       }
       case "preferences_read": {
         return this.preferences;
@@ -983,6 +991,9 @@ export class MockCli {
   }
 }
 
+/** Where the app sends usage data (src/lib/telemetry.ts). */
+export const posthogHost = "https://eu.i.posthog.com";
+
 /**
  * Playwright's test with a `cli` fixture: the mocked CLI. It is installed for every test of a file
  * that imports this `test`, before any hook opens the page, so the app never loads without it.
@@ -991,6 +1002,10 @@ export const test = base.extend<{ cli: MockCli }>({
   cli: [
     async ({ page }, provide) => {
       const cli = new MockCli(page);
+      // No test sends usage data to PostHog: what a test does not intercept itself is answered here.
+      await page.route(`${posthogHost}/**`, async (route) => {
+        await route.fulfill({ body: "{}", contentType: "application/json" });
+      });
       await cli.install();
       await provide(cli);
       cli.verify();

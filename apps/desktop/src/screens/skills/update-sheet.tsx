@@ -145,7 +145,11 @@ const Reading = ({
     >
       {files.map((file, i) => (
         <AccordionItem key={file.path} value={file.path} fill="scroll">
-          <AccordionTrigger label={file.path} open={open.includes(file.path)}>
+          <AccordionTrigger
+            track="update-sheet.toggle-file"
+            label={file.path}
+            open={open.includes(file.path)}
+          >
             <Status status={file.status} />
             <Path path={file.path} />
           </AccordionTrigger>
@@ -224,7 +228,11 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
           value={diff.path}
           fill={fillOf(diff.patch)}
         >
-          <AccordionTrigger label={diff.path} open={open.includes(diff.path)}>
+          <AccordionTrigger
+            track="update-sheet.toggle-diff"
+            label={diff.path}
+            open={open.includes(diff.path)}
+          >
             <Status status={diff.status} />
             <Path path={diff.path} />
           </AccordionTrigger>

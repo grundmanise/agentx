@@ -5,12 +5,14 @@
 // the app's preferences, the updater plugin, which checks for and installs the app's own
 // updates (ADR 0019), and the PostHog SDK, which reports a panic of its own while the app's
 // usage data setting is on (panic_reports.rs). It starts no program but the login shell, agentx
-// and, when the user asks, the editor of their choice (ADR 0001, ADR 0013). Its calls to the operating system beside
-// that are the opener plugin, which shows a path selected in Finder (the file manager elsewhere)
-// and opens a skill's file in the system's default application when the user asks, and the dialog
-// plugin's open dialog, in which the user picks a snapshot to apply: it returns the path, and the
-// app passes it to the CLI without reading the file.
+// and, when the user asks, the editor of their choice (ADR 0001, ADR 0013). Its calls to the
+// operating system beside that are the opener plugin, which shows a path selected in Finder (the
+// file manager elsewhere) and opens a skill's file in the system's default application when the
+// user asks, and the dialog plugin's open dialog, in which the user picks a snapshot to apply: it
+// returns the path, and the app passes it to the CLI without reading the file.
 
+#[cfg(target_os = "macos")]
+mod app_menu;
 mod app_update;
 mod editor;
 mod logfile;
@@ -126,42 +128,6 @@ async fn editor_open(app: tauri::AppHandle, sup: Sup<'_>, path: String) -> Resul
     editor::launch(&words, &env).await
 }
 
-/// What the app's usage data names it by (docs/help-center/telemetry.mdx): its version, and the
-/// operating system and architecture by the names the CLI gives them.
-#[derive(serde::Serialize)]
-struct AppInfo {
-    version: String,
-    os: &'static str,
-    arch: &'static str,
-}
-
-#[tauri::command(rename_all = "snake_case")]
-fn app_info(app: tauri::AppHandle) -> AppInfo {
-    AppInfo {
-        version: app.package_info().version.to_string(),
-        os: go_os(std::env::consts::OS),
-        arch: go_arch(std::env::consts::ARCH),
-    }
-}
-
-/// An operating system as Go names it, which the CLI reports: `darwin` for macOS.
-fn go_os(os: &'static str) -> &'static str {
-    if os == "macos" {
-        "darwin"
-    } else {
-        os
-    }
-}
-
-/// An architecture as Go names it, which the CLI reports: `amd64` and `arm64`.
-fn go_arch(arch: &'static str) -> &'static str {
-    match arch {
-        "x86_64" => "amd64",
-        "aarch64" => "arm64",
-        other => other,
-    }
-}
-
 /// Where serve's stderr is written: `~/Library/Logs/agentx` on macOS, `$XDG_STATE_HOME/agentx/logs`
 /// elsewhere.
 fn log_dir(env: &HashMap<String, String>) -> PathBuf {
@@ -177,7 +143,12 @@ fn log_dir(env: &HashMap<String, String>) -> PathBuf {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(app_menu::build)
+        .on_menu_event(app_menu::on_event);
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -221,7 +192,6 @@ pub fn run() {
             app_update::app_update_check,
             app_update::app_update_install,
             app_update::app_restart,
-            app_info,
             panic_reports::set_telemetry
         ])
         .build(tauri::generate_context!())
@@ -232,17 +202,4 @@ pub fn run() {
             tauri::async_runtime::block_on(sup.shutdown());
         }
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{go_arch, go_os};
-
-    #[test]
-    fn names_the_platform_as_the_cli_does() {
-        assert_eq!(go_os("macos"), "darwin");
-        assert_eq!(go_os("linux"), "linux");
-        assert_eq!(go_arch("x86_64"), "amd64");
-        assert_eq!(go_arch("aarch64"), "arm64");
-    }
 }
