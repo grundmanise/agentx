@@ -74,14 +74,6 @@ var telemetryEvents = map[string]string{
 	recordServeStart: "serve_start",
 }
 
-// consentEvent asks the desktop app to offer telemetry: scan --json and
-// serve emit it once, after the inventory, while the setting is unset.
-type consentEvent struct {
-	event
-	Topic string `json:"topic"`
-	State string `json:"state"`
-}
-
 // telemetryID derives the telemetry id from the machine id.
 func telemetryID(machineID string) string {
 	mac := hmac.New(sha256.New, []byte(telemetryIDKey))
@@ -142,13 +134,6 @@ func (inv *invocation) askConsent() bool {
 	}
 	s, err := home.LoadSettings(inv.dirs.Home)
 	return err == nil && s.Telemetry == ""
-}
-
-// emitConsent emits the consent event when the run offers telemetry.
-func (inv *invocation) emitConsent() {
-	if inv.askConsent() {
-		inv.out.emit(consentEvent{event: newEvent("consent"), Topic: "telemetry", State: telemetryUnset})
-	}
 }
 
 // interactive reports whether a person is there to answer: stdin and stdout

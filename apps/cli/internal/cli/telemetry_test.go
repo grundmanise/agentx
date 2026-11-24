@@ -97,9 +97,9 @@ func spoolFiles(t *testing.T, h *harness) []string {
 	return spooled(spoolDir(h.agentx))
 }
 
-// TestTelemetry is the whole flow: no answer without a terminal, the
-// consent event with --json, the answer at the terminal, one command event
-// per run sent under the telemetry id and nothing of the machine in it.
+// TestTelemetry is the whole flow: no question without a terminal or with
+// --json, the answer at the terminal, one command event per run sent under
+// the telemetry id and nothing of the machine in it.
 func TestTelemetry(t *testing.T) {
 	t.Parallel()
 	h, c := telemetryHarness(t)
@@ -112,23 +112,19 @@ func TestTelemetry(t *testing.T) {
 	}
 	equal(t, "telemetry", h.run("config", "get", "telemetry").stdout, "unset\n")
 
-	out = h.run("--json", "scan")
-	events := h.events(out.stdout)
-	if got, want := h.types(events), []string{"inventory", "consent", "result"}; !reflect.DeepEqual(got, want) {
+	h.env["AGENTX_INTERACTIVE"] = "1"
+	out = h.runWith("y\n", "--json", "scan")
+	if got, want := h.types(h.events(out.stdout)), []string{"inventory", "result"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v", got, want)
 	}
-	equal(t, "topic", events[1]["topic"], "telemetry")
-	equal(t, "state", events[1]["state"], "unset")
-	for _, line := range strings.Split(out.stdout, "\n") {
-		if strings.Contains(line, "telemetry") && !strings.Contains(line, `"type":"consent"`) {
-			t.Errorf("stdout mentions telemetry outside the consent event: %s", line)
-		}
+	if strings.Contains(out.stdout, "telemetry") {
+		t.Errorf("--json stdout mentions telemetry:\n%s", out.stdout)
 	}
+	equal(t, "telemetry", h.run("config", "get", "telemetry").stdout, "unset\n")
 	if n := len(spoolFiles(t, h)); n != 0 || c.raw() != "" {
 		t.Fatalf("recorded before consent: %d spooled, sent %q", n, c.raw())
 	}
 
-	h.env["AGENTX_INTERACTIVE"] = "1"
 	out = h.runWith("y\n", "scan")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "Send anonymous usage data? [y/N] ")
@@ -224,7 +220,7 @@ func TestTelemetryFlushAnswers(t *testing.T) {
 }
 
 // TestTelemetryNeverAsked: DO_NOT_TRACK and a build with no host neither
-// ask, emit the consent event nor record, even with the setting on.
+// ask nor record, even with the setting on.
 func TestTelemetryNeverAsked(t *testing.T) {
 	t.Parallel()
 	for name, env := range map[string]map[string]string{
@@ -242,9 +238,6 @@ func TestTelemetryNeverAsked(t *testing.T) {
 			if strings.Contains(out.stdout, "Send anonymous usage data") {
 				t.Errorf("asked:\n%s", out.stdout)
 			}
-			if got := h.types(h.events(h.run("--json", "scan").stdout)); slices.Contains(got, "consent") {
-				t.Errorf("event types = %v, with a consent event", got)
-			}
 			settings := h.events(h.run("--json", "config", "set", "telemetry", "on").stdout)[0]
 			if _, ok := settings["telemetry_id"]; ok && name == "DO_NOT_TRACK" {
 				t.Errorf("the settings event carries a telemetry id under DO_NOT_TRACK: %v", settings)
@@ -257,24 +250,13 @@ func TestTelemetryNeverAsked(t *testing.T) {
 	}
 }
 
-// TestTelemetryServe: serve emits the consent event once after its first
-// inventory while the setting is unset, and with the setting on records its
-// start and flushes it at once.
+// TestTelemetryServe: with the setting on, serve records its start and
+// flushes it at once.
 func TestTelemetryServe(t *testing.T) {
 	t.Parallel()
 	h, c := telemetryHarness(t)
-	p := h.serve(t, "--json")
-	p.next("inventory")
-	p.next("consent")
 	h.mustRun("config", "set", "telemetry", "on")
-	equal(t, "exit", p.close(), 0)
-
-	p = h.serve(t, "--json", "--once")
-	p.next("inventory")
-	p.next("result")
-	p.wait()
-
-	p = h.serve(t, "--json")
+	p := h.serve(t, "--json")
 	p.next("inventory")
 	deadline := time.Now().Add(serveDeadline)
 	for !slices.ContainsFunc(c.entries(t), func(e map[string]any) bool { return e["event"] == "serve_start" }) {
