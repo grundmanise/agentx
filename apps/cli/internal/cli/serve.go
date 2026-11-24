@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -247,16 +248,18 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 	if err != nil {
 		return err
 	}
-	ctx, stopCause := context.WithCancelCause(ctx)
-	stop := func() { stopCause(nil) }
+	ctx, stop := context.WithCancel(ctx)
+	var panicked atomic.Pointer[crash.Panic] // the first panic of a method, see guardMethods
 	defer func() {
-		var p *crash.Panic
-		if errors.As(context.Cause(ctx), &p) {
+		if p := panicked.Load(); p != nil {
 			err = p
 		}
 	}()
 	defer stop()
-	table := guardMethods(methods.table(), func(p *crash.Panic) { stopCause(p) })
+	table := guardMethods(methods.table(), func(p *crash.Panic) {
+		panicked.CompareAndSwap(nil, p)
+		stop()
+	})
 	stdio := rpc.ServeStdio(ctx, stdin, lockedWriter{w: inv.out, out: stdout}, table)
 	// The end of stdin ends serve once the runs it asked for have stopped,
 	// and serve ending for another reason stops them and waits for them

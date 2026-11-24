@@ -21,6 +21,8 @@ func TestRedact(t *testing.T) {
 		{"library and config", "/home/jo/.agents/skills/pdf and /home/jo/.config/x", "<library>/pdf and <xdg-config>/x"},
 		{"temporary directory", "/tmp/run1/a.lock", "<tmp>/a.lock"},
 		{"name that only starts like HOME", "/home/joe/x", "<path>"},
+		{"name that goes on with punctuation", "/home/jo!private/key.pem", "<path>"},
+		{"HOME at the end of a sentence", "cannot read /home/jo: denied", "cannot read ~: denied"},
 		{"module cache of another user", "/home/ci/go/pkg/mod/github.com/spf13/cobra@v1.9.1/command.go",
 			"<path>"},
 		{"macOS temporary directory", `stat "/private/var/folders/x1/T/agentx-3/f": no such file`,

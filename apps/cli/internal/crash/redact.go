@@ -33,7 +33,7 @@ var userPath = regexp.MustCompile(`(^|[^\w.\-/~<>])(?:/Users/|/home/|/root/|/pri
 // Redact replaces every directory of p in s with its placeholder, the
 // longest first so that the agentx home inside HOME is named as the agentx
 // home, then every other absolute path under a users' directory with
-// <path>. A directory is replaced only where its name ends, so that HOME
+// <path>. A directory is replaced only where it is whole, so that HOME
 // /home/jo leaves /home/joe to the second rule.
 func Redact(s string, p Paths) string {
 	type dir struct{ path, placeholder string }
@@ -58,8 +58,10 @@ func Redact(s string, p Paths) string {
 	return userPath.ReplaceAllString(s, "$1<path>")
 }
 
-// replaceDir replaces each occurrence of dir in s that ends where a path
-// name ends.
+// replaceDir replaces each occurrence of dir in s that is a whole path:
+// followed by a slash, or by what ends a path in a message. Anything else,
+// such as /home/jo!x for /home/jo, is another directory, left to the
+// generic rule.
 func replaceDir(s, dir, placeholder string) string {
 	var b strings.Builder
 	for {
@@ -69,7 +71,7 @@ func replaceDir(s, dir, placeholder string) string {
 			return b.String()
 		}
 		end := i + len(dir)
-		if end < len(s) && namePart(s[end]) {
+		if end < len(s) && !strings.ContainsRune(pathEnd, rune(s[end])) {
 			b.WriteString(s[:end])
 		} else {
 			b.WriteString(s[:i])
@@ -79,11 +81,9 @@ func replaceDir(s, dir, placeholder string) string {
 	}
 }
 
-// namePart says whether c can continue a file name.
-func namePart(c byte) bool {
-	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
-		c == '.' || c == '_' || c == '-' || c == '+' || c == '@' || c >= utf8.RuneSelf
-}
+// pathEnd are the characters that can follow a whole path: a slash that
+// goes on into it, or what ends a path in a message.
+const pathEnd = "/ \t\n\r\"'`:,;)]}>"
 
 // Truncate cuts s to at most n bytes, at a rune boundary.
 func Truncate(s string, n int) string {

@@ -150,13 +150,17 @@ type Job func(ctx context.Context) (report func())
 // it reports what fails through Fail and goes on: a scan that failed is
 // tried again on the next change or refresh, and once watching fails serve
 // scans only when it is asked to. A cancelled ctx is a clean end.
-func Run(ctx context.Context, o Options) error {
+func Run(ctx context.Context, o Options) (err error) {
 	// The jobs and the watcher run on goroutines of their own; a panic in
 	// one of them ends Run with that panic as its error, as a panic in Run
-	// itself would end the command.
-	ctx, cancelCause := context.WithCancelCause(ctx)
-	cancel := func() { cancelCause(nil) } // ends the jobs when Run returns
-	crashed := func(p *crash.Panic) { cancelCause(p) }
+	// itself would end the command. The first panic is kept apart from the
+	// context, whose cause a stop that came first has already set.
+	ctx, cancel := context.WithCancel(ctx) // ends the jobs when Run returns
+	var panicked atomic.Pointer[crash.Panic]
+	crashed := func(p *crash.Panic) {
+		panicked.CompareAndSwap(nil, p)
+		cancel()
+	}
 	l := &loop{Options: o}
 	var refreshes chan func(counter int, err error) // nil without Requests: never ready
 	if o.Requests != nil {
@@ -170,6 +174,9 @@ func Run(ctx context.Context, o Options) error {
 		// that no git of it outlives serve and no hold of the lock does
 		// either; its report is dropped.
 		checking.Wait()
+		if p := panicked.Load(); p != nil {
+			err = p
+		}
 	}()
 	if o.Once {
 		return l.initial(ctx)
@@ -269,10 +276,6 @@ func Run(ctx context.Context, o Options) error {
 	for {
 		select {
 		case <-ctx.Done():
-			var p *crash.Panic
-			if errors.As(context.Cause(ctx), &p) {
-				return p
-			}
 			return nil
 		case done := <-refreshes:
 			l.pending = append(l.pending, done)

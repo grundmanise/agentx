@@ -124,25 +124,40 @@ func TestTheChecksRunOneAtATime(t *testing.T) {
 
 // TestAPanicInAJobEndsServe drives Run with a job that panics: the panic
 // ends Run, which returns it as its error instead of the process ending.
+// A job that panics while it stops, after serve was asked to, still ends
+// Run with its panic.
 func TestAPanicInAJobEndsServe(t *testing.T) {
 	t.Parallel()
-	done := make(chan error, 1)
-	go func() {
-		done <- Run(context.Background(), Options{
-			Scan:      func(context.Context) (scan.Inventory, error) { return scan.Inventory{}, nil },
-			Inventory: func(scan.Inventory) {},
-			Fail:      func(err error) { t.Errorf("Fail(%v)", err) },
-			Warn:      func(string) {},
-			Jobs:      []Job{func(context.Context) func() { panic("job failed") }},
+	for name, job := range map[string]Job{
+		"while serving": func(context.Context) func() { panic("job failed") },
+		"while stopping": func(ctx context.Context) func() {
+			<-ctx.Done()
+			panic("job failed")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				done <- Run(ctx, Options{
+					Scan:      func(context.Context) (scan.Inventory, error) { return scan.Inventory{}, nil },
+					Inventory: func(scan.Inventory) { cancel() }, // stops serve once it is up; the first job has panicked by then or not
+					Fail:      func(err error) { t.Errorf("Fail(%v)", err) },
+					Warn:      func(string) {},
+					Jobs:      []Job{job},
+				})
+			}()
+			select {
+			case err := <-done:
+				var p *crash.Panic
+				if !errors.As(err, &p) || p.Value != "job failed" {
+					t.Errorf("Run returned %v, want the job's panic", err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("Run did not return")
+			}
 		})
-	}()
-	select {
-	case err := <-done:
-		var p *crash.Panic
-		if !errors.As(err, &p) || p.Value != "job failed" {
-			t.Errorf("Run returned %v, want the job's panic", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("Run did not return")
 	}
 }

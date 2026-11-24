@@ -259,6 +259,11 @@ jobs:
       - name: Check a crash names no build path
         if: matrix.goarch == (runner.arch == 'ARM64' && 'arm64' || 'amd64')
         run: |
+          # A commit older than the test panic cannot crash on purpose.
+          if ! grep -qF AGENTX_TEST_PANIC apps/cli/internal/cli/crashreport.go 2> /dev/null; then
+            echo "this commit has no test panic, nothing to check"
+            exit 0
+          fi
           home=$(mktemp -d)
           status=0
           AGENTX_TEST_PANIC=1 HOME="$home" "dist/$NAME/agentx" scan --verbose 2> stack.txt || status=$?
