@@ -1,25 +1,17 @@
-import { cva } from "class-variance-authority";
-
-import { Spinner } from "#/components/spinner.tsx";
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+} from "#/components/ui/alert.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { retryRefresh } from "#/store/feed.ts";
 import { useAppStore } from "#/store/store.ts";
 
-const barVariants = cva(
-  "h-stale-bar px-stale-bar type-notice text-text-secondary flex flex-none items-center gap-3 border-b",
-  {
-    variants: {
-      kind: {
-        failed: "border-tone-danger-border bg-tone-danger-bg",
-        stale: "border-tone-attention-border bg-tone-attention-bg",
-      },
-    },
-  }
-);
-
 /**
  * A thin bar at the top of the main panel while the inventory shown may be out of date: while a
- * restarted serve child has not sent its first inventory, or after a refresh failed.
+ * restarted serve child has not sent its first inventory, or after a refresh failed. An Alert in
+ * its bar layout, an `<output>`, so a screen reader says when it shows or its text changes.
  */
 export const StaleBar = () => {
   const freshness = useAppStore((s) => s.freshness);
@@ -27,28 +19,35 @@ export const StaleBar = () => {
     return null;
   }
   return (
-    <output className={barVariants({ kind: freshness.kind })}>
+    <Alert
+      layout="bar"
+      tone={freshness.kind === "stale" ? "attention" : "danger"}
+    >
       {freshness.kind === "stale" ? (
         <>
           <Spinner />
-          <span>Reconnecting to agentx…</span>
+          <AlertDescription layout="bar">
+            Reconnecting to agentx…
+          </AlertDescription>
         </>
       ) : (
         <>
-          <span className="min-w-0 flex-1 truncate">
+          <AlertDescription layout="bar">
             {`Couldn't read this machine: ${freshness.error}`}
-          </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              void retryRefresh();
-            }}
-          >
-            Retry
-          </Button>
+          </AlertDescription>
+          <AlertAction>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                void retryRefresh();
+              }}
+            >
+              Retry
+            </Button>
+          </AlertAction>
         </>
       )}
-    </output>
+    </Alert>
   );
 };

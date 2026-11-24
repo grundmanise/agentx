@@ -5,9 +5,9 @@ import { LogoStack } from "#/components/agent-logo.tsx";
 import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { ListRow } from "#/components/list-row.tsx";
-import { Pill } from "#/components/pill.tsx";
-import type { PillTone } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
+import type { BadgeProps } from "#/components/ui/badge.tsx";
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { bannerFor } from "#/screens/skills/banners.ts";
 import type { BannerFacts } from "#/screens/skills/banners.ts";
@@ -17,7 +17,7 @@ import type { PillKind, SkillRow } from "#/screens/skills/projection.ts";
 /** How many agent client logos a row shows before "+n". */
 const MAX_LOGOS = 4;
 
-const pillTones: Record<PillKind, PillTone> = {
+const pillTones: Record<PillKind, BadgeProps["tone"]> = {
   "not-published": "neutral",
 };
 
@@ -105,9 +105,9 @@ const SkillRowView = ({
             {row.name}
           </span>
           {row.pills.map((pill) => (
-            <Pill key={pill.kind} tone={pillTones[pill.kind]}>
+            <Badge key={pill.kind} tone={pillTones[pill.kind]}>
               {pill.label}
-            </Pill>
+            </Badge>
           ))}
           {alert !== undefined && (
             <span
