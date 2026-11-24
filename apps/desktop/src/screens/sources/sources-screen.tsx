@@ -10,10 +10,14 @@ import type {
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
 import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
-import { Spinner } from "#/components/spinner.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
-import { Input } from "#/components/ui/input.tsx";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { problemSentence, skillNamesOf } from "#/lib/problem-text.ts";
 import { FloatingActionBar } from "#/screens/sources/action-bar.tsx";
 import { addProblem } from "#/screens/sources/add-problem.ts";
@@ -554,11 +558,11 @@ export const SourcesScreen = () => {
             </Button>
           </div>
         </div>
-        <div className="text-input-placeholder relative flex items-center">
-          <span className="pointer-events-none absolute left-3.5 flex">
+        <InputGroup>
+          <InputGroupAddon kind="search">
             <SearchIcon size="sm" />
-          </span>
-          <Input
+          </InputGroupAddon>
+          <InputGroupInput
             kind="search"
             type="search"
             ref={searchField}
@@ -569,7 +573,7 @@ export const SourcesScreen = () => {
               changeQuery(e.target.value);
             }}
           />
-        </div>
+        </InputGroup>
         <SourceRow pills={pills} active={activeKey} now={now} onOpen={open} />
         {/* The card of the open source; it stays while a search looks across every source. */}
         {activePill !== undefined && (

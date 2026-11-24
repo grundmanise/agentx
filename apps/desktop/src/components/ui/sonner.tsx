@@ -8,7 +8,7 @@ import { Toaster as Sonner } from "sonner";
 import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
 import { CircleCheckIcon } from "#/components/icons/circle-check.tsx";
 import { CircleXIcon } from "#/components/icons/circle-x.tsx";
-import { Spinner } from "#/components/spinner.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 
 /**
  * Where toasts show (DESIGN.md §6 "Toast"): top right, `toast.offset` below the title bar and
