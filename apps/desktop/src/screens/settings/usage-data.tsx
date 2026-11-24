@@ -1,4 +1,4 @@
-// Usage data: the Send usage data switch, bound to the `telemetry` setting (src/store/telemetry.ts).
+// Usage data: the Send anonymous usage data switch, bound to the `telemetry` setting (src/store/telemetry.ts).
 // It runs `config set telemetry on|off` and shows the setting as the CLI reports it, off while the
 // setting has no value: pending while the command runs and while the settings are read again.
 import { useId } from "react";
@@ -26,11 +26,9 @@ const SendUsageData = ({ checked }: { checked: boolean }) => {
     <div className="flex items-start justify-between gap-6">
       <span className="flex min-w-0 flex-col gap-1">
         <label htmlFor={id} className="type-body text-text-primary">
-          Send usage data
+          Send anonymous usage data
         </label>
-        <span id={`${id}-line`} className="type-secondary text-text-muted">
-          Commands, screens, clicks by name and crash reports, never a path, a
-          name or anything you type.{" "}
+        <span className="type-secondary text-text-muted">
           <Button
             track="settings.usage-data-help"
             variant="link"
@@ -52,7 +50,6 @@ const SendUsageData = ({ checked }: { checked: boolean }) => {
         <Switch
           track="settings.usage-data"
           id={id}
-          aria-describedby={`${id}-line`}
           title={checked ? "On · usage data is sent" : "Off · nothing is sent"}
           checked={checked}
           disabled={pending}
@@ -69,10 +66,7 @@ const SendUsageData = ({ checked }: { checked: boolean }) => {
 export const UsageDataSection = () => {
   const settings = useAppStore((s) => s.settings);
   return (
-    <SettingsSection
-      title="Usage data"
-      description="Anonymous usage data and crash reports, from the CLI and the app."
-    >
+    <SettingsSection title="Usage data">
       {settings !== undefined && (
         <SendUsageData checked={settings.telemetry === "on"} />
       )}
