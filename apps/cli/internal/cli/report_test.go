@@ -208,10 +208,10 @@ func (h *harness) asMachine(id string) {
 
 // TestMachineReportRefusesWithoutWritingAnything: a machine with no hub
 // has nowhere to report to, exit code 6. With a hub, a push the hub does
-// not take writes no report, each answer of the hub with its own exit code
-// and hint: a branch another writer moved and a push a hook declined are
-// exit code 6, a push the host denies and one whose answer names nothing
-// of the branch exit code 3.
+// not take writes no report, each answer of the hub with its own exit
+// code: a branch another writer moved and a push a hook declined are exit
+// code 6, a push the host denies, which says what to check first, and one
+// whose answer names nothing of the branch exit code 3.
 func TestMachineReportRefusesWithoutWritingAnything(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -233,17 +233,18 @@ func TestMachineReportRefusesWithoutWritingAnything(t *testing.T) {
 	for _, tc := range []struct {
 		what, push string
 		exit       int
-		says, hint string
+		says       string
+		check      string // what a denial says to check first
 	}{
 		{"moved", `printf 'To hub\n!\tHEAD:` + ref + `\t[rejected] (stale info)\nDone\n'; exit 1`, 6,
-			"reports/" + id + " on the hub changed since it was read, so nothing was pushed", "run 'agentx machine report' again: it reads reports/" + id + " again first"},
+			"reports/" + id + " on the hub changed since it was read, so nothing was pushed", ""},
 		{"declined", `echo "remote: no pushes on Fridays" >&2
 	printf 'To hub\n!\tHEAD:` + ref + `\t[remote rejected] (pre-receive hook declined)\nDone\n'; exit 1`, 6,
-			"the hub declined reports/" + id + ": pre-receive hook declined: no pushes on Fridays", "once the hub takes it, run 'agentx machine report' again"},
+			"the hub declined reports/" + id + ": pre-receive hook declined: no pushes on Fridays", ""},
 		{"denied", `echo "remote: Permission to me/hub.git denied to someone." >&2
 	echo "fatal: unable to access 'https://example.com/me/hub.git/': The requested URL returned error: 403" >&2
 	exit 128`, 3, "did not let this machine push reports/" + id, "credential helper"},
-		{"no answer for the branch", "exit 0", 3, "whether the hub took reports/" + id + " is not known", "run 'agentx machine report' again"},
+		{"no answer for the branch", "exit 0", 3, "whether the hub took reports/" + id + " is not known", ""},
 	} {
 		stubGit(t, h, `#!/bin/sh
 case " $* " in
@@ -257,7 +258,9 @@ exec `+real+` "$@"
 		equal(t, tc.what+": exit", out.exit, tc.exit)
 		e := h.one(out.stdout, "error")
 		contains(t, tc.what+": message", e["message"].(string), tc.says)
-		contains(t, tc.what+": hint", e["hint"].(string), tc.hint)
+		if tc.check != "" {
+			contains(t, tc.what+": what to check first", e["hint"].(string), tc.check)
+		}
 		equal(t, tc.what+": machine_report events", len(h.eventsOfType(out.stdout, "machine_report")), 0)
 	}
 	equal(t, "the hub's report branches", remoteGit(t, h, remote, "for-each-ref", "refs/heads/reports/"), "")
@@ -439,7 +442,6 @@ func TestRemovingTheHubDeletesThisMachinesReport(t *testing.T) {
 	equal(t, "remove of a hub out of reach: warnings", len(warnings), 1)
 	message := warnings[0]["message"].(string)
 	contains(t, "the warning", message, url+" still holds reports/"+id+", this machine's report: ")
-	contains(t, "the warning's way on", message, "; delete it with 'git push "+url+" --delete reports/"+id+"'")
 	if sources, _ := readSettingsFile(t, h)["sources"].([]any); len(sources) != 0 {
 		t.Errorf("source remove left the entry: %v", readSettingsFile(t, h)["sources"])
 	}

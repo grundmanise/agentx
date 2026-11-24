@@ -194,15 +194,16 @@ agentx source remove git@github.com:you/agentx-hub.git
 
 agentx removes the hub from the machine, then deletes the branch `reports/<machine id>` from the hub. [Replacing the hub](/cli/source#add-your-hub) deletes the report from the hub you replace.
 
-If Git cannot delete the branch, for example because the hub is out of reach, the hub is removed from the machine all the same. agentx prints a warning with the Git command that deletes the branch:
+If Git cannot delete the branch, for example because the hub is out of reach, the hub is removed from the machine all the same. agentx prints a warning that names the branch:
 
 ```text
 warning: ssh://git@github.com/you/agentx-hub still holds reports/3ea501b8fb5db1ad3cc85268972d7012, this machine's report: <reason>
-  delete it with 'git push ssh://git@github.com/you/agentx-hub --delete reports/3ea501b8fb5db1ad3cc85268972d7012'
 ```
 
-No machine deletes the report of another machine. For a machine you no longer have, delete its branch on the hub with Git. `agentx machine show` prints the machine id:
+Delete the branch on the hub with Git:
 
 ```sh
-git push git@github.com:you/agentx-hub.git --delete reports/7c1f0a2e9b3d4c5e8f6a1b2c3d4e5f60
+git push git@github.com:you/agentx-hub.git --delete reports/3ea501b8fb5db1ad3cc85268972d7012
 ```
+
+No machine deletes the report of another machine. For a machine you no longer have, delete its branch the same way. `agentx machine show` prints the machine id.
