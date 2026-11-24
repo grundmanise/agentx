@@ -66,7 +66,10 @@ const SendUsageData = ({ checked }: { checked: boolean }) => {
 export const UsageDataSection = () => {
   const settings = useAppStore((s) => s.settings);
   return (
-    <SettingsSection title="Usage data">
+    <SettingsSection
+      title="Usage data"
+      description="Anonymous usage data and crash reports, from the CLI and the app."
+    >
       {settings !== undefined && (
         <SendUsageData checked={settings.telemetry === "on"} />
       )}
