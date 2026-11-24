@@ -189,9 +189,9 @@ test.describe("the question", () => {
     await expect(dialog(page)).toContainText(
       "It never sends paths, skill or server names, URLs, on-screen text or anything you type. Your IP address is not stored."
     );
-    // "Don't send" is the default: it has the focus.
+    // "Don't allow" is the default: it has the focus.
     await expect(
-      dialog(page).getByRole("button", { name: "Don't send" })
+      dialog(page).getByRole("button", { name: "Don't allow" })
     ).toBeFocused();
 
     await dialog(page).getByRole("button", { name: "Details" }).click();
@@ -207,7 +207,7 @@ test.describe("the question", () => {
     await expect(dialog(page)).toHaveCount(0);
   });
 
-  test("Send runs config set telemetry on, then a refresh, and asks no more", async ({
+  test("Allow anonymous data runs config set telemetry on, then a refresh, and asks no more", async ({
     cli,
     page,
   }) => {
@@ -220,7 +220,11 @@ test.describe("the question", () => {
     await expect(dialog(page)).toBeVisible();
     const before = refreshes(cli);
 
-    await dialog(page).getByRole("button", { name: "Send usage data" }).click();
+    await dialog(page)
+      .getByRole("button", {
+        name: "Allow anonymous data",
+      })
+      .click();
     await expect(dialog(page)).toHaveCount(0);
     await expect
       .poll(() => telemetrySets(cli))
@@ -232,7 +236,7 @@ test.describe("the question", () => {
     await expect(dialog(page)).toHaveCount(0);
   });
 
-  test("Don't send, and Escape, run config set telemetry off", async ({
+  test("Don't allow, and Escape, run config set telemetry off", async ({
     cli,
     page,
   }) => {
@@ -242,7 +246,7 @@ test.describe("the question", () => {
       events: [settingsEvent("off")],
     });
     await page.goto("/");
-    await dialog(page).getByRole("button", { name: "Don't send" }).click();
+    await dialog(page).getByRole("button", { name: "Don't allow" }).click();
     await expect
       .poll(() => telemetrySets(cli))
       .toEqual(["config set telemetry off --json"]);

@@ -1,7 +1,7 @@
 // The telemetry question (docs/help-center/telemetry.mdx): asked once the app has started, in a
 // release build (one whose CLI reports a stable or nightly version), while the `settings` event
 // says the `telemetry` setting has no value. It lists what may be sent, and both answers run
-// `config set telemetry`, which gives the setting a value, so no later launch asks. "Don't send"
+// `config set telemetry`, which gives the setting a value, so no later launch asks. "Don't allow"
 // is the default: it has the focus, and Escape answers with it.
 import {
   AlertDialog,
@@ -100,18 +100,18 @@ export const TelemetryDialog = () => {
             </Button>
           </div>
           <AlertDialogCancel asChild>
-            <Button track="telemetry-dialog.dont-send" variant="ghost">
-              Don&apos;t send
+            <Button track="telemetry-dialog.dont-allow" variant="ghost">
+              Don&apos;t allow
             </Button>
           </AlertDialogCancel>
           <Button
-            track="telemetry-dialog.send"
+            track="telemetry-dialog.allow"
             variant="primary"
             onClick={() => {
               answer(true);
             }}
           >
-            Send usage data
+            Allow anonymous data
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
