@@ -3,13 +3,15 @@
 // the events of a child that ended or was replaced are dropped. Within one serve instance an
 // inventory applies only when its scan counter goes up; a new instance applies whatever it sends
 // first, since counters are never compared across instances. What serve notices goes to the
-// activity list: its drift, reconcile and update events, and the warnings it logs on stderr. Its
+// activity list: its drift and reconcile events, an update that an inventory of an instance offers
+// and the one before it did not, and the warnings it logs on stderr. Its
 // `update_check` events say when the last update check ended, which the title bar shows. The
 // activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
 // exit of the active child.
 import type {
   DriftEvent,
   InventoryEvent,
+  LibraryEntry,
   LogEvent,
   SearchResult,
 } from "#/cli/events.gen.ts";
@@ -174,7 +176,6 @@ const activate = (childId: number) => {
     refreshes: Object.fromEntries(
       Object.entries(refreshes).filter(([id]) => !unanswered.includes(id))
     ),
-    updates: {},
   });
   void Promise.all(unanswered.map(resend));
 };
@@ -202,9 +203,33 @@ const driftText = (e: DriftEvent) => {
   return now === undefined ? `${e.name} changed` : `${e.name}: ${now}`;
 };
 
-/** Applies an inventory, unless the same instance already applied one with a counter as high. */
+/** The versions of the update a library entry offers, "" when it offers none. */
+const offeredVersions = (entry: LibraryEntry) =>
+  entry.candidate === undefined && entry.hub_ahead === undefined
+    ? ""
+    : `${entry.hub_ahead?.commit ?? ""}:${entry.candidate?.upstream_commit ?? ""}`;
+
+/**
+ * The library skills of `after` that offer an update `before` did not offer them, a newer one
+ * included, in the library's order. A skill that arrived with an update is not one: the inventory
+ * shows it.
+ */
+const newUpdates = (before: LibraryEntry[], after: LibraryEntry[]) => {
+  const previous = new Map(before.map((entry) => [entry.name, entry]));
+  return after.filter((entry) => {
+    const was = previous.get(entry.name);
+    const now = offeredVersions(entry);
+    return was !== undefined && now !== "" && now !== offeredVersions(was);
+  });
+};
+
+/**
+ * Applies an inventory, unless the same instance already applied one with a counter as high, and
+ * says each update it offers that the instance's inventory before did not. The first inventory of
+ * an instance is where every update starts, not a new one.
+ */
 const applyInventory = (childId: number, event: InventoryEvent) => {
-  const { applied } = useAppStore.getState();
+  const { applied, inventory: before } = useAppStore.getState();
   const sameInstance =
     applied !== undefined &&
     applied.childId === childId &&
@@ -228,6 +253,12 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
       plural(event.plugins.length, "plugin"),
     ].join(", ")}`
   );
+  if (sameInstance && before !== undefined) {
+    for (const entry of newUpdates(before.library, event.library)) {
+      addActivity("success", `Update available for ${entry.name}`);
+      logBackground(`update available for ${entry.name}`);
+    }
+  }
 };
 
 /** Clears an answered request, even when the inventory did not change. */
@@ -269,13 +300,7 @@ const apply = (childId: number, event: ServeEvent) => {
       addActivity(tone, `${event.name}: ${event.outcome}`);
     }
     logBackground(`${event.name}: ${event.outcome}`);
-  } else if (event.type === "update_available") {
-    set((s) => ({ updates: { ...s.updates, [event.name]: event } }));
-    addActivity("success", `Update available for ${event.name}`);
-    logBackground(`update available for ${event.name}`);
   } else if (event.type === "update_check") {
-    // The check's update_available events came before it, and stay: a check of the hub
-    // alone adds to what the last full check found.
     if (event.ok) {
       set({ lastChecked: event.checked_at });
       logBackground("update check finished");

@@ -1424,9 +1424,8 @@ exec `+real+` "$@"
 }
 
 // TestServeChecksForUpdates runs serve: the check starts once the initial
-// inventory is out and announces the update the source holds, with the
-// instance id of this serve, and the inventory its write sets off carries
-// the candidate. A single pass checks nothing.
+// inventory is out, and the inventory its write sets off carries the
+// candidate of the update the source holds. A single pass checks nothing.
 func TestServeChecksForUpdates(t *testing.T) {
 	t.Parallel()
 	h, s, _ := checkHarness(t)
@@ -1439,65 +1438,39 @@ func TestServeChecksForUpdates(t *testing.T) {
 	equal(t, "the candidate after serve --once", h.ref(lineage.CandidateRef("alpha")), "")
 
 	p := h.serve(t, "--json")
-	first := p.next("inventory")
-	update, events := p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == second })
-	equal(t, "name", update["name"], "alpha")
-	equal(t, "instance_id", update["instance_id"], first["instance_id"])
-	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
-	// The write that pinned it bumped the version file, and the rescan that
-	// sets off, or the one this refresh asks for, carries the candidate in
-	// the inventory the desktop app applies.
-	events = append(events, p.until("after")...)
-	var last jsonEvent
-	for _, e := range events {
-		if e["type"] == "inventory" {
-			last = e
-		}
+	p.next("inventory")
+	p.nextEntry("alpha", candidateAt(second))
+	if h.ref(lineage.CandidateRef("alpha")) == "" {
+		t.Error("no candidate ref for alpha")
 	}
-	if last == nil {
-		t.Fatal("no inventory after the check wrote its candidate")
-	}
-	var entry map[string]any
-	for _, e := range last["library"].([]any) {
-		if m := e.(map[string]any); m["name"] == "alpha" {
-			entry = m
-		}
-	}
-	cand, ok := entry["candidate"].(map[string]any)
-	if !ok {
-		t.Fatalf("the last inventory's alpha carries no candidate: %v", entry)
-	}
-	equal(t, "the inventory's candidate", cand["upstream_commit"], second)
 	equal(t, "exit", p.close(), 0)
 }
 
 // TestServeChecksInTextMode runs serve without --json, whose inventory lists
-// no library: it checks all the same, since the settings hold a source, and
-// prints one line per update, the upstream commit the skill is at, the one
-// its candidate pins and how many files the update changes.
+// no library: it checks all the same, since the settings hold a source, pins
+// the candidate, and prints the line that ends the check.
 func TestServeChecksInTextMode(t *testing.T) {
 	t.Parallel()
-	h, s, first := checkHarness(t)
+	h, s, _ := checkHarness(t)
 	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
-	second := s.commit("second version")
+	s.commit("second version")
 	p := h.serve(t)
 	p.line("inventory 1: 1 configuration, 2 skills")
-	want := "update alpha: " + short(first) + " -> " + short(second) + ", 1 file"
 	// The rescan the check's write sets off prints an inventory line of its
-	// own, before or after the update's.
+	// own, before or after the check's.
 	deadline := time.After(serveDeadline)
 	for got := ""; got == ""; {
 		select {
 		case line, ok := <-p.lines:
 			if !ok {
-				t.Fatal("serve ended before the update line")
+				t.Fatal("serve ended before the check's line")
 			}
 			if !strings.HasPrefix(line, "inventory ") {
 				got = line
-				equal(t, "the update line", got, want)
+				equal(t, "the check's line", got, "check all: ok, fetched")
 			}
 		case <-deadline:
-			t.Fatalf("no update line within %s", serveDeadline)
+			t.Fatalf("no line of the check within %s", serveDeadline)
 		}
 	}
 	if h.ref(lineage.CandidateRef("alpha")) == "" {
@@ -1563,8 +1536,7 @@ func TestServeCheckWaitsForTheLock(t *testing.T) {
 			// is how long it is kept waiting, not a wait for anything.
 			time.Sleep(500 * time.Millisecond)
 			unlock()
-			update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == second })
-			equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
+			p.nextEntry("alpha", candidateAt(second))
 			equal(t, "exit", p.close(), 0)
 			for _, w := range warnings(h, p.stderr.String()) {
 				if strings.HasPrefix(w, "update check:") {
@@ -1594,8 +1566,7 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 
 	p := h.serve(t, "--json")
 	p.next("inventory")
-	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["name"] == "alpha" && e["candidate_upstream_commit"] == second })
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
+	p.nextEntry("alpha", candidateAt(second))
 	p.until("alive")
 	equal(t, "exit", p.close(), 0)
 
@@ -1614,13 +1585,35 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 	equal(t, "gamma's candidate", h.ref(lineage.CandidateRef("gamma")), "")
 }
 
-// nextUpdate reads the child's events up to the first update_available
-// that match accepts, and returns it with every event it passed over on the
-// way: a check and the rescans its write sets off interleave as they
-// happen to.
-func (p *serveProc) nextUpdate(match func(jsonEvent) bool) (jsonEvent, []jsonEvent) {
+// nextEntry reads the child's events up to the first inventory whose
+// library entry of the skill called name match accepts, and returns that
+// entry with every event it passed over on the way: a check and the
+// rescans its write sets off interleave as they happen to.
+func (p *serveProc) nextEntry(name string, match func(jsonEvent) bool) (jsonEvent, []jsonEvent) {
 	p.t.Helper()
-	return p.nextMatching("update_available", func(e jsonEvent) bool { return e["type"] == "update_available" && match(e) })
+	var entry jsonEvent
+	_, passed := p.nextMatching("inventory with "+name, func(e jsonEvent) bool {
+		if e["type"] != "inventory" {
+			return false
+		}
+		for _, l := range e["library"].([]any) {
+			if m := l.(map[string]any); m["name"] == name && match(m) {
+				entry = m
+				return true
+			}
+		}
+		return false
+	})
+	return entry, passed
+}
+
+// candidateAt matches a library entry whose candidate is the upstream
+// commit commit.
+func candidateAt(commit string) func(jsonEvent) bool {
+	return func(e jsonEvent) bool {
+		c, ok := e["candidate"].(map[string]any)
+		return ok && c["upstream_commit"] == commit
+	}
 }
 
 // nextMatching reads the child's events up to the first that match

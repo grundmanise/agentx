@@ -143,20 +143,21 @@ func (inv *invocation) printInstallable(installable []installableSkillEvent) {
 // every row would widen every listing for the sake of a few. Both are said
 // in full, so that neither hides the other.
 //
-// An update the last check found is said last in the same cell, as update
+// An update the last check found, or what another machine published to
+// the hub that a fork lacks, is said last in the same cell, as update
 // available, and a merge an update left pending after it, as merge
 // pending: neither is drift, but both are how the skill stands against its
 // upstream, which is what the cell is about.
 func row(out *writer, ev librarySkillEvent, hub string) []cell {
 	words := append([]string{ev.State}, ev.Drift...)
-	if ev.Candidate != nil {
+	if ev.Candidate != nil || ev.HubAhead != nil {
 		words = append(words, updateAvailable)
 	}
 	if ev.PendingMerge {
 		words = append(words, mergePending)
 	}
 	state := c(strings.Join(words, ", "), okStyle)
-	if ev.State == stateModified || len(ev.Drift) > 0 || ev.Candidate != nil || ev.PendingMerge {
+	if ev.State == stateModified || len(ev.Drift) > 0 || ev.Candidate != nil || ev.HubAhead != nil || ev.PendingMerge {
 		state.style = warnStyle
 	}
 	if ev.State == "" {

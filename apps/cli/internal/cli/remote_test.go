@@ -361,6 +361,17 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	contains(t, "the check's line for what a published", out.stdout, "alpha  published from another machine")
 	contains(t, "its hint, with an upstream update listed too", out.stdout, "agentx skill diff <name> --update")
 	candidate := b.ref(lineage.CandidateRef("alpha"))
+	// The inventory says what the hub holds that b lacks, and the diff of
+	// the update shows it, then the update from upstream, in the order
+	// the update takes them in.
+	equal(t, "what the hub holds of alpha", b.listed("alpha")["hub_ahead"].(map[string]any)["commit"], theirs)
+	diff := b.mustRun("--json", "skill", "diff", "alpha", "--update")
+	var steps []string
+	for _, e := range b.eventsOfType(diff.stdout, "diff") {
+		steps = append(steps, fmt.Sprint(e["step"], " ", e["path"]))
+	}
+	equal(t, "the diff's steps", strings.Join(steps, ", "), "hub notes.md, upstream notes.md")
+	contains(t, "the diff's summary", b.one(diff.stdout, "result")["summary"].(string), "what the hub holds of alpha at "+short(theirs))
 
 	out = b.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "pull outcome", b.one(out.stdout, "pull")["outcome"], pullMerged)
@@ -396,7 +407,6 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	a.mustRun("skill", "update", "alpha")
 	a.mustRun("skill", "publish", "alpha")
 	published := a.ref(lineage.ForkRef("alpha"))
-
 	out = b.mustRun("--json", "skill", "update", "--all")
 	equal(t, "pull outcome", b.one(out.stdout, "pull")["outcome"], pullFastForward)
 	equal(t, "alpha's tip", b.ref(lineage.ForkRef("alpha")), published)
@@ -429,6 +439,10 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "its candidate's time", update["candidate_upstream_time"], lineage.UpstreamTime(b.storeGit("log", "-1", "--format=%ct", published)))
 	equal(t, "its kind", update["kind"], lineage.KindManaged)
 	equal(t, "its files", fmt.Sprint(update["files"]), "[map[path:notes.md status:added]]")
+	// A skill with no upstream reads what the hub holds as its update too.
+	diff = b.mustRun("--json", "skill", "diff", "notes", "--update")
+	got := b.one(diff.stdout, "diff")
+	equal(t, "the diff of what the hub holds", fmt.Sprint(got["step"], " ", got["status"], " ", got["path"]), "hub added notes.md")
 	if lastFetched(t, b, "file://"+remote) == backdated {
 		t.Error("the check left the hub's last_fetched as it was")
 	}

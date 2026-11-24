@@ -39,6 +39,7 @@ export type HandshakeReason =
   | "failed";
 export type OriginKind = "plugin" | "source" | "skill";
 export type FileStatus = "added" | "modified" | "deleted";
+export type DiffStep = "hub" | "upstream";
 export type DoctorStatus = "ok" | "warn" | "fail" | "info";
 export type UpdateState = "current" | "available" | "updated";
 export type UpdateChannel = "stable" | "nightly";
@@ -136,6 +137,7 @@ export interface LibraryEntry {
   state?: SkillState;
   drift?: DriftState[];
   candidate?: LibraryCandidate;
+  hub_ahead?: LibraryHubAhead;
   pending_merge?: boolean;
   placements: LibraryPlacement[];
   universal: string[];
@@ -215,6 +217,11 @@ export interface LibraryCandidate {
   upstream_commit: string;
   upstream_time?: string;
   content_hash: string;
+}
+
+export interface LibraryHubAhead {
+  commit: string;
+  time?: string;
 }
 
 export interface LibraryPlacement {
@@ -437,6 +444,7 @@ export interface DiffEvent {
   path: string;
   status: FileStatus;
   patch: string;
+  step?: DiffStep;
 }
 
 export interface SkillFileEvent {
@@ -471,7 +479,6 @@ export interface HistoryEvent {
 export interface UpdateAvailableEvent {
   type: "update_available";
   schema_version: number;
-  instance_id?: string;
   name: string;
   kind: SkillKind;
   source?: string;

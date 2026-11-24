@@ -121,6 +121,7 @@ type LibraryEntry struct {
 	State           string             `json:"state,omitempty"`         // current or modified, for a managed skill whose directory is its checkout
 	Drift           []string           `json:"drift,omitempty"`         // the drift states beside state, for a managed skill
 	Candidate       *LibraryCandidate  `json:"candidate,omitempty"`     // the update the last check found, from its source or its upstream
+	HubAhead        *LibraryHubAhead   `json:"hub_ahead,omitempty"`     // what another machine published to the hub that a fork's branch lacks
 	PendingMerge    bool               `json:"pending_merge,omitempty"` // an update left a merge pending, read from <agentx home>/merges/<name>
 	Placements      []LibraryPlacement `json:"placements"`
 	Universal       []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
@@ -135,6 +136,16 @@ type LibraryCandidate struct {
 	UpstreamCommit string `json:"upstream_commit"`
 	UpstreamTime   string `json:"upstream_time,omitempty"` // when the upstream commit was made, RFC 3339 in UTC
 	ContentHash    string `json:"content_hash"`
+}
+
+// LibraryHubAhead is what the hub holds of a fork that its branch here
+// lacks, as the last fetch of the hub left its remote-tracking branch: the
+// commits another machine published, which the hub step of the fork's
+// update takes in. Commit is that branch's tip, and Time its committer
+// time, when the other machine recorded it.
+type LibraryHubAhead struct {
+	Commit string `json:"commit"`
+	Time   string `json:"time,omitempty"` // RFC 3339 in UTC
 }
 
 // LibraryPlacement is one way a configuration sees a library skill: mode is

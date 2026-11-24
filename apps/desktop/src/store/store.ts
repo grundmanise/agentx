@@ -18,7 +18,6 @@ import type {
   SkillFileEvent,
   SourceEvent,
   SourceSkillEvent,
-  UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
 
 /** Why a command or the serve child failed, as the CLI said it. */
@@ -90,8 +89,6 @@ export interface AppState {
   serveError: ServeError | undefined;
   /** The reconcile events of the active serve child's start. */
   reconciles: ReconcileEvent[];
-  /** The update candidates, by skill name, from the last update check. */
-  updates: Record<string, UpdateAvailableEvent>;
   /**
    * When an update check last ended well (RFC 3339): serve's own, by its `update_check` event, or
    * a `skill check-updates` run, which reached every source or all but some (exit 3). Undefined
@@ -214,7 +211,6 @@ export const useAppStore = create<AppState>()(() => ({
   skillMds: {},
   sources: [],
   updateDiffs: {},
-  updates: {},
 }));
 
 let nextActivity = 1;

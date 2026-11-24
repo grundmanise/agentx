@@ -12,13 +12,15 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
-import { pdfUpdateDiffs } from "./fixtures/update-diffs.ts";
+import { pdfUpdateDiffs, updateDiffsOf } from "./fixtures/update-diffs.ts";
 import {
   ACME,
   allUpdates,
+  inventoryOf,
+  libraryWith,
   pdfUpdate,
   reviewUpdate,
-  updatesInventory,
+  updated as withUpdates,
   updatesLibrary,
   ZETA,
 } from "./fixtures/updates.ts";
@@ -37,7 +39,10 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-/** The reads the detail pane runs on its own when a skill is selected. */
+/**
+ * The reads the detail pane runs on its own when a skill is selected, what its update changes
+ * among them.
+ */
 const detailReads = new Set(["skill history", "skill files", "skill diff"]);
 
 /** The command lines the buttons ran: everything but the launch, the store's and the pane's reads. */
@@ -87,17 +92,44 @@ const updateDone = (
   type: "progress",
 });
 
+/** Answers every refresh request so far, once the command asked for one, as serve does after its scan. */
+const answerRefreshes = async (cli: MockCli) => {
+  await expect.poll(() => cli.requestIds.length).toBeGreaterThan(0);
+  await cli.serveEmit(
+    cli.requestIds.map((id) => ({
+      ok: true,
+      request_id: id,
+      scan_counter: 2,
+      type: "refresh_complete",
+    }))
+  );
+};
+
 /**
- * Opens the Skills screen on the fixture machine, on `name`, with serve's start check having
- * found `updates`.
+ * The scan that follows a command: an inventory whose library has an update for each skill of
+ * `names`, then the answer to every refresh asked for.
+ */
+const rescan = async (cli: MockCli, names: readonly string[]) => {
+  await cli.serveEmit([
+    { ...inventoryOf(libraryWith(names)), scan_counter: 2 },
+  ]);
+  await answerRefreshes(cli);
+};
+
+/**
+ * Opens the Skills screen on the fixture machine, on `name`, with serve's first inventory offering
+ * an update for each skill of `names`.
  */
 const open = async (
   cli: MockCli,
   page: Page,
   name: string,
-  updates: InlineEvent[] = allUpdates
+  names: readonly string[] = withUpdates
 ) => {
-  cli.onServeStart({ events: [updatesInventory, ...updates] });
+  cli.onServeStart({ events: [inventoryOf(libraryWith(names))] });
+  for (const [skill, diffs] of Object.entries(updateDiffsOf)) {
+    cli.register(["skill", "diff", skill, "--update"], { events: diffs });
+  }
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });
@@ -128,6 +160,11 @@ test.describe("Update", () => {
     await expect(update(page, "pdf")).toHaveAttribute("aria-busy", "true");
     run.release();
     await expect(toasts(page).getByText("Updated pdf skill")).toBeVisible();
+    // The scan that follows the update offers it no more.
+    await rescan(
+      cli,
+      withUpdates.filter((n) => n !== "pdf")
+    );
     await expect(update(page, "pdf")).toHaveCount(0);
     expect(later(cli)).toEqual([["skill", "update", "pdf", "--json"]]);
   });
@@ -174,7 +211,11 @@ test.describe("Update", () => {
       await expect(
         toasts(page).getByText(c.toast, { exact: true })
       ).toBeVisible();
-      // Updated or up to date already, the skill has no update left.
+      // Updated or up to date already, the scan that follows offers it no more.
+      await rescan(
+        cli,
+        withUpdates.filter((n) => n !== c.name)
+      );
       await expect(update(page, c.name)).toHaveCount(0);
       expect(later(cli)).toEqual([["skill", "update", c.name, "--json"]]);
     });
@@ -362,6 +403,8 @@ test.describe("Check updates", () => {
       toasts(page).getByText("Checking for updates… 0/2")
     ).toBeVisible();
     run.release();
+    // The scan that follows the check offers what it found.
+    await rescan(cli, withUpdates);
     // draft's pending merge comes first: four skills are offered an update, in the dialog.
     await expect(updateDialog(page)).toBeVisible();
     await expect(updateDialog(page).getByRole("listitem")).toHaveCount(4);
@@ -447,7 +490,7 @@ test.describe("Check updates", () => {
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "false");
   });
 
-  test("nothing new: All skills are up to date, and the updates serve found are gone", async ({
+  test("nothing new: All skills are up to date, and the updates the inventory offered are gone with the scan that follows", async ({
     cli,
     page,
   }) => {
@@ -455,6 +498,7 @@ test.describe("Check updates", () => {
     await expect(update(page, "pdf")).toBeVisible();
     cli.register(["skill", "check-updates"]);
     await checkButton(page).click();
+    await rescan(cli, []);
     await expect(
       toasts(page).getByText("All skills are up to date")
     ).toBeVisible();
@@ -502,6 +546,7 @@ test.describe("Check updates", () => {
       ],
     });
     await checkButton(page).click();
+    await rescan(cli, ["pdf", "review"]);
     // The app's own hint, in place of the CLI's, in one sentence-cased paragraph.
     await expect(
       toasts(page).getByText(
@@ -682,9 +727,10 @@ test.describe("the Update skills dialog", () => {
     // The inventory that follows has review's merge pending: pdf, left out, is left.
     await cli.serveEmit([
       {
-        ...updatesInventory,
-        library: updatesLibrary.map((entry) =>
-          entry.name === "review" ? { ...entry, pending_merge: true } : entry
+        ...inventoryOf(
+          libraryWith(["draft", "pdf", "review"]).map((entry) =>
+            entry.name === "review" ? { ...entry, pending_merge: true } : entry
+          )
         ),
         scan_counter: 2,
       } satisfies InlineEvent,
@@ -692,6 +738,39 @@ test.describe("the Update skills dialog", () => {
     await expect(
       nav.getByRole("button", { exact: true, name: "1 update" })
     ).toBeVisible();
+  });
+});
+
+/** The lines of the Activity log whose text holds `text`, oldest first. */
+const logLines = (page: Page, text: string) =>
+  page
+    .getByRole("dialog", { name: "Activity log" })
+    .getByRole("list", { name: "Activity log lines" })
+    .getByRole("listitem")
+    .filter({ hasText: text });
+
+test.describe("the Activity log", () => {
+  test("says an update an inventory offers that the one before did not, once; the first inventory's are not new", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf", ["review"]);
+    await cli.serveEmit([
+      { ...inventoryOf(libraryWith(["pdf", "review"])), scan_counter: 2 },
+    ]);
+    await expect(update(page, "pdf")).toBeVisible();
+    // The same offer again is not new.
+    await cli.serveEmit([
+      { ...inventoryOf(libraryWith(["pdf", "review"])), scan_counter: 3 },
+    ]);
+    await page.keyboard.press("Control+K");
+    await page
+      .getByRole("dialog")
+      .getByRole("option")
+      .filter({ hasText: "Show activity log" })
+      .click();
+    await expect(logLines(page, "update available for pdf")).toHaveCount(1);
+    await expect(logLines(page, "update available for review")).toHaveCount(0);
   });
 });
 

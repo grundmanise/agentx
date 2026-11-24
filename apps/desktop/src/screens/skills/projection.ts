@@ -7,11 +7,12 @@ import type {
   AdoptionEvent,
   Configuration,
   InventoryEvent,
+  LibraryCandidate,
   LibraryEntry,
+  LibraryHubAhead,
   Occurrence,
   Plugin,
   SkillNode,
-  UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
 import { formatDate } from "#/lib/dates.ts";
 
@@ -49,13 +50,13 @@ export interface SkillRow {
   agents: string[];
   /** Whether a universal client sees it: it is in the library. */
   universal: boolean;
-  /** An update candidate is known for it. */
+  /** An update is known for it. */
   hasUpdate: boolean;
   /**
-   * The update the last update check offers for it, which its banner's Update applies.
-   * Absent for a skill with a pending merge: finishing that merge comes first.
+   * The update the app offers for it, which its banner's Update applies. Absent for a skill with a
+   * pending merge: finishing that merge comes first.
    */
-  update?: UpdateAvailableEvent;
+  update?: UpdateOffer;
   /** The plugin that provides it, for a plugin's skill. */
   plugin?: Plugin;
   /** The one adoption entry that names it, for an unmanaged skill another tool installed. */
@@ -138,30 +139,65 @@ export const shortSource = (url: string): string => {
 export const shortId = (id: string) => id.slice(0, 7);
 
 /**
- * Whether an update is what another of your machines published to a hub skill: the
- * CLI leaves its base version empty (docs/spec/cli-contract.md, `update_available`).
+ * An update of a library skill, as its inventory entry says it (docs/spec/cli-contract.md,
+ * `library_skill`): what another of your machines published to the hub that a hub skill lacks,
+ * which the update takes in first, and the newer version the last update check found, from its
+ * source or its upstream. A skill has one or both.
  */
-export const fromAnotherMachine = (update: UpdateAvailableEvent) =>
-  update.base_hash === "";
+export interface UpdateOffer {
+  name: string;
+  entry: LibraryEntry;
+  /** What another machine published to the hub. */
+  hub?: LibraryHubAhead;
+  /** The newer version from the skill's source, or a hub skill's upstream. */
+  upstream?: LibraryCandidate;
+}
+
+/** The update the inventory entry offers, if any. */
+export const offerOf = (entry: LibraryEntry): UpdateOffer | undefined =>
+  entry.candidate === undefined && entry.hub_ahead === undefined
+    ? undefined
+    : {
+        entry,
+        name: entry.name,
+        ...(entry.hub_ahead === undefined ? {} : { hub: entry.hub_ahead }),
+        ...(entry.candidate === undefined ? {} : { upstream: entry.candidate }),
+      };
+
+/** Whether an update is only what another of your machines published to a hub skill. */
+export const fromAnotherMachine = (update: UpdateOffer) =>
+  update.upstream === undefined;
+
+/** The newer version an update brings, by its date when the CLI dates it: the upstream's, else the hub's. */
+export const newerTime = (update: UpdateOffer) =>
+  update.upstream === undefined
+    ? update.hub?.time
+    : update.upstream.upstream_time;
 
 /**
  * The two versions of an update, base then newer, each by its date when the CLI dates it, else by
- * its short id. An update from another machine has no base version, so it names the newer alone.
+ * its short id. An update from another machine alone has no base version, so it names the newer
+ * alone.
  */
-export const updateVersions = (update: UpdateAvailableEvent): string => {
+export const updateVersions = (update: UpdateOffer): string => {
+  const time = newerTime(update);
   const newer =
-    update.candidate_upstream_time === undefined
-      ? shortId(update.candidate_upstream_commit || update.candidate)
-      : formatDate(update.candidate_upstream_time);
+    time === undefined
+      ? shortId(update.upstream?.upstream_commit ?? update.hub?.commit ?? "")
+      : formatDate(time);
   if (fromAnotherMachine(update)) {
     return newer;
   }
-  const base =
-    update.upstream_time === undefined
-      ? shortId(update.upstream_commit)
-      : formatDate(update.upstream_time);
-  return `${base} → ${newer}`;
+  const { upstream_commit: commit, upstream_time: base } = update.entry;
+  return `${base === undefined ? shortId(commit ?? "") : formatDate(base)} → ${newer}`;
 };
+
+/**
+ * What names the versions of an update, for the read of what it changes: a read of another one
+ * is not this update's.
+ */
+export const updateKey = (update: UpdateOffer) =>
+  `${update.hub?.commit ?? ""}:${update.upstream?.upstream_commit ?? ""}`;
 
 /** The tool an adoption record names, as the product calls it. */
 export const toolName = (adoption: AdoptionEvent): string => {
@@ -250,7 +286,6 @@ const originalOf = (entry: LibraryEntry, library: LibraryEntry[]) =>
 
 export interface ProjectionInput {
   inventory: InventoryEvent;
-  updates: Record<string, UpdateAvailableEvent>;
   adoption: AdoptionEvent[];
 }
 
@@ -276,8 +311,7 @@ const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
     enabled: direct.length > 0 || entry.universal.length > 0,
     entry,
     group: groupOf(kind, entry),
-    hasUpdate:
-      Object.hasOwn(c.updates, entry.name) || entry.candidate !== undefined,
+    hasUpdate: offerOf(entry) !== undefined,
     key: entry.name,
     kind,
     modified: entry.state === "modified",
@@ -290,7 +324,7 @@ const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
   if (node !== undefined) {
     row.node = node;
   }
-  const update = c.updates[entry.name];
+  const update = offerOf(entry);
   if (
     update !== undefined &&
     entry.kind === "managed" &&

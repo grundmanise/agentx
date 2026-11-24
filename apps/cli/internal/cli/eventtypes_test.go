@@ -159,6 +159,9 @@ var valueLists = []valueList{
 	{name: "FileStatus", values: []string{diffAdded, diffModified, diffDeleted}, fields: []fieldRef{
 		{diffEvent{}, "Status"}, {changedFile{}, "Status"},
 	}},
+	{name: "DiffStep", values: []string{diffStepHub, diffStepUpstream}, fields: []fieldRef{
+		{diffEvent{}, "Step"},
+	}},
 	{name: "DoctorStatus", values: []string{rowOK, rowWarn, rowFail, rowInfo}, fields: []fieldRef{
 		{doctorEvent{}, "Status"},
 	}},

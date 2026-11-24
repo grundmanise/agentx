@@ -1,5 +1,5 @@
 // The sync status at the right of the title bar: how this machine stands with the hub,
-// from the inventory's library, the Sources slice and the update candidates. With no hub
+// from the inventory's library and the Sources slice. With no hub
 // set, it says so and a click goes to Settings, where one is set. Otherwise it counts what
 // there is to publish (hub skills edited since they were published, and those never
 // published) and what is incoming (hub skills changed on your other machines), or says it
@@ -8,7 +8,6 @@
 // the Skills screen checks by hand.
 import { useState } from "react";
 
-import type { UpdateAvailableEvent } from "#/cli/events.gen.ts";
 import {
   StatusAnnouncement,
   StatusButton,
@@ -34,10 +33,8 @@ import { navigateTo } from "#/lib/navigate.ts";
 import { useNow } from "#/lib/now.ts";
 import { hubOf, readOnlyHubReason } from "#/screens/skills/banners.ts";
 import { openSkill } from "#/screens/skills/open.ts";
-import {
-  fromAnotherMachine,
-  shortSource,
-} from "#/screens/skills/projection.ts";
+import { shortSource } from "#/screens/skills/projection.ts";
+import type { SkillRow } from "#/screens/skills/projection.ts";
 import {
   PUBLISH_ALL,
   publishAll,
@@ -65,14 +62,14 @@ export type SyncState =
       /** Why Publish all does nothing, while the hub is read-only. */
       readOnly?: string;
       outgoing: ToPublish[];
-      incoming: UpdateAvailableEvent[];
+      /** Hub skills whose branch on the hub holds what another machine published. */
+      incoming: SkillRow[];
     };
 
 /** The sync status from the store; undefined until the inventory and the sources are read. */
 export const useSyncState = (): SyncState | undefined => {
   const rows = useSkillRows();
   const inventory = useAppStore((s) => s.inventory);
-  const updates = useAppStore((s) => s.updates);
   const hub = useAppStore((s) => hubOf(s.sources));
   const readOnly = useAppStore((s) => readOnlyHubReason(s.sources));
   // The sources load once the checks pass: until their first answer, the status would guess.
@@ -84,17 +81,13 @@ export const useSyncState = (): SyncState | undefined => {
   if (hub === undefined) {
     return { kind: "no-hub" };
   }
-  // Only what another machine published to this hub, for a hub skill still
-  // in the library: a skill removed since, a plugin's or a client's skill of the same name, or an
-  // update from a hub set before this one, is not incoming.
-  const installed = new Set(
-    rows.filter((row) => row.kind === "hub").map((row) => row.name)
-  );
-  const incoming = Object.values(updates).filter(
-    (update) =>
-      fromAnotherMachine(update) &&
-      update.source === hub.url &&
-      installed.has(update.name)
+  // Only what another machine published to this hub, for a hub skill in the library: a hub
+  // skill published to a hub set before this one is not incoming.
+  const incoming = rows.filter(
+    (row) =>
+      row.kind === "hub" &&
+      row.entry?.hub_ahead !== undefined &&
+      row.entry.source === hub.url
   );
   incoming.sort((a, b) => a.name.localeCompare(b.name));
   return {
@@ -125,7 +118,7 @@ const outgoingLine = (outgoing: ToPublish[]) => {
 /** The pill's tone, label and tooltip lines with a hub set. */
 const describe = (
   outgoing: ToPublish[],
-  incoming: UpdateAvailableEvent[],
+  incoming: SkillRow[],
   checked: string | undefined
 ): { tone: StatusTone; label: string; tooltip: string[] } => {
   const n = outgoing.length;
@@ -242,12 +235,12 @@ export const PublishStatus = () => {
           {incoming.length > 0 && (
             <SyncGroup caption="Incoming">
               <SyncRows>
-                {incoming.map((update) => (
+                {incoming.map((row) => (
                   <SyncRow
-                    key={update.name}
-                    name={update.name}
+                    key={row.name}
+                    name={row.name}
                     onOpen={() => {
-                      openSkill(update.name);
+                      openSkill(row.name);
                     }}
                   />
                 ))}

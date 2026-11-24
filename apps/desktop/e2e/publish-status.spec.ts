@@ -1,13 +1,17 @@
-// The sync status at the right of the title bar: its states from the inventory, the Sources slice
-// and the updates serve found, the popover it opens with what there is to publish and what is
-// incoming, Publish all from that popover, and when the hub was last checked. Every
-// click's command line is asserted as the mocked CLI recorded it.
+// The sync status at the right of the title bar: its states from the inventory, where the
+// library says what another machine published, and the Sources slice, the popover it opens with
+// what there is to publish and what is incoming, Publish all from that popover, and when the hub
+// was last checked. Every click's command line is asserted as the mocked CLI recorded it.
 import type { Page } from "@playwright/test";
 
 import type { PublishOutcome } from "#/cli/events.gen.ts";
 
-import { launch, syncedLibrary } from "./fixtures/palette-publish.ts";
-import { HUB, configurations, skills } from "./fixtures/skills.ts";
+import {
+  fromAnotherMachine,
+  launch,
+  syncedLibrary,
+} from "./fixtures/palette-publish.ts";
+import { HUB, configurations } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
@@ -24,20 +28,6 @@ const pane = (page: Page, name: string) =>
   page
     .getByRole("region", { name: "Skill details" })
     .getByRole("article", { name });
-
-/** An update another of your machines published to `name`, as serve reports it from `source`. */
-const fromAnotherMachine = (name: string, source: string): InlineEvent => ({
-  base_hash: "",
-  candidate: "c0ffee",
-  candidate_hash: "",
-  candidate_upstream_commit: "",
-  files: [{ path: "SKILL.md", status: "modified" }],
-  kind: "managed",
-  name,
-  source,
-  type: "update_available",
-  upstream_commit: "",
-});
 
 /** A hub whose short form is longer than the popover's least width leaves room for. */
 const LONG_REMOTE =
@@ -108,25 +98,28 @@ test.describe("states", () => {
     ).toHaveText("1 incoming");
   });
 
-  test("an update from another machine for a skill not in the library, a plugin's skill of its name, or from another remote, is not incoming", async ({
+  test("what another machine published to a skill of another remote is not incoming", async ({
     cli,
     page,
   }) => {
     launch(cli, "synced");
     await page.goto("/");
     await expect(status(page)).toHaveText("Synced");
-    const pluginSkill = skills.find((node) => node.name === "commit-helper");
     await cli.serveEmit([
       {
         configurations,
-        library: syncedLibrary,
+        library: syncedLibrary.map((entry) =>
+          entry.name === "notes"
+            ? {
+                ...entry,
+                ...fromAnotherMachine,
+                source: "https://github.com/me/old-skills.git",
+              }
+            : entry
+        ),
         scan_counter: 2,
-        skills: pluginSkill === undefined ? [] : [pluginSkill],
         type: "inventory",
       },
-      fromAnotherMachine("gone", HUB),
-      fromAnotherMachine("commit-helper", HUB),
-      fromAnotherMachine("notes", "https://github.com/me/old-skills.git"),
     ]);
     await expect(status(page)).toHaveText("Synced");
   });

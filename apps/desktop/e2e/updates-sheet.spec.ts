@@ -1,7 +1,8 @@
-// The What's new sheet: See changes on an update's banner opens it, it reads
-// `skill diff <name> --update` and shows one block per changed file with its status, its path and
-// the patch with the diff tints. An update from another machine lists its files with a note.
-// Escape and Close close it.
+// The What's new sheet: See changes on an update's banner opens it with what
+// `skill diff <name> --update` read when the skill was selected, one block per changed file with
+// its status, its path and the patch with the diff tints. A hub skill's update that takes in what
+// another machine published, then a newer version from upstream, shows the two under a caption
+// each. Escape and Close close it.
 import type { Page } from "@playwright/test";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -12,10 +13,15 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
-import { lettersUpdateDiffs, pdfUpdateDiffs } from "./fixtures/update-diffs.ts";
-import { allUpdates, updatesInventory } from "./fixtures/updates.ts";
+import {
+  lettersUpdateDiffs,
+  pdfUpdateDiffs,
+  releaseNotesUpdateDiffs,
+  updateDiffsOf,
+} from "./fixtures/update-diffs.ts";
+import { inventoryOf, updatesLibrary } from "./fixtures/updates.ts";
 import { expect, test } from "./harness/cli.ts";
-import type { MockCli } from "./harness/cli.ts";
+import type { MockCli, Reply } from "./harness/cli.ts";
 
 /** The reads of what an update changes, in the order the sheet ran them. */
 const updateDiffs = (cli: MockCli) =>
@@ -35,9 +41,22 @@ const block = (page: Page, path: string) =>
 const patch = (page: Page, path: string) =>
   sheet(page).getByRole("region", { exact: true, name: `Changes to ${path}` });
 
-/** Opens the Skills screen on `name`, with serve's start check having found every update. */
-const open = async (cli: MockCli, page: Page, name: string) => {
-  cli.onServeStart({ events: [updatesInventory, ...allUpdates] });
+/**
+ * Opens the Skills screen on `name`, with serve's first inventory offering every update of
+ * `library`, and `diff` as what `skill diff <name> --update` answers. Returns that read.
+ */
+const open = async (
+  cli: MockCli,
+  page: Page,
+  name: string,
+  diff?: Reply,
+  library = updatesLibrary
+) => {
+  cli.onServeStart({ events: [inventoryOf(library)] });
+  const reading = cli.register(
+    ["skill", "diff", name, "--update"],
+    diff ?? { events: updateDiffsOf[name] }
+  );
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });
@@ -51,6 +70,7 @@ const open = async (cli: MockCli, page: Page, name: string) => {
   cli.register(["skill", "diff", "pdf-letters"], { events: [] });
   await page.goto(`/#/skills/${encodeURIComponent(name)}`);
   await expect(pane(page, name)).toBeVisible();
+  return reading;
 };
 
 test.describe("the What's new sheet", () => {
@@ -58,13 +78,12 @@ test.describe("the What's new sheet", () => {
     cli,
     page,
   }) => {
-    await open(cli, page, "pdf");
-    const read = cli.register(["skill", "diff", "pdf", "--update"], {
+    const read = await open(cli, page, "pdf", {
       events: pdfUpdateDiffs,
       holdAfter: 0,
     });
-    await seeChanges(page, "pdf").click();
     await read.started;
+    await seeChanges(page, "pdf").click();
     await expect(sheet(page)).toBeVisible();
     // It opens as wide as every sheet, the Activity log's 1120.
     const box = await sheet(page).boundingBox();
@@ -72,8 +91,7 @@ test.describe("the What's new sheet", () => {
     await expect(sheet(page)).toContainText("pdf");
     // The two versions, by date where the CLI dates them.
     await expect(sheet(page)).toContainText("Sep 14 → Sep 28");
-    // While it reads: the first changed file's block, open, over the loading pane.
-    await expect(block(page, "SKILL.md")).toBeVisible();
+    // While it reads: the loading pane.
     await expect(sheet(page).getByText("Reading the changes…")).toBeAttached();
     read.release();
 
@@ -150,9 +168,8 @@ test.describe("the What's new sheet", () => {
     cli,
     page,
   }) => {
-    await open(cli, page, "review");
     const lines = Array.from({ length: 80 }, (_, i) => `+Step ${i + 1}.`);
-    cli.register(["skill", "diff", "review", "--update"], {
+    await open(cli, page, "review", {
       events: [
         {
           name: "review",
@@ -196,9 +213,6 @@ test.describe("the What's new sheet", () => {
   }) => {
     await page.setViewportSize({ height: 420, width: 1280 });
     await open(cli, page, "pdf");
-    cli.register(["skill", "diff", "pdf", "--update"], {
-      events: pdfUpdateDiffs,
-    });
     await seeChanges(page, "pdf").click();
     await expect(patch(page, "scripts/convert.py")).toBeAttached();
     const box = await patch(page, "SKILL.md").boundingBox();
@@ -212,12 +226,9 @@ test.describe("the What's new sheet", () => {
     page,
   }) => {
     await open(cli, page, "pdf-letters");
-    cli.register(["skill", "diff", "pdf-letters", "--update"], {
-      events: lettersUpdateDiffs,
-    });
     await seeChanges(page, "pdf-letters").click();
     await expect(block(page, "examples.md")).toContainText("deleted");
-    await expect(sheet(page)).toContainText("1a2b3c4 → 9b8c7d6");
+    await expect(sheet(page)).toContainText("3f2a9c1 → 9b8c7d6");
     await expect(
       patch(page, "examples.md").locator("del", { hasText: "# Examples" })
     ).toBeVisible();
@@ -226,7 +237,7 @@ test.describe("the What's new sheet", () => {
     ]);
   });
 
-  test("lists the files of an update from another machine with the note", async ({
+  test("shows what another machine published to the hub, with its patch", async ({
     cli,
     page,
   }) => {
@@ -235,21 +246,51 @@ test.describe("the What's new sheet", () => {
     await expect(sheet(page)).toBeVisible();
     await expect(sheet(page)).toContainText("release-notes");
     await expect(sheet(page)).toContainText("Oct 1");
-    await expect(sheet(page)).toContainText(
-      "Changes from another machine can't be shown before you update."
-    );
-    const files = sheet(page).getByRole("list", { name: "Changed files" });
-    await expect(files.getByRole("listitem")).toHaveText(["addedtemplate.md"]);
+    await expect(block(page, "template.md")).toContainText("added");
+    await expect(
+      patch(page, "template.md").locator("ins", { hasText: "# Release notes" })
+    ).toBeVisible();
+    expect(updateDiffs(cli)).toEqual([
+      ["skill", "diff", "release-notes", "--update", "--json"],
+    ]);
     await page.keyboard.press("Escape");
     await expect(sheet(page)).toHaveCount(0);
+  });
+
+  test("a fork behind its hub with a newer upstream: what the hub holds, then the upstream's version, each under its caption", async ({
+    cli,
+    page,
+  }) => {
+    const library = updatesLibrary.map((entry) =>
+      entry.name === "pdf-letters"
+        ? { ...entry, hub_ahead: { commit: "77e1d0c0ffee" } }
+        : entry
+    );
+    const hub = releaseNotesUpdateDiffs.map((d) => ({
+      ...d,
+      name: "pdf-letters",
+    }));
+    await open(
+      cli,
+      page,
+      "pdf-letters",
+      { events: [...hub, ...lettersUpdateDiffs] },
+      library
+    );
+    await seeChanges(page, "pdf-letters").click();
+    // In the order the update takes them in: the hub's, then the upstream's.
+    await expect(sheet(page)).toContainText(
+      /Published from another machine.*template\.md.*New version from acme\/skills.*examples\.md/su
+    );
+    await expect(block(page, "template.md")).toContainText("added");
+    await expect(block(page, "examples.md")).toContainText("deleted");
   });
 
   test("says when the changes could not be read, in the sheet", async ({
     cli,
     page,
   }) => {
-    await open(cli, page, "review");
-    cli.register(["skill", "diff", "review", "--update"], {
+    await open(cli, page, "review", {
       events: [
         {
           code: "refused",

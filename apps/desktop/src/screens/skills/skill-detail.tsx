@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
@@ -26,6 +26,7 @@ import {
   glyphOf,
   glyphTitle,
   originOf,
+  updateKey,
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
@@ -33,6 +34,7 @@ import { RenameButton } from "#/screens/skills/rename-dialog.tsx";
 import { canRename } from "#/screens/skills/rename.ts";
 import { SightsNotice } from "#/screens/skills/sights-view.tsx";
 import { sightsOf } from "#/screens/skills/sights.ts";
+import { loadUpdateDiff } from "#/store/loaders.ts";
 import { useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -172,10 +174,26 @@ export const SkillDetail = ({
       : undefined;
   });
   const conflicts = useAppStore((s) => s.conflicts);
+  // The files the update changes, from `skill diff <name> --update` of this update.
+  const update = row.update === undefined ? undefined : updateKey(row.update);
+  const updateDiffs = useAppStore((s) => {
+    const read = s.updateDiffs[row.name];
+    return read?.candidate === update ? read?.diffs : undefined;
+  });
+  const base = row.entry?.base_hash ?? "";
+  useEffect(() => {
+    if (update !== undefined) {
+      void loadUpdateDiff(row.name, update, base);
+    }
+  }, [row.name, update, base]);
   const banner = bannerFor(row, configurations, {
     changedFiles,
     conflicts,
     sources,
+    updateFiles:
+      updateDiffs === undefined
+        ? undefined
+        : [...new Set(updateDiffs.map((d) => d.path))],
   });
   const details = detailsOf(row, configurations);
   const sights = sightsOf(row, sameName, configurations);

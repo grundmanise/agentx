@@ -369,6 +369,7 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		}
 		ev.Drift = driftOf(obs, false, false)
 		ev.PendingMerge = obs.pending
+		ev.HubAhead = obs.hubAhead
 	}
 	// A fork's update is a newer version of the upstream its base came
 	// from, judged against that base, whatever its own commits hold.

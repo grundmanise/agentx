@@ -1,8 +1,7 @@
 // The slices that one-shot reads fill: settings, sources and the adoption preview. Each loads
 // once the startup checks pass, and again after the commands that change it. The adoption preview
-// also loads when Settings opens and on Check updates. The update check of
-// `skill check-updates` replaces the update candidates serve found and sets when the last check
-// ended, and `skill update` takes away those of the skills it updated.
+// also loads when Settings opens and on Check updates. A `skill check-updates` run sets when the
+// last check ended; what it found reaches the inventory that follows it.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
   CliEvent,
@@ -416,17 +415,18 @@ export const loadSkillMd = async (key: string, request: SkillMdRequest) => {
   }
 };
 
-// The candidate of each update whose changes were read, or are being read: name → candidate.
+// The versions of each update whose changes were read, or are being read: name → updateKey.
 const updateDiffCandidates = new Map<string, string>();
 
 /** The label of the read of what the update of `name` changes, for `usePending`. */
 export const updateDiffLabel = (name: string) => `update diff ${name}`;
 
 /**
- * Loads what the update of `name` changes: `skill diff <name> --update`, a read of the two
- * versions the last update check pinned. `candidate` names the update: the same one is read once,
- * however often its changes are opened, and a newer one reads again. A failed read is kept with
- * the CLI's message, and tried again the next time the changes are opened.
+ * Loads what the update of `name` changes: `skill diff <name> --update`, what `skill update <name>`
+ * would apply, a fork's hub step and its upstream's update each under its step. `candidate` names
+ * the versions the inventory offers (`updateKey`): the same update is read once, however often
+ * its changes are shown, and a newer one reads again. A failed read is kept with the CLI's
+ * message, and tried again the next time the changes are shown.
  */
 export const loadUpdateDiff = async (
   name: string,
@@ -521,47 +521,17 @@ const reloadReads = (command: string, args: readonly string[]) => {
 };
 
 /** What to load again after a command that may have changed something. */
-const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
+const afterCommand = ({ args, command, exitCode, read }: Finished) => {
   if (read) {
     return;
   }
   reloadReads(command, args);
-  // A check that could not reach a source (exit 3) still lists what it found elsewhere.
+  // A check that could not reach a source (exit 3) still checked the others.
   if (
     command === "skill check-updates" &&
     (exitCode === EXIT_CODES.ok || exitCode === EXIT_CODES.source)
   ) {
-    useAppStore.setState({
-      lastChecked: new Date().toISOString(),
-      updates: Object.fromEntries(
-        events
-          .filter((e) => e.type === "update_available")
-          .map((e) => [e.name, e])
-      ),
-    });
-  }
-  // The skills an update applied to, which its `library_skill` events name, have no update left,
-  // and neither has the one skill an update of one name left current, which it names in none.
-  // An aborted merge emits `library_skill` too, but its update is still offered.
-  if (command === "skill update" && !args.includes("--abort")) {
-    const updated = new Set(
-      events.filter((e) => e.type === "library_skill").map((e) => e.name)
-    );
-    const one = args.at(2);
-    if (
-      exitCode === EXIT_CODES.ok &&
-      one !== undefined &&
-      !one.startsWith("-")
-    ) {
-      updated.add(one);
-    }
-    if (updated.size > 0) {
-      useAppStore.setState((s) => ({
-        updates: Object.fromEntries(
-          Object.entries(s.updates).filter(([name]) => !updated.has(name))
-        ),
-      }));
-    }
+    useAppStore.setState({ lastChecked: new Date().toISOString() });
   }
 };
 

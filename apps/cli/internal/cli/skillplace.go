@@ -713,6 +713,9 @@ type skillContext struct {
 	// published is the tip of each hub skill's branch on the
 	// hub as last fetched, by name, see publishedTips.
 	published map[string]string
+	// publishedAt is the committer time of each of those tips, by name,
+	// read in the same for-each-ref.
+	publishedAt map[string]string
 	// publishedRead is false when published could not be read, so that no
 	// skill is judged not published, see publishedTips.
 	publishedRead bool
