@@ -18,6 +18,17 @@ func ForkRefspec(remote string) string {
 	return "+refs/heads/skills/*:" + TrackingPrefix(remote) + "skills/*"
 }
 
+// ForkBranches names every fork branch of a repository, as a pattern
+// BranchTips and TipsAt take.
+const ForkBranches = "skills/*"
+
+// ForkName is the name of the fork the branch, a short name, is the fork
+// branch of, ok false for a branch that is none.
+func ForkName(branch string) (name string, ok bool) {
+	name, ok = strings.CutPrefix(branch, "skills/")
+	return name, ok && name != ""
+}
+
 // TrackingPrefix is where a fetch of the remote called remote writes what
 // it holds, every ref under it this remote's.
 func TrackingPrefix(remote string) string { return "refs/remotes/" + remote + "/" }
@@ -157,38 +168,6 @@ func (r *Runner) ProbeRemote(ctx context.Context, url string) (forks bool, err e
 	args := append(networkConfig(), "ls-remote", "--heads", url, "refs/heads/skills/*")
 	out, err := r.run(ctx, call{dir: os.TempDir()}, args...)
 	return strings.TrimSpace(out) != "", err
-}
-
-// ForkTips asks the repository at url which fork branches it holds and
-// the commit each one holds, by fork name, in the user's environment, with
-// no hook of theirs, see networkConfig. It is one ls-remote, which brings
-// no object and writes nothing, so that a caller can tell whether a fetch
-// would bring anything before it fetches. It runs where no repository is,
-// as ProbeRemote does, so that it needs no remote set up in the home
-// repo and no configuration but the user's applies.
-func (r *Runner) ForkTips(ctx context.Context, url string) (map[string]string, error) {
-	const prefix = "refs/heads/skills/"
-	args := append(networkConfig(), "ls-remote", "--refs", url, prefix+"*")
-	out, err := r.run(ctx, call{dir: os.TempDir()}, args...)
-	if err != nil {
-		return nil, err
-	}
-	return parseForkTips(out), nil
-}
-
-// parseForkTips reads what ls-remote printed of the fork branches, one
-// "<commit>\t<ref>" line each, by fork name. A line of another ref, which
-// a pattern matching the tail of a ref name lets in, is left out. Pure.
-func parseForkTips(out string) map[string]string {
-	const prefix = "refs/heads/skills/"
-	tips := map[string]string{}
-	for _, line := range strings.Split(out, "\n") {
-		commit, ref, ok := strings.Cut(strings.TrimSpace(line), "\t")
-		if name, under := strings.CutPrefix(ref, prefix); ok && under && name != "" && commit != "" {
-			tips[name] = commit
-		}
-	}
-	return tips
 }
 
 // FetchRemote fetches the fork branches of the remote called remote into

@@ -18,7 +18,7 @@ type Settings struct {
 	Label                  string          `json:"label,omitempty"` // empty until set; the hostname stands in
 	AcceptOperations       bool            `json:"accept_operations"`
 	IgnoreSystemFiles      bool            `json:"ignore_system_files"` // a file without the key reads true; see SystemFiles
-	ReportInventory        bool            `json:"report_inventory"`    // whether this machine writes its inventory report to the hub on its own, which nothing does yet; off until the user turns it on
+	ReportInventory        bool            `json:"report_inventory"`    // whether this machine writes its inventory report to the hub on its own, which the serve child does; off until the user turns it on
 	DisabledConfigurations []string        `json:"disabled_configurations"`
 	CopyConfigurations     []string        `json:"copy_configurations"` // the configurations whose new placements are copies, sorted
 	Sources                []Source        `json:"sources"`

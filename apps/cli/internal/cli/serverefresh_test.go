@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -187,12 +188,13 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	one, two := h.fetchSources(t)
 	h.storeGit("remote", "remove", source.RemoteName(source.ID(two.url)))
 	h.storeGit("update-ref", "-d", source.Ref(source.ID(two.url)))
+	hub := "file://" + newHubRemote(t, h)
 	err := home.Mutate(h.agentx, nil, func() error {
 		settings, err := home.LoadSettings(h.agentx)
 		if err != nil {
 			return err
 		}
-		settings.SetSource(home.Source{URL: "https://example.invalid/me/forks", Hub: true})
+		settings.SetSource(home.Source{URL: hub, Hub: true})
 		return home.SaveSettings(h.agentx, settings)
 	})
 	if err != nil {
@@ -380,11 +382,15 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 
 // TestServeChecksTheHubRemoteWhileItRuns runs serve on machine b of
 // two that share a hub, with the hub check it repeats
-// made a few milliseconds apart. The check at launch ends in an
-// update_check of scope all that fetched. Then, while the hub
+// made a few milliseconds apart. The check at launch reads the hub's
+// machines, which is none yet, a fleet event that lists none, and ends in
+// an update_check of scope all that fetched. Then, while the hub
 // holds what b's remote-tracking branches hold, each hub check is one
-// ls-remote, fetches nothing and writes nothing, and ends in an
-// update_check of scope hub that did not fetch. Once machine a
+// ls-remote, of the fork branches and the machines' branches together,
+// fetches nothing and writes nothing, and ends in an
+// update_check of scope hub that did not fetch. Once machine a writes
+// its report, the next hub check fetches that branch alone and emits the
+// fleet with a in it, once: no check after it emits one. Once machine a
 // publishes alpha, the next hub check fetches, announces the update a
 // published as the check at launch would, with this serve's instance id,
 // and ends in an update_check that fetched. With the hub out of
@@ -394,14 +400,26 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	every := hubCheckEvery
 	hubCheckEvery = 20 * time.Millisecond
 	t.Cleanup(func() { hubCheckEvery = every })
+	const idA = "fedcba9876543210fedcba9876543210"
 	a, b, _, remote := twoHomes(t)
 	url := "file://" + remote
 	calls := countingGit(t, b)
 	p := b.serve(t, "--json")
 	first := p.next("inventory")
+	var fleets []jsonEvent
+	await := func(what string, match func(jsonEvent) bool) jsonEvent {
+		t.Helper()
+		e, passed := p.nextMatching(what, match)
+		for _, read := range append(passed, e) {
+			if read["type"] == "fleet" {
+				fleets = append(fleets, read)
+			}
+		}
+		return e
+	}
 	checked := func(scope string) jsonEvent {
 		t.Helper()
-		e, _ := p.nextMatching("update_check of scope "+scope, func(e jsonEvent) bool { return e["type"] == "update_check" && e["scope"] == scope })
+		e := await("update_check of scope "+scope, func(e jsonEvent) bool { return e["type"] == "update_check" && e["scope"] == scope })
 		equal(t, "instance_id", e["instance_id"], first["instance_id"])
 		if _, err := time.Parse(time.RFC3339, e["checked_at"].(string)); err != nil {
 			t.Errorf("checked_at %q: %v", e["checked_at"], err)
@@ -411,6 +429,7 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	all := checked(checkScopeAll)
 	equal(t, "the check at launch: ok", all["ok"], true)
 	equal(t, "the check at launch: fetched", all["fetched"], true)
+	equal(t, "the fleet of the check at launch", asJSON(t, fleets), `[{"machines":[],"schema_version":`+fmt.Sprint(schemaVersion)+`,"type":"fleet"}]`)
 	fetched := func() int { return strings.Count(strings.Join(calls(), "\n"), " fetch --") }
 	atLaunch, version := fetched(), mutationVersion(t, b)
 
@@ -421,11 +440,30 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	}
 	equal(t, "an unchanged remote: fetches", fetched(), atLaunch)
 	equal(t, "an unchanged remote: writes", mutationVersion(t, b), version)
-	contains(t, "an unchanged remote: its git", strings.Join(calls(), "\n"), "ls-remote --refs "+url+" refs/heads/skills/*")
+	contains(t, "an unchanged remote: its git", strings.Join(calls(), "\n"),
+		"ls-remote --refs "+url+" refs/heads/skills/* refs/heads/reports/* refs/heads/machines/cloud")
+
+	a.asMachine(idA)
+	a.mustRun("machine", "report")
+	reported, _, _ := reportOnHub(t, a, remote, idA)
+	fleet := await("the fleet with machine a", func(e jsonEvent) bool { return e["type"] == "fleet" })
+	machines := fleet["machines"].([]any)
+	equal(t, "the machines of the fleet", len(machines), 1)
+	fromA := named(t, machines, "commit", reported)
+	equal(t, "the machine of the fleet", fromA["machine"].(map[string]any)["id"], idA)
+	named(t, fromA["library"], "name", "alpha")
+	withA := checked(checkScopeHub)
+	equal(t, "a hub with a new report: ok", withA["ok"], true)
+	equal(t, "a hub with a new report: fetched", withA["fetched"], false)
+	checked(checkScopeHub)
+	equal(t, "a hub with a new report: fetches", fetched(), atLaunch+1)
+	contains(t, "a hub with a new report: its fetch", strings.Join(calls(), "\n"),
+		hubRemoteName(t, b)+" +refs/heads/reports/"+idA+":"+gitx.TrackingPrefix(hubRemoteName(t, b))+"reports/"+idA+"\n")
+	equal(t, "a hub with a new report: writes", mutationVersion(t, b), version)
 
 	published := a.commitFork("alpha", forkNotes("one", "one, a"))
 	a.mustRun("skill", "publish", "alpha")
-	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["name"] == "alpha" })
+	update := await("update_available", func(e jsonEvent) bool { return e["type"] == "update_available" && e["name"] == "alpha" })
 	equal(t, "the update's instance_id", update["instance_id"], first["instance_id"])
 	equal(t, "its source", update["source"], url)
 	equal(t, "its candidate", update["candidate"], published)
@@ -438,7 +476,7 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A check that began before the rename can still report ok: wait for the first that failed.
-	p.nextMatching("a hub check of the remote out of reach", func(e jsonEvent) bool {
+	await("a hub check of the remote out of reach", func(e jsonEvent) bool {
 		return e["type"] == "update_check" && e["scope"] == checkScopeHub && e["ok"] == false
 	})
 	for range 2 {
@@ -447,10 +485,11 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	if err := os.Rename(away, remote); err != nil {
 		t.Fatal(err)
 	}
-	p.nextMatching("an update_check that is ok again", func(e jsonEvent) bool {
+	await("an update_check that is ok again", func(e jsonEvent) bool {
 		return e["type"] == "update_check" && e["scope"] == checkScopeHub && e["ok"] == true
 	})
 	equal(t, "exit", p.close(), 0)
+	equal(t, "fleet events over the run", len(fleets), 2)
 	var unreached []string
 	for _, w := range warnings(b, p.stderr.String()) {
 		if strings.HasPrefix(w, "update check: the hub "+url+": cannot reach it") {

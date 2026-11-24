@@ -28,9 +28,9 @@ const (
 var ErrWatch = errors.New("cannot watch for changes")
 
 // Options wires one serve loop to the command that runs it: how to scan and
-// how to report. Check and Recheck run on a goroutine of their own, and the
-// report each returns is called from the loop's goroutine, as every other
-// report function is.
+// how to report. Check, Recheck and Quiet run on a goroutine of their own,
+// one of the three at a time, and the report each returns is called from
+// the loop's goroutine, as every other report function is.
 type Options struct {
 	Scan  func(ctx context.Context) (scan.Inventory, error)                              // one whole scan; ctx bounds its wait for the lock
 	Index func(ctx context.Context, prev *source.Index) (*source.Index, []string, error) // the source index after a scan, prev being the last one built; nil indexes nothing
@@ -53,6 +53,18 @@ type Options struct {
 	// itself or beside Check. nil repeats nothing, and so does Once.
 	Recheck      Job
 	RecheckEvery time.Duration
+	// Quiet is the job serve runs once the machine has been quiet, off the
+	// loop's goroutine as a check is: QuietAfter after a scan ended, when
+	// no other scan ended since, whether or not the inventory changed, and
+	// never before the first inventory. A run of scans, each within
+	// QuietAfter of the one before, so leads to one run of it, after the
+	// last. It never runs beside itself or beside a check: one that is due
+	// while a check or a run of its own goes on starts once that one's
+	// report is made, and a check that is due while it runs does the same.
+	// A scan that ends while it runs starts the wait again, so another run
+	// follows. nil runs nothing, and so does Once.
+	Quiet      Job
+	QuietAfter time.Duration
 	// Jobs are the other jobs serve runs once at start, such as the home
 	// repo's maintenance.
 	Jobs []Job
@@ -137,11 +149,11 @@ func (r *Requests) Search(ctx context.Context, query string) ([]source.Match, er
 }
 
 // Job is one job serve runs off the loop's goroutine, once the first
-// inventory is out: each of Jobs once, beside each other, and the checks,
-// see Check and Recheck. The report a run returns, nil
-// for nothing to report, is made on the loop's goroutine, where every other
-// report is. Under Once no job runs, and Run waits for a run still going,
-// stopped by its context, before it returns.
+// inventory is out: each of Jobs once, beside each other, the checks, see
+// Check and Recheck, and the quiet job, see Quiet. The report a run
+// returns, nil for nothing to report, is made on the loop's goroutine,
+// where every other report is. Under Once no job runs, and Run waits for a
+// run still going, stopped by its context, before it returns.
 type Job func(ctx context.Context) (report func())
 
 // Run serves until ctx is done or, under Once, the initial inventory is
@@ -194,7 +206,8 @@ func Run(ctx context.Context, o Options) error {
 	// where every other report is. The checks, Check and then Recheck over
 	// and over, report over checked instead, which is what times the next
 	// one: one check at a time, the next timed from the report of the last.
-	ended, checked := make(chan func()), make(chan func())
+	// The quiet job reports over quieted.
+	ended, checked, quieted := make(chan func()), make(chan func()), make(chan func())
 	start := func(job Job, done chan<- func()) {
 		checking.Add(1)
 		go func() {
@@ -206,7 +219,23 @@ func Run(ctx context.Context, o Options) error {
 			}
 		}()
 	}
-	var recheckC <-chan time.Time
+	// A check and the quiet job run one at a time, so that what they share
+	// needs no lock: busy is set while one runs, and one whose time comes
+	// meanwhile is due, and starts once the report of the one running is
+	// made, the quiet job first.
+	var recheckC, quietC <-chan time.Time
+	busy, recheckDue, quietDue := false, false, false
+	startDue := func() {
+		switch {
+		case busy:
+		case quietDue:
+			busy, quietDue = true, false
+			start(o.Quiet, quieted)
+		case recheckDue:
+			busy, recheckDue = true, false
+			start(o.Recheck, checked)
+		}
+	}
 	jobsStarted := false
 	startJobs := func() {
 		if jobsStarted || l.counter == 0 {
@@ -215,6 +244,7 @@ func Run(ctx context.Context, o Options) error {
 		jobsStarted = true
 		switch {
 		case o.Check != nil:
+			busy = true
 			start(o.Check, checked)
 		case o.Recheck != nil:
 			recheckC = time.After(o.RecheckEvery)
@@ -225,13 +255,21 @@ func Run(ctx context.Context, o Options) error {
 			}
 		}
 	}
+	// scanned follows every scan, whatever it found: once an inventory is
+	// out, the wait for the quiet job starts again.
+	scanned := func() {
+		startJobs()
+		if o.Quiet != nil && l.counter > 0 {
+			quietC = time.After(o.QuietAfter)
+		}
+	}
 	if err := l.scan(ctx); err != nil && ctx.Err() == nil {
 		o.Fail(err)
 	}
 	if o.Requests != nil {
 		close(o.Requests.scanned)
 	}
-	startJobs()
+	scanned()
 
 	// A change starts the debounce timer and, unless one is running, the
 	// deadline timer; whichever fires first triggers the rescan.
@@ -257,7 +295,7 @@ func Run(ctx context.Context, o Options) error {
 		if err := l.scan(ctx); err != nil && ctx.Err() == nil {
 			o.Warn("scan failed: " + err.Error())
 		}
-		startJobs()
+		scanned()
 	}
 	for {
 		select {
@@ -280,15 +318,26 @@ func Run(ctx context.Context, o Options) error {
 				report()
 			}
 		case report := <-checked:
+			busy = false
 			if report != nil {
 				report()
 			}
 			if o.Recheck != nil {
 				recheckC = time.After(o.RecheckEvery)
 			}
+			startDue()
+		case report := <-quieted:
+			busy = false
+			if report != nil {
+				report()
+			}
+			startDue()
 		case <-recheckC:
-			recheckC = nil
-			start(o.Recheck, checked)
+			recheckC, recheckDue = nil, true
+			startDue()
+		case <-quietC:
+			quietC, quietDue = nil, true
+			startDue()
 		}
 	}
 }

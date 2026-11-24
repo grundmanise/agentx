@@ -27,7 +27,7 @@ The desktop app runs serve with [`--json`](/cli/output#json-output) and talks to
 
 Serve watches agentx home (`~/.agentx`), the library and the skills directory of every agent client agentx knows, such as `~/.claude/skills`. It does not watch the clients' MCP configuration files: a change there shows at the next rescan.
 
-Serve sees a skill added, removed or edited, whatever tool made the change. The next inventory shows it. A hub skill shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits for you.
+Serve sees a skill added, removed or edited, whatever tool made the change. The next inventory shows it. A hub skill shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits a skill for you.
 
 ## What serve repairs at start
 
@@ -65,6 +65,12 @@ The check only records what it found. Apply an update with [`agentx skill update
 
 While serve runs, it also checks your [hub](/hub) every 10 minutes for what your other machines published. This check is light: it asks the remote which versions it holds, and fetches only when they differ from what this machine last fetched. If the hub cannot be reached, serve warns once and stays quiet until a check succeeds again.
 
+The same check reads the [inventory reports](/cli/machine#see-the-skills-of-your-other-machines) of your other machines, and fetches only the reports that changed. Serve prints a line when what your hub holds of your machines changed, and once when it starts:
+
+```text
+machines: 3 on the hub
+```
+
 A source that cannot be fetched, because you are offline or the repository moved, is a warning starting `update check:` that names it and any skills it left unchecked:
 
 ```text
@@ -74,6 +80,27 @@ warning: update check: https://github.com/me/skills: git fetch: fatal: unable to
 Serve keeps running. Other `update check:` warnings name a skill or source the check could not check, and say what to do next.
 
 Serve does not fetch a source that your settings name and this machine never added, for example because an [`agentx snapshot apply`](/cli/snapshot#apply-a-snapshot) stopped before it added it. Its warning says `source not fetched`. Run `agentx source add <url>`, or apply the snapshot again. For a [pinned](/cli/source#pin-a-source) source, run `agentx source add <url>#<ref>` so it keeps its pin.
+
+## Inventory report
+
+With the machine setting [`report_inventory`](/cli/config#list-every-setting) on and a hub set, serve writes this machine's [inventory report](/cli/machine#see-the-skills-of-your-other-machines) to your hub on its own:
+
+```text
+report: wrote this machine's report to reports/3ea501b8fb5db1ad3cc85268972d7012 on the hub at 4c1d2e7
+machines: 3 on the hub
+```
+
+Serve waits until the machine has been quiet for one minute after a scan, so several changes in a row make one report. When it starts, it waits one minute after the first inventory. It pushes only when the report is not the one your hub holds, and prints nothing when it pushes nothing.
+
+The setting is off by default. You can turn it on while serve runs: serve writes the first report about a minute later.
+
+If serve cannot write the report, it prints one warning that starts `machine report:` and keeps running:
+
+```text
+warning: machine report: cannot reach the hub https://github.com/you/agentx-hub: git ls-remote: fatal: unable to access 'https://github.com/you/agentx-hub/': Could not resolve host: github.com
+```
+
+Serve stays quiet while the reports keep failing. It tries again after the next change on the machine, and when its next check of your hub succeeds.
 
 ## Maintenance
 
@@ -85,7 +112,7 @@ When serve starts, it tidies the store (`~/.agentx/store.git`) in the background
 agentx serve --once
 ```
 
-Serve scans once, prints the inventory and exits. It repairs nothing, watches nothing and runs no update check or maintenance. To read the full inventory, run [`agentx scan`](/cli/scan).
+Serve scans once, prints the inventory and exits. It repairs nothing, watches nothing, runs no update check or maintenance and writes no inventory report. To read the full inventory, run [`agentx scan`](/cli/scan).
 
 ## Answer a browser on this machine
 

@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -48,6 +50,14 @@ const (
 const hubCheckInterval = 10 * time.Minute
 
 var hubCheckEvery = hubCheckInterval
+
+// reportQuietPeriod is how long the machine must have been quiet, no scan
+// ending, before the serve child writes this machine's inventory report,
+// see serveChecks.report. reportQuietFor is what serve waits, which a test
+// shortens.
+const reportQuietPeriod = time.Minute
+
+var reportQuietFor = reportQuietPeriod
 
 // driftEvent says that one skill of the library is no longer in the state
 // the last inventory showed it in: its state, its drift, or both changed
@@ -181,14 +191,15 @@ func (inv *invocation) prepareServe() {
 	inv.forksWarned = true // reconciliation and every inventory name them
 }
 
-// serveScan is one scan of serve. It checks git first: serve starts
-// without one, see needsGit, so that it stays up to say what is wrong, and
-// the scan after git is installed finds it.
-func (inv *invocation) serveScan(ctx context.Context) (scan.Inventory, error) {
+// serveScan is one scan of serve, the library read as library says, see
+// scanMachine. It checks git first: serve starts without one, see needsGit,
+// so that it stays up to say what is wrong, and the scan after git is
+// installed finds it.
+func (inv *invocation) serveScan(ctx context.Context, library libraryRead) (inventory scan.Inventory, unlisted *failure, err error) {
 	if _, err := inv.gitVersion(ctx); err != nil {
-		return scan.Inventory{}, err
+		return scan.Inventory{}, nil, err
 	}
-	return inv.inventory(ctx, 0, "", false)
+	return inv.scanMachine(ctx, 0, "", false, library)
 }
 
 // inventoryReporter reports each inventory serve emits, with the drift
@@ -222,7 +233,11 @@ func (inv *invocation) serveOnce(ctx context.Context) error {
 	}
 	defer home.Unlock(lock)
 	inv.prepareServe()
-	return serve.Run(ctx, serve.Options{Scan: inv.serveScan, Once: true, Inventory: inv.inventoryReporter(), Warn: inv.out.warn})
+	scan := func(ctx context.Context) (scan.Inventory, error) {
+		inventory, _, err := inv.serveScan(ctx, libraryEmitted)
+		return inventory, err
+	}
+	return serve.Run(ctx, serve.Options{Scan: scan, Once: true, Inventory: inv.inventoryReporter(), Warn: inv.out.warn})
 }
 
 // serve is serve without --once: JSON-RPC on stdin and stdout, and on the
@@ -293,7 +308,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 	dirs, trees := inv.watchedDirs()
 	checks := &serveChecks{inv: inv}
 	return serve.Run(ctx, serve.Options{
-		Scan:         inv.serveScan,
+		Scan:         checks.scan,
 		Index:        inv.sourceIndex,
 		Watch:        dirs,
 		Trees:        trees,
@@ -301,6 +316,8 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		Check:        checks.startup,
 		Recheck:      checks.hub,
 		RecheckEvery: hubCheckEvery,
+		Quiet:        checks.report,
+		QuietAfter:   reportQuietFor,
 		Jobs:         []serve.Job{inv.maintenanceJob},
 		Inventory:    inv.inventoryReporter(),
 		Fail:         inv.serveFailed,
@@ -324,17 +341,44 @@ func (inv *invocation) serveFailed(err error) {
 	inv.out.fail(f)
 }
 
-// serveChecks are the update checks of the serve child: the full check it
-// runs once, as soon as its initial inventory is out, see startup, and the
-// check of the hub alone it repeats while it runs, see hub.
-// serve runs one at a time and makes each report on its loop's goroutine,
-// so failing needs no lock.
+// serveChecks is what the serve child does with its sources and the hub in
+// the background: the full update check it runs once, as soon as its
+// initial inventory is out, see startup, the check of the hub alone it
+// repeats while it runs, see hub, each of which reads the hub's machines
+// too, see machines, and the inventory report of this machine it writes
+// once the machine has been quiet, see report. serve runs one of the three
+// at a time and makes each report on its loop's goroutine before it starts
+// the next, so none of this needs a lock but scanned, which the loop writes
+// while one of them runs.
 type serveChecks struct {
 	inv *invocation
 	// failing is set while the checks fail to reach the hub, or
 	// fail as a whole: the check that starts failing warns, and those after
 	// it stay quiet until one succeeds again.
 	failing bool
+	// fleet is the commit every machine branch of the hub held when the
+	// last fleet event was emitted, by branch; nil before the first.
+	fleet map[string]string
+	// scanned is the last inventory serve scanned, which the report is
+	// built from; nil before the first.
+	scanned atomic.Pointer[scannedInventory]
+	// reported is the report the hub's branch of this machine held when the
+	// last report was written or found written already; nil before the
+	// first and after one that failed.
+	reported []byte
+	// reportFailing is failing for the reports: set while they fail. A hub
+	// check that reached the hub writes the report again while it is set.
+	reportFailing bool
+}
+
+// fleetRead is what one read of the hub's machines by the serve child came
+// to: the commit each machine branch holds, the fleet they make, nil when
+// they are the commits the last fleet event was read at, and the failure
+// that kept the machines from being read. The zero value is no read.
+type fleetRead struct {
+	tips  map[string]string
+	fleet *fleet
+	err   error
 }
 
 // startup is the serve child's update check at start: the check skill
@@ -354,35 +398,41 @@ type serveChecks struct {
 // the version file sets off brings the candidates and markers it wrote
 // into the next inventory, and every source ref it moved into the source
 // index.
+//
+// Then it reads the hub's machines, see hubMachines, unless the check just
+// found the hub out of reach, and its report carries the fleet event of
+// that read before its update_check.
 func (c *serveChecks) startup(ctx context.Context) func() {
 	rep, err := c.inv.checkUpdates(ctx, true, "")
+	var machines fleetRead
+	if err == nil && !rep.hubFailed {
+		machines = c.hubMachines(ctx)
+	}
 	at := time.Now()
 	return func() {
-		if err == nil && rep.idle {
-			return // nothing to check, and nothing was
-		}
-		c.inv.reportServeCheck(rep, err)
-		ok := err == nil && !rep.hubFailed
-		c.failing = !ok
-		c.inv.reportUpdateCheck(checkScopeAll, at, ok, err == nil && len(rep.refreshed) > 0)
+		c.reportCheck(checkScopeAll, at, rep, err, machines, err == nil && len(rep.refreshed) > 0)
 	}
 }
 
 // hub is the check the serve child repeats while it runs, see
 // hubCheckEvery: what another machine published to hub skills
-// since the last fetch of the hub. With no hub set,
-// or no store, it runs no git and reports nothing. Otherwise one
-// git ls-remote asks the hub for its fork branches, see
-// gitx.Runner.ForkTips, and when they are what the remote-tracking
-// branches the last fetch left hold, read in one for-each-ref, it fetches
-// nothing, takes no lock and writes nothing. When they differ, it runs the
+// since the last fetch of the hub, and what the hub holds of every
+// machine. With no hub set, or no store, it runs no git and reports
+// nothing. Otherwise one git ls-remote asks the hub for its fork branches
+// and its machine branches, see checkHubRemote. When the fork branches are
+// what the remote-tracking branches the last fetch left hold, read in one
+// for-each-ref, it fetches none of them, takes no lock and writes nothing.
+// When they differ, it runs the
 // update check of the hub alone, see checkUpdates: one fetch of
 // it, outside the lock, the comparison of hub skills placed here with
 // what it holds, and one write of its last_fetched, under the lock, waited
 // for as the check at start waits. Its report is that check's: one
-// update_available per update, then its update_check. A failure is a
+// update_available per update, the fleet event when the hub's machines
+// changed, see machines, then its update_check. A failure is a
 // warning prefixed "update check: " when the checks start failing, and
-// none while they go on failing, see serveChecks.failing.
+// none while they go on failing, see serveChecks.failing. A check that
+// reached the hub while the reports of this machine fail writes the report
+// again, see report: no scan follows a hub that is back in reach.
 func (c *serveChecks) hub(ctx context.Context) func() {
 	inv := c.inv
 	entry, remote, set, err := inv.hubSource()
@@ -395,44 +445,170 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 		}
 	}
 	var rep checkReport
+	var machines fleetRead
 	if err == nil {
-		rep, err = inv.checkHubRemote(ctx, entry.URL, remote)
+		rep, machines, err = c.checkHubRemote(ctx, entry, remote)
 	}
 	at := time.Now()
+	var again func()
+	if c.reportFailing && err == nil && !rep.hubFailed && machines.err == nil {
+		again = c.report(ctx)
+	}
 	return func() {
-		if err == nil && rep.idle {
-			return
+		c.reportCheck(checkScopeHub, at, rep, err, machines, err == nil && rep.hubFetched)
+		if again != nil {
+			again()
 		}
-		ok := err == nil && !rep.hubFailed
-		if ok || !c.failing {
-			inv.reportServeCheck(rep, err)
-		}
-		c.failing = !ok
-		inv.reportUpdateCheck(checkScopeHub, at, ok, err == nil && rep.hubFetched)
+	}
+}
+
+// reportCheck makes the report of one check of scope that ended at at, on
+// the loop's goroutine: what the update check found, rep or err, see
+// reportServeCheck, then the fleet event of the read of the hub's
+// machines, see reportFleet, then the check's update_check. A check that
+// could not reach the hub, failed as a whole or could not read the hub's
+// machines is not ok: it warns when the checks start failing and gives none
+// of its warnings while they go on failing, see serveChecks.failing. A
+// check that had nothing of the sources to check emits no update_check, and
+// reports nothing at all when it read no machines either.
+func (c *serveChecks) reportCheck(scope string, at time.Time, rep checkReport, err error, machines fleetRead, fetched bool) {
+	inv := c.inv
+	idle := err == nil && rep.idle
+	if idle && machines.tips == nil && machines.err == nil {
+		return // nothing to check, and nothing was
+	}
+	reached := err == nil && !rep.hubFailed
+	if !idle && (reached || !c.failing) {
+		inv.reportServeCheck(rep, err)
+	}
+	if machines.err != nil && !c.failing {
+		inv.out.warn("update check: " + machines.err.Error())
+	}
+	ok := reached && machines.err == nil
+	c.failing = !ok
+	c.reportFleet(machines)
+	if !idle {
+		inv.reportUpdateCheck(scope, at, ok, fetched)
 	}
 }
 
 // checkHubRemote is the hub check of the serve child, see
-// serveChecks.hub, of the hub at url, the git remote
-// called remote in the store: an empty report, neither idle nor
+// serveChecks.hub, of the hub entry names, the git remote
+// called remote in the store. Its one ls-remote asks for the fork branches
+// and for the machine branches. The report is empty, neither idle nor
 // fetched, when the hub holds the fork branches its
 // remote-tracking branches hold, and otherwise the report of the update
 // check of the hub alone. An ls-remote that fails is reported
-// as a fetch of the hub that failed.
-func (inv *invocation) checkHubRemote(ctx context.Context, url, remote string) (checkReport, error) {
-	theirs, err := inv.git.ForkTips(ctx, url)
+// as a fetch of the hub that failed. The hub's machines are read from the
+// same answer, see machines, unless that update check found the hub out of
+// reach or no longer set.
+func (c *serveChecks) checkHubRemote(ctx context.Context, entry home.Source, remote string) (checkReport, fleetRead, error) {
+	inv := c.inv
+	url := entry.URL
+	tips, err := inv.git.TipsAt(ctx, url, append([]string{gitx.ForkBranches}, machineBranches()...)...)
 	if err != nil {
 		f := uncheckedHub(url, fmt.Errorf("%w: %v", source.ErrUnreachable, err))
-		return checkReport{hubFailed: true, failures: []checkFailure{{source: url, fetch: true, f: f}}}, nil
+		return checkReport{hubFailed: true, failures: []checkFailure{{source: url, fetch: true, f: f}}}, fleetRead{}, nil
+	}
+	theirs, machines := map[string]string{}, map[string]string{}
+	for branch, tip := range tips {
+		if name, fork := gitx.ForkName(branch); fork {
+			theirs[name] = tip
+		} else {
+			machines[branch] = tip
+		}
 	}
 	ours, err := lineage.ListRemote(ctx, inv.git, gitx.StorePath(inv.dirs.Home), remote)
 	if err != nil {
-		return checkReport{}, storeFailure(err)
+		return checkReport{}, fleetRead{}, storeFailure(err)
 	}
-	if maps.Equal(theirs, ours) {
-		return checkReport{}, nil
+	var rep checkReport
+	if !maps.Equal(theirs, ours) {
+		if rep, err = inv.checkUpdates(ctx, true, url); err != nil || rep.idle || rep.hubFailed {
+			return rep, fleetRead{}, err
+		}
 	}
-	return inv.checkUpdates(ctx, true, url)
+	return rep, c.machines(ctx, entry, remote, machines), nil
+}
+
+// hubMachines reads the hub's machines for the check at start, which
+// fetches the fork branches without asking for them first: one ls-remote
+// of its own asks for the machine branches alone, see machines. With no
+// hub set, or no store, it runs no git and is no read. A hub the ls-remote
+// cannot reach is the failure the hub check gives for one.
+func (c *serveChecks) hubMachines(ctx context.Context) fleetRead {
+	inv := c.inv
+	entry, remote, set, err := inv.hubSource()
+	if err != nil || !set {
+		return fleetRead{}
+	}
+	if _, err := os.Stat(gitx.StorePath(inv.dirs.Home)); err != nil {
+		return fleetRead{}
+	}
+	tips, err := inv.git.TipsAt(ctx, entry.URL, machineBranches()...)
+	if err != nil {
+		return fleetRead{err: uncheckedHub(entry.URL, fmt.Errorf("%w: %v", source.ErrUnreachable, err))}
+	}
+	return c.machines(ctx, entry, remote, tips)
+}
+
+// machines reads the hub's machines, every machine's report and the cloud
+// machine's snapshot, from tips: the commit each machine branch of the hub
+// entry names holds, as a check's ls-remote found them. Only the branches
+// that moved are fetched, in one fetch, and none when none did, see
+// heldBranches. The hub's remote is brought in line with its entry first,
+// under the lock, waited for, as the update check brings it, and only ahead
+// of a fetch. The files are read only when a branch holds another commit
+// than the last fleet event was read at, see fleetHeld.
+func (c *serveChecks) machines(ctx context.Context, entry home.Source, remote string, tips map[string]string) fleetRead {
+	inv := c.inv
+	gitDir := gitx.StorePath(inv.dirs.Home)
+	align := func() error {
+		return inv.holdLock(ctx, true, false, func() error { return inv.alignRemotes(ctx, gitDir, []fetchTarget{target(entry)}) })
+	}
+	held, err := inv.heldBranches(ctx, gitDir, remote, entry.URL, tips, align, machineBranches()...)
+	if err != nil {
+		return fleetRead{err: err}
+	}
+	return c.fleetHeld(ctx, gitDir, remote, entry.URL, held)
+}
+
+// fleetHeld is the read of the hub's machines from held, what the store's
+// remote-tracking refs hold of the machine branches. It reaches no remote.
+// When every branch holds the commit the last fleet event was read at,
+// nothing changed and no file is read. The first read always makes a
+// fleet, of no machine when the hub holds none.
+func (c *serveChecks) fleetHeld(ctx context.Context, gitDir, remote, url string, held map[string]gitx.Tracked) fleetRead {
+	tips := make(map[string]string, len(held))
+	for branch, t := range held {
+		tips[branch] = t.Commit
+	}
+	if c.fleet != nil && maps.Equal(tips, c.fleet) {
+		return fleetRead{tips: tips}
+	}
+	f, err := c.inv.fleetOf(ctx, gitDir, remote, url, held)
+	if err != nil {
+		return fleetRead{err: err}
+	}
+	return fleetRead{tips: tips, fleet: &f}
+}
+
+// reportFleet emits the fleet event of a read that found the hub's
+// machines changed, the type machine list emits, with its line without
+// --json and a warning for each branch no view can use, and keeps what it
+// was read at for the next read. A read that found nothing changed, or
+// failed, emits nothing.
+func (c *serveChecks) reportFleet(read fleetRead) {
+	if read.fleet == nil {
+		return
+	}
+	out := c.inv.out
+	out.emit(read.fleet.event())
+	out.print(out.paint(heading, "machines"), ": ", strconv.Itoa(len(read.fleet.machines)), " on the hub")
+	for _, w := range read.fleet.warnings {
+		out.warn(w)
+	}
+	c.fleet = read.tips
 }
 
 // reportServeCheck reports what an update check of the serve child found,
