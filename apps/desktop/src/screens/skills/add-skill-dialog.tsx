@@ -16,7 +16,6 @@ import type {
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Dialog,
@@ -28,6 +27,7 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { doctorRule } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { openSkill } from "#/screens/skills/open.ts";

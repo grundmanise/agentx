@@ -89,6 +89,7 @@ type Server struct {
 	conns    map[*socket]struct{}
 	retained []byte // the notification every new client is sent first
 	note     []byte // the one sent after it, until the next retained one
+	standing []byte // the one sent after both, until the next standing one
 	closed   bool
 	serving  sync.WaitGroup // one per connection
 	queue    int            // messages that may wait for one client
@@ -156,9 +157,10 @@ func (s *Server) authorised(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("token")), []byte(s.o.Token)) == 1
 }
 
-// add takes a new connection in and queues the retained notification for
-// it, both under the lock a broadcast holds, so that the client misses no
-// broadcast after the retained one and gets none before it.
+// add takes a new connection in and queues the notifications kept for it,
+// the retained one, its note, then the standing one, both under the lock a
+// broadcast holds, so that the client misses no broadcast after them and
+// gets none before them.
 func (s *Server) add(c *socket) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -167,7 +169,7 @@ func (s *Server) add(c *socket) bool {
 	}
 	s.conns[c] = struct{}{}
 	s.serving.Add(1)
-	for _, b := range [][]byte{s.retained, s.note} {
+	for _, b := range [][]byte{s.retained, s.note, s.standing} {
 		if b != nil {
 			c.offer(b)
 		}
@@ -189,6 +191,11 @@ const (
 	// another note or another retained notification replaces it: a problem
 	// that a client connecting late must still learn of.
 	Note
+	// Standing is sent to every later client after the retained one and its
+	// note, until another standing one replaces it. A retained notification
+	// leaves it: it says something that does not depend on what the
+	// retained one holds.
+	Standing
 )
 
 // Notify sends a notification to every client. It never waits: a client
@@ -203,6 +210,8 @@ func (s *Server) Notify(method string, params any, keep Keep) {
 		s.retained, s.note = b, nil
 	case Note:
 		s.note = b
+	case Standing:
+		s.standing = b
 	case Passing:
 	}
 	for c := range s.conns {

@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -6,7 +6,7 @@ import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import {
   CheckOption,
   ChoiceGroup,
-  ChoicePill,
+  ChoicePills,
   FilterButton,
   Segmented,
 } from "#/components/filter-controls.tsx";
@@ -107,8 +107,7 @@ export const AgentChoices = ({
       id: UNIVERSAL,
       label: (
         <>
-          {/* Positioned, so it sits above the row's checkbox and opens the agent list on hover. */}
-          <span className="relative shrink-0">
+          <span className="shrink-0">
             <LogoStack
               clients={universal.slice(0, UNIVERSAL_LOGOS)}
               hidden={universal.slice(UNIVERSAL_LOGOS)}
@@ -207,7 +206,6 @@ export const FilterPopover = ({
   onChange: (filters: Filters) => void;
 }) => {
   const [open, setOpen] = useState(false);
-  const id = useId();
   const counts = showCounts(rows, filters);
   const count = filterCount(filters);
 
@@ -227,25 +225,16 @@ export const FilterPopover = ({
       </PopoverTrigger>
       <PopoverContent aria-label="Filters">
         <ChoiceGroup caption="Show">
-          <div className="flex flex-wrap gap-1">
-            {shows.map((s) => (
-              <ChoicePill
-                key={s.value}
-                group={`${id}-show`}
-                active={filters.show === s.value}
-                count={counts[s.value]}
-                onSelect={() => {
-                  onChange({ ...filters, show: s.value });
-                }}
-              >
-                {s.label}
-              </ChoicePill>
-            ))}
-          </div>
+          <ChoicePills
+            options={shows.map((s) => ({ ...s, count: counts[s.value] }))}
+            value={filters.show}
+            onChange={(show) => {
+              onChange({ ...filters, show });
+            }}
+          />
         </ChoiceGroup>
         <ChoiceGroup caption="State">
           <Segmented
-            group={`${id}-state`}
             options={states}
             value={filters.state}
             onChange={(state) => {
