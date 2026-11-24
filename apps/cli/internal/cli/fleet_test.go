@@ -70,10 +70,10 @@ func TestCloudFleet(t *testing.T) {
 	}
 }
 
-// TestMachineNamed holds what the argument of machine show and machine
-// remove names: the cloud machine by its id alone, a computer by its id,
-// the start of its id or its label, and nothing when it names several,
-// exit code 6, or none, exit code 5.
+// TestMachineNamed holds what the argument of machine show names: the
+// cloud machine by its id alone, a computer by its id, the start of its id
+// or its label, and nothing when it names several, exit code 6, or none,
+// exit code 5.
 func TestMachineNamed(t *testing.T) {
 	t.Parallel()
 	machine := func(id, label string) fleetMachine {

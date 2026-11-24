@@ -103,8 +103,13 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 	})
 	cmd.AddCommand(newSourceFetchCommand(inv))
 	cmd.AddCommand(&cobra.Command{
-		Use:         "remove <url|id>",
-		Short:       "Remove a source and what was fetched from it",
+		Use:   "remove <url|id>",
+		Short: "Remove a source and what was fetched from it",
+		Long: "Remove a source from this machine: its settings entry and what was fetched\n" +
+			"from it. The skills installed from it stay as they are.\n\n" +
+			"Removing the hub leaves your hub skills on this machine as they are, and\n" +
+			"deletes this machine's inventory report from the hub, when the hub holds one.\n" +
+			"A report Git cannot delete is a warning, and the hub is removed all the same.",
 		Annotations: map[string]string{annotationSection: "sources"},
 		Args:        cobra.ExactArgs(1),
 		Example:     examples("agentx source remove anthropics/skills", "remove it and what was fetched from it"),
@@ -134,7 +139,7 @@ func newSourceAddCommand(inv *invocation) *cobra.Command {
 			"token in the URL is dropped. A source is fetched from and pushed to at that\n" +
 			"URL. A source holds skills in folders on one branch, unless --hub adds it\n" +
 			"as the hub, a repository with one branch per hub skill, which they are\n" +
-			"published to.",
+			"published to. A hub it replaces loses this machine's inventory report.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.sourceAdd(cmd.Context(), args[0], hub)
