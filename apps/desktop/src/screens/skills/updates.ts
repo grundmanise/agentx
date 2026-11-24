@@ -60,6 +60,7 @@ export const addSource = (source: string): ToastAction => ({
       success: `Added ${shortSource(source)} source`,
     });
   },
+  track: "source-toast.add-source",
 });
 
 /** What an Update that exited 0 did, in the words of the results table. */
@@ -240,6 +241,7 @@ export const checkUpdates = async () => {
     onClick: () => {
       void cancelCommand(CHECK_UPDATES);
     },
+    track: "check-updates-toast.cancel",
   };
   notify(checkingText(), cancel, { kind: "progress", lasting: true });
   const { exitCode } = await agentx(["skill", "check-updates"], {

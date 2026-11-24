@@ -124,6 +124,7 @@ const reportPublish = (row: SkillRow, outcome: Outcome, hubSet: boolean) => {
         onClick: () => {
           update(name);
         },
+        track: "publish-toast.update",
       },
       { kind: "warning" }
     );
@@ -308,9 +309,12 @@ const PublishForm = ({
       <DialogFooter>
         {running && <DialogStatus>{progressText(name, progress)}</DialogStatus>}
         <DialogClose asChild>
-          <Button variant="ghost">Cancel</Button>
+          <Button track="publish-dialog.cancel" variant="ghost">
+            Cancel
+          </Button>
         </DialogClose>
         <Button
+          track="publish-dialog.confirm"
           type="submit"
           variant="primary"
           disabled={running}
@@ -401,6 +405,7 @@ export const PublishButton = ({
     <>
       <WithReason reason={readOnly}>
         <Button
+          track="skill-banner.publish"
           variant="ghost"
           size="sm"
           disabled={pending}
@@ -431,6 +436,7 @@ export const PublishButton = ({
 /** Open Settings, where a hub is set. */
 export const OpenSettingsButton = () => (
   <Button
+    track="skill-banner.open-settings"
     variant="ghost"
     size="sm"
     onClick={() => {

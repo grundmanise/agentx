@@ -80,7 +80,9 @@ export const loadLabel = (args: string[]) => `load ${args.join(" ")}`;
 export const loadSettings = async () => {
   await load(["config", "list"], (events) => {
     const event = events.find((e) => e.type === "settings");
-    return event === undefined ? {} : { settings: event.settings };
+    return event === undefined
+      ? {}
+      : { anonymousId: event.anonymous_id, settings: event.settings };
   });
 };
 

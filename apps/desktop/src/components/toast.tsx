@@ -4,6 +4,7 @@ import type { ExternalToast } from "sonner";
 
 import { Button } from "#/components/ui/button.tsx";
 import { problemSentence } from "#/lib/problem-text.ts";
+import type { Tracked } from "#/lib/track.ts";
 
 // The toast last shown, which the next one replaces.
 let shown: string | number | undefined;
@@ -51,8 +52,8 @@ export const dismissToast = () => {
   }
 };
 
-/** An action inside a toast, such as Undo. */
-export interface ToastAction {
+/** An action inside a toast, such as Undo, with the fixed name a click on it is sent under. */
+export interface ToastAction extends Tracked {
   label: string;
   onClick: () => void;
 }
@@ -68,6 +69,7 @@ const actionButton = (id: string | number, action: ToastAction | undefined) =>
       <Button
         variant="plain"
         size="sm"
+        track={action.track}
         onClick={() => {
           toast.dismiss(id);
           action.onClick();

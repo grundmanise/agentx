@@ -1,6 +1,7 @@
 import { useId } from "react";
 
 import { Checkbox } from "#/components/ui/checkbox.tsx";
+import type { Tracked } from "#/lib/track.ts";
 import { cn } from "#/lib/utils.ts";
 import { selectAllLabel } from "#/screens/sources/projection.ts";
 
@@ -14,7 +15,8 @@ export const SelectAllRow = ({
   onSelectAll,
   onClear,
   align = "start",
-}: {
+  track,
+}: Tracked & {
   /** How many of the selectable cards are selected. */
   selected: number;
   /** How many cards can be selected. */
@@ -53,6 +55,7 @@ export const SelectAllRow = ({
       >
         <Checkbox
           id={id}
+          track={track}
           checked={checked}
           disabled={total === 0}
           onCheckedChange={() => {

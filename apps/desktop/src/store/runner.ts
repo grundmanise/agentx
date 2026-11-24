@@ -282,6 +282,7 @@ const report = (
       {
         label: "Retry",
         onClick: again,
+        track: "toast.retry",
       },
       { kind: "warning" }
     );

@@ -91,6 +91,7 @@ const Row = ({
         <Name configuration={configuration} universal={false} />
         <Checkbox
           id={id}
+          track="agent-picker-dialog.row-select"
           aria-label={configuration.name}
           checked={checked}
           onCheckedChange={onToggle}
@@ -169,7 +170,11 @@ export const AgentPickerDialog = ({
             {universal.length > 0 && (
               <>
                 {` ${one ? "It is" : "They are"} always available to `}
-                <HelpTerm tip={universalTip} trailing=".">
+                <HelpTerm
+                  tip={universalTip}
+                  trailing="."
+                  track="agent-picker-dialog.universal-help"
+                >
                   universal agents
                 </HelpTerm>
               </>
@@ -220,6 +225,7 @@ export const AgentPickerDialog = ({
         <DialogFooter>
           <Button
             variant="ghost"
+            track="agent-picker-dialog.clear"
             disabled={targets.length === 0}
             onClick={onClearTargets}
           >
@@ -227,6 +233,7 @@ export const AgentPickerDialog = ({
           </Button>
           <Button
             variant="primary"
+            track="agent-picker-dialog.done"
             onClick={() => {
               setQuery("");
               onOpenChange(false);
