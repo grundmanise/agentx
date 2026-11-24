@@ -8,8 +8,13 @@ import { Pill } from "#/components/pill.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
-import { nameOf } from "#/screens/machines/machine-list.tsx";
-import { changedInFull, osName } from "#/screens/machines/projection.ts";
+import {
+  changedInFull,
+  fromText,
+  nameOf,
+  osName,
+  sourceText,
+} from "#/screens/machines/projection.ts";
 import type {
   AgentGroup,
   MachineView,
@@ -69,28 +74,6 @@ const RemoveReport = ({ machine }: { machine: MachineView }) => {
       />
     </>
   );
-};
-
-/** What brings a skill to an agent, in the app's words. */
-const fromText = (skill: SkillLine) => {
-  if (skill.from === "library") {
-    return "Library";
-  }
-  return skill.from === "plugin"
-    ? `${skill.plugin ?? ""} plugin`
-    : "Skills directory";
-};
-
-/** Where a library skill is published: the hub, with a fork's upstream, or its source. */
-const sourceText = (skill: SkillLine) => {
-  const { source } = skill;
-  if (source === undefined) {
-    return "";
-  }
-  if (!source.hub) {
-    return source.short;
-  }
-  return source.short === "" ? "Hub" : `Hub, from ${source.short}`;
 };
 
 /** A skill's row inside its agent's group, beside the group's guide line. */

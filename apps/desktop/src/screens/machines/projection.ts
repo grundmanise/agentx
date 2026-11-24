@@ -3,7 +3,7 @@
 // cloud machine last. Each machine lists the skills each of its agent configurations sees, as
 // `agentx machine show` does: the library's skills, then a plugin's, then those of the agent's own
 // skills directory. Pure functions, so that every later change reads a machine the same way.
-// Nothing here compares one machine with another.
+// Nothing here compares one machine with another: across.ts does, from what each machine holds.
 import type {
   FleetMachine,
   InventoryEvent,
@@ -32,19 +32,45 @@ export interface SkillSource {
   full: string;
 }
 
-/** One skill an agent configuration sees. */
-export interface SkillLine {
-  /** Unique among its configuration's skills. */
-  key: string;
-  name: string;
-  /** What brings it: the machine's library, a plugin, or the agent's own skills directory. */
+/** What brings a skill to a machine. */
+export interface SkillOrigin {
+  /** The machine's library, a plugin, or an agent's own skills directory. */
   from: "library" | "plugin" | "directory";
   /** The plugin's name, for a plugin's skill. */
   plugin: string | undefined;
   /** For a library skill, where it is published. */
   source: SkillSource | undefined;
+}
+
+/**
+ * What tells a skill from the same skill on another machine, and one version of it from another:
+ * across.ts compares two of these.
+ */
+export interface Holding {
+  name: string;
+  /**
+   * The logical id of its library entry, when the entry names a fork id or a source: the same on
+   * every machine that holds the skill. A skill with none is known by its name alone.
+   */
+  logicalId: string | undefined;
+  /** What the machine holds of it; the cloud machine's skills have none. */
+  contentHash: string | undefined;
+  /** The commit of its source it was installed at, when the entry names one. */
+  upstreamCommit: string | undefined;
+}
+
+/** One skill a machine holds: in its library, from a plugin or in an agent's own skills directory. */
+export interface HeldSkill extends Holding, SkillOrigin {}
+
+/** One skill an agent configuration sees. */
+export interface SkillLine extends SkillOrigin {
+  /** Unique among its configuration's skills. */
+  key: string;
+  name: string;
   /** A library skill edited on that machine. */
   modified: boolean;
+  /** What the machine holds of it. */
+  contentHash: string | undefined;
 }
 
 /** One agent configuration of a machine, with the skills its agent client sees. */
@@ -71,13 +97,18 @@ export interface MachineView {
   skillCount: number;
   /** Its agent configurations, A to Z by name. */
   agents: AgentGroup[];
+  /** Every skill it holds, whether an agent sees it or not. */
+  held: HeldSkill[];
 }
 
 const byName = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
 /** A sorted copy of `items`; `items` is left as it is. */
-const sorted = <T>(items: readonly T[], compare: (a: T, b: T) => number) => {
+export const sorted = <T>(
+  items: readonly T[],
+  compare: (a: T, b: T) => number
+) => {
   const copy = [...items];
   copy.sort(compare);
   return copy;
@@ -145,6 +176,7 @@ const skillsSeenBy = (held: ReportContents, id: string): SkillLine[] => {
     const placed = entry.placements.filter((p) => p.configuration === id);
     if (placed.length > 0 || entry.universal.includes(id)) {
       library.push({
+        contentHash: entry.content_hash,
         from: "library",
         key: `library ${entry.name}`,
         modified: entry.state === "modified",
@@ -167,6 +199,7 @@ const skillsSeenBy = (held: ReportContents, id: string): SkillLine[] => {
       if (o.plugin !== undefined && o.plugin !== "") {
         const key = `plugin ${skill.name} ${o.plugin}`;
         plugins.set(key, {
+          contentHash: skill.content_hash,
           from: "plugin",
           key,
           modified: false,
@@ -180,6 +213,7 @@ const skillsSeenBy = (held: ReportContents, id: string): SkillLine[] => {
       ) {
         const key = `directory ${skill.name}`;
         own.set(key, {
+          contentHash: skill.content_hash,
           from: "directory",
           key,
           modified: false,
@@ -216,12 +250,71 @@ const agentsOf = (held: ReportContents): AgentGroup[] =>
 const skillCountOf = (agents: readonly AgentGroup[]) =>
   new Set(agents.flatMap((a) => a.skills.map((s) => s.name))).size;
 
+/**
+ * A library entry as what its machine holds of the skill. Its logical id counts when the entry
+ * names a fork id or a source: with neither, the id is the skill's content, which says nothing of
+ * the skill on another machine.
+ */
+export const holdingOf = (
+  entry: Pick<
+    ReportLibrarySkill,
+    | "name"
+    | "logical_id"
+    | "fork_id"
+    | "source"
+    | "content_hash"
+    | "upstream_commit"
+  >
+): Holding => ({
+  contentHash: entry.content_hash,
+  logicalId:
+    (entry.fork_id ?? "") !== "" || (entry.source ?? "") !== ""
+      ? entry.logical_id
+      : undefined,
+  name: entry.name,
+  upstreamCommit: entry.upstream_commit,
+});
+
+/**
+ * Every skill a machine holds: each skill of its library, placed or not, then the skills its
+ * agents see from a plugin or their own skills directory, each content of a name once.
+ */
+const heldOf = (
+  contents: ReportContents,
+  agents: readonly AgentGroup[]
+): HeldSkill[] => {
+  const held: HeldSkill[] = contents.library.map((entry) => ({
+    ...holdingOf(entry),
+    from: "library",
+    plugin: undefined,
+    source: sourceOf(entry),
+  }));
+  const seen = new Set<string>();
+  for (const line of agents.flatMap((a) => a.skills)) {
+    const key = `${line.key}\n${line.contentHash ?? ""}`;
+    if (line.from !== "library" && !seen.has(key)) {
+      seen.add(key);
+      held.push({
+        contentHash: line.contentHash,
+        from: line.from,
+        logicalId: undefined,
+        name: line.name,
+        plugin: line.plugin,
+        source: undefined,
+        upstreamCommit: undefined,
+      });
+    }
+  }
+  return held;
+};
+
 const viewOf = (machine: FleetMachine): MachineView => {
   const agents = agentsOf(machine);
   return {
     agents,
     agentx: machine.machine.agentx,
     changedAt: machine.changed_at,
+    held: heldOf(machine, agents),
     id: machine.machine.id,
     kind: machine.machine.id === CLOUD_ID ? "cloud" : "other",
     label: machine.machine.label,
@@ -244,11 +337,13 @@ export const projectMachines = (
   const self = machine ?? inventory?.machine;
   const views: MachineView[] = [];
   if (inventory !== undefined && self !== undefined) {
-    const agents = agentsOf(reportOf(inventory));
+    const contents = reportOf(inventory);
+    const agents = agentsOf(contents);
     views.push({
       agents,
       agentx: undefined,
       changedAt: undefined,
+      held: heldOf(contents, agents),
       id: self.id,
       kind: "this",
       label: self.label,
@@ -270,6 +365,35 @@ export const projectMachines = (
     ...held.filter((m) => m.kind === "cloud"),
   ];
 };
+
+/** The name a machine goes by: its label, or what the glossary calls the cloud machine. */
+export const nameOf = (machine: Pick<MachineView, "kind" | "label">) =>
+  machine.kind === "cloud" ? "Cloud machine" : machine.label;
+
+/** What brings a skill to a machine, in the app's words. */
+export const fromText = (skill: SkillOrigin) => {
+  if (skill.from === "library") {
+    return "Library";
+  }
+  return skill.from === "plugin"
+    ? `${skill.plugin ?? ""} plugin`
+    : "Skills directory";
+};
+
+/** Where a library skill is published: the hub, with a fork's upstream, or its source. */
+export const sourceText = ({ source }: SkillOrigin) => {
+  if (source === undefined) {
+    return "";
+  }
+  if (!source.hub) {
+    return source.short;
+  }
+  return source.short === "" ? "Hub" : `Hub, from ${source.short}`;
+};
+
+/** The two in one: where a library skill is published when it is, else what brings the skill. */
+export const originText = (skill: SkillOrigin) =>
+  sourceText(skill) || fromText(skill);
 
 /** The names the operating systems go by, for the ones a report names by another word. */
 const osNames: Record<string, string> = {
