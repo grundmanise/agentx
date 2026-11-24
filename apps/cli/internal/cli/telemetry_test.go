@@ -228,13 +228,13 @@ func TestTelemetryServe(t *testing.T) {
 func TestRedactPaths(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]string{
-		"open /Users/me/.agentx/settings.json: denied": "open <path>: denied",
-		"/home/me/x and /tmp/y":                        "<path> and <path>",
-		`"/root/.agentx"`:                              `"<path>"`,
-		"/private/var/folders/x/y":                     "<path>",
+		"open /Users/me/.agentx/settings.json: denied":                 "open <path>: denied",
+		"/home/me/x and /tmp/y":                                        "<path> and <path>",
+		`"/root/.agentx"`:                                              `"<path>"`,
+		"/private/var/folders/x/y":                                     "<path>",
 		"github.com/grundmanise/agentx/apps/cli/internal/home/dirs.go": "github.com/grundmanise/agentx/apps/cli/internal/home/dirs.go",
-		"runtime/panic.go": "runtime/panic.go",
-		"~/skills/x":       "~/skills/x",
+		"runtime/panic.go":                                             "runtime/panic.go",
+		"~/skills/x":                                                   "~/skills/x",
 	} {
 		equal(t, in, redactPaths(in), want)
 	}

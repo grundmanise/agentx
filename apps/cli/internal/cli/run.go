@@ -299,4 +299,3 @@ func knownFailure(dir string, err error) (*failure, bool) {
 	}
 	return f, true
 }
-

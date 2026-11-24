@@ -1,13 +1,13 @@
 ---
 title: "Usage data"
-description: "What anonymous usage data agentx can send, and how to turn it on or off."
+description: "What anonymous usage data agentx can send to PostHog, and how to turn it on or off."
 ---
 
-agentx can send anonymous usage data, so its maintainers learn which commands fail and on which platforms. It sends nothing until you agree.
+agentx can send anonymous usage data to [PostHog](https://posthog.com), in its EU cloud. We use it to find what breaks and to make agentx better for you. agentx sends nothing until you agree.
 
 ## Answer the question
 
-The first time you run [`agentx scan`](/cli/scan) in a terminal, agentx prints the inventory, then what it would send, and asks:
+The first time you run [`agentx scan`](/cli/scan) in a terminal, agentx prints the inventory, then what it may send, and asks:
 
 ```text
 Send anonymous usage data? [y/N]
@@ -19,27 +19,21 @@ A scan without a terminal, such as one in a script or with `--json`, does not as
 
 In the desktop app, a dialog asks the same question after the first scan.
 
-## What is sent
+## What agentx may send
+
+- The command name, without arguments or values, such as `skill add` or `config set`
+- The exit code and how long the command took
+- The app version, release channel (`stable` or `nightly`), OS and CPU type
+- A non-reversible, hashed anonymous id
+- Crash reports, with every path removed
 
 agentx sends one event for each command you run, when the command ends. [`agentx serve`](/cli/serve) also sends one when it starts.
 
-| Field | Value |
-|---|---|
-| `telemetry_id` | An id derived from the machine id |
-| `cli_version` | The version [`agentx version`](/cli/version) prints |
-| `schema_version` | The version of the `--json` output |
-| `os`, `arch` | `darwin` or `linux`, `amd64` or `arm64` |
-| `command` | The command words only, such as `skill add` or `config set`, without arguments or flag values |
-| `exit_code` | The [exit code](/cli/output#exit-codes); absent on the `serve` start event |
-| `duration_ms` | How long the command ran |
-| `json` | Whether you gave `--json` |
-| `at` | When the command ended, to the minute |
+It never sends paths, skill or server names, URLs, or anything you type. Your IP address is not stored.
 
-A command event carries nothing else: no path, skill name, server name, source URL, configuration id, hostname, machine label, error message or environment variable.
+## The anonymous id
 
-agentx derives the telemetry id from the machine id with a one-way hash. Nobody can get the machine id back from it. [`agentx machine reset-id`](/cli/machine) changes both.
-
-The same answer covers crash reports. When agentx crashes, it sends the error type, the error message and a stack trace, with every path removed.
+The anonymous id is a keyed hash of the [machine id](/cli/machine). It can't be turned back into the machine id. [`agentx machine reset-id`](/cli/machine) changes both.
 
 ## Change your answer
 
@@ -48,7 +42,7 @@ agentx config set telemetry off
 agentx config set telemetry on
 ```
 
-`agentx config get telemetry` prints `on`, `off` or `unset`. When you turn it off, agentx deletes the events it has not sent yet.
+`agentx config get telemetry` prints `on`, `off` or `unset`.
 
 In the desktop app, use the switch in Settings.
 
@@ -56,10 +50,4 @@ In the desktop app, use the switch in Settings.
 
 Set `DO_NOT_TRACK=1` in your environment. agentx then neither asks nor sends, whatever the setting says.
 
-A build from source has no destination for the data, so it never asks and never sends.
-
-## Where the data goes
-
-agentx sends the events to a hosted analytics service in the EU region. It keeps each event in `telemetry/` in agentx home until it is sent: at most 500 events, each for at most seven days. It sends them in the background, so a command never waits for the network.
-
-To send the events somewhere else, such as a collector of your own, set `AGENTX_TELEMETRY_ENDPOINT` to its address. agentx then posts each batch to `<address>/batch/`.
+Only stable and nightly releases send usage data. A build from source never asks and never sends.
