@@ -62,6 +62,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
     /^Import skills/u,
     /^Comparing edits/u,
     /^Editor/u,
+    /^App updates/u,
     /^Storage/u,
     /^Command line/u,
     /^Activity log/u,

@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 
 import { ActivityLogSheet } from "#/app/activity-log.tsx";
+import { startAppUpdateChecks } from "#/app/app-update.ts";
 import { CommandPalette } from "#/app/command-palette.tsx";
 import { KeptScreens, screenOf } from "#/app/kept-screens.tsx";
 import { LaunchProgress } from "#/app/launch-progress.tsx";
@@ -111,6 +112,12 @@ export const App = () => {
       startLoaders();
     }
   }, [startup.ready]);
+
+  // The app checks for its own update once the checks pass, so the startup stays offline.
+  useEffect(
+    () => (startup.ready ? startAppUpdateChecks() : undefined),
+    [startup.ready]
+  );
 
   // A route that is no screen's goes to Skills.
   const { pathname } = useLocation();

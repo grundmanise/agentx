@@ -75,6 +75,7 @@ test("a detected editor, once chosen, is still chosen after a restart", async ({
   await expect
     .poll(() => cli.savedPreferences)
     .toEqual({
+      check_updates: true,
       editor: { id: "zed", kind: "app", name: "Zed" },
     });
 
@@ -113,7 +114,10 @@ test("Custom command shows its field, saves the command on Enter, and keeps it a
   await commandField(page).press("Enter");
   await expect
     .poll(() => cli.savedPreferences)
-    .toEqual({ editor: { command: "subl -n", kind: "custom" } });
+    .toEqual({
+      check_updates: true,
+      editor: { command: "subl -n", kind: "custom" },
+    });
 
   await restart(cli, page);
   await expect(choice(page, "Custom command")).toBeChecked();
@@ -123,7 +127,7 @@ test("Custom command shows its field, saves the command on Enter, and keeps it a
   await choice(page, "System default").click();
   await expect
     .poll(() => cli.savedPreferences)
-    .toEqual({ editor: { kind: "system" } });
+    .toEqual({ check_updates: true, editor: { kind: "system" } });
   await choice(page, "Custom command").click();
   await expect(commandField(page)).toHaveValue("subl -n");
 });
