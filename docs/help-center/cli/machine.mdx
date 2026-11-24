@@ -124,7 +124,7 @@ With the machine setting `report_inventory` on, agentx writes this machine's rep
 - **After you set or replace your hub**: about a minute later.
 - **When nothing changed**: it pushes nothing.
 
-The setting is off until you turn it on, and you turn it on machine by machine. With the setting off, agentx writes a report only when you run `agentx machine report`.
+The setting is off until you turn it on, and you turn it on machine by machine. With the setting off, agentx writes a report only when you run `agentx machine report`. Turning the setting off keeps the last report on your hub: the report leaves the hub when [the machine does](#remove-a-report-from-the-hub).
 
 If agentx cannot write the report, for example because the machine is offline or cannot push to your hub, it tries again after the next change, and when it next reaches your hub.
 
