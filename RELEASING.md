@@ -8,9 +8,10 @@ Releases go through the Release workflow in
 [`.github/workflows/release.yml`](.github/workflows/release.yml). Every release builds the CLI for
 Linux on amd64 and arm64 and for macOS on arm64, and the desktop app with the CLI inside it: for
 Apple silicon Macs as the disk image `agentx_desktop_darwin_arm64.dmg`, and for Linux on amd64 and
-arm64 as `agentx_desktop_linux_<arch>.deb` and `agentx_desktop_linux_<arch>.AppImage`. It publishes
-the CLI archives, the app packages and their checksums to
-[GitHub Releases](https://github.com/grundmanise/agentx/releases).
+arm64 as `agentx_desktop_linux_<arch>.deb` and `agentx_desktop_linux_<arch>.AppImage`. With the
+updater key, it also packs the macOS app as `agentx_desktop_darwin_arm64.app.tar.gz`, the file the
+app's updater installs, and signs it and the Linux packages. It publishes the CLI archives, the app
+packages and their checksums to [GitHub Releases](https://github.com/grundmanise/agentx/releases).
 
 - **Nightly**: the workflow releases the head of `main` as a prerelease, such as
   `v0.3.0-nightly.20261001.42`, where `42` is the run number, when `apps/cli` or `apps/desktop` changed
@@ -26,6 +27,23 @@ the CLI archives, the app packages and their checksums to
   `v0.3.0`, and builds it again, so `agentx version` prints the release version. It also updates the
   Homebrew tap.
 
+The app updates itself with Tauri's updater, as
+[ADR 0019](docs/adr/0019-the-app-updates-itself-with-tauris-updater-one-manifest-per-channel.md)
+describes. It reads `latest.json`, an update manifest with the version, the release notes, the
+publish date and, for each platform, the asset to install and its signature. The workflow writes one
+per channel, only when every platform has a signature:
+
+- A stable release uploads its manifest to its own release, so
+  `https://github.com/grundmanise/agentx/releases/latest/download/latest.json` is always the newest
+  release's.
+- A nightly writes its manifest to the prerelease `nightly-updates`, which the workflow creates the
+  first time and which holds nothing else. Apps from a nightly read
+  `https://github.com/grundmanise/agentx/releases/download/nightly-updates/latest.json`. Don't delete
+  this prerelease: nightly apps would find no updates until the next nightly writes it again.
+
+Re-running the Publish job writes the manifest again, so it repairs a missing one. An app picks its
+channel from its own version: one with `-nightly.` in it follows the nightlies.
+
 The install script is served from `https://agentx.wtf/install`, which redirects to
 [`scripts/install.sh`](scripts/install.sh) on `main`.
 
@@ -37,7 +55,7 @@ commit:
 
 | Package | Template | What it installs |
 | --- | --- | --- |
-| Cask `agentx` | `agentx.cask.rb` | The app from its disk image, with the CLI inside it linked onto `PATH`. For Apple silicon Macs. Updated only when the release's app was notarized, since Gatekeeper blocks an unnotarized download |
+| Cask `agentx` | `agentx.cask.rb` | The app from its disk image, with the CLI inside it linked onto `PATH`. For Apple silicon Macs. Updated only when the release's app was notarized, since Gatekeeper blocks an unnotarized download. It declares `auto_updates`, so `brew upgrade` leaves the app to its own updater |
 | Formula `agentx-cli` | `agentx-cli.rb` | The CLI alone, built from source. For macOS and Linux |
 
 Both link `agentx` into Homebrew's `bin`, and Homebrew keeps only the first link. Edit the
@@ -61,6 +79,8 @@ them a release still publishes, but the step that needs them shows a warning and
 | `APPLE_API_ISSUER` | The issuer ID of an App Store Connect API key | The app is signed but not notarized, and macOS blocks it the same way. A stable release leaves the Homebrew cask as it was |
 | `APPLE_API_KEY` | The key ID of that API key | |
 | `APPLE_API_PRIVATE_KEY` | The contents of the key's `.p8` file | |
+| `TAURI_SIGNING_PRIVATE_KEY` | The private key of the app's updater, made by `tauri signer generate` | The release has no update manifest, so installed apps are not offered it. A stable release also leaves `releases/latest/download/latest.json` missing until the next signed one |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The password of that key | |
 | `HOMEBREW_TAP_DEPLOY_KEY` | The private half of a deploy key with write access to `grundmanise/homebrew-tap` | Stable releases don't update the Homebrew cask and formula |
 
 To make the Apple secrets, with a membership of the Apple Developer Program:
@@ -81,6 +101,20 @@ To make the Apple secrets, with a membership of the Apple Developer Program:
    role. The issuer ID above the table is `APPLE_API_ISSUER` and the key's Key ID is `APPLE_API_KEY`.
    Download the key, which Apple allows only once, and paste the whole `.p8` file, from
    `-----BEGIN PRIVATE KEY-----` to `-----END PRIVATE KEY-----`, as `APPLE_API_PRIVATE_KEY`.
+
+To make the updater key:
+
+```sh
+pnpm --dir apps/desktop tauri signer generate -w ~/.tauri/agentx-updater.key
+```
+
+It asks for a password and writes the private key to `~/.tauri/agentx-updater.key` and the public key
+to `~/.tauri/agentx-updater.key.pub`. Put the contents of the `.pub` file in
+`apps/desktop/src-tauri/tauri.conf.json` under `plugins.updater.pubkey`, and merge that before the
+first signed release. Paste the contents of the private key file as `TAURI_SIGNING_PRIVATE_KEY` and
+the password as `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Keep the private key and its password in a
+password manager. If you lose either, every installed app must be reinstalled by hand, since the app
+refuses updates signed with a new key.
 
 To make the deploy key:
 
