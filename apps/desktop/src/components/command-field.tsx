@@ -1,5 +1,6 @@
+import { CommandKeyIcon } from "#/components/icons/command-key.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
-import { KeyHint } from "#/components/key-hint.tsx";
+import { Kbd, KbdGroup } from "#/components/ui/kbd.tsx";
 import { isMac } from "#/lib/platform.ts";
 
 /** The command field in the title bar: looks like a search input and opens the palette. */
@@ -11,6 +12,16 @@ export const CommandField = ({ onOpen }: { onOpen: () => void }) => (
   >
     <SearchIcon size="xs" />
     <span className="flex-1 text-left">Search skills or run a command</span>
-    <KeyHint keys={isMac ? ["⌘", "K"] : ["Ctrl", "K"]} />
+    <KbdGroup>
+      {isMac ? (
+        <Kbd>
+          <CommandKeyIcon />
+          <span className="sr-only">⌘</span>
+        </Kbd>
+      ) : (
+        <Kbd>Ctrl</Kbd>
+      )}
+      <Kbd>K</Kbd>
+    </KbdGroup>
   </button>
 );

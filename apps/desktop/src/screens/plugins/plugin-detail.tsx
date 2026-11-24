@@ -5,8 +5,8 @@ import { AgentLogo } from "#/components/agent-logo.tsx";
 import { DetailFact, DetailFacts } from "#/components/detail-facts.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
-import { Pill } from "#/components/pill.tsx";
 import { SelectableLink } from "#/components/selectable-link.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Table,
@@ -184,13 +184,13 @@ export const PluginDetail = ({
           <h1 className="type-plugin-name text-text-primary m-0 break-all select-text">
             {row.name}
           </h1>
-          <Pill tone="version" face="mono" size="detail">
+          <Badge tone="version" face="mono" size="detail">
             {row.version === "" ? "no version" : row.version}
-          </Pill>
+          </Badge>
           {row.disabled && (
-            <Pill tone="disabled" size="detail">
+            <Badge tone="disabled" size="detail">
               Disabled
-            </Pill>
+            </Badge>
           )}
         </div>
         <DetailFacts>

@@ -114,27 +114,33 @@ func alike(t *testing.T, what string, got, want any) {
 
 // A browser on this machine does through the door what the desktop app
 // does through its shell: it gets the inventory, runs commands, whose
-// events and exit code come back, and asks for a refresh and a search.
-// After a command that changed something, the refresh it asks for names
-// the inventory that holds the change, which was sent before it. What
-// serve answers stdin with stays on stdout.
+// events and exit code come back, and asks for a refresh and a search. A
+// browser that connects after serve read the hub's machines gets the fleet
+// of that read too, after the inventory. After a command that changed
+// something, the refresh it asks for names the inventory that holds the
+// change, which was sent before it. What serve answers stdin with stays on
+// stdout.
 func TestServeListenAnswersABrowser(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	h.env[cliChildEnv] = "1"
+	h.setHub(newHubRemote(t, h))
 	p := h.serve(t, "--json", "--listen", "localhost", "--origin", "http://localhost:1420")
 	listening := p.next("listening")
 	inventory := p.next("inventory")
+	p.next("fleet") // of the check at start, before any client is there
 	c := dialDoor(t, listening, "http://localhost:1420")
 	p.refreshed("r1")
 
 	// The inventory serve last emitted is what a new client is sent first,
-	// and the answer to stdin's refresh is not sent at all.
+	// then the fleet it last emitted, and the answer to stdin's refresh is
+	// not sent at all.
 	c.send(1, "run", map[string]any{"args": []string{"version"}})
 	result, _, run, own := c.answer(1)
 	alike(t, "run events", h.types(run), []string{"version", "result"})
-	alike(t, "own events", h.types(own), []string{"inventory"})
+	alike(t, "own events", h.types(own), []string{"inventory", "fleet"})
 	equal(t, "inventory.scan_counter", own[0]["scan_counter"], float64(1))
+	alike(t, "the machines of the fleet", own[1]["machines"], []any{})
 	alike(t, "result", result, jsonEvent{"exit_code": float64(0), "cancelled": false, "timed_out": false})
 
 	// The inventory that holds the change comes before the answer to the
@@ -208,6 +214,10 @@ exec git "$@"
 	}
 	p := h.serve(t, "--json", "--listen", "127.0.0.1")
 	c := dialDoor(t, p.next("listening"), "")
+	// Serve answers a run while it reconciles, which holds the lock, and
+	// source add gives up on a held lock before it runs any git. The first
+	// inventory comes once serve has reconciled.
+	p.next("inventory")
 	c.send(1, "run", map[string]any{"args": []string{"source", "add", "https://never.invalid/skills.git"}})
 	waitingGit()
 	c.send(nil, "$/cancelRequest", map[string]any{"id": 1})

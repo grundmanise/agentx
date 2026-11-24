@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Spinner } from "#/components/spinner.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import {
   Tooltip,
   TooltipContent,

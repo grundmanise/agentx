@@ -68,17 +68,22 @@ type writtenReport struct {
 // report is the quiet job of the serve child, which serve runs once the
 // machine has been quiet for reportQuietFor after a scan, and never beside
 // itself or a check. With the machine setting report_inventory off, or no
-// hub set, it runs no git and reports nothing. Otherwise it writes this
+// hub set, it runs no git and reports nothing, and what the last reports
+// came to is forgotten, see forgetReports. Otherwise it writes this
 // machine's report from the last inventory scanned, see writeScanned, and
 // its outcome is reported on the loop's goroutine, see reportWrite. The
 // setting is read on every run. A hub check runs it too while the reports
 // fail, see serveChecks.hub.
 func (c *serveChecks) report(ctx context.Context) func() {
-	sc := c.scanned.Load()
+	reports, err := c.inv.reportsInventory()
+	if err == nil && !reports {
+		return c.forgetReports
+	}
 	// An inventory whose library is not listed was scanned before this
 	// machine reported: the scan that turning the setting on, or setting a
 	// hub, sets off brings one that lists it.
-	if reports, err := c.inv.reportsInventory(); err != nil || !reports || sc == nil || !sc.listed {
+	sc := c.scanned.Load()
+	if err != nil || sc == nil || !sc.listed {
 		return nil
 	}
 	w, err := c.writeScanned(ctx, sc)
@@ -86,6 +91,13 @@ func (c *serveChecks) report(ctx context.Context) func() {
 		return nil
 	}
 	return func() { c.reportWrite(w, err) }
+}
+
+// forgetReports forgets what the last reports came to, on the loop's
+// goroutine, once this machine no longer reports: when it reports again,
+// the branch is read again and a report that fails warns.
+func (c *serveChecks) forgetReports() {
+	c.reportFailing, c.reported = false, nil
 }
 
 // reportWrite reports what one report came to. One that was pushed is a

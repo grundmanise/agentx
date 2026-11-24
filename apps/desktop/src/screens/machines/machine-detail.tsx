@@ -4,10 +4,14 @@ import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
 import { DetailFact, DetailFacts } from "#/components/detail-facts.tsx";
 import { LIST_GUIDE } from "#/components/list-guide.ts";
-import { Pill } from "#/components/pill.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
-import { Spinner } from "#/components/spinner.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "#/components/ui/collapsible.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { nameOf } from "#/screens/machines/machine-list.tsx";
 import { changedInFull, osName } from "#/screens/machines/projection.ts";
 import type {
@@ -109,7 +113,7 @@ const SkillItem = ({ skill }: { skill: SkillLine }) => {
           <span className="type-row-name text-row-name truncate select-text">
             {skill.name}
           </span>
-          {skill.modified && <Pill tone="neutral">Modified</Pill>}
+          {skill.modified && <Badge tone="neutral">Modified</Badge>}
         </span>
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className="type-secondary text-text-muted whitespace-nowrap">
@@ -129,7 +133,10 @@ const SkillItem = ({ skill }: { skill: SkillLine }) => {
   );
 };
 
-/** One agent configuration of the machine: its header, and the skills its agent client sees. */
+/**
+ * One agent configuration of the machine: its header, and the skills its agent client sees. The
+ * header is the trigger of the Collapsible that holds the group.
+ */
 const AgentSection = ({
   agent,
   first,
@@ -141,35 +148,39 @@ const AgentSection = ({
   open: boolean;
   onToggle: () => void;
 }) => (
-  <section
-    aria-label={agent.name}
-    className={first ? "flex flex-col" : "pt-group-spacing flex flex-col"}
-  >
-    <h2 className="bg-shell-content-bg sticky top-0 z-10 m-0">
-      <SectionToggle
-        level="group"
-        label={agent.name}
-        icon={
-          <AgentLogo
-            client={{ client: agent.id, name: agent.name }}
-            size={16}
-            decorative
-          />
-        }
-        count={agent.skills.length}
-        mark={agent.enabled ? undefined : <Pill tone="disabled">Disabled</Pill>}
-        open={open}
-        onToggle={onToggle}
-      />
-    </h2>
-    {open && agent.skills.length > 0 && (
-      <ul className="m-0 flex list-none flex-col p-0">
-        {agent.skills.map((skill) => (
-          <SkillItem key={skill.key} skill={skill} />
-        ))}
-      </ul>
-    )}
-  </section>
+  <Collapsible asChild open={open} onOpenChange={onToggle}>
+    <section
+      aria-label={agent.name}
+      className={first ? "flex flex-col" : "pt-group-spacing flex flex-col"}
+    >
+      <h2 className="bg-shell-content-bg sticky top-0 z-10 m-0">
+        <SectionToggle
+          level="group"
+          label={agent.name}
+          icon={
+            <AgentLogo
+              client={{ client: agent.id, name: agent.name }}
+              size={16}
+              decorative
+            />
+          }
+          count={agent.skills.length}
+          mark={
+            agent.enabled ? undefined : <Badge tone="disabled">Disabled</Badge>
+          }
+        />
+      </h2>
+      {agent.skills.length > 0 && (
+        <CollapsibleContent asChild>
+          <ul className="m-0 flex list-none flex-col p-0">
+            {agent.skills.map((skill) => (
+              <SkillItem key={skill.key} skill={skill} />
+            ))}
+          </ul>
+        </CollapsibleContent>
+      )}
+    </section>
+  </Collapsible>
 );
 
 /**
@@ -204,9 +215,9 @@ export const MachineDetail = ({ machine }: { machine: MachineView }) => {
               {name}
             </h1>
             {machine.kind === "this" && (
-              <Pill tone="neutral" size="detail">
+              <Badge tone="neutral" size="detail">
                 This machine
-              </Pill>
+              </Badge>
             )}
             {machine.kind === "other" && (
               <div className="ml-auto flex">

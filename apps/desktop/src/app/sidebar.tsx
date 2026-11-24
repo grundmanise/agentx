@@ -5,7 +5,7 @@ import { screens } from "#/app/screens.ts";
 import type { Screen } from "#/app/screens.ts";
 import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { ArrowUpIcon } from "#/components/icons/arrow-up.tsx";
-import { PillButton } from "#/components/pill.tsx";
+import { BadgeButton } from "#/components/ui/badge.tsx";
 import { plural } from "#/lib/plural.ts";
 import { cn } from "#/lib/utils.ts";
 import { UpdateSkillsDialog } from "#/screens/skills/update-dialog.tsx";
@@ -65,16 +65,16 @@ const UpdatePill = () => {
   const n = useOfferedUpdates().length;
   return n === 0 ? null : (
     <span className="absolute top-1/2 right-2 flex -translate-y-1/2">
-      <PillButton
+      <BadgeButton
         id={UPDATE_PILL_ID}
         tone="update"
-        icon={<ArrowUpIcon size="2xs" />}
-        label={plural(n, "update")}
+        aria-label={plural(n, "update")}
         title="Update skills"
         onClick={openUpdateDialog}
       >
+        <ArrowUpIcon size="2xs" />
         {plural(n, "update")}
-      </PillButton>
+      </BadgeButton>
     </span>
   );
 };
