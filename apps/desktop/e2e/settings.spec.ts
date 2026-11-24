@@ -261,7 +261,7 @@ test("with a hub, Report inventory runs config set report_inventory true, then f
   await openSettings(cli, page);
   await expect(reportSwitch(page)).not.toBeChecked();
   await expect(reportSwitch(page)).toHaveAccessibleDescription(
-    "Other machines with this hub can see which skills this machine has: the report holds names, versions and sources, and no file path, setting or skill content."
+    "Other machines with this hub can see which skills this machine has."
   );
 
   const on = cli.register(["config", "set", "report_inventory", "true"], {
