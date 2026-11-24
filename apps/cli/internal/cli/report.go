@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
@@ -381,6 +382,62 @@ func (inv *invocation) heldBranches(ctx context.Context, gitDir, remote, url str
 		}
 	}
 	return held, nil
+}
+
+// knownReport is this machine's report branch on a hub as the store knows
+// it, with no call to the hub: the branch's short name, and the commit its
+// remote-tracking ref holds, which this machine's last report, or its last
+// read of the hub's machines, left there. A tip of "" is a hub this machine
+// knows no report of its own on.
+type knownReport struct {
+	branch, tip string
+}
+
+// knownReportOn reads this machine's report branch on the hub whose git
+// remote is called remote from the store, see knownReport. A machine with
+// no id yet has written no report.
+func (inv *invocation) knownReportOn(ctx context.Context, gitDir, remote string) (knownReport, error) {
+	id, err := home.KnownMachineID(inv.dirs.Home, inv.env)
+	if err != nil || id == "" {
+		return knownReport{}, err
+	}
+	branch := gitx.ReportBranch(id)
+	tracked, err := inv.git.TrackedBranches(ctx, gitDir, remote, branch)
+	if err != nil {
+		return knownReport{}, storeFailure(err)
+	}
+	return knownReport{branch: branch, tip: tracked[branch].Commit}, nil
+}
+
+// dropReport deletes this machine's report r from the repository at url, a
+// hub this machine has just disconnected from: only a machine deletes its
+// own report, and it does so when it leaves the hub (ADR 0018). The
+// settings and the store name the hub no longer, so the branch is deleted
+// at its URL, in the one push a branch of the hub is deleted with, see
+// gitx.DeleteRemoteBranch, leased on the tip the store knew. A hub this
+// machine knows no report of its own on is not called at all.
+//
+// The machine is disconnected whatever the hub answers: a deletion git
+// could not make, or one the repository rejected, is a warning that names
+// the branch left there and the git command that deletes it.
+func (inv *invocation) dropReport(ctx context.Context, gitDir, url string, r knownReport) {
+	if r.tip == "" {
+		return
+	}
+	out := inv.out
+	s, err := inv.git.DeleteRemoteBranch(ctx, gitDir, url, r.branch, r.tip)
+	var why string
+	switch {
+	case err != nil:
+		why = trimGit(err.Error())
+	case s.Rejected():
+		why = "its deletion was rejected: " + sanitised(s.Why())
+	default:
+		out.done("deleted this machine's report, " + out.paint(heading, r.branch) + ", from " + shownURL(url))
+		return
+	}
+	out.warnWith(shownURL(url)+" still holds "+r.branch+", this machine's report: "+why,
+		"delete it with 'git push "+shellWord(shownURL(url))+" --delete "+r.branch+"'")
 }
 
 // writeReport writes data, a report document, as the one file of a commit

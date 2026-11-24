@@ -4,6 +4,8 @@ import type { ReactElement } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 
 import { ActivityLogSheet } from "#/app/activity-log.tsx";
+import { listenAppMenu } from "#/app/app-menu.ts";
+import { startAppUpdateChecks } from "#/app/app-update.ts";
 import { CommandPalette } from "#/app/command-palette.tsx";
 import { KeptScreens, screenOf } from "#/app/kept-screens.tsx";
 import { LaunchProgress } from "#/app/launch-progress.tsx";
@@ -111,6 +113,12 @@ export const App = () => {
     }
   }, [startup.ready]);
 
+  // The app checks for its own update once the checks pass, so the startup stays offline.
+  useEffect(
+    () => (startup.ready ? startAppUpdateChecks() : undefined),
+    [startup.ready]
+  );
+
   // A route that is no screen's goes to Skills.
   const { pathname } = useLocation();
   const known = screenOf(pathname) !== undefined;
@@ -121,14 +129,28 @@ export const App = () => {
     setNavigate(navigate);
   }, [navigate]);
 
-  // ⌘K / Ctrl+K toggles the palette from anywhere but the startup layer, once the checks pass.
+  // ⌘K / Ctrl+K toggles the palette, and ⌘, / Ctrl+, opens Settings, from anywhere but the startup
+  // layer, once the checks pass. On macOS the app menu's Settings… takes ⌘, and opens it too.
+  const reachable = startup.ready && !startup.open;
   useWindowEvent("keydown", (e) => {
-    const shortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
-    if (shortcut && startup.ready && !startup.open) {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "k" && reachable) {
       e.preventDefault();
       setPaletteOpen((open) => !open);
+    } else if (mod && e.key === "," && reachable) {
+      e.preventDefault();
+      void navigate("/settings");
     }
   });
+  useEffect(
+    () =>
+      listenAppMenu(() => {
+        if (reachable) {
+          void navigate("/settings");
+        }
+      }),
+    [navigate, reachable]
+  );
 
   return (
     <div className="bg-shell-bg text-text-primary flex h-full flex-col">

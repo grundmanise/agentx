@@ -227,7 +227,7 @@ SKILL.md of pdf in https://github.com/anthropics/skills under skills/pdf at 3f2a
   SKILL.md  4210 bytes  96 lines
 ```
 
-Use `.` for a skill at the root of the repository. The path always starts at the repository root, even when the URL names a path. With `--json`, the `skill_file` event carries the file's content, as [`agentx skill files`](/cli/skill#read-a-skills-files) does for an installed skill. The command reads what the last add or fetch stored and makes no network calls. A path that holds no skill is refused with exit code 5.
+Use `.` for a skill at the root of the repository. The path always starts at the repository root, even when the URL names a path. With `--json`, the `skill_file` event carries the file's content, as [`agentx skill files`](/cli/skill#read-a-skill’s-files) does for an installed skill. The command reads what the last add or fetch stored and makes no network calls. A path that holds no skill is refused with exit code 5.
 
 ## Remove a source
 
@@ -265,11 +265,14 @@ hint: run 'agentx source add https://github.com/anthropics/skills' to add it aga
 
 Once you remove the last of those skills with [`agentx skill remove <name>`](/cli/skill), agentx no longer knows the source's URL. Add the source again by its URL.
 
-Removing your [hub](#add-your-hub) clears it from this machine's settings. Your hub skills stay on this machine, and nothing on the remote changes:
+Removing your [hub](#add-your-hub) clears it from this machine's settings. Your hub skills stay on this machine, and the skills on the hub stay there. If the hub holds this machine's [inventory report](/cli/machine#remove-a-report-from-the-hub), agentx deletes it there:
 
 ```text
 ✓ the hub ssh://git@github.com/you/agentx-hub is no longer set; your skills on this machine are as they were
+✓ deleted this machine's report, reports/3ea501b8fb5db1ad3cc85268972d7012, from ssh://git@github.com/you/agentx-hub
 ```
+
+If Git cannot delete the report, the hub is removed all the same, and agentx prints a warning with the Git command that deletes it.
 
 ## Add your hub
 
@@ -292,7 +295,7 @@ agentx source add git@github.com:you/agentx-hub.git --hub
 - Only your hub skills travel through it. Skills you install from other sources, their update checks and the sources themselves stay on each machine.
 - A machine without a hub keeps the whole history of your hub skills: `agentx skill history` and `agentx skill diff` work without one. Add it when you want a backup, or a second machine.
 - Adding the hub's URL again, with or without `--hub`, fetches it again.
-- Adding another URL with `--hub` replaces the hub. Your hub skills stay on this machine. `agentx skill list` shows them as `not published` until you publish each one to the new remote with `agentx skill publish <name>`. `agentx skill publish` with no name skips them.
+- Adding another URL with `--hub` replaces the hub. agentx deletes this machine's [inventory report](/cli/machine#remove-a-report-from-the-hub) from the hub you replace. Your hub skills stay on this machine. `agentx skill list` shows them as `not published` until you publish each one to the new remote with `agentx skill publish <name>`. `agentx skill publish` with no name skips them.
 - A source you added without `--hub` cannot become the hub, even under another URL for the same repository. agentx stops with exit code 6. Remove the source first with `agentx source remove <url>`, then add the hub.
 
 ## Exit codes

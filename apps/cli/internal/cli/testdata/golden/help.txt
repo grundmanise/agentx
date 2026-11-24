@@ -44,7 +44,6 @@ MACHINES
   machine report                         Write this machine's inventory report to the hub
   machine list                           List this machine and the machines the hub holds
   machine show <machine>                 Show the skills of one machine, as the hub holds them
-  machine remove <machine>               Delete a machine's report from the hub
   snapshot save [<name>]|--machine <id>  Save a snapshot to the library or the hub
   snapshot apply <file>|--machine <id>   Apply a snapshot: settings, skills and placements
 
