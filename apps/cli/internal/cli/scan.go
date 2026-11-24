@@ -40,6 +40,7 @@ func newScanCommand(inv *invocation) *cobra.Command {
 			"agentx scan --json", "the inventory as JSON events, for a script",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			inv.testPanic()
 			if configuration != "" {
 				if err := inv.detectedConfiguration(configuration); err != nil {
 					return err
@@ -50,10 +51,11 @@ func newScanCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
-			if !inv.out.json {
-				inv.printInventory(inventory)
+			if inv.out.json {
+				return nil
 			}
-			return nil
+			inv.printInventory(inventory)
+			return inv.offerTelemetry(cmd.Context(), cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "also inventory the project-scope skills under this directory, read-only")

@@ -9,9 +9,12 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/posthog/posthog-go/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/crash"
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
@@ -27,6 +30,8 @@ type invocation struct {
 	instance string // the instance_id inventories carry, fixed once per run
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 	summary  string // what the result event says about a run that succeeded
+	started  time.Time
+	command  string // the command's words, such as "skill add", once parsed; "" before
 	// publishHintOnce says a run over many skills says once, once they are
 	// done, that the skills it made hub skills are not published, see
 	// noHubRemoteHint; publishHintDue says one of them needs it said.
@@ -43,6 +48,8 @@ type invocation struct {
 	hosts        func(host string) string // the host names of the user's SSH configuration, read once per host; see sshHosts
 	unfetched    sync.Map                 // remote name -> URL of a hub whose remote was just written over one never fetched whole; see fetchForks
 	published    sync.Map                 // skill name -> the publishedBase last read for it; see tipPublished
+	posthogMu    sync.Mutex
+	posthog      posthog.Client // made by telemetryClient, closed by closeTelemetry; nil until then
 }
 
 // refs is what the mutation journal needs to apply and recover the lineage
@@ -115,7 +122,7 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	// --color is scanned the same way, so that an error cobra reports before
 	// it parsed the flags, such as an unknown command, is painted as asked.
 	out := &writer{stdout: stdout, stderr: stderr, env: env, json: slices.Contains(args, "--json"), color: colorFromArgs(args)}
-	inv := &invocation{env: env, out: out}
+	inv := &invocation{env: env, out: out, started: time.Now()}
 
 	root := newRoot(inv)
 	if args == nil {
@@ -129,7 +136,23 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	} else {
 		root.SetOut(stdout)
 	}
-	return finish(ctx, inv, root.ExecuteContext(ctx))
+	code := finish(ctx, inv, execute(ctx, root))
+	inv.recordRun(ctx, code)
+	inv.closeTelemetry()
+	return code
+}
+
+// execute runs the command and returns a panic in it as a *crash.Panic,
+// so that the run ends as an internal error does rather than with Go's
+// trace. The goroutines serve starts recover their own and end serve
+// with the panic the same way.
+func execute(ctx context.Context, root *cobra.Command) (err error) {
+	defer func() {
+		if p := crash.Recovered(recover()); p != nil {
+			err = p
+		}
+	}()
+	return root.ExecuteContext(ctx)
 }
 
 // colorFromArgs returns the value of --color on the command line, as
@@ -169,6 +192,7 @@ func newRoot(inv *invocation) *cobra.Command {
 				return fail(exitUsage, fmt.Sprintf("invalid value %q for --color", colorFlag), "use on or off")
 			}
 			inv.parsed = true
+			inv.command = strings.TrimPrefix(strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()), " ")
 			dirs, err := home.Resolve(inv.env)
 			if err != nil {
 				return fail(exitUsage, err.Error(), "set HOME to your home directory")
@@ -227,6 +251,21 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 		// cancelled context by design and exits 0.
 		out.result(true, inv.summary)
 		return exitOK.exit
+	}
+	// A panic is agentx's own bug, whatever else happened to the run: it
+	// ends the run as an internal error and, with the user's consent, is
+	// reported.
+	var p *crash.Panic
+	if errors.As(err, &p) {
+		for i := len(p.Stack.Frames) - 1; i >= 0; i-- { // innermost first, as Go prints it
+			fr := p.Stack.Frames[i]
+			out.debugf("  at %s (%s:%d)", fr.Function, fr.Filename, fr.LineNo)
+		}
+		inv.reportCrash(ctx, p)
+		f := &failure{status: exitInternal, message: p.Error()}
+		out.fail(f)
+		out.result(false, f.message)
+		return f.status.exit
 	}
 	// A terminal signals the whole foreground process group, so the git the
 	// run was waiting on dies of the same Ctrl-C and its error can reach

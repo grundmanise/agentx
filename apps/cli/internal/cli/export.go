@@ -400,6 +400,7 @@ func (inv *invocation) snapshot(ctx context.Context) (snapshot, error) {
 	if err != nil {
 		return snapshot{}, err
 	}
+	s.Telemetry = "" // consent is this machine's own: a snapshot never carries it
 	return snapshot{
 		SchemaVersion:  snapshotSchemaVersion,
 		Machine:        &exportMachine{ID: id, Label: inv.label(s)},

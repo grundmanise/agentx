@@ -36,6 +36,7 @@ func TestConfigListDefaults(t *testing.T) {
 		"label                    test-host",
 		"accept_operations        false",
 		"ignore_system_files      true",
+		"telemetry                unset",
 		"disabled_configurations  (none)",
 		"copy_configurations      (none)",
 		"sources                  []",

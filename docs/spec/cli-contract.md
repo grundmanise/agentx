@@ -21,7 +21,11 @@ The CLI reads its environment once, at startup, from the variables below. Beyond
 | `AGENTX_HOSTNAME` | the default machine label | the operating system's hostname |
 | `AGENTX_INSTANCE_ID` | the `instance_id` carried by inventories, so a script can fix it | a fresh random id per process |
 | `AGENTX_HANDSHAKE_TIMEOUT` | the budget of one MCP handshake, a duration such as `500ms` | `10s` |
+| `AGENTX_TEST_PANIC` | `1` makes `agentx scan` panic with a message that names `HOME` and agentx home, which is how the tests reach a crash | unset |
 | `GITHUB_TOKEN` | the token [`agentx update`](#update) reads GitHub's release list with, which only `--nightly` needs; GitHub allows 60 anonymous requests an hour | unset |
+| `AGENTX_INTERACTIVE` | `1` or `0`: whether a person is there to answer the [telemetry](#telemetry) question, for tests | stdin and stdout are both terminals |
+| `AGENTX_TELEMETRY_ENDPOINT` | the PostHog host [telemetry](#telemetry) is sent to, for tests | `https://eu.i.posthog.com` in a stable or nightly build; none in a source build |
+| `DO_NOT_TRACK` | any value but `0` or `false` turns [telemetry](#telemetry) off, its question included | unset |
 
 ## Streams
 
@@ -77,6 +81,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | Field | Type | Meaning |
 |---|---|---|
 | `settings` | object | the machine settings as they now are, in the shape of the settings file below, with `label` filled in from the hostname when it is not set |
+| `anonymous_id` | string | the [anonymous id](#telemetry), present exactly when `telemetry` is `on` and `DO_NOT_TRACK` is unset, so the desktop app sends under the same id, and only then |
 
 `config_removal`, emitted by `agentx config remove`, one per configuration it removed, sorted by `id`, before the `settings` event:
 
@@ -347,7 +352,7 @@ An update another machine published to a hub skill, see **Checking for updates**
 | 7 | `locked` | another agentx command holds the lock |
 | 8 | `store` | the store is unusable: missing, corrupt, or a repository format this git cannot read |
 | 9 | `interrupted` | a stop signal ended the run before it finished, see [Stopping a run](#stopping-a-run) |
-| 10 | `internal` | an internal error, including a settings file or another tool's install record agentx cannot read |
+| 10 | `internal` | an internal error, including a settings file or another tool's install record agentx cannot read, and a panic: its message is the error's, `panic: ` and what was passed to `panic` |
 
 In JSON mode the `error` event carries the code as its `code` field.
 
@@ -407,7 +412,7 @@ No agent client reads anything in agentx home except the fork worktrees, through
 
 `settings.json` in agentx home holds what only this machine decides. It is read whole and written by temp file, fsync and rename while the lock is held. A missing file means defaults. An unreadable file is exit code 10 with a hint naming the path. `schema_version` stays `1` while keys are only added, since a reader ignores a key it does not know; a file whose `schema_version` is greater than the one this agentx reads was written by a later agentx and is exit code 10 too, wherever the settings are read, with a hint to upgrade agentx rather than to delete the file. Running an agentx that predates a key on a file that holds it is not supported: an agentx that does not know a key ignores it, so one that predates the hub flag reads the hub as a shared source.
 
-`agentx config list` prints every setting, `agentx config get <key>` one, and `agentx config set <key> <value>` changes `label`, `accept_operations` or `ignore_system_files`; the booleans take `true` or `false`. A label is one non-empty line of at most 256 bytes carrying no control character, which is the rule every route to it is held to: `config set label`, `machine rename` and the label an import restores. An unknown key, a key that `config set` cannot change, or an invalid value is exit code 1 with a hint listing the keys. Without `--json`, `list` prints a `key  value` table, showing an empty value as `(none)`, `get` prints the bare value, and `set`, `enable`, `disable` and `placement` print one confirmation line: `✓ <key> is now <value>`, `✓ <id> is now enabled`, `✓ <id> is now disabled`, `✓ <id> now places copies` or `✓ <id> now places symlinks`.
+`agentx config list` prints every setting, `agentx config get <key>` one, and `agentx config set <key> <value>` changes `label`, `accept_operations`, `ignore_system_files` or `telemetry`; the booleans take `true` or `false`, and `telemetry` takes `on` or `off`. A label is one non-empty line of at most 256 bytes carrying no control character, which is the rule every route to it is held to: `config set label`, `machine rename` and the label an import restores. An unknown key, a key that `config set` cannot change, or an invalid value is exit code 1 with a hint listing the keys. Without `--json`, `list` prints a `key  value` table, showing an empty value as `(none)`, `get` prints the bare value, and `set`, `enable`, `disable` and `placement` print one confirmation line: `✓ <key> is now <value>`, `✓ <id> is now enabled`, `✓ <id> is now disabled`, `✓ <id> now places copies` or `✓ <id> now places symlinks`.
 
 `agentx config disable <id>` adds a configuration id to `disabled_configurations` and `agentx config enable <id>` removes it; both are mutations, both are no-ops when the list already has the wanted state, and both emit the `settings` event. The id must name a detected configuration (see [Inventory](#inventory)), else exit code 5 with a hint listing the detected ids. A detected configuration is enabled unless it is listed, so every configuration is enabled on first detection without a write.
 
@@ -464,6 +469,7 @@ No agent client reads anything in agentx home except the fork worktrees, through
 | `label` | the machine label; absent until set with `config set label` or `machine rename`, and reported as the hostname meanwhile |
 | `accept_operations` | reserved; whether this machine executes operations queued for it |
 | `ignore_system_files` | whether git ignores, in every skill directory, the files an operating system or an editor leaves there on its own; `true` by default, and a file without the key reads `true`. The list is `.DS_Store`, `._*`, `.AppleDouble`, `.LSOverride`, `Thumbs.db`, `ehthumbs.db`, `desktop.ini`, `.directory`, `.fuse_hidden*`, `.nfs*`, `*.swp`, `*.swo`, `*~` and `.#*`, each matched against a base name. While it is on, the store's `info/exclude` holds the list, one pattern per line; while it is off, the file is empty. `config set ignore_system_files` rewrites the file at once, and every git run over a skill directory brings it in line first, see [Git](#git) |
+| `telemetry` | `on` or `off`, absent until answered; `config get telemetry` and `config list` report the absent key as `unset`. See [Telemetry](#telemetry) |
 | `disabled_configurations` | configuration ids the user took out of the default set for explicit placements, sorted; every other detected configuration is enabled |
 | `copy_configurations` | configuration ids whose new placements are copies of the library directory instead of symlinks, sorted, `[]` when there is none, and a file without the key reads `[]`; written by `config placement`. Every placement a command makes on this machine's disk into a configuration it lists is a copy, as if `--copy` were given for that configuration alone, and is recorded in `copy_mode` as `--copy` records it: `skill add`, `skill place`, `config enable --place-all`, `skill new`, `skill fork`, `skill rename`, an install from the hub, putting a fork back and `snapshot apply` alike. `--copy` still makes every placement of its run a copy. Which placement is displaced stays decided by `copy_mode` alone, see **Putting placements back** under [Skills](#skills). A client that reads the library is never listed, since the library entry is its placement |
 | `sources` | each source by canonical `url`, sorted by it, with optional `alias` (another URL of the same repository whose fetches map onto the canonical one, such as its old URL after a rename; reserved, nothing sets it, and nothing is ever pushed to it), optional `hub` (`true` on the one entry that is the [hub](#hub), which holds one branch per fork, `skills/<name>`, and which forks publish to; `agentx source add --hub` writes it. Absent on every other source, a shared source, which holds skills in folders anywhere in the tree of one branch), optional `pin` (the ref the source is held at, absent when it follows the remote's default branch; the hub, a whole repository, never has one), optional `access` (what git lets this machine do at the source: `writable`, or `read-only` when git answered with a denial it is known to give for want of rights; absent while it is unknown, which is everything else), optional `access_checked` (RFC 3339 in UTC, when the access was last checked, also when the check could not decide), optional `default_branch` (the branch the remote's `HEAD` named when it was last looked at; shown, and never used to choose a branch; the hub is written with none) and `last_fetched` (RFC 3339 in UTC). At most one entry is the hub, and no shared source names the repository the hub names; written by `source add`, `source remove` and `source fetch`, which rewrites `last_fetched` and what its access check found, `access`, `access_checked` and `default_branch`, alone, as `skill check-updates` does for the sources it fetched and the update check of [serve](#serve) does for every source it fetched, a source no skill was installed from included, and by `skill add` when it adds or fetches the source it installs from, as `source add` does, see [Sources](#sources) |
@@ -480,6 +486,32 @@ The machine id names one computer across reinstalls. It is derived, in this orde
 3. Otherwise 16 random bytes are generated once, under the lock, stored as hex in `machine.json`, and used from then on as in 1.
 
 `agentx machine` prints the id, the label and the derivation, and where agentx keeps its files: agentx home, the settings file, the library and, once it exists, the store with its size on disk, each as the `machine` event carries it, so that a consumer such as the desktop app shows the paths and the size without computing anything about the machine. `agentx machine rename <label>` sets the label in the settings file. `agentx machine reset-id` writes a new random id to `machine.json`; from then on the id is random even where a platform id exists, until the file is deleted. Without `--json`, `machine` prints a `key  value` table with the rows `Machine id`, `Label`, `Derivation`, `Home`, `Settings`, `Library` and `Store`, the last `<path> (<size>)`, the size in bytes below one KiB and with one decimal in KiB, MiB, GiB or TiB above, or `not created yet`; the two mutations print one confirmation line: `✓ machine label is now <label>` or `✓ machine id is now <id>`.
+
+## Telemetry
+
+Usage data is opt-in and anonymous, and goes to PostHog through its Go SDK (`posthog-go`). It is **offered** when a host is known, which a stable or nightly build has (`https://eu.i.posthog.com`, with the project's public client token in the code) and `AGENTX_TELEMETRY_ENDPOINT` replaces, and `DO_NOT_TRACK` is unset; a source build, whose version is `dev`, has no host and never offers or sends. It is **sent** when it is offered and the `telemetry` setting is `on`. Nothing is sent while the setting is absent or `off`.
+
+**Consent.** While telemetry is offered and the setting is absent, `agentx scan` without `--json` asks after it printed the inventory, when a person is there to answer (stdin and stdout are terminals, or `AGENTX_INTERACTIVE` is `1`): it prints what is sent and `Send anonymous usage data? [y/N] `, reads one line, and stores `on` for `y` or `yes`, in any case, and `off` for anything else, as a mutation. A run with no one to answer asks nothing and stores nothing, so a later run asks. `agentx scan --json` and `agentx serve` never ask: the desktop app reads the setting from the `settings` event, asks itself while `telemetry` is absent, and answers with `config set telemetry`. The setting is this machine's own: `snapshot save` leaves it out and `snapshot apply` keeps the machine's value.
+
+**The anonymous id** is HMAC-SHA256 with the key `agentx-anonymous-id/v1` over the machine id, rendered as the first 32 lowercase hex characters. It is the PostHog `distinct_id` of every event. It differs from the machine id, cannot be turned back into it, and changes with `agentx machine reset-id`. Events are personless (`process_person_profile: false`); the CLI never identifies.
+
+**Events.** Every run that parsed its command line sends `command_run` when it ends, and `agentx serve` sends `serve_start` when it starts. Their properties are:
+
+| Property | Meaning |
+|---|---|
+| `command` | the command words only, such as `skill add` or `config set`; never an argument or a flag value |
+| `exit_code` | the exit code; absent on `serve_start` |
+| `duration_ms` | wall time since the run started |
+| `release_channel` | `nightly` when the version contains `-nightly.`, else `stable`, as `agentx update` decides |
+| `cli_version` | as `agentx version` prints it |
+| `schema_version` | the output schema version |
+| `arch` | the Go runtime's, such as `arm64` |
+
+plus what the SDK adds itself, such as `$os`, `$os_version`, `$lib` and `$lib_version`. GeoIP is off. Before an event is sent, the SDK's `BeforeSend` hook replaces every path under `/Users/`, `/home/`, `/root/`, `/private/`, `/tmp/` or `/var/folders/` in any string it carries, an exception's messages, stack frames and binary path included, with `<path>`.
+
+**Crashes.** A panic ends the run as an internal error, exit code 10, see [Exit codes](#exit-codes); a panic on a goroutine serve starts, its jobs, its watcher and the methods it answers requests with, ends serve the same way. While usage data is sent, the run also sends one `$exception` event to PostHog's error tracking: the Go type of the value passed to `panic`, the panic's message and the stack it was raised on, as the SDK reads it, the frames of agentx's own code marked `in_app`, with `mechanism.handled` false. The release build passes `-trimpath`, so the frames name module-relative files. The message on stderr, or in the `error` event, keeps its paths: it goes to the user's own terminal.
+
+**Sending.** The SDK batches events in the background. A run makes one client on its first event and closes it when it ends, waiting at most one second for what is queued and dropping the rest; serve keeps its client open while it runs. A failed send is not retried after that, and never changes the exit code or the output.
 
 ## Lock and version file
 

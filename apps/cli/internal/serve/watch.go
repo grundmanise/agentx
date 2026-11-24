@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/crash"
 )
 
 // watcher signals changes in the directories serve cares about, through
@@ -35,8 +37,9 @@ type backend interface {
 // and one pending error, since the loop coalesces changes anyway and warns
 // once per error it reads.
 type signals struct {
-	events chan<- struct{}
-	errors chan<- error
+	events  chan<- struct{}
+	errors  chan<- error
+	crashed func(*crash.Panic) // what a panic on the backend's goroutine is handed to
 }
 
 func (s signals) changed() {
@@ -54,10 +57,10 @@ func (s signals) failed(err error) {
 }
 
 // newWatcher watches dirs and every directory below each of trees.
-func newWatcher(dirs, trees []string) (*watcher, error) {
+func newWatcher(dirs, trees []string, crashed func(*crash.Panic)) (*watcher, error) {
 	events := make(chan struct{}, 1)
 	errs := make(chan error, 1)
-	b, err := newBackend(signals{events: events, errors: errs})
+	b, err := newBackend(signals{events: events, errors: errs, crashed: crashed})
 	if err != nil {
 		return nil, err
 	}
