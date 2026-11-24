@@ -13,6 +13,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "#/components/ui/hover-card.tsx";
+import type { HoverCardPlacement } from "#/components/ui/hover-card.tsx";
 import {
   Tooltip,
   TooltipContent,
@@ -241,8 +242,11 @@ const countVariants = cva("", {
   },
 });
 
-/** The side of its trigger an agent list card opens on. */
-export type AgentListSide = "top" | "right" | "bottom" | "left";
+/** Where an agent list card opens: below its trigger, ending at its right edge, or to its left. */
+export type AgentListPlacement = Extract<
+  HoverCardPlacement,
+  "below-end" | "left-start"
+>;
 
 /**
  * The agents behind a trigger, such as a stack of logos: pointing at the trigger opens a hover
@@ -253,24 +257,20 @@ export type AgentListSide = "top" | "right" | "bottom" | "left";
 export const AgentListCard = ({
   clients,
   children,
-  side = "bottom",
+  placement = "below-end",
 }: {
   clients: Pick<Configuration, "client" | "name">[];
   /** The trigger: one element, which takes the hover card's handlers and ref. */
   children: ReactElement;
   /**
-   * Where the card opens: below the trigger, ending at its right edge, by default; beside it, from
-   * its top, for a trigger in a menu, so the card does not cover the menu's rows.
+   * Where the card opens: below the trigger, ending at its right edge, by default; to its left,
+   * from its top, for a trigger in a menu, so the card does not cover the menu's rows.
    */
-  side?: AgentListSide;
+  placement?: AgentListPlacement;
 }) => (
   <HoverCard>
     <HoverCardTrigger asChild>{children}</HoverCardTrigger>
-    <HoverCardContent
-      side={side}
-      align={side === "left" || side === "right" ? "start" : "end"}
-      padding="list"
-    >
+    <HoverCardContent placement={placement} padding="list">
       <ul
         aria-label="Agents"
         className="max-h-agent-list m-0 grid list-none grid-cols-2 gap-x-3.5 overflow-y-auto overscroll-contain px-0 py-2.5"
@@ -303,7 +303,7 @@ export const LogoStack = ({
   surface,
   decorative = false,
   tooltip,
-  listSide,
+  listPlacement,
 }: {
   clients: Pick<Configuration, "client" | "name">[];
   size: LogoSize;
@@ -312,7 +312,7 @@ export const LogoStack = ({
   decorative?: boolean;
   tooltip?: boolean;
   /** Where the agent list card opens, when `hidden` adds one. */
-  listSide?: AgentListSide;
+  listPlacement?: AgentListPlacement;
 }) => {
   const listed = hidden !== undefined && hidden.length > 0;
   const stack = (
@@ -334,7 +334,7 @@ export const LogoStack = ({
     return stack;
   }
   return (
-    <AgentListCard clients={[...clients, ...hidden]} side={listSide}>
+    <AgentListCard clients={[...clients, ...hidden]} placement={listPlacement}>
       <span className="flex items-center">
         {stack}
         <span

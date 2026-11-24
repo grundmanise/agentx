@@ -2,11 +2,11 @@ import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
-import { PillButton } from "#/components/pill.tsx";
 import { SelectableLink } from "#/components/selectable-link.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
-import { Spinner } from "#/components/spinner.tsx";
+import { BadgeButton } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { openInEditor } from "#/lib/editor.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
@@ -202,27 +202,25 @@ export const SkillDetail = ({
             </span>
           )}
           {forks.map((fork) => (
-            <PillButton
+            <BadgeButton
               key={fork.key}
               tone="neutral"
               size="detail"
-              label={`Forked as ${fork.name}`}
+              aria-label={`Forked as ${fork.name}`}
               title={`Forked as ${fork.name}`}
-              icon={
-                <SkillGlyph
-                  shape="fork"
-                  size={12}
-                  tone="inherit"
-                  title={`Forked as ${fork.name}`}
-                  decorative
-                />
-              }
               onClick={() => {
                 openSkill(fork.key);
               }}
             >
+              <SkillGlyph
+                shape="fork"
+                size={12}
+                tone="inherit"
+                title={`Forked as ${fork.name}`}
+                decorative
+              />
               {fork.name}
-            </PillButton>
+            </BadgeButton>
           ))}
           {/* The action row, at the title row's right end: Publish and the rest come with the
               changes that add them. */}

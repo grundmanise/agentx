@@ -3,11 +3,20 @@ import { useRef } from "react";
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
 import { ExpandToggle, SortToggle } from "#/components/filter-controls.tsx";
+import { SearchIcon } from "#/components/icons/search.tsx";
 import { LIST_GUIDE } from "#/components/list-guide.ts";
 import { ListRow } from "#/components/list-row.tsx";
-import { Pill } from "#/components/pill.tsx";
-import { SearchField } from "#/components/search-field.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "#/components/ui/collapsible.tsx";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group.tsx";
 import { useOnNewKey } from "#/lib/new-key.ts";
 import { plural } from "#/lib/plural.ts";
 import { PluginFilterPopover } from "#/screens/plugins/filter-popover.tsx";
@@ -66,7 +75,7 @@ const PluginRowView = ({
           <span className="type-row-name text-row-name truncate">
             {row.name}
           </span>
-          {row.disabled && <Pill tone="disabled">Disabled</Pill>}
+          {row.disabled && <Badge tone="disabled">Disabled</Badge>}
           <span className="flex-1" />
           <span className="type-technical-sm text-text-caption whitespace-nowrap">
             {row.version}
@@ -180,14 +189,21 @@ export const PluginList = ({
       </div>
     </div>
     <div className="pt-split-toolbar-top px-split-toolbar pb-split-toolbar-bottom gap-split-toolbar flex flex-col">
-      <SearchField
-        label="Filter plugins by name"
-        placeholder="Search"
-        value={filters.name}
-        onChange={(name) => {
-          onFilters({ ...filters, name });
-        }}
-      />
+      <InputGroup>
+        <InputGroupAddon>
+          <SearchIcon size="xs" />
+        </InputGroupAddon>
+        <InputGroupInput
+          kind="list-search"
+          type="search"
+          aria-label="Filter plugins by name"
+          placeholder="Search"
+          value={filters.name}
+          onChange={(e) => {
+            onFilters({ ...filters, name: e.target.value });
+          }}
+        />
+      </InputGroup>
       <div className="gap-split-filter flex min-w-0 items-center">
         <PluginFilterPopover
           configurations={configurations}
@@ -235,47 +251,51 @@ export const PluginList = ({
         </p>
       ) : (
         groups.map((group, i) => (
-          <section
+          <Collapsible
             key={group.configuration.id}
-            aria-label={group.configuration.name}
-            className={
-              i === 0 ? "flex flex-col" : "pt-group-spacing flex flex-col"
-            }
+            asChild
+            open={!collapsed.has(group.configuration.id)}
+            onOpenChange={() => {
+              onToggleGroup(group.configuration.id);
+            }}
           >
-            <h2 className="bg-shell-content-bg sticky top-0 z-10 m-0">
-              <SectionToggle
-                level="group"
-                label={group.configuration.name}
-                icon={
-                  <AgentLogo
-                    client={group.configuration}
-                    size={16}
-                    decorative
-                  />
-                }
-                count={group.rows.length}
-                open={!collapsed.has(group.configuration.id)}
-                onToggle={() => {
-                  onToggleGroup(group.configuration.id);
-                }}
-              />
-            </h2>
-            {!collapsed.has(group.configuration.id) && (
-              <ul className="m-0 flex list-none flex-col p-0">
-                {group.rows.map((row, at) => (
-                  <PluginItem
-                    key={row.key}
-                    row={row}
-                    first={at === 0}
-                    selected={row.key === selectedKey}
-                    onSelect={() => {
-                      onSelect(row);
-                    }}
-                  />
-                ))}
-              </ul>
-            )}
-          </section>
+            <section
+              aria-label={group.configuration.name}
+              className={
+                i === 0 ? "flex flex-col" : "pt-group-spacing flex flex-col"
+              }
+            >
+              <h2 className="bg-shell-content-bg sticky top-0 z-10 m-0">
+                <SectionToggle
+                  level="group"
+                  label={group.configuration.name}
+                  icon={
+                    <AgentLogo
+                      client={group.configuration}
+                      size={16}
+                      decorative
+                    />
+                  }
+                  count={group.rows.length}
+                />
+              </h2>
+              <CollapsibleContent asChild>
+                <ul className="m-0 flex list-none flex-col p-0">
+                  {group.rows.map((row, at) => (
+                    <PluginItem
+                      key={row.key}
+                      row={row}
+                      first={at === 0}
+                      selected={row.key === selectedKey}
+                      onSelect={() => {
+                        onSelect(row);
+                      }}
+                    />
+                  ))}
+                </ul>
+              </CollapsibleContent>
+            </section>
+          </Collapsible>
         ))
       )}
     </div>

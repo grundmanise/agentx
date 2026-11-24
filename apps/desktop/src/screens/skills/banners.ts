@@ -92,6 +92,14 @@ interface BannerRule {
 export const hubOf = (sources: SourceEvent[]) =>
   sources.find((s) => s.hub === true);
 
+/** Why Publish does nothing for a hub skill while the hub is read-only, as the last add or fetch of it found. */
+export const readOnlyHubReason = (sources: SourceEvent[]) => {
+  const hub = hubOf(sources);
+  return hub?.access === "read-only"
+    ? `${shortSource(hub.url)} is read-only`
+    : undefined;
+};
+
 /**
  * A hub skill edited since it was published: what a bare `skill publish` covers, and
  * what the title bar's status counts as edited.

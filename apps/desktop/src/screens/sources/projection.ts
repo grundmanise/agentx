@@ -213,14 +213,16 @@ export const removedText = (skills: number): string =>
     ? "Source removed"
     : `Source and ${count(skills, "skill")} removed`;
 
-/** Why a card cannot be selected, from the inventory's library. */
-export type CardStatus = "added" | "forked" | "on-disk" | "name-in-use";
+/**
+ * Why a card cannot be selected, from the inventory's library: this skill is Added or Forked, or
+ * another skill holds its name.
+ */
+export type CardStatus = "added" | "forked" | "name-taken";
 
 export const statusLabels: Record<CardStatus, string> = {
   added: "Added",
   forked: "Forked",
-  "name-in-use": "Name in use",
-  "on-disk": "Already in library",
+  "name-taken": "Name taken",
 };
 
 /**
@@ -232,6 +234,14 @@ export interface SkillMdRef {
   source: string;
   subpath: string;
   tree: string;
+}
+
+/** Why a card's name is taken, as the text before and after the library skill that holds it. */
+export interface TakenReason {
+  before: string;
+  /** The name of the library skill that holds the name. */
+  skill: string;
+  after: string;
 }
 
 export interface SkillCard {
@@ -248,6 +258,8 @@ export interface SkillCard {
   status?: CardStatus;
   /** Why a card that cannot be selected cannot be. */
   title?: string;
+  /** For a name a library skill holds: `title` around that skill's name, which opens it in Skills. */
+  taken?: TakenReason;
   /** Where its SKILL.md is read from; absent for your skills on the hub. */
   skillMd?: SkillMdRef;
   /** The skill's directory on its source's web page, when agentx knows the host's pages. */
@@ -266,11 +278,47 @@ export const cardKey = (source: string, name: string, subpath?: string) =>
     ? `${source}\u0000${name}`
     : `${source}\u0000${name}\u0000${subpath}`;
 
+/** Why a card is not selectable: its status, and for a name taken, the skill that holds it. */
+interface CardState {
+  status: CardStatus;
+  /** The library entry that holds the card's name, for "name-taken". */
+  holder?: LibraryEntry;
+}
+
+/** Why a card whose name `holder` holds cannot be added, and how to free the name. */
+const takenWhy = ({
+  kind,
+  name,
+  source,
+  subpath,
+}: LibraryEntry): TakenReason => {
+  if (kind === "unmanaged") {
+    return {
+      after:
+        " folder that agentx doesn't manage. Import or remove it to add this skill.",
+      before: "Your library has a ",
+      skill: name,
+    };
+  }
+  if (subpath === undefined || source === undefined) {
+    return {
+      after: " skill. Remove or rename it to add this skill.",
+      before: "Your library has ",
+      skill: name,
+    };
+  }
+  return {
+    after: ` skill from ${shortSource(source)}. Remove or rename it to add this skill.`,
+    before: "Your library has ",
+    skill: name,
+  };
+};
+
 const card = (
   source: string,
   name: string,
   description: string,
-  status: CardStatus | undefined,
+  state: CardState | undefined,
   skillMd?: SkillMdRef,
   page?: string
 ): SkillCard => {
@@ -286,13 +334,11 @@ const card = (
   if (page !== undefined) {
     c.page = page;
   }
-  if (status !== undefined) {
-    c.status = status;
-    if (status === "name-in-use") {
-      c.title = `Remove or rename ${name} first`;
-    }
-    if (status === "on-disk") {
-      c.title = `A folder named ${name} is already in your library, added outside agentx. Import it in Skills to manage it, or remove it to add this one.`;
+  if (state !== undefined) {
+    c.status = state.status;
+    if (state.holder !== undefined) {
+      c.taken = takenWhy(state.holder);
+      c.title = `${c.taken.before}${c.taken.skill}${c.taken.after}`;
     }
   }
   return c;
@@ -304,26 +350,25 @@ const sourceSkillStatus = (
   subpath: string,
   name: string,
   library: LibraryEntry[]
-): CardStatus | undefined => {
+): CardState | undefined => {
   if (
     library.some(
       (e) => e.kind === "managed" && e.source === url && e.subpath === subpath
     )
   ) {
-    return "added";
+    return { status: "added" };
   }
   if (
     library.some(
       (e) => e.upstream === url && (e.upstream_subpath ?? "") === subpath
     )
   ) {
-    return "forked";
+    return { status: "forked" };
   }
   const named = library.find((e) => e.name === name);
-  if (named === undefined) {
-    return undefined;
-  }
-  return named.kind === "unmanaged" ? "on-disk" : "name-in-use";
+  return named === undefined
+    ? undefined
+    : { holder: named, status: "name-taken" };
 };
 
 /** Where a skill sits in its source, for a reason that names it. */
@@ -356,8 +401,8 @@ const withSharedNames = (cards: SkillCard[]): SkillCard[] => {
     return {
       ...c,
       sharedWith: earlier,
-      status: "name-in-use",
-      title: `The skill at ${placeOf(earlier)} in this source is named ${c.name} too, and only the first of a name can be added`,
+      status: "name-taken",
+      title: `The skill at ${placeOf(earlier)} in this source is named ${c.name} too, and only the first of a name can be added.`,
     };
   });
 };
@@ -391,19 +436,19 @@ export const listingCards = (
 const installableStatus = (
   skill: InstallableSkillEvent,
   library: LibraryEntry[]
-): CardStatus | undefined => {
+): CardState | undefined => {
   const named = library.find((e) => e.name === skill.name);
   if (named === undefined) {
     return undefined;
   }
-  if (named.kind === "unmanaged") {
-    return "on-disk";
-  }
   const sameUpstream =
+    named.kind === "managed" &&
     skill.upstream !== undefined &&
     named.source === skill.upstream &&
     named.subpath === (skill.upstream_subpath ?? "");
-  return sameUpstream && named.state === "current" ? undefined : "name-in-use";
+  return sameUpstream && named.state === "current"
+    ? undefined
+    : { holder: named, status: "name-taken" };
 };
 
 /** The cards of your skills on the hub, as `skill list --remote` gave them. */

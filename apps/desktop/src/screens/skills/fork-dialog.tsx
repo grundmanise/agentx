@@ -15,7 +15,6 @@ import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Dialog,
@@ -27,6 +26,7 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import {
   Tooltip,
