@@ -46,8 +46,8 @@ const Note = ({
  * (skill-matrix.tsx): every skill across the machines. The views are offered once another machine
  * shows, and the one chosen stays until the app quits (view.ts). This machine is the applied
  * inventory; the others are what the hub holds, read with `machine list` each time the screen
- * opens and after a report is removed, and sent by serve after its check of the hub. The open
- * machine is the route, so another screen can open a machine by its path.
+ * opens and sent by serve after its check of the hub. The open machine is the route, so another
+ * screen can open a machine by its path.
  */
 export const MachinesScreen = () => {
   const navigate = useNavigate();

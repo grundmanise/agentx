@@ -1,9 +1,11 @@
+import { AppUpdateStatus } from "#/app/app-update-status.tsx";
 import { PublishStatus } from "#/app/publish-status.tsx";
 import { CommandField } from "#/components/command-field.tsx";
 
 /**
  * The 50px title bar. On macOS the window's own traffic lights sit in the left column; the whole
- * bar drags the window. The right column holds the sync status. The startup layer hides the
+ * bar drags the window. The right column holds the app update, when there is one, and the sync
+ * status. The startup layer hides the
  * command field and the sync status; until the startup checks pass, both are `locked`: shown, but
  * out of reach. The bar still drags the window.
  */
@@ -28,10 +30,11 @@ export const TopBar = ({
     )}
     <div
       data-tauri-drag-region
-      className="flex flex-1 items-center justify-end self-stretch"
+      className="flex flex-1 items-center justify-end gap-2 self-stretch"
     >
       {commandField && (
         <div inert={locked} className="contents">
+          <AppUpdateStatus />
           <PublishStatus />
         </div>
       )}

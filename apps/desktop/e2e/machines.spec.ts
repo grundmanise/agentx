@@ -1,7 +1,7 @@
 // The Machines screen: this machine from its inventory, the other machines and the cloud machine
 // from what the hub holds (`machine list`, and serve's `fleet` event), the open machine's agents
-// and skills, the By skill view of every skill across the machines, Remove report
-// (`machine remove <id>`), and the line that stands in for the other machines while none can show.
+// and skills, the By skill view of every skill across the machines, and the line that stands in
+// for the other machines while none can show.
 import type { Page } from "@playwright/test";
 
 import {
@@ -123,7 +123,6 @@ test("the list shows this machine, the other machines by label and the cloud mac
   await expect(detail(page)).toMatchAriaSnapshot(`
     - article "workbench":
       - heading "workbench" [level=1]
-      - button "Remove report"
       - term: Machine id
       - definition: ${WORKBENCH_ID}
       - term: OS
@@ -321,59 +320,6 @@ test("a row says how long ago as of now when the screen shows again", async ({
   await expect(row(page, "atelier")).toHaveAccessibleDescription(
     "Changed 3 hours ago · 3 skills"
   );
-});
-
-test("Remove report asks first, then runs machine remove and reads the hub again", async ({
-  cli,
-  page,
-}) => {
-  await openMachines(cli, page, fleet);
-  await row(page, "workbench").click();
-  const remove = detail(page).getByRole("button", { name: "Remove report" });
-  const dialog = page.getByRole("alertdialog");
-
-  // Cancel runs nothing.
-  await remove.click();
-  await expect(dialog).toMatchAriaSnapshot(`
-    - alertdialog "Remove the report of workbench?":
-      - heading "Remove the report of workbench?" [level=2]
-      - paragraph: Its inventory report is deleted from the hub. A machine that still reports shows here again.
-      - button "Cancel"
-      - button "Remove"
-  `);
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog).toHaveCount(0);
-  expect(runs(cli, ["machine", "remove", WORKBENCH_ID])).toBe(0);
-
-  const removal = cli.register(["machine", "remove", WORKBENCH_ID], {
-    holdAfter: 0,
-  });
-  await remove.click();
-  await dialog.getByRole("button", { name: "Remove" }).click();
-  await removal.started;
-  await expect(dialog).toHaveCount(0);
-  await expect(remove).toHaveAttribute("aria-busy", "true");
-  // The machine stays, its button pending, until the hub is read again.
-  const read = cli.register(["machine", "list"], {
-    events: [fleetWithoutWorkbench],
-    holdAfter: 0,
-  });
-  removal.release();
-  await expect(
-    toasts(page).getByText("Removed the report of workbench")
-  ).toBeVisible();
-  await read.started;
-  await expect(row(page, "workbench")).toBeVisible();
-  await expect(remove).toHaveAttribute("aria-busy", "true");
-  read.release();
-  await expect
-    .poll(async () => await rowNames(page))
-    .toEqual(["studio", "atelier", "Cloud machine"]);
-  expect(runs(cli, ["machine", "list"])).toBe(2);
-  // With its machine gone, the pane shows this machine.
-  await expect(
-    detail(page).getByRole("heading", { level: 1, name: "studio" })
-  ).toBeVisible();
 });
 
 test("without a hub, one line says to set one and opens Settings", async ({

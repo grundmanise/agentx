@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
@@ -383,6 +384,61 @@ func (inv *invocation) heldBranches(ctx context.Context, gitDir, remote, url str
 	return held, nil
 }
 
+// knownReport is this machine's report branch on a hub as the store knows
+// it, with no call to the hub: the branch's short name, and the commit its
+// remote-tracking ref holds, which this machine's last report, or its last
+// read of the hub's machines, left there. A tip of "" is a hub this machine
+// knows no report of its own on.
+type knownReport struct {
+	branch, tip string
+}
+
+// knownReportOn reads this machine's report branch on the hub whose git
+// remote is called remote from the store, see knownReport. A machine with
+// no id yet has written no report.
+func (inv *invocation) knownReportOn(ctx context.Context, gitDir, remote string) (knownReport, error) {
+	id, err := home.KnownMachineID(inv.dirs.Home, inv.env)
+	if err != nil || id == "" {
+		return knownReport{}, err
+	}
+	branch := gitx.ReportBranch(id)
+	tracked, err := inv.git.TrackedBranches(ctx, gitDir, remote, branch)
+	if err != nil {
+		return knownReport{}, storeFailure(err)
+	}
+	return knownReport{branch: branch, tip: tracked[branch].Commit}, nil
+}
+
+// dropReport deletes this machine's report r from the repository at url, a
+// hub this machine has just disconnected from: only a machine deletes its
+// own report, and it does so when it leaves the hub (ADR 0018). The
+// settings and the store name the hub no longer, so the branch is deleted
+// at its URL, in the one push a branch of the hub is deleted with, see
+// gitx.DeleteRemoteBranch, leased on the tip the store knew. A hub this
+// machine knows no report of its own on is not called at all.
+//
+// The machine is disconnected whatever the hub answers: a deletion git
+// could not make, or one the repository rejected, is a warning that names
+// the branch left there.
+func (inv *invocation) dropReport(ctx context.Context, gitDir, url string, r knownReport) {
+	if r.tip == "" {
+		return
+	}
+	out := inv.out
+	s, err := inv.git.DeleteRemoteBranch(ctx, gitDir, url, r.branch, r.tip)
+	var why string
+	switch {
+	case err != nil:
+		why = trimGit(err.Error())
+	case s.Rejected():
+		why = "its deletion was rejected: " + sanitised(s.Why())
+	default:
+		out.done("deleted this machine's report, " + out.paint(heading, r.branch) + ", from " + shownURL(url))
+		return
+	}
+	out.warn(shownURL(url) + " still holds " + r.branch + ", this machine's report: " + why)
+}
+
 // writeReport writes data, a report document, as the one file of a commit
 // on the tip of b and pushes it to b's branch, leased on that tip, "" for
 // a branch that must not exist yet, and never forced, then points the
@@ -426,7 +482,6 @@ func (inv *invocation) writeReport(ctx context.Context, b reportBranch, data []b
 		return "", false, unreachableRemote(b.url, err)
 	}
 	class, reason := gitx.ClassifyPush(s, found, stderr, exit)
-	const run = "run 'agentx machine report' again"
 	switch {
 	case class == gitx.PushPushed, class == gitx.PushUpToDate:
 		if err := inv.git.SetTracked(ctx, b.gitDir, b.remote, branch, commit); err != nil {
@@ -434,16 +489,14 @@ func (inv *invocation) writeReport(ctx context.Context, b reportBranch, data []b
 		}
 		return commit, true, nil
 	case class == gitx.PushMoved:
-		return "", false, fail(exitRefused, branch+" on the hub changed since it was read, so nothing was pushed",
-			run+": it reads "+branch+" again first")
+		return "", false, fail(exitRefused, branch+" on the hub changed since it was read, so nothing was pushed", "")
 	case class == gitx.PushDeclined:
-		return "", false, fail(exitRefused, "the hub declined "+branch+": "+sanitised(reason),
-			"once the hub takes it, "+run)
+		return "", false, fail(exitRefused, "the hub declined "+branch+": "+sanitised(reason), "")
 	case class == gitx.PushDenied:
 		return "", false, fail(exitSource, "the hub "+shownURL(b.url)+" did not let this machine push "+branch+": "+sanitised(reason),
-			deniedHint(gitx.DeniedFix(reason))+", then "+run)
+			deniedHint(gitx.DeniedFix(reason)))
 	case found || exit == 0:
-		return "", false, fail(exitSource, "whether the hub took "+branch+" is not known: "+sanitised(reason), run)
+		return "", false, fail(exitSource, "whether the hub took "+branch+" is not known: "+sanitised(reason), "")
 	}
 	return "", false, unreachableRemote(b.url, errors.New(reason))
 }

@@ -27,9 +27,9 @@ The first report follows about a minute after you turn the switch on. The switch
 
 The switch is the machine setting `report_inventory`. See [Let agentx write the report](/cli/machine#let-agentx-write-the-report).
 
-On a machine without the desktop app, or to write the report now, run [`agentx machine report`](/cli/machine#write-this-machines-report).
+On a machine without the desktop app, or to write the report now, run [`agentx machine report`](/cli/machine#write-this-machine’s-report).
 
-The report holds the names of the machine's skills and plugins, their versions and their sources. It holds no path, no machine setting and no file of any skill. Anyone who can read your hub can read the report. For everything it holds, see [Write this machine's report](/cli/machine#write-this-machines-report).
+The report holds the names of the machine's skills and plugins, their versions and their sources. It holds no path, no machine setting and no file of any skill. Anyone who can read your hub can read the report. For everything it holds, see [Write this machine's report](/cli/machine#write-this-machine’s-report).
 
 ## See the machines
 
@@ -57,7 +57,7 @@ Under them, each agent of the machine lists the skills it sees, and where each s
 
 **Disabled** beside an agent's name means the agent is disabled on that machine. Select the name to collapse or expand its skills.
 
-For the cloud machine, the skills are what each cloud agent session is given. To change them, see [Change the cloud machine's skills](/cloud#change-the-cloud-machines-skills).
+For the cloud machine, the skills are what each cloud agent session is given. To change them, see [Change the cloud machine's skills](/cloud#change-the-cloud-machine’s-skills).
 
 ## Compare your machines skill by skill
 
@@ -93,17 +93,10 @@ To go back to the list of machines, select **By machine**. The app keeps the vie
 
 **Also on** shows when another machine has the skill. agentx compares the machines as in [How agentx compares](#how-agentx-compares).
 
-## Remove a machine's report
+## Take a machine off the list
 
-Remove the report of a machine you no longer use.
-
-1. Open **Machines** and select the machine.
-2. Select **Remove report**, then **Remove**.
-
-agentx deletes the report from your hub, and the machine leaves the list. Nothing changes on that machine. A machine that writes its report again, on its own or with `agentx machine report`, shows again.
-
-**Remove report** shows on your other machines. The cloud machine writes no report.
+To take a machine off the list, open **Settings** on that machine and select **Unlink** under **Hub**: unlinking the hub deletes the machine's report from it. Turning **Report inventory** off keeps the last report, so the machine stays in the list.
 
 ## From the command line
 
-`agentx machine list`, `agentx machine show` and `agentx machine remove` do the same. See [See the skills of your other machines](/cli/machine#see-the-skills-of-your-other-machines).
+`agentx machine list` and `agentx machine show` do the same. See [See the skills of your other machines](/cli/machine#see-the-skills-of-your-other-machines).

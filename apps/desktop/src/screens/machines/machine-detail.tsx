@@ -1,17 +1,14 @@
 import { useState } from "react";
 
-import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
 import { DetailFact, DetailFacts } from "#/components/detail-facts.tsx";
 import { LIST_GUIDE } from "#/components/list-guide.ts";
 import { SectionToggle } from "#/components/section-toggle.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
-import { Button } from "#/components/ui/button.tsx";
 import {
   Collapsible,
   CollapsibleContent,
 } from "#/components/ui/collapsible.tsx";
-import { Spinner } from "#/components/ui/spinner.tsx";
 import {
   changedInFull,
   fromText,
@@ -24,61 +21,6 @@ import type {
   MachineView,
   SkillLine,
 } from "#/screens/machines/projection.ts";
-import { Confirm } from "#/screens/settings/confirm.tsx";
-import { loadLabel } from "#/store/loaders.ts";
-import { agentx, usePending } from "#/store/runner.ts";
-
-/** The pending label of `machine remove <id>`. */
-const removeLabel = (id: string) => `remove report ${id}`;
-
-/**
- * Remove report, for a machine other than this one and the cloud machine: `machine remove <id>`,
- * behind a confirm dialog. The store reads the hub again after it (src/store/loaders.ts), and the
- * machine leaves the list once the hub no longer holds its report: the button stays pending from
- * its command through that read.
- */
-const RemoveReport = ({ machine }: { machine: MachineView }) => {
-  const [confirming, setConfirming] = useState(false);
-  const [removed, setRemoved] = useState(false);
-  const label = removeLabel(machine.id);
-  const removing = usePending(label);
-  const reading = usePending(loadLabel(["machine", "list"]));
-  const pending = removing || (removed && reading);
-  const remove = async () => {
-    const outcome = await agentx(["machine", "remove", machine.id], {
-      label,
-      success: `Removed the report of ${machine.label}`,
-    });
-    setRemoved(outcome.exitCode === EXIT_CODES.ok);
-  };
-  return (
-    <>
-      <Button
-        variant="danger"
-        size="sm"
-        disabled={pending}
-        aria-busy={pending ? true : undefined}
-        onClick={() => {
-          setConfirming(true);
-        }}
-      >
-        {pending && <Spinner />}
-        Remove report
-      </Button>
-      <Confirm
-        open={confirming}
-        onOpenChange={setConfirming}
-        title={`Remove the report of ${machine.label}?`}
-        description="Its inventory report is deleted from the hub. A machine that still reports shows here again."
-        action="Remove"
-        onConfirm={() => {
-          setConfirming(false);
-          void remove();
-        }}
-      />
-    </>
-  );
-};
 
 /** A skill's row inside its agent's group, beside the group's guide line. */
 const ROW = `pl-subgroup-indent relative flex ${LIST_GUIDE}`;
@@ -167,8 +109,8 @@ const AgentSection = ({
 );
 
 /**
- * The open machine (DESIGN.md §6 "Machines screen"): its label, the This machine pill or Remove
- * report, one row of facts, then the skills each of its agents sees, one group per agent
+ * The open machine (DESIGN.md §6 "Machines screen"): its label, the This machine pill on this
+ * machine, one row of facts, then the skills each of its agents sees, one group per agent
  * configuration. Only the groups scroll: the title and the facts stay put.
  */
 export const MachineDetail = ({ machine }: { machine: MachineView }) => {
@@ -201,11 +143,6 @@ export const MachineDetail = ({ machine }: { machine: MachineView }) => {
               <Badge tone="neutral" size="detail">
                 This machine
               </Badge>
-            )}
-            {machine.kind === "other" && (
-              <div className="ml-auto flex">
-                <RemoveReport machine={machine} />
-              </div>
             )}
           </div>
           {machine.kind === "cloud" && (

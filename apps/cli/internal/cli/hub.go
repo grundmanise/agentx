@@ -245,9 +245,10 @@ func hubRefusal(s home.Settings, want home.Source, resolve func(host string) str
 // out of the settings and its remote out of the store, its
 // remote-tracking branches first, then its source ref and staging refs.
 // Local forks stay as they are: those of a replaced hub are
-// published to the new one by name, see remoteSelection. A run that gets
-// no further than its fetch takes back the remote it wrote, as an add
-// does.
+// published to the new one by name, see remoteSelection. This machine's
+// report is deleted from the hub replaced, once the lock is let go, see
+// dropReport. A run that gets no further than its fetch takes back the
+// remote it wrote, as an add does.
 func (inv *invocation) addHub(ctx context.Context, arg string) error {
 	src, f := hubURL(arg)
 	if f != nil {
@@ -323,6 +324,7 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 	entry.LastFetched = time.Now().UTC().Format(time.RFC3339)
 	check.apply(&entry)
 	var replaced home.Source
+	var report knownReport // this machine's report on the hub replaced
 	settled := false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		settled = true
@@ -353,6 +355,9 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 		// that tracked it track this one.
 		if replaced.URL != "" {
 			old := source.RemoteName(source.ID(replaced.URL))
+			if report, err = inv.knownReportOn(ctx, gitDir, old); err != nil {
+				return err
+			}
 			if err := inv.retrack(ctx, gitDir, old, remote); err != nil {
 				return storeFailure(err)
 			}
@@ -382,6 +387,7 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 	holds := "; it holds " + plural(n, "skill")
 	inv.summary = "the hub is now " + entry.URL + holds
 	inv.out.done("the hub is now " + inv.out.paint(heading, entry.URL) + holds + accessPhrase(inv.out, entry.AccessName()))
+	inv.dropReport(ctx, gitDir, replaced.URL, report)
 	return nil
 }
 
@@ -391,17 +397,24 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 // staging ref a killed fetch of its URL can have left, as a shared source
 // add of that URL cut short does, see source.Remove, then its settings
 // entry. source remove of the hub's URL or id runs it. Local
-// fork branches, their worktrees and every commit stay as they are, and
-// nothing on the remote changes.
+// fork branches, their worktrees and every commit stay as they are. Of the
+// remote, one thing changes, once the lock is let go: this machine's report
+// is deleted from it, when the store knew of one, see dropReport.
 func (inv *invocation) removeHub(ctx context.Context, entry home.Source) error {
 	id := source.ID(entry.URL)
 	remote := source.RemoteName(id)
+	var gitDir string
+	var report knownReport
 	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
+		dir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 		if err != nil {
 			return storeFailure(err)
 		}
 		if exists {
+			gitDir = dir
+			if report, err = inv.knownReportOn(ctx, gitDir, remote); err != nil {
+				return err
+			}
 			if err := inv.git.UnsetRemote(ctx, gitDir, remote); err != nil {
 				return storeFailure(err)
 			}
@@ -422,6 +435,7 @@ func (inv *invocation) removeHub(ctx context.Context, entry home.Source) error {
 	u := shownURL(entry.URL)
 	inv.summary = "the hub " + u + " is no longer set; your skills on this machine are as they were"
 	inv.out.done("the hub " + inv.out.paint(heading, u) + " is no longer set; your skills on this machine are as they were")
+	inv.dropReport(ctx, gitDir, entry.URL, report)
 	return nil
 }
 

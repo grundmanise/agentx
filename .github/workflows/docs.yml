@@ -1,0 +1,36 @@
+name: Docs
+
+# Only pull requests and pushes that change the Help Center or this check.
+on:
+  pull_request:
+    paths:
+      - docs/help-center/**
+      - .github/workflows/docs.yml
+      - Makefile
+  push:
+    branches: [main]
+    paths:
+      - docs/help-center/**
+      - .github/workflows/docs.yml
+      - Makefile
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # The Node version in .node-version. The Mintlify CLI needs 20.17 or later.
+          node-version-file: .node-version
+
+      - run: make check-docs

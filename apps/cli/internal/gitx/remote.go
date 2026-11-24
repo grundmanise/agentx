@@ -248,8 +248,9 @@ func (r *Runner) Push(ctx context.Context, gitDir, remote string, branches []str
 	return statuses, stderr, exit, err
 }
 
-// DeleteRemoteBranch deletes the branch of the remote called remote, named
-// by its short name such as "skills/pdf", in one git push of the user's
+// DeleteRemoteBranch deletes the branch of the remote called remote, or of
+// the repository at that URL, named by its short name such as "skills/pdf",
+// in one git push of the user's
 // environment with no hook, push certificate or push option of theirs, see
 // pushConfig, and returns the remote's answer for it. The deletion is
 // leased on expect, the commit the last fetch read the branch at: a branch
