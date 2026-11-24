@@ -59,7 +59,6 @@ var eventTypes = []struct {
 	{"inventory", inventoryEvent{}},
 	{"doctor", doctorEvent{}},
 	{"adoption", adoptionEvent{}},
-	{"reconcile", reconcileEvent{}},
 	{"update_check", updateCheckEvent{}},
 	{"listening", listeningEvent{}},
 }
@@ -115,7 +114,7 @@ func errorCodes() []string {
 // CLI writes.
 var valueLists = []valueList{
 	{name: "SkillKind", values: []string{lineage.KindManaged, lineage.KindUnmanaged}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "Kind"}, {reconcileEvent{}, "Kind"},
+		{scan.LibraryEntry{}, "Kind"},
 		{updateAvailableEvent{}, "Kind"}, {conflictEvent{}, "Kind"}, {snapshotSkill{}, "Kind"},
 	}},
 	{name: "SkillState", values: []string{stateCurrent, stateModified}, fields: []fieldRef{
@@ -181,12 +180,6 @@ var valueLists = []valueList{
 	{name: "PullOutcome", values: []string{pullFastForward, pullMerged, pullConflict, pullRefused}, fields: []fieldRef{
 		{pullEvent{}, "Outcome"},
 	}},
-	{name: "ReconcileOutcome", values: []string{
-		outcomeRestored, outcomeRepaired, outcomeWorktreeMissing, outcomeAdoptCandidate,
-		outcomeModified, outcomeInstallable, outcomeUnmanaged,
-	}, fields: []fieldRef{
-		{reconcileEvent{}, "Outcome"},
-	}},
 	{name: "AdoptionState", values: []string{adoptCandidate, adoptAdopted, adoptManaged, adoptRefused}, fields: []fieldRef{
 		{adoptionEvent{}, "State"},
 	}},
@@ -198,9 +191,6 @@ var valueLists = []valueList{
 	}},
 	{name: "MachineDerivation", values: []string{home.DerivedPlatform, home.DerivedRandom}, fields: []fieldRef{
 		{machineEvent{}, "Derivation"},
-	}},
-	{name: "UpdateCheckScope", values: []string{checkScopeAll, checkScopeHub}, fields: []fieldRef{
-		{updateCheckEvent{}, "Scope"},
 	}},
 	{name: "SourceAccess", values: []string{home.AccessWritable, home.AccessReadOnly, home.AccessUnknown}, fields: []fieldRef{
 		{sourceEvent{}, "Access"}, {home.Source{}, "Access"},

@@ -127,7 +127,7 @@ test("serve's own lines arrive in order, with their child id", async ({
     await page.evaluate(async () => await window.transport.serveStart())
   ).toBe(1);
   await cli.serveEmit([
-    { kind: "managed", name: "pdf", outcome: "modified", type: "reconcile" },
+    { checked_at: "2026-11-24T09:00:00Z", ok: true, type: "update_check" },
   ]);
   await cli.serveLog([{ level: "warn", message: "careful" }]);
   await cli.serveEmit([{ checked_at: "now", type: "update_check" }]);
@@ -138,11 +138,10 @@ test("serve's own lines arrive in order, with their child id", async ({
       value: {
         childId: 1,
         event: {
-          kind: "managed",
-          name: "pdf",
-          outcome: "modified",
+          checked_at: "2026-11-24T09:00:00Z",
+          ok: true,
           schema_version: 4,
-          type: "reconcile",
+          type: "update_check",
         },
         kind: "event",
       },
@@ -194,7 +193,7 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
   expect(cli.serveStarts).toBe(2);
   await cli.serveLog([{ level: "warn", message: "cannot fetch a source" }]);
   await cli.serveEmit([
-    { kind: "managed", name: "pdf", outcome: "modified", type: "reconcile" },
+    { checked_at: "2026-11-24T09:00:00Z", ok: true, type: "update_check" },
   ]);
   // Serve is not started yet: its lines wait.
   await expect(received(page)).toHaveCount(2);
@@ -230,11 +229,10 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
       value: {
         childId: 2,
         event: {
-          kind: "managed",
-          name: "pdf",
-          outcome: "modified",
+          checked_at: "2026-11-24T09:00:00Z",
+          ok: true,
           schema_version: 4,
-          type: "reconcile",
+          type: "update_check",
         },
         kind: "event",
       },

@@ -227,10 +227,7 @@ test.describe("popover", () => {
     await cli.serveEmit([
       {
         checked_at: new Date(Date.now() - 3_000_000).toISOString(),
-        fetched: true,
-        instance_id: "instance-1",
         ok: true,
-        scope: "hub",
         type: "update_check",
       },
     ]);
@@ -280,18 +277,12 @@ test.describe("popover", () => {
     await cli.serveEmit([
       {
         checked_at: checkedAt,
-        fetched: true,
-        instance_id: "instance-1",
         ok: true,
-        scope: "hub",
         type: "update_check",
       },
       {
         checked_at: new Date().toISOString(),
-        fetched: false,
-        instance_id: "instance-1",
         ok: false,
-        scope: "hub",
         type: "update_check",
       },
     ]);

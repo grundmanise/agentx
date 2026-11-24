@@ -23,23 +23,13 @@ import (
 )
 
 // updateCheckEvent ends the report of one update check of the serve child,
-// after its update_available events: which check it was, when it ended,
-// whether it reached what it set out to check, and whether it fetched.
+// after its update_available events: when it ended, and whether it reached
+// what it set out to check.
 type updateCheckEvent struct {
 	event
-	InstanceID string `json:"instance_id"`
-	Scope      string `json:"scope"`      // checkScopeAll or checkScopeHub
-	CheckedAt  string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
-	OK         bool   `json:"ok"`         // false when the check failed as a whole or could not reach the hub
-	Fetched    bool   `json:"fetched"`    // whether the check fetched anything
+	CheckedAt string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
+	OK        bool   `json:"ok"`         // false when the check failed as a whole or could not reach the hub
 }
-
-// The scopes of an update_check event: the full check serve runs at start,
-// and the check of the hub alone it repeats while it runs.
-const (
-	checkScopeAll = "all"
-	checkScopeHub = "hub"
-)
 
 // hubCheckInterval is how long the serve child waits, once the report
 // of one check is made, before it checks the hub again, see
@@ -118,7 +108,7 @@ func (inv *invocation) prepareServe() {
 	inv.instanceID() // fixed here, before the goroutines that report it
 	inv.verdicts = map[string]keptVerdict{}
 	inv.forkWalks = lineage.NewWalkCache()
-	inv.forksWarned = true // reconciliation and every inventory name them
+	inv.forksWarned = true // every inventory names them
 }
 
 // serveScan is one scan of serve. It checks git first: serve starts
@@ -210,7 +200,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		return err
 	}
 	defer home.Unlock(lock)
-	// Reconciliation reports and repairs before the first scan, so the
+	// Reconciliation repairs before the first scan, so the
 	// inventory shows what it put back. One that cannot run leaves serve
 	// to report what the scan finds, and without git the scan says so.
 	if _, err := inv.gitVersion(ctx); err == nil {
@@ -295,7 +285,7 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 		c.inv.reportServeCheck(rep, err)
 		ok := err == nil && !rep.hubFailed
 		c.failing = !ok
-		c.inv.reportUpdateCheck(checkScopeAll, at, ok, err == nil && len(rep.refreshed) > 0)
+		c.inv.reportUpdateCheck(at, ok)
 	}
 }
 
@@ -339,7 +329,7 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 			inv.reportServeCheck(rep, err)
 		}
 		c.failing = !ok
-		inv.reportUpdateCheck(checkScopeHub, at, ok, err == nil && rep.hubFetched)
+		inv.reportUpdateCheck(at, ok)
 	}
 }
 
@@ -391,21 +381,14 @@ func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 }
 
 // reportUpdateCheck emits the update_check event that ends the report of
-// a check of scope that ended at at, and its line without --json.
-func (inv *invocation) reportUpdateCheck(scope string, at time.Time, ok, fetched bool) {
-	inv.out.emit(updateCheckEvent{
-		event: newEvent("update_check"), InstanceID: inv.instanceID(), Scope: scope,
-		CheckedAt: at.UTC().Format(time.RFC3339), OK: ok, Fetched: fetched,
-	})
+// a check that ended at at, and its line without --json.
+func (inv *invocation) reportUpdateCheck(at time.Time, ok bool) {
+	inv.out.emit(updateCheckEvent{event: newEvent("update_check"), CheckedAt: at.UTC().Format(time.RFC3339), OK: ok})
 	status, style := "ok", okStyle
 	if !ok {
 		status, style = "failed", failStyle
 	}
-	line := []string{inv.out.paint(heading, "check "+scope), ": ", inv.out.paint(style, status)}
-	if fetched {
-		line = append(line, ", fetched")
-	}
-	inv.out.print(line...)
+	inv.out.print(inv.out.paint(heading, "check"), ": ", inv.out.paint(style, status))
 }
 
 // watchedDirs are the directories a change signal can come from, most

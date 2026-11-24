@@ -186,16 +186,8 @@ test("logs a failed scan and update check in serve's words, and nothing of what 
 
   await cli.serveEmit([
     { ...firstInventory(["codex"]), scan_counter: 2 },
-    { kind: "managed", name: "pdf", outcome: "repaired", type: "reconcile" },
     pdfUpdate,
-    {
-      checked_at: "2026-11-24T09:00:00Z",
-      fetched: false,
-      instance_id: "instance-1",
-      ok: false,
-      scope: "hub",
-      type: "update_check",
-    },
+    { checked_at: "2026-11-24T09:00:00Z", ok: false, type: "update_check" },
     {
       error: "skills folder changed during the scan",
       ok: false,
@@ -205,7 +197,7 @@ test("logs a failed scan and update check in serve's words, and nothing of what 
   ]);
   await expect(value(page, "Freshness")).toHaveText("failed");
   // Serve's lines, the commands left out. The update check says nothing in words, so its line is
-  // the event; no line says the inventory, the repair or the update.
+  // the event; no line says the inventory or the update.
   const serveLines = page
     .getByRole("list", { exact: true, name: "Activity log" })
     .getByRole("listitem")
