@@ -50,10 +50,11 @@ func newScanCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
-			if !inv.out.json {
-				inv.printInventory(inventory)
+			if inv.out.json {
+				return nil
 			}
-			return nil
+			inv.printInventory(inventory)
+			return inv.offerTelemetry(cmd.Context(), cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "also inventory the project-scope skills under this directory, read-only")

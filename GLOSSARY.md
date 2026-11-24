@@ -33,6 +33,10 @@ _Avoid_: device, host, node
 The stable identifier of a machine, derived from the computer's platform identity, so agentx reinstalled on the same computer is the same machine. A random id is used only where no platform identity exists.
 _Avoid_: device id, installation id
 
+**Anonymous id**:
+The id usage data is sent under: a keyed hash of the machine id that can't be turned back into it. Exists only while the user has agreed to send usage data.
+_Avoid_: telemetry id, user id, distinct id
+
 ### Identity
 
 **Logical asset**:
@@ -140,7 +144,7 @@ Something of the user's where a fork placed on this machine belongs: a directory
 _Avoid_: orphan, stray directory
 
 **Hub**:
-The source whose settings entry carries the hub flag, added with `agentx source add <url> --hub`: the repository stores push forks to and fetch them from. In the MVP it is a Git repository: the user's own, one the user's machines share, or one someone else keeps to distribute skills, which may be read-only; later, hosted by agentx once the machine is signed in. Only hub skills' branches and snapshots travel through it.
+The source whose settings entry carries the hub flag, added with `agentx source add <url> --hub`: the one repository of the user's own that stores push forks to and fetch them from, and the only place agentx publishes to (ADR 0020). In the MVP it is a Git repository the user's machines share, which may be read-only for one of them; later, hosted by agentx once the machine is signed in. Only hub skills' branches and snapshots travel through it. A repository other people share, such as a company's, is a shared source, never the hub.
 _Avoid_: account remote (old name), personal, own, cloud, server, origin, fork source
 
 **Hub skill**:
@@ -227,7 +231,7 @@ _Avoid_: original, parent, snapshot
 The ~/.agentx directory holding the store clone with its worktrees, the machine settings, local mutation journals and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
 
 **Machine settings**:
-The one file in agentx home holding what only this machine decides: its label, enabled configurations, the placement mode of each configuration, sources and their pins, and copy modes. Leaves the machine only inside a snapshot.
+The one file in agentx home holding what only this machine decides: its label, enabled configurations, the placement mode of each configuration, sources and their pins, copy modes, and whether to send usage data. Leaves the machine only inside a snapshot, without the answer about usage data.
 _Avoid_: config, preferences, local state
 
 **App preference**:

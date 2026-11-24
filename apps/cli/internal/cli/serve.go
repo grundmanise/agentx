@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/posthog/posthog-go/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -234,6 +235,7 @@ func (inv *invocation) serveOnce(ctx context.Context) error {
 // watching that fails.
 func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Writer, address string, origins []string) error {
 	inv.prepareServe()
+	inv.capture(ctx, eventServeStart, posthog.Properties{"duration_ms": time.Since(inv.started).Milliseconds()})
 	methods, err := inv.newServeMethods()
 	if err != nil {
 		return err

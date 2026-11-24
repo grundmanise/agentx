@@ -15,7 +15,8 @@ import (
 // write must not lose it.
 type Settings struct {
 	SchemaVersion          int             `json:"schema_version"`
-	Label                  string          `json:"label,omitempty"` // empty until set; the hostname stands in
+	Label                  string          `json:"label,omitempty"`     // empty until set; the hostname stands in
+	Telemetry              string          `json:"telemetry,omitempty"` // on or off; empty until answered
 	AcceptOperations       bool            `json:"accept_operations"`
 	IgnoreSystemFiles      bool            `json:"ignore_system_files"` // a file without the key reads true; see SystemFiles
 	DisabledConfigurations []string        `json:"disabled_configurations"`
