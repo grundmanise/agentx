@@ -9,7 +9,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/posthog/posthog-go/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -27,6 +29,8 @@ type invocation struct {
 	instance string // the instance_id inventories carry, fixed once per run
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 	summary  string // what the result event says about a run that succeeded
+	started  time.Time
+	command  string // the command's words, such as "skill add", once parsed; "" before
 	// publishHintOnce says a run over many skills says once, once they are
 	// done, that the skills it made hub skills are not published, see
 	// noHubRemoteHint; publishHintDue says one of them needs it said.
@@ -43,6 +47,8 @@ type invocation struct {
 	hosts        func(host string) string // the host names of the user's SSH configuration, read once per host; see sshHosts
 	unfetched    sync.Map                 // remote name -> URL of a hub whose remote was just written over one never fetched whole; see fetchForks
 	published    sync.Map                 // skill name -> the publishedBase last read for it; see tipPublished
+	posthogMu    sync.Mutex
+	posthog      posthog.Client // made by telemetryClient, closed by closeTelemetry; nil until then
 }
 
 // refs is what the mutation journal needs to apply and recover the lineage
@@ -115,7 +121,7 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	// --color is scanned the same way, so that an error cobra reports before
 	// it parsed the flags, such as an unknown command, is painted as asked.
 	out := &writer{stdout: stdout, stderr: stderr, env: env, json: slices.Contains(args, "--json"), color: colorFromArgs(args)}
-	inv := &invocation{env: env, out: out}
+	inv := &invocation{env: env, out: out, started: time.Now()}
 
 	root := newRoot(inv)
 	if args == nil {
@@ -129,7 +135,10 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	} else {
 		root.SetOut(stdout)
 	}
-	return finish(ctx, inv, root.ExecuteContext(ctx))
+	code := finish(ctx, inv, root.ExecuteContext(ctx))
+	inv.recordRun(ctx, code)
+	inv.closeTelemetry()
+	return code
 }
 
 // colorFromArgs returns the value of --color on the command line, as
@@ -169,6 +178,7 @@ func newRoot(inv *invocation) *cobra.Command {
 				return fail(exitUsage, fmt.Sprintf("invalid value %q for --color", colorFlag), "use on or off")
 			}
 			inv.parsed = true
+			inv.command = strings.TrimPrefix(strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()), " ")
 			dirs, err := home.Resolve(inv.env)
 			if err != nil {
 				return fail(exitUsage, err.Error(), "set HOME to your home directory")
