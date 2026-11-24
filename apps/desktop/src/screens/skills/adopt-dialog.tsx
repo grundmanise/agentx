@@ -11,6 +11,11 @@ import { CloseIcon } from "#/components/icons/close.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "#/components/ui/collapsible.tsx";
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -170,39 +175,36 @@ const Refused = ({ rows }: { rows: AdoptRow[] }) => {
     return null;
   }
   return (
-    <section
-      aria-label="Can't be imported"
-      className="border-overlay-border flex min-h-0 flex-col gap-2 border-t pt-3"
-    >
-      <div>
-        <Button
-          variant="plain"
-          size="inline"
-          aria-expanded={open}
-          onClick={() => {
-            setOpen((o) => !o);
-          }}
-        >
-          <span
-            className={
-              open
-                ? "text-text-caption flex h-5 rotate-90 items-center"
-                : "text-text-caption flex h-5 items-center"
-            }
-          >
-            <ChevronIcon size="xs" />
-          </span>
-          {`${plural(rows.length, "skill")} can't be imported`}
-        </Button>
-      </div>
-      {open && (
-        <ul className="max-h-adopt-list m-0 flex min-h-0 list-none flex-col gap-2 overflow-auto p-0">
-          {rows.map((row) => (
-            <Row key={`${row.tool}:${row.name}`} row={row} />
-          ))}
-        </ul>
-      )}
-    </section>
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
+      <section
+        aria-label="Can't be imported"
+        className="border-overlay-border flex min-h-0 flex-col gap-2 border-t pt-3"
+      >
+        <div>
+          <CollapsibleTrigger asChild>
+            <Button variant="plain" size="inline">
+              <span
+                className={
+                  open
+                    ? "text-text-caption flex h-5 rotate-90 items-center"
+                    : "text-text-caption flex h-5 items-center"
+                }
+              >
+                <ChevronIcon size="xs" />
+              </span>
+              {`${plural(rows.length, "skill")} can't be imported`}
+            </Button>
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent asChild>
+          <ul className="max-h-adopt-list m-0 flex min-h-0 list-none flex-col gap-2 overflow-auto p-0">
+            {rows.map((row) => (
+              <Row key={`${row.tool}:${row.name}`} row={row} />
+            ))}
+          </ul>
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
   );
 };
 
