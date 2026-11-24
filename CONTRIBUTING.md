@@ -68,7 +68,8 @@ Go module in `apps/cli`:
 | `make test-cli` | Runs every test with the race detector, never from cache | `go test -race -count=1 ./...` |
 | `make check-cli` | Runs all the CLI checks CI runs, in the same order | `fmt-check-cli lint-cli tidy-check-cli build-cli test-cli` |
 | `make check-desktop` | Runs all the desktop app checks CI runs: the frontend, then the Tauri shell | `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm test`, `pnpm build`, then `cargo fmt --check` and `cargo clippy --locked -- -D warnings` |
-| `make check` | Runs every check CI runs | `check-cli check-desktop` |
+| `make check-docs` | Checks the Help Center: `docs.json` and every page build, and every internal link and anchor points to a page or heading that exists | `mint validate`, then `mint broken-links --check-anchors`, in `docs/help-center` |
+| `make check` | Runs every check CI runs | `check-cli check-desktop check-docs` |
 
 To run the tests without the race detector, as CI does on macOS, use `make test-cli RACE=`.
 
@@ -79,6 +80,9 @@ CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
 `make check-desktop` needs the desktop tools listed in [Set up your machine](#set-up-your-machine),
 including Playwright's Chromium. The desktop app's own commands, such as `pnpm fix`, are in its
 [README](apps/desktop/README.md).
+
+`make check-docs` needs only Node. It runs the Mintlify CLI through `npx`, at the version pinned in the
+`Makefile`. CI runs it on pull requests that change `docs/help-center`.
 
 ## Make a change
 
@@ -92,9 +96,9 @@ including Playwright's Chromium. The desktop app's own commands, such as `pnpm f
 - **Update the Help Center.** When you add a feature or change how one works, update the matching page
   in [`docs/help-center`](docs/help-center). Keep it clear, structured and concise, in an imperative
   tone.
-- **Run `make check`.** It runs what CI runs: the CLI checks and the desktop app checks. A green
-  `make check` means a green pull request. It needs the tools of both apps, so to check only the side you
-  changed, run `make check-cli` or `make check-desktop`. Run `make fmt-cli` to fix Go formatting, and
+- **Run `make check`.** It runs what CI runs: the CLI checks, the desktop app checks and the Help Center
+  checks. A green `make check` means a green pull request. It needs the tools of both apps, so to check
+  only the side you changed, run `make check-cli`, `make check-desktop` or `make check-docs`. Run `make fmt-cli` to fix Go formatting, and
   `pnpm fix` in `apps/desktop` to fix the desktop app's formatting and lint.
 
 ## Open a pull request
