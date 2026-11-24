@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, the hub naming superseded by ADR-0020
 date: 2026-11-23
 ---
 
