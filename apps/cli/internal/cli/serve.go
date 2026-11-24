@@ -199,13 +199,8 @@ func (inv *invocation) serveScan(ctx context.Context) (scan.Inventory, error) {
 // touches it.
 func (inv *invocation) inventoryReporter() func(scan.Inventory) {
 	var library map[string]scan.LibraryEntry
-	first := true
 	return func(inventory scan.Inventory) {
 		inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
-		if first {
-			first = false
-			inv.emitConsent() // once per serve, after its first inventory
-		}
 		inv.out.print(inv.out.paint(heading, fmt.Sprintf("inventory %d", inventory.ScanCounter)), ": ",
 			plural(len(inventory.Configurations), "configuration"), ", ", plural(len(inventory.Skills), "skill"))
 		for _, ev := range driftTransitions(library, inventory) {
