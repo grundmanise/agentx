@@ -10,6 +10,8 @@
 // plugin's open dialog, in which the user picks a snapshot to apply: it returns the path, and the
 // app passes it to the CLI without reading the file.
 
+#[cfg(target_os = "macos")]
+mod app_menu;
 mod app_update;
 mod editor;
 mod logfile;
@@ -139,7 +141,12 @@ fn log_dir(env: &HashMap<String, String>) -> PathBuf {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(app_menu::build)
+        .on_menu_event(app_menu::on_event);
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
