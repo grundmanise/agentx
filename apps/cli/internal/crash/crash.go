@@ -1,40 +1,29 @@
 // Package crash turns a panic into an error a command can end with, and
-// into the record a crash report carries: the panic's type, its message and
-// its stack, with every user path taken out.
+// into the exception PostHog's error tracking receives.
 package crash
 
 import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
+
+	"github.com/posthog/posthog-go/v2"
 )
 
-// MaxFrames is how many frames a Panic keeps, innermost first.
-const MaxFrames = 50
-
-// module is the prefix of every function of agentx's own code but main's;
-// a frame of any other function is the standard library's or a
-// dependency's.
+// module is the prefix of every function of agentx's own code but main's.
 const module = "github.com/grundmanise/agentx/"
 
-// Frame is one call of a panic's stack, as a crash report carries it.
-type Frame struct {
-	Filename string `json:"filename"`
-	Function string `json:"function"`
-	Lineno   int    `json:"lineno"`
-	InApp    bool   `json:"in_app"`
-	Platform string `json:"platform"`
-}
-
 // Panic is a recovered panic, as an error: what was passed to panic and
-// the stack it was raised on, innermost frame first.
+// the stack it was raised on, as the SDK reads it.
 type Panic struct {
 	Value  any
-	Frames []Frame
+	Stack  *posthog.ExceptionStacktrace
+	Images []posthog.DebugImage
 }
 
-// Error is the panic as Go prints it, unredacted: it is meant for the
-// user's own terminal.
+// Error is the panic as Go prints it: it is meant for the user's own
+// terminal.
 func (p *Panic) Error() string { return fmt.Sprintf("panic: %v", p.Value) }
 
 // Type is the Go type of the panic's value, such as "runtime.boundsError"
@@ -43,14 +32,21 @@ func (p *Panic) Type() string { return fmt.Sprintf("%T", p.Value) }
 
 // Recovered turns what recover returned into a Panic, or nil when nothing
 // panicked. It is called from the deferred function that recovered, while
-// the stack that panicked is still below it.
+// the stack that panicked is still below it; the frames of the recovering
+// code and of runtime.gopanic are dropped.
 func Recovered(v any) *Panic {
 	if v == nil {
 		return nil
 	}
-	pcs := make([]uintptr, 256)
-	pcs = pcs[:runtime.Callers(1, pcs)]
-	return &Panic{Value: v, Frames: frames(pcs)}
+	x := posthog.DefaultStackTraceExtractor{InAppDecider: inApp}
+	stack := x.GetStackTrace(2) // from Recovered's caller
+	for i := len(stack.Frames) - 1; i >= 0; i-- {
+		if stack.Frames[i].Function == "runtime.gopanic" {
+			stack.Frames = stack.Frames[:i]
+			break
+		}
+	}
+	return &Panic{Value: v, Stack: stack, Images: x.GetDebugImages()}
 }
 
 // Recover is deferred at the entry of a goroutine: a panic there is handed
@@ -61,33 +57,24 @@ func Recover(report func(*Panic)) {
 	}
 }
 
-// frames reads pcs, innermost first, and keeps what is below the panic:
-// the frames of the recovering code and of runtime.gopanic itself are
-// dropped.
-func frames(pcs []uintptr) []Frame {
-	var all []Frame
-	cf := runtime.CallersFrames(pcs)
-	for {
-		f, more := cf.Next()
-		all = append(all, Frame{
-			Filename: f.File,
-			Function: f.Function,
-			Lineno:   f.Line,
-			InApp:    strings.HasPrefix(f.Function, module) || strings.HasPrefix(f.Function, "main."),
-			Platform: "go",
-		})
-		if !more {
-			break
-		}
+// inApp says whether a frame is agentx's own code. The SDK's default
+// decides by file path, which a -trimpath build makes module-relative for
+// the standard library and dependencies too.
+func inApp(f runtime.Frame) bool {
+	return strings.HasPrefix(f.Function, module) || strings.HasPrefix(f.Function, "main.")
+}
+
+// Exception is p as an unhandled exception of distinctID, at at.
+func (p *Panic) Exception(distinctID string, at time.Time) posthog.Exception {
+	return posthog.Exception{
+		DistinctId: distinctID,
+		Timestamp:  at,
+		ExceptionList: []posthog.ExceptionItem{{
+			Type:       p.Type(),
+			Value:      fmt.Sprint(p.Value),
+			Mechanism:  &posthog.ExceptionMechanism{Handled: posthog.Ptr(false)},
+			Stacktrace: p.Stack,
+		}},
+		DebugImages: p.Images,
 	}
-	for i, f := range all {
-		if f.Function == "runtime.gopanic" {
-			all = all[i+1:]
-			break
-		}
-	}
-	if len(all) > MaxFrames {
-		all = all[:MaxFrames]
-	}
-	return all
 }

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/posthog/posthog-go/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/crash"
@@ -47,6 +48,8 @@ type invocation struct {
 	hosts        func(host string) string // the host names of the user's SSH configuration, read once per host; see sshHosts
 	unfetched    sync.Map                 // remote name -> URL of a hub whose remote was just written over one never fetched whole; see fetchForks
 	published    sync.Map                 // skill name -> the publishedBase last read for it; see tipPublished
+	posthogMu    sync.Mutex
+	posthog      posthog.Client // made by telemetryClient, closed by closeTelemetry; nil until then
 }
 
 // refs is what the mutation journal needs to apply and recover the lineage
@@ -135,6 +138,7 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	}
 	code := finish(ctx, inv, execute(ctx, root))
 	inv.recordRun(ctx, code)
+	inv.closeTelemetry()
 	return code
 }
 
@@ -223,7 +227,6 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newDoctorCommand(inv))
 	root.AddCommand(newVersionCommand(inv))
 	root.AddCommand(newUpdateCommand(inv))
-	root.AddCommand(newTelemetryCommand(inv))
 	return root
 }
 
@@ -254,8 +257,9 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 	// reported.
 	var p *crash.Panic
 	if errors.As(err, &p) {
-		for _, fr := range p.Frames {
-			out.debugf("  at %s (%s:%d)", fr.Function, fr.Filename, fr.Lineno)
+		for i := len(p.Stack.Frames) - 1; i >= 0; i-- { // innermost first, as Go prints it
+			fr := p.Stack.Frames[i]
+			out.debugf("  at %s (%s:%d)", fr.Function, fr.Filename, fr.LineNo)
 		}
 		inv.reportCrash(ctx, p)
 		f := &failure{status: exitInternal, message: p.Error(), hint: "this is a bug in agentx: report it at " + issuesURL}
@@ -323,20 +327,4 @@ func knownFailure(dir string, err error) (*failure, bool) {
 		return nil, false
 	}
 	return f, true
-}
-
-// recordRun spools the command event of a run that ended with code and
-// starts a flush, both only while telemetry is recording. The flush's own
-// run is never recorded.
-func (inv *invocation) recordRun(ctx context.Context, code int) {
-	if inv.command == flushCommand {
-		return
-	}
-	ctx = context.WithoutCancel(ctx)
-	inv.spoolRecord(ctx, recordCommand, map[string]any{
-		"exit_code":   code,
-		"duration_ms": time.Since(inv.started).Milliseconds(),
-		"json":        inv.out.json,
-	})
-	inv.startFlush(ctx)
 }

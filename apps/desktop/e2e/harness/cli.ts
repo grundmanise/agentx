@@ -488,6 +488,11 @@ export class MockCli {
     await this.emit("app-update-progress", [{ downloaded, total }]);
   }
 
+  /** Clicks an item of the macOS app menu: Settings… or Check for Updates…. */
+  async clickAppMenu(item: "settings" | "check-updates") {
+    await this.emit("app-menu", [item]);
+  }
+
   /** What the supervisor reports about the CLI. */
   resolveTo(resolution: Resolution) {
     this.resolution = resolution;

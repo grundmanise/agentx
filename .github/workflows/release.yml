@@ -234,15 +234,11 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.goos == 'darwin' && '1' || '0' }}
           VERSION: ${{ needs.plan.outputs.version }}
-          # Where usage data goes once a user agrees to send it; a build without them sends nothing.
-          TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
-          TELEMETRY_KEY: ${{ secrets.TELEMETRY_KEY }}
           COPYFILE_DISABLE: 1 # no AppleDouble files in the macOS archives
         run: |
           mkdir -p "dist/$NAME"
-          pkg=github.com/grundmanise/agentx/apps/cli/internal/cli
           (cd apps/cli && go build -trimpath \
-            -ldflags "-s -w -X $pkg.cliVersion=$VERSION -X $pkg.telemetryHost=$TELEMETRY_HOST -X $pkg.telemetryKey=$TELEMETRY_KEY" \
+            -ldflags "-s -w -X github.com/grundmanise/agentx/apps/cli/internal/cli.cliVersion=$VERSION" \
             -o "../../dist/$NAME/agentx" .)
           cp LICENSE README.md "dist/$NAME/"
           tar -C "dist/$NAME" -czf "dist/$NAME.tar.gz" agentx LICENSE README.md

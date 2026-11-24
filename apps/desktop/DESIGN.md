@@ -1252,6 +1252,7 @@ Left of the sync status, `button.gap` apart (`src/app/app-update-status.tsx`, wh
 - Installed: a click restarts the app into the new version. The app never restarts on its own.
 - A visually hidden polite live region beside the pill (`StatusAnnouncement`) holds the phase, never the percent.
 - The app checks after the startup checks pass, never during them, and once a day while it runs, unless Check for updates is off in Settings (§6 "Settings").
+- On macOS the app menu holds Settings… (⌘,) and Check for Updates… under About, as Mac apps place them (`src-tauri/src/app_menu.rs`, `src/app/app-menu.ts`). Check for Updates… checks at once, as Check now does. ⌘, (Ctrl+, on Linux) opens Settings from the app too, once the startup checks pass.
 
 ### Sidebar
 

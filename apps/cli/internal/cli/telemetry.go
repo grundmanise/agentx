@@ -2,39 +2,26 @@ package cli
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
-	"io/fs"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"regexp"
 	"runtime"
-	"slices"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
-	"github.com/spf13/cobra"
+	"github.com/posthog/posthog-go/v2"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
-// Where usage data goes: set by the release build through -ldflags, empty in
-// a source build, which then neither asks, records nor sends anything.
-// AGENTX_TELEMETRY_ENDPOINT and AGENTX_TELEMETRY_KEY replace them.
-var (
-	telemetryHost string
-	telemetryKey  string
+// Usage data goes to the agentx project on PostHog's EU cloud. The token is
+// the project's public client token, which can only send events.
+const (
+	posthogHost  = "https://eu.i.posthog.com"
+	posthogToken = "phc_xQuv9oeNiExAgBEey2FvxwbgSK3ZNyrDPVwbaugWgQHn"
 )
 
 // The values of the telemetry setting. Absent is unset: never answered.
@@ -44,63 +31,35 @@ const (
 	telemetryUnset = "unset"
 )
 
-// The spool: one file per record under telemetry/ in agentx home, at most
-// spoolCap of them and none older than spoolMaxAge. A flush sends at most
-// flushBatch records in one request, within flushBudget. A one-shot command
-// starts a flush when the last attempt is flushEvery old, and serve flushes
-// that often.
+// anonymousIDKey keys the HMAC that derives the anonymous id from the
+// machine id. It differs from the machine id's own key, so the anonymous id
+// cannot be joined with the machine id without the machine id itself.
+const anonymousIDKey = "agentx-anonymous-id/v1"
+
+// The events the CLI sends.
 const (
-	spoolCap    = 500
-	spoolMaxAge = 7 * 24 * time.Hour
-	flushBatch  = 100
-	flushBudget = 3 * time.Second
-	flushEvery  = 10 * time.Minute
+	eventCommandRun = "command_run"
+	eventServeStart = "serve_start"
 )
 
-// telemetryIDKey keys the HMAC that derives the telemetry id from the
-// machine id. It differs from the machine id's own key, so the telemetry
-// id cannot be joined with the machine id without the machine id itself.
-const telemetryIDKey = "agentx-telemetry-id/v1"
-
-// The types of spool record and the event each is sent as. A new record
-// type is one line here; the flush reads nothing else of it.
-const (
-	recordCommand    = "command"
-	recordServeStart = "serve_start"
-	recordException  = "exception"
-)
-
-var telemetryEvents = map[string]string{
-	recordCommand:    "command_run",
-	recordServeStart: "serve_start",
-	recordException:  "$exception",
-}
-
-// telemetryID derives the telemetry id from the machine id.
-func telemetryID(machineID string) string {
-	mac := hmac.New(sha256.New, []byte(telemetryIDKey))
+// anonymousID derives the anonymous id from the machine id.
+func anonymousID(machineID string) string {
+	mac := hmac.New(sha256.New, []byte(anonymousIDKey))
 	mac.Write([]byte(machineID))
 	return hex.EncodeToString(mac.Sum(nil))[:32]
 }
 
 // telemetryEndpoint is the host usage data goes to: AGENTX_TELEMETRY_ENDPOINT,
-// else the build's, else none.
+// else PostHog for a nightly or stable build. A source build has none, so
+// it neither asks nor sends.
 func (inv *invocation) telemetryEndpoint() string {
 	if v := inv.env["AGENTX_TELEMETRY_ENDPOINT"]; v != "" {
 		return v
 	}
-	return telemetryHost
-}
-
-// telemetryAPIKey is the project key sent with each batch.
-func (inv *invocation) telemetryAPIKey() string {
-	if v := inv.env["AGENTX_TELEMETRY_KEY"]; v != "" {
-		return v
+	if cliVersion == "dev" {
+		return ""
 	}
-	if telemetryKey != "" {
-		return telemetryKey
-	}
-	return "none"
+	return posthogHost
 }
 
 // doNotTrack reports DO_NOT_TRACK set to anything but 0 or false.
@@ -118,24 +77,23 @@ func (inv *invocation) telemetryOffered() bool {
 	return inv.telemetryEndpoint() != "" && !inv.doNotTrack()
 }
 
-// recordingTelemetry reports whether usage data is recorded and sent: the
-// setting is on, a host is known and DO_NOT_TRACK is not set. It reads the
-// settings; an unreadable file records nothing.
-func (inv *invocation) recordingTelemetry() bool {
-	if !inv.telemetryOffered() {
-		return false
+// telemetrySetting is the stored telemetry setting, "" when unset or
+// unreadable, or when the run has no agentx home yet.
+func (inv *invocation) telemetrySetting() string {
+	if inv.dirs.Home == "" {
+		return ""
 	}
 	s, err := home.LoadSettings(inv.dirs.Home)
-	return err == nil && s.Telemetry == telemetryOn
+	if err != nil {
+		return ""
+	}
+	return s.Telemetry
 }
 
-// askConsent is whether a run offers telemetry: offered, and the setting unset.
-func (inv *invocation) askConsent() bool {
-	if !inv.telemetryOffered() {
-		return false
-	}
-	s, err := home.LoadSettings(inv.dirs.Home)
-	return err == nil && s.Telemetry == ""
+// recordingTelemetry reports whether usage data is sent: offered, and the
+// setting on.
+func (inv *invocation) recordingTelemetry() bool {
+	return inv.telemetryOffered() && inv.telemetrySetting() == telemetryOn
 }
 
 // interactive reports whether a person is there to answer: stdin and stdout
@@ -151,24 +109,33 @@ func (inv *invocation) interactive(in io.Reader) bool {
 }
 
 // telemetryStatement is what the terminal shows before it asks.
-const telemetryStatement = `agentx can send anonymous usage data to help fix what fails. For each command
-it sends the command's name without arguments, its exit code and duration,
-whether --json was given, the agentx version, the OS and CPU type, and an id
-derived from the machine id that cannot be traced back to it. Crash reports,
-with paths removed, fall under the same answer. It never sends a path, a skill
-or server name, a URL or anything you typed.
+const telemetryStatement = `Help improve agentx
+
+Send anonymous usage data to PostHog? We use it to find what breaks
+and to make agentx better for you.
+
+It may send:
+  - the command name, without arguments or values
+  - the exit code and how long it took
+  - the app version, release channel, OS and CPU type
+  - a non-reversible, hashed anonymous id
+  - crash reports, with every path removed
+
+It never sends paths, skill or server names, URLs, or anything you type.
+Your IP address is not stored.
 Details: https://docs.agentx.wtf/telemetry
-Change your answer at any time with: agentx config set telemetry on|off`
+Change it any time: agentx config set telemetry on|off`
 
 // offerTelemetry asks a person at a terminal once whether to send usage
 // data, and stores the answer: on for y or yes, off for anything else.
 // A run that cannot ask leaves the setting unset for a later run.
 func (inv *invocation) offerTelemetry(ctx context.Context, in io.Reader) error {
-	if inv.out.json || !inv.askConsent() || !inv.interactive(in) {
+	if inv.out.json || !inv.telemetryOffered() || inv.telemetrySetting() != "" || !inv.interactive(in) {
 		return nil
 	}
 	inv.out.print()
 	inv.out.print(telemetryStatement)
+	inv.out.print()
 	inv.out.prompt("Send anonymous usage data? [y/N] ")
 	answer, _ := bufio.NewReader(in).ReadString('\n')
 	value := telemetryOff
@@ -176,15 +143,6 @@ func (inv *invocation) offerTelemetry(ctx context.Context, in io.Reader) error {
 	case "y", "yes":
 		value = telemetryOn
 	}
-	if err := inv.setTelemetry(ctx, value); err != nil {
-		return err
-	}
-	inv.out.done("telemetry is now " + inv.out.paint(heading, value))
-	return nil
-}
-
-// setTelemetry stores the setting; turning it off drops what is spooled.
-func (inv *invocation) setTelemetry(ctx context.Context, value string) error {
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		s, err := inv.loadSettings()
 		if err != nil {
@@ -193,29 +151,30 @@ func (inv *invocation) setTelemetry(ctx context.Context, value string) error {
 		s.Telemetry = value
 		return home.SaveSettings(inv.dirs.Home, s)
 	})
-	if err == nil && value == telemetryOff {
-		err = os.RemoveAll(spoolDir(inv.dirs.Home))
+	if err != nil {
+		return err
 	}
-	return err
+	inv.out.done("telemetry is now " + inv.out.paint(heading, value))
+	return nil
 }
 
-// settingsTelemetryID is the telemetry id the settings event carries: set
+// settingsAnonymousID is the anonymous id the settings event carries: set
 // only while the setting is on and DO_NOT_TRACK is unset, which counts as
 // off for the desktop app too.
-func (inv *invocation) settingsTelemetryID(s home.Settings) string {
+func (inv *invocation) settingsAnonymousID(s home.Settings) string {
 	if s.Telemetry != telemetryOn || inv.doNotTrack() {
 		return ""
 	}
-	id, err := inv.telemetryIDNow(context.Background())
+	id, err := inv.anonymousIDNow(context.Background())
 	if err != nil {
 		return ""
 	}
 	return id
 }
 
-// telemetryIDNow is this machine's telemetry id, storing a machine id
+// anonymousIDNow is this machine's anonymous id, storing a machine id
 // first when there is none yet.
-func (inv *invocation) telemetryIDNow(ctx context.Context) (string, error) {
+func (inv *invocation) anonymousIDNow(ctx context.Context) (string, error) {
 	id, err := home.KnownMachineID(inv.dirs.Home, inv.env)
 	if err == nil && id == "" {
 		id, _, err = home.MachineID(inv.dirs.Home, inv.env, inv.refs(ctx))
@@ -223,284 +182,144 @@ func (inv *invocation) telemetryIDNow(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return telemetryID(id), nil
+	return anonymousID(id), nil
 }
 
-func spoolDir(dir string) string { return filepath.Join(dir, "telemetry") }
-
-// lastFlushPath marks the last flush attempt by its modification time.
-func lastFlushPath(dir string) string { return filepath.Join(spoolDir(dir), "last-flush") }
-
-// spoolRecord writes one record of type typ to the spool when telemetry is
-// recording: the envelope every record carries, then fields, which may not
-// replace it. Recording never fails a command, so neither does this: a
-// record that cannot be written is dropped.
-func (inv *invocation) spoolRecord(ctx context.Context, typ string, fields map[string]any) {
-	if inv.command == "" || !inv.recordingTelemetry() {
-		return
+// telemetryClient is the run's PostHog client and the anonymous id to send
+// under, made on first use; nil while telemetry is not recording. What is
+// enqueued is sent in the background, and closeTelemetry sends the rest
+// when the run ends. It reads the setting on every call, so serve stops
+// sending as soon as the setting is turned off.
+func (inv *invocation) telemetryClient(ctx context.Context) (posthog.Client, string) {
+	if !inv.recordingTelemetry() {
+		return nil, ""
 	}
-	id, err := inv.telemetryIDNow(ctx)
+	id, err := inv.anonymousIDNow(context.WithoutCancel(ctx))
 	if err != nil {
-		return
+		return nil, ""
 	}
-	rec := map[string]any{}
-	for k, v := range fields {
-		rec[k] = v
-	}
-	rec["type"] = typ
-	rec["telemetry_id"] = id
-	rec["cli_version"] = cliVersion
-	rec["schema_version"] = schemaVersion
-	rec["os"] = runtime.GOOS
-	rec["arch"] = runtime.GOARCH
-	rec["command"] = inv.command
-	rec["at"] = time.Now().UTC().Truncate(time.Minute).Format(time.RFC3339)
-	b, err := json.Marshal(rec)
-	if err != nil {
-		return
-	}
-	_ = writeSpool(spoolDir(inv.dirs.Home), b)
-}
-
-// writeSpool writes one record under a name that sorts by time, through a
-// temporary file so a flush never reads half of it, then trims the spool.
-func writeSpool(dir string, b []byte) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	var r [4]byte
-	_, _ = rand.Read(r[:])
-	name := fmt.Sprintf("%020d-%s.json", time.Now().UnixNano(), hex.EncodeToString(r[:]))
-	tmp := filepath.Join(dir, "."+name+".tmp")
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, filepath.Join(dir, name)); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	trimSpool(dir, time.Now())
-	return nil
-}
-
-// spooled lists the records of the spool, oldest first.
-func spooled(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var names []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") && !strings.HasPrefix(e.Name(), ".") {
-			names = append(names, e.Name())
+	inv.posthogMu.Lock()
+	defer inv.posthogMu.Unlock()
+	if inv.posthog == nil {
+		client, err := posthog.NewWithConfig(posthogToken, posthog.Config{
+			Endpoint: inv.telemetryEndpoint(),
+			IsServer: posthog.Ptr(false),
+			DefaultEventProperties: posthog.Properties{
+				"release_channel": channelOf(cliVersion),
+				"cli_version":     cliVersion,
+				"schema_version":  schemaVersion,
+				"arch":            runtime.GOARCH,
+			},
+			DefaultEventOptions: posthog.NewOptions().Set("process_person_profile", false),
+			BeforeSend:          redactMessage,
+			ShutdownTimeout:     time.Second,
+			Logger:              quietLogger{},
+		})
+		if err != nil {
+			return nil, ""
 		}
+		inv.posthog = client
 	}
-	slices.Sort(names)
-	return names
+	return inv.posthog, id
 }
 
-// spooledAt is when a record was written, read from its name.
-func spooledAt(name string) (time.Time, bool) {
-	stamp, _, ok := strings.Cut(name, "-")
-	if !ok {
-		return time.Time{}, false
+// capture sends one event while telemetry is recording. Sending never fails
+// a command, so neither does this.
+func (inv *invocation) capture(ctx context.Context, event string, props posthog.Properties) {
+	client, id := inv.telemetryClient(ctx)
+	if client == nil {
+		return
 	}
-	ns, err := strconv.ParseInt(stamp, 10, 64)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return time.Unix(0, ns), true
+	props["command"] = inv.command
+	_ = client.Enqueue(posthog.Capture{DistinctId: id, Event: event, Properties: props})
 }
 
-// trimSpool drops the records older than spoolMaxAge or with a name that
-// tells no time, then the oldest beyond spoolCap, and returns the rest.
-func trimSpool(dir string, now time.Time) []string {
-	var kept []string
-	for _, name := range spooled(dir) {
-		if at, ok := spooledAt(name); !ok || now.Sub(at) > spoolMaxAge {
-			_ = os.Remove(filepath.Join(dir, name))
-			continue
-		}
-		kept = append(kept, name)
-	}
-	for len(kept) > spoolCap {
-		_ = os.Remove(filepath.Join(dir, kept[0]))
-		kept = kept[1:]
-	}
-	return kept
-}
-
-// startFlush sends the spool after a command: in a detached agentx
-// telemetry flush that the command does not wait for, or in-process with
-// AGENTX_TELEMETRY_FLUSH=inline. It does nothing while telemetry is not
-// recording, the spool is empty or the last attempt is under flushEvery old.
-func (inv *invocation) startFlush(ctx context.Context) {
-	if inv.command == "" || inv.command == flushCommand || !inv.recordingTelemetry() {
+// recordRun sends the command event of a run that ended with code.
+func (inv *invocation) recordRun(ctx context.Context, code int) {
+	if inv.command == "" {
 		return
 	}
-	dir := spoolDir(inv.dirs.Home)
-	if len(spooled(dir)) == 0 {
-		return
-	}
-	if inv.env["AGENTX_TELEMETRY_FLUSH"] == "inline" {
-		inv.flush(context.WithoutCancel(ctx))
-		return
-	}
-	if info, err := os.Stat(lastFlushPath(inv.dirs.Home)); err == nil && time.Since(info.ModTime()) < flushEvery {
-		return
-	}
-	self, err := os.Executable()
-	if err != nil {
-		return
-	}
-	cmd := exec.Command(self, "telemetry", "flush")
-	for k, v := range inv.env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // its own session: a Ctrl-C to the command's group misses it
-	if cmd.Start() == nil {
-		_ = cmd.Process.Release()
-	}
-}
-
-// flushCommand is the hidden command that sends the spool; its own run is
-// never recorded.
-const flushCommand = "telemetry flush"
-
-func newTelemetryCommand(inv *invocation) *cobra.Command {
-	cmd := &cobra.Command{Use: "telemetry", Hidden: true, Args: cobra.NoArgs}
-	cmd.AddCommand(&cobra.Command{
-		Use:    "flush",
-		Short:  "Send the spooled usage data",
-		Hidden: true,
-		Args:   cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if inv.recordingTelemetry() {
-				inv.flush(cmd.Context())
-			}
-			return nil
-		},
+	inv.capture(ctx, eventCommandRun, posthog.Properties{
+		"exit_code":   code,
+		"duration_ms": time.Since(inv.started).Milliseconds(),
 	})
-	return cmd
 }
 
-// batchEntry is one event of a batch.
-type batchEntry struct {
-	Event      string         `json:"event"`
-	DistinctID string         `json:"distinct_id"`
-	Timestamp  string         `json:"timestamp"`
-	Properties map[string]any `json:"properties"`
-}
-
-// batchEntryOf builds the entry of one spool record, false for a record
-// that is not one: unreadable, of an unknown type or without its id.
-func batchEntryOf(b []byte) (batchEntry, bool) {
-	var rec map[string]any
-	if json.Unmarshal(b, &rec) != nil {
-		return batchEntry{}, false
-	}
-	typ, _ := rec["type"].(string)
-	event, known := telemetryEvents[typ]
-	id, _ := rec["telemetry_id"].(string)
-	at, _ := rec["at"].(string)
-	if !known || id == "" || at == "" {
-		return batchEntry{}, false
-	}
-	props := map[string]any{}
-	for k, v := range rec {
-		switch k {
-		case "type", "telemetry_id", "at":
-		default:
-			props[k] = v
-		}
-	}
-	if typ == recordException {
-		exceptionProperties(props)
-	}
-	props["$process_person_profile"] = false
-	props["$lib"] = "agentx-cli"
-	props["$lib_version"] = rec["cli_version"]
-	return batchEntry{Event: event, DistinctID: id, Timestamp: at, Properties: props}, true
-}
-
-// flush posts up to flushBatch spooled records in one request within
-// flushBudget. A 2xx or 4xx answer deletes the records it carried; any
-// other answer, or none, keeps them for the next flush. It takes no lock:
-// a record written meanwhile waits for the next one.
-func (inv *invocation) flush(ctx context.Context) {
-	dir := spoolDir(inv.dirs.Home)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return
-	}
-	now := time.Now()
-	_ = os.WriteFile(lastFlushPath(inv.dirs.Home), nil, 0o600)
-	_ = os.Chtimes(lastFlushPath(inv.dirs.Home), now, now)
-	names := trimSpool(dir, now)
-	var sent []string
-	batch := []batchEntry{}
-	for _, name := range names {
-		if len(batch) == flushBatch {
-			break
-		}
-		path := filepath.Join(dir, name)
-		b, err := os.ReadFile(path)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		entry, ok := batchEntryOf(b)
-		if !ok {
-			_ = os.Remove(path)
-			continue
-		}
-		batch = append(batch, entry)
-		sent = append(sent, path)
-	}
-	if len(batch) == 0 {
-		return
-	}
-	body, err := json.Marshal(struct {
-		APIKey string       `json:"api_key"`
-		Batch  []batchEntry `json:"batch"`
-	}{inv.telemetryAPIKey(), batch})
-	if err != nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(ctx, flushBudget)
-	defer cancel()
-	url := strings.TrimSuffix(inv.telemetryEndpoint(), "/") + "/batch/"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "agentx/"+cliVersion)
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		inv.out.debugf("telemetry: %v", err)
-		return
-	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 1<<16))
-	_ = res.Body.Close()
-	if ok := res.StatusCode >= 200 && res.StatusCode < 300 || res.StatusCode >= 400 && res.StatusCode < 500; !ok {
-		inv.out.debugf("telemetry: the endpoint answered %d", res.StatusCode)
-		return
-	}
-	for _, path := range sent {
-		_ = os.Remove(path)
+// closeTelemetry sends what is still queued, waiting at most the client's
+// ShutdownTimeout, and drops the rest.
+func (inv *invocation) closeTelemetry() {
+	inv.posthogMu.Lock()
+	defer inv.posthogMu.Unlock()
+	if inv.posthog != nil {
+		_ = inv.posthog.Close()
+		inv.posthog = nil
 	}
 }
 
-// serveTelemetryJob flushes the spool at start and every flushEvery while
-// serve runs, off the loop's goroutine so it never delays a scan.
-func (inv *invocation) serveTelemetryJob(ctx context.Context) func() {
-	for {
-		if inv.recordingTelemetry() {
-			inv.flush(ctx)
+// userPath is a path under a user's home or a temporary directory, after
+// anything that would make it part of a longer path or a module path.
+var userPath = regexp.MustCompile(`(^|[^\w.\-/~<>])(?:/Users/|/home/|/root/|/private/|/tmp/|/var/folders/)[^\s"':]*`)
+
+// redactPaths replaces every user path in s with <path>.
+func redactPaths(s string) string { return userPath.ReplaceAllString(s, "$1<path>") }
+
+// redactMessage is the client's BeforeSend: it removes every user path from
+// what an event sends.
+func redactMessage(m posthog.Message) posthog.Message {
+	switch m := m.(type) {
+	case posthog.Capture:
+		m.Properties = redactValue(m.Properties).(posthog.Properties)
+		return m
+	case posthog.Exception:
+		m.Properties = redactValue(m.Properties).(posthog.Properties)
+		for i := range m.ExceptionList {
+			item := &m.ExceptionList[i]
+			item.Type = redactPaths(item.Type)
+			item.Value = redactPaths(item.Value)
+			if item.Stacktrace != nil {
+				for j := range item.Stacktrace.Frames {
+					item.Stacktrace.Frames[j].Filename = redactPaths(item.Stacktrace.Frames[j].Filename)
+				}
+			}
 		}
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(flushEvery):
+		for i := range m.DebugImages {
+			m.DebugImages[i].CodeFile = redactPaths(m.DebugImages[i].CodeFile)
+		}
+		return m
+	}
+	return m
+}
+
+// redactValue redacts the strings of a JSON-like value, in place for maps
+// and slices.
+func redactValue(v any) any {
+	switch v := v.(type) {
+	case string:
+		return redactPaths(v)
+	case posthog.Properties:
+		for k, e := range v {
+			v[k] = redactValue(e)
+		}
+	case map[string]any:
+		for k, e := range v {
+			v[k] = redactValue(e)
+		}
+	case []any:
+		for i, e := range v {
+			v[i] = redactValue(e)
+		}
+	case []string:
+		for i, e := range v {
+			v[i] = redactPaths(e)
 		}
 	}
+	return v
 }
+
+// quietLogger keeps the client's own logging off the command's output.
+type quietLogger struct{}
+
+func (quietLogger) Debugf(string, ...any) {}
+func (quietLogger) Logf(string, ...any)   {}
+func (quietLogger) Warnf(string, ...any)  {}
+func (quietLogger) Errorf(string, ...any) {}

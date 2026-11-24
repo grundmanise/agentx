@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/posthog/posthog-go/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/crash"
@@ -240,10 +241,7 @@ func (inv *invocation) serveOnce(ctx context.Context) error {
 // runs in flight have stopped.
 func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Writer, address string, origins []string) (err error) {
 	inv.prepareServe()
-	inv.spoolRecord(ctx, recordServeStart, map[string]any{
-		"duration_ms": time.Since(inv.started).Milliseconds(),
-		"json":        inv.out.json,
-	})
+	inv.capture(ctx, eventServeStart, posthog.Properties{"duration_ms": time.Since(inv.started).Milliseconds()})
 	methods, err := inv.newServeMethods()
 	if err != nil {
 		return err
@@ -321,7 +319,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		Check:        checks.startup,
 		Recheck:      checks.hub,
 		RecheckEvery: hubCheckEvery,
-		Jobs:         []serve.Job{inv.maintenanceJob, inv.serveTelemetryJob},
+		Jobs:         []serve.Job{inv.maintenanceJob},
 		Inventory:    inv.inventoryReporter(),
 		Fail:         inv.serveFailed,
 		Warn:         inv.out.warn,
