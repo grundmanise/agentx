@@ -168,7 +168,6 @@ const activate = (childId: number) => {
     (id) => (refreshes[id] ?? 0) < childId
   );
   set({
-    reconciles: [],
     refreshes: Object.fromEntries(
       Object.entries(refreshes).filter(([id]) => !unanswered.includes(id))
     ),
@@ -244,8 +243,6 @@ const apply = (childId: number, event: ServeEvent) => {
     acknowledge(event);
   } else if (event.type === "search") {
     answerSearch(event);
-  } else if (event.type === "reconcile") {
-    set((s) => ({ reconciles: [...s.reconciles, event] }));
   } else if (event.type === "update_available") {
     set((s) => ({ updates: { ...s.updates, [event.name]: event } }));
   } else if (event.type === "update_check") {

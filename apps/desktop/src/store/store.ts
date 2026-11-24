@@ -13,7 +13,6 @@ import type {
   InstallableSkillEvent,
   InventoryEvent,
   MachineEvent,
-  ReconcileEvent,
   Settings,
   SkillFileEvent,
   SourceEvent,
@@ -74,8 +73,6 @@ export interface AppState {
    * serve holds: serve keeps running and answering, and reports it with an `error` event.
    */
   serveError: ServeError | undefined;
-  /** The reconcile events of the active serve child's start. */
-  reconciles: ReconcileEvent[];
   /** The update candidates, by skill name, from the last update check. */
   updates: Record<string, UpdateAvailableEvent>;
   /**
@@ -189,7 +186,6 @@ export const useAppStore = create<AppState>()(() => ({
   listings: {},
   machine: undefined,
   pending: {},
-  reconciles: [],
   refreshes: {},
   serveEnd: undefined,
   serveError: undefined,
