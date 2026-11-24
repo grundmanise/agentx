@@ -24,7 +24,11 @@ export const CommandLineSection = () => {
         </p>
       )}
       <div className="flex">
-        <Button variant="secondary" onClick={runChecks}>
+        <Button
+          variant="secondary"
+          track="settings.cli-run-checks"
+          onClick={runChecks}
+        >
           Run checks
         </Button>
       </div>

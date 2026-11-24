@@ -8,6 +8,8 @@ import { useId } from "react";
 import type { ReactNode } from "react";
 
 import { CheckMark } from "#/components/check-mark.tsx";
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 export type RadioGroupProps = Omit<
@@ -29,18 +31,25 @@ const RadioGroup = (props: RadioGroupProps) => (
 export type RadioGroupItemProps = Omit<
   OwnProps<typeof RadioGroupPrimitive.Item>,
   "children" | "id"
-> & {
-  /** Whether this item is the one chosen: the mark follows it. */
-  checked: boolean;
-  /** The item's name, in `type.body` `text.primary`. */
-  label: ReactNode;
-};
+> &
+  Tracked & {
+    /** Whether this item is the one chosen: the mark follows it. */
+    checked: boolean;
+    /** The item's name, in `type.body` `text.primary`. */
+    label: ReactNode;
+  };
 
-const RadioGroupItem = ({ checked, label, ...props }: RadioGroupItemProps) => {
+const RadioGroupItem = ({
+  checked,
+  label,
+  track,
+  ...props
+}: RadioGroupItemProps) => {
   const id = useId();
   return (
     <label htmlFor={id} className="flex cursor-pointer items-center gap-2.5">
       <RadioGroupPrimitive.Item
+        {...trackAttribute(track)}
         data-slot="radio-group-item"
         id={id}
         className="rounded-checkbox size-checkbox inline-flex shrink-0 items-center justify-center border-0 bg-transparent p-0 outline-none disabled:cursor-not-allowed disabled:opacity-50"

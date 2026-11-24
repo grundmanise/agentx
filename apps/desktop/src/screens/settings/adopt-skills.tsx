@@ -37,6 +37,7 @@ export const AdoptSkillsSection = () => {
             <Button
               key={tool.arg}
               variant="secondary"
+              track="settings.adopt-import"
               disabled={busy}
               onClick={() => {
                 setAdopting(tool.arg);

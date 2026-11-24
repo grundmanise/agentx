@@ -10,6 +10,11 @@ export interface Screen {
   /** Route path; routes under it (such as Update review under Skills) keep it active. */
   path: string;
   label: string;
+  /**
+   * The screen's fixed segment in the names clicks are sent under, such as "mcp-servers" in
+   * "sidebar.mcp-servers".
+   */
+  track: string;
   icon: IconComponent;
   /** The screens nested under this one in the sidebar, each at its own path. */
   children?: Screen[];
@@ -24,15 +29,33 @@ export const SOURCES_PATH = "/sources";
 /** Sidebar order: Skills with Sources under it, Agents, MCP servers, Plugins, Settings. */
 export const screens: Screen[] = [
   {
-    children: [{ icon: SourcesIcon, label: "Sources", path: SOURCES_PATH }],
+    children: [
+      {
+        icon: SourcesIcon,
+        label: "Sources",
+        path: SOURCES_PATH,
+        track: "sources",
+      },
+    ],
     icon: SkillsIcon,
     label: "Skills",
     path: "/skills",
+    track: "skills",
   },
-  { icon: AgentsIcon, label: "Agents", path: "/agents" },
-  { icon: ServersIcon, label: "MCP servers", path: "/servers" },
-  { icon: PluginsIcon, label: "Plugins", path: "/plugins" },
-  { icon: SettingsIcon, label: "Settings", path: "/settings" },
+  { icon: AgentsIcon, label: "Agents", path: "/agents", track: "agents" },
+  {
+    icon: ServersIcon,
+    label: "MCP servers",
+    path: "/servers",
+    track: "mcp-servers",
+  },
+  { icon: PluginsIcon, label: "Plugins", path: "/plugins", track: "plugins" },
+  {
+    icon: SettingsIcon,
+    label: "Settings",
+    path: "/settings",
+    track: "settings",
+  },
 ];
 
 /** Every screen, a nested one right after its parent: the palette's GO TO and the routes. */

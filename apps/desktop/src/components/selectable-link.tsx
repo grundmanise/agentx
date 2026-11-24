@@ -3,6 +3,9 @@
 import { useRef } from "react";
 import type { ReactNode } from "react";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
+
 /**
  * Its look: `caption` as the origin beside a skill's name, `muted` under a source's name,
  * `secondary` as a value of Details.
@@ -22,7 +25,8 @@ export const SelectableLink = ({
   tone,
   onOpen,
   children,
-}: {
+  track,
+}: Tracked & {
   href: string;
   title?: string;
   tone: keyof typeof TONES;
@@ -34,6 +38,7 @@ export const SelectableLink = ({
   return (
     <a
       href={href}
+      {...trackAttribute(track)}
       title={title}
       draggable={false}
       className={TONES[tone]}

@@ -66,6 +66,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
     /^Storage/u,
     /^Command line/u,
     /^Activity log/u,
+    /^Usage data/u,
     /^Save snapshot/u,
     /^Apply snapshot/u,
   ]);

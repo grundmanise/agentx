@@ -10,6 +10,8 @@ import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const buttonVariants = cva(
@@ -96,7 +98,8 @@ const buttonVariants = cva(
 
 /** Style comes only from `variant` and `size`: Button takes no `className` or `style`. */
 export type ButtonProps = Omit<OwnProps<"button">, "type"> &
-  VariantProps<typeof buttonVariants> & {
+  VariantProps<typeof buttonVariants> &
+  Tracked & {
     type?: "button" | "submit";
     /** Renders the child element (a link, a trigger's child) with the button's look instead of a `<button>`. */
     asChild?: boolean;
@@ -107,16 +110,19 @@ const Button = ({
   size,
   type = "button",
   asChild = false,
+  track,
   ...props
 }: ButtonProps) =>
   asChild ? (
     <Slot.Root
+      {...trackAttribute(track)}
       data-slot="button"
       className={buttonVariants({ size, variant })}
       {...props}
     />
   ) : (
     <button
+      {...trackAttribute(track)}
       data-slot="button"
       type={type === "submit" ? "submit" : "button"}
       className={buttonVariants({ size, variant })}

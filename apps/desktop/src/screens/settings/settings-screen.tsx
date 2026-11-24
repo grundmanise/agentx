@@ -8,8 +8,8 @@
 // when it has nothing to show; the page draws the hairlines between them. To add a section, write
 // it in its own file in this folder and add it to `sections` at its slot below, in this order:
 // This machine, Hub, Adopt skills, Comparing edits, Editor, App updates, Storage, Command line,
-// Activity log, Save snapshot, Apply snapshot. Insert the new entry under its slot's comment and
-// keep the comment.
+// Activity log, Usage data, Save snapshot, Apply snapshot. Insert the new entry under its slot's
+// comment and keep the comment.
 import type { ComponentType } from "react";
 
 import { ActivityLogSection } from "#/screens/settings/activity-log.tsx";
@@ -23,6 +23,7 @@ import { HubSection } from "#/screens/settings/hub.tsx";
 import { SaveSnapshotSection } from "#/screens/settings/save-snapshot.tsx";
 import { StorageSection } from "#/screens/settings/storage.tsx";
 import { ThisMachineSection } from "#/screens/settings/this-machine.tsx";
+import { UsageDataSection } from "#/screens/settings/usage-data.tsx";
 
 interface Section {
   /** Names the section, as React's key. */
@@ -42,6 +43,7 @@ const sections: Section[] = [
   { Section: StorageSection, id: "storage" },
   { Section: CommandLineSection, id: "command-line" },
   { Section: ActivityLogSection, id: "activity-log" },
+  { Section: UsageDataSection, id: "usage-data" },
   // Slot: Save snapshot, Apply snapshot.
   { Section: SaveSnapshotSection, id: "save-snapshot" },
   { Section: ApplySnapshotSection, id: "apply-snapshot" },

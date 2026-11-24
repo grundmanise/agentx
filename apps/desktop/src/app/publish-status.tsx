@@ -163,6 +163,7 @@ export const PublishStatus = () => {
           tone="none"
           label="Set up sync"
           tooltip={["Connect a hub to sync skills"]}
+          track="sync.set-up"
           onClick={() => {
             navigateTo("/settings");
           }}
@@ -187,6 +188,7 @@ export const PublishStatus = () => {
             busy={publishing}
             rim={rim}
             onRimSettled={settlePublishRim}
+            track="sync.open"
           />
         </PopoverTrigger>
         <PopoverContent aria-label="Sync" placement="below-end" width="fit">
@@ -201,6 +203,7 @@ export const PublishStatus = () => {
                     key={skill.name}
                     name={skill.name}
                     meta={skill.kind}
+                    track="sync.outgoing-open"
                     onOpen={() => {
                       openSkill(skill.name);
                     }}
@@ -213,6 +216,7 @@ export const PublishStatus = () => {
                     variant="primary"
                     size="sm"
                     aria-busy={publishing}
+                    track="sync.publish-all"
                     aria-disabled={readOnly === undefined ? undefined : true}
                     onClick={
                       readOnly === undefined
@@ -239,6 +243,7 @@ export const PublishStatus = () => {
                   <SyncRow
                     key={row.name}
                     name={row.name}
+                    track="sync.incoming-open"
                     onOpen={() => {
                       openSkill(row.name);
                     }}

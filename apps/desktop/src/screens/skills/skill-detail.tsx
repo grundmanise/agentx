@@ -54,6 +54,7 @@ const DetailValue = ({ detail }: { detail: Detail }) => {
   const page = link.kind === "page";
   return (
     <SelectableLink
+      track="skill-detail.open-detail-link"
       href={page ? link.url : `file://${link.path}`}
       title={page ? link.url : showInLabel()}
       tone="secondary"
@@ -79,6 +80,7 @@ const Origin = ({ row }: { row: SkillRow }) => {
   }
   return (
     <SelectableLink
+      track="skill-detail.open-origin"
       href={page}
       title={page}
       tone="caption"
@@ -102,6 +104,7 @@ const RemoveButton = ({
   const pending = useSettling(removeLabel(row));
   return (
     <Button
+      track="skill-detail.remove"
       variant="danger"
       size="sm"
       disabled={pending}
@@ -126,6 +129,7 @@ const EditButton = ({ row }: { row: SkillRow }) => {
   }
   return (
     <Button
+      track="skill-detail.edit"
       variant="secondary"
       size="sm"
       onClick={() => {

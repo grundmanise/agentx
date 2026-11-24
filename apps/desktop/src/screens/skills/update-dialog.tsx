@@ -356,6 +356,7 @@ const Row = ({
           <span className="relative z-10 flex flex-none self-center">
             {idle ? (
               <Checkbox
+                track="update-dialog.toggle-skill"
                 id={id}
                 aria-label={update.name}
                 checked={selected}
@@ -394,6 +395,7 @@ const Row = ({
               <Dot />
               <span className="relative flex">
                 <Button
+                  track="update-dialog.see-changes"
                   variant="link"
                   size="inline"
                   onClick={(e) => {
@@ -571,6 +573,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
         </DialogHeader>
         {idle && total > 1 && (
           <SelectAllRow
+            track="update-dialog.select-all"
             selected={selected}
             total={total}
             onSelectAll={() => {
@@ -602,7 +605,11 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
                   aria-label={group.label}
                   className="flex flex-col gap-0.5"
                 >
-                  <SectionToggle label={group.label} title={group.url} />
+                  <SectionToggle
+                    track="update-dialog.toggle-group"
+                    label={group.label}
+                    title={group.url}
+                  />
                   <CollapsibleContent asChild>
                     <ul className="pl-subgroup-indent m-0 flex list-none flex-col gap-0.5 py-0 pr-0">
                       {group.rows.map((row) => (
@@ -632,11 +639,16 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
           {run === undefined || running ? (
             <>
               <DialogClose asChild>
-                <Button variant="ghost" disabled={running}>
+                <Button
+                  track="update-dialog.cancel"
+                  variant="ghost"
+                  disabled={running}
+                >
                   Cancel
                 </Button>
               </DialogClose>
               <Button
+                track="update-dialog.confirm"
                 ref={confirm}
                 variant="primary"
                 disabled={running || selected === 0}
@@ -648,7 +660,11 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
               </Button>
             </>
           ) : (
-            <Button variant="primary" onClick={close}>
+            <Button
+              track="update-dialog.done"
+              variant="primary"
+              onClick={close}
+            >
               Done
             </Button>
           )}

@@ -31,6 +31,7 @@
     "entities": "9.0.0",
     "idb-keyval": "6.3.0",
     "marked": "18.2.1",
+    "posthog-js": "1.454.0",
     "radix-ui": "1.8.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",

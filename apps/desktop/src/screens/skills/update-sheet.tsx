@@ -147,7 +147,11 @@ const Changes = ({ update }: { update: UpdateOffer }) => {
           value={diff.path}
           fill={fillOf(diff.patch)}
         >
-          <AccordionTrigger label={diff.path} open={open.includes(diff.path)}>
+          <AccordionTrigger
+            track="update-sheet.toggle-diff"
+            label={diff.path}
+            open={open.includes(diff.path)}
+          >
             <Status status={diff.status} />
             <Path path={diff.path} />
           </AccordionTrigger>

@@ -7,6 +7,8 @@
 // §8): the chevron turns with no transition.
 import { Collapsible as CollapsiblePrimitive } from "radix-ui";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const Collapsible = ({
@@ -16,9 +18,11 @@ const Collapsible = ({
 );
 
 const CollapsibleTrigger = ({
+  track,
   ...props
-}: OwnProps<typeof CollapsiblePrimitive.CollapsibleTrigger>) => (
+}: OwnProps<typeof CollapsiblePrimitive.CollapsibleTrigger> & Tracked) => (
   <CollapsiblePrimitive.CollapsibleTrigger
+    {...trackAttribute(track)}
     data-slot="collapsible-trigger"
     {...props}
   />

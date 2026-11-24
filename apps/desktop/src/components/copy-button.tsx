@@ -4,6 +4,7 @@ import { CheckIcon } from "#/components/icons/check.tsx";
 import { CopyIcon } from "#/components/icons/copy.tsx";
 import { notifyFailure } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import type { Tracked } from "#/lib/track.ts";
 
 /** How long the button shows its check after a copy, in ms. */
 const COPIED_MS = 2000;
@@ -18,7 +19,8 @@ export const CopyButton = ({
   text,
   size = "default",
   disabled = false,
-}: {
+  track,
+}: Tracked & {
   label: string;
   /** The text to copy, read when the button is clicked. */
   text: () => string;
@@ -50,6 +52,7 @@ export const CopyButton = ({
         variant="ghost"
         size={size}
         disabled={disabled}
+        track={track}
         onClick={() => {
           void copy();
         }}
