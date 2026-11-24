@@ -83,7 +83,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | Field | Type | Meaning |
 |---|---|---|
 | `settings` | object | the machine settings as they now are, in the shape of the settings file below, with `label` filled in from the hostname when it is not set |
-| `telemetry_id` | string | the [telemetry id](#telemetry), present exactly when `telemetry` is `on`, so the desktop app sends under the same id |
+| `telemetry_id` | string | the [telemetry id](#telemetry), present exactly when `telemetry` is `on` and `DO_NOT_TRACK` is unset, so the desktop app sends under the same id, and only then |
 
 `consent`, emitted by `agentx scan --json` and `agentx serve` once, right after the first `inventory`, while the `telemetry` setting is unset and telemetry is offered (see [Telemetry](#telemetry)):
 

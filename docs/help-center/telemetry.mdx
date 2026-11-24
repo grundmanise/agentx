@@ -35,7 +35,7 @@ agentx sends one event for each command you run, when the command ends. [`agentx
 | `json` | Whether you gave `--json` |
 | `at` | When the command ended, to the minute |
 
-agentx sends nothing else: no path, skill name, server name, source URL, configuration id, hostname, machine label, error message or environment variable.
+A command event carries nothing else: no path, skill name, server name, source URL, configuration id, hostname, machine label, error message or environment variable.
 
 agentx derives the telemetry id from the machine id with a one-way hash. Nobody can get the machine id back from it. [`agentx machine reset-id`](/cli/machine) changes both.
 

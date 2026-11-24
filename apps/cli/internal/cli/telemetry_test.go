@@ -245,7 +245,10 @@ func TestTelemetryNeverAsked(t *testing.T) {
 			if got := h.types(h.events(h.run("--json", "scan").stdout)); slices.Contains(got, "consent") {
 				t.Errorf("event types = %v, with a consent event", got)
 			}
-			h.mustRun("config", "set", "telemetry", "on")
+			settings := h.events(h.run("--json", "config", "set", "telemetry", "on").stdout)[0]
+			if _, ok := settings["telemetry_id"]; ok && name == "DO_NOT_TRACK" {
+				t.Errorf("the settings event carries a telemetry id under DO_NOT_TRACK: %v", settings)
+			}
 			h.mustRun("config", "list")
 			if n := len(spoolFiles(t, h)); n != 0 || c.raw() != "" {
 				t.Errorf("recorded: %d spooled, sent %q", n, c.raw())
