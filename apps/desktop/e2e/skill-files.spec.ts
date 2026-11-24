@@ -15,7 +15,13 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
-import { expect, libraryPath, loadLines, test } from "./harness/cli.ts";
+import {
+  expect,
+  keptReads,
+  libraryPath,
+  loadLines,
+  test,
+} from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -72,16 +78,6 @@ const rowNames = async (where: Locator) =>
         )
         .map((b) => b.getAttribute("aria-label"))
     );
-
-/** The keys of the reads the kept reads' index in IndexedDB names. */
-const keptReads = async (page: Page) => {
-  await page.addScriptTag({
-    type: "module",
-    url: "/e2e/harness/kept-reads.ts",
-  });
-  await page.waitForFunction(() => "keptReads" in window);
-  return await page.evaluate(async () => await window.keptReads());
-};
 
 /** Opens the Skills screen on the fixture machine at `path`, with every read registered. */
 const openSkills = async (
