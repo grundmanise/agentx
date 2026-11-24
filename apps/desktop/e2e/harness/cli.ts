@@ -169,6 +169,9 @@ export const serveLogPath = "/home/me/.local/state/agentx/logs/serve.log";
 /** The CLI version a passing launch reports. */
 export const cliVersion = "1.2.0";
 
+/** What the app's `app_info` reports: its version and platform, by the names the CLI uses. */
+export const appInfo = { arch: "amd64", os: "linux", version: "0.4.0" };
+
 /** Doctor's passing rows with `changes` put in place of the rows of the same check. */
 export const doctorWith = (...changes: InlineEvent[]): InlineEvent[] =>
   passingDoctor.map(
@@ -779,6 +782,9 @@ export class MockCli {
       }
       case "editor_detect": {
         return this.editors;
+      }
+      case "app_info": {
+        return appInfo;
       }
       case "preferences_read": {
         return this.preferences;

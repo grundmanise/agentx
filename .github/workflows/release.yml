@@ -304,9 +304,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Before the Apple secrets are in the environment, so no frontend tool sees them. No
-      # pnpm check: the plan job releases only a commit whose CI passed, and CI runs it.
+      # pnpm check: the plan job releases only a commit whose CI passed, and CI runs it. The
+      # telemetry host and key are the CLI's: the app sends its own usage data there once a user
+      # agrees, and a build without them sends nothing.
       - name: Build the frontend
         working-directory: apps/desktop
+        env:
+          VITE_TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
+          VITE_TELEMETRY_KEY: ${{ secrets.TELEMETRY_KEY }}
         run: pnpm build
 
       # With the secrets, Tauri imports the certificate into a temporary keychain, signs the app
@@ -321,6 +326,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
         run: |
           if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_CERTIFICATE_PASSWORD" ]; then
             echo "::warning title=App not signed::add the APPLE_CERTIFICATE secrets, see RELEASING.md"
@@ -335,8 +341,11 @@ jobs:
             echo "notarized=true" >> "$GITHUB_OUTPUT"
           fi
           unset APPLE_API_PRIVATE_KEY
-          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" \
-            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}}')
+          # The window may connect to the telemetry host, when the build has one, and nowhere else.
+          csp=$(jq -r .app.security.csp src-tauri/tauri.conf.json)
+          [ -z "$TELEMETRY_HOST" ] || csp=${csp/connect-src /connect-src $TELEMETRY_HOST }
+          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" --arg csp "$csp" \
+            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}, app: {security: {csp: $csp}}}')
           pnpm tauri build --target "$TARGET" --bundles app,dmg --config "$config"
 
       # The release asset has no version in its name, like the CLI archives, so
@@ -417,16 +426,24 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # No pnpm check, as for the macOS app.
+      # No pnpm check, and the telemetry host and key, as for the macOS app.
       - name: Build the frontend
         working-directory: apps/desktop
+        env:
+          VITE_TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
+          VITE_TELEMETRY_KEY: ${{ secrets.TELEMETRY_KEY }}
         run: pnpm build
 
       - name: Build the app
         working-directory: apps/desktop
+        env:
+          TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
         run: |
-          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" \
-            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}}')
+          # The window may connect to the telemetry host, when the build has one, and nowhere else.
+          csp=$(jq -r .app.security.csp src-tauri/tauri.conf.json)
+          [ -z "$TELEMETRY_HOST" ] || csp=${csp/connect-src /connect-src $TELEMETRY_HOST }
+          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" --arg csp "$csp" \
+            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}, app: {security: {csp: $csp}}}')
           pnpm tauri build --target "$TARGET" --bundles deb,appimage --config "$config"
 
       # The CLI inside each package must report the release version, as in the macOS app. The

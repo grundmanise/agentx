@@ -99,6 +99,17 @@ export interface AppState {
    */
   lastChecked: string | undefined;
   settings: Settings | undefined;
+  /**
+   * The anonymous id usage data is sent under, from the `settings` event: there only while the
+   * `telemetry` setting is on.
+   */
+  telemetryId: string | undefined;
+  /**
+   * Where the telemetry question stands this session: "asking" once the active serve child sent a
+   * `consent` event for `telemetry` while the setting had no value, "answered" once the dialog was
+   * answered, after which no `consent` event asks again.
+   */
+  telemetryConsent: "none" | "asking" | "answered";
   /** This machine and where agentx keeps its files, from `machine`. */
   machine: MachineEvent | undefined;
   sources: SourceEvent[];
@@ -213,6 +224,8 @@ export const useAppStore = create<AppState>()(() => ({
   settings: undefined,
   skillMds: {},
   sources: [],
+  telemetryConsent: "none",
+  telemetryId: undefined,
   updateDiffs: {},
   updates: {},
 }));

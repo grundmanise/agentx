@@ -5,6 +5,8 @@ date: 2026-09-16
 
 # The Go CLI owns the machine and the account; the Tauri app only renders
 
+Amended 2026-11-24: once the user agrees to send usage data, the app sends its own usage events and crash reports from its window to the host a release build names (docs/help-center/telemetry.mdx). It is an exception to "never opens a network connection": the CLI cannot report a crash of the app. The CLI still owns the setting and the telemetry id; the app reads both from the `settings` event.
+
 agentx has two executables that ship together. The Go CLI, `agentx`, is the only component that reads or writes the machine, runs git, computes identities, signs in, and syncs. The desktop app is a Tauri 2 shell with a React frontend that spawns the CLI, reads its structured output and renders it. The app never scans, never parses a config file, never computes an identity, never opens a network connection. The CLI is a single static binary that is complete on its own from a terminal or CI.
 
 ## Contract between the two

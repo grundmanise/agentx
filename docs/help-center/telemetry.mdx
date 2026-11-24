@@ -41,6 +41,18 @@ agentx derives the telemetry id from the machine id with a one-way hash. Nobody 
 
 The same answer covers crash reports. When agentx crashes, it sends the error type, the error message and a stack trace, with every path removed.
 
+## What the desktop app sends
+
+The same answer covers the desktop app. Each time it opens, it sends one event under the same telemetry id:
+
+| Field | Value |
+|---|---|
+| `app_version` | The version of the app |
+| `cli_version` | The version of agentx inside the app |
+| `os`, `arch` | `darwin` or `linux`, `amd64` or `arm64` |
+
+When the app crashes, it sends the error type, the error message and a stack trace, with every path removed. It sends nothing about its window or your device: no page address, user agent, screen size, time zone or language, and it stores nothing for the data on your machine.
+
 ## Change your answer
 
 ```sh
@@ -50,13 +62,13 @@ agentx config set telemetry on
 
 `agentx config get telemetry` prints `on`, `off` or `unset`. When you turn it off, agentx deletes the events it has not sent yet.
 
-In the desktop app, use the switch in Settings.
+In the desktop app, use the **Send usage data** switch in Settings. The app stops sending as soon as you turn it off.
 
 ## Turn it off for every run
 
 Set `DO_NOT_TRACK=1` in your environment. agentx then neither asks nor sends, whatever the setting says.
 
-A build from source has no destination for the data, so it never asks and never sends.
+A build from source, of agentx or of the desktop app, has no destination for the data, so it never asks and never sends.
 
 ## Where the data goes
 

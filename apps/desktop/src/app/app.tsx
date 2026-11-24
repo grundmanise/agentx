@@ -11,6 +11,7 @@ import { SOURCES_PATH, titles } from "#/app/screens.ts";
 import { Sidebar } from "#/app/sidebar.tsx";
 import { StaleBar } from "#/app/stale-bar.tsx";
 import { StartupLayer } from "#/app/startup-layer.tsx";
+import { TelemetryDialog } from "#/app/telemetry-dialog.tsx";
 import { TopBar } from "#/app/top-bar.tsx";
 import { Toaster } from "#/components/ui/sonner.tsx";
 import { setNavigate } from "#/lib/navigate.ts";
@@ -166,6 +167,7 @@ export const App = () => {
       </Activity>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ActivityLogSheet />
+      {startup.ready && <TelemetryDialog />}
       <Toaster />
     </div>
   );
