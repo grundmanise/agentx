@@ -2,13 +2,17 @@
 // environment and keeps the serve child open, relaying the JSON-RPC messages the app exchanges
 // with it over its stdin and stdout; every command the app runs is a `run` request to serve. It
 // has no file, git or network code of its own beyond writing serve's log, reading its end back,
-// and the app's preferences, and starts no program but the login shell, agentx and, when the user
-// asks, the editor of their choice (ADR 0001, ADR 0013). Its calls to the operating system beside
+// the app's preferences, and the updater plugin, which checks for and installs the app's own
+// updates (ADR 0019). It starts no program but the login shell, agentx and, when the user asks,
+// the editor of their choice (ADR 0001, ADR 0013). Its calls to the operating system beside
 // that are the opener plugin, which shows a path selected in Finder (the file manager elsewhere)
 // and opens a skill's file in the system's default application when the user asks, and the dialog
 // plugin's open dialog, in which the user picks a snapshot to apply: it returns the path, and the
 // app passes it to the CLI without reading the file.
 
+#[cfg(target_os = "macos")]
+mod app_menu;
+mod app_update;
 mod editor;
 mod logfile;
 mod preferences;
@@ -137,9 +141,16 @@ fn log_dir(env: &HashMap<String, String>) -> PathBuf {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(app_menu::build)
+        .on_menu_event(app_menu::on_event);
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(app_update::Found::default())
         .setup(|app| {
             let base_env: HashMap<String, String> = std::env::vars_os()
                 .map(|(k, v)| {
@@ -175,7 +186,10 @@ pub fn run() {
             preferences_read,
             preferences_write,
             editor_detect,
-            editor_open
+            editor_open,
+            app_update::app_update_check,
+            app_update::app_update_install,
+            app_update::app_restart
         ])
         .build(tauri::generate_context!())
         .expect("error while building the agentx desktop app");

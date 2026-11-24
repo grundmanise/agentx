@@ -1,13 +1,16 @@
-# The checks CI runs: .github/workflows/ci.yml calls these targets. Run `make check` before pushing.
+# The checks CI runs: .github/workflows/ci.yml and docs.yml call these targets. Run `make check`
+# before pushing.
 #
-# Naming: `<action>-<app>`. `check-cli` and `check-desktop` run every check for one app, and `check`
-# runs both. The CLI's single steps follow the same scheme: fmt-cli, fmt-check-cli, lint-cli,
-# tidy-check-cli, build-cli and test-cli.
+# Naming: `<action>-<app>`. `check-cli`, `check-desktop` and `check-docs` run every check for one
+# part, and `check` runs all three. The CLI's single steps follow the same scheme: fmt-cli,
+# fmt-check-cli, lint-cli, tidy-check-cli, build-cli and test-cli.
 
 CLI = apps/cli
 DESKTOP = apps/desktop
+DOCS = docs/help-center
 # Pinned in one place.
 GOLANGCI_LINT_VERSION = $(shell cat $(CLI)/.golangci-lint-version)
+MINT_VERSION = 4.3.88
 # `go run pkg@version` resolves its toolchain from that package's own go.mod and
 # ignores ours, so a machine whose `go` predates the linter's minimum switches
 # down to that minimum, and the binary it builds then refuses this module's
@@ -17,9 +20,9 @@ GO_TOOLCHAIN = go$(shell awk '$$1 == "go" { print $$2; exit }' $(CLI)/go.mod)+au
 # Static on Linux; cgo on macOS, where the serve watcher uses FSEvents.
 CGO_ENABLED ?= $(if $(filter Darwin,$(shell uname -s)),1,0)
 
-.PHONY: check check-cli check-desktop fmt-cli fmt-check-cli lint-cli tidy-check-cli build-cli test-cli
+.PHONY: check check-cli check-desktop check-docs fmt-cli fmt-check-cli lint-cli tidy-check-cli build-cli test-cli
 
-check: check-cli check-desktop
+check: check-cli check-desktop check-docs
 
 # The CLI in apps/cli. Needs Go.
 check-cli: fmt-check-cli lint-cli tidy-check-cli build-cli test-cli
@@ -55,3 +58,9 @@ check-desktop:
 	pnpm install --frozen-lockfile
 	cd $(DESKTOP) && pnpm check && pnpm test && pnpm build
 	cd $(DESKTOP)/src-tauri && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked
+
+# The Help Center in docs/help-center: docs.json and the pages build, and every internal link and
+# anchor points to a page or heading that exists. Needs Node 20.17 or later.
+check-docs:
+	cd $(DOCS) && npx --yes mint@$(MINT_VERSION) validate
+	cd $(DOCS) && npx --yes mint@$(MINT_VERSION) broken-links --check-anchors
