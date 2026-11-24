@@ -2,12 +2,18 @@
 // field loses focus with a changed value, and the machine id. Both come from the `machine` event,
 // which the store reads again after the label changes (src/store/loaders.ts). A refusal shows
 // under the field as one sentence-cased paragraph (`ProblemText`), the label sent keeping its case.
+// Under them, the Report inventory switch, bound to the `report_inventory` setting: it runs
+// `config set report_inventory true|false` and shows the setting as the CLI reports it. Reports
+// go to the hub, so without one the switch takes no click and its line says to add a hub first.
 import { useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
+import { hubSource } from "#/screens/settings/source-rows.ts";
+import { SwitchRow } from "#/screens/settings/switch-row.tsx";
+import { loadLabel } from "#/store/loaders.ts";
 import { agentx, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -101,9 +107,52 @@ const LabelField = ({ label }: { label: string }) => {
   );
 };
 
+/** The pending label of `config set report_inventory`. */
+export const REPORT_LABEL = "set report_inventory";
+
+const ReportInventory = ({
+  checked,
+  hub,
+}: {
+  checked: boolean;
+  /** A hub is set: reports go there. */
+  hub: boolean;
+}) => {
+  const running = usePending(REPORT_LABEL);
+  const reading = usePending(loadLabel(["config", "list"]));
+  return (
+    <SwitchRow
+      name="Report inventory"
+      line={
+        hub
+          ? "Other machines with this hub can see which skills this machine has: the report holds names, versions and sources, and no file path, setting or skill content."
+          : "Add a hub first. Other machines with that hub can then see which skills this machine has."
+      }
+      title={
+        checked
+          ? "On · this machine reports its inventory to the hub"
+          : "Off · this machine reports nothing"
+      }
+      checked={checked}
+      pending={running || reading}
+      disabled={!hub}
+      onChange={(on) => {
+        void agentx(["config", "set", "report_inventory", String(on)], {
+          label: REPORT_LABEL,
+          success: on
+            ? "Turned on inventory reporting"
+            : "Turned off inventory reporting",
+        });
+      }}
+    />
+  );
+};
+
 export const ThisMachineSection = () => {
   const label = useAppStore((s) => s.machine?.label);
   const id = useAppStore((s) => s.machine?.id);
+  const reports = useAppStore((s) => s.settings?.report_inventory);
+  const hub = useAppStore((s) => hubSource(s.sources) !== undefined);
   return (
     <SettingsSection
       title="This machine"
@@ -115,6 +164,7 @@ export const ThisMachineSection = () => {
           {id}
         </p>
       )}
+      {reports !== undefined && <ReportInventory checked={reports} hub={hub} />}
     </SettingsSection>
   );
 };

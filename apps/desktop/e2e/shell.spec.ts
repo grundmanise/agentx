@@ -15,6 +15,7 @@ test("opens on Skills and lists the screens in sidebar order", async ({
     "Agents",
     "MCP servers",
     "Plugins",
+    "Machines",
     "Settings",
   ]);
   await expect(nav.getByRole("link", { name: "Skills" })).toHaveAttribute(
@@ -25,7 +26,7 @@ test("opens on Skills and lists the screens in sidebar order", async ({
 
   // Each link's icon is an inline SVG, hidden from screen readers and from the tab order.
   const icons = nav.locator("svg");
-  await expect(icons).toHaveCount(6);
+  await expect(icons).toHaveCount(7);
   expect(
     await icons.evaluateAll((svgs) =>
       svgs.every(

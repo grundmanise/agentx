@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
-import type { ReactNode } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
+import { DetailFact, DetailFacts } from "#/components/detail-facts.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { Pill } from "#/components/pill.tsx";
@@ -33,22 +33,6 @@ import { PluginTile } from "#/screens/plugins/plugin-tile.tsx";
 import type { PluginItem, PluginRow } from "#/screens/plugins/projection.ts";
 import { openServer } from "#/screens/servers/open.ts";
 import { openSkill } from "#/screens/skills/open.ts";
-
-/** One detail under the title: its label, with its value under it. */
-const Detail = ({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) => (
-  <div className="flex min-w-0 flex-col gap-1">
-    <dt className="type-secondary text-text-hint">{label}</dt>
-    <dd className="type-technical-sm text-text-secondary m-0 flex min-h-5 min-w-0 flex-wrap items-center gap-2 break-all">
-      {children}
-    </dd>
-  </div>
-);
 
 /** An agent configuration, always with its logo. */
 const Agent = ({ configuration }: { configuration: Configuration }) => (
@@ -209,17 +193,14 @@ export const PluginDetail = ({
             </Pill>
           )}
         </div>
-        <dl
-          aria-label="Details"
-          className="gap-x-plugin-details gap-y-plugin-details-y m-0 flex flex-wrap"
-        >
-          <Detail label="Agent">
+        <DetailFacts>
+          <DetailFact label="Agent">
             <Agent configuration={configuration} />
-          </Detail>
-          <Detail label="Marketplace">
+          </DetailFact>
+          <DetailFact label="Marketplace">
             {row.marketplace === "" ? "local" : row.marketplace}
-          </Detail>
-          <Detail label="Path">
+          </DetailFact>
+          <DetailFact label="Path">
             <span className="text-text-caption flex flex-none">
               <FolderIcon size="xs" />
             </span>
@@ -233,9 +214,9 @@ export const PluginDetail = ({
             >
               {row.path}
             </SelectableLink>
-          </Detail>
+          </DetailFact>
           {twins.length > 0 && (
-            <Detail label="Also installed in">
+            <DetailFact label="Also installed in">
               {twins.map((twin) => {
                 const twinConfiguration = configurations.find(
                   (c) => c.id === twin.configuration
@@ -258,9 +239,9 @@ export const PluginDetail = ({
                   </Button>
                 );
               })}
-            </Detail>
+            </DetailFact>
           )}
-        </dl>
+        </DetailFacts>
       </header>
       {tabs.length > 0 && (
         <Tabs

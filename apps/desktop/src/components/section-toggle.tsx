@@ -52,18 +52,19 @@ const countVariants = cva("type-technical-sm", {
 /**
  * The header of a section that collapses, within a list (DESIGN.md §6 "Group header (lists)"):
  * a flat, full-width row with no fill at rest, a chevron that turns down while the section is
- * open, the section's caption, its count and, at the right end, a dim detail such as a plugin's
- * marketplace. It tints on hover. A click collapses or expands the section, which
- * `aria-expanded` reports. It is named by its caption, count and detail. An action, such as a
- * text button, sits at the row's right end, beside the toggle, so that a click on it toggles
- * nothing. A `group` header heads a top-level group of a list, with the group's padding and
- * colours; a `subgroup` header heads a section inside one, such as a plugin's skills.
+ * open, the section's caption, its count, a mark such as a Disabled pill and, at the right end, a
+ * dim detail such as a plugin's marketplace. It tints on hover. A click collapses or expands the
+ * section, which `aria-expanded` reports. It is named by its caption, count, mark and detail. An
+ * action, such as a text button, sits at the row's right end, beside the toggle, so that a click
+ * on it toggles nothing. A `group` header heads a top-level group of a list, with the group's
+ * padding and colours; a `subgroup` header heads a section inside one, such as a plugin's skills.
  */
 export const SectionToggle = ({
   label,
   icon,
   title,
   count,
+  mark,
   detail,
   open,
   onToggle,
@@ -78,6 +79,8 @@ export const SectionToggle = ({
   title?: string;
   /** How many rows the section holds; left out, the header shows no count. */
   count?: number;
+  /** A state of the whole section after its count, such as a Disabled pill. */
+  mark?: ReactNode;
   /**
    * A dim note at the row's right end, such as a plugin's marketplace. It takes only the space
    * the caption and count leave, so it truncates first and disappears when none is left; its
@@ -124,6 +127,7 @@ export const SectionToggle = ({
       {count !== undefined && (
         <span className={countVariants({ level })}>{count}</span>
       )}
+      {mark}
       {detail !== undefined && (
         <span
           title={detail}

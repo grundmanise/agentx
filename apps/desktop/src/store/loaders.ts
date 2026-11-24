@@ -1,6 +1,7 @@
 // The slices that one-shot reads fill: settings, sources and the adoption preview. Each loads
 // once the startup checks pass, and again after the commands that change it. The adoption preview
-// also loads when Settings opens and on Check updates. The update check of
+// also loads when Settings opens and on Check updates. The machines the hub holds load when the
+// Machines screen opens and after a report is removed. The update check of
 // `skill check-updates` replaces the update candidates serve found and sets when the last check
 // ended, and `skill update` takes away those of the skills it updated.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -10,6 +11,7 @@ import type {
   HistoryEvent,
   InstallableSkillEvent,
   SkillFileEvent,
+  SourceEvent,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { checksPass } from "#/startup/startup.ts";
@@ -92,11 +94,22 @@ export const loadMachine = async () => {
   });
 };
 
-/** Loads the added sources: `source list`. The Add screen calls it when it opens. */
+/** The URL of the hub among `sources`, if one is set. */
+const hubUrl = (sources: readonly SourceEvent[]) =>
+  sources.find((s) => s.hub === true)?.url;
+
+/**
+ * Loads the added sources: `source list`. The Add screen calls it when it opens. The machines
+ * read from a hub that is no longer the one set go: they are that hub's, not this one's.
+ */
 export const loadSources = async () => {
-  await load(["source", "list"], (events) => ({
-    sources: events.filter((e) => e.type === "source"),
-  }));
+  await load(["source", "list"], (events, state) => {
+    const sources = events.filter((e) => e.type === "source");
+    const before = hubUrl(state.sources);
+    return before !== undefined && before !== hubUrl(sources)
+      ? { fleet: undefined, sources }
+      : { sources };
+  });
 };
 
 /**
@@ -168,37 +181,57 @@ export const loadInstallable = async () => {
   }
 };
 
-// The preview's run, while one runs, and whether a write since it started asks for one more.
-let adoptionRun: Promise<void> | undefined;
-let adoptionStale = false;
-
-/** Runs the preview until no write asked for another run while it ran. */
-const readAdoption = async () => {
-  try {
-    do {
-      adoptionStale = false;
-      // oxlint-disable-next-line no-await-in-loop
-      await load(["skill", "import"], (events) => ({
-        adoption: events.filter((e) => e.type === "adoption"),
-      }));
-    } while (adoptionStale);
-  } finally {
-    adoptionRun = undefined;
-  }
+/**
+ * A read whose calls join the run under way, so that two controls that ask at once run the command
+ * once. `afterWrite`, a call after a command that changed what it reads, runs it once more after.
+ */
+const joined = (read: () => Promise<void>) => {
+  let run: Promise<void> | undefined;
+  let stale = false;
+  /** Runs the read until no write asked for another run while it ran. */
+  const runAll = async () => {
+    try {
+      do {
+        stale = false;
+        // oxlint-disable-next-line no-await-in-loop
+        await read();
+      } while (stale);
+    } finally {
+      run = undefined;
+    }
+  };
+  return async ({ afterWrite = false } = {}) => {
+    if (run === undefined) {
+      run = runAll();
+    } else {
+      stale ||= afterWrite;
+    }
+    await run;
+  };
 };
 
 /**
  * Loads what `skill import` would take over, from its preview, which writes nothing. A call while
  * the preview runs joins that run; `afterWrite`, a call after an import, runs it once more after.
  */
-export const loadAdoption = async ({ afterWrite = false } = {}) => {
-  if (adoptionRun === undefined) {
-    adoptionRun = readAdoption();
-  } else {
-    adoptionStale ||= afterWrite;
-  }
-  await adoptionRun;
-};
+export const loadAdoption = joined(async () => {
+  await load(["skill", "import"], (events) => ({
+    adoption: events.filter((e) => e.type === "adoption"),
+  }));
+});
+
+/**
+ * Loads what the hub holds of every machine: `machine list`, which reads the hub and fetches only
+ * the reports that changed. The Machines screen calls it when it opens, while a hub is set, since
+ * the command needs one. A call while the hub is read joins that run; `afterWrite`, a call after
+ * a report is removed, reads it once more after.
+ */
+export const loadFleet = joined(async () => {
+  await load(["machine", "list"], (events) => {
+    const event = events.find((e) => e.type === "fleet");
+    return event === undefined ? {} : { fleet: event.machines };
+  });
+});
 
 // The version of each skill whose history was read, or is being read: name → version.
 const historyVersions = new Map<string, string>();
@@ -496,7 +529,10 @@ const reloadReads = (command: string, args: readonly string[]) => {
   if (command.startsWith("config ") || command === "snapshot apply") {
     void loadSettings();
   }
-  if (command.startsWith("machine ")) {
+  // Removing a report changes what the hub holds, and nothing of this machine.
+  if (command === "machine remove") {
+    void loadFleet({ afterWrite: true });
+  } else if (command.startsWith("machine ")) {
     void loadMachine();
   }
   // The label is the machine's: Settings shows it from `machine`, which reads it again.

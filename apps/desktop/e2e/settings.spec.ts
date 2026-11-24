@@ -1,9 +1,11 @@
-// The Settings page: This machine (the label, saved with `config set label`, and the machine id),
+// The Settings page: This machine (the label, saved with `config set label`, the machine id and
+// Report inventory, `config set report_inventory`),
 // Comparing edits (`config set ignore_system_files`), Storage (the library's path and the home
 // repo's size from `machine`) and Command line (the versions and Run checks). Every row reads the
 // store, and every control runs exactly its command.
 import type { Page } from "@playwright/test";
 
+import { hub } from "./fixtures/hub.ts";
 import { MACHINE_ID, machine, settings } from "./fixtures/settings.ts";
 import {
   cliVersion,
@@ -41,6 +43,8 @@ const labelField = (page: Page) =>
   page.getByRole("textbox", { name: "Machine label" });
 const ignoreSwitch = (page: Page) =>
   page.getByRole("switch", { name: "Ignore system files" });
+const reportSwitch = (page: Page) =>
+  page.getByRole("switch", { name: "Report inventory" });
 
 const openSettings = async (cli: MockCli, page: Page, ignore = true) => {
   cli.register(["machine"], { events: [machine()] });
@@ -74,6 +78,11 @@ test("each section shows what the store holds", async ({ cli, page }) => {
     "Shown on skills you publish from here."
   );
   await expect(thisMachine).toContainText(MACHINE_ID);
+  // Reports go to the hub: with none set, the switch takes no click and its line says why.
+  await expect(reportSwitch(page)).toBeDisabled();
+  await expect(reportSwitch(page)).toHaveAccessibleDescription(
+    "Add a hub first. Other machines with that hub can then see which skills this machine has."
+  );
 
   const comparing = section(page, "Comparing edits");
   await expect(comparing).toContainText(
@@ -241,6 +250,46 @@ test("the switch runs config set ignore_system_files true, then false, each with
   expect(later(cli)).toEqual([
     ["config", "set", "ignore_system_files", "true", "--json"],
     ["config", "set", "ignore_system_files", "false", "--json"],
+  ]);
+});
+
+test("with a hub, Report inventory runs config set report_inventory true, then false, each with its toast", async ({
+  cli,
+  page,
+}) => {
+  cli.register(["source", "list"], { events: [hub] });
+  await openSettings(cli, page);
+  await expect(reportSwitch(page)).not.toBeChecked();
+  await expect(reportSwitch(page)).toHaveAccessibleDescription(
+    "Other machines with this hub can see which skills this machine has: the report holds names, versions and sources, and no file path, setting or skill content."
+  );
+
+  const on = cli.register(["config", "set", "report_inventory", "true"], {
+    events: [{ type: "settings" }],
+    holdAfter: 0,
+  });
+  await reportSwitch(page).click();
+  await on.started;
+  await expect(reportSwitch(page)).toHaveAttribute("aria-busy", "true");
+  cli.register(["config", "list"], { events: [settings(true, true)] });
+  on.release();
+  await expect(
+    toasts(page).getByText("Turned on inventory reporting")
+  ).toBeVisible();
+  await expect(reportSwitch(page)).toBeChecked();
+
+  cli.register(["config", "set", "report_inventory", "false"], {
+    events: [{ type: "settings" }],
+  });
+  cli.register(["config", "list"], { events: [settings(true)] });
+  await reportSwitch(page).click();
+  await expect(
+    toasts(page).getByText("Turned off inventory reporting")
+  ).toBeVisible();
+  await expect(reportSwitch(page)).not.toBeChecked();
+  expect(later(cli)).toEqual([
+    ["config", "set", "report_inventory", "true", "--json"],
+    ["config", "set", "report_inventory", "false", "--json"],
   ]);
 });
 

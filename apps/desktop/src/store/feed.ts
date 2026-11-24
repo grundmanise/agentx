@@ -4,7 +4,8 @@
 // inventory applies only when its scan counter goes up; a new instance applies whatever it sends
 // first, since counters are never compared across instances. What serve notices goes to the
 // activity list: its drift, reconcile and update events, and the warnings it logs on stderr. Its
-// `update_check` events say when the last update check ended, which the title bar shows. The
+// `update_check` events say when the last update check ended, which the title bar shows, and its
+// `fleet` events what the hub holds of every machine, which the Machines screen shows. The
 // activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
 // exit of the active child.
 import type {
@@ -282,6 +283,9 @@ const apply = (childId: number, event: ServeEvent) => {
     } else {
       logBackground("update check failed", { failed: true });
     }
+  } else if (event.type === "fleet") {
+    // What serve's check of the hub found of every machine: it replaces what was read before.
+    set({ fleet: event.machines });
   } else if (event.type === "drift") {
     addActivity("attention", driftText(event));
     logBackground(driftText(event));

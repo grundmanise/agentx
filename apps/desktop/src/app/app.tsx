@@ -16,6 +16,7 @@ import { Toaster } from "#/components/ui/sonner.tsx";
 import { setNavigate } from "#/lib/navigate.ts";
 import { cn } from "#/lib/utils.ts";
 import { AgentsScreen } from "#/screens/agents/agents-screen.tsx";
+import { MachinesScreen } from "#/screens/machines/machines-screen.tsx";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
 import { PluginsScreen } from "#/screens/plugins/plugins-screen.tsx";
 import { ServersScreen } from "#/screens/servers/servers-screen.tsx";
@@ -29,6 +30,7 @@ import { startLoaders } from "#/store/loaders.ts";
 /** The screens built so far, by path; the others show their placeholder. */
 const built: Record<string, ReactElement> = {
   "/agents": <AgentsScreen />,
+  "/machines": <MachinesScreen />,
   "/plugins": <PluginsScreen />,
   "/servers": <ServersScreen />,
   "/settings": <SettingsScreen />,

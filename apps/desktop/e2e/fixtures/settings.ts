@@ -25,8 +25,11 @@ export const machine = (
   type: "machine",
 });
 
-/** `config list`, with `ignore_system_files` as given. */
-export const settings = (ignoreSystemFiles: boolean): InlineEvent => {
+/** `config list`, with `ignore_system_files` and `report_inventory` as given. */
+export const settings = (
+  ignoreSystemFiles: boolean,
+  reportInventory = false
+): InlineEvent => {
   const value: Settings = {
     accept_operations: false,
     copy_configurations: [],
@@ -34,7 +37,7 @@ export const settings = (ignoreSystemFiles: boolean): InlineEvent => {
     disabled_configurations: [],
     ignore_system_files: ignoreSystemFiles,
     label: machineLabel,
-    report_inventory: false,
+    report_inventory: reportInventory,
     schema_version: 1,
     sources: [],
   };

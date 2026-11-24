@@ -8,6 +8,7 @@ import type {
   AdoptionEvent,
   ConflictEvent,
   DiffEvent,
+  FleetMachine,
   HandshakeError,
   HistoryEvent,
   InstallableSkillEvent,
@@ -101,6 +102,12 @@ export interface AppState {
   settings: Settings | undefined;
   /** This machine and where agentx keeps its files, from `machine`. */
   machine: MachineEvent | undefined;
+  /**
+   * What the hub holds of every machine, the cloud machine included: the inventory report of each
+   * computer and the cloud machine's snapshot, from serve's `fleet` event after its check of the
+   * hub and from `machine list`. This machine's live state is `inventory`. Undefined until read.
+   */
+  fleet: FleetMachine[] | undefined;
   sources: SourceEvent[];
   /** What `skill import` would take over, from its preview. */
   adoption: AdoptionEvent[];
@@ -197,6 +204,7 @@ export const useAppStore = create<AppState>()(() => ({
   applied: undefined,
   conflicts: {},
   files: {},
+  fleet: undefined,
   freshness: { kind: "stale" },
   handshakeFailures: [],
   histories: {},

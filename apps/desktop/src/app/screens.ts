@@ -1,5 +1,6 @@
 import { AgentsIcon } from "#/components/icons/agents.tsx";
 import type { IconComponent } from "#/components/icons/icon-props.ts";
+import { MachinesIcon } from "#/components/icons/machines.tsx";
 import { PluginsIcon } from "#/components/icons/plugins.tsx";
 import { ServersIcon } from "#/components/icons/servers.tsx";
 import { SettingsIcon } from "#/components/icons/settings.tsx";
@@ -21,7 +22,7 @@ export interface Screen {
  */
 export const SOURCES_PATH = "/sources";
 
-/** Sidebar order: Skills with Sources under it, Agents, MCP servers, Plugins, Settings. */
+/** Sidebar order: Skills with Sources under it, Agents, MCP servers, Plugins, Machines, Settings. */
 export const screens: Screen[] = [
   {
     children: [{ icon: SourcesIcon, label: "Sources", path: SOURCES_PATH }],
@@ -32,6 +33,7 @@ export const screens: Screen[] = [
   { icon: AgentsIcon, label: "Agents", path: "/agents" },
   { icon: ServersIcon, label: "MCP servers", path: "/servers" },
   { icon: PluginsIcon, label: "Plugins", path: "/plugins" },
+  { icon: MachinesIcon, label: "Machines", path: "/machines" },
   { icon: SettingsIcon, label: "Settings", path: "/settings" },
 ];
 
@@ -44,6 +46,7 @@ export const allScreens: Screen[] = screens.flatMap((s) => [
 /** The title each screen shows. */
 export const titles: Record<string, string> = {
   "/agents": "Agents",
+  "/machines": "Machines",
   "/plugins": "Plugins",
   "/servers": "MCP servers",
   "/settings": "Settings",

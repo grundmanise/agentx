@@ -1,0 +1,68 @@
+---
+title: "See your other machines"
+description: "See on the Machines screen of the desktop app which skills each of your machines and the cloud machine has, and let this machine report its own."
+---
+
+The **Machines** screen of the desktop app shows the skills of each of your machines: this machine, every other machine that reports to your hub, and the cloud machine. You can read a machine's skills while that machine is off.
+
+This page uses the terms hub, inventory report, library and cloud machine. See the [glossary](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md).
+
+## Before you start
+
+Set a [hub](/hub#add-it) on each machine. Without a hub, **Machines** lists this machine alone. Select **Open Settings** there to add one.
+
+## Let a machine report
+
+A machine shows on your other machines once it writes its inventory report to your hub.
+
+1. On that machine, open **Settings**.
+2. Under **This machine**, turn on **Report inventory**.
+
+While the switch is on, agentx writes the machine's report to your hub when its skills change. The switch is off by default. Without a hub, you cannot turn it on.
+
+On a machine without the desktop app, run [`agentx machine report`](/cli/machine#write-this-machines-report).
+
+The report holds the names of the machine's skills and plugins, their versions and their sources. It holds no path, no machine setting and no file of any skill. Anyone who can read your hub can read the report. For everything it holds, see [Write this machine's report](/cli/machine#write-this-machines-report).
+
+## See the machines
+
+Open **Machines**. The list shows:
+
+1. This machine, as it is now.
+2. Your other machines that wrote a report, by label.
+3. The [cloud machine](/cloud), from its snapshot.
+
+Each row shows the machine's label, its agents, when its report last changed on the hub, and how many skills its agents see. The date is not when the machine was last on.
+
+agentx reads your hub each time you open the screen.
+
+## See a machine's skills
+
+Select a machine. The right side shows its machine id and, for another machine, its operating system, its agentx version and when its report last changed.
+
+Under them, each agent of the machine lists the skills it sees, and where each skill comes from:
+
+| Value | What it means |
+|---|---|
+| **Library** | A skill in that machine's library, followed by its source. **Hub** means a hub skill. **Modified** means the skill was edited on that machine. |
+| **`<name>` plugin** | A skill that the plugin `<name>` brings. |
+| **Skills directory** | A skill in the agent client's own skills directory that agentx does not manage. |
+
+**Disabled** beside an agent's name means the agent is disabled on that machine. Select the name to collapse or expand its skills.
+
+For the cloud machine, the skills are what each cloud agent session is given. To change them, see [Change the cloud machine's skills](/cloud#change-the-cloud-machines-skills).
+
+## Remove a machine's report
+
+Remove the report of a machine you no longer use.
+
+1. Open **Machines** and select the machine.
+2. Select **Remove report**, then **Remove**.
+
+agentx deletes the report from your hub, and the machine leaves the list. Nothing changes on that machine. A machine that still reports shows again after its next report.
+
+**Remove report** shows on your other machines. The cloud machine writes no report.
+
+## From the command line
+
+`agentx machine list`, `agentx machine show` and `agentx machine remove` do the same. See [See the skills of your other machines](/cli/machine#see-the-skills-of-your-other-machines).

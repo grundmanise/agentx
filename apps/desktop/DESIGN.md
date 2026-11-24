@@ -505,6 +505,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
 | `type.settings-label` | sans | 14 | 500 |  |  |  | Settings section label (`text.primary`); the line under it is `type.secondary` in `text.muted` |
 | `type.plugin-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane plugin name, selectable |
+| `type.machine-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane machine label, selectable |
 | `type.plugin-tile` | sans | 17 | 600 |  | -0.01em |  | The letter of a plugin's monogram tile |
 | `type.tab` | sans | 14 | 500 |  |  |  | Tab labels |
 | `type.version-pill` | mono | 12 | 500 |  |  |  | A plugin's version pill |
@@ -552,6 +553,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `split.toolbar-gap` | 12 | `gap-split-toolbar` | Search → filter row |
 | `split.filter-gap` | 6 | `gap-split-filter` | Filter button → chip → sort |
 | `split.list-padding` | 0 28 24 14 | `pt-0 pr-split-list-right pb-split-list-bottom pl-split-list-left` | Scrolling list |
+| `split.list-top` | 20 | `pt-split-list-top` | Above the rows of a split list with no search and filter block over it (Machines) |
 | `detail.padding` | 34 40 48 | `pt-detail-top px-detail pb-detail-bottom` | Detail pane content |
 | `detail.max-width` | 900 | `max-w-detail` |  |
 | `detail.section-gap` | 28 | `gap-detail-section` | Header → banner → agents → files → details/history |
@@ -665,7 +667,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `universal-card.column-min-width` | 220 | `grid-cols-universal` | Narrowest client column of the Universal card |
 | `plugin.tile` | 40 | `size-plugin-tile` | Plugin icon or monogram tile in the detail pane |
 | `plugin.row-tile` | 28 | `size-plugin-row-tile` | Plugin icon or monogram tile in a Plugins list row |
-| `plugin-details.gap` | 12 40 | `gap-y-plugin-details-y gap-x-plugin-details` | Between the details under a plugin's name (row, column) |
+| `detail-facts.gap` | 12 40 | `gap-y-detail-facts-y gap-x-detail-facts` | Between the facts under a plugin's or a machine's name (row, column) |
 | `plugin.name-col` | 200 | `w-plugin-name-col` | The name column of a plugin's Skills, MCP servers and Hooks tables |
 | `add-card.spacing` | 6 | `pt-add-card` | Between the skills' cards of the Sources list: on each card after the first of its source, which the list places itself |
 
@@ -845,10 +847,12 @@ A primary button whose command can be stopped, such as Add on the Add skills bar
 Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a plugin's version takes `type.version-pill`.
 
 - Not published: `pill.neutral-*`. The only status pill a skill row carries.
-- Disabled (plugin): `pill.disabled-*`.
+- Disabled (plugin, and a machine's disabled agent configuration): `pill.disabled-*`.
 - Version (plugin): `pill.version-*`.
 - Fork: `pill.neutral-*`, hover `pill.neutral-hover`, the 12px fork glyph then the fork's name. In the detail header of the original of a fork made under a new name, one per fork; it opens the fork.
 - Universal: `pill.universal-*`, after the name of a universal agent in the agent picker (§6 "Agent picker"). It does nothing on a click: it is a button only so that its tooltip, which says what universal agents are, opens from the keyboard too.
+- This machine (Machines): `pill.neutral-*`, on this machine's row and beside its label in the detail pane.
+- Modified (Machines): `pill.neutral-*`, after the name of a library skill edited on its machine.
 - Update (sidebar): `pill.update-*`, hover `pill.update-hover`, 20 high, the `2xs` arrow-up icon then how many updates the app offers. §6 "Sidebar" places it.
 
 A skill row whose banner (§6 "Banner (detail pane)") has tone `attention` or `danger` shows an `AlertTriangleIcon` (`xs`) in `tone.attention.fg` after the name and pill, whatever the banner's tone; its accessible name is the banner's title. The banner tile keeps the circled `AlertIcon`. Other banner tones put nothing on the row.
@@ -932,7 +936,7 @@ Expand toggle, just before the sort toggle: a 28px icon button in `filter.sort-t
 
 ### Group header (lists)
 
-Every group's header is a section toggle (`src/components/section-toggle.tsx`, `level="group"`), like a plugin's below but with `group.padding` and the group's colours: a `xs` chevron in `text.caption`, `type.caption` in `group.label`, then the count in `group.count`. A click collapses or expands the group's rows (`aria-expanded`); a collapsed group keeps its header and count, and j/k skip its rows. Every group is open when the app starts, and the list keeps which are collapsed while another screen shows. A skill selected in a collapsed group, such as one another screen opens, opens its group. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding`, with `group.spacing` above each group but the first, and at least `group.header-height` tall. A header can end with one control at its right edge: the Unmanaged group's Import all, an accent inline button (§6 "Buttons") in `type.button-sm`, as tall as its text, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool. No header holds a control to open or close every section: the expand toggle in the filter row does that for the whole list.
+Every group's header is a section toggle (`src/components/section-toggle.tsx`, `level="group"`), like a plugin's below but with `group.padding` and the group's colours: a `xs` chevron in `text.caption`, `type.caption` in `group.label`, then the count in `group.count`. A click collapses or expands the group's rows (`aria-expanded`); a collapsed group keeps its header and count, and j/k skip its rows. Every group is open when the app starts, and the list keeps which are collapsed while another screen shows. A skill selected in a collapsed group, such as one another screen opens, opens its group. A source's group shows only the source's short form, so its label shows the source's full URL in a tooltip (§6 "Tooltip"), above the label and aligned to its start. `group.padding`, with `group.spacing` above each group but the first, and at least `group.header-height` tall. A header can end with one control at its right edge: the Unmanaged group's Import all, an accent inline button (§6 "Buttons") in `type.button-sm`, as tall as its text, while another tool installed skills agentx can adopt. It opens the adopt dialog (§6 "Adopt dialog") for every such tool. No header holds a control to open or close every section: the expand toggle in the filter row does that for the whole list. A header can carry one mark after its count, a pill that says a state of the whole group, such as Disabled on a disabled agent configuration of a machine.
 
 Nesting: what a group holds is inset by `subgroup.indent`, a few pixels clear of the guide line, so a row's fill never touches it, and a 1px `list.guide` line runs down the left of it, under the group's chevron (`list.guide-inset`). A plugin's rows sit one level further in (`subgroup.nested`), with a second line under the plugin's chevron (`list.guide-nested-inset`). Each placed item draws its own piece of the line (`src/components/list-guide.ts`), so the line runs on through the rows and the spaces between them. Any other grouped list with section toggles uses the same pattern: the tokens and `LIST_GUIDE` / `LIST_GUIDE_NESTED`.
 
@@ -1066,10 +1070,26 @@ The Plugins screen (`src/screens/plugins`) is a split, as Skills is: the list co
 
 - The list column: the serif title and the plugin count, the search field (§6 "Inputs"), then the filter row: the Filter button, whose popover holds AGENTS, the agent configurations that hold a plugin, each its own choice with no Universal (§6 "Popover (Filter)"), the agents chip while any is checked, the expand toggle and the sort toggle (§6 "Skills list"). The expand toggle reads Collapse all while any group is open and collapses every group to its header, with the open plugin kept in the detail pane; it reads Expand all while all are collapsed and opens every group. It is disabled while the filters list no plugin. The sort toggle is A-Z by name at first, and each click flips between A-Z and Z-A. Disabled plugins sort with the rest and read as washed out.
 - The plugins, one row per plugin in one agent configuration in one version, are grouped by agent configuration, A to Z by its name. A group header is a section toggle (§6 "Group header (lists)", `level="group"`): the chevron, the configuration's 16px logo, its name and count. It pins to the top while its group shows, and a click collapses or expands the group. Every group is open at first; a plugin opened from Also installed in opens its group. The rows follow the nesting pattern there: inset by `subgroup.indent`, with the `list.guide` line under the chevron (`LIST_GUIDE`). A row (`src/components/list-row.tsx`) holds the `plugin.row-tile` tile, the name, the Disabled pill when the client turned the plugin off, and the version at the right end in `type.technical-sm` `text.caption`; under them, how many skills, servers and hooks it brings, in `type.row-desc`. A disabled plugin's name and counts are at `row.off`; its tile is not.
-- The detail pane: the `plugin.tile` tile, the name in `type.plugin-name`, the version pill and the Disabled pill. Under them, one row of details that wraps, `plugin-details.gap` apart, each a `type.secondary` `text.hint` label over its value in `type.technical-sm` `text.secondary`: the agent, always with its logo; the marketplace; the path, after a `xs` folder icon in `text.caption`, a link that shows the plugin's directory in Finder; and, when other agents hold the same plugin from the same marketplace, each of them with its logo and version, a link that opens it.
+- The detail pane: the `plugin.tile` tile, the name in `type.plugin-name`, the version pill and the Disabled pill. Under them, the detail facts (§6 "Detail facts"): the agent, always with its logo; the marketplace; the path, after a `xs` folder icon in `text.caption`, a link that shows the plugin's directory in Finder; and, when other agents hold the same plugin from the same marketplace, each of them with its logo and version, a link that opens it.
 - Then the tabs (§6 "Tabs"): Skills, MCP servers and Hooks, each with its count, and only those the plugin has; a plugin with none has no tabs. Each tab is a table (`src/components/ui/table.tsx`): a skill and its description, a server and its transport, a hook and its event. A skill's name opens it in Skills, a server's in MCP servers; a hook opens nothing. The name column is `plugin.name-col` wide and the other column takes the rest. A name wraps to at most 2 lines: a longer one ends in an ellipsis, and pointing at it shows the whole name in a tooltip. A description renders its inline Markdown (§6 "Inline Markdown"), shows at most 2 lines and ends in an ellipsis past them, with no tooltip.
 - Only the table scrolls. The title, the details and the tabs stay in place, and the table's column captions pin to its top on `shell.content-bg`, so rows pass under them.
 - The tile is the plugin's own icon from the inventory, or the name's first letter in `type.plugin-tile` on `button.secondary-bg`.
+
+### Detail facts
+
+The facts under a detail pane's title (`src/components/detail-facts.tsx`), as under a plugin's name and a machine's label: one row that wraps, `detail-facts.gap` apart, each a `type.secondary` `text.hint` label over its value in `type.technical-sm` `text.secondary`.
+
+### Machines screen
+
+The Machines screen (`src/screens/machines`) is a split, as Plugins is: the machines on the left, the open machine on the right. This machine is the applied inventory, and every other machine is what the hub holds of it. Nothing on it compares two machines.
+
+- The list column: the serif title and the machine count, with a `Spinner` in `text.hint` beside the count while the hub is read. It has no search, filter or sort: the list is flat and short, and its rows start `split.list-top` under the header. This machine comes first, then the other machines A to Z by label, then the cloud machine, which goes by its glossary name.
+- A row (`src/components/list-row.tsx`) holds the label, the This machine pill on this machine's row and, at the right end, the 20px logos of the machine's agents, at most 4 with a "+n" count for the rest (§6 "Agent client logo chip"). Under them, in `type.row-desc`: when the machine's report last changed, as time ago within 30 days and as a date after that, then how many skills its agents see. This machine's row gives no time, since it shows the machine as it is now.
+- While no other machine can show, one centred `type.secondary` `text.hint` line stands 24 under the rows, with at most one ghost small button under it.
+- The detail pane: the label in `type.machine-name`, then the This machine pill at `detail` size on this machine, or, on another machine, one danger small button at the title row's right end that removes its report behind the confirm dialog (§6 "Dialog"), with a `Spinner` while its command runs. The cloud machine has neither: one `type.detail-desc` `text.muted` line says what it is, `detail.header-gap` under its name. Then the detail facts (§6 "Detail facts"): the machine id, the operating system and the agentx version a report names, and when the report last changed as a date and time. This machine shows its id alone, and the cloud machine, which has no id of its own, when it last changed.
+- Then the skills each agent of the machine sees, one group per agent configuration, A to Z by its name, as the Plugins list groups them: a section toggle (§6 "Group header (lists)", `level="group"`) with the chevron, the configuration's 16px logo, its name and count, and the Disabled pill as its mark on a disabled configuration. A header pins to the top while its group shows, and every group is open at first. The groups reach 14 past the pane's padding on both sides, so a chevron sits under the label's left edge, as a list column's chevrons sit under its title.
+- A skill's row follows the nesting pattern there: inset by `subgroup.indent`, with the `list.guide` line. It is 36 high with 8 12 8 14 padding, has no hover and opens nothing. Its left half holds the name in `type.row-name` and the Modified pill; its right half starts at the row's middle, so it reads as a column across the groups: what brings the skill in `type.secondary` `text.muted`, then, for a library skill, where it is published in `type.technical-sm` `text.caption`, a source in its short form with the full URL as its tooltip. In a group, the library's skills come first, then a plugin's, then those of the agent's own skills directory, each A to Z.
+- Only the groups scroll. The label and the facts stay in place.
 
 ### Copy button
 
@@ -1219,7 +1239,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 
 - A section is a `settings.columns` grid with `settings.column-gap` and `settings.section-padding` above and below. The label column holds the label in `type.settings-label` `text.primary` and one line under it in `type.secondary` `text.muted`; the content column holds the rows, `settings.section-gap` apart.
 - Inputs are `input.height`. Paths and ids are `type.technical`, ids in `text.hint`.
-- A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
+- A switch row (`src/screens/settings/switch-row.tsx`) is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch"). A setting that cannot change now keeps its row: the switch is disabled, and the line says what it needs first.
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
 - Hub, once set, shows its URL in `type.technical` with a neutral Read-only pill beside it when access is limited, as a source card does (§6 "Source card"); a remote you can write to has no tag.

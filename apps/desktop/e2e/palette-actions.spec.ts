@@ -40,7 +40,10 @@ const refreshes = (cli: MockCli) =>
     );
   });
 
-test("the groups read ACTIONS, GO TO, SKILLS", async ({ cli, page }) => {
+test("the groups read ACTIONS, GO TO, SKILLS, and GO TO lists the screens in sidebar order", async ({
+  cli,
+  page,
+}) => {
   launch(cli);
   await openPalette(page);
   const groups = palette(page).getByRole("group");
@@ -48,6 +51,15 @@ test("the groups read ACTIONS, GO TO, SKILLS", async ({ cli, page }) => {
   await expect(groups.nth(0)).toHaveAccessibleName("ACTIONS");
   await expect(groups.nth(1)).toHaveAccessibleName("GO TO");
   await expect(groups.nth(2)).toHaveAccessibleName("SKILLS");
+  await expect(groups.nth(1).getByRole("option")).toHaveText([
+    "Skills",
+    "Sources",
+    "Agents",
+    "MCP servers",
+    "Plugins",
+    "Machines",
+    "Settings",
+  ]);
 });
 
 test.describe("ACTIONS", () => {
