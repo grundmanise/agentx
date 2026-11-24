@@ -1,7 +1,8 @@
 // The app's preferences (ADR 0013): what the desktop app alone decides on this machine, today the
-// editor a skill opens in. They are one JSON file, `preferences.json`, in the app's config
-// directory, which the app reads and writes itself. They are not machine settings: the CLI never
-// reads them, and a snapshot does not carry them.
+// editor a skill opens in and whether the app checks for its own updates (ADR 0019). They are one
+// JSON file, `preferences.json`, in the app's config directory, which the app reads and writes
+// itself. They are not machine settings: the CLI never reads them, and a snapshot does not carry
+// them.
 
 use std::io;
 use std::path::Path;
@@ -14,10 +15,26 @@ use crate::editor::Editor;
 pub const FILE_NAME: &str = "preferences.json";
 
 /// Everything the file holds. A field missing from the file takes its default.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Preferences {
     #[serde(default)]
     pub editor: Editor,
+    /// Whether the app checks for its own updates after it starts and once a day. On by default.
+    #[serde(default = "on")]
+    pub check_updates: bool,
+}
+
+const fn on() -> bool {
+    true
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            editor: Editor::default(),
+            check_updates: true,
+        }
+    }
 }
 
 /// The preferences in `file`, or the defaults when it is missing or cannot be read as preferences.
@@ -55,11 +72,13 @@ mod tests {
             editor: Editor::Custom {
                 command: "code --wait".into(),
             },
+            check_updates: false,
         };
         write(&file, &custom).unwrap();
         assert_eq!(read(&file), custom);
         let written = std::fs::read_to_string(&file).unwrap();
         assert!(written.contains("\"kind\": \"custom\""), "{written}");
+        assert!(written.contains("\"check_updates\": false"), "{written}");
 
         std::fs::write(&file, b"{\"editor\":{\"kind\":\"vim\"}}").unwrap();
         assert_eq!(read(&file), Preferences::default());
