@@ -365,7 +365,7 @@ export interface SettingsEvent {
   type: "settings";
   schema_version: number;
   settings: Settings;
-  telemetry_id?: string;
+  anonymous_id?: string;
 }
 
 export interface ConfigRemovalEvent {

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/posthog/posthog-go/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -46,6 +47,8 @@ type invocation struct {
 	hosts        func(host string) string // the host names of the user's SSH configuration, read once per host; see sshHosts
 	unfetched    sync.Map                 // remote name -> URL of a hub whose remote was just written over one never fetched whole; see fetchForks
 	published    sync.Map                 // skill name -> the publishedBase last read for it; see tipPublished
+	posthogMu    sync.Mutex
+	posthog      posthog.Client // made by telemetryClient, closed by closeTelemetry; nil until then
 }
 
 // refs is what the mutation journal needs to apply and recover the lineage
@@ -134,6 +137,7 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	}
 	code := finish(ctx, inv, root.ExecuteContext(ctx))
 	inv.recordRun(ctx, code)
+	inv.closeTelemetry()
 	return code
 }
 
@@ -209,7 +213,6 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newDoctorCommand(inv))
 	root.AddCommand(newVersionCommand(inv))
 	root.AddCommand(newUpdateCommand(inv))
-	root.AddCommand(newTelemetryCommand(inv))
 	return root
 }
 
@@ -297,18 +300,3 @@ func knownFailure(dir string, err error) (*failure, bool) {
 	return f, true
 }
 
-// recordRun spools the command event of a run that ended with code and
-// starts a flush, both only while telemetry is recording. The flush's own
-// run is never recorded.
-func (inv *invocation) recordRun(ctx context.Context, code int) {
-	if inv.command == flushCommand {
-		return
-	}
-	ctx = context.WithoutCancel(ctx)
-	inv.spoolRecord(ctx, recordCommand, map[string]any{
-		"exit_code":   code,
-		"duration_ms": time.Since(inv.started).Milliseconds(),
-		"json":        inv.out.json,
-	})
-	inv.startFlush(ctx)
-}
