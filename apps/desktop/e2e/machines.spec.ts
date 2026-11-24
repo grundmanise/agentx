@@ -280,7 +280,7 @@ test("with a hub that holds no other machine, one line says how a machine shows"
 }) => {
   await openMachines(cli, page, fleetOfThisMachine);
   await expect(list(page)).toContainText(
-    "A machine shows here once Report inventory is on there, or after agentx machine report."
+    "A machine shows here once Report inventory is on there."
   );
   expect(await rowNames(page)).toEqual(["studio"]);
 });

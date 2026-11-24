@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
-import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { MachineDetail } from "#/screens/machines/machine-detail.tsx";
 import { MachineList } from "#/screens/machines/machine-list.tsx";
 import { projectMachines } from "#/screens/machines/projection.ts";
@@ -80,11 +79,7 @@ export const MachinesScreen = () => {
     fleetRead &&
     !machines.some((m) => m.kind === "other")
   ) {
-    note = (
-      <Note>
-        <InlineMarkdown text="A machine shows here once Report inventory is on there, or after `agentx machine report`." />
-      </Note>
-    );
+    note = <Note>A machine shows here once Report inventory is on there.</Note>;
   }
   return (
     <div className="flex min-h-0 flex-1">
