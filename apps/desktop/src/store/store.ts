@@ -104,12 +104,8 @@ export interface AppState {
    * `telemetry` setting is on.
    */
   telemetryId: string | undefined;
-  /**
-   * Where the telemetry question stands this session: "asking" once the active serve child sent a
-   * `consent` event for `telemetry` while the setting had no value, "answered" once the dialog was
-   * answered, after which no `consent` event asks again.
-   */
-  telemetryConsent: "none" | "asking" | "answered";
+  /** Whether the telemetry question was answered this session: it is not asked again. */
+  telemetryAnswered: boolean;
   /** This machine and where agentx keeps its files, from `machine`. */
   machine: MachineEvent | undefined;
   sources: SourceEvent[];
@@ -224,7 +220,7 @@ export const useAppStore = create<AppState>()(() => ({
   settings: undefined,
   skillMds: {},
   sources: [],
-  telemetryConsent: "none",
+  telemetryAnswered: false,
   telemetryId: undefined,
   updateDiffs: {},
   updates: {},

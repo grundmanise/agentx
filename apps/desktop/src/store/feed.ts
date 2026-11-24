@@ -6,10 +6,8 @@
 // activity list: its drift, reconcile and update events, and the warnings it logs on stderr. Its
 // `update_check` events say when the last update check ended, which the title bar shows. The
 // activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
-// exit of the active child. Its `consent` event asks the telemetry question
-// (src/app/telemetry-dialog.tsx) once, while the setting has no value.
+// exit of the active child.
 import type {
-  ConsentEvent,
   DriftEvent,
   InventoryEvent,
   LogEvent,
@@ -204,22 +202,6 @@ const driftText = (e: DriftEvent) => {
   return now === undefined ? `${e.name} changed` : `${e.name}: ${now}`;
 };
 
-/**
- * Asks the telemetry question: serve asks after its first inventory while the `telemetry` setting
- * has no value. One answered this session, or a setting that has a value, is not asked again.
- */
-const askConsent = (event: ConsentEvent) => {
-  const { settings, telemetryConsent } = useAppStore.getState();
-  if (
-    event.topic === "telemetry" &&
-    event.state === "unset" &&
-    telemetryConsent === "none" &&
-    settings?.telemetry === undefined
-  ) {
-    set({ telemetryConsent: "asking" });
-  }
-};
-
 /** Applies an inventory, unless the same instance already applied one with a counter as high. */
 const applyInventory = (childId: number, event: InventoryEvent) => {
   const { applied } = useAppStore.getState();
@@ -300,8 +282,6 @@ const apply = (childId: number, event: ServeEvent) => {
     } else {
       logBackground("update check failed", { failed: true });
     }
-  } else if (event.type === "consent") {
-    askConsent(event);
   } else if (event.type === "drift") {
     addActivity("attention", driftText(event));
     logBackground(driftText(event));

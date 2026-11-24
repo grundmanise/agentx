@@ -1,8 +1,8 @@
-// The telemetry question (docs/help-center/telemetry.mdx): asked once, when the active serve
-// child sends its `consent` event after the first inventory of a home whose `telemetry` setting
-// has no value. It lists what is sent, and both answers run `config set telemetry`, which gives
-// the setting a value, so serve never asks again. "Don't send" is the default: it has the focus,
-// and Escape answers with it.
+// The telemetry question (docs/help-center/telemetry.mdx): asked once the app has started, while
+// the `settings` event says the `telemetry` setting has no value, in a build that names a
+// telemetry host. It lists what is sent, and both answers run `config set telemetry`, which gives
+// the setting a value, so no later launch asks. "Don't send" is the default: it has the focus, and
+// Escape answers with it.
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -14,6 +14,7 @@ import {
 } from "#/components/ui/alert-dialog.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
+import { telemetryBuild } from "#/lib/telemetry.ts";
 import { useAppStore } from "#/store/store.ts";
 import { TELEMETRY_PAGE, setTelemetry } from "#/store/telemetry.ts";
 
@@ -33,14 +34,20 @@ const FIELDS: [string, string][] = [
   ["at", "when the command ended, to the minute"],
 ];
 
-/** Answers the question: no `consent` event asks it again this session. */
+/** Answers the question, which is not asked again this session, even if the command fails. */
 const answer = (on: boolean) => {
-  useAppStore.setState({ telemetryConsent: "answered" });
+  useAppStore.setState({ telemetryAnswered: true });
   void setTelemetry(on);
 };
 
 export const TelemetryDialog = () => {
-  const asking = useAppStore((s) => s.telemetryConsent === "asking");
+  const asking = useAppStore(
+    (s) =>
+      telemetryBuild &&
+      !s.telemetryAnswered &&
+      s.settings !== undefined &&
+      s.settings.telemetry === undefined
+  );
   return (
     <AlertDialog
       open={asking}

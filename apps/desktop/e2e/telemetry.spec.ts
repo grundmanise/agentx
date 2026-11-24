@@ -1,5 +1,5 @@
-// Usage data (docs/help-center/telemetry.mdx): the telemetry dialog the active serve child's
-// `consent` event opens, the Usage data switch in Settings, both bound to `config set telemetry`,
+// Usage data (docs/help-center/telemetry.mdx): the telemetry dialog, asked while the `telemetry`
+// setting has no value, the Usage data switch in Settings, both bound to `config set telemetry`,
 // and the app's own events and crash reports. It runs in two projects (playwright.config.ts):
 // `chromium`, whose dev server has no telemetry host, and `telemetry`, whose dev server has one,
 // which these tests intercept and record.
@@ -43,15 +43,9 @@ const settingsEvent = (telemetry?: "on" | "off", id = true): InlineEvent => {
     : { settings, type: "settings" };
 };
 
-const consent: InlineEvent = {
-  state: "unset",
-  topic: "telemetry",
-  type: "consent",
-};
-
-/** A serve child that writes its first inventory, then asks. */
-const asksOnStart = (cli: MockCli) => {
-  cli.onServeStart({ events: [firstInventory(), consent] });
+/** A home whose `telemetry` setting has no value. */
+const unanswered = (cli: MockCli) => {
+  cli.register(["config", "list"], { events: [settingsEvent()] });
 };
 
 const dialog = (page: Page) =>
@@ -82,114 +76,18 @@ const isLaunched = async (page: Page) => {
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
 };
 
-test.describe("the dialog and the switch", () => {
+test.describe("a build without a host", () => {
   test.beforeEach(() => {
     test.skip(test.info().project.name !== "chromium");
   });
 
-  test("a consent event from the active child asks once, after the first inventory", async ({
-    cli,
-    page,
-  }) => {
-    asksOnStart(cli);
-    await page.goto("/");
-    await expect(dialog(page)).toBeVisible();
-    // Under it, the screens the first inventory filled, out of reach while it asks.
-    await expect(page.locator("main")).toHaveAttribute("aria-busy", "false");
-
-    const fields = dialog(page).getByRole("list", { name: "What is sent" });
-    await expect(fields.getByRole("listitem")).toHaveText([
-      /^telemetry_id /u,
-      /^cli_version /u,
-      /^schema_version /u,
-      /^os, arch /u,
-      /^command the command words only, without arguments or flag values$/u,
-      /^exit_code /u,
-      /^duration_ms /u,
-      /^json /u,
-      /^at /u,
-    ]);
-    await expect(dialog(page)).toContainText(
-      "A crash sends the error type, its message and a stack trace, with paths removed."
-    );
-    // "Don't send" is the default: it has the focus.
-    await expect(
-      dialog(page).getByRole("button", { name: "Don't send" })
-    ).toBeFocused();
-
-    await dialog(page).getByRole("button", { name: "What is sent" }).click();
-    expect(cli.openedUrls).toEqual(["https://docs.agentx.wtf/telemetry"]);
-  });
-
-  test("no consent event, or one from a one-shot or an ended child, asks nothing", async ({
-    cli,
-    page,
-  }) => {
-    // A one-shot's consent, as `scan --json` writes one.
-    cli.register(["source", "list"], { events: [consent] });
+  test("never asks, with the setting unanswered", async ({ cli, page }) => {
+    unanswered(cli);
     await page.goto("/");
     await isLaunched(page);
     await expect.poll(() => cli.commands.length).toBeGreaterThan(4);
-
-    // The child that wrote the first inventory ended, and its later lines are dropped.
-    await cli.serveExit(1);
-    cli.serveRestart(2);
-    await cli.serveEmit([firstInventory()]);
-    await cli.serveEmit([consent], 1);
-    await cli.serveEmit([{ ...firstInventory(), scan_counter: 2 }]);
-    await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
+    await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
     await expect(dialog(page)).toHaveCount(0);
-  });
-
-  test("Send runs config set telemetry on, then a refresh, and asks no more", async ({
-    cli,
-    page,
-  }) => {
-    asksOnStart(cli);
-    answers(cli, "on");
-    await page.goto("/");
-    await expect(dialog(page)).toBeVisible();
-    const before = refreshes(cli);
-
-    await dialog(page)
-      .getByRole("button", { exact: true, name: "Send" })
-      .click();
-    await expect(dialog(page)).toHaveCount(0);
-    await expect
-      .poll(() => telemetrySets(cli))
-      .toEqual(["config set telemetry on --json"]);
-    await expect.poll(() => refreshes(cli)).toBe(before + 1);
-
-    // A second consent in the same stream asks nothing.
-    await cli.serveEmit([consent]);
-    await cli.serveEmit([{ ...firstInventory(), scan_counter: 2 }]);
-    await expect(dialog(page)).toHaveCount(0);
-  });
-
-  test("Don't send, and Escape, run config set telemetry off", async ({
-    cli,
-    page,
-  }) => {
-    asksOnStart(cli);
-    answers(cli, "off");
-    await page.goto("/");
-    await dialog(page).getByRole("button", { name: "Don't send" }).click();
-    await expect
-      .poll(() => telemetrySets(cli))
-      .toEqual(["config set telemetry off --json"]);
-
-    cli.restart();
-    cli.register(["config", "list"], { events: [settingsEvent()] });
-    await page.reload();
-    await expect(dialog(page)).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(dialog(page)).toHaveCount(0);
-    await expect
-      .poll(() => telemetrySets(cli))
-      .toEqual([
-        "config set telemetry off --json",
-        "config set telemetry off --json",
-      ]);
   });
 
   test("the switch in Settings shows the setting and runs the same command", async ({
@@ -332,6 +230,109 @@ const flip = async (cli: MockCli, page: Page, value: "on" | "off") => {
   await expect(usageSwitch(page)).toBeChecked({ checked: value === "on" });
 };
 
+test.describe("the question", () => {
+  test.beforeEach(() => {
+    test.skip(test.info().project.name !== "telemetry");
+  });
+
+  test("asks once the app has started, while the setting has no value", async ({
+    cli,
+    page,
+  }) => {
+    unanswered(cli);
+    await page.goto("/");
+    await expect(dialog(page)).toBeVisible();
+    // Under it, the screens the first inventory filled, out of reach while it asks.
+    await expect(page.locator("main")).toHaveAttribute("aria-busy", "false");
+
+    const fields = dialog(page).getByRole("list", { name: "What is sent" });
+    await expect(fields.getByRole("listitem")).toHaveText([
+      /^telemetry_id /u,
+      /^cli_version /u,
+      /^schema_version /u,
+      /^os, arch /u,
+      /^command the command words only, without arguments or flag values$/u,
+      /^exit_code /u,
+      /^duration_ms /u,
+      /^json /u,
+      /^at /u,
+    ]);
+    await expect(dialog(page)).toContainText(
+      "A crash sends the error type, its message and a stack trace, with paths removed."
+    );
+    // "Don't send" is the default: it has the focus.
+    await expect(
+      dialog(page).getByRole("button", { name: "Don't send" })
+    ).toBeFocused();
+
+    await dialog(page).getByRole("button", { name: "What is sent" }).click();
+    expect(cli.openedUrls).toEqual(["https://docs.agentx.wtf/telemetry"]);
+  });
+
+  test("a setting with a value asks nothing", async ({ cli, page }) => {
+    answers(cli, "off");
+    await page.goto("/");
+    await isLaunched(page);
+    await expect.poll(() => cli.commands.length).toBeGreaterThan(4);
+    await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
+    await expect(dialog(page)).toHaveCount(0);
+  });
+
+  test("Send runs config set telemetry on, then a refresh, and asks no more", async ({
+    cli,
+    page,
+  }) => {
+    unanswered(cli);
+    cli.register(["config", "set", "telemetry", "on"], {
+      events: [settingsEvent("on")],
+    });
+    await page.goto("/");
+    await expect(dialog(page)).toBeVisible();
+    const before = refreshes(cli);
+
+    await dialog(page)
+      .getByRole("button", { exact: true, name: "Send" })
+      .click();
+    await expect(dialog(page)).toHaveCount(0);
+    await expect
+      .poll(() => telemetrySets(cli))
+      .toEqual(["config set telemetry on --json"]);
+    await expect.poll(() => refreshes(cli)).toBe(before + 1);
+
+    // The refresh still finds no value, as if the command failed: the answer stands this session.
+    await cli.serveEmit([{ ...firstInventory(), scan_counter: 2 }]);
+    await expect(dialog(page)).toHaveCount(0);
+  });
+
+  test("Don't send, and Escape, run config set telemetry off", async ({
+    cli,
+    page,
+  }) => {
+    unanswered(cli);
+    cli.register(["config", "set", "telemetry", "off"], {
+      events: [settingsEvent("off")],
+    });
+    await page.goto("/");
+    await dialog(page).getByRole("button", { name: "Don't send" }).click();
+    await expect
+      .poll(() => telemetrySets(cli))
+      .toEqual(["config set telemetry off --json"]);
+
+    cli.restart();
+    unanswered(cli);
+    await page.reload();
+    await expect(dialog(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toHaveCount(0);
+    await expect
+      .poll(() => telemetrySets(cli))
+      .toEqual([
+        "config set telemetry off --json",
+        "config set telemetry off --json",
+      ]);
+  });
+});
+
 test.describe("what the app sends", () => {
   test.beforeEach(() => {
     test.skip(test.info().project.name !== "telemetry");
@@ -467,10 +468,11 @@ test.describe("what the app sends", () => {
     await page.goto("/#/settings");
     await expect(usageSwitch(page)).not.toBeChecked();
 
+    // Not answered: the question shows, and the SDK waits for the answer.
     cli.restart();
-    cli.register(["config", "list"], { events: [settingsEvent()] });
+    unanswered(cli);
     await page.reload();
-    await expect(usageSwitch(page)).not.toBeChecked();
+    await expect(dialog(page)).toBeVisible();
 
     // On, without the telemetry id, which the CLI leaves out while DO_NOT_TRACK is set.
     cli.restart();

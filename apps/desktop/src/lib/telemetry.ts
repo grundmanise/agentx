@@ -21,6 +21,9 @@ import { inApp } from "#/lib/platform.ts";
 const host = import.meta.env.VITE_TELEMETRY_HOST ?? "";
 const key = import.meta.env.VITE_TELEMETRY_KEY ?? "";
 
+/** Whether this build names a host: one that names none never sends, nor asks. */
+export const telemetryBuild = host !== "";
+
 /** What `app_info` reports: the app's version, and the platform by the names the CLI uses. */
 interface AppInfo {
   version: string;
@@ -141,7 +144,7 @@ export const followTelemetry = (
   telemetryId: string | undefined,
   cliVersion: string | undefined
 ) => {
-  if (host === "" || !inApp || on === sending) {
+  if (!telemetryBuild || !inApp || on === sending) {
     return;
   }
   if (on && started === undefined) {
