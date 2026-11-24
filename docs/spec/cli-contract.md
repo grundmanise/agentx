@@ -21,6 +21,7 @@ The CLI reads its environment once, at startup, from the variables below. Beyond
 | `AGENTX_HOSTNAME` | the default machine label | the operating system's hostname |
 | `AGENTX_INSTANCE_ID` | the `instance_id` carried by inventories, so a script can fix it | a fresh random id per process |
 | `AGENTX_HANDSHAKE_TIMEOUT` | the budget of one MCP handshake, a duration such as `500ms` | `10s` |
+| `AGENTX_TEST_PANIC` | `1` makes `agentx scan` panic with a message that names `HOME` and agentx home, which is how the tests reach a crash | unset |
 | `GITHUB_TOKEN` | the token [`agentx update`](#update) reads GitHub's release list with, which only `--nightly` needs; GitHub allows 60 anonymous requests an hour | unset |
 | `AGENTX_INTERACTIVE` | `1` or `0`: whether a person is there to answer the [telemetry](#telemetry) question, for tests | stdin and stdout are both terminals |
 | `AGENTX_TELEMETRY_ENDPOINT` | the host [telemetry](#telemetry) is posted to, at `<host>/batch/` | the release build's; none in a source build |
@@ -359,7 +360,7 @@ An update another machine published to a hub skill, see **Checking for updates**
 | 7 | `locked` | another agentx command holds the lock |
 | 8 | `store` | the store is unusable: missing, corrupt, or a repository format this git cannot read |
 | 9 | `interrupted` | a stop signal ended the run before it finished, see [Stopping a run](#stopping-a-run) |
-| 10 | `internal` | an internal error, including a settings file or another tool's install record agentx cannot read |
+| 10 | `internal` | an internal error, including a settings file or another tool's install record agentx cannot read, and a panic: its message is the error's, `panic: ` and what was passed to `panic`, with the hint to report it |
 
 In JSON mode the `error` event carries the code as its `code` field.
 
@@ -508,7 +509,7 @@ Usage data is opt-in and anonymous. It is **offered** when a host is known, from
 
 | Field | Meaning |
 |---|---|
-| `type` | `command`, or `serve_start` for the record serve writes when it starts |
+| `type` | `command`, or `serve_start` for the record serve writes when it starts; `exception` for a crash, see **Crash records** |
 | `telemetry_id` | the telemetry id |
 | `cli_version` | as `agentx version` prints it |
 | `schema_version` | the output schema version |
@@ -519,9 +520,19 @@ Usage data is opt-in and anonymous. It is **offered** when a host is known, from
 | `json` | whether `--json` was given |
 | `at` | RFC 3339 in UTC, truncated to the minute |
 
+**Crash records.** A panic ends the run as an internal error, exit code 10, see [Exit codes](#exit-codes); a panic on a goroutine serve starts, its jobs, its watcher and the methods it answers requests with, ends serve the same way. When recorded, the run first spools one more record, with `type` `exception`, the envelope above (`type`, `telemetry_id`, `cli_version`, `schema_version`, `os`, `arch`, `command`, `at`) and these fields and no other:
+
+| Field | Meaning |
+|---|---|
+| `exception_type` | the Go type of the value passed to `panic`, such as `runtime.boundsError` or `*errors.errorString` |
+| `exception_value` | the panic's message, redacted, at most 1024 bytes |
+| `frames` | up to 50 frames, innermost first, each `{filename, function, lineno, in_app, platform}`: `in_app` is true for agentx's own code, false for the standard library and dependencies; `platform` is `go` |
+
+Redaction replaces in the message and in every `filename`, longest first, agentx home with `<agentx-home>`, the library with `<library>`, `XDG_CONFIG_HOME` with `<xdg-config>`, `TMPDIR` with `<tmp>` and `HOME` with `~`, each only where a path name ends, then every other absolute path under `/Users/`, `/home/`, `/root/`, `/private/`, `/tmp/` or `/var/folders/`, up to the next whitespace, quote or colon, with `<path>`. The release build passes `-trimpath`, so the frames name module-relative files rather than the build machine's. The message on stderr, or in the `error` event, stays unredacted: it goes to the user's own terminal.
+
 The spool keeps at most 500 records, dropping the oldest, and drops any older than seven days. `config set telemetry off` deletes it.
 
-**Flush.** A flush posts up to 100 records in one request to `<host>/batch/` within three seconds, with the body `{"api_key": <key>, "batch": [...]}`; the key is `AGENTX_TELEMETRY_KEY`, else the release build's, else `none`. Each record becomes one entry: `event` is `command_run` for `command` and `serve_start` for `serve_start`, `distinct_id` the telemetry id, `timestamp` the `at` value, and `properties` the remaining fields plus `$process_person_profile: false`, `$lib: "agentx-cli"` and `$lib_version`, the record's `cli_version`. A 2xx or 4xx answer deletes the records it carried; any other answer, or none, keeps them for the next flush, with no retry. A record that does not parse is deleted. The flush takes no lock: a record written meanwhile waits for the next one.
+**Flush.** A flush posts up to 100 records in one request to `<host>/batch/` within three seconds, with the body `{"api_key": <key>, "batch": [...]}`; the key is `AGENTX_TELEMETRY_KEY`, else the release build's, else `none`. Each record becomes one entry: `event` is `command_run` for `command`, `serve_start` for `serve_start` and `$exception` for `exception`, `distinct_id` the telemetry id, `timestamp` the `at` value, and `properties` the remaining fields plus `$process_person_profile: false`, `$lib: "agentx-cli"` and `$lib_version`, the record's `cli_version`. An `exception` record's own three fields become `$exception_list: [{type, value, mechanism: {handled: false}, stacktrace: {type: "raw", frames}}]`; no fingerprint is set, so the server groups crashes. A 2xx or 4xx answer deletes the records it carried; any other answer, or none, keeps them for the next flush, with no retry. A record that does not parse is deleted. The flush takes no lock: a record written meanwhile waits for the next one.
 
 After its `result` event, a run that recorded starts a detached `agentx telemetry flush`, with its stdio on the null device, and exits without waiting, unless the spool is empty or the last flush attempt is under ten minutes old; `AGENTX_TELEMETRY_FLUSH=inline` flushes in-process before the run returns instead. A long-running serve flushes in-process, off its loop, at start and every ten minutes.
 

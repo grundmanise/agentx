@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/crash"
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
@@ -132,9 +133,22 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	} else {
 		root.SetOut(stdout)
 	}
-	code := finish(ctx, inv, root.ExecuteContext(ctx))
+	code := finish(ctx, inv, execute(ctx, root))
 	inv.recordRun(ctx, code)
 	return code
+}
+
+// execute runs the command and returns a panic in it as a *crash.Panic,
+// so that the run ends as an internal error does rather than with Go's
+// trace. The goroutines serve starts recover their own and end serve
+// with the panic the same way.
+func execute(ctx context.Context, root *cobra.Command) (err error) {
+	defer func() {
+		if p := crash.Recovered(recover()); p != nil {
+			err = p
+		}
+	}()
+	return root.ExecuteContext(ctx)
 }
 
 // colorFromArgs returns the value of --color on the command line, as
@@ -234,6 +248,20 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 		// cancelled context by design and exits 0.
 		out.result(true, inv.summary)
 		return exitOK.exit
+	}
+	// A panic is agentx's own bug, whatever else happened to the run: it
+	// ends the run as an internal error and, with the user's consent, is
+	// reported.
+	var p *crash.Panic
+	if errors.As(err, &p) {
+		for _, fr := range p.Frames {
+			out.debugf("  at %s (%s:%d)", fr.Function, fr.Filename, fr.Lineno)
+		}
+		inv.reportCrash(ctx, p)
+		f := &failure{status: exitInternal, message: p.Error(), hint: "this is a bug in agentx: report it at " + issuesURL}
+		out.fail(f)
+		out.result(false, f.message)
+		return f.status.exit
 	}
 	// A terminal signals the whole foreground process group, so the git the
 	// run was waiting on dies of the same Ctrl-C and its error can reach

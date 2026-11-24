@@ -252,6 +252,19 @@ jobs:
         run: |
           "dist/$NAME/agentx" version --json | tee /dev/stderr | grep -F "\"cli_version\":\"$VERSION\""
 
+      # -trimpath keeps the build machine's paths out of a crash's stack: the
+      # frames name module-relative files, which a crash report then carries.
+      - name: Check a crash names no build path
+        if: matrix.goarch == (runner.arch == 'ARM64' && 'arm64' || 'amd64')
+        run: |
+          home=$(mktemp -d)
+          status=0
+          AGENTX_TEST_PANIC=1 HOME="$home" "dist/$NAME/agentx" scan --verbose 2> stack.txt || status=$?
+          cat stack.txt
+          test "$status" -eq 10
+          grep -F "(github.com/grundmanise/agentx/apps/cli/internal/cli/" stack.txt
+          if grep -F "$GITHUB_WORKSPACE" stack.txt; then exit 1; fi
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.NAME }}

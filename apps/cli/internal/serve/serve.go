@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/crash"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
@@ -150,7 +151,12 @@ type Job func(ctx context.Context) (report func())
 // tried again on the next change or refresh, and once watching fails serve
 // scans only when it is asked to. A cancelled ctx is a clean end.
 func Run(ctx context.Context, o Options) error {
-	ctx, cancel := context.WithCancel(ctx) // ends the jobs when Run returns
+	// The jobs and the watcher run on goroutines of their own; a panic in
+	// one of them ends Run with that panic as its error, as a panic in Run
+	// itself would end the command.
+	ctx, cancelCause := context.WithCancelCause(ctx)
+	cancel := func() { cancelCause(nil) } // ends the jobs when Run returns
+	crashed := func(p *crash.Panic) { cancelCause(p) }
 	l := &loop{Options: o}
 	var refreshes chan func(counter int, err error) // nil without Requests: never ready
 	if o.Requests != nil {
@@ -174,7 +180,7 @@ func Run(ctx context.Context, o Options) error {
 	// ready, and serve scans only when it is asked to.
 	var events <-chan struct{}
 	var watchErrors <-chan error
-	w, err := newWatcher(o.Watch, o.Trees)
+	w, err := newWatcher(o.Watch, o.Trees, crashed)
 	if err != nil {
 		o.Fail(fmt.Errorf("%w: %w", ErrWatch, err))
 	} else {
@@ -199,6 +205,7 @@ func Run(ctx context.Context, o Options) error {
 		checking.Add(1)
 		go func() {
 			defer checking.Done()
+			defer crash.Recover(crashed)
 			report := job(ctx)
 			select {
 			case done <- report:
@@ -262,6 +269,10 @@ func Run(ctx context.Context, o Options) error {
 	for {
 		select {
 		case <-ctx.Done():
+			var p *crash.Panic
+			if errors.As(context.Cause(ctx), &p) {
+				return p
+			}
 			return nil
 		case done := <-refreshes:
 			l.pending = append(l.pending, done)

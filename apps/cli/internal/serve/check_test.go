@@ -2,10 +2,12 @@ package serve
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/crash"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
@@ -117,5 +119,30 @@ func TestTheChecksRunOneAtATime(t *testing.T) {
 	}
 	if early.Load() {
 		t.Error("the recheck ran before the check's report was made")
+	}
+}
+
+// TestAPanicInAJobEndsServe drives Run with a job that panics: the panic
+// ends Run, which returns it as its error instead of the process ending.
+func TestAPanicInAJobEndsServe(t *testing.T) {
+	t.Parallel()
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(context.Background(), Options{
+			Scan:      func(context.Context) (scan.Inventory, error) { return scan.Inventory{}, nil },
+			Inventory: func(scan.Inventory) {},
+			Fail:      func(err error) { t.Errorf("Fail(%v)", err) },
+			Warn:      func(string) {},
+			Jobs:      []Job{func(context.Context) func() { panic("job failed") }},
+		})
+	}()
+	select {
+	case err := <-done:
+		var p *crash.Panic
+		if !errors.As(err, &p) || p.Value != "job failed" {
+			t.Errorf("Run returned %v, want the job's panic", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return")
 	}
 }

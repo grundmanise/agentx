@@ -67,11 +67,13 @@ const telemetryIDKey = "agentx-telemetry-id/v1"
 const (
 	recordCommand    = "command"
 	recordServeStart = "serve_start"
+	recordException  = "exception"
 )
 
 var telemetryEvents = map[string]string{
 	recordCommand:    "command_run",
 	recordServeStart: "serve_start",
+	recordException:  "$exception",
 }
 
 // consentEvent asks the desktop app to offer telemetry: scan --json and
@@ -425,6 +427,9 @@ func batchEntryOf(b []byte) (batchEntry, bool) {
 		default:
 			props[k] = v
 		}
+	}
+	if typ == recordException {
+		exceptionProperties(props)
 	}
 	props["$process_person_profile"] = false
 	props["$lib"] = "agentx-cli"
