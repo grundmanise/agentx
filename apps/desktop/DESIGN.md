@@ -208,12 +208,13 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `checkbox.checked-bg` | `accent.primary` |  |
 | `checkbox.check` | `on-accent` |  |
 
-#### Segmented control (Update review, filter State, agent client placement)
+#### Segmented control (Update review, filter State, agent client placement, Machines view)
 
 | Token | Primitive | Element |
 | --- | --- | --- |
 | `segmented.track-bg` | `gray-950` | Track |
 | `segmented.card-track-bg` | `gray-980` | Track on a card (placement on an agent client card) |
+| `segmented.page-track-bg` | `gray-980` | Track on the page (the view switch of the Machines screen) |
 | `segmented.track-border` | `gray-870` |  |
 | `segmented.text` | `gray-50` | Unselected segment; `gray-400` once another segment is chosen |
 | `segmented.yours-selected` | `accent.yours` | Your side chosen (label `on-accent`) |
@@ -669,6 +670,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `plugin.row-tile` | 28 | `size-plugin-row-tile` | Plugin icon or monogram tile in a Plugins list row |
 | `detail-facts.gap` | 12 40 | `gap-y-detail-facts-y gap-x-detail-facts` | Between the facts under a plugin's or a machine's name (row, column) |
 | `plugin.name-col` | 200 | `w-plugin-name-col` | The name column of a plugin's Skills, MCP servers and Hooks tables |
+| `machines.skill-col` | 280 | `w-machines-skill-col` | The Skill column of the By skill table of Machines |
+| `machines.machine-col` | 168 | `w-machines-machine-col` | A machine's column there: room for the Another version pill and for when a report last changed |
 | `add-card.spacing` | 6 | `pt-add-card` | Between the skills' cards of the Sources list: on each card after the first of its source, which the list places itself |
 
 ### Overlays
@@ -853,6 +856,7 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, `type.pill`; a 
 - Universal: `pill.universal-*`, after the name of a universal agent in the agent picker (§6 "Agent picker"). It does nothing on a click: it is a button only so that its tooltip, which says what universal agents are, opens from the keyboard too.
 - This machine (Machines): `pill.neutral-*`, on this machine's row and beside its label in the detail pane.
 - Modified (Machines): `pill.neutral-*`, after the name of a library skill edited on its machine.
+- Another version (Machines, a skill's Also on): `pill.neutral-*`, for a machine that holds another version of a skill: in its cell of the By skill table, and after its name in Also on.
 - Update (sidebar): `pill.update-*`, hover `pill.update-hover`, 20 high, the `2xs` arrow-up icon then how many updates the app offers. §6 "Sidebar" places it.
 
 A skill row whose banner (§6 "Banner (detail pane)") has tone `attention` or `danger` shows an `AlertTriangleIcon` (`xs`) in `tone.attention.fg` after the name and pill, whatever the banner's tone; its accessible name is the banner's title. The banner tile keeps the circled `AlertIcon`. Other banner tones put nothing on the row.
@@ -901,7 +905,7 @@ One choice among a few (`src/components/ui/radio-group.tsx`): a column of rows `
 
 Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segmented.padding`, `segmented.gap`. Segments `segmented.height`, `segmented.radius`, `type.segment`. The selected segment fills with its meaning colour (`segmented.*-selected`) and `on-accent`; the others are transparent in `segmented.text`.
 
-On a card the track is `segmented.card-track-bg`. A control whose command runs is pending like a switch (§6 "Switch"): disabled at 50% opacity, `aria-busy`, with a `Spinner` beside its label, until the inventory that follows arrives.
+On a card the track is `segmented.card-track-bg`, and on the page `segmented.page-track-bg`. A control whose command runs is pending like a switch (§6 "Switch"): disabled at 50% opacity, `aria-busy`, with a `Spinner` beside its label, until the inventory that follows arrives.
 
 ### Agent client logo chip
 
@@ -996,6 +1000,15 @@ Where the agents find a skill of the selected skill's name, from the inventory a
 - When some agent sees more than one skill of the name, a callout (§6 "Callout") under the chips in `attention`: its title says how many skills of the name there are, and its line that agents seeing more than one may pick the wrong skill, ending with Details: the line's type and colour with a dashed underline, plain text that opens a hover card (§6 "Hover card") on hover. The callout has no button, and the hover card only explains: Rename is in the action row. With no agent seeing more than one, AGENTS shows nothing of this.
 - The hover card: its title in `type.secondary` `text.primary` 500, then a table (`src/components/ui/table.tsx`). A column for each place, the library first, then each plugin, then each agent's own folder, its caption in `table.header-text`; a check in `tone.primary.fg` where the row's agents see the skill, an en dash in `text.hint` where they do not. The agents that see more than one skill come first, a row each on `tone.attention.bg`; then the agents that see one, a row for those that see the same one, their names joined. Rows are `type.secondary` `text.secondary`, a 1px `shell.divider` rule above each. While some row is highlighted, a `text.muted` line under the table says what the highlight means.
 
+### Also on (detail pane DETAILS)
+
+The last row of a skill's DETAILS names the other machines that hold the skill (`src/screens/skills/also-on.tsx`), by the rule of the By skill view (§6 "Machines screen"): the other machines by label, then the cloud machine. A row of DETAILS and not a section: it is one more fact about the skill, and it needs no heading.
+
+- Each machine is a link button (`variant="link"`, `size="inline"`) in the row's `type.technical-sm`, as Also installed in on Plugins. It opens the machine on Machines, in the By machine view.
+- The Another version pill (§6 "Pills (status)") follows, 8 after its name, a machine that holds another version than this machine. Where nothing can be compared, the name stands alone.
+- The machines wrap, 12 apart, with 6 between their lines.
+- The row is left out when no other machine holds the skill, as when no hub is set.
+
 ### Edit (detail pane)
 
 Edit is a secondary small button, first in the action row, for a skill the user may write to (`canEdit` in `src/screens/skills/edit.ts`). An unmodified skill of a source has none, because its first edit would quietly turn it into one an update has to merge with. Edit opens the skill's `SKILL.md` in the editor chosen in Settings, runs no command and shows no toast; the inventory that follows shows what changed. When the editor cannot be opened, a toast says so, with Show in Finder as its action.
@@ -1081,15 +1094,29 @@ The facts under a detail pane's title (`src/components/detail-facts.tsx`), as un
 
 ### Machines screen
 
-The Machines screen (`src/screens/machines`) is a split, as Plugins is: the machines on the left, the open machine on the right. This machine is the applied inventory, and every other machine is what the hub holds of it. Nothing on it compares two machines.
+The Machines screen (`src/screens/machines`) has two views. By machine, the view it opens in, is a split, as Plugins is: the machines on the left, the open machine on the right. By skill is one table, as wide as the screen, that compares the machines skill by skill. This machine is the applied inventory, and every other machine is what the hub holds of it.
 
-- The list column: the serif title and the machine count, with a `Spinner` in `text.hint` beside the count while the hub is read. It has no search, filter or sort: the list is flat and short, and its rows start `split.list-top` under the header. This machine comes first, then the other machines A to Z by label, then the cloud machine, which goes by its glossary name.
+- The head is the same in both views: the serif title and the machine count, with a `Spinner` in `text.hint` beside the count while the hub is read. Once the screen lists more than one machine, the switch between the views stands under it, in the toolbar block (`split.toolbar-padding`): a segmented control (§6 "Segmented control", on the page) with By machine and By skill, the selected segment `segmented.neutral-selected`. A segmented control and not tabs: both views share the head, and tabs would take the title out of the list column. It is as wide as the list column in both views, so it stays under the pointer when the view changes. One machine has nothing to be compared with: the switch is then left out, and the rows start `split.list-top` under the title.
+- The view chosen stays until the app quits. It is kept outside the screen (`view.ts`), since a machine that another screen opens shows in By machine.
+- The list column (By machine) has no search, filter or sort: the list is flat and short. This machine comes first, then the other machines A to Z by label, then the cloud machine, which goes by its glossary name.
 - A row (`src/components/list-row.tsx`) holds the label, the This machine pill on this machine's row and, at the right end, the 20px logos of the machine's agents, at most 4 with a "+n" count for the rest (§6 "Agent client logo chip"). Under them, in `type.row-desc`: when the machine's report last changed, as time ago within 30 days and as a date after that, then how many skills its agents see: the names in the machine's details, each counted once, so that a row and its details agree. This machine's row gives no time, since it shows the machine as it is now.
 - While no other machine can show, one centred `type.secondary` `text.hint` line stands 24 under the rows, with at most one ghost small button under it.
+- The open machine is the route, `/machines/<machine id>`, as a skill is on Skills, so another screen opens a machine by its path (`open.ts`).
 - The detail pane: the label in `type.machine-name`, then the This machine pill at `detail` size on this machine, or, on another machine, one danger small button at the title row's right end that removes its report behind the confirm dialog (§6 "Dialog"), with a `Spinner` while its command runs. The cloud machine has neither: one `type.detail-desc` `text.muted` line says what it is, `detail.header-gap` under its name. Then the detail facts (§6 "Detail facts"): the machine id, the operating system and the agentx version a report names, and when the report last changed as a date and time. This machine shows its id alone, and the cloud machine, which has no id of its own, when it last changed.
 - Then the skills each agent of the machine sees, one group per agent configuration, A to Z by its name, as the Plugins list groups them: a section toggle (§6 "Group header (lists)", `level="group"`) with the chevron, the configuration's 16px logo, its name and count, and the Disabled pill as its mark on a disabled configuration. A header pins to the top while its group shows, and every group is open at first. The groups reach 14 past the pane's padding on both sides, so a chevron sits under the label's left edge, as a list column's chevrons sit under its title.
 - A skill's row follows the nesting pattern there: inset by `subgroup.indent`, with the `list.guide` line. It is 36 high with 8 12 8 14 padding, has no hover and opens nothing. Its left half holds the name in `type.row-name` and the Modified pill; its right half starts at the row's middle, so it reads as a column across the groups: what brings the skill in `type.secondary` `text.muted`, then, for a library skill, where it is published in `type.technical-sm` `text.caption`, a source in its short form with the full URL as its tooltip. In a group, the library's skills come first, then a plugin's, then those of the agent's own skills directory, each A to Z.
 - Only the groups scroll. The label and the facts stay in place.
+
+By skill (`skill-matrix.tsx`) answers where a skill is and where its version differs. Whether two machines hold the same skill, and the same version of it, is one rule in `across.ts`, which a skill's Also on reads too (§6 "Also on (detail pane DETAILS)").
+
+- The head spans the screen. After the switch, on its row, the Only differences checkbox (`src/components/ui/checkbox.tsx`) with its label in `type.secondary` `text.secondary`, as the select-all row of Sources. A checkbox and not a switch: it filters what shows and changes nothing. It is offered in this view alone.
+- Under the head, a table (`src/components/ui/table.tsx`, `scroll`, `layout="fixed"`): the Skill column, `machines.skill-col` wide, a column per machine in the list's order, each `machines.machine-col` wide, then an empty column that takes the rest, so the machines stay beside the skills in a wide window. The table reaches 8 past the head's padding on both sides, so the text of its first column starts under the title.
+- A machine's caption is centred, as its cells are: the label in `text.primary`, cut with an ellipsis, and under it, on a line 20 high, the This machine pill or when the machine's report last changed in `type.row-desc` `row.desc`, worded as in its row of the list.
+- A row is one skill across the machines, A to Z: its name in `type.row-name`, and under it in `type.row-desc` `row.desc` where it comes from, the same words as in a machine's details: where a library skill is published, a plugin, or the agent's own skills directory. Both are cut with an ellipsis. The rows have no hover and open nothing.
+- A cell carries one of the marks of What each agent sees: a check (`CheckIcon`, `xs`) in `tone.primary.fg` where the machine holds the skill, an en dash in `text.hint` where it does not, and the Another version pill (§6 "Pills (status)") where it holds another version than the first machine of the row that holds the skill, which is this machine whenever it holds it. A check claims no version: where nothing can be compared, as for the cloud machine, whose skills have no content hash, the cell is a check.
+- No legend: a check, the pill's words and a dash say what they mean, and no short line would say what a row is compared with better than the row does. No mark per agent either: which agent sees a skill is what By machine shows.
+- Only the table scrolls. Its captions pin to the top and its Skill column to the left (`pinned`), on `shell.content-bg`, so a window too narrow for every machine scrolls the machines under the skills.
+- With Only differences on, a row whose cells are all checks is left out. When no row is left, or no machine holds a skill, one centred `type.secondary` `text.hint` line stands in for the table.
 
 ### Copy button
 

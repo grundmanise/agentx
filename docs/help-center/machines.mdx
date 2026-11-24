@@ -1,6 +1,6 @@
 ---
 title: "See your other machines"
-description: "See on the Machines screen of the desktop app which skills each of your machines and the cloud machine has, and let this machine report its own."
+description: "See on the Machines screen of the desktop app which skills each of your machines and the cloud machine has, compare them skill by skill, and let this machine report its own."
 ---
 
 The **Machines** screen of the desktop app shows the skills of each of your machines: this machine, every other machine that reports to your hub, and the cloud machine. You can read a machine's skills while that machine is off.
@@ -58,6 +58,40 @@ Under them, each agent of the machine lists the skills it sees, and where each s
 **Disabled** beside an agent's name means the agent is disabled on that machine. Select the name to collapse or expand its skills.
 
 For the cloud machine, the skills are what each cloud agent session is given. To change them, see [Change the cloud machine's skills](/cloud#change-the-cloud-machines-skills).
+
+## Compare your machines skill by skill
+
+See which machines have a skill, and where its version differs.
+
+1. Open **Machines**.
+2. Under the title, select **By skill**.
+
+The table lists every skill that one of your machines has, by name. Under each name, it shows where the skill comes from. Each machine has a column: this machine first, then your other machines by label, then the cloud machine.
+
+| Mark | What it means |
+|---|---|
+| Check | The machine has the skill. |
+| **Another version** | The machine has another version of the skill than this machine. When this machine does not have the skill, the first machine in the row that has it takes its place. |
+| Dash | The machine does not have the skill. |
+
+To hide the skills that every machine has in the same version, select **Only differences**.
+
+To go back to the list of machines, select **By machine**. The app keeps the view you chose until you quit it. **By skill** shows once **Machines** lists more than one machine.
+
+### How agentx compares
+
+- **The same skill**: two machines have the same skill when both installed it from the same source, or both have the same hub skill, under any name. A skill that agentx does not manage, such as a plugin's skill, is the same skill when its name is the same.
+- **The same version**: agentx compares the content of the skill on both machines. For the cloud machine, whose skills agentx has not read, it compares the version of the source that each one was installed at.
+- **Nothing to compare**: a check. agentx shows **Another version** only when it found a difference.
+
+## See which other machines have a skill
+
+1. Open **Skills** and select a skill.
+2. Under **Details**, read **Also on**.
+
+**Also on** names your other machines that have the skill, then the cloud machine. **Another version** follows a machine that has another version than this machine. Select a machine to open it on **Machines**.
+
+**Also on** shows when another machine has the skill. agentx compares the machines as in [How agentx compares](#how-agentx-compares).
 
 ## Remove a machine's report
 
