@@ -47,7 +47,7 @@ On each machine, add the repository with `--hub`:
 agentx source add git@github.com:you/agentx-hub.git --hub
 ```
 
-In the desktop app, open **Settings**, paste the URL under **Hub** and select **Save**. **Change…** replaces it with another repository, and **Detach** removes it. Your skills stay on the machine either way.
+In the desktop app, open **Settings**, paste the URL under **Hub** and select **Save**. **Change…** replaces it with another repository, and **Unlink** removes it. Your skills stay on the machine either way. If the hub holds this machine's [inventory report](/cli/machine#remove-a-report-from-the-hub), agentx deletes it from the hub the machine leaves.
 
 Each machine can use its own URL for the same repository, such as SSH on your computer and HTTPS for a cloud agent. For the details, see [Add your hub](/cli/source#add-your-hub). For how `agentx snapshot apply` treats two URLs of one repository, see [Apply a snapshot](/cli/snapshot#apply-a-snapshot).
 
