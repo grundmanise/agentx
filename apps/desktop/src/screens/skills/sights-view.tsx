@@ -2,12 +2,18 @@
 // the name, a notice under the chips that ends with Details, a word with a dashed underline. Hover
 // on it opens a hover card: a table with a column for each place that holds a skill of the name
 // and a row for each agent that sees more than one, highlighted, then a row for the agents that
-// see the same one (`sightsTable`). The notice is a Callout, as the detail pane's banner is, with
+// see the same one (`sightsTable`). The notice is an Alert, as the detail pane's banner is, with
 // no button; the hover card only explains.
 import { useId } from "react";
 
-import { Callout } from "#/components/callout.tsx";
 import { CheckIcon } from "#/components/icons/check.tsx";
+import {
+  Alert,
+  AlertContent,
+  AlertDescription,
+  AlertTile,
+  AlertTitle,
+} from "#/components/ui/alert.tsx";
 import {
   HoverCard,
   HoverCardContent,
@@ -83,7 +89,7 @@ const SightsBody = ({ table }: { table: SightsTable }) => {
 };
 
 /**
- * The notice under the chips while some agent sees more than one skill of the name, a callout: how
+ * The notice under the chips while some agent sees more than one skill of the name, an alert: how
  * many skills of the name there are, then Details, which opens the table on hover.
  */
 export const SightsNotice = ({ sights }: { sights: NameSights }) => {
@@ -93,12 +99,11 @@ export const SightsNotice = ({ sights }: { sights: NameSights }) => {
   }
   const table = sightsTable(sights);
   return (
-    <Callout
-      tone="attention"
-      label="Skills of the same name"
-      title={clash.title}
-      text={
-        <>
+    <Alert tone="attention" aria-label="Skills of the same name">
+      <AlertTile tone="attention" />
+      <AlertContent>
+        <AlertTitle>{clash.title}</AlertTitle>
+        <AlertDescription>
           {clash.text}{" "}
           <HoverCard>
             <HoverCardTrigger asChild>
@@ -110,8 +115,8 @@ export const SightsNotice = ({ sights }: { sights: NameSights }) => {
               <SightsBody table={table} />
             </HoverCardContent>
           </HoverCard>
-        </>
-      }
-    />
+        </AlertDescription>
+      </AlertContent>
+    </Alert>
   );
 };

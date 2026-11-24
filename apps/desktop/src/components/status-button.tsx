@@ -71,7 +71,7 @@ export const StatusButton = ({
       </button>
     </TooltipTrigger>
     {tooltip.length > 0 && (
-      <TooltipContent align="end">
+      <TooltipContent placement="above-end">
         {tooltip.map((line) => (
           <span key={line} className="block">
             {line}

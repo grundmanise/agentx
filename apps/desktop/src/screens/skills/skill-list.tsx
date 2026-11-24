@@ -19,12 +19,21 @@ import {
   SortToggle,
 } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
+import { SearchIcon } from "#/components/icons/search.tsx";
 import { LIST_GUIDE, LIST_GUIDE_NESTED } from "#/components/list-guide.ts";
-import { SearchField } from "#/components/search-field.tsx";
 import { SectionToggle } from "#/components/section-toggle.tsx";
 import { SplitButton } from "#/components/split-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "#/components/ui/collapsible.tsx";
 import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import {
   Tooltip,
@@ -221,13 +230,12 @@ type Item =
       /** The space above a group (`group.spacing`) or above a plugin (`subgroup.spacing`). */
       above: "group" | "subgroup";
     }
-  | { kind: "header"; key: string; group: Group; open: boolean }
+  | { kind: "header"; key: string; group: Group }
   | {
       kind: "subheader";
       key: string;
       group: Group;
       subgroup: Subgroup;
-      open: boolean;
     }
   | {
       kind: "row";
@@ -273,7 +281,6 @@ const bodyOf = (group: Group, collapse: Sections): Item[] => {
         group,
         key: `subgroup:${subgroup.key}`,
         kind: "subheader",
-        open,
         subgroup,
       },
       ...(open ? rowItems(group, subgroup.rows, subgroup) : []),
@@ -299,7 +306,7 @@ const itemsOf = (groups: Group[], collapse: Sections): Item[] =>
               kind: "gap",
             } satisfies Item,
           ]),
-      { group, key: `group:${group.key}`, kind: "header", open },
+      { group, key: `group:${group.key}`, kind: "header" },
       ...(open ? bodyOf(group, collapse) : []),
     ];
   });
@@ -649,112 +656,136 @@ const SkillGroups = ({
       ) : (
         <div ref={virtualizer.containerRef} className="relative">
           {drawn.map(({ group, header, gaps, parts }) => (
-            <section
+            <Collapsible
               key={group.key}
-              aria-label={`${group.label} (${group.rows.length})`}
-              className="contents"
+              asChild
+              open={!collapse.collapsed.has(group.key)}
+              onOpenChange={() => {
+                // Only a drawn header's toggle opens or closes the group.
+                if (header !== undefined) {
+                  toggle(header.index, () => {
+                    onToggleGroup(group.key);
+                  });
+                }
+              }}
             >
-              {gaps.map(({ index, item }) => (
-                <div
-                  key={item.key}
-                  ref={virtualizer.measureElement}
-                  data-index={index}
-                  aria-hidden="true"
-                  className={
-                    item.above === "group"
-                      ? PLACED_GAP_GROUP
-                      : PLACED_GAP_SUBGROUP
-                  }
-                />
-              ))}
-              {header !== undefined && (
-                <div
-                  ref={virtualizer.measureElement}
-                  data-index={header.index}
-                  data-rail=""
-                  className={RAIL_GROUP}
-                >
-                  <div className={RAIL_SPAN}>
-                    <div ref={railHeader} className={PINNED_GROUP}>
-                      <SectionToggle
-                        level="group"
-                        label={group.label}
-                        title={group.source}
-                        count={group.rows.length}
-                        open={header.item.open}
-                        onToggle={() => {
-                          toggle(header.index, () => {
-                            onToggleGroup(group.key);
-                          });
-                        }}
-                        action={groupAction(group, onAdoptAll)}
-                      />
+              <section
+                aria-label={`${group.label} (${group.rows.length})`}
+                className="contents"
+              >
+                {gaps.map(({ index, item }) => (
+                  <div
+                    key={item.key}
+                    ref={virtualizer.measureElement}
+                    data-index={index}
+                    aria-hidden="true"
+                    className={
+                      item.above === "group"
+                        ? PLACED_GAP_GROUP
+                        : PLACED_GAP_SUBGROUP
+                    }
+                  />
+                ))}
+                {header !== undefined && (
+                  <div
+                    ref={virtualizer.measureElement}
+                    data-index={header.index}
+                    data-rail=""
+                    className={RAIL_GROUP}
+                  >
+                    <div className={RAIL_SPAN}>
+                      <div ref={railHeader} className={PINNED_GROUP}>
+                        <SectionToggle
+                          level="group"
+                          label={group.label}
+                          title={group.source}
+                          count={group.rows.length}
+                          action={groupAction(group, onAdoptAll)}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              {parts.map(({ subgroup, subheader, rows: partRows }) => {
-                const list = (
-                  <ul className="contents">
-                    {partRows.map(({ index, item }) => (
-                      <li
-                        key={item.key}
-                        ref={virtualizer.measureElement}
-                        data-index={index}
-                        aria-posinset={item.at + 1}
-                        aria-setsize={item.size}
-                        className={placedRow(item)}
-                      >
-                        <SkillRowItem
-                          row={item.row}
-                          forks={forks.get(item.row.name) ?? NO_FORKS}
-                          configurations={configurations}
-                          facts={facts}
-                          selected={item.row.key === selectedKey}
-                          onSelect={select}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                );
-                if (subgroup === undefined) {
-                  return <Fragment key="rows">{list}</Fragment>;
-                }
-                return (
-                  <section
-                    key={subgroup.key}
-                    aria-label={`${subgroup.label} (${subgroup.rows.length})`}
-                    className="contents"
-                  >
-                    {subheader !== undefined && (
-                      <div
-                        ref={virtualizer.measureElement}
-                        data-index={subheader.index}
-                        data-rail=""
-                        className={RAIL_SUBGROUP}
-                      >
-                        <div className={RAIL_SPAN}>
-                          <div ref={railHeader} className={PINNED_SUBGROUP}>
-                            <SectionToggle
-                              label={subgroup.label}
-                              count={subgroup.rows.length}
-                              detail={subgroup.marketplace}
-                              open={subheader.item.open}
-                              onToggle={() => {
-                                toggle(subheader.index, () => {
-                                  onToggle(subgroup.key);
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {list}
-                  </section>
-                );
-              })}
-            </section>
+                )}
+                {/* The group's drawn rows and plugins, which the list places itself. */}
+                <CollapsibleContent asChild>
+                  <div className="contents">
+                    {parts.map(({ subgroup, subheader, rows: partRows }) => {
+                      const list = (
+                        <ul className="contents">
+                          {partRows.map(({ index, item }) => (
+                            <li
+                              key={item.key}
+                              ref={virtualizer.measureElement}
+                              data-index={index}
+                              aria-posinset={item.at + 1}
+                              aria-setsize={item.size}
+                              className={placedRow(item)}
+                            >
+                              <SkillRowItem
+                                row={item.row}
+                                forks={forks.get(item.row.name) ?? NO_FORKS}
+                                configurations={configurations}
+                                facts={facts}
+                                selected={item.row.key === selectedKey}
+                                onSelect={select}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                      if (subgroup === undefined) {
+                        return <Fragment key="rows">{list}</Fragment>;
+                      }
+                      return (
+                        <Collapsible
+                          key={subgroup.key}
+                          asChild
+                          open={collapse.expanded.has(subgroup.key)}
+                          onOpenChange={() => {
+                            // Only a drawn header's toggle opens or closes the plugin.
+                            if (subheader !== undefined) {
+                              toggle(subheader.index, () => {
+                                onToggle(subgroup.key);
+                              });
+                            }
+                          }}
+                        >
+                          <section
+                            aria-label={`${subgroup.label} (${subgroup.rows.length})`}
+                            className="contents"
+                          >
+                            {subheader !== undefined && (
+                              <div
+                                ref={virtualizer.measureElement}
+                                data-index={subheader.index}
+                                data-rail=""
+                                className={RAIL_SUBGROUP}
+                              >
+                                <div className={RAIL_SPAN}>
+                                  <div
+                                    ref={railHeader}
+                                    className={PINNED_SUBGROUP}
+                                  >
+                                    <SectionToggle
+                                      label={subgroup.label}
+                                      count={subgroup.rows.length}
+                                      detail={subgroup.marketplace}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            <CollapsibleContent asChild>
+                              {list}
+                            </CollapsibleContent>
+                          </section>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
+                </CollapsibleContent>
+              </section>
+            </Collapsible>
           ))}
         </div>
       )}
@@ -863,14 +894,21 @@ export const SkillList = ({
         </div>
       </div>
       <div className="pt-split-toolbar-top px-split-toolbar pb-split-toolbar-bottom gap-split-toolbar flex flex-col">
-        <SearchField
-          label="Filter skills by name"
-          placeholder="Search"
-          value={filters.name}
-          onChange={(name) => {
-            onFilters({ ...filters, name });
-          }}
-        />
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon size="xs" />
+          </InputGroupAddon>
+          <InputGroupInput
+            kind="list-search"
+            type="search"
+            aria-label="Filter skills by name"
+            placeholder="Search"
+            value={filters.name}
+            onChange={(e) => {
+              onFilters({ ...filters, name: e.target.value });
+            }}
+          />
+        </InputGroup>
         <div className="gap-split-filter flex min-w-0 items-center">
           <FilterPopover
             rows={rows}
