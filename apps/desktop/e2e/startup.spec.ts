@@ -6,6 +6,7 @@ import {
   doctorWith,
   expect,
   firstInventory,
+  keptReads,
   loadLines,
   test,
 } from "./harness/cli.ts";
@@ -147,8 +148,8 @@ const veil = (page: Page) =>
   page.getByRole("main").locator("> [data-launch-veil]");
 
 /**
- * Launches with one hub skill, waits until its inventory is kept for the next launch, then
- * restarts the app with `doctor` held. Returns the held doctor and the command lines of the
+ * Launches with one hub skill, waits until its inventory and its files are kept for the next
+ * launch, then restarts the app with `doctor` held. Returns the held doctor and the command lines of the
  * restart, the reads of the skill included.
  */
 const relaunch = async (cli: MockCli, page: Page, more: string[] = []) => {
@@ -173,6 +174,8 @@ const relaunch = async (cli: MockCli, page: Page, more: string[] = []) => {
         await page.evaluate(() => localStorage.getItem("agentx.launch"))
     )
     .not.toBeNull();
+  // The files read is kept in IndexedDB apart from the inventory, and after it shows.
+  await expect.poll(async () => await keptReads(page)).toContain("files:notes");
 
   const before = cli.commands.length;
   const held = cli.register(["doctor"], {
