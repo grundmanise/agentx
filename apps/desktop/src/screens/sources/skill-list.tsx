@@ -1,27 +1,20 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cva } from "class-variance-authority";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 
 import type { Configuration, Install } from "#/cli/events.gen.ts";
 import { CodePane } from "#/components/code-pane.tsx";
+import { ExternalLinkIcon } from "#/components/icons/external-link.tsx";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { RemoveSwap } from "#/components/remove-swap.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import {
   Tooltip,
@@ -32,6 +25,7 @@ import { formatDate } from "#/lib/dates.ts";
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
+import { openSkill, skillPath } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
 import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
@@ -44,6 +38,7 @@ import type {
   CardGroup,
   SkillCard,
   SkillMdRef,
+  TakenReason,
 } from "#/screens/sources/projection.ts";
 import { loadSkillMd } from "#/store/loaders.ts";
 import { useSettling } from "#/store/settle.ts";
@@ -135,8 +130,7 @@ export const statusVariants = cva("type-secondary flex-none font-medium", {
     status: {
       added: "text-add-card-status-added",
       forked: "text-add-card-status-forked",
-      "name-in-use": "text-add-card-status-in-use",
-      "on-disk": "text-add-card-status-disk",
+      "name-taken": "text-add-card-status-taken",
     },
   },
 });
@@ -191,21 +185,41 @@ const SkillMd = ({
 };
 
 /**
- * "View skill": the skill's directory on its source's web page, opened in the browser. It sits
- * beside the name in the open row, over the row's trigger, and takes its own clicks.
+ * "See full skill": the skill's directory on its source's web page, opened in the browser, with
+ * the external-link icon after it. It sits beside the name in the open row, over the row's
+ * trigger, and takes its own clicks.
  */
-const ViewSkill = ({ page }: { page: string }) => (
+const SeeFullSkill = ({ page }: { page: string }) => (
   <a
     href={page}
     title={page}
-    className="type-secondary text-text-primary pointer-events-auto flex-none font-medium underline underline-offset-2"
+    className="type-secondary text-text-primary pointer-events-auto inline-flex flex-none items-center gap-1 font-medium underline underline-offset-2"
     onClick={(e) => {
       e.preventDefault();
       void openInBrowser(page);
     }}
   >
-    View skill
+    See full skill
+    <ExternalLinkIcon size="2xs" />
   </a>
+);
+
+/** Why a card's name is taken, the skill that holds it a link that opens it in Skills. */
+const TakenText = ({ taken }: { taken: TakenReason }) => (
+  <>
+    {taken.before}
+    <a
+      href={`#${skillPath(taken.skill)}`}
+      className="text-text-primary underline underline-offset-2"
+      onClick={(e) => {
+        e.preventDefault();
+        openSkill(taken.skill);
+      }}
+    >
+      {taken.skill}
+    </a>
+    {taken.after}
+  </>
 );
 
 /**
@@ -230,7 +244,11 @@ const Details = ({ card }: { card: SkillCard }) => {
           )}
           {card.title !== undefined && (
             <p className="type-secondary text-text-hint m-0 text-pretty">
-              {card.title}
+              {card.taken === undefined ? (
+                card.title
+              ) : (
+                <TakenText taken={card.taken} />
+              )}
             </p>
           )}
         </div>
@@ -341,7 +359,7 @@ const AddedRemove = ({
 
 /**
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its
- * description while closed, View skill beside the name while open) and, at its end, the round
+ * description while closed, See full skill beside the name while open) and, at its end, the round
  * check that selects it, or for a skill this machine holds already its status, which for an Added
  * skill turns into Remove on hover. Added carries the date of the last add, and the check of a
  * skill this machine removed has the date of the last removal before it, when this machine
@@ -428,7 +446,7 @@ const SkillItemView = ({
         meta={rowMeta(card, date)}
         action={action}
       >
-        {/* The name and View skill share a baseline, as their sizes differ. */}
+        {/* The name and See full skill share a baseline, as their sizes differ. */}
         <span className="flex min-w-0 flex-initial items-baseline gap-3">
           <span
             aria-hidden
@@ -436,7 +454,7 @@ const SkillItemView = ({
           >
             {card.name}
           </span>
-          {open && card.page !== undefined && <ViewSkill page={card.page} />}
+          {open && card.page !== undefined && <SeeFullSkill page={card.page} />}
         </span>
         {loading ? (
           <Loading />
@@ -535,14 +553,16 @@ const PLACED_CARD = "pt-add-card absolute top-0 left-0 w-full";
 /**
  * Where the list starts in the scroller's content, in px, for the virtualizer's scroll margin. It
  * changes whenever something above it in the scroller changes size, comes or goes, such as the
- * card of the open source or the select-all row.
+ * card of the open source or the select-all row. It is measured in an effect, not a layout
+ * effect: the scroller belongs to a component above, and when both mount at once, as on a launch
+ * that draws the kept sources, React sets its ref only after the list's layout effects ran.
  */
 const useOffsetIn = (
   list: RefObject<HTMLElement | null>,
   scroller: RefObject<HTMLElement | null>
 ) => {
   const [offset, setOffset] = useState(0);
-  useLayoutEffect(() => {
+  useEffect(() => {
     const element = list.current;
     const parent = scroller.current;
     const measure = () => {
@@ -666,6 +686,12 @@ export const SkillList = ({
     overscan: OVERSCAN,
     scrollMargin: offset,
   });
+
+  // A row that changes height moves the scroll only when it lies wholly above what shows, so a
+  // row that opens keeps the scroll. By default the list also moves it for a row whose top is
+  // above, so a row opened with its top hidden pushed the list up by all it revealed.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) =>
+    item.end <= (virtualizer.scrollOffset ?? 0);
 
   const drawn = virtualizer.getVirtualItems().flatMap((v) => {
     const item = items[v.index];
