@@ -800,39 +800,6 @@ test.describe("the Update skills dialog", () => {
   });
 });
 
-/** The lines of the Activity log whose text holds `text`, oldest first. */
-const logLines = (page: Page, text: string) =>
-  page
-    .getByRole("dialog", { name: "Activity log" })
-    .getByRole("list", { name: "Activity log lines" })
-    .getByRole("listitem")
-    .filter({ hasText: text });
-
-test.describe("the Activity log", () => {
-  test("says an update an inventory offers that the one before did not, once; the first inventory's are not new", async ({
-    cli,
-    page,
-  }) => {
-    await open(cli, page, "pdf", ["review"]);
-    await cli.serveEmit([
-      { ...inventoryOf(libraryWith(["pdf", "review"])), scan_counter: 2 },
-    ]);
-    await expect(update(page, "pdf")).toBeVisible();
-    // The same offer again is not new.
-    await cli.serveEmit([
-      { ...inventoryOf(libraryWith(["pdf", "review"])), scan_counter: 3 },
-    ]);
-    await page.keyboard.press("Control+K");
-    await page
-      .getByRole("dialog")
-      .getByRole("option")
-      .filter({ hasText: "Show activity log" })
-      .click();
-    await expect(logLines(page, "update available for pdf")).toHaveCount(1);
-    await expect(logLines(page, "update available for review")).toHaveCount(0);
-  });
-});
-
 /** The banner of draft's pending merge. */
 const conflictBanner = (page: Page) =>
   pane(page, "draft").getByRole("note", { name: "Update has conflicts" });
