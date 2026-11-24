@@ -126,7 +126,9 @@ test("serve's own lines arrive in order, with their child id", async ({
   expect(
     await page.evaluate(async () => await window.transport.serveStart())
   ).toBe(1);
-  await cli.serveEmit([{ drift: [], name: "pdf", type: "drift" }]);
+  await cli.serveEmit([
+    { kind: "managed", name: "pdf", outcome: "modified", type: "reconcile" },
+  ]);
   await cli.serveLog([{ level: "warn", message: "careful" }]);
   await cli.serveEmit([{ checked_at: "now", type: "update_check" }]);
 
@@ -135,7 +137,13 @@ test("serve's own lines arrive in order, with their child id", async ({
     {
       value: {
         childId: 1,
-        event: { drift: [], name: "pdf", schema_version: 4, type: "drift" },
+        event: {
+          kind: "managed",
+          name: "pdf",
+          outcome: "modified",
+          schema_version: 4,
+          type: "reconcile",
+        },
         kind: "event",
       },
       what: "serve",
@@ -185,7 +193,9 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
   await expect(received(page)).toHaveCount(2);
   expect(cli.serveStarts).toBe(2);
   await cli.serveLog([{ level: "warn", message: "cannot fetch a source" }]);
-  await cli.serveEmit([{ drift: [], name: "pdf", type: "drift" }]);
+  await cli.serveEmit([
+    { kind: "managed", name: "pdf", outcome: "modified", type: "reconcile" },
+  ]);
   // Serve is not started yet: its lines wait.
   await expect(received(page)).toHaveCount(2);
 
@@ -219,7 +229,13 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
     {
       value: {
         childId: 2,
-        event: { drift: [], name: "pdf", schema_version: 4, type: "drift" },
+        event: {
+          kind: "managed",
+          name: "pdf",
+          outcome: "modified",
+          schema_version: 4,
+          type: "reconcile",
+        },
         kind: "event",
       },
       what: "serve",

@@ -3,13 +3,14 @@
 // the events of a child that ended or was replaced are dropped. Within one serve instance an
 // inventory applies only when its scan counter goes up; a new instance applies whatever it sends
 // first, since counters are never compared across instances. What serve notices goes to the
-// activity list: its drift, reconcile and update events, and the warnings it logs on stderr. Its
+// activity list: a library skill whose state or drift changed from one inventory of an instance to
+// the next, its reconcile and update events, and the warnings it logs on stderr. Its
 // `update_check` events say when the last update check ended, which the title bar shows. The
 // activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
 // exit of the active child.
 import type {
-  DriftEvent,
   InventoryEvent,
+  LibraryEntry,
   LogEvent,
   SearchResult,
 } from "#/cli/events.gen.ts";
@@ -197,14 +198,36 @@ export const retryRefresh = async () => {
   await refresh();
 };
 
-const driftText = (e: DriftEvent) => {
-  const now = e.drift.length > 0 ? e.drift.join(", ") : e.state;
-  return now === undefined ? `${e.name} changed` : `${e.name}: ${now}`;
+/** "pdf: displaced, missing", or "pdf: modified" when it is in no drift, as the activity list says it. */
+const driftText = (entry: LibraryEntry) => {
+  const drift = entry.drift ?? [];
+  const now = drift.length > 0 ? drift.join(", ") : entry.state;
+  return now === undefined ? `${entry.name} changed` : `${entry.name}: ${now}`;
 };
 
-/** Applies an inventory, unless the same instance already applied one with a counter as high. */
+/**
+ * The library skills of `after` whose state or drift is not what `before` showed, in the library's
+ * order. A skill that arrived or left is no change of drift: the inventory shows that itself.
+ */
+const driftChanges = (before: LibraryEntry[], after: LibraryEntry[]) => {
+  const previous = new Map(before.map((entry) => [entry.name, entry]));
+  return after.filter((entry) => {
+    const was = previous.get(entry.name);
+    return (
+      was !== undefined &&
+      (was.state !== entry.state ||
+        (was.drift ?? []).join("\n") !== (entry.drift ?? []).join("\n"))
+    );
+  });
+};
+
+/**
+ * Applies an inventory, unless the same instance already applied one with a counter as high, and
+ * says each library skill whose state or drift changed since the instance's inventory before. The
+ * first inventory of an instance is where every state starts, not a change of one.
+ */
 const applyInventory = (childId: number, event: InventoryEvent) => {
-  const { applied } = useAppStore.getState();
+  const { applied, inventory: before } = useAppStore.getState();
   const sameInstance =
     applied !== undefined &&
     applied.childId === childId &&
@@ -228,6 +251,12 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
       plural(event.plugins.length, "plugin"),
     ].join(", ")}`
   );
+  if (sameInstance && before !== undefined) {
+    for (const entry of driftChanges(before.library, event.library)) {
+      addActivity("attention", driftText(entry));
+      logBackground(driftText(entry));
+    }
+  }
 };
 
 /** Clears an answered request, even when the inventory did not change. */
@@ -282,9 +311,6 @@ const apply = (childId: number, event: ServeEvent) => {
     } else {
       logBackground("update check failed", { failed: true });
     }
-  } else if (event.type === "drift") {
-    addActivity("attention", driftText(event));
-    logBackground(driftText(event));
   } else if (event.type === "error") {
     logBackground(event.message, {
       failed: true,

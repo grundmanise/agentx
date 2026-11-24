@@ -619,19 +619,6 @@ export interface ReconcileEvent {
   path?: string;
 }
 
-export interface DriftEvent {
-  type: "drift";
-  schema_version: number;
-  instance_id: string;
-  scan_counter: number;
-  name: string;
-  kind: SkillKind;
-  state?: SkillState;
-  drift: DriftState[];
-  previous_state?: SkillState;
-  previous_drift: DriftState[];
-}
-
 export interface UpdateCheckEvent {
   type: "update_check";
   schema_version: number;
@@ -688,7 +675,6 @@ export type CliEvent =
   | DoctorEvent
   | AdoptionEvent
   | ReconcileEvent
-  | DriftEvent
   | UpdateCheckEvent
   | ListeningEvent
   | OperationEvent

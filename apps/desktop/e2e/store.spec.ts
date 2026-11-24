@@ -1,5 +1,8 @@
 import type { Page } from "@playwright/test";
 
+import type { LibraryEntry } from "#/cli/events.gen.ts";
+
+import { library } from "./fixtures/skills.ts";
 import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -170,6 +173,59 @@ test("shows serve's warnings in the activity list, not its debug lines or an old
   await cli.serveLog([{ level: "warn", message: "reconcile: pdf" }], 1);
   // The old child's warning was handled before serveLog returned: it added nothing.
   await expect(activity).toHaveText([warning]);
+});
+
+/** An inventory with this counter and this library. */
+const inventory = (counter: number, entries: LibraryEntry[]) => ({
+  ...firstInventory(),
+  library: entries,
+  scan_counter: counter,
+});
+
+test("tells each skill whose state or drift changed from one inventory to the next", async ({
+  cli,
+  page,
+}) => {
+  await launch(cli, page);
+  // The Skills screen reads the files of the skill it shows.
+  for (const name of ["pdf", "scratch"]) {
+    cli.register(["skill", "files", name], {});
+    cli.register(["skill", "diff", name], {});
+  }
+  const [pdf, scratch] = ["pdf", "scratch"].map((name) => {
+    const entry = library.find((e) => e.name === name);
+    if (entry === undefined) {
+      throw new Error(`no ${name} in the library fixture`);
+    }
+    return entry;
+  });
+  const activity = page
+    .getByRole("list", { name: "Activity" })
+    .getByRole("listitem");
+  // Skills that arrive in the library are no change of state.
+  await cli.serveEmit([inventory(2, [pdf])]);
+  await expect(value(page, "Counter")).toHaveText("2");
+  await cli.serveEmit([
+    inventory(3, [{ ...pdf, drift: ["displaced", "missing"] }, scratch]),
+  ]);
+  await expect(value(page, "Counter")).toHaveText("3");
+  await cli.serveEmit([
+    inventory(4, [{ ...pdf, state: "modified" }]),
+    inventory(5, [{ ...pdf, state: "modified" }, scratch]),
+  ]);
+  await expect(value(page, "Counter")).toHaveText("5");
+  await expect(activity).toHaveText([
+    "pdf: modified",
+    "pdf: displaced, missing",
+  ]);
+  await expect(activity.first()).toHaveAttribute("data-tone", "attention");
+
+  // A new instance's first inventory is where every state starts.
+  await cli.serveExit(null);
+  cli.serveRestart(2);
+  await cli.serveEmit([inventory(1, [pdf, scratch])]);
+  await expect(value(page, "Instance")).toHaveText("instance-2");
+  await expect(activity).toHaveCount(2);
 });
 
 test("ignores the inventory a one-shot writes, and keeps its outcome", async ({

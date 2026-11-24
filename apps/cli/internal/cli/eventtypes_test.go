@@ -60,7 +60,6 @@ var eventTypes = []struct {
 	{"doctor", doctorEvent{}},
 	{"adoption", adoptionEvent{}},
 	{"reconcile", reconcileEvent{}},
-	{"drift", driftEvent{}},
 	{"update_check", updateCheckEvent{}},
 	{"listening", listeningEvent{}},
 }
@@ -116,16 +115,16 @@ func errorCodes() []string {
 // CLI writes.
 var valueLists = []valueList{
 	{name: "SkillKind", values: []string{lineage.KindManaged, lineage.KindUnmanaged}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "Kind"}, {reconcileEvent{}, "Kind"}, {driftEvent{}, "Kind"},
+		{scan.LibraryEntry{}, "Kind"}, {reconcileEvent{}, "Kind"},
 		{updateAvailableEvent{}, "Kind"}, {conflictEvent{}, "Kind"}, {snapshotSkill{}, "Kind"},
 	}},
 	{name: "SkillState", values: []string{stateCurrent, stateModified}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "State"}, {driftEvent{}, "State"}, {driftEvent{}, "PreviousState"},
+		{scan.LibraryEntry{}, "State"},
 	}},
 	{name: "DriftState", open: true, values: []string{
 		driftDisplaced, driftMissing, driftSourceRemoved, driftUpstreamRemoved, driftNotPublished,
 	}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "Drift"}, {driftEvent{}, "Drift"}, {driftEvent{}, "PreviousDrift"},
+		{scan.LibraryEntry{}, "Drift"},
 	}},
 	{name: "PlacementMode", values: []string{modeSymlink, modeCopy, modeLibrary}, fields: []fieldRef{
 		{scan.LibraryPlacement{}, "Mode"},
