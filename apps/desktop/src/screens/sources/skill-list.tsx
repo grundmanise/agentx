@@ -224,7 +224,7 @@ const TakenText = ({ taken }: { taken: TakenReason }) => (
 
 /**
  * What an open row shows: why a skill that cannot be selected cannot be, and its SKILL.md, whose
- * frontmatter holds the description. One of your skills on the hub has no SKILL.md to
+ * frontmatter holds the description. One of your skills on the account repo has no SKILL.md to
  * read here, so its row shows its description.
  */
 const Details = ({ card }: { card: SkillCard }) => {

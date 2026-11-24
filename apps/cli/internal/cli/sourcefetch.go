@@ -76,11 +76,11 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	if !exists {
 		// Settings that name sources the store has nothing of, as an
 		// import leaves them: a shared source is refused as not fetched, with
-		// the add that fetches it as the hint, and the hub, which
+		// the add that fetches it as the hint, and the account repo, which
 		// this command writes the remote of when it is missing, is fetched
 		// into a store created for it.
 		for _, t := range targets {
-			if !t.entry.Hub {
+			if !t.entry.Account {
 				return sourceFailure(source.NotFetched(t.src.URL), t.src)
 			}
 		}
@@ -144,13 +144,13 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 		return nil, storeFailure(err)
 	}
 	// Shared sources are fetched in parallel, without blobs, see
-	// source.FetchAll; the hub whole, once those are done, see
+	// source.FetchAll; the account repo whole, once those are done, see
 	// fetchForks. results keeps the order of targets, and then and the
 	// progress events count both alike.
 	var srcs []source.Source
 	var shared, forks []int
 	for i, t := range targets {
-		if t.entry.Hub {
+		if t.entry.Account {
 			forks = append(forks, i)
 			continue
 		}
@@ -194,11 +194,11 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 	// the user wrote; the truth is that the source is not on this machine,
 	// which is what source skills says of the same state. Only a shared
 	// source that failed is checked, so a run that works spawns nothing for
-	// it: the hub's remote is always written before its fetch,
+	// it: the account repo's remote is always written before its fetch,
 	// and one a failed first fetch took out again, see fetchForks, was
 	// still unreachable.
 	for i, res := range results {
-		if res.Err != nil && !targets[i].entry.Hub && !source.Configured(ctx, inv.git, gitDir, res.Source.ID()) {
+		if res.Err != nil && !targets[i].entry.Account && !source.Configured(ctx, inv.git, gitDir, res.Source.ID()) {
 			results[i].Err = source.NotFetched(res.Source.URL)
 		}
 	}
@@ -233,7 +233,7 @@ func (inv *invocation) holdLock(ctx context.Context, wait, signal bool, fn func(
 // A shared source with no remote at all, which an interrupted removal
 // leaves, is left alone: writing one for it would build a remote out of an
 // entry nothing can fetch. The fetch that follows fails, and the run says
-// what it is: a source this machine does not hold. The hub's
+// what it is: a source this machine does not hold. The account repo's
 // remote is written whenever it is missing, as settings an import wrote leave it:
 // its forks are fetched whole from the repository and need nothing else.
 // One written over a remote never fetched whole is fetched with --refetch
@@ -242,13 +242,13 @@ func (inv *invocation) alignRemotes(ctx context.Context, gitDir string, targets 
 	remotes := source.Remotes(ctx, inv.git, gitDir)
 	for _, t := range targets {
 		remote, ok := remotes[t.src.ID()]
-		if (!ok || remote.URL == "") && !t.entry.Hub || remote == source.RemoteOf(t.entry) {
+		if (!ok || remote.URL == "") && !t.entry.Account || remote == source.RemoteOf(t.entry) {
 			continue
 		}
 		if err := source.Configure(ctx, inv.git, gitDir, t.entry); err != nil {
 			return err
 		}
-		if t.entry.Hub {
+		if t.entry.Account {
 			inv.awaitWholeFetch(remotes, t.entry)
 		}
 	}
@@ -308,7 +308,7 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 		check.report(inv, res.Source.URL)
 		ev := entryEvent(entry)
 		ev.AccessReason = check.reason()
-		if entry.Hub {
+		if entry.Account {
 			n, _, err := inv.forkCount(ctx, gitDir, entry, source.RemoteName(res.Source.ID()))
 			if err != nil {
 				return storeFailure(err)
@@ -488,7 +488,7 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 }
 
 // sharedSources are the entries of sources the update check and serve's
-// search index cover: every one but the hub, which holds no
+// search index cover: every one but the account repo, which holds no
 // skill on one branch to check or list. Its forks are fetched whole by the
 // commands that read them, see fetchForks; fetching it as a shared source
 // would bring its objects in without their blobs, which its forks' history
@@ -496,7 +496,7 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 func sharedSources(sources []home.Source) []home.Source {
 	var shared []home.Source
 	for _, entry := range sources {
-		if !entry.Hub {
+		if !entry.Account {
 			shared = append(shared, entry)
 		}
 	}

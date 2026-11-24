@@ -6,8 +6,8 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
-// A merge of two histories of one fork, as the hub step of an update or
-// a publish makes when both this machine and the hub moved on,
+// A merge of two histories of one fork, as the account repo step of an update or
+// a publish makes when both this machine and the account repo moved on,
 // records which import is the fork's base afterwards in its Agentx-Base
 // trailer, since the next update from upstream merges with that import as
 // its base. When both sides are on the same import, that is it. When they

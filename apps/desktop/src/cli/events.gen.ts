@@ -81,7 +81,7 @@ export type ImportAction =
   | "kept"
   | "skipped";
 export type MachineDerivation = "platform" | "random";
-export type UpdateCheckScope = "all" | "hub";
+export type UpdateCheckScope = "all" | "account";
 export type SourceAccess = "writable" | "read-only" | "unknown";
 export type ProgressPhase =
   | "fetch"
@@ -203,7 +203,7 @@ export interface SearchResult {
 export interface SettingsSource {
   url: string;
   alias?: string;
-  hub?: boolean;
+  account?: boolean;
   pin?: string;
   access?: SourceAccess;
   access_checked?: string;
@@ -393,7 +393,7 @@ export interface SourceEvent {
   id: string;
   url: string;
   alias?: string;
-  hub?: boolean;
+  account?: boolean;
   pin?: string;
   access?: SourceAccess;
   access_checked?: string;

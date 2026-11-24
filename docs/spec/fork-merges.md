@@ -1,8 +1,8 @@
-# Fork updates and the hub step
+# Fork updates and the account repo step
 
 Status: accepted, 2026-09-19; updated 2026-10-02 to plain Git merges. This replaces inferred import ancestry in ADR 0003.
 
-A fork takes in two kinds of change: a newer version of its upstream, and what another machine of the same user published of it to the hub. Both are Git merges. Nothing is classified, nothing is selected in place of a merge, and no record of a choice is kept beside the history: the branch's commits and their trailers are the whole record.
+A fork takes in two kinds of change: a newer version of its upstream, and what another machine of the same user published of it to the account repo. Both are Git merges. Nothing is classified, nothing is selected in place of a merge, and no record of a choice is kept beside the history: the branch's commits and their trailers are the whole record.
 
 ## Required behavior
 
@@ -16,17 +16,17 @@ A fork takes in two kinds of change: a newer version of its upstream, and what a
 
 An upstream update is always a three-way merge with the accepted import as the explicit base: `merge-tree --write-tree --merge-base=<accepted import> <fork tip> <new import>`, whether or not the fork holds commits of its own. So the fork's own changes are kept, a line it put back to an older upstream text stays so, and what changed upstream alone comes in clean. A clean result is committed with the fork tip and the new import as parents and `Agentx-Base` naming the new import. A conflict becomes a pending merge whose completion commit carries that same base.
 
-## The hub step and publishing
+## The account repo step and publishing
 
-The hub step of `skill update`, which takes in what another machine published of a fork before the update from upstream, is a plain Git merge on ordinary ancestry. It is the only step that merges what the hub holds: a publish never does.
+The account repo step of `skill update`, which takes in what another machine published of a fork before the update from upstream, is a plain Git merge on ordinary ancestry. It is the only step that merges what the account repo holds: a publish never does.
 
-The hub step:
+The account repo step:
 
 - Nothing to do when the remote tip is the local tip or an ancestor of it.
 - A fast-forward when the local tip is an ancestor of the remote tip. No commit is written.
 - Otherwise `merge-tree --write-tree` of the two tips, with the merge base git finds. A clean result is committed with the local tip and the remote tip as parents and the base below; a conflict becomes a pending merge, resolved in its worktree like any other conflict. A binary file or a symlink both sides changed conflicts whole, as Git merges it: the pending merge holds the local side's version and the other side's as its own stage, with no markers.
 
-Publishing records the fork's edits as one commit on its branch, then pushes the branch, never forced, and only the fork's own branch: import branches, update candidates, upstream-removed markers and source refs never travel. Recorded edits are part of the tip, and the fork's skill directory holds its tip again; they stay unpublished until the push. A push the remote rejects or its host declines is reported, never retried with force. When the hub holds commits the fork lacks, the publish records nothing and does not push it: a fork the remote is only ahead of, holding no edits, has nothing to publish, and one whose history or edits diverged from the remote's is refused until `skill update` takes the remote's commits in.
+Publishing records the fork's edits as one commit on its branch, then pushes the branch, never forced, and only the fork's own branch: import branches, update candidates, upstream-removed markers and source refs never travel. Recorded edits are part of the tip, and the fork's skill directory holds its tip again; they stay unpublished until the push. A push the remote rejects or its host declines is reported, never retried with force. When the account repo holds commits the fork lacks, the publish records nothing and does not push it: a fork the remote is only ahead of, holding no edits, has nothing to publish, and one whose history or edits diverged from the remote's is refused until `skill update` takes the remote's commits in.
 
 ## The recorded base
 
@@ -40,7 +40,7 @@ For a merge of two histories of one fork:
 
 A wrong base costs at most a conflict on the next upstream update. No content is lost over it, since the merge itself is Git's.
 
-A hub step that moves the fork's base to another import also drops the update candidate this machine's last check pinned, unless the same proof shows the candidate newer than the new base. A candidate pinned against the old base can be older than the version the other machine took, and merging it over the new base would take the fork back to that older version. The next check pins an update against the new base.
+An account repo step that moves the fork's base to another import also drops the update candidate this machine's last check pinned, unless the same proof shows the candidate newer than the new base. A candidate pinned against the old base can be older than the version the other machine took, and merging it over the new base would take the fork back to that older version. The next check pins an update against the new base.
 
 ## Deterministic parentless imports
 
@@ -56,7 +56,7 @@ Ancestry is never inferred: no grafts, no replacement refs, no ordering by impor
 - Different upstream versions merge clean where they changed different lines and conflict where both changed the same lines; the conflict is resolved like any other.
 - The recorded `Agentx-Base` follows the base rule above, never a timestamp.
 - A rollback of an upstream line on one machine survives an update on the other, or surfaces as a conflict; it is never silently undone.
-- An update never takes a fork back to an upstream version older than the one the hub step brought it.
+- An update never takes a fork back to an upstream version older than the one the account repo step brought it.
 - Custom content is never silently lost.
 - Source aliases, a cross-subpath candidate, unavailable or force-pushed source history, file modes, binary files and symlinks behave as specified.
 - A different fork of the same name on the remote is refused, by its fork id.

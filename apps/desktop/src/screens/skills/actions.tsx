@@ -49,7 +49,7 @@ const reconnectLabel = (row: SkillRow, placement: LibraryPlacement) =>
 
 const addSourceLabel = (source: string) => `add source ${source}`;
 
-/** The name the CLI reports for the skill a `skill import` run took over as a hub skill. */
+/** The name the CLI reports for the skill a `skill import` run took over as an account skill. */
 const adoptedName = (events: CliEvent[]) =>
   events.find((e) => e.type === "library_skill")?.name;
 

@@ -11,12 +11,12 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
-// The hub step brings a fork up to date with what another machine
-// published to the hub, by a plain Git merge on the ancestry the two
-// histories share: nothing when the hub holds nothing this machine lacks, a
-// fast-forward when this machine holds nothing the hub lacks, and otherwise
+// The account repo step brings a fork up to date with what another machine
+// published to the account repo, by a plain Git merge on the ancestry the two
+// histories share: nothing when the account repo holds nothing this machine lacks, a
+// fast-forward when this machine holds nothing the account repo lacks, and otherwise
 // a merge of the two tips, git finding their merge base. It is the first
-// step of a fork's update, see updateRun.hubStep; a publish never takes
+// step of a fork's update, see updateRun.accountStep; a publish never takes
 // anything in. A clean merge is committed by the fork commit writer, with
 // the local tip and the remote tip as its parents and the base the two
 // sides agree on, see lineage.PickBase, and the branch and the worktree
@@ -24,42 +24,42 @@ import (
 // becomes a pending merge in a checkout under agentx home, as an update's
 // does: the fork's worktree and branch stay as they are, and the next
 // update of the fork completes it once it is resolved there with git. The
-// hub step refuses a remote branch of the same name that is another
+// account repo step refuses a remote branch of the same name that is another
 // fork, by its fork id. It records the fork's unpublished edits before it
 // takes anything in, see recordFirst, so they are kept, still unpublished.
 
-// pullEvent is what the hub step did to one fork.
+// pullEvent is what the account repo step did to one fork.
 type pullEvent struct {
 	event
 	Name    string `json:"name"`
 	Outcome string `json:"outcome"`
-	Commit  string `json:"commit,omitempty"` // the fork's new tip, when the hub step moved it
-	Base    string `json:"base,omitempty"`   // the base the merge records, when the hub step merged
+	Commit  string `json:"commit,omitempty"` // the fork's new tip, when the account repo step moved it
+	Base    string `json:"base,omitempty"`   // the base the merge records, when the account repo step merged
 }
 
-// The outcomes of the hub step, one per fork. An up to date fork is
+// The outcomes of the account repo step, one per fork. An up to date fork is
 // never reported: the step took nothing in.
 const (
-	pullUpToDate    = "up to date"   // the hub holds nothing the fork lacks
+	pullUpToDate    = "up to date"   // the account repo holds nothing the fork lacks
 	pullFastForward = "fast-forward" // the fork's branch moved to the remote tip
 	pullMerged      = "merged"       // the two tips were merged
 	pullConflict    = "conflict"     // the merge is pending
 	pullRefused     = "refused"      // see the error
 )
 
-// remoteForks is what the hub held of the forks a run covers,
+// remoteForks is what the account repo held of the forks a run covers,
 // as its fetch left the remote-tracking branches: each fork's remote tip,
 // by name, and the lineage of every remote tip the fork's own branch does
 // not hold already, read in one walk. For a fork renamed here whose own
 // name has no branch there, that is the branch of the name it was renamed
 // from, see publishedName.
 type remoteForks struct {
-	remote string // the hub's git remote, whose remote-tracking branches were read
+	remote string // the account repo's git remote, whose remote-tracking branches were read
 	tips   map[string]string
 	walked map[string]lineage.ForkLineage
 }
 
-// walkRemoteForks reads remoteForks for names from the hub's
+// walkRemoteForks reads remoteForks for names from the account repo's
 // remote-tracking branches, tips, by name, which the run read already. It
 // walks the remote tips of names that differ from the local ones, in one
 // git process; for a
@@ -85,8 +85,8 @@ func (inv *invocation) walkRemoteForks(ctx context.Context, gitDir, remote strin
 	return remoteForks{remote: remote, tips: tips, walked: walked}, nil
 }
 
-// forkSync is what the hub step of an update made of one fork: its
-// outcome, see the outcomes of the hub step, the update it applied or
+// forkSync is what the account repo step of an update made of one fork: its
+// outcome, see the outcomes of the account repo step, the update it applied or
 // left pending, and why it was refused.
 type forkSync struct {
 	name    string
@@ -101,7 +101,7 @@ func (s forkSync) moved() bool {
 	return s.outcome == pullFastForward || s.outcome == pullMerged
 }
 
-// syncFork runs the hub step of an update for the fork whose branch is
+// syncFork runs the account repo step of an update for the fork whose branch is
 // rec, see judgePull, and applies what it found, in a hold of the lock and
 // a journal of its own, see applyForkUpdate.
 func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks) forkSync {
@@ -133,10 +133,10 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 	return s
 }
 
-// judgePull decides, before the lock, what the hub step of the fork
+// judgePull decides, before the lock, what the account repo step of the fork
 // whose branch is rec takes in from remote, and merges it. Its caller never
 // gives it a fork with a merge pending: the update completes that one, see
-// judgeForkCompletion. In this order: a fork the hub holds no
+// judgeForkCompletion. In this order: a fork the account repo holds no
 // branch of, or one that holds what the fork holds already, is left as it
 // is, up to date; a remote branch whose history names another fork id than
 // the fork's, or one of the two that names none, is refused, exit code 6,
@@ -144,7 +144,7 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 // that shares no commit with the fork, a fork whose worktree git cannot
 // work in, see worktreeHealth, and one with a repository nested in it that
 // no ignore rule covers or what git cannot record, see recordFirst, exit
-// code 6, before anything is written. A fork the hub has
+// code 6, before anything is written. A fork the account repo has
 // nothing new for is up to date whatever its worktree holds. Then the
 // fork's unpublished edits are recorded, see recordFirst, and what follows
 // is judged on the tip that holds them.
@@ -158,7 +158,7 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks) (string, *updating, *failure) {
 	name := rec.Name
 	theirs := remote.tips[name]
-	fork := &forkUpdate{pull: true, theirsRef: lineage.RemoteForkRef(remote.remote, name), theirs: theirs, with: "the hub"}
+	fork := &forkUpdate{pull: true, theirsRef: lineage.RemoteForkRef(remote.remote, name), theirs: theirs, with: "the account repo"}
 	if theirs == "" || theirs == rec.Commit {
 		return pullUpToDate, nil, nil
 	}
@@ -172,7 +172,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	case err != nil:
 		return "", nil, failureOf(storeFailure(err))
 	case status != 0:
-		return "", nil, refuse(exitRefused, sanitised(name)+" and the hub's "+strings.TrimPrefix(rec.Ref, "refs/heads/")+" share no commit, so they cannot be merged",
+		return "", nil, refuse(exitRefused, sanitised(name)+" and the account repo's "+strings.TrimPrefix(rec.Ref, "refs/heads/")+" share no commit, so they cannot be merged",
 			"run '"+skillCommand("history", name)+"' to read the history of yours")
 	case base == theirs:
 		return pullUpToDate, nil, nil
@@ -225,7 +225,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	if rec.Fork != nil {
 		fork.base = lineage.PickBase(ctx, inv.git, gitDir, *rec.Fork, there)
 	}
-	subject := hubMergeSubject(name, w.label)
+	subject := accountMergeSubject(name, w.label)
 	if u.merged.conflicted {
 		files, err := conflictFiles(u.merged.stages, site.dir)
 		if err == nil {
@@ -266,18 +266,18 @@ func sameForkRefusal(rec lineage.Record, there lineage.ForkLineage, doing string
 	}
 	switch {
 	case here != "" && there.ID != "" && here != there.ID:
-		return refuse(exitRefused, "the hub's "+branch+" is a different skill than "+name+" on this machine, so "+name+" cannot be "+doing, rename)
+		return refuse(exitRefused, "the account repo's "+branch+" is a different skill than "+name+" on this machine, so "+name+" cannot be "+doing, rename)
 	case here == "" || there.ID == "":
-		return refuse(exitRefused, "the history of "+name+" here or of the hub's "+branch+" records no fork id, so nothing tells that they are one skill and "+name+" cannot be "+doing, rename)
+		return refuse(exitRefused, "the history of "+name+" here or of the account repo's "+branch+" records no fork id, so nothing tells that they are one skill and "+name+" cannot be "+doing, rename)
 	}
 	return nil
 }
 
-// hubMergeSubject is the subject of the commit that merges what the
-// hub holds of a fork into it: the skill and the label of the
-// machine it was merged on, as in "pdf: merge the hub (laptop)".
-func hubMergeSubject(name, label string) string {
-	return name + ": merge the hub (" + sanitised(label) + ")"
+// accountMergeSubject is the subject of the commit that merges what the
+// account repo holds of a fork into it: the skill and the label of the
+// machine it was merged on, as in "pdf: merge the account repo (laptop)".
+func accountMergeSubject(name, label string) string {
+	return name + ": merge the account repo (" + sanitised(label) + ")"
 }
 
 // forkRecords is the lineage of the store with every fork's
@@ -294,7 +294,7 @@ func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[stri
 }
 
 // remoteSelection is the skills a bare publish covers, in name order: every
-// hub skill this machine holds whose branch the hub holds, see
+// account skill this machine holds whose branch the account repo holds, see
 // remoteForks.branchOf, and the ones it skips, those it holds no branch of,
 // in name order: a bare publish never creates a branch, so a first publish,
 // and putting back a skill another machine removed, take naming the skill.
@@ -314,7 +314,7 @@ func remoteSelection(records map[string]lineage.Record, remote remoteForks) (nam
 	return names, skipped
 }
 
-// branchOf is the name of the hub's branch that holds the fork
+// branchOf is the name of the account repo's branch that holds the fork
 // rec, as the fetch left it: its own name, or, for a skill renamed here and
 // not yet published under its new name, the nearest name its history
 // records it was renamed from, see publishedName, when that branch is the
@@ -338,9 +338,9 @@ func (r remoteForks) branchOf(rec lineage.Record) string {
 	return ""
 }
 
-// hubSkills is the names of hub skills records holds, those whose
+// accountSkills is the names of account skills records holds, those whose
 // branch is a fork branch, in name order. Pure.
-func hubSkills(records map[string]lineage.Record) []string {
+func accountSkills(records map[string]lineage.Record) []string {
 	var names []string
 	for n, rec := range records {
 		if rec.Kind == lineage.KindFork {
@@ -357,7 +357,7 @@ func (inv *invocation) forkPlaced(name string) bool {
 	return lexists(inv.worktreeRoot(name)) || lexists(inv.libraryPath(name))
 }
 
-// remoteHolds reports whether the hub, the git remote called
+// remoteHolds reports whether the account repo, the git remote called
 // remote, held a fork called name at the last fetch, by its remote-tracking
 // branch; a read that fails says it does not.
 func (inv *invocation) remoteHolds(ctx context.Context, remote, name string) bool {
@@ -365,7 +365,7 @@ func (inv *invocation) remoteHolds(ctx context.Context, remote, name string) boo
 	return err == nil && tips[name] != ""
 }
 
-// reportSync reports what the hub step did to one fork it updated to
+// reportSync reports what the account repo step did to one fork it updated to
 // the latest published version, or refused: a pull event, a line, and for
 // a merge left pending the conflict, see printConflicts.
 func (inv *invocation) reportSync(s forkSync) {

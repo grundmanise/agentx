@@ -282,7 +282,7 @@ test.describe("banners", () => {
       text: "SKILL.md · Your local edits are kept.",
       title: "New version from acme/skills",
     },
-    // A hub skill: the update comes from the upstream it was forked from.
+    // An account skill: the update comes from the upstream it was forked from.
     {
       name: "pdf-letters",
       text: "SKILL.md · examples.md · Your local edits are kept.",
@@ -530,12 +530,12 @@ test.describe("the Update skills dialog", () => {
     // from: a fork's upstream for pdf-letters.
     await expect(dialog.getByRole("button", { expanded: true })).toHaveText([
       "acme/skills",
-      "me/hub",
+      "me/my-skills",
     ]);
     const acme = dialog.getByRole("region", { name: "acme/skills" });
     await expect(acme.getByRole("listitem")).toHaveCount(3);
     await expect(
-      dialog.getByRole("region", { name: "me/hub" }).getByRole("checkbox")
+      dialog.getByRole("region", { name: "me/my-skills" }).getByRole("checkbox")
     ).toHaveCount(1);
     // Every skill and the select-all row, all checked.
     await expect(dialog.getByRole("checkbox", { checked: true })).toHaveCount(

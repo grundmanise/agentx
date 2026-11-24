@@ -90,16 +90,16 @@ const problemLine = (problem: Problem): CheckLine =>
     ? { text: problem.message }
     : { hint: problem.hint, text: problem.message };
 
-/** Hub skills and those from sources, as the library of the first inventory holds them. */
+/** Account skills and those from sources, as the library of the first inventory holds them. */
 const counts = (inventory: InventoryEvent) => {
   const managed = inventory.library.filter((s) => s.kind === "managed");
-  // Hub skills carry a fork id, or have no source while no hub is set.
+  // Account skills carry a fork id, or have no source while no account repo is set.
   const own = managed.filter(
     (s) => s.fork_id !== undefined || s.source === undefined
   ).length;
   return managed.length === 0
     ? "No skills yet"
-    : `${plural(own, "hub skill", "hub skills")}, ${managed.length - own} from sources`;
+    : `${plural(own, "account skill", "account skills")}, ${managed.length - own} from sources`;
 };
 
 /** A check read from doctor rows. */

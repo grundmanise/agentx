@@ -34,7 +34,7 @@ import {
   planAdds,
   resultCards,
   sourcePills,
-  HUB_SKILLS,
+  ACCOUNT_SKILLS,
 } from "#/screens/sources/projection.ts";
 import type {
   AddPlan,
@@ -69,15 +69,15 @@ const noCards: SkillCard[] = [];
 type Selection = ReadonlyMap<string, SkillCard>;
 const noSelection: Selection = new Map();
 
-/** Loads what a pill shows: a source's listing, or your skills on the hub. */
+/** Loads what a pill shows: a source's listing, or your skills on the account repo. */
 const loadPill = async (key: string) => {
-  await (key === HUB_SKILLS ? loadInstallable() : loadListing(key));
+  await (key === ACCOUNT_SKILLS ? loadInstallable() : loadListing(key));
 };
 
 /** The label of the read that fills a pill, for `usePending`. */
 const loadingLabel = (key: string) =>
   loadLabel(
-    key === HUB_SKILLS
+    key === ACCOUNT_SKILLS
       ? ["skill", "list", "--remote"]
       : ["source", "skills", key]
   );
@@ -108,7 +108,7 @@ const useOpenPill = (
 
 /**
  * Loads the open pill when the user did not open it, such as the first one, unless
- * `useFetchedListings` reads its listing: Hub, or a source never fetched.
+ * `useFetchedListings` reads its listing: Account repo, or a source never fetched.
  */
 const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
   const key = pill?.key;
@@ -117,7 +117,7 @@ const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
     if (
       key !== undefined &&
       key !== opened &&
-      (key === HUB_SKILLS || fetched === undefined)
+      (key === ACCOUNT_SKILLS || fetched === undefined)
     ) {
       void loadPill(key);
     }
@@ -126,15 +126,15 @@ const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
 
 /**
  * Refresh all: one `source fetch --all`, after which the screen reads again the listing of each
- * source `source list` reports a new fetch for. Hub lists your skills from
- * `skill list --remote`, so they are read again too, whenever there is a hub.
+ * source `source list` reports a new fetch for. Account repo lists your skills from
+ * `skill list --remote`, so they are read again too, whenever there is an account repo.
  */
 const refreshAll = async () => {
   const outcome = await agentx(["source", "fetch", "--all"], {
     label: REFRESH_ALL_LABEL,
   });
   const { sources } = useAppStore.getState();
-  if (outcome.exitCode !== null && sources.some((s) => s.hub === true)) {
+  if (outcome.exitCode !== null && sources.some((s) => s.account === true)) {
     await loadInstallable();
   }
 };
@@ -250,14 +250,14 @@ export const SourcesScreen = () => {
   };
 
   const listing =
-    activePill === undefined || activePill.key === HUB_SKILLS
+    activePill === undefined || activePill.key === ACCOUNT_SKILLS
       ? undefined
       : listings[activePill.key];
   const shownCards = (): SkillCard[] => {
     if (activePill === undefined) {
       return noCards;
     }
-    if (activePill.key === HUB_SKILLS) {
+    if (activePill.key === ACCOUNT_SKILLS) {
       return installable === undefined
         ? noCards
         : nameOrder(installableCards(installable, library));
@@ -298,7 +298,7 @@ export const SourcesScreen = () => {
           {
             cards: shown,
             label: activePill.label,
-            source: activePill.url ?? HUB_SKILLS,
+            source: activePill.url ?? ACCOUNT_SKILLS,
           },
         ]);
   const allCards = groups.flatMap((g) => g.cards);
@@ -480,7 +480,7 @@ export const SourcesScreen = () => {
     const plans = planAdds({
       allOf:
         allMode && activePill !== undefined && results === undefined
-          ? { cards: shown, source: activePill.url ?? HUB_SKILLS }
+          ? { cards: shown, source: activePill.url ?? ACCOUNT_SKILLS }
           : undefined,
       enabled,
       selected: [...selection.values()],
@@ -517,9 +517,9 @@ export const SourcesScreen = () => {
     if (loading || activePill === undefined) {
       return undefined;
     }
-    if (activePill.key === HUB_SKILLS) {
+    if (activePill.key === ACCOUNT_SKILLS) {
       return installable !== undefined && shown.length === 0
-        ? "Every skill on your hub is on this machine"
+        ? "Every skill on your account repo is on this machine"
         : undefined;
     }
     return listing !== undefined && shown.length === 0

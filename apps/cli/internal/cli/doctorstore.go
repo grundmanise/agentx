@@ -54,11 +54,11 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 		return
 	}
 	named := make(map[string]bool, len(settings.Sources))
-	hub := ""
+	account := ""
 	for _, s := range settings.Sources {
 		named[source.ID(s.URL)] = true
-		if s.Hub {
-			hub = s.URL
+		if s.Account {
+			account = s.URL
 		}
 	}
 	remotes := source.Remotes(ctx, d.inv.git, gitDir)
@@ -83,34 +83,34 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 	sort.Strings(orphans)
 	sort.Strings(forks)
 	all := append(append([]string{}, orphans...), forks...)
-	hint := sourceRemotesHint(orphans, forks, hub)
+	hint := sourceRemotesHint(orphans, forks, account)
 	d.row("source_remotes", rowWarn, plural(len(all), "source remote")+" the settings do not name: "+strings.Join(all, ", "), hint)
 }
 
 // sourceRemotesHint is the source_remotes hint for the orphan remotes
-// orphans and the orphan remotes of fork branches forks, hub being the
-// URL of the hub the settings hold, "" when none. A remote of
+// orphans and the orphan remotes of fork branches forks, account repo being the
+// URL of the account repo the settings hold, "" when none. A remote of
 // fork branches added back as a shared source would have its forks fetched
-// without blobs. With no hub set, it is one the settings lost,
-// and only one remote can be made the hub again. With one set,
-// it is what a replaced hub left, and adding it back with
-// --hub would replace the hub the user chose, so it is
+// without blobs. With no account repo set, it is one the settings lost,
+// and only one remote can be made the account repo again. With one set,
+// it is what a replaced account repo left, and adding it back with
+// --account would replace the account repo the user chose, so it is
 // only cleared.
-func sourceRemotesHint(orphans, forks []string, hub string) string {
+func sourceRemotesHint(orphans, forks []string, account string) string {
 	plain := "run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"
 	if len(forks) == 0 {
 		return "for each, " + plain
 	}
 	var held string
 	switch {
-	case hub != "":
-		held = "run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --hub' would replace the hub " + hub
+	case account != "":
+		held = "run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --account' would replace the account repo " + account
 	case len(forks) == 1:
-		held = "run 'agentx source add <url> --hub' to make it the hub again and take the remote with it, or 'agentx source remove <id>' to clear it"
+		held = "run 'agentx source add <url> --account' to make it the account repo again and take the remote with it, or 'agentx source remove <id>' to clear it"
 	default:
-		held = "run 'agentx source add <url> --hub' for the one to make the hub again, and 'agentx source remove <id>' for the rest"
+		held = "run 'agentx source add <url> --account' for the one to make the account repo again, and 'agentx source remove <id>' for the rest"
 	}
-	if len(orphans) == 0 && (len(forks) == 1 || hub != "") {
+	if len(orphans) == 0 && (len(forks) == 1 || account != "") {
 		return "for each, " + held
 	}
 	hint := "for " + strings.Join(forks, ", ") + ", which held your skills, " + held

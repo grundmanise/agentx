@@ -28,8 +28,8 @@ type invocation struct {
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 	summary  string // what the result event says about a run that succeeded
 	// publishHintOnce says a run over many skills says once, once they are
-	// done, that the skills it made hub skills are not published, see
-	// noHubRemoteHint; publishHintDue says one of them needs it said.
+	// done, that the skills it made account skills are not published, see
+	// noAccountRemoteHint; publishHintDue says one of them needs it said.
 	publishHintOnce, publishHintDue bool
 	// adoptForce is agentx skill import --force: an adoption replaces an agent
 	// client's folder of the skill that holds other files, see readAdoptCopies.
@@ -41,7 +41,7 @@ type invocation struct {
 	forkWalks    *lineage.WalkCache       // serve's fork lineages, by branch tip, shared by its goroutines; nil keeps none, see lineageRecords
 	forksWarned  bool                     // the forks to put back were warned of, or the command's own output names them; see listLineage
 	hosts        func(host string) string // the host names of the user's SSH configuration, read once per host; see sshHosts
-	unfetched    sync.Map                 // remote name -> URL of a hub whose remote was just written over one never fetched whole; see fetchForks
+	unfetched    sync.Map                 // remote name -> URL of an account repo whose remote was just written over one never fetched whole; see fetchForks
 	published    sync.Map                 // skill name -> the publishedBase last read for it; see tipPublished
 }
 
@@ -155,7 +155,7 @@ func newRoot(inv *invocation) *cobra.Command {
 		Annotations: map[string]string{annotationGroup: "true"},
 		Example: examples(
 			"agentx skill add anthropics/skills --name pdf", "install one skill into every enabled client",
-			"agentx skill new release-notes", "create a hub skill",
+			"agentx skill new release-notes", "create an account skill",
 			"agentx skill check-updates", "see what changed upstream before you update",
 			"agentx snapshot save --machine cloud", "seed the cloud machine with this one's skills",
 		),

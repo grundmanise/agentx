@@ -40,7 +40,7 @@ func storedInstall(t *testing.T, h *harness, source, subpath, forkID string) hom
 
 // TestInstallsRecordWhenSkillsEnterAndLeaveTheLibrary: skill add records
 // when a skill of a source entered the library, by its source and subpath,
-// and skill new when a hub skill did, by its fork id; installing
+// and skill new when an account skill did, by its fork id; installing
 // a skill the library already holds again adds nothing. A removal from
 // some configurations leaves the dates alone, and a removal of the whole
 // skill records when it left, keeping when it was added, which the next

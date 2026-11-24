@@ -136,12 +136,12 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 
 // publishedVersion is the commit skill diff compares the fork whose branch
 // is rec with, and how its line names it: the newest commit of its history
-// the hub's branch holds, as the last fetch left it, which is
+// the account repo's branch holds, as the last fetch left it, which is
 // its last published version, read with one merge-base; for a renamed
 // skill not yet published under its new name, the old name's branch, see
-// publishedName. A fork the hub holds no branch of, or none
+// publishedName. A fork the account repo holds no branch of, or none
 // that shares its history, never published, removed there by another
-// machine or with no hub set, is compared with its creation
+// machine or with no account repo set, is compared with its creation
 // commit, the one skill new or skill fork wrote, and one whose history
 // carries no fork id with its tip. Either way it is what its state is
 // judged against, see unpublished.
@@ -157,7 +157,7 @@ func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec 
 		rec = recs[rec.Name]
 		return nil
 	}
-	_, remote, ok, err := inv.hubSource()
+	_, remote, ok, err := inv.accountSource()
 	if err != nil {
 		return "", "", err
 	}
@@ -199,7 +199,7 @@ func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec 
 	return rec.Commit, "its last commit " + short(rec.Commit), nil
 }
 
-// remoteForkTip is the tip of the hub's branch of the skill
+// remoteForkTip is the tip of the account repo's branch of the skill
 // called name, the git remote called remote, as last fetched; "" when it
 // holds none.
 func (inv *invocation) remoteForkTip(ctx context.Context, gitDir, remote, name string) (string, error) {

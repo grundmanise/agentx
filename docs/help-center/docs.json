@@ -24,7 +24,7 @@
       {
         "group": "Get started",
         "icon": "rocket",
-        "pages": ["index", "install", "hub", "cloud"]
+        "pages": ["index", "install", "account-repo", "cloud"]
       },
       {
         "group": "Inventory",

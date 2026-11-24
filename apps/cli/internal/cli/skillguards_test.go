@@ -13,7 +13,7 @@ import (
 // back, never from what was written, so it is the last thing that can tell
 // this version from something else.
 //
-// A library hub skill can hold a symlink, and a symlink is
+// A library account skill can hold a symlink, and a symlink is
 // read for what it resolves to in the place it sits: one naming a file
 // inside the library entry contributes that file's content there and
 // resolves outside the copy once it is copied somewhere else. The copy

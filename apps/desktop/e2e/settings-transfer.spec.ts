@@ -11,7 +11,7 @@ import {
   exported,
   imported,
   LIBRARY,
-  NEW_HUB,
+  NEW_ACCOUNT,
   nothingNew,
   SNAPSHOT,
   sourcesAfterImport,
@@ -159,8 +159,10 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
 }) => {
   cli.answerOpenDialog(SNAPSHOT);
   cli.register(["snapshot", "apply", SNAPSHOT, "--yes"], { events: imported });
-  const hubAdd = cli.register(["source", "add", NEW_HUB, "--hub"], {
-    events: [{ hub: true, id: "s-new-hub", type: "source", url: NEW_HUB }],
+  const accountAdd = cli.register(["source", "add", NEW_ACCOUNT, "--account"], {
+    events: [
+      { account: true, id: "s-new-account", type: "source", url: NEW_ACCOUNT },
+    ],
     holdAfter: 0,
   });
   cli.register(["source", "add", `${TEAM}#v2`], {
@@ -199,11 +201,11 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
     .poll(() => later(cli))
     .toEqual([
       ["snapshot", "apply", SNAPSHOT, "--yes", "--json"],
-      ["source", "add", NEW_HUB, "--hub", "--json"],
+      ["source", "add", NEW_ACCOUNT, "--account", "--json"],
     ]);
   await expect(applyButton).toBeDisabled();
   await expect(applyButton).toHaveAttribute("aria-busy", "true");
-  hubAdd.release();
+  accountAdd.release();
   const result = section.getByRole("region", { name: "Apply result" });
 
   await expect(result.getByRole("paragraph")).toHaveText([
@@ -223,7 +225,7 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
   await expect(applyButton).toBeEnabled();
   expect(later(cli)).toEqual([
     ["snapshot", "apply", SNAPSHOT, "--yes", "--json"],
-    ["source", "add", NEW_HUB, "--hub", "--json"],
+    ["source", "add", NEW_ACCOUNT, "--account", "--json"],
     ["source", "add", `${TEAM}#v2`, "--json"],
   ]);
   // A skipped skill carries the CLI's reason as its tooltip and description.

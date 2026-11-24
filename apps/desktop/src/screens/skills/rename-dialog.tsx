@@ -1,4 +1,4 @@
-// The Rename dialog, for a hub skill. Rename in the detail pane's action row opens it.
+// The Rename dialog, for an account skill. Rename in the detail pane's action row opens it.
 // `RenameDialogs`, which the Skills screen mounts once, shows it, so it
 // outlives the detail pane of the skill renamed, which leaves the inventory. Rename runs `skill
 // rename <old> <new>`, and the renamed skill is selected by its new name, shown once the inventory
@@ -46,7 +46,7 @@ interface RenameState {
 
 const useRenameStore = create<RenameState>()(() => ({ open: false }));
 
-/** Opens the Rename dialog for `row`, a hub skill. */
+/** Opens the Rename dialog for `row`, an account skill. */
 export const openRename = (row: SkillRow) => {
   useRenameStore.setState({ open: true, renaming: row });
 };
@@ -66,7 +66,7 @@ const refusalOf = (outcome: Outcome): Problem => {
   return hint === undefined ? { message } : { hint, message };
 };
 
-/** Rename, a secondary button in the detail pane's action row of a hub skill. */
+/** Rename, a secondary button in the detail pane's action row of an account skill. */
 export const RenameButton = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(renameLabel(row));
   return (

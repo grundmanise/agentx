@@ -18,7 +18,7 @@ import (
 
 // agentx skill import takes over an unmanaged skill, one no other tool
 // recorded or one whose record names nowhere agentx can install it from, as
-// a hub skill. It is a fork in the skill's place with nothing to fork from,
+// an account skill. It is a fork in the skill's place with nothing to fork from,
 // see forkOf and makeFork: a branch of its own whose first commit holds the
 // skill as it is, its directory moved into the worktree, and the library
 // symlink to it. The skill is the library's, or a directory in an agent
@@ -413,9 +413,9 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 			}
 			return forkSource{kind: lineage.KindUnmanaged, name: name, lib: lib, held: true, dir: lib.ResolvedPath}, nil
 		}
-		what, hubSkill := "a skill of a shared source", rec.Kind == lineage.KindFork
-		if hubSkill {
-			what = "a hub skill"
+		what, accountSkill := "a skill of a shared source", rec.Kind == lineage.KindFork
+		if accountSkill {
+			what = "an account skill"
 		}
 		dirs, _ := inv.adoptSites(name)
 		// A copy copy_mode records is agentx's own placement of the skill.
@@ -429,13 +429,13 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 		if len(dirs) > 0 {
 			// The way out names the configuration a placement of the library's
 			// skill can take the directory's place in. One whose client reads
-			// the library has that skill already, and a hub skill is
+			// the library has that skill already, and an account skill is
 			// never placed over a directory.
 			hint := "rename the folder and import it under the new name, or "
 			switch i := slices.IndexFunc(dirs[0].targets, func(t placeTarget) bool { return !t.readsLibrary }); {
 			case i < 0:
 				hint += "remove it"
-			case hubSkill:
+			case accountSkill:
 				hint += "remove it and place yours with '" + skillCommand("place", name, "--to", dirs[0].targets[i].id) + "'"
 			default:
 				hint += "replace it with '" + skillCommand("place", name, "--to", dirs[0].targets[i].id, "--force") + "', which discards what it holds"
@@ -444,8 +444,8 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 				listed(managedNameRow(dirs[0].path))
 		}
 		message, row := shown+" is already managed by agentx", "already managed by agentx"
-		if hubSkill {
-			message, row = shown+" is already a hub skill", "already a hub skill"
+		if accountSkill {
+			message, row = shown+" is already an account skill", "already an account skill"
 		}
 		return forkSource{}, refuse(exitRefused, message, "run 'agentx skill list' to see it").listed(row + ". To see it, run 'agentx skill list'")
 	}
@@ -467,7 +467,7 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 // hold under name, each path once, see placeKey, in the order the
 // configurations were detected, which is by id: dirs, the real directories
 // that are a skill, and links, the symlinks. The library entry is neither,
-// by whatever path a client reads it. Only hub skills
+// by whatever path a client reads it. Only account skills
 // directories are read, so a project's skill and a plugin's are no part of
 // it, and a configuration counts whether or not it is enabled.
 func (inv *invocation) adoptSites(name string) (dirs []adoptPlace, links []string) {
@@ -511,7 +511,7 @@ func (inv *invocation) adoptSites(name string) (dirs []adoptPlace, links []strin
 // store already holds, records being its branches. The directory
 // can be renamed, and one found in an agent client's own skills directory
 // may also be in the way of the skill the branch is, whose library entry
-// is gone: a hub skill is put back, and any other let go of.
+// is gone: an account skill is put back, and any other let go of.
 func (fk *forking) adoptTakenHint(records map[string]lineage.Record) string {
 	rename := "rename the folder and import it under the new name"
 	rec, taken := nameTaken(records, fk.target, "")
@@ -542,7 +542,7 @@ func (fk *forking) adoptTaken(records map[string]lineage.Record) error {
 }
 
 // adoptClash refuses an adoption out of an agent client's own skills
-// directory whose name the hub already held a skill of at its
+// directory whose name the account repo already held a skill of at its
 // last fetch: adopted, it would be another skill of that name, which a
 // publish refuses. An adoption of a library entry is not asked, as a fork
 // in its place never was.
@@ -550,11 +550,11 @@ func (inv *invocation) adoptClash(ctx context.Context, fk *forking) error {
 	if len(fk.places) == 0 {
 		return nil
 	}
-	if _, remote, set, err := inv.hubSource(); err != nil || !set || !inv.remoteHolds(ctx, remote, fk.target) {
+	if _, remote, set, err := inv.accountSource(); err != nil || !set || !inv.remoteHolds(ctx, remote, fk.target) {
 		return nil
 	}
 	return refuse(exitRefused, "you already published a skill called "+sanitised(fk.target)+", so "+quotedPath(fk.from)+" cannot be imported under that name",
-		"install the published one with '"+hubAddCommand(fk.target)+"' once "+quotedPath(fk.from)+" is moved aside, or rename the folder and import it under the new name").
+		"install the published one with '"+accountAddCommand(fk.target)+"' once "+quotedPath(fk.from)+" is moved aside, or rename the folder and import it under the new name").
 		listed(quotedPath(fk.from) + " has the name of a skill you already published. To import it, rename that folder")
 }
 
@@ -872,7 +872,7 @@ func (inv *invocation) stageAdoptReplacement(m *home.Mutation, fk *forking, p ad
 }
 
 // reportAdoptedOwn reads the machine again and reports the adoption: the
-// library_skill event of the skill, which is a hub skill now,
+// library_skill event of the skill, which is an account skill now,
 // and a confirmation, with one row per configuration whose own skills
 // directory held it when it came out of one. A symlink of the user's to
 // the skill in another configuration's skills directory is left as it is,
@@ -896,7 +896,7 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	if len(fk.places) == 0 && len(fk.copies) == 0 {
 		inv.summary = "imported " + name
 		out.done("imported " + out.paint(heading, name))
-		inv.noHubRemoteHint(ev)
+		inv.noAccountRemoteHint(ev)
 		return nil
 	}
 	_, links := inv.adoptSites(fk.target)
@@ -913,7 +913,7 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	out.done("imported " + out.paint(heading, name) + from + ": " + out.paint(noteStyle, plural(len(rows), "placement")))
 	inv.printPlacementRows(fk.target, rows)
 	inv.printUniversal(ev.Universal)
-	inv.noHubRemoteHint(ev)
+	inv.noAccountRemoteHint(ev)
 	inv.summary = "imported " + name + from + " in " + plural(len(done.placed), "configuration") + universalClause(ev.Universal)
 	return nil
 }

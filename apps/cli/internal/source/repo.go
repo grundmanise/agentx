@@ -139,10 +139,10 @@ type Remote struct {
 // RemoteOf is the remote the settings entry of a source wants. Every source
 // is fetched from and pushed to at its canonical URL, so that git applies
 // the user's own url.<base>.insteadOf and pushInsteadOf to it. A shared
-// source is fetched without blobs onto its staging ref. The hub is fetched
+// source is fetched without blobs onto its staging ref. The account repo is fetched
 // whole, every fork branch onto its remote-tracking branch.
 func RemoteOf(entry home.Source) Remote {
-	if entry.Hub {
+	if entry.Account {
 		return Remote{URL: entry.URL, Refspec: gitx.ForkRefspec(RemoteName(ID(entry.URL)))}
 	}
 	return Remote{

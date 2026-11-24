@@ -8,12 +8,12 @@ import (
 
 // TestSourceMerge: an add decides the URL, the pin and when it fetched, and
 // keeps whatever else the entry knew and it did not find out. The access
-// and the time of its check travel as a pair. The hub flag is the
+// and the time of its check travel as a pair. The account flag is the
 // add's own, never kept.
 func TestSourceMerge(t *testing.T) {
 	t.Parallel()
 	prev := Source{
-		URL: "https://example.com/skills", Alias: "https://example.com/old", Hub: true,
+		URL: "https://example.com/skills", Alias: "https://example.com/old", Account: true,
 		Pin: "v1", Access: AccessWritable, AccessChecked: "2026-10-01T10:00:00Z", DefaultBranch: "main", LastFetched: "2026-10-01T10:00:00Z",
 	}
 	added := Source{URL: prev.URL, LastFetched: "2026-10-02T10:00:00Z"}

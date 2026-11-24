@@ -140,7 +140,7 @@ func (r *Runner) dropRemoteRefs(ctx context.Context, gitDir, remote string) erro
 	return err
 }
 
-// networkConfig is what every git agentx runs against the hub
+// networkConfig is what every git agentx runs against the account repo
 // sets on top of the user's environment, whose credential helpers, SSH
 // configuration and URL rewrites apply as for any git of theirs: no hook of
 // theirs runs. A hooks path set in the user's global configuration belongs
@@ -210,8 +210,8 @@ func parseForkTips(out string) map[string]string {
 // environment merges every remote.<name>.fetch their configuration holds,
 // a global one meant for their projects included. refetch fetches every
 // object the fork branches reach again, as a fresh clone would, telling
-// the remote of nothing this repository holds. Only the first fetch of a
-// hub on this machine asks for it: a shared source of the same
+// the remote of nothing this repository holds. Only the first fetch of an
+// account repo on this machine asks for it: a shared source of the same
 // repository, removed before, may have left commits fetched without their
 // blobs, which would otherwise let the remote leave out blobs the home
 // repo never received. A refetch with no fork branch to fetch waits on the

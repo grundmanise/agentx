@@ -1,4 +1,4 @@
-// Edit in the Skills detail pane: offered for a hub skill and an edited skill of a
+// Edit in the Skills detail pane: offered for an account skill and an edited skill of a
 // source. It opens the skill's SKILL.md in the editor chosen in Settings; when the editor cannot
 // be opened, a toast offers to show the file in the file manager instead, which is Finder on
 // macOS.
@@ -49,7 +49,7 @@ const openSkill = async (
   await expect(pane(page, name)).toBeVisible();
 };
 
-// The action row of each skill that is not a hub skill and has no edits.
+// The action row of each skill that is not an account skill and has no edits.
 for (const [name, key, shown] of [
   ["pdf", "pdf", ["Fork", "Remove"]],
   ["gone", "gone", ["Fork", "Remove"]],

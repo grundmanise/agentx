@@ -103,7 +103,7 @@ Install the newest nightly of the CLI:
 curl -fsSL https://agentx.wtf/install | sh -s -- --nightly
 ```
 
-Once you run a nightly, `agentx update` moves you to the newest nightly, and `agentx update --stable` takes you back to the latest release. Running the install command again does the same: with `--nightly` for a newer nightly, without it for the latest release. If GitHub refuses the command because of its rate limit, set `GITHUB_TOKEN` and run it again.
+Once you run a nightly, `agentx update` moves you to the newest nightly, and `agentx update --stable` takes you back to the latest release. Running the install command again does the same: with `--nightly` for a newer nightly, without it for the latest release. If GitHub refuses the command because of its rate limit, set `GITACCOUNT_TOKEN` and run it again.
 
 For a nightly of the app, download its package from the nightly's page under [releases](https://github.com/grundmanise/agentx/releases), and install it as in [Install the app](#install-the-app). It then updates itself to each newer nightly.
 
@@ -132,4 +132,4 @@ To build the app, see the desktop app's [README](https://github.com/grundmanise/
 - **AppImage**: delete the file.
 - **Install script**: delete `agentx` from the directory you installed to, `~/.local/bin` by default.
 
-Uninstalling keeps your data. agentx home, `~/.agentx` by default, keeps its settings and the history of your hub skills. Your skills stay in the library, `~/.agents/skills` by default. If you install agentx again over the same `~/.agentx`, it finds all your managed skills again, your hub skills included.
+Uninstalling keeps your data. agentx home, `~/.agentx` by default, keeps its settings and the history of your account skills. Your skills stay in the library, `~/.agents/skills` by default. If you install agentx again over the same `~/.agentx`, it finds all your managed skills again, your account skills included.

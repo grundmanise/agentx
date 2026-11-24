@@ -1,6 +1,12 @@
 import type { Page } from "@playwright/test";
 
-import { HUB, ACME, hub, sharedOnly, sources } from "./fixtures/hub.ts";
+import {
+  ACCOUNT,
+  ACME,
+  account,
+  sharedOnly,
+  sources,
+} from "./fixtures/account.ts";
 import type { MockCli } from "./harness/cli.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 
@@ -23,9 +29,9 @@ const commandLines = (cli: MockCli) =>
 
 const section = (page: Page, name: string) =>
   page.getByRole("region", { exact: true, name });
-const hubSection = (page: Page) => section(page, "Hub");
+const accountSection = (page: Page) => section(page, "Account repo");
 const urlField = (page: Page) =>
-  hubSection(page).getByRole("textbox", { name: "Hub URL" });
+  accountSection(page).getByRole("textbox", { name: "Account repo URL" });
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 
@@ -45,109 +51,119 @@ const openSettings = async (cli: MockCli, page: Page, listed = sources) => {
     .toBe(1);
 };
 
-test("the hub with what the Sources slice reports", async ({ cli, page }) => {
+test("the account repo with what the Sources slice reports", async ({
+  cli,
+  page,
+}) => {
   await openSettings(cli, page);
-  const remote = hubSection(page);
+  const remote = accountSection(page);
   await expect(remote).toContainText(
     "The Git repository your skills publish to."
   );
-  await expect(remote.getByText(HUB, { exact: true })).toBeVisible();
+  await expect(remote.getByText(ACCOUNT, { exact: true })).toBeVisible();
   // No line under the URL: the count was skills published there, not skills installed.
-  await expect(remote.getByText(/hub skills? on it|fetched/u)).toHaveCount(0);
+  await expect(remote.getByText(/account skills? on it|fetched/u)).toHaveCount(
+    0
+  );
   // Write access is the norm, so it shows no tag.
   await expect(remote.getByText("Read-only", { exact: true })).toHaveCount(0);
   await expect(remote.getByRole("button", { name: "Change…" })).toBeVisible();
   await expect(remote.getByRole("button", { name: "Unlink" })).toBeVisible();
 });
 
-test("a read-only hub has a Read-only tag beside its URL", async ({
+test("a read-only account repo has a Read-only tag beside its URL", async ({
   cli,
   page,
 }) => {
   await openSettings(cli, page, [
     ...sharedOnly,
-    { ...hub, access: "read-only" },
+    { ...account, access: "read-only" },
   ]);
   await expect(
-    hubSection(page).getByText("Read-only", { exact: true })
+    accountSection(page).getByText("Read-only", { exact: true })
   ).toBeVisible();
 });
 
-test("set the hub: Save runs source add --hub, and the row comes from the next source list", async ({
+test("set the account repo: Save runs source add --account, and the row comes from the next source list", async ({
   cli,
   page,
 }) => {
   await openSettings(cli, page, sharedOnly);
   await expect(urlField(page)).toBeVisible();
   await expect(
-    hubSection(page).getByRole("button", { name: "Save" })
+    accountSection(page).getByRole("button", { name: "Save" })
   ).toBeDisabled();
-  cli.register(["source", "add", "git@github.com:me/hub.git", "--hub"], {
-    events: [
-      { current: 1, phase: "fetch", subject: HUB, type: "progress" },
-      { ...hub, last_fetched: new Date().toISOString() },
-    ],
-  });
+  cli.register(
+    ["source", "add", "git@github.com:me/my-skills.git", "--account"],
+    {
+      events: [
+        { current: 1, phase: "fetch", subject: ACCOUNT, type: "progress" },
+        { ...account, last_fetched: new Date().toISOString() },
+      ],
+    }
+  );
   // The read after the add waits, so the screen can be seen before it.
   const relisted = cli.register(["source", "list"], {
-    events: [...sharedOnly, hub],
+    events: [...sharedOnly, account],
     holdAfter: 0,
   });
-  await urlField(page).fill("git@github.com:me/hub.git");
+  await urlField(page).fill("git@github.com:me/my-skills.git");
   await urlField(page).press("Enter");
-  await expect(toasts(page).getByText("Linked hub")).toBeVisible();
-  // The field stays until `source list` reports the hub.
+  await expect(toasts(page).getByText("Linked account repo")).toBeVisible();
+  // The field stays until `source list` reports the account repo.
   await relisted.started;
   await expect(urlField(page)).toBeVisible();
   relisted.release();
-  await expect(hubSection(page).getByText(HUB, { exact: true })).toBeVisible();
+  await expect(
+    accountSection(page).getByText(ACCOUNT, { exact: true })
+  ).toBeVisible();
   expect(commandLines(cli)).toEqual([
-    "source add git@github.com:me/hub.git --hub",
+    "source add git@github.com:me/my-skills.git --account",
   ]);
 });
 
-test("set the hub: exit 3, 1 and 6 show the CLI's message and hint under the field, as one paragraph", async ({
+test("set the account repo: exit 3, 1 and 6 show the CLI's message and hint under the field, as one paragraph", async ({
   cli,
   page,
 }) => {
   await openSettings(cli, page, sharedOnly);
-  cli.register(["source", "add", "me/missing", "--hub"], {
+  cli.register(["source", "add", "me/missing", "--account"], {
     events: [
       {
         code: "source",
         hint: "check the URL, and that your credential helper can read it",
         message:
-          "cannot reach the hub https://github.com/me/missing: repository not found",
+          "cannot reach the account repo https://github.com/me/missing: repository not found",
         type: "error",
       },
     ],
     exitCode: 3,
   });
-  cli.register(["source", "add", "me/hub#main", "--hub"], {
+  cli.register(["source", "add", "me/my-skills#main", "--account"], {
     events: [
       {
         code: "usage",
         hint: "give the repository's URL alone",
         message:
-          "me/hub#main names a folder or a ref, and the hub is a whole repository",
+          "me/my-skills#main names a folder or a ref, and the account repo is a whole repository",
         type: "error",
       },
     ],
     exitCode: 1,
   });
-  cli.register(["source", "add", ACME, "--hub"], {
+  cli.register(["source", "add", ACME, "--account"], {
     events: [
       {
         code: "refused",
         hint: `remove the source first with 'agentx source remove ${ACME}', or choose another repository`,
-        message: `${ACME} is a shared source, and a repository cannot be both a shared source and the hub`,
+        message: `${ACME} is a shared source, and a repository cannot be both a shared source and the account repo`,
         type: "error",
       },
     ],
     exitCode: 6,
   });
-  const save = hubSection(page).getByRole("button", { name: "Save" });
-  const alert = hubSection(page).getByRole("alert");
+  const save = accountSection(page).getByRole("button", { name: "Save" });
+  const alert = accountSection(page).getByRole("alert");
 
   await urlField(page).fill("me/missing");
   await save.click();
@@ -156,74 +172,77 @@ test("set the hub: exit 3, 1 and 6 show the CLI's message and hint under the fie
     "Couldn't reach me/missing. Check the URL, and that your credential helper can read it."
   );
 
-  await urlField(page).fill("me/hub#main");
+  await urlField(page).fill("me/my-skills#main");
   await save.click();
   await expect(alert).toHaveText(
-    "me/hub#main names a folder or a ref, and the hub is a whole repository. Give the repository's URL alone."
+    "me/my-skills#main names a folder or a ref, and the account repo is a whole repository. Give the repository's URL alone."
   );
 
   await urlField(page).fill(ACME);
   await save.click();
   // The hint names the control in Settings, not the command the CLI names.
   await expect(alert).toHaveText(
-    `${ACME} is a shared source, and a repository cannot be both a shared source and the hub. Remove it under Sources first, or choose another repository.`
+    `${ACME} is a shared source, and a repository cannot be both a shared source and the account repo. Remove it under Sources first, or choose another repository.`
   );
   expect(commandLines(cli)).toEqual([
-    "source add me/missing --hub",
-    "source add me/hub#main --hub",
-    `source add ${ACME} --hub`,
+    "source add me/missing --account",
+    "source add me/my-skills#main --account",
+    `source add ${ACME} --account`,
   ]);
 });
 
-test("Change… warns before it replaces the hub", async ({ cli, page }) => {
-  await openSettings(cli, page);
-  const next = "ssh://git@github.com/me/skills";
-  await hubSection(page).getByRole("button", { name: "Change…" }).click();
-  await expect(urlField(page)).toHaveValue(HUB);
-  const save = hubSection(page).getByRole("button", { name: "Save" });
-  await expect(save).toBeDisabled();
-  await urlField(page).fill(next);
-  await save.click();
-  const confirm = page.getByRole("alertdialog", {
-    name: "Change your hub?",
-  });
-  await expect(confirm).toContainText(
-    "Skills from the previous hub will stay but show as not published."
-  );
-  await confirm.getByRole("button", { name: "Cancel" }).click();
-  await expect(confirm).toHaveCount(0);
-
-  cli.register(["source", "add", next, "--hub"], {
-    events: [{ ...hub, url: next }],
-  });
-  await save.click();
-  await confirm.getByRole("button", { name: "Change" }).click();
-  await expect(toasts(page).getByText("Linked hub")).toBeVisible();
-  await expect(urlField(page)).toHaveCount(0);
-  expect(commandLines(cli)).toEqual([`source add ${next} --hub`]);
-});
-
-test("Unlink warns, runs source remove and shows the field once source list has no hub", async ({
+test("Change… warns before it replaces the account repo", async ({
   cli,
   page,
 }) => {
   await openSettings(cli, page);
-  await hubSection(page).getByRole("button", { name: "Unlink" }).click();
+  const next = "ssh://git@github.com/me/skills";
+  await accountSection(page).getByRole("button", { name: "Change…" }).click();
+  await expect(urlField(page)).toHaveValue(ACCOUNT);
+  const save = accountSection(page).getByRole("button", { name: "Save" });
+  await expect(save).toBeDisabled();
+  await urlField(page).fill(next);
+  await save.click();
   const confirm = page.getByRole("alertdialog", {
-    name: "Unlink the hub?",
+    name: "Change your account repo?",
   });
   await expect(confirm).toContainText(
-    `This will disconnect ${HUB} from the app, but keep all current skills in place.`
+    "Skills from the previous account repo will stay but show as not published."
   );
-  cli.register(["source", "remove", HUB], {
-    events: [{ id: hub.id, type: "source", url: HUB }],
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+
+  cli.register(["source", "add", next, "--account"], {
+    events: [{ ...account, url: next }],
+  });
+  await save.click();
+  await confirm.getByRole("button", { name: "Change" }).click();
+  await expect(toasts(page).getByText("Linked account repo")).toBeVisible();
+  await expect(urlField(page)).toHaveCount(0);
+  expect(commandLines(cli)).toEqual([`source add ${next} --account`]);
+});
+
+test("Unlink warns, runs source remove and shows the field once source list has no account repo", async ({
+  cli,
+  page,
+}) => {
+  await openSettings(cli, page);
+  await accountSection(page).getByRole("button", { name: "Unlink" }).click();
+  const confirm = page.getByRole("alertdialog", {
+    name: "Unlink the account repo?",
+  });
+  await expect(confirm).toContainText(
+    `This will disconnect ${ACCOUNT} from the app, but keep all current skills in place.`
+  );
+  cli.register(["source", "remove", ACCOUNT], {
+    events: [{ id: account.id, type: "source", url: ACCOUNT }],
   });
   cli.register(["source", "list"], { events: sharedOnly });
   await confirm.getByRole("button", { name: "Unlink" }).click();
   await expect(
-    toasts(page).getByText("The hub is no longer set")
+    toasts(page).getByText("The account repo is no longer set")
   ).toBeVisible();
   await expect(urlField(page)).toBeVisible();
   await expect(urlField(page)).toHaveValue("");
-  expect(commandLines(cli)).toEqual([`source remove ${HUB}`]);
+  expect(commandLines(cli)).toEqual([`source remove ${ACCOUNT}`]);
 });

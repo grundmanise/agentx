@@ -78,7 +78,7 @@ func takenRefusal(records map[string]lineage.Record, name, except, hint string) 
 	}
 	what := "a skill of a shared source"
 	if rec.Kind == lineage.KindFork {
-		what = "a hub skill"
+		what = "an account skill"
 	}
 	message := "the store already holds " + sanitised(rec.Name) + " as " + what
 	if rec.Name != name {

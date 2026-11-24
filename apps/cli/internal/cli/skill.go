@@ -19,13 +19,13 @@ import (
 // which is one content version found anywhere on the machine, or from a
 // sourceSkillEvent, which is one installable skill of a source. Its fields
 // are the library entry an inventory lists, so the two always say the same.
-// hubSkill, which no event carries, is whether it is a hub skill,
-// whose source is the hub: its kind alone does not say, and
-// while no hub is set neither does its source.
+// accountSkill, which no event carries, is whether it is an account skill,
+// whose source is the account repo: its kind alone does not say, and
+// while no account repo is set neither does its source.
 type librarySkillEvent struct {
 	event
 	scan.LibraryEntry
-	hubSkill bool
+	accountSkill bool
 }
 
 // placementEvent is one way a configuration sees the skill: mode is what
@@ -78,10 +78,10 @@ const driftSourceRemoved = "source removed"
 // ref. The skill is kept as it is and never updated.
 const driftUpstreamRemoved = "upstream removed"
 
-// driftNotPublished is the drift state of a hub skill the
-// hub holds no branch of, under its name or a name it was
+// driftNotPublished is the drift state of an account skill the
+// account repo holds no branch of, under its name or a name it was
 // renamed from, as last fetched: a skill never published, one another
-// machine removed, and every one while no hub is set. It is
+// machine removed, and every one while no account repo is set. It is
 // read from the remote-tracking branches and stored nowhere. A publish of
 // every skill leaves it out; publishing it by name creates the branch.
 // A former name's branch counts here whatever skill it holds, since a
@@ -97,8 +97,8 @@ const driftNotPublished = "not published"
 // candidate rather than in drift.
 const updateAvailable = "update available"
 
-// publishedElsewhere is what skill check-updates says of a hub skill whose
-// branch on the hub holds commits another machine published, which this
+// publishedElsewhere is what skill check-updates says of an account skill whose
+// branch on the account repo holds commits another machine published, which this
 // machine's branch lacks.
 const publishedElsewhere = "published from another machine"
 
@@ -118,7 +118,7 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 			"agentx skill list --remote", "also list your skills not installed here",
 			"agentx skill fork pdf --name my-pdf", "fork a skill beside the original",
 			"agentx skill check-updates", "find updates, then update <name> or --all",
-			"agentx skill publish release-notes", "push your edits to the hub",
+			"agentx skill publish release-notes", "push your edits to the account repo",
 		),
 		Args: cobra.NoArgs,
 		RunE: needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
@@ -321,7 +321,7 @@ func universalClients(inventory scan.Inventory) []string {
 }
 
 // skillFromLibrary builds the event of one library skill from its lineage
-// record, the canonical URLs of the sources the settings hold, the hub's,
+// record, the canonical URLs of the sources the settings hold, the account repo's,
 // "" when none is set, the placements a scan found, the universal clients
 // that scan detected and what was observed of its directory and of its
 // places.
@@ -333,15 +333,15 @@ func universalClients(inventory scan.Inventory) []string {
 // a source is gone is its settings entry and not its ref in the home
 // repo: an entry whose ref is missing is a source this machine still has
 // and has not fetched, which is what an import leaves.
-func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, hub string, places []placementEvent, universal []string, obs observation) librarySkillEvent {
+func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, account string, places []placementEvent, universal []string, obs observation) librarySkillEvent {
 	ev := librarySkillEvent{event: newEvent("library_skill"), LibraryEntry: scan.LibraryEntry{
 		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places, Universal: universal,
 	}}
 	if !ok {
 		return ev
 	}
-	ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, hub)
-	ev.hubSkill = rec.Kind == lineage.KindFork
+	ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, account)
+	ev.accountSkill = rec.Kind == lineage.KindFork
 	// The version is the base version's: a managed skill's is the import
 	// commit its branch points at, and a fork's the import commit its
 	// history names, read by the walk, which a skill made by skill new has
@@ -358,7 +358,7 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 	if hasBase {
 		ev.UpstreamCommit, ev.UpstreamTime, ev.BaseHash = base.Commit, when, base.Hash
 	}
-	// A fork is compared with what the hub holds of it:
+	// A fork is compared with what the account repo holds of it:
 	// modified while it has edits not yet published, see unpublished. Its drift is its placements', since what
 	// the source drift states say of a managed skill is not true of a
 	// fork, see driftOf.
@@ -385,7 +385,7 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		// The coordinates stay as the lineage has them: they are still where
 		// the skill came from, and they are what adding the source again
 		// needs. A fork is not judged this way, since the source that
-		// matters to a fork is the hub it is published to, and
+		// matters to a fork is the account repo it is published to, and
 		// its third-party upstream is only where later versions are merged
 		// in from.
 		ev.Drift = driftOf(obs, !sources[rec.Import.Source], rec.UpstreamRemoved != "")

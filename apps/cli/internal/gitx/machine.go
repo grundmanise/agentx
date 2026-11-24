@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-// SnapshotFile is the one file of a machine's branch on the hub:
+// SnapshotFile is the one file of a machine's branch on the account repo:
 // the snapshot, at the root of the branch's tree.
 const SnapshotFile = "snapshot.json"
 
-// MachineBranch is the short name of the branch of the hub that
+// MachineBranch is the short name of the branch of the account repo that
 // holds the snapshot of the machine with the id, such as "machines/cloud".
 func MachineBranch(id string) string { return "machines/" + id }
 

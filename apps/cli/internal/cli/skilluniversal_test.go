@@ -26,7 +26,7 @@ func universalHarness(t *testing.T, extra ...string) (*harness, *sourceRepo) {
 }
 
 // universalHome is the machine of universalHarness with no source added,
-// for a test whose library skill is a hub skill.
+// for a test whose library skill is an account skill.
 func universalHome(t *testing.T, extra ...string) *harness {
 	t.Helper()
 	h := newHarness(t)

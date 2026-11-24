@@ -245,7 +245,7 @@ func configurationSkill(inventory scan.Inventory, id, name string) (scan.Occurre
 // root counts. Nothing is written to the library. While no store
 // exists there is no repository to run git over, and nothing is ignored.
 func (inv *invocation) libraryIgnored(ctx context.Context, name string, lib scan.LibrarySkill) (map[string]bool, error) {
-	gitDir, rec, held, err := inv.hubRecord(ctx, name)
+	gitDir, rec, held, err := inv.accountRecord(ctx, name)
 	if err != nil {
 		return nil, err
 	}

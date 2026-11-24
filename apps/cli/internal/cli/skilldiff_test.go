@@ -185,8 +185,8 @@ func TestSkillDiffRefusesWhatHasNoBase(t *testing.T) {
 		{[]string{"nowhere"}, `the library holds no skill called "nowhere"`, 5},
 		{[]string{"mine"}, "mine is not managed by agentx, so it has no base version to", 6},
 		{[]string{"forked"}, "forked's worktree " + quotedPath(filepath.Join(h.agentx, "worktrees", "forked")) + " is missing", 6},
-		{[]string{"pdf", "--commit", "HEAD"}, "pdf is not a skill of the hub, so it has no commit of its own to", 6},
-		{[]string{"mine", "--commit", "HEAD"}, "mine is not a skill of the hub, so it has no commit to", 6},
+		{[]string{"pdf", "--commit", "HEAD"}, "pdf is not a skill of the account repo, so it has no commit of its own to", 6},
+		{[]string{"mine", "--commit", "HEAD"}, "mine is not a skill of the account repo, so it has no commit to", 6},
 	} {
 		what := "diff " + strings.Join(c.args, " ")
 		out := h.run(append([]string{"--json", "skill", "diff"}, c.args...)...)

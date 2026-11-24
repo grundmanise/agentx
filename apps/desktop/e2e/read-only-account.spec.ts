@@ -1,24 +1,24 @@
-// A read-only hub: Publish and Publish all look disabled, do nothing and say why in a Tooltip;
+// A read-only account repo: Publish and Publish all look disabled, do nothing and say why in a Tooltip;
 // the palette offers no Publish all; Rename stays, since a rename changes only this machine.
 import type { Page } from "@playwright/test";
 
 import { launch } from "./fixtures/palette-publish.ts";
-import { HUB } from "./fixtures/skills.ts";
+import { ACCOUNT } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
-const READ_ONLY = "me/hub is read-only";
+const READ_ONLY = "me/my-skills is read-only";
 
-const readOnlyHub = (cli: MockCli) => {
+const readOnlyAccount = (cli: MockCli) => {
   launch(cli, "edited");
   cli.register(["source", "list"], {
     events: [
       {
         access: "read-only",
-        hub: true,
+        account: true,
         id: "2222222222222222",
         type: "source",
-        url: HUB,
+        url: ACCOUNT,
       },
     ],
   });
@@ -33,11 +33,11 @@ const pane = (page: Page, name: string) =>
 const published = (cli: MockCli) =>
   cli.commands.filter((l) => l[0] === "skill" && l[1] === "publish");
 
-test("Publish all in the title bar says the hub is read-only and publishes nothing", async ({
+test("Publish all in the title bar says the account repo is read-only and publishes nothing", async ({
   cli,
   page,
 }) => {
-  readOnlyHub(cli);
+  readOnlyAccount(cli);
   await page.goto("/");
   await expect(status(page)).toHaveText("3 to publish");
   await status(page).click();
@@ -51,11 +51,11 @@ test("Publish all in the title bar says the hub is read-only and publishes nothi
   expect(published(cli)).toEqual([]);
 });
 
-test("a hub skill's Publish says the hub is read-only; Rename stays", async ({
+test("an account skill's Publish says the account repo is read-only; Rename stays", async ({
   cli,
   page,
 }) => {
-  readOnlyHub(cli);
+  readOnlyAccount(cli);
   await page.goto("/#/skills/changelog");
   const detail = pane(page, "changelog");
   const publish = detail.getByRole("button", { exact: true, name: "Publish" });
@@ -70,7 +70,7 @@ test("a hub skill's Publish says the hub is read-only; Rename stays", async ({
 });
 
 test("the palette offers no Publish all", async ({ cli, page }) => {
-  readOnlyHub(cli);
+  readOnlyAccount(cli);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect(status(page)).toHaveText("3 to publish");

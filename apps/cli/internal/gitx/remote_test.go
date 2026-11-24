@@ -111,7 +111,7 @@ func TestUnsetRemoteTakesOutOnlyTheRemoteItNames(t *testing.T) {
 
 // TestProbeRemoteSaysWhetherForksAreHeld: the probe reports a repository
 // holding a skills/* branch as holding forks and one with only other
-// branches as not. addHub asks git for a refetch on that answer alone,
+// branches as not. addAccount asks git for a refetch on that answer alone,
 // and a refetch of a repository with no fork branch waits for good.
 func TestProbeRemoteSaysWhetherForksAreHeld(t *testing.T) {
 	t.Parallel()

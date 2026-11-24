@@ -21,7 +21,7 @@ import {
   filterCount,
   GROUP_DISK,
   GROUP_PLUGINS,
-  GROUP_HUB,
+  GROUP_ACCOUNT,
   groupName,
   noFilters,
   showCounts,
@@ -36,7 +36,7 @@ import type {
 
 const shows: { value: Show; label: string }[] = [
   { label: "All skills", value: "all" },
-  { label: groupName(GROUP_HUB), value: "hub" },
+  { label: groupName(GROUP_ACCOUNT), value: "account" },
   { label: groupName(GROUP_PLUGINS), value: "plugins" },
   { label: groupName(GROUP_DISK), value: "unmanaged" },
   { label: "Updates", value: "updates" },

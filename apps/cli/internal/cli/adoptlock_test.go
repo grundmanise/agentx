@@ -175,7 +175,7 @@ func TestAdoptAllAdoptsFoldersAsTheyAre(t *testing.T) {
 	h.lockUnchanged(h.lockPath(), lock)
 	equal(t, "stdout", out.stdout, "✓ imported alpha\n"+
 		"✓ imported notes\n"+
-		"Imported skills stay on this machine until you publish them: run 'agentx source add <url> --hub', then 'agentx skill publish <name>'.\n\n"+
+		"Imported skills stay on this machine until you publish them: run 'agentx source add <url> --account', then 'agentx skill publish <name>'.\n\n"+
 		"Could not import (2)\n"+
 		"  cloned    "+cloned+"\n"+
 		"  shortcut  "+shortcut+"\n\n"+

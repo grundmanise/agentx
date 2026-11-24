@@ -5,7 +5,7 @@ import type { LibraryEntry, Plugin, SkillNode } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
 import { inventory, LIBRARY } from "./agents.ts";
-import { HUB, ACME } from "./skills.ts";
+import { ACCOUNT, ACME } from "./skills.ts";
 
 export { inventory } from "./agents.ts";
 
@@ -19,7 +19,7 @@ const libraryPlacement = (configurationId: string, name: string) => ({
   path: `${LIBRARY}/${name}`,
 });
 
-/** A hub skill as `skill fork` leaves it: its branch's worktree, in Claude Code too. */
+/** An account skill as `skill fork` leaves it: its branch's worktree, in Claude Code too. */
 const ownEntry = (
   name: string,
   hash: string,
@@ -39,7 +39,7 @@ const ownEntry = (
     },
     ...universal.map((id) => libraryPlacement(id, name)),
   ],
-  source: HUB,
+  source: ACCOUNT,
   state: "current",
   universal,
   ...from,
@@ -81,7 +81,7 @@ const fromPdf: Partial<LibraryEntry> = {
   upstream_subpath: "pdf",
 };
 
-/** After `skill fork pdf`: pdf is a hub skill, in its place. */
+/** After `skill fork pdf`: pdf is an account skill, in its place. */
 export const pdfForkedInPlace = {
   ...inventory,
   library: inventory.library.map((e) =>

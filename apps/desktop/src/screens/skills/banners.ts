@@ -44,7 +44,7 @@ export type BannerAction =
   | { kind: "add-source"; source: string }
   /** Opens the Publish dialog, which runs `skill publish <name>`. */
   | { kind: "publish" }
-  /** Goes to Settings, where a hub is set. */
+  /** Goes to Settings, where an account repo is set. */
   | { kind: "open-settings" }
   /**
    * The button of an edited skill of a source whose source this machine can write to: Publish to
@@ -71,7 +71,7 @@ type Conflicts = Record<string, ConflictEvent>;
 
 /** What the banners read besides the row: the store's sources, conflicts and the skill's diff. */
 export interface BannerFacts {
-  /** The added sources, from `source list`: the hub, and each source's access. */
+  /** The added sources, from `source list`: the account repo, and each source's access. */
   sources: SourceEvent[];
   /** How many files `skill diff <name>` reports changed; undefined until it was read. */
   changedFiles?: number;
@@ -88,31 +88,32 @@ interface BannerRule {
   ) => Banner;
 }
 
-/** The hub, the one source added with `--hub`, when one is set. */
-export const hubOf = (sources: SourceEvent[]) =>
-  sources.find((s) => s.hub === true);
+/** The account repo, the one source added with `--account`, when one is set. */
+export const accountOf = (sources: SourceEvent[]) =>
+  sources.find((s) => s.account === true);
 
-/** Why Publish does nothing for a hub skill while the hub is read-only, as the last add or fetch of it found. */
-export const readOnlyHubReason = (sources: SourceEvent[]) => {
-  const hub = hubOf(sources);
-  return hub?.access === "read-only"
-    ? `${shortSource(hub.url)} is read-only`
+/** Why Publish does nothing for an account skill while the account repo is read-only, as the last add or fetch of it found. */
+export const readOnlyAccountReason = (sources: SourceEvent[]) => {
+  const account = accountOf(sources);
+  return account?.access === "read-only"
+    ? `${shortSource(account.url)} is read-only`
     : undefined;
 };
 
 /**
- * A hub skill edited since it was published: what a bare `skill publish` covers, and
+ * An account skill edited since it was published: what a bare `skill publish` covers, and
  * what the title bar's status counts as edited.
  */
 export const hasEditsToPublish = (row: SkillRow) =>
-  row.kind === "hub" && row.modified && row.published;
+  row.kind === "account" && row.modified && row.published;
 
 /**
- * A hub skill the hub holds no branch of: a publish sends every file, and
+ * An account skill the account repo holds no branch of: a publish sends every file, and
  * the title bar counts it as new.
  */
 export const notPublished = (row: SkillRow) =>
-  row.kind === "hub" && (row.entry?.drift?.includes("not published") ?? false);
+  row.kind === "account" &&
+  (row.entry?.drift?.includes("not published") ?? false);
 
 const filesWord = (n: number) => (n === 1 ? "1 file" : `${n} files`);
 
@@ -127,12 +128,12 @@ const changedFiles = (row: SkillRow) =>
   ].join(" · ");
 
 /**
- * Where an update comes from: its source, or for a hub skill with an upstream, the
+ * Where an update comes from: its source, or for an account skill with an upstream, the
  * upstream.
  */
 const updateOrigin = (row: SkillRow) => {
   const upstream =
-    row.kind === "hub"
+    row.kind === "account"
       ? (row.update?.upstream ?? row.entry?.upstream)
       : undefined;
   return shortSource(upstream ?? row.update?.source ?? row.entry?.source ?? "");
@@ -268,17 +269,17 @@ const table: BannerRule[] = [
       tone: "yours",
     }),
     when: (row, facts) =>
-      notPublished(row) && hubOf(facts.sources) !== undefined,
+      notPublished(row) && accountOf(facts.sources) !== undefined,
   },
   {
     banner: () => ({
       action: { kind: "open-settings" },
-      text: "Set a hub to publish it.",
+      text: "Set an account repo to publish it.",
       title: "Not published",
       tone: "yours",
     }),
     when: (row, facts) =>
-      notPublished(row) && hubOf(facts.sources) === undefined,
+      notPublished(row) && accountOf(facts.sources) === undefined,
   },
   {
     banner: (row, _configurations, facts) => {

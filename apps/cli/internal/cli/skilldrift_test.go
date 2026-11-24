@@ -632,14 +632,14 @@ func (p *serveProc) nextOf(typ string) jsonEvent {
 // published, skill publish makes it current and published, and, after
 // another edit, a commit made with git in the fork's worktree leaves it
 // modified, since nothing published it, until a publish that has nothing
-// to record but pushes the commit, which moves only the hub's
+// to record but pushes the commit, which moves only the account repo's
 // branch as the store tracks it. Serve itself never commits an
 // edit.
 func TestServeReportsForkDrift(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
 	h.mustRun("skill", "new", "notes")
-	h.setHub(newHubRemote(t, h))
+	h.setAccount(newAccountRemote(t, h))
 	p := h.serve(t, "--json")
 	first := p.next("inventory")["library"].([]any)
 	equal(t, "the fork's first state", first[0].(map[string]any)["state"], stateCurrent)
@@ -666,9 +666,9 @@ func TestServeReportsForkDrift(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 }
 
-// TestUnpublished is when a hub skill reads modified: its skill
+// TestUnpublished is when an account skill reads modified: its skill
 // directory differs from its tip, or the tip is not the version skill diff
-// compares with: the merge base of the tip and the hub's branch
+// compares with: the merge base of the tip and the account repo's branch
 // as last fetched, which git is asked only when the two tips differ, or,
 // with no remote branch or one that shares no commit, the commit that
 // created it, and the tip itself when its history names none.
@@ -699,7 +699,7 @@ func TestUnpublished(t *testing.T) {
 }
 
 // TestPublishedName: a skill compares with its own name's branch on the
-// hub, and a renamed one not yet published under its new name
+// account repo, and a renamed one not yet published under its new name
 // with the nearest old name's branch there.
 func TestPublishedName(t *testing.T) {
 	t.Parallel()

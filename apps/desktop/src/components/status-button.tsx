@@ -24,7 +24,7 @@ const noop = () => {
   // Nothing to do once the rim has faded.
 };
 
-/** The dot's colour: no hub, something to publish or take in, or synced. */
+/** The dot's colour: no account repo, something to publish or take in, or synced. */
 export type StatusTone = "none" | "pending" | "synced";
 
 /**

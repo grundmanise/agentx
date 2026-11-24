@@ -261,7 +261,7 @@ func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 
 // TestSourceRemovedIsForManagedSkillsAlone lists a fork and an unmanaged
 // skill beside the managed one after the source goes. The source that
-// matters to a fork is the hub, not the third-party upstream it
+// matters to a fork is the account repo, not the third-party upstream it
 // merges from, and an unmanaged skill has no source at all.
 func TestSourceRemovedIsForManagedSkillsAlone(t *testing.T) {
 	t.Parallel()
@@ -365,7 +365,7 @@ func TestRemovedSourceHintIsQuotedForAShell(t *testing.T) {
 
 // TestAForkDoesNotNameARemovedSource moves a skill's lineage into the fork
 // namespace before its source is removed. The source that matters to a
-// fork is the hub it is published to, not the upstream it
+// fork is the account repo it is published to, not the upstream it
 // merges later versions from, so only a managed skill's lineage turns the
 // refusal of an id into the command that adds the source again.
 func TestAForkDoesNotNameARemovedSource(t *testing.T) {

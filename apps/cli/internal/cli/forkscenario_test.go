@@ -14,7 +14,7 @@ import (
 )
 
 // The tests in this file are the acceptance suite of forks synced between
-// two machines of one user through the hub. Each one is a
+// two machines of one user through the account repo. Each one is a
 // scenario on two homes, a and b, that share the remote and the upstream
 // source, and reads the outcome back with plain git: the branches, their
 // merge commits and trailers, the worktrees and the checkouts of pending
@@ -22,14 +22,14 @@ import (
 // nothing either machine committed is ever lost on the way, either merged
 // or in a conflict the user resolves.
 
-// scenarioMachines is hubHomes with a second machine that differs from
+// scenarioMachines is accountHomes with a second machine that differs from
 // the first in what most often changes a commit: another time zone, and a
 // git configuration with line ending conversion, signing and hooks of its
 // own, which agentx keeps out of every commit it writes. b has installed
 // nothing and added no source.
 func scenarioMachines(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	t.Helper()
-	a, b, s, remote = hubHomes(t)
+	a, b, s, remote = accountHomes(t)
 	b.env["TZ"] = "Pacific/Chatham"
 	spoilTheGitConfig(t, b)
 	b.withIdentity("Machine B", "b@example.com")
@@ -37,7 +37,7 @@ func scenarioMachines(t *testing.T) (a, b *harness, s *sourceRepo, remote string
 }
 
 // scenarioHomes is scenarioMachines with the forks called names installed
-// on b from the hub alone, which adds their source to b, so
+// on b from the account repo alone, which adds their source to b, so
 // every import commit b writes of a version it takes is its own, and has to
 // come out as the one a writes of that version for the two to merge as one
 // history.
@@ -129,7 +129,7 @@ func besideConflicts(body string) (merged, conflicts string) {
 }
 
 // TestScenarioDisjointEditsMergeClean syncs one fork a published and b
-// installed from the hub, under the fork id a gave it. Each
+// installed from the account repo, under the fork id a gave it. Each
 // machine edits other lines and commits, and b holds a draft it has not
 // recorded. b's update records the draft first, as a commit of its own on
 // b's tip, and merges what a published into it clean: the draft is in the
@@ -165,7 +165,7 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	equal(t, "b's state once published", b.listed("alpha")["state"], stateCurrent)
 	out = a.mustRun("skill", "update", "alpha")
 	equal(t, "a's update, naming only the subject of the newest of the three commits it lacked", out.stdout,
-		"✓ updated alpha to the latest published version: \"alpha: merge the hub (test-host)\"\n"+
+		"✓ updated alpha to the latest published version: \"alpha: merge the account repo (test-host)\"\n"+
 			"alpha is up to date as of the last update check; run agentx skill check-updates to look again\n")
 	equal(t, "a's alpha", a.ref(lineage.ForkRef("alpha")), merged)
 	for _, h := range []*harness{a, b} {
@@ -596,7 +596,7 @@ func TestScenarioEdgeCases(t *testing.T) {
 	}
 	shared := 0
 	for _, ev := range b.eventsOfType(b.mustRun("--json", "source", "list").stdout, "source") {
-		if ev["hub"] != true {
+		if ev["account"] != true {
 			shared++
 		}
 	}

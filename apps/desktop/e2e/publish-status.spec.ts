@@ -1,13 +1,13 @@
 // The sync status at the right of the title bar: its states from the inventory, the Sources slice
 // and the updates serve found, the popover it opens with what there is to publish and what is
-// incoming, Publish all from that popover, and when the hub was last checked. Every
+// incoming, Publish all from that popover, and when the account repo was last checked. Every
 // click's command line is asserted as the mocked CLI recorded it.
 import type { Page } from "@playwright/test";
 
 import type { PublishOutcome } from "#/cli/events.gen.ts";
 
 import { launch, syncedLibrary } from "./fixtures/palette-publish.ts";
-import { HUB, configurations, skills } from "./fixtures/skills.ts";
+import { ACCOUNT, configurations, skills } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
@@ -39,7 +39,7 @@ const fromAnotherMachine = (name: string, source: string): InlineEvent => ({
   upstream_commit: "",
 });
 
-/** A hub whose short form is longer than the popover's least width leaves room for. */
+/** An account repo whose short form is longer than the popover's least width leaves room for. */
 const LONG_REMOTE =
   "git@github.com:example-org/a-rather-long-skill-remote-name.git";
 
@@ -79,7 +79,7 @@ const progress = (current: number, subject: string): InlineEvent => ({
 const published = (name: string, outcome: PublishOutcome): InlineEvent => ({
   name,
   outcome,
-  source: HUB,
+  source: ACCOUNT,
   type: "publish",
 });
 
@@ -124,8 +124,8 @@ test.describe("states", () => {
         skills: pluginSkill === undefined ? [] : [pluginSkill],
         type: "inventory",
       },
-      fromAnotherMachine("gone", HUB),
-      fromAnotherMachine("commit-helper", HUB),
+      fromAnotherMachine("gone", ACCOUNT),
+      fromAnotherMachine("commit-helper", ACCOUNT),
       fromAnotherMachine("notes", "https://github.com/me/old-skills.git"),
     ]);
     await expect(status(page)).toHaveText("Synced");
@@ -143,18 +143,20 @@ test.describe("states", () => {
     await expect(status(page)).toHaveText("Synced");
   });
 
-  test("no hub: Set up sync, and a click goes to Settings, Hub", async ({
+  test("no account repo: Set up sync, and a click goes to Settings, Account repo", async ({
     cli,
     page,
   }) => {
-    launch(cli, "no-hub");
+    launch(cli, "no-account");
     await page.goto("/");
     await expect(status(page)).toHaveText("Set up sync");
     await status(page).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Settings" })
     ).toBeVisible();
-    await expect(page.getByRole("region", { name: "Hub" })).toBeInViewport();
+    await expect(
+      page.getByRole("region", { name: "Account repo" })
+    ).toBeInViewport();
   });
 
   test("is hidden while the startup layer shows", async ({ cli, page }) => {
@@ -188,7 +190,7 @@ test.describe("popover", () => {
     await expect(
       group(page, "To publish").getByRole("button", { name: "Publish all" })
     ).toBeVisible();
-    await expect(popover(page)).toContainText("me/hub");
+    await expect(popover(page)).toContainText("me/my-skills");
     await expect(popover(page)).toContainText("Not checked yet");
 
     await group(page, "To publish")
@@ -206,7 +208,7 @@ test.describe("popover", () => {
     await expect(popover(page)).toBeVisible();
   });
 
-  test("shows the hub in full, Publish all at the right", async ({
+  test("shows the account repo in full, Publish all at the right", async ({
     cli,
     page,
   }) => {
@@ -214,7 +216,7 @@ test.describe("popover", () => {
     cli.register(["source", "list"], {
       events: [
         {
-          hub: true,
+          account: true,
           id: "2222222222222222",
           type: "source",
           url: LONG_REMOTE,
@@ -230,7 +232,7 @@ test.describe("popover", () => {
         fetched: true,
         instance_id: "instance-1",
         ok: true,
-        scope: "hub",
+        scope: "account",
         type: "update_check",
       },
     ]);
@@ -283,7 +285,7 @@ test.describe("popover", () => {
         fetched: true,
         instance_id: "instance-1",
         ok: true,
-        scope: "hub",
+        scope: "account",
         type: "update_check",
       },
       {
@@ -291,13 +293,13 @@ test.describe("popover", () => {
         fetched: false,
         instance_id: "instance-1",
         ok: false,
-        scope: "hub",
+        scope: "account",
         type: "update_check",
       },
     ]);
     await status(page).hover();
     await expect(page.getByRole("tooltip")).toHaveText(
-      "Synced with your hub · checked 5 minutes ago"
+      "Synced with your account repo · checked 5 minutes ago"
     );
     await status(page).click();
     await expect(popover(page)).toContainText("Everything is synced");
@@ -306,7 +308,7 @@ test.describe("popover", () => {
 });
 
 test.describe("publish", () => {
-  test("Publish all runs one skill publish naming every skill to publish, shows its progress, then names the skill with a newer version on the hub, with Update", async ({
+  test("Publish all runs one skill publish naming every skill to publish, shows its progress, then names the skill with a newer version on the account repo, with Update", async ({
     cli,
     page,
   }) => {
@@ -322,7 +324,7 @@ test.describe("publish", () => {
         {
           code: "refused",
           message:
-            "1 of 3 skills could not be published: the hub holds changes to notes that this machine lacks, published from another machine",
+            "1 of 3 skills could not be published: the account repo holds changes to notes that this machine lacks, published from another machine",
           type: "error",
         },
       ],
@@ -343,7 +345,7 @@ test.describe("publish", () => {
 
     const toast = toasts(page);
     await expect(toast).toContainText(
-      "There is a newer version of notes skill on the hub. Update it first, then publish your changes."
+      "There is a newer version of notes skill on the account repo. Update it first, then publish your changes."
     );
     expect(ran(cli, ["skill", "publish", ...OUTGOING])).toBe(true);
     // Until the inventory that follows arrives, the pill keeps the last count.
@@ -392,41 +394,41 @@ test.describe("publish, refused: the hint in the app's words", () => {
   }[] = [
     {
       exitCode: 6,
-      hint: "once the hub takes it, run 'agentx skill publish changelog draft notes' again",
-      message: "the hub declined skills/notes: protected branch",
+      hint: "once the account repo takes it, run 'agentx skill publish changelog draft notes' again",
+      message: "the account repo declined skills/notes: protected branch",
       name: "declined",
       outcomes: [["notes", "declined"]],
       shown:
-        "The hub declined skills/notes: protected branch. Publish again once the hub takes it.",
+        "The account repo declined skills/notes: protected branch. Publish again once the account repo takes it.",
     },
     {
       exitCode: 3,
       hint: "check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then run 'agentx skill publish changelog draft notes' again",
-      message: `the hub ${HUB} did not let this machine push skills/notes: permission denied`,
+      message: `the account repo ${ACCOUNT} did not let this machine push skills/notes: permission denied`,
       name: "denied",
       outcomes: [["notes", "denied"]],
-      shown: `The hub ${HUB} did not let this machine push skills/notes: permission denied. Check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then publish again.`,
+      shown: `The account repo ${ACCOUNT} did not let this machine push skills/notes: permission denied. Check that the git credential helper (git config credential.helper) or SSH key you use for it may push there, then publish again.`,
     },
     {
       exitCode: 6,
       hint: "run 'agentx skill list' to see the state of each skill, then publish the rest one at a time",
       message:
-        "2 of 3 skills could not be published: the hub declined skills/changelog: protected branch; notes: the hub did not let this machine push skills/notes: permission denied",
+        "2 of 3 skills could not be published: the account repo declined skills/changelog: protected branch; notes: the account repo did not let this machine push skills/notes: permission denied",
       name: "several causes",
       outcomes: [
         ["changelog", "declined"],
         ["notes", "denied"],
       ],
       shown:
-        "2 of 3 skills could not be published: the hub declined skills/changelog: protected branch; notes: the hub did not let this machine push skills/notes: permission denied. See the state of each skill in Skills, then publish the rest one at a time.",
+        "2 of 3 skills could not be published: the account repo declined skills/changelog: protected branch; notes: the account repo did not let this machine push skills/notes: permission denied. See the state of each skill in Skills, then publish the rest one at a time.",
     },
     {
       exitCode: 3,
-      hint: "check your network; the edits were recorded, so run 'agentx skill publish changelog draft notes' again once the hub can be reached",
-      message: `cannot reach ${HUB}: connection refused`,
-      name: "the hub cannot be reached",
+      hint: "check your network; the edits were recorded, so run 'agentx skill publish changelog draft notes' again once the account repo can be reached",
+      message: `cannot reach ${ACCOUNT}: connection refused`,
+      name: "the account repo cannot be reached",
       outcomes: [],
-      shown: `Cannot reach ${HUB}: connection refused. Check your network; the edits were recorded, so publish again once the hub can be reached.`,
+      shown: `Cannot reach ${ACCOUNT}: connection refused. Check your network; the edits were recorded, so publish again once the account repo can be reached.`,
     },
   ];
   for (const c of cases) {

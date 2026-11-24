@@ -69,7 +69,7 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 }
 
 // TestConfigureWritesTheRemoteOfEachKind configures one source's remote
-// as a shared source and as the hub, in turn, and reads each
+// as a shared source and as the account repo, in turn, and reads each
 // back as the entry wants it: a key the remote does not have goes, and a
 // key a user gave a second value is set to one again. A key git cannot
 // unset fails the write.
@@ -80,14 +80,14 @@ func TestConfigureWritesTheRemoteOfEachKind(t *testing.T) {
 	const url = "https://github.com/acme/skills"
 	id := source.ID(url)
 	key := "remote." + source.RemoteName(id) + "."
-	hub := home.Source{URL: url, Hub: true}
+	account := home.Source{URL: url, Account: true}
 	for _, tc := range []struct {
 		name  string
 		entry home.Source
 		want  source.Remote
 	}{
 		{"a shared source", home.Source{URL: url, Pin: "v1"}, source.Remote{URL: url, Refspec: "+v1:" + source.StagingRef(id), Promisor: "true", Filter: "blob:none"}},
-		{"the hub", hub, source.Remote{URL: url, Refspec: gitx.ForkRefspec(source.RemoteName(id))}},
+		{"the account repo", account, source.Remote{URL: url, Refspec: gitx.ForkRefspec(source.RemoteName(id))}},
 	} {
 		if _, err := git.Isolated(ctx, gitDir, "config", "--add", key+"fetch", "+refs/heads/x:refs/x"); err != nil {
 			t.Fatal(err)
@@ -112,7 +112,7 @@ func TestConfigureWritesTheRemoteOfEachKind(t *testing.T) {
 	bin := t.TempDir()
 	testshim.Write(t, filepath.Join(bin, "git"), "#!/bin/sh\ncase \"$*\" in *--unset-all*) exit 4;; esac\nexec '"+gitPath+"' \"$@\"\n")
 	failing := gitx.New(map[string]string{"PATH": bin, "HOME": t.TempDir()}, false, func(string, ...any) {})
-	if err := source.Configure(ctx, failing, gitDir, hub); err == nil {
+	if err := source.Configure(ctx, failing, gitDir, account); err == nil {
 		t.Error("Configure succeeded although git could not unset the promisor settings")
 	}
 }

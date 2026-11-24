@@ -15,7 +15,7 @@ export const useFetchedListings = (sources: SourceEvent[]) => {
     for (const source of sources) {
       const fetched = source.last_fetched;
       if (
-        source.hub !== true &&
+        source.account !== true &&
         fetched !== undefined &&
         read.current.get(source.id) !== fetched
       ) {

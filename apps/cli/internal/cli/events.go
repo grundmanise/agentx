@@ -25,7 +25,7 @@ func newEvent(typ string) event { return event{Type: typ, SchemaVersion: schemaV
 // eventKind is the kind an event reports for a skill whose lineage record
 // is of kind k: managed for a skill with a branch in either namespace, a
 // fork's included, and unmanaged for one with none. A fork branch is how
-// the store keeps hub skills, not a kind of skill: what tells
+// the store keeps account skills, not a kind of skill: what tells
 // them from the skills of a shared source is their source, see
 // skillOrigin. The commands themselves decide on the record's kind.
 func eventKind(k string) string {
@@ -36,22 +36,22 @@ func eventKind(k string) string {
 }
 
 // skillOrigin is what every event that names a skill's origin reports of
-// the skill whose lineage record is rec, hub being the URL of the
-// hub, "" when none is set: its kind, see eventKind; its
+// the skill whose lineage record is rec, account repo being the URL of the
+// account repo, "" when none is set: its kind, see eventKind; its
 // source, where it is published to, with the directory there; and its
 // upstream, where a forked skill came from and takes its updates from,
 // with the directory there.
 //
 // A managed skill of a shared source is published to the source its import
-// commit names, at the directory it names, and has no upstream. Hub skills,
-// the ones a fork branch holds, are published to the hub, at no directory,
-// and have no source while no hub is set; one made by skill fork of a skill
+// commit names, at the directory it names, and has no upstream. Account skills,
+// the ones a fork branch holds, are published to the account repo, at no directory,
+// and have no source while no account repo is set; one made by skill fork of a skill
 // of a shared source carries the upstream its base import commit names,
 // which its lineage read by the walk holds, or, for the record of its base
 // version that Record.ForkBase builds, the record's own import. A skill
 // made by skill new, or forked from a skill with no upstream, has none. An
 // unmanaged skill has neither.
-func skillOrigin(rec lineage.Record, hub string) (kind, source string, subpath *string, upstream string, upstreamSubpath *string) {
+func skillOrigin(rec lineage.Record, account string) (kind, source string, subpath *string, upstream string, upstreamSubpath *string) {
 	kind = eventKind(rec.Kind)
 	switch rec.Kind {
 	case lineage.KindManaged:
@@ -59,7 +59,7 @@ func skillOrigin(rec lineage.Record, hub string) (kind, source string, subpath *
 			source, subpath = rec.Import.Source, ptr(rec.Import.Path)
 		}
 	case lineage.KindFork:
-		source = hub
+		source = account
 		switch {
 		case rec.Fork != nil:
 			if rec.Fork.Base != "" {

@@ -5,7 +5,7 @@ description: "Bring your skills to cloud agent sessions with a setup script that
 
 A cloud agent, such as Claude Code on the web, starts every session on a fresh computer in the cloud. Your skills reach it only if you commit them to the repository the session works on, or if agentx brings them.
 
-agentx treats all your cloud agents as one machine, the **cloud machine**. The cloud machine has no computer of its own. Its snapshot lists its skills and where each skill is placed. The snapshot is on your [hub](/hub), on the branch `machines/cloud`. When a session starts, it reads the snapshot and installs the skills. A session never writes to your hub.
+agentx treats all your cloud agents as one machine, the **cloud machine**. The cloud machine has no computer of its own. Its snapshot lists its skills and where each skill is placed. The snapshot is on your [account repo](/account-repo), on the branch `machines/cloud`. When a session starts, it reads the snapshot and installs the skills. A session never writes to your account repo.
 
 ## Supported environments
 
@@ -19,7 +19,7 @@ agentx treats all your cloud agents as one machine, the **cloud machine**. The c
 
 You need:
 
-- A [hub](/hub) that Git can reach over HTTPS, such as `https://github.com/you/agentx-hub`. The session needs the HTTPS URL: it has no SSH key, and the token works only over HTTPS. Your computer can keep an SSH URL for the same repository.
+- A [account repo](/account-repo) that Git can reach over HTTPS, such as `https://github.com/you/agentx-account`. The session needs the HTTPS URL: it has no SSH key, and the token works only over HTTPS. Your computer can keep an SSH URL for the same repository.
 - Skills on the cloud machine. On your computer, copy all of its skills to the cloud machine:
 
   ```sh
@@ -27,41 +27,41 @@ You need:
   ```
 
   Or turn on one skill at a time, see [Change the cloud machine's skills](#change-the-cloud-machine’s-skills). Until the cloud machine has a snapshot, sessions start without your skills.
-- A token that can only read the hub. See [Create a read-only token](#create-a-read-only-token).
+- A token that can only read the account repo. See [Create a read-only token](#create-a-read-only-token).
 
 `agentx snapshot save --machine cloud` copies your computer's settings, skills and placements to the cloud machine:
 
-- The snapshot keeps each MCP server's command, arguments and URL as your configuration writes them, and these can hold a token. Keep the hub private, or remove such values from your configuration before you save the snapshot.
+- The snapshot keeps each MCP server's command, arguments and URL as your configuration writes them, and these can hold a token. Keep the account repo private, or remove such values from your configuration before you save the snapshot.
 - It replaces the cloud machine's whole snapshot. A skill you placed only on the cloud machine, or a `--copy` you gave with `--machine cloud`, is gone until you place it again.
 - A skill from a shared source stays at the version your computer had. To move it to a newer version, save the snapshot again, or run `agentx skill place <name> --machine cloud`. After that, sessions take its latest version.
-- Sessions install your hub skills at their latest version on the hub.
+- Sessions install your account skills at their latest version on the account repo.
 
 See [Seed another machine](/cli/snapshot#seed-another-machine).
 
 ## Create a read-only token
 
-The setup script holds the token, so give it the least access that works: read access to the hub and nothing else.
+The setup script holds the token, so give it the least access that works: read access to the account repo and nothing else.
 
 On GitHub, create a fine-grained personal access token:
 
 1. Open **Settings**, then **Developer settings**, then **Personal access tokens**, then **Fine-grained tokens**, and select **Generate new token**.
 2. Set an expiration date.
-3. Under **Repository access**, select **Only select repositories** and pick your hub.
+3. Under **Repository access**, select **Only select repositories** and pick your account repo.
 4. Under **Permissions**, set **Contents** to **Read-only**. Leave every other permission at **No access**.
 5. Generate the token and copy it.
 
-On another Git host, create a token with read access to that one repository. If your hub is public, you need no token.
+On another Git host, create a token with read access to that one repository. If your account repo is public, you need no token.
 
 ## Set up Claude Code on the web
 
 1. Copy the [setup script](#the-setup-script) below.
 2. Set the three values at its top:
    - `AGENTX_VERSION`: `nightly` or `stable`.
-   - `HUB_URL`: the HTTPS URL of your hub. If `agentx source list` shows an SSH URL, such as `git@github.com:you/agentx-hub.git`, use the HTTPS URL of the same repository, `https://github.com/you/agentx-hub`.
-   - `HUB_TOKEN`: your read-only token. For a public hub, leave it empty.
+   - `ACCOUNT_URL`: the HTTPS URL of your account repo. If `agentx source list` shows an SSH URL, such as `git@github.com:you/agentx-account.git`, use the HTTPS URL of the same repository, `https://github.com/you/agentx-account`.
+   - `ACCOUNT_TOKEN`: your read-only token. For a public account repo, leave it empty.
 3. In Claude Code on the web, open the settings of the environment you work in.
 4. Paste the script into the environment's setup script, and save.
-5. If the environment limits network access, allow `github.com`, `api.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` and the host of your hub.
+5. If the environment limits network access, allow `github.com`, `api.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` and the host of your account repo.
 6. Start a new session.
 
 Every session in that environment now gets the cloud machine's skills. To use them in another environment, repeat these steps there.
@@ -76,14 +76,14 @@ Every session in that environment now gets the cloud machine's skills. To use th
 # The agentx build to install: "nightly" for the newest nightly build,
 # or "stable" for the latest release.
 AGENTX_VERSION="nightly"
-# The HTTPS URL of your hub. The token works only over HTTPS.
-HUB_URL="https://github.com/you/agentx-hub"
-# A token that can only read the hub. Leave it empty for a public one.
-HUB_TOKEN="paste-a-read-only-token-here"
+# The HTTPS URL of your account repo. The token works only over HTTPS.
+ACCOUNT_URL="https://github.com/you/agentx-account"
+# A token that can only read the account repo. Leave it empty for a public one.
+ACCOUNT_TOKEN="paste-a-read-only-token-here"
 
 bin="$HOME/.local/bin"
 agentx="$bin/agentx"
-remote=${HUB_URL%/}
+remote=${ACCOUNT_URL%/}
 remote=${remote%.git}
 
 # 1. Install agentx, a single binary, without Homebrew.
@@ -91,11 +91,11 @@ remote=${remote%.git}
 curl -fsSL https://raw.githubusercontent.com/grundmanise/agentx/main/scripts/install.sh |
 	sh -s -- "$@" --dir "$bin"
 
-# 2. Let Git read the hub with the token, for that repository alone.
-git config --global "credential.$remote.helper" "!f() { echo username=x-access-token; echo password=$HUB_TOKEN; }; f"
+# 2. Let Git read the account repo with the token, for that repository alone.
+git config --global "credential.$remote.helper" "!f() { echo username=x-access-token; echo password=$ACCOUNT_TOKEN; }; f"
 
-# 3. Add the hub.
-"$agentx" source add "$remote" --hub
+# 3. Add the account repo.
+"$agentx" source add "$remote" --account
 
 # 4. Add a SessionStart hook to ~/.claude/settings.json, keeping every other
 #    setting and hook. On every start and resume it applies the cloud machine's
@@ -126,11 +126,11 @@ exit 0
 ### What the script does
 
 1. Installs agentx to `~/.local/bin` with the [install script](/install#with-the-install-script): the newest [nightly build](/install#try-a-nightly-build) for `nightly`, or the latest release for `stable`.
-2. Sets a Git credential helper in `~/.gitconfig` that gives the token to Git for the hub and no other repository.
-3. Adds the hub with `agentx source add <url> --hub`.
+2. Sets a Git credential helper in `~/.gitconfig` that gives the token to Git for the account repo and no other repository.
+3. Adds the account repo with `agentx source add <url> --account`.
 4. Adds a `SessionStart` hook to `~/.claude/settings.json`. It keeps every other setting and hook in the file, and replaces only an earlier agentx hook, so running the script again adds no second hook.
 
-The hook runs `agentx snapshot apply --machine cloud --yes` each time a session starts or resumes. It installs the skills that the snapshot on `machines/cloud` lists, and places them. Then the hook asks Claude Code to look for skills again, so a skill it installs is there in that same session. See [Restore from the hub](/cli/snapshot#restore-from-the-hub).
+The hook runs `agentx snapshot apply --machine cloud --yes` each time a session starts or resumes. It installs the skills that the snapshot on `machines/cloud` lists, and places them. Then the hook asks Claude Code to look for skills again, so a skill it installs is there in that same session. See [Restore from the account repo](/cli/snapshot#restore-from-the-account-repo).
 
 The script always exits 0, so the environment starts even if a step fails. The setup output shows the error.
 
@@ -148,7 +148,7 @@ agentx skill remove <name> --machine cloud
 - `skill place` without `--to` places the skill in every configuration your computer detects and enables. Sessions then take the skill's latest version.
 - Add `--copy` to `skill place` for a client that cannot follow a symlink. Sessions then give that client a copy of the skill.
 - `skill remove` with `--from` takes the skill out of those configurations and keeps it on the cloud machine. Without `--from`, it takes the skill off the cloud machine.
-- Each command commits to `machines/cloud` on your hub, pushes, and changes nothing on your computer.
+- Each command commits to `machines/cloud` on your account repo, pushes, and changes nothing on your computer.
 - A later `agentx snapshot save --machine cloud` replaces all of these changes with your computer's skills and settings.
 
 The next session that starts or resumes applies the change. A session that already installed a skill you took off keeps it until a new session starts. For the details and the refusals, see [Turn skills on for your cloud agents](/cli/skill#turn-skills-on-for-your-cloud-agents).
@@ -156,7 +156,7 @@ The next session that starts or resumes applies the change. A session that alrea
 ## Limits
 
 - The hook relies on Claude Code reading `~/.claude/settings.json` on the session's own computer. This works in Claude Code on the web today, but Claude Code does not document it, so it can change.
-- The token reads only the hub. If a skill comes from a source the session cannot reach, such as another private repository or an SSH URL, applying the snapshot skips it, and the log says why.
+- The token reads only the account repo. If a skill comes from a source the session cannot reach, such as another private repository or an SSH URL, applying the snapshot skips it, and the log says why.
 - A session reads the cloud machine's snapshot and never writes it. Edits you make to a skill in a session stay in that session.
 
 ## Revoke the token

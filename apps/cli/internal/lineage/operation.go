@@ -12,7 +12,7 @@ import (
 )
 
 // The trailers of a commit on a machine's branch, machines/<machine id>
-// on the hub, which name the operation the commit made: so that
+// on the account repo, which name the operation the commit made: so that
 // the branch's history is a log of changes a reader can type, not only a
 // list of snapshots to diff, and every change has an id of its own, the
 // shape the operations of the account service take.

@@ -17,12 +17,12 @@ import (
 
 // A publish records the edits of one of your skills, what its skill
 // directory holds that its branch does not, as one commit on its branch,
-// and pushes the branch to the hub. Edits stay on this machine
+// and pushes the branch to the account repo. Edits stay on this machine
 // until they are published: there is no step between. It pushes only the
 // skill's own branch, to the branch of the same name, never forced. A
-// publish never merges: when the hub holds commits the skill
+// publish never merges: when the account repo holds commits the skill
 // lacks, another machine's, the skill is not pushed and nothing is
-// recorded, and an update takes them in, see updateRun.hubStep. A
+// recorded, and an update takes them in, see updateRun.accountStep. A
 // branch of the same name that is another skill, by its fork id, is never
 // pushed over.
 
@@ -38,22 +38,22 @@ type publishEvent struct {
 
 // The outcomes of a publish, one per skill.
 const (
-	publishPushed   = "pushed"     // the hub's branch now holds the skill's tip
+	publishPushed   = "pushed"     // the account repo's branch now holds the skill's tip
 	publishUpToDate = "up to date" // it held it already, and the skill had no edits to record
 	publishRefused  = "refused"    // see the error
 	// publishDeclined is a push the host refused, a hook of the remote's,
 	// a protected branch or a rule of the hosting service: the error names
 	// its reason.
 	publishDeclined = "declined"
-	// publishDenied is a push this machine may not make: the hub denied its
+	// publishDenied is a push this machine may not make: the account repo denied its
 	// credentials, or none answered without asking.
 	publishDenied = "denied"
-	// publishMoved is a skill the hub holds commits of that it
+	// publishMoved is a skill the account repo holds commits of that it
 	// lacks, published from another machine, while it holds commits or
 	// edits of its own the remote lacks: the two diverged, and an update
 	// has to take them in before it can be published. See the error.
 	publishMoved = "moved"
-	// publishBehind is a skill whose tip the hub's branch holds
+	// publishBehind is a skill whose tip the account repo's branch holds
 	// in its history, with commits another machine published on top, and
 	// which holds no edits: it has nothing to publish, and is not refused.
 	publishBehind = "behind"
@@ -67,33 +67,33 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 	var message string
 	cmd := &cobra.Command{
 		Use:         "publish [<name>...]",
-		Short:       "Publish edits to the source or the hub",
+		Short:       "Publish edits to the source or the account repo",
 		Annotations: map[string]string{annotationSection: "updates"},
-		Long: "Publish the skills named, or with no name every hub skill the hub\n" +
+		Long: "Publish the skills named, or with no name every account skill the account repo\n" +
 			"holds: record the edits each directory holds as one commit on its branch,\n" +
-			"then push the branches to the hub in one push. Edits stay on this\n" +
+			"then push the branches to the account repo in one push. Edits stay on this\n" +
 			"machine until you publish them. A bare publish never creates a branch: name a\n" +
 			"skill to publish it for the first time, or to put back one another machine\n" +
 			"removed; it names each skill it skipped. The commit's message names the skill and\n" +
 			"the files it changes, unless -m gives one; with -m, the edits an update recorded\n" +
 			"are published in that one commit too, unless a rename or an update from upstream\n" +
-			"lies between. Files git ignores are never published. When the hub\n" +
+			"lies between. Files git ignores are never published. When the account repo\n" +
 			"holds changes another machine published, nothing is recorded or pushed: run\n" +
 			"'agentx skill update <name>' to get them first, then publish again. A push the\n" +
-			"hub's host declines, by a hook or a protected branch, is reported\n" +
+			"account repo's host declines, by a hook or a protected branch, is reported\n" +
 			"with its reason, never forced, and a branch of the same name that is another\n" +
 			"skill is never pushed over.\n\n" +
 			"A skill installed from a shared source is published only when you name it on its\n" +
 			"own: its edits become one commit, under your own git identity, on the branch of\n" +
 			"the source it is installed from, changing its folder alone, and the commit is\n" +
-			"pushed there. No hub is needed. When the source changed the skill\n" +
+			"pushed there. No account repo is needed. When the source changed the skill\n" +
 			"since it was installed, nothing is pushed: run 'agentx skill update <name>'\n" +
 			"first, then publish again.",
 		Example: examples(
-			"agentx skill publish release-notes", "publish a hub skill",
+			"agentx skill publish release-notes", "publish an account skill",
 			"agentx skill publish release-notes triage", "publish two, a new one included, in one push",
 			"agentx skill publish release-notes -m \"Cover reverted PRs\"", "with your own commit message",
-			"agentx skill publish", "every hub skill the hub holds",
+			"agentx skill publish", "every account skill the account repo holds",
 			"agentx skill publish pdf", "push edits of a shared source's skill to it",
 		),
 		Args: cobra.ArbitraryArgs,
@@ -166,12 +166,12 @@ type publishing struct {
 	commit  string
 	edits   *committing // the edits its directory holds, nil when it holds its tip
 	// fold is the commit that records, under the message -m gives, every
-	// edit the skill holds that the hub lacks, recorded or not,
+	// edit the skill holds that the account repo lacks, recorded or not,
 	// see foldable; nil when -m gives none or they cannot be folded. With
 	// edits, it is edits itself.
 	fold *committing
 	// foldRefused is set when -m gives a message and the commits the
-	// hub lacks cannot be folded, see foldable: they keep
+	// account repo lacks cannot be folded, see foldable: they keep
 	// their own commits.
 	foldRefused bool
 	recorded    bool // the edits were recorded on its branch
@@ -181,15 +181,15 @@ type publishing struct {
 }
 
 // publish publishes the skills called named, each once, or with none every
-// hub skill on this machine whose branch the hub holds, see
+// account skill on this machine whose branch the account repo holds, see
 // remoteSelection, naming each one it skips: a bare publish never creates a
-// branch there, and a named skill the hub holds no branch of is pushed as
+// branch there, and a named skill the account repo holds no branch of is pushed as
 // any other, its push creating the branch. Named skills are judged first
 // from what this machine holds, see publishable, so a skill a publish
-// cannot cover is refused before the hub is looked up, and the whole run
+// cannot cover is refused before the account repo is looked up, and the whole run
 // with it; a managed skill of a shared source named alone is published to
 // that source instead, see publishShared, and one named beside others is
-// refused. Then the hub is fetched once, and each skill is judged against
+// refused. Then the account repo is fetched once, and each skill is judged against
 // its branch there, as the fetch left it, see judgePublish. The edits of
 // every skill that goes on are recorded, see recordEdits, after the fetch
 // and every refusal, so a remote out of reach or one that moved on records
@@ -209,27 +209,27 @@ func (inv *invocation) publish(ctx context.Context, named []string, message stri
 			return inv.publishShared(ctx, named[0], message)
 		}
 	}
-	gitDir, entry, hub, err := inv.hubRemote(ctx)
+	gitDir, entry, account, err := inv.accountRemote(ctx)
 	if err != nil {
 		return err
 	}
 	if err := inv.finishJournals(ctx); err != nil {
 		return err
 	}
-	if err := inv.fetchRemote(ctx, gitDir, hub, entry.URL); err != nil {
+	if err := inv.fetchRemote(ctx, gitDir, account, entry.URL); err != nil {
 		return err
 	}
 	records, err := inv.forkRecords(ctx, gitDir)
 	if err != nil {
 		return err
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, hub)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, account)
 	if err != nil {
 		return storeFailure(err)
 	}
 	names := named
 	if len(named) == 0 {
-		names = hubSkills(records)
+		names = accountSkills(records)
 	}
 	for _, n := range named {
 		if records[n].Kind != lineage.KindFork {
@@ -237,7 +237,7 @@ func (inv *invocation) publish(ctx context.Context, named []string, message stri
 			return inv.noLibrarySkill(n)
 		}
 	}
-	remote, err := inv.walkRemoteForks(ctx, gitDir, hub, tips, records, names)
+	remote, err := inv.walkRemoteForks(ctx, gitDir, account, tips, records, names)
 	if err != nil {
 		return err
 	}
@@ -258,7 +258,7 @@ func (inv *invocation) publish(ctx context.Context, named []string, message stri
 	}
 	if len(names) == 0 {
 		inv.summary = "no skill to publish"
-		inv.out.print("You have no hub skill to publish. Create one with ", inv.out.paint(label, "agentx skill new <name>"), " or ", inv.out.paint(label, "agentx skill fork <name>"), ".")
+		inv.out.print("You have no account skill to publish. Create one with ", inv.out.paint(label, "agentx skill new <name>"), " or ", inv.out.paint(label, "agentx skill fork <name>"), ".")
 		return nil
 	}
 	// The writer reads the user's identity and their core.excludesFile in
@@ -321,12 +321,12 @@ func (inv *invocation) publish(ctx context.Context, named []string, message stri
 		}
 	}
 	if len(branches) > 0 {
-		if err := inv.pushForks(ctx, gitDir, hub, entry.URL, named, list, branches); err != nil {
+		if err := inv.pushForks(ctx, gitDir, account, entry.URL, named, list, branches); err != nil {
 			return inv.pushFailed(ctx, list, named, err)
 		}
 	}
 	err = inv.reportPublished(ctx, list, entry.URL)
-	inv.dropRenamed(ctx, gitDir, hub, records, remote, list)
+	inv.dropRenamed(ctx, gitDir, account, records, remote, list)
 	return err
 }
 
@@ -334,7 +334,7 @@ func (inv *invocation) publish(ctx context.Context, named []string, message stri
 // recorded: the library_skill event of each skill whose edits were, and,
 // for a push git could not make at all, exit code 3, a hint that the next
 // publish pushes them. The publish of the skills called named, or with
-// none every hub skill.
+// none every account skill.
 func (inv *invocation) pushFailed(ctx context.Context, list []*publishing, named []string, err error) error {
 	var recorded []string
 	for _, p := range list {
@@ -351,18 +351,18 @@ func (inv *invocation) pushFailed(ctx context.Context, list []*publishing, named
 	again := publishCommand(named...)
 	f := failureOf(err)
 	if f.status == exitSource {
-		f.hint += "; the edits were recorded, so run '" + again + "' again once the hub can be reached"
+		f.hint += "; the edits were recorded, so run '" + again + "' again once the account repo can be reached"
 	}
 	return f
 }
 
 // publishable judges the named skills, in name order, from what this
-// machine holds, before the hub is looked up or fetched: a hub skill, a
+// machine holds, before the account repo is looked up or fetched: an account skill, a
 // fork branch's, passes; a managed skill of a shared source is shared, and
-// published to its source, see publishShared, with no hub needed, when it
+// published to its source, see publishShared, with no account repo needed, when it
 // is the one skill named; and a skill a publish cannot cover refuses the
 // whole run: one this machine does not hold, exit code 5, with the hint to
-// install it when the hub held it at the last fetch, an unmanaged skill,
+// install it when the account repo held it at the last fetch, an unmanaged skill,
 // exit code 6, which has no source to publish to, and a skill of a shared
 // source named beside others, exit code 1, see sharedBesideOthers. The
 // lineage is read once for every name.
@@ -403,24 +403,24 @@ func (inv *invocation) publishable(ctx context.Context, names []string) (shared 
 // not hold, exit code 5, see publishable.
 func (inv *invocation) unpublishable(ctx context.Context, name string) error {
 	_, held := librarySkill(inv.dirs.Library, name)
-	// published is whether the hub held a skill of the name at
+	// published is whether the account repo held a skill of the name at
 	// the last fetch, read without fetching: a fork of the name made here
 	// would be another skill of the name, which a publish refuses, so the
 	// hint offers to install the one published instead.
 	published := false
-	if _, remote, set, err := inv.hubSource(); err == nil && set {
+	if _, remote, set, err := inv.accountSource(); err == nil && set {
 		published = inv.remoteHolds(ctx, remote, name)
 	}
 	switch {
 	case held:
-		hint := "make it a hub skill with '" + adoptCommand(name) + "', then publish it"
+		hint := "make it an account skill with '" + adoptCommand(name) + "', then publish it"
 		if published {
-			hint += "; or move " + quotedPath(inv.libraryPath(name)) + " aside and install the one you published with '" + hubAddCommand(name) + "'"
+			hint += "; or move " + quotedPath(inv.libraryPath(name)) + " aside and install the one you published with '" + accountAddCommand(name) + "'"
 		}
 		return fail(exitRefused, sanitised(name)+" is not managed, so it has no source to publish to", hint)
 	case published:
 		f := failureOf(inv.noLibrarySkill(name))
-		f.hint = "it is one of your skills on the hub; install it with '" + hubAddCommand(name) + "'"
+		f.hint = "it is one of your skills on the account repo; install it with '" + accountAddCommand(name) + "'"
 		return f
 	}
 	return inv.noLibrarySkill(name)
@@ -429,7 +429,7 @@ func (inv *invocation) unpublishable(ctx context.Context, name string) error {
 // sharedBesideOthers refuses, exit code 1, a publish that names the skills
 // of shared sources called shared beside other skills: a skill of a shared
 // source is pushed to its own source, one at a time, and a publish of
-// several skills pushes hub skills to the hub. Pure.
+// several skills pushes account skills to the account repo. Pure.
 func sharedBesideOthers(shared []string) *failure {
 	if len(shared) == 1 {
 		return refuse(exitUsage, sanitised(shared[0])+" is installed from a shared source, which a skill is published to only when it is named alone",
@@ -446,7 +446,7 @@ func sharedBesideOthers(shared []string) *failure {
 // judgePublish decides what the publish does with the skill whose branch
 // is rec, see publish, before anything is written. Its edits are judged
 // first, see judgeEdits; a skill whose directory cannot be judged is
-// refused. Then its branch on the hub: a skill the remote
+// refused. Then its branch on the account repo: a skill the remote
 // holds no branch of, or an ancestor of its tip on, is pushed, its edits
 // recorded first; one whose tip the remote holds already is pushed when it
 // has edits, and otherwise up to date; one whose remote branch is another
@@ -454,10 +454,10 @@ func sharedBesideOthers(shared []string) *failure {
 // from is behind, and not pushed, when it has no edits; and one the remote
 // holds commits of that it lacks while it holds commits or edits of its
 // own is refused, outcome moved, exit code 6, since a publish never
-// merges: what the hub holds that the skill lacks is an
-// update's to take in, see updateRun.hubStep.
+// merges: what the account repo holds that the skill lacks is an
+// update's to take in, see updateRun.accountStep.
 //
-// With message, the -m of the run, a skill pushed onto the hub's branch,
+// With message, the -m of the run, a skill pushed onto the account repo's branch,
 // which its tip descends from, is folded when it can be, see foldable: what
 // it holds that the remote lacks, the commits an update, a fork or a rename
 // recorded for its edits included, becomes one commit on the remote's tip
@@ -505,14 +505,14 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 	switch {
 	case err != nil:
 		p.outcome, p.f = publishRefused, failureOf(storeFailure(err))
-	case ahead: // the hub holds nothing the skill lacks
+	case ahead: // the account repo holds nothing the skill lacks
 		p.push = true
 		if strings.TrimSpace(message) != "" {
 			if p.fold, p.foldRefused, err = inv.foldEdits(ctx, gitDir, rec, theirs, remote.walked[theirs].Base, edits); err != nil {
 				return nil, err
 			}
 		}
-	case behind && edits == nil: // the skill holds nothing the hub lacks
+	case behind && edits == nil: // the skill holds nothing the account repo lacks
 		p.outcome, p.commit = publishBehind, theirs
 	default: // the remote moved on, and the skill holds commits or edits of its own
 		p.outcome, p.f = publishMoved, movedRefusal(n)
@@ -520,12 +520,12 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 	return p, nil
 }
 
-// movedRefusal refuses to publish the skill called name while the hub holds
+// movedRefusal refuses to publish the skill called name while the account repo holds
 // commits of it that it lacks, published from another machine, and it holds
 // commits or edits of its own the remote lacks: a publish never merges, and
 // an update takes them in first.
 func movedRefusal(name string) *failure {
-	return refuse(exitRefused, "the hub holds changes to "+sanitised(name)+" that this machine lacks, published from another machine",
+	return refuse(exitRefused, "the account repo holds changes to "+sanitised(name)+" that this machine lacks, published from another machine",
 		"run '"+skillCommand("update", name)+"' to get them, then publish again")
 }
 
@@ -536,12 +536,12 @@ type committing struct {
 	site     forkSite
 	captured string // the skill directory's fingerprint, taken before git read it
 	root     string // the root tree of the commit: the tip's, with the skill's directory as git wrote it
-	parent   string // the commit's one parent, the tip when ""; a fold's is the hub's tip, see foldEdits
+	parent   string // the commit's one parent, the tip when ""; a fold's is the account repo's tip, see foldEdits
 	commit   string
 }
 
 // foldEdits is the commit that folds what the skill whose branch is rec
-// holds that the hub lacks, the remote's branch being at
+// holds that the account repo lacks, the remote's branch being at
 // theirs, an ancestor of its tip, into one commit on theirs, see foldable;
 // nil when it cannot be folded, refused true, or the skill has no
 // worktree or library entry here. edits are the skill's edits not yet
@@ -570,7 +570,7 @@ func (inv *invocation) foldEdits(ctx context.Context, gitDir string, rec lineage
 	return &committing{site: f, captured: j.captured, root: rec.Tree, parent: theirs}, false, nil
 }
 
-// foldable reports whether the commits of tip the hub's tip
+// foldable reports whether the commits of tip the account repo's tip
 // theirs lacks can be folded into one: none of them may carry what a
 // skill's history is read for, see lineage.Resolve, so that the history
 // of the fold, theirs and the one commit on it, says what the skill's
@@ -787,7 +787,7 @@ func commitSubject(name, label string, files []changedFile) string {
 	return name + ": " + what + " (" + sanitised(label) + ")"
 }
 
-// pushForks pushes branches in one push to the hub, the git
+// pushForks pushes branches in one push to the account repo, the git
 // remote called remote at url, and reads what it answered for each, see
 // gitx.ClassifyPush, then what its branches hold now. A push git could not
 // make at all is exit code 3, as a fetch is. A branch the remote moved on
@@ -796,7 +796,7 @@ func commitSubject(name, label string, files []changedFile) string {
 // code 6 naming the host's reason, and a push this machine's credentials
 // may not make is exit code 3; none is ever pushed again with force. The
 // hints name the run's command, the publish of the skills called named or
-// with none of every hub skill, and not each skill, so that a
+// with none of every account skill, and not each skill, so that a
 // push refused for all of them alike ends with the one hint that fits.
 func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url string, named []string, list []*publishing, branches []string) error {
 	statuses, stderr, exit, err := inv.git.Push(ctx, gitDir, remote, branches)
@@ -832,19 +832,19 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url string
 		case gitx.PushMoved:
 			p.outcome, p.f = publishMoved, movedRefusal(p.name)
 		case gitx.PushDeclined:
-			p.outcome, p.f = publishDeclined, refuse(exitRefused, "the hub declined "+branch+": "+sanitised(reason),
-				"once the hub takes it, "+again)
+			p.outcome, p.f = publishDeclined, refuse(exitRefused, "the account repo declined "+branch+": "+sanitised(reason),
+				"once the account repo takes it, "+again)
 		case gitx.PushDenied:
-			p.outcome, p.f = publishDenied, refuse(exitSource, "the hub "+shownURL(url)+" did not let this machine push "+branch+": "+sanitised(reason),
+			p.outcome, p.f = publishDenied, refuse(exitSource, "the account repo "+shownURL(url)+" did not let this machine push "+branch+": "+sanitised(reason),
 				deniedHint(gitx.DeniedFix(reason))+", then "+again)
 		default:
-			p.outcome, p.f = publishRefused, refuse(exitSource, "whether the hub took "+branch+" is not known: "+sanitised(reason), again)
+			p.outcome, p.f = publishRefused, refuse(exitSource, "whether the account repo took "+branch+" is not known: "+sanitised(reason), again)
 		}
 	}
 	return nil
 }
 
-// deniedHint is what a push the hub denied tells the user to
+// deniedHint is what a push the account repo denied tells the user to
 // do first, see gitx.DeniedFix.
 func deniedHint(fix gitx.DenialFix) string {
 	switch fix {
@@ -858,7 +858,7 @@ func deniedHint(fix gitx.DenialFix) string {
 
 // reportPublished reports every skill of the publish, in name order: one
 // progress event each, its publish event, naming url as its source, and
-// its line, or for a skill behind the hub a warning; then the
+// its line, or for a skill behind the account repo a warning; then the
 // library_skill event of each skill whose edits were recorded, as the
 // machine now has it, read from one rescan; and the result, which answers
 // for every skill that was not published, see refusals.
@@ -876,7 +876,7 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing, 
 			pushed++
 			out.done("published " + name + " as " + short(p.commit))
 		case publishUpToDate:
-			out.print(name, " is up to date on the hub")
+			out.print(name, " is up to date on the account repo")
 		case publishBehind:
 			out.warnWith(behindMessage(p.name), "run '"+skillCommand("update", p.name)+"' to get them")
 		}
@@ -897,7 +897,7 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing, 
 	case len(list) == 1 && pushed == 1:
 		inv.summary = "published " + sanitised(list[0].name)
 	case len(list) == 1 && list[0].outcome == publishUpToDate:
-		inv.summary = sanitised(list[0].name) + " is up to date on the hub"
+		inv.summary = sanitised(list[0].name) + " is up to date on the account repo"
 	case len(list) == 1 && list[0].outcome == publishBehind:
 		inv.summary = behindMessage(list[0].name)
 	default:
@@ -935,7 +935,7 @@ func (inv *invocation) reportRecorded(ctx context.Context, names []string) error
 }
 
 // behindMessage is the warning for the skill called name, which the
-// hub is ahead of: it has nothing to publish.
+// account repo is ahead of: it has nothing to publish.
 func behindMessage(name string) string {
-	return sanitised(name) + " has nothing to publish; the hub holds changes published from another machine"
+	return sanitised(name) + " has nothing to publish; the account repo holds changes published from another machine"
 }

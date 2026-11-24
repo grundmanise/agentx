@@ -1,5 +1,5 @@
-// The Hub section of Settings: the Git repository your hub skills publish to. With none
-// set, a URL field and Save, which runs `source add <url> --hub`. With one set, its URL, a
+// The Account repo section of Settings: the Git repository your account skills publish to. With none
+// set, a URL field and Save, which runs `source add <url> --account`. With one set, its URL, a
 // Read-only tag when access is limited, and Change… (a new URL, after the replace warning) and Unlink (`source remove <url>`, after its warning).
 // What it shows is the Sources slice, which `source list` fills again after each command; a
 // failure of Save shows under the field, in the CLI's words as one sentence-cased paragraph, a
@@ -25,16 +25,16 @@ import { Spinner } from "#/components/ui/spinner.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
-import { hubSource } from "#/screens/settings/source-rows.ts";
+import { accountSource } from "#/screens/settings/source-rows.ts";
 import { agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
-/** The pending label of `source add <url> --hub` from this section. */
-export const SAVE_HUB_LABEL = "save hub";
+/** The pending label of `source add <url> --account` from this section. */
+export const SAVE_ACCOUNT_LABEL = "save account repo";
 
-/** The pending label of `source remove <url>` of the hub. */
-export const DETACH_HUB_LABEL = "detach hub";
+/** The pending label of `source remove <url>` of the account repo. */
+export const DETACH_ACCOUNT_LABEL = "detach account repo";
 
 /** A confirmation: its title, its warning, Cancel and the button that goes ahead. */
 const Confirm = ({
@@ -78,7 +78,7 @@ const Confirm = ({
   </AlertDialog>
 );
 
-/** The hints of `source add --hub` that name a command, in the app's words. */
+/** The hints of `source add --account` that name a command, in the app's words. */
 const saveHintRules: HintRule[] = [
   {
     app: () => "remove it under Sources first, or choose another repository",
@@ -111,7 +111,7 @@ const saveProblem = (
 };
 
 /**
- * The URL field and Save. With `current`, the URL of the hub set now, Save asks first
+ * The URL field and Save. With `current`, the URL of the account repo set now, Save asks first
  * whether to replace it, and Cancel closes the field.
  */
 const RemoteForm = ({
@@ -119,7 +119,7 @@ const RemoteForm = ({
   onDone,
 }: {
   current?: string;
-  /** The hub was saved, or Cancel was chosen. */
+  /** The account repo was saved, or Cancel was chosen. */
   onDone?: () => void;
 }) => {
   const [url, setUrl] = useState(current ?? "");
@@ -127,19 +127,19 @@ const RemoteForm = ({
   // The URL saved when it was refused: it keeps its case when it starts the CLI's words.
   const [refused, setRefused] = useState("");
   const [confirming, setConfirming] = useState(false);
-  const saving = usePending(SAVE_HUB_LABEL);
+  const saving = usePending(SAVE_ACCOUNT_LABEL);
   const typed = url.trim();
   const unchanged = typed === "" || typed === current;
 
   const save = async () => {
-    if (SAVE_HUB_LABEL in useAppStore.getState().pending) {
+    if (SAVE_ACCOUNT_LABEL in useAppStore.getState().pending) {
       return;
     }
     setProblem(undefined);
-    const outcome = await agentx(["source", "add", typed, "--hub"], {
-      label: SAVE_HUB_LABEL,
+    const outcome = await agentx(["source", "add", typed, "--account"], {
+      label: SAVE_ACCOUNT_LABEL,
       ownFailure: true,
-      success: "Linked hub",
+      success: "Linked account repo",
     });
     if (outcome.exitCode === EXIT_CODES.ok) {
       onDone?.();
@@ -152,7 +152,7 @@ const RemoteForm = ({
   return (
     <>
       <form
-        aria-label="Hub URL"
+        aria-label="Account repo URL"
         className="gap-input-label flex flex-col"
         onSubmit={(e) => {
           e.preventDefault();
@@ -169,8 +169,8 @@ const RemoteForm = ({
         <div className="flex items-center gap-2">
           <Input
             kind="mono"
-            aria-label="Hub URL"
-            placeholder="git@github.com:you/agentx-hub.git"
+            aria-label="Account repo URL"
+            placeholder="git@github.com:you/agentx-account.git"
             aria-invalid={problem === undefined ? undefined : true}
             value={url}
             onChange={(e) => {
@@ -198,8 +198,8 @@ const RemoteForm = ({
       <Confirm
         open={confirming}
         onOpenChange={setConfirming}
-        title="Change your hub?"
-        warning="Skills from the previous hub will stay but show as not published."
+        title="Change your account repo?"
+        warning="Skills from the previous account repo will stay but show as not published."
         action="Change"
         onConfirm={() => {
           void save();
@@ -210,18 +210,18 @@ const RemoteForm = ({
 };
 
 /**
- * The hub set now: its URL, a Read-only tag when access is limited, Change… and
+ * The account repo set now: its URL, a Read-only tag when access is limited, Change… and
  * Unlink. Like a source's card, it shows a tag only for a limit.
  */
-const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
+const AccountRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
   const [changing, setChanging] = useState(false);
   const [detaching, setDetaching] = useState(false);
-  const busy = usePending(DETACH_HUB_LABEL);
+  const busy = usePending(DETACH_ACCOUNT_LABEL);
 
   const detach = () => {
     void agentx(["source", "remove", url], {
-      label: DETACH_HUB_LABEL,
-      success: "The hub is no longer set",
+      label: DETACH_ACCOUNT_LABEL,
+      success: "The account repo is no longer set",
     });
   };
 
@@ -267,7 +267,7 @@ const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
       <Confirm
         open={detaching}
         onOpenChange={setDetaching}
-        title="Unlink the hub?"
+        title="Unlink the account repo?"
         warning={
           <>
             This will disconnect{" "}
@@ -286,22 +286,22 @@ const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
   );
 };
 
-/** The Hub section, from the Sources slice. */
-export const HubSection = () => {
-  const hub = useAppStore((s) => hubSource(s.sources));
+/** The Account repo section, from the Sources slice. */
+export const AccountSection = () => {
+  const account = useAppStore((s) => accountSource(s.sources));
   return (
     <SettingsSection
-      title="Hub"
+      title="Account repo"
       description="The Git repository your skills publish to."
     >
-      {hub === undefined ? (
+      {account === undefined ? (
         <RemoteForm />
       ) : (
-        <HubRow
-          // A new hub starts with its field closed.
-          key={hub.url}
-          url={hub.url}
-          readOnly={hub.access === "read-only"}
+        <AccountRow
+          // A new account repo starts with its field closed.
+          key={account.url}
+          url={account.url}
+          readOnly={account.access === "read-only"}
         />
       )}
     </SettingsSection>

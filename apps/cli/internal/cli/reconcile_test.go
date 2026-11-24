@@ -165,7 +165,7 @@ func TestForkWarningsSayWhatIsMissing(t *testing.T) {
 // it, and reads one reconcile event per skill name, sorted, before the
 // first inventory: a managed skill that holds its base, a .DS_Store of its
 // own beside it, is restored, an edited one modified, one whose library
-// directory went installable, and so is a fork only the hub's
+// directory went installable, and so is a fork only the account repo's
 // branches hold; a fork placed as it was is restored, and stays its
 // worktree's owner beside a copy of the worktree, one whose worktree was
 // deleted by hand is checked out again and repaired, one whose skill
@@ -173,7 +173,7 @@ func TestForkWarningsSayWhatIsMissing(t *testing.T) {
 // worktree missing, the merge kept, and one whose registration was
 // removed by hand, its worktree then a directory git does not know, is an
 // adopt candidate left as it is; a directory of the library no branch
-// names is unmanaged, even when the hub holds a fork of its
+// names is unmanaged, even when the account repo holds a fork of its
 // name. Before that, git's registration of a worktree whose directory is
 // gone is pruned, while a pending merge's locked checkout stays; the
 // repair rewrites the version file.
@@ -202,20 +202,20 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	remove(t, admin)
 	orphanTree := libraryTree(t, orphan)
 	tip := h.ref(lineage.ForkRef("kept"))
-	// The hub's branches, as a fetch of it leaves them.
-	const hub = "file:///nowhere/skills.git"
+	// The account repo's branches, as a fetch of it leaves them.
+	const account = "file:///nowhere/skills.git"
 	if err := home.Mutate(h.agentx, nil, func() error {
 		settings, err := home.LoadSettings(h.agentx)
 		if err != nil {
 			return err
 		}
-		settings.SetSource(home.Source{URL: hub, Hub: true})
+		settings.SetSource(home.Source{URL: account, Account: true})
 		return home.SaveSettings(h.agentx, settings)
 	}); err != nil {
 		t.Fatal(err)
 	}
-	h.storeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(hub)), "far"), tip)
-	h.storeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(hub)), "mine"), tip)
+	h.storeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(account)), "far"), tip)
+	h.storeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(account)), "mine"), tip)
 	stray := filepath.Join(t.TempDir(), "stray")
 	h.storeGit("worktree", "add", "--quiet", "--detach", stray, tip)
 	remove(t, stray)
@@ -317,7 +317,7 @@ func (h *harness) moveTo(t *testing.T, root string) {
 func TestServeRepairsWorktreesOfAMovedHome(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.setHub(newHubRemote(t, h))
+	h.setAccount(newAccountRemote(t, h))
 	_, _ = h.storeGitErr("config", "--unset", "worktree.useRelativePaths") // unset already on an older git
 	h.mustRun("skill", "new", "notes")
 	h.moveTo(t, filepath.Join(t.TempDir(), "moved"))

@@ -48,7 +48,7 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "pdf is already a hub skill",
+      "pdf is already an account skill",
       "fork it under a new name with 'agentx skill fork pdf --name <new>'"
     ),
     "on",
@@ -64,7 +64,7 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "the store already holds notes as a hub skill",
+      "the store already holds notes as an account skill",
       "choose another name with --name <new>"
     ),
     "named",
@@ -72,7 +72,7 @@ const forkTable: [ErrorEvent, ForkFields, string | undefined][] = [
   ],
   [
     refused(
-      "the store already holds pdf as a hub skill",
+      "the store already holds pdf as an account skill",
       "choose another name with --name <new>"
     ),
     "on",

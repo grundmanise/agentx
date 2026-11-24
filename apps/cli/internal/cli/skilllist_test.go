@@ -56,13 +56,13 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 	equal(t, "state", h.eventsOfType(after.stdout, "library_skill")[0]["state"], "modified")
 
 	// The text says where each skill is published to: a skill of a shared
-	// source its source's URL and directory; a hub skill, made by skill
-	// new or skill fork, the hub, marked as source list marks
+	// source its source's URL and directory; an account skill, made by skill
+	// new or skill fork, the account repo, marked as source list marks
 	// it, and a forked one the upstream it came from too; an unmanaged one
 	// none. Neither command publishes, so both read not published.
-	remote := newHubRemote(t, h)
-	h.setHub(remote)
-	hub := "file://" + remote
+	remote := newAccountRemote(t, h)
+	h.setAccount(remote)
+	account := "file://" + remote
 	h.mustRun("skill", "new", "gamma")
 	h.mustRun("skill", "fork", "alpha", "--name", "delta")
 	upstream := managed["source"].(string) + "/" + managed["subpath"].(string)
@@ -73,8 +73,8 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 		cells[fields[0]] = fields[1:]
 	}
 	equal(t, "alpha's row", cells["alpha"][0]+"|"+cells["alpha"][2], "managed|"+upstream)
-	equal(t, "gamma's row", strings.Join(cells["gamma"], "|"), "managed|current, not published|"+hub+" (hub)|4 placements")
-	equal(t, "delta's row", strings.Join(cells["delta"], "|"), "managed|current, not published|"+hub+" (hub), from "+upstream+"|4 placements")
+	equal(t, "gamma's row", strings.Join(cells["gamma"], "|"), "managed|current, not published|"+account+" (account)|4 placements")
+	equal(t, "delta's row", strings.Join(cells["delta"], "|"), "managed|current, not published|"+account+" (account), from "+upstream+"|4 placements")
 	equal(t, "mine's row", strings.Join(cells["mine"], "|"), "unmanaged|-|(none)|2 placements")
 }
 
@@ -110,7 +110,7 @@ func TestSkillListReadsLineageFromTheBranchesAlone(t *testing.T) {
 }
 
 // TestSkillListReportsAFork reads the fork namespace too, so that a branch
-// written there is listed as a managed skill (a hub skill) rather
+// written there is listed as a managed skill (an account skill) rather
 // than as an unmanaged directory. The branch is made with plain git and
 // the library holds a directory of its own under its name, not the
 // symlink into the fork's worktree, so the directory is not the fork's
@@ -152,7 +152,7 @@ func TestSkillListWithoutALibrary(t *testing.T) {
 // of a listing and of an inventory over skills that differ every way drift
 // reads: alpha edited, a file of it made executable, with a candidate and a
 // pending merge; beta displaced in one configuration, missing from another,
-// removed upstream, and holding a file the system-file list names; a hub
+// removed upstream, and holding a file the system-file list names; an account repo
 // skill; and a managed branch with no library directory and no
 // lineage, which a warning names; and two skills made by skill new, whose lineage
 // their own history holds, one as its tip records it and one edited. All
@@ -284,43 +284,43 @@ func TestSkillListSanitisesTheName(t *testing.T) {
 }
 
 // TestSourceCell is the source column of every listing over each kind of
-// skill and each state of the hub, then each listing's row
+// skill and each state of the account repo, then each listing's row
 // passing it what its event says.
 func TestSourceCell(t *testing.T) {
 	t.Parallel()
-	const hub, shared, up = "https://example.com/me/skills", "https://example.com/team/skills", "https://example.com/up/skills"
+	const account, shared, up = "https://example.com/me/skills", "https://example.com/team/skills", "https://example.com/up/skills"
 	root, dir, nasty := "", "tools/pdf", "na\x1b[31msty"
 	for _, c := range []struct {
 		name            string
-		hubSkill        bool
+		accountSkill    bool
 		source          string
 		subpath         *string
 		upstream        string
 		upstreamSubpath *string
-		hub, want       string
+		account, want   string
 	}{
-		{"unmanaged, or an import agentx cannot read", false, "", nil, "", nil, hub, "(none)"},
-		{"unmanaged, no hub", false, "", nil, "", nil, "", "(none)"},
-		{"a shared source at its root", false, shared, &root, "", nil, hub, shared},
-		{"a shared source's directory", false, shared, &dir, "", nil, hub, shared + "/tools/pdf"},
-		{"a shared source, no hub", false, shared, nil, "", nil, "", shared},
-		{"a hub skill", true, hub, nil, "", nil, hub, hub + " (hub)"},
-		{"a hub skill, forked", true, hub, nil, up, &dir, hub, hub + " (hub), from " + up + "/tools/pdf"},
-		{"a hub skill, forked from a root", true, hub, nil, up, &root, hub, hub + " (hub), from " + up},
-		{"a hub skill, no hub", true, "", nil, "", nil, "", "hub not set"},
-		{"a hub skill, forked, no hub", true, "", nil, up, nil, "", "hub not set, from " + up},
-		{"a shared source, sanitised", false, shared, &nasty, "", nil, hub, shared + "/na [31msty"},
-		{"a hub skill, sanitised", true, hub + "\x1b[1m", nil, up, &nasty, hub + "\x1b[1m", hub + " [1m (hub), from " + up + "/na [31msty"},
+		{"unmanaged, or an import agentx cannot read", false, "", nil, "", nil, account, "(none)"},
+		{"unmanaged, no account repo", false, "", nil, "", nil, "", "(none)"},
+		{"a shared source at its root", false, shared, &root, "", nil, account, shared},
+		{"a shared source's directory", false, shared, &dir, "", nil, account, shared + "/tools/pdf"},
+		{"a shared source, no account repo", false, shared, nil, "", nil, "", shared},
+		{"an account skill", true, account, nil, "", nil, account, account + " (account)"},
+		{"an account skill, forked", true, account, nil, up, &dir, account, account + " (account), from " + up + "/tools/pdf"},
+		{"an account skill, forked from a root", true, account, nil, up, &root, account, account + " (account), from " + up},
+		{"an account skill, no account repo", true, "", nil, "", nil, "", "account repo not set"},
+		{"an account skill, forked, no account repo", true, "", nil, up, nil, "", "account repo not set, from " + up},
+		{"a shared source, sanitised", false, shared, &nasty, "", nil, account, shared + "/na [31msty"},
+		{"an account skill, sanitised", true, account + "\x1b[1m", nil, up, &nasty, account + "\x1b[1m", account + " [1m (account), from " + up + "/na [31msty"},
 	} {
-		got := sourceCell(c.hubSkill, c.source, c.subpath, c.upstream, c.upstreamSubpath, c.hub).text
+		got := sourceCell(c.accountSkill, c.source, c.subpath, c.upstream, c.upstreamSubpath, c.account).text
 		equal(t, c.name, got, c.want)
 	}
 
-	// Each listing says which skills are hub skills: skill list by the
+	// Each listing says which skills are account skills: skill list by the
 	// lineage, and skill list --remote lists nothing else.
 	w := &writer{}
-	equal(t, "skill list", row(w, librarySkillEvent{LibraryEntry: scan.LibraryEntry{Kind: lineage.KindManaged, Source: hub, Upstream: up}, hubSkill: true}, hub)[3].text,
-		hub+" (hub), from "+up)
-	equal(t, "skill list --remote", installableRow(w, installableSkillEvent{Name: "alpha", Source: hub, Upstream: up, UpstreamSubpath: &dir})[3].text,
-		hub+" (hub), from "+up+"/tools/pdf")
+	equal(t, "skill list", row(w, librarySkillEvent{LibraryEntry: scan.LibraryEntry{Kind: lineage.KindManaged, Source: account, Upstream: up}, accountSkill: true}, account)[3].text,
+		account+" (account), from "+up)
+	equal(t, "skill list --remote", installableRow(w, installableSkillEvent{Name: "alpha", Source: account, Upstream: up, UpstreamSubpath: &dir})[3].text,
+		account+" (account), from "+up+"/tools/pdf")
 }

@@ -147,7 +147,7 @@ const veil = (page: Page) =>
   page.getByRole("main").locator("> [data-launch-veil]");
 
 /**
- * Launches with one hub skill, waits until its inventory is kept for the next launch, then
+ * Launches with one account skill, waits until its inventory is kept for the next launch, then
  * restarts the app with `doctor` held. Returns the held doctor and the command lines of the
  * restart, the reads of the skill included.
  */
@@ -503,7 +503,7 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   );
   await expect(row(page, "git 2.40 or newer")).toContainText("git 2.43.0");
   await expect(row(page, "Store opens")).toContainText(
-    "2 hub skills, 1 from sources"
+    "2 account skills, 1 from sources"
   );
   await expect(row(page, "Watching this machine")).toContainText(
     "Found 3 agents"

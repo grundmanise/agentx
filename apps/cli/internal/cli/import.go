@@ -65,20 +65,20 @@ func newSnapshotApplyCommand(inv *invocation) *cobra.Command {
 			"lacks, move each one it holds forward to the version the snapshot names, and\n" +
 			"place each one in the configurations the snapshot records, in those detected\n" +
 			"here.\n\n" +
-			"A skill of a source is installed from that source, and a hub skill from the\n" +
-			"hub. An entry with no version takes the latest one. A skill is only\n" +
+			"A skill of a source is installed from that source, and an account skill from the\n" +
+			"account repo. An entry with no version takes the latest one. A skill is only\n" +
 			"ever moved forward: one that is ahead is kept, and one that holds edits or\n" +
 			"whose history diverged is left as it is and reported, for 'agentx skill update'.\n" +
 			"A skill that cannot be installed, such as an unmanaged one, is skipped with\n" +
 			"the reason. A skill the snapshot does not list is left as it is, and MCP\n" +
-			"servers and plugins are not applied. Settings whose hub is this\n" +
+			"servers and plugins are not applied. Settings whose account repo is this\n" +
 			"machine's repository, by another URL, keep this machine's URL of it.\n\n" +
-			"Every source the settings name that this machine has not added, the hub\n" +
+			"Every source the settings name that this machine has not added, the account repo\n" +
 			"included, is added as 'agentx source add' adds it, at the pin the\n" +
 			"settings hold. A source that cannot be reached is a warning, and the snapshot\n" +
 			"is applied without it.\n\n" +
 			"With --machine <id>, read the snapshot from the branch machines/<id> of the\n" +
-			"hub instead of a file, fetching that one branch and pushing\n" +
+			"account repo instead of a file, fetching that one branch and pushing\n" +
 			"nothing, so a credential that can only read is enough, and apply it as a\n" +
 			"file's.\n\n" +
 			"The command asks once before it changes anything. Pass --yes to apply without\n" +
@@ -96,13 +96,13 @@ func newSnapshotApplyCommand(inv *invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "apply the snapshot without asking")
-	cmd.Flags().StringVar(&machine, "machine", "", "read the snapshot from the branch machines/<id> of the hub instead of a file: cloud, or a computer's machine id")
+	cmd.Flags().StringVar(&machine, "machine", "", "read the snapshot from the branch machines/<id> of the account repo instead of a file: cloud, or a computer's machine id")
 	return cmd
 }
 
 // importSnapshot reads a snapshot and applies it, see applySnapshot. The
 // snapshot is the file at path, or, when machine names one, what that
-// machine's branch on the hub holds, see importMachine, whose
+// machine's branch on the account repo holds, see importMachine, whose
 // name, machines/<id>, then stands for the file in every line.
 //
 // The snapshot is read and validated whole before anything is locked, so
@@ -186,9 +186,9 @@ func readExport(path string) (snapshot, error) {
 }
 
 // decodeSnapshot reads b, the snapshot path names, a file or a machine's
-// branch on the hub, as readExport describes. A snapshot is one
+// branch on the account repo, as readExport describes. A snapshot is one
 // machine's whole state, so it always holds that machine's settings, and
-// the entries of hub skills are read against the hub they
+// the entries of account skills are read against the account repo they
 // set.
 func decodeSnapshot(path string, b []byte) (snapshot, error) {
 	// The version is read first and on its own: a document of a schema this
@@ -219,7 +219,7 @@ func decodeSnapshot(path string, b []byte) (snapshot, error) {
 	if err := validSettings(path, snap.Settings); err != nil {
 		return snapshot{}, err
 	}
-	if err := validEntries(path, snap.Skills, documentHub(snap.Settings)); err != nil {
+	if err := validEntries(path, snap.Skills, documentAccount(snap.Settings)); err != nil {
 		return snapshot{}, err
 	}
 	for i := range snap.Skills {
@@ -428,50 +428,50 @@ func badCopyMode(s home.Settings) string {
 	return ""
 }
 
-// documentHub is the URL of the hub the settings of a
+// documentAccount is the URL of the account repo the settings of a
 // document set, "" when they set none.
-func documentHub(s home.Settings) string {
-	entry, _ := hubEntry(s)
+func documentAccount(s home.Settings) string {
+	entry, _ := accountEntry(s)
 	return entry.URL
 }
 
-// hubRecord reports whether e is a hub skill, which a fork
+// accountRecord reports whether e is an account skill, which a fork
 // branch holds: a managed entry whose source names the repository of the
-// hub the snapshot is read against, hub, or that has no
-// source at all, as hub skills have none while no hub is
+// account repo the snapshot is read against, account, or that has no
+// source at all, as account skills have none while no account repo is
 // set. Every other managed entry is a skill of a shared source, whose
 // import branch holds it. The repository decides and not its spelling,
-// every host read as itself, see hubRepository: a computer that
-// reaches the hub over SSH and the cloud machine that reaches
+// every host read as itself, see accountRepository: a computer that
+// reaches the account repo over SSH and the cloud machine that reaches
 // it over HTTPS name one repository.
-func hubRecord(e snapshotSkill, hub string) bool {
-	return e.Kind != lineage.KindUnmanaged && (e.Source == "" || hubRepository(e.Source, hub))
+func accountRecord(e snapshotSkill, account string) bool {
+	return e.Kind != lineage.KindUnmanaged && (e.Source == "" || accountRepository(e.Source, account))
 }
 
-// hubRepository reports whether url names the repository of the
-// hub at the URL hub: its URL, or another of the same host and path,
+// accountRepository reports whether url names the repository of the
+// account repo at the URL account: its URL, or another of the same host and path,
 // over HTTPS or over SSH, see sameRepository. Every host is read as
 // itself, as a snapshot is read on whatever machine, with no SSH
-// configuration of its own: no alias resolves. A hub of "" is no
-// hub, which no URL names. Pure.
-func hubRepository(url, hub string) bool {
-	return hub != "" && (url == hub || sameRepository(url, hub, nil))
+// configuration of its own: no alias resolves. An account repo of "" is no
+// account repo, which no URL names. Pure.
+func accountRepository(url, account string) bool {
+	return account != "" && (url == account || sameRepository(url, account, nil))
 }
 
-// keepHubRemote puts the hub of here, this machine's
+// keepAccountRemote puts the account repo of here, this machine's
 // settings, in place of the one the settings s an import writes set, when
-// both name one repository, see hubRepository: the URL is how this
+// both name one repository, see accountRepository: the URL is how this
 // machine reaches it, over SSH or over HTTPS, with its own credential, and
 // what it found it can do there is this machine's too. Settings that set
-// a hub of another repository, or none, keep theirs, as every
+// an account repo of another repository, or none, keep theirs, as every
 // other field of them is kept. The sources stay sorted by URL. Pure.
-func keepHubRemote(s *home.Settings, here home.Settings) {
-	mine, ok := hubEntry(here)
+func keepAccountRemote(s *home.Settings, here home.Settings) {
+	mine, ok := accountEntry(here)
 	if !ok {
 		return
 	}
 	for i, src := range s.Sources {
-		if src.Hub && hubRepository(src.URL, mine.URL) {
+		if src.Account && accountRepository(src.URL, mine.URL) {
 			s.Sources[i] = mine
 			slices.SortFunc(s.Sources, func(a, b home.Source) int { return strings.Compare(a.URL, b.URL) })
 			return
@@ -481,10 +481,10 @@ func keepHubRemote(s *home.Settings, here home.Settings) {
 
 // recordedImport is the upstream version an entry names, see
 // snapshotSkill: the source's for a skill of a shared source, the
-// upstream's for a hub skill, and whether it names any field of one.
-func recordedImport(e snapshotSkill, hubSkill bool) (lineage.Import, bool) {
+// upstream's for an account skill, and whether it names any field of one.
+func recordedImport(e snapshotSkill, accountSkill bool) (lineage.Import, bool) {
 	source, subpath := e.Source, e.Subpath
-	if hubSkill {
+	if accountSkill {
 		source, subpath = e.Upstream, e.UpstreamSubpath
 	}
 	i := lineage.Import{Source: source, Commit: e.UpstreamCommit, Hash: e.BaseHash}
@@ -498,9 +498,9 @@ func recordedImport(e snapshotSkill, hubSkill bool) (lineage.Import, bool) {
 // on: a name no branch of the library namespace can carry, a name given
 // twice, a kind other than managed and unmanaged, placements that are not
 // configuration ids as agentx writes them, a commit that is not an object
-// id, or lineage that the trailer reader would not accept. hub is the
-// hub the snapshot is read against, which tells hub skills
-// from a shared source's, see hubRecord: a hub skill carries no
+// id, or lineage that the trailer reader would not accept. account repo is the
+// account repo the snapshot is read against, which tells account skills
+// from a shared source's, see accountRecord: an account skill carries no
 // subpath and names its upstream version, if any, in its upstream fields;
 // a shared source's carries its subpath and no upstream, and names its
 // version in its source fields. An unmanaged skill carries no source and
@@ -509,7 +509,7 @@ func recordedImport(e snapshotSkill, hubSkill bool) (lineage.Import, bool) {
 // import commit passes before it is written, which is that reader itself on
 // the message the commit would carry, so an exact entry this command
 // accepts is exactly one a branch could hold.
-func validEntries(path string, skills []snapshotSkill, hub string) error {
+func validEntries(path string, skills []snapshotSkill, account string) error {
 	refuse := func(why string) error {
 		return fail(exitRefused, path+" lists a skill agentx cannot read: "+sanitised(why),
 			"fix the snapshot, or save it again on the machine it came from")
@@ -540,20 +540,20 @@ func validEntries(path string, skills []snapshotSkill, hub string) error {
 			}
 			continue
 		}
-		hubSkill := hubRecord(e, hub)
+		accountSkill := accountRecord(e, account)
 		switch {
-		case hubSkill && e.Subpath != nil:
-			return refuse(e.Name + " is a hub skill, and hub skills have no subpath")
-		case !hubSkill && (e.Upstream != "" || e.UpstreamSubpath != nil):
-			return refuse(e.Name + " names an upstream, which only hub skills have")
-		case !hubSkill && e.ForkID != "":
-			return refuse(e.Name + " names a fork id, which only hub skills have")
+		case accountSkill && e.Subpath != nil:
+			return refuse(e.Name + " is an account skill, and account skills have no subpath")
+		case !accountSkill && (e.Upstream != "" || e.UpstreamSubpath != nil):
+			return refuse(e.Name + " names an upstream, which only account skills have")
+		case !accountSkill && e.ForkID != "":
+			return refuse(e.Name + " names a fork id, which only account skills have")
 		case e.ForkID != "" && !lineage.IsForkID(e.ForkID):
 			return refuse(e.Name + " names a fork id that is not one")
-		case !hubSkill && e.Subpath == nil:
+		case !accountSkill && e.Subpath == nil:
 			return refuse(e.Name + " names its source and not its folder in it, the subpath")
 		}
-		imported, named := recordedImport(e, hubSkill)
+		imported, named := recordedImport(e, accountSkill)
 		if e.Commit == "" {
 			if e.UpstreamCommit != "" || e.BaseHash != "" || e.Upstream != "" || e.UpstreamSubpath != nil {
 				return refuse(e.Name + " names no commit, so it follows the latest version, and names part of a version all the same")
@@ -562,12 +562,12 @@ func validEntries(path string, skills []snapshotSkill, hub string) error {
 			// exact entry's, with a version that is only there to make
 			// the message whole.
 			imported.Commit, imported.Hash = strings.Repeat("0", 40), strings.Repeat("0", 64)
-			if !hubSkill && lineage.Unrecordable(imported) != "" {
+			if !accountSkill && lineage.Unrecordable(imported) != "" {
 				return refuse(e.Name + " does not name the canonical URL of a source and a folder of it")
 			}
 			continue
 		}
-		if !named && hubSkill {
+		if !named && accountSkill {
 			continue // a branch with no imported version: a skill made by skill new
 		}
 		if lineage.Unrecordable(imported) != "" {
@@ -599,22 +599,22 @@ func placementsRefusal(e snapshotSkill) string {
 
 // restoreStates compares every entry of the snapshot with what the home
 // repo of this machine holds under that name, in the namespace the entry
-// belongs in: hub skills, see hubRecord, under skills/, and a shared
+// belongs in: account skills, see accountRecord, under skills/, and a shared
 // source's under managed/. A branch in that namespace at the same commit is
 // the version the entry names, and at any commit for an entry that follows
 // the latest version, which only an update can tell apart; a name the repo
 // does not hold at all is missing; a name it holds otherwise, at another
 // commit or in the other namespace, is different, and the commit it holds
-// is reported beside it. A hub skill the repo holds no branch of is also
-// held when the hub holds it, as remote lists the remote-tracking branches
-// by name: a machine that set the hub and fetched it holds every skill
+// is reported beside it. An account skill the repo holds no branch of is also
+// held when the account repo holds it, as remote lists the remote-tracking branches
+// by name: a machine that set the account repo and fetched it holds every skill
 // published there, so such an entry reads present when its remote-tracking
 // branch is at its commit and different when that is at another. An
 // unmanaged skill has no branch anywhere: it is different when the repo
 // holds a branch of its name and missing otherwise. A machine with no
 // store holds nothing, and creating one is not this command's to do,
 // so every entry is then missing.
-func restoreStates(skills []snapshotSkill, records map[string]lineage.Record, remote map[string]string, hub string) []importSkillEvent {
+func restoreStates(skills []snapshotSkill, records map[string]lineage.Record, remote map[string]string, account string) []importSkillEvent {
 	states := make([]importSkillEvent, 0, len(skills))
 	for _, e := range skills {
 		st := importSkillEvent{event: newEvent("import_skill"), snapshotSkill: e, State: restoreMissing}
@@ -627,7 +627,7 @@ func restoreStates(skills []snapshotSkill, records map[string]lineage.Record, re
 			continue
 		}
 		kind := lineage.KindManaged
-		if hubRecord(e, hub) {
+		if accountRecord(e, account) {
 			kind = lineage.KindFork
 		}
 		if there := remote[e.Name]; !local && there != "" && kind == lineage.KindFork {
@@ -645,11 +645,11 @@ func restoreStates(skills []snapshotSkill, records map[string]lineage.Record, re
 	return states
 }
 
-// remoteTips is what the hub held of every fork as the last
+// remoteTips is what the account repo held of every fork as the last
 // fetch left it, see lineage.ListRemote: none on a machine with no home
-// repo, or with no hub set.
+// repo, or with no account repo set.
 func (inv *invocation) remoteTips(ctx context.Context) (map[string]string, error) {
-	_, remote, ok, err := inv.hubSource()
+	_, remote, ok, err := inv.accountSource()
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -767,8 +767,8 @@ func (inv *invocation) printImported(states []importSkillEvent, settings home.Se
 		t := &table{}
 		for _, ev := range added {
 			kind := c("", muted)
-			if ev.Hub {
-				kind = c("hub", muted)
+			if ev.Account {
+				kind = c("account", muted)
 			}
 			t.add(c(sanitised(ev.URL), plain), kind)
 		}
@@ -830,7 +830,7 @@ func printSkillSection(out *writer, title string, states []importSkillEvent, nam
 // that this machine has not added: those the store holds no remote
 // of, or a remote that is not the one the entry wants, as an import of
 // settings naming another pin leaves it, and those it never fetched, whose
-// source ref it does not hold or, for the hub, of which it holds
+// source ref it does not hold or, for the account repo, of which it holds
 // no remote-tracking branch and no record of a fetch, see forkCount. An
 // import restores the settings entry of a source alone, so on the machine
 // an import makes every source is one of these, and the import adds each
@@ -855,7 +855,7 @@ func (inv *invocation) unadded(ctx context.Context, settings home.Settings) ([]h
 		id := source.ID(src.URL)
 		r, ok := remotes[id]
 		inLine, fetched := ok && r == source.RemoteOf(src), commits[id] != ""
-		if inLine && src.Hub {
+		if inLine && src.Account {
 			if _, fetched, err = inv.forkCount(ctx, gitDir, src, source.RemoteName(id)); err != nil {
 				return nil, storeFailure(err)
 			}
@@ -872,8 +872,8 @@ func (inv *invocation) unadded(ctx context.Context, settings home.Settings) ([]h
 // it, every word of it quoted for a POSIX shell.
 func sourceAddLine(src home.Source) string {
 	line := "agentx source add " + sourceAddArg(src.URL, src.Pin)
-	if src.Hub {
-		line = "agentx source add " + shellWord(sanitised(src.URL)) + " --hub"
+	if src.Account {
+		line = "agentx source add " + shellWord(sanitised(src.URL)) + " --account"
 	}
 	return line
 }

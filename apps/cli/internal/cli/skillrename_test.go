@@ -11,21 +11,21 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
 )
 
-// TestSkillRenameIsAForkAndARemoval renames a skill of the hub on machine
+// TestSkillRenameIsAForkAndARemoval renames a skill of the account repo on machine
 // a, which published it, a version since its creation included, while
 // machine b installed it. Every refusal of either step comes before
 // anything changes: a name outside the grammar, a name another skill has, a
-// skill that is not one of the hub's and a merge pending. The rename is
+// skill that is not one of the account repo's and a merge pending. The rename is
 // then a fork of the skill under the new name that keeps its fork id, with
 // the old branch's commits as its history and the edit a held recorded on
 // it, still unpublished, placed where the old one was with its copy mode,
 // even once that recorded edit left the copy behind; and the old skill's
 // removal. Until it is published, the renamed skill compares with the old
-// branch on the hub, so its diff holds the edit and not what was published
-// under the old name. The hub keeps the old branch, which a, holding it
+// branch on the account repo, so its diff holds the edit and not what was published
+// under the old name. The account repo keeps the old branch, which a, holding it
 // under the new name, neither lists as installable nor installs with --all.
 // The publish that creates the new name's branch deletes the old one there,
-// and no other publish does: a deletion the hub rejects warns, names the
+// and no other publish does: a deletion the account repo rejects warns, names the
 // removal that deletes it, and exits 0. Removed as the hint says, b keeps
 // its alpha and lists the renamed skill, with the same fork id, as
 // installable, and its publish of alpha, which renamed nothing, leaves the
@@ -56,7 +56,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	}{
 		{"a name outside the grammar", []string{"alpha", "Renamed"}, 6, "Renamed"},
 		{"a name taken", []string{"alpha", "beta"}, 6, "choose another name with 'agentx skill rename alpha <new>'"},
-		{"not the hub's", []string{"mine", "yours"}, 6, "mine is not a skill of the hub, so it cannot be renamed"},
+		{"not the account repo's", []string{"mine", "yours"}, 6, "mine is not a skill of the account repo, so it cannot be renamed"},
 		{"a merge pending", []string{"alpha", "renamed"}, 4, "alpha has a merge pending"},
 	} {
 		if tc.name == "a merge pending" {
@@ -110,7 +110,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	nothingAt(t, "the old library entry", filepath.Join(a.library, "alpha"))
 	equal(t, "the remote's old branch", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), published)
 
-	// The hub refuses the old branch's deletion: the publish
+	// The account repo refuses the old branch's deletion: the publish
 	// warns and goes on, still pushing renamed.
 	hook := filepath.Join(remote, "hooks", "pre-receive")
 	testshim.Write(t, hook, "#!/bin/sh\nwhile read old new ref; do [ \"$ref\" = refs/heads/skills/alpha ] && exit 1; done\nexit 0\n")
@@ -118,7 +118,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	out = a.run("skill", "publish", "renamed", "-m", "Rename alpha")
 	equal(t, "a refused deletion: exit", out.exit, 0)
 	contains(t, "-m over a rename", out.stderr, "the edits of renamed were already recorded in commits of their own, which a rename or an update from upstream keeps, so -m was not used")
-	contains(t, "its warning", out.stderr, "the hub still holds skills/alpha: the hub rejected its deletion")
+	contains(t, "its warning", out.stderr, "the account repo still holds skills/alpha: the account repo rejected its deletion")
 	contains(t, "its hint", out.stderr, "delete it with 'agentx skill remove alpha --remote'")
 	equal(t, "the remote's alpha, kept", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), published)
 	if err := os.Remove(hook); err != nil {
@@ -149,7 +149,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	b.mustRun("skill", "publish", "beta")
 	out = a.run("skill", "publish")
 	equal(t, "a publish over a changed old branch: exit", out.exit, 0)
-	contains(t, "its warning", out.stderr, "the hub's skills/beta holds changes gamma lacks, so it was kept")
+	contains(t, "its warning", out.stderr, "the account repo's skills/beta holds changes gamma lacks, so it was kept")
 	contains(t, "its hint", out.stderr, "install it beside gamma with 'agentx skill add --name beta', or delete it with 'agentx skill remove beta --remote'")
 	equal(t, "the remote's alpha, put back", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), b.ref(lineage.ForkRef("alpha")))
 	equal(t, "the remote's beta", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/beta"), theirs)
@@ -159,7 +159,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	// name's branch, gamma's, and leaves beta's be.
 	a.mustRun("skill", "rename", "gamma", "delta")
 	out = a.mustRun("skill", "publish", "delta")
-	contains(t, "the deletion's line", out.stdout, "deleted skills/gamma from the hub (renamed to delta)")
+	contains(t, "the deletion's line", out.stdout, "deleted skills/gamma from the account repo (renamed to delta)")
 	equal(t, "the remote's gamma, deleted", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)", "refs/heads/skills/gamma"), "")
 	equal(t, "the remote's delta", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/delta"), a.ref(lineage.ForkRef("delta")))
 	equal(t, "the remote's beta, kept", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/beta"), theirs)

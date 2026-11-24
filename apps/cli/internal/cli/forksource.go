@@ -67,7 +67,7 @@ func adoptCommand(name string) string {
 func unmanagedRefusal(name string, mode forkMode) error {
 	message := sanitised(name) + " is not managed by agentx, so it cannot be forked"
 	if mode == modeRename {
-		message = sanitised(name) + " is not a skill of the hub, so it cannot be renamed"
+		message = sanitised(name) + " is not a skill of the account repo, so it cannot be renamed"
 	}
 	return fail(exitRefused, message, "import it first with '"+adoptCommand(name)+"'")
 }

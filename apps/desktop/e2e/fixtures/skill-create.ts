@@ -1,5 +1,5 @@
 // The Create skill tests: the Skills fixture's machine before `skill new`, and the inventory the
-// scan after it reports, with the new hub skill in the library, placed in every enabled
+// scan after it reports, with the new account skill in the library, placed in every enabled
 // agent: a symlink in Claude Code and Cursor, the library itself for the two that read it. And the
 // Add skill tests: a folder of a source not added that holds four skills, one of them installed
 // already and kept when its source was removed, what Find skills reads of it, and the machine
@@ -12,7 +12,7 @@ import type {
 } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
-import { HUB, inventory, library, skills } from "./skills.ts";
+import { ACCOUNT, inventory, library, skills } from "./skills.ts";
 
 const LIBRARY = "/home/me/.agents/skills";
 const WORKTREES = "/home/me/.agentx/worktrees";
@@ -40,7 +40,7 @@ const placements: LibraryPlacement[] = [
   })),
 ];
 
-/** The library entry `skill new` made: a hub skill, never published. */
+/** The library entry `skill new` made: an account skill, never published. */
 export const created: LibraryEntry = {
   content_hash: "h-standup",
   drift: ["not published"],
@@ -48,7 +48,7 @@ export const created: LibraryEntry = {
   kind: "managed",
   name: NEW_SKILL,
   placements,
-  source: HUB,
+  source: ACCOUNT,
   state: "current",
   universal,
 };

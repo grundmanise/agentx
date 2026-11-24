@@ -178,7 +178,7 @@ func TestServeRefreshesEverySource(t *testing.T) {
 // but the second source is no different from one rebuild to the next: the
 // index warns once that it has not been fetched, and the check at launch
 // warns that it could not fetch it and leaves its last_fetched as it was.
-// The hub, which is never fetched as a shared source, is warned
+// The account repo, which is never fetched as a shared source, is warned
 // about by neither.
 func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	t.Parallel()
@@ -192,7 +192,7 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		settings.SetSource(home.Source{URL: "https://example.invalid/me/forks", Hub: true})
+		settings.SetSource(home.Source{URL: "https://example.invalid/me/forks", Account: true})
 		return home.SaveSettings(h.agentx, settings)
 	})
 	if err != nil {
@@ -378,22 +378,22 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 		"Nothing to check: no managed skill comes from a source added on this machine.\n")
 }
 
-// TestServeChecksTheHubRemoteWhileItRuns runs serve on machine b of
-// two that share a hub, with the hub check it repeats
+// TestServeChecksTheAccountRemoteWhileItRuns runs serve on machine b of
+// two that share an account repo, with the account repo check it repeats
 // made a few milliseconds apart. The check at launch ends in an
-// update_check of scope all that fetched. Then, while the hub
-// holds what b's remote-tracking branches hold, each hub check is one
+// update_check of scope all that fetched. Then, while the account repo
+// holds what b's remote-tracking branches hold, each account repo check is one
 // ls-remote, fetches nothing and writes nothing, and ends in an
-// update_check of scope hub that did not fetch. Once machine a
-// publishes alpha, the next hub check fetches, announces the update a
+// update_check of scope account repo that did not fetch. Once machine a
+// publishes alpha, the next account repo check fetches, announces the update a
 // published as the check at launch would, with this serve's instance id,
-// and ends in an update_check that fetched. With the hub out of
+// and ends in an update_check that fetched. With the account repo out of
 // reach, the checks warn once, however many fail, each ending in an
 // update_check that is not ok, until one reaches it again.
-func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
-	every := hubCheckEvery
-	hubCheckEvery = 20 * time.Millisecond
-	t.Cleanup(func() { hubCheckEvery = every })
+func TestServeChecksTheAccountRemoteWhileItRuns(t *testing.T) {
+	every := accountCheckEvery
+	accountCheckEvery = 20 * time.Millisecond
+	t.Cleanup(func() { accountCheckEvery = every })
 	a, b, _, remote := twoHomes(t)
 	url := "file://" + remote
 	calls := countingGit(t, b)
@@ -415,7 +415,7 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	atLaunch, version := fetched(), mutationVersion(t, b)
 
 	for range 2 {
-		unchanged := checked(checkScopeHub)
+		unchanged := checked(checkScopeAccount)
 		equal(t, "an unchanged remote: ok", unchanged["ok"], true)
 		equal(t, "an unchanged remote: fetched", unchanged["fetched"], false)
 	}
@@ -429,7 +429,7 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	equal(t, "the update's instance_id", update["instance_id"], first["instance_id"])
 	equal(t, "its source", update["source"], url)
 	equal(t, "its candidate", update["candidate"], published)
-	moved := checked(checkScopeHub)
+	moved := checked(checkScopeAccount)
 	equal(t, "a remote another machine published to: ok", moved["ok"], true)
 	equal(t, "a remote another machine published to: fetched", moved["fetched"], true)
 
@@ -438,26 +438,26 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A check that began before the rename can still report ok: wait for the first that failed.
-	p.nextMatching("a hub check of the remote out of reach", func(e jsonEvent) bool {
-		return e["type"] == "update_check" && e["scope"] == checkScopeHub && e["ok"] == false
+	p.nextMatching("an account repo check of the remote out of reach", func(e jsonEvent) bool {
+		return e["type"] == "update_check" && e["scope"] == checkScopeAccount && e["ok"] == false
 	})
 	for range 2 {
-		equal(t, "a hub out of reach: ok", checked(checkScopeHub)["ok"], false)
+		equal(t, "an account repo out of reach: ok", checked(checkScopeAccount)["ok"], false)
 	}
 	if err := os.Rename(away, remote); err != nil {
 		t.Fatal(err)
 	}
 	p.nextMatching("an update_check that is ok again", func(e jsonEvent) bool {
-		return e["type"] == "update_check" && e["scope"] == checkScopeHub && e["ok"] == true
+		return e["type"] == "update_check" && e["scope"] == checkScopeAccount && e["ok"] == true
 	})
 	equal(t, "exit", p.close(), 0)
 	var unreached []string
 	for _, w := range warnings(b, p.stderr.String()) {
-		if strings.HasPrefix(w, "update check: the hub "+url+": cannot reach it") {
+		if strings.HasPrefix(w, "update check: the account repo "+url+": cannot reach it") {
 			unreached = append(unreached, w)
 		}
 	}
-	equal(t, "warnings of the hub out of reach", len(unreached), 1)
+	equal(t, "warnings of the account repo out of reach", len(unreached), 1)
 }
 
 // TestReportServeCheck: what serve's check could not check and each note

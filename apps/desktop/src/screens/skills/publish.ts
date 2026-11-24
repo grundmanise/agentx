@@ -1,6 +1,6 @@
-// Publishing hub skills: what the Publish dialog of one skill (publish-dialog.tsx) and the
+// Publishing account skills: what the Publish dialog of one skill (publish-dialog.tsx) and the
 // publish of every skill at once share. Publish all, which the title bar's sync popover and the
-// palette run, is one `skill publish <name>…` naming every skill to publish: hub skills
+// palette run, is one `skill publish <name>…` naming every skill to publish: account skills
 // edited since they were published and those never published (docs/spec/cli-contract.md,
 // "Publishing"). One toast says how it went, in the words the dialog uses for one skill; the list
 // redraws from the inventory that follows.
@@ -15,7 +15,7 @@ import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
 import { navigateTo } from "#/lib/navigate.ts";
 import {
-  hubOf,
+  accountOf,
   hasEditsToPublish,
   notPublished,
 } from "#/screens/skills/banners.ts";
@@ -65,8 +65,8 @@ const publishHintRules: HintRule[] = [
   },
   {
     app: ({ first }) =>
-      `${first ?? ""}; the edits were recorded, so publish again once the hub can be reached`,
-    cli: /^(?<first>.+); the edits were recorded, so run 'agentx skill publish(?: .+)?' again once the hub can be reached$/u,
+      `${first ?? ""}; the edits were recorded, so publish again once the account repo can be reached`,
+    cli: /^(?<first>.+); the edits were recorded, so run 'agentx skill publish(?: .+)?' again once the account repo can be reached$/u,
   },
   {
     app: ({ what }) => `publish again once ${what ?? ""} takes it`,
@@ -114,11 +114,11 @@ export const publishFailure = (
 
 /**
  * The toast of a skill whose newer version is where it publishes to: it needs an update before a
- * publish. For a hub skill that is the hub; for a skill of a source, the
+ * publish. For an account skill that is the account repo; for a skill of a source, the
  * source, which `source` names by its URL.
  */
 export const changedElsewhere = (name: string, source?: string) =>
-  `There is a newer version of ${name} skill ${source === undefined ? "on the hub" : `in ${shortSource(source)}`}. Update it first, then publish your changes.`;
+  `There is a newer version of ${name} skill ${source === undefined ? "on the account repo" : `in ${shortSource(source)}`}. Update it first, then publish your changes.`;
 
 /** The toast of a publish that sent nothing: the skill already matches what is published. */
 export const alreadyPublished = (name: string) =>
@@ -131,23 +131,23 @@ const nonePublished = (judged: number) =>
     : "No skills were published. They already match the published versions.";
 
 /**
- * Whether a publish was refused for want of a hub: refused before any skill was
+ * Whether a publish was refused for want of an account repo: refused before any skill was
  * judged, with none set or with the CLI saying so.
  */
-export const refusedForHub = (outcome: Outcome, hubSet: boolean) => {
+export const refusedForAccount = (outcome: Outcome, accountSet: boolean) => {
   const judged = outcome.events.some((e) => e.type === "publish");
   const error = outcome.events.find((e) => e.type === "error");
   return (
     outcome.exitCode === EXIT_CODES.refused &&
     !judged &&
-    (!hubSet || error?.message === "no hub is set")
+    (!accountSet || error?.message === "no account repo is set")
   );
 };
 
-/** "Set a hub to publish", with Open Settings. */
-export const notifyNoHub = () => {
+/** "Set an account repo to publish", with Open Settings. */
+export const notifyNoAccount = () => {
   notify(
-    "Set a hub to publish",
+    "Set an account repo to publish",
     {
       label: "Open Settings",
       onClick: () => {
@@ -158,15 +158,15 @@ export const notifyNoHub = () => {
   );
 };
 
-/** A hub skill to publish: edited since it was published, or never published. */
+/** An account skill to publish: edited since it was published, or never published. */
 export interface ToPublish {
   name: string;
   kind: "edited" | "new";
 }
 
 /**
- * What Publish all publishes, in name order: each hub skill edited since it was
- * published (edited) or never published (new). Read only while a hub is set.
+ * What Publish all publishes, in name order: each account skill edited since it was
+ * published (edited) or never published (new). Read only while an account repo is set.
  */
 export const toPublish = (rows: SkillRow[]): ToPublish[] => {
   const skills = rows.flatMap((row): ToPublish[] => {
@@ -217,7 +217,7 @@ const updateAction = (name: string): ToastAction | undefined => {
 };
 
 /**
- * The toast of a Publish all that ended. A skill the hub declined, or one this machine
+ * The toast of a Publish all that ended. A skill the account repo declined, or one this machine
  * may not push, keeps the runner's error toast, in the CLI's words; so does any other failure.
  */
 const reportPublishAll = (outcome: Outcome) => {
@@ -306,9 +306,9 @@ export const publishAll = async (names: readonly string[]) => {
       useProgressStore.setState({ progress: undefined });
     }
   });
-  const hubSet = hubOf(useAppStore.getState().sources) !== undefined;
-  if (refusedForHub(outcome, hubSet)) {
-    notifyNoHub();
+  const accountSet = accountOf(useAppStore.getState().sources) !== undefined;
+  if (refusedForAccount(outcome, accountSet)) {
+    notifyNoAccount();
     return;
   }
   reportPublishAll(outcome);

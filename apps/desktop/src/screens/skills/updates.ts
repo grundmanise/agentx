@@ -69,7 +69,7 @@ const updatedText = (row: SkillRow, events: CliEvent[]) => {
   if (updated === undefined) {
     return `${row.name} skill is already up to date`;
   }
-  if (row.kind === "hub") {
+  if (row.kind === "account") {
     return `Updated ${row.name} skill. Publish when ready.`;
   }
   return updated.state === "modified"

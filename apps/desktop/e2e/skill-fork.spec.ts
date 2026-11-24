@@ -155,7 +155,7 @@ test("Use a different name: Fork runs skill fork <name> --name <new> and selects
   await expect(
     page
       .getByRole("navigation", { name: "Skills" })
-      .getByRole("region", { name: "HUB" })
+      .getByRole("region", { name: "ACCOUNT" })
       .getByRole("button", { exact: true, name: "my-pdf" })
   ).toHaveAttribute("aria-current", "true");
   expect(forks(cli)).toEqual([
@@ -344,7 +344,7 @@ test("a plugin's skill: Use a different name starts on; turned off, Fork runs sk
   ).toBeVisible();
   await cli.serveEmit([commitHelperForked]);
   const fork = pane(page, "commit-helper");
-  await expect(fork).toContainText("hub skill");
+  await expect(fork).toContainText("account skill");
   await expect(page).toHaveURL(/#\/skills\/commit-helper$/u);
   expect(forks(cli)).toEqual([
     ["skill", "fork", "acme-tools:commit-helper", "--json"],

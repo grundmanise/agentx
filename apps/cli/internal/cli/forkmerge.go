@@ -152,10 +152,10 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	// git commit -m writes it, or one whose MERGE_MSG was edited, names no
 	// base. The base is then the one the merge was started to record: what it
 	// merges, an import, or the base the completed merge it merges again
-	// records. A merge of two histories of the fork, as the hub step
+	// records. A merge of two histories of the fork, as the account repo step
 	// starts, or a completed merge merged again records what the base rule
 	// picks of the two sides' bases instead, see lineage.PickBase, as the
-	// merge's MERGE_MSG did: the hub step never takes the fork back to an
+	// merge's MERGE_MSG did: the account repo step never takes the fork back to an
 	// older version than the one this machine holds. The commit that completes
 	// it is written again with that base added to the user's message, see
 	// keptMessage, so that the fork does not stay on the old base and take the
@@ -174,7 +174,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: recorded, Import: next.Import}
 	// A merge whose theirs is no import commit is a merge of two histories: a
 	// completed merge merged again with the commits made while it was pending,
-	// or the hub step's merge with what the hub held.
+	// or the account repo step's merge with what the account repo held.
 	u.fork.remerge = p.theirs != "" && walked[p.theirs].Base != p.theirs
 	if !resolved {
 		u.merge = lineage.Merge{Base: mine.Base, Mine: p.mine, Theirs: p.theirs}
@@ -183,15 +183,15 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 				return nil, failureOf(storeFailure(err))
 			}
 			// A completed merge is only ever written here, so a theirs the
-			// remote-tracking branch holds is what the hub step merged,
+			// remote-tracking branch holds is what the account repo step merged,
 			// whichever command reports the merge again and however far the
 			// remote moved on since.
-			with, err := inv.mergedWithHub(ctx, gitDir, name, p.theirs)
+			with, err := inv.mergedWithAccount(ctx, gitDir, name, p.theirs)
 			if err != nil {
 				return nil, failureOf(err)
 			}
 			if with {
-				u.fork.with = "the hub"
+				u.fork.with = "the account repo"
 			}
 		} else if p.theirs != "" {
 			u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: p.theirs, Import: walked[p.theirs].Import}
@@ -287,11 +287,11 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	return u, inv.layFork(ctx, u, commit)
 }
 
-// mergedWithHub reports whether theirs, what a pending merge of the fork
-// called name merged, is on the hub's remote-tracking branch of the
-// fork, as the hub step's merge is: false on a machine with no hub.
-func (inv *invocation) mergedWithHub(ctx context.Context, gitDir, name, theirs string) (bool, error) {
-	_, remote, ok, err := inv.hubSource()
+// mergedWithAccount reports whether theirs, what a pending merge of the fork
+// called name merged, is on the account repo's remote-tracking branch of the
+// fork, as the account repo step's merge is: false on a machine with no account repo.
+func (inv *invocation) mergedWithAccount(ctx context.Context, gitDir, name, theirs string) (bool, error) {
+	_, remote, ok, err := inv.accountSource()
 	if err != nil || !ok {
 		return false, err
 	}

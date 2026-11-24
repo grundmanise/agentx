@@ -15,9 +15,9 @@ import (
 func newSkillHistoryCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:         "history <name>",
-		Short:       "List the commits of a hub skill",
+		Short:       "List the commits of an account skill",
 		Annotations: map[string]string{annotationSection: "skills"},
-		Long: "List every commit of <name>, a hub skill, newest first: the commits\n" +
+		Long: "List every commit of <name>, an account skill, newest first: the commits\n" +
 			"agentx wrote, those made with git in its worktree, and the upstream imports it\n" +
 			"was forked from or merged.\n" +
 			"Each names the files it changes in the skill's directory, a merge against its\n" +
@@ -127,16 +127,16 @@ const historyFormat = "--format=%x01%H%x00%P%x00%aI%x00%an <%ae>%x00%B%x00"
 // the skill's directory. Nothing is
 // written, and the fork needs no worktree on this machine.
 func (inv *invocation) skillHistory(ctx context.Context, name string) error {
-	gitDir, rec, held, err := inv.hubRecord(ctx, name)
+	gitDir, rec, held, err := inv.accountRecord(ctx, name)
 	if err != nil {
 		return err
 	}
 	switch _, inLibrary := librarySkill(inv.dirs.Library, name); {
 	case held && rec.Kind != lineage.KindFork:
-		return fail(exitRefused, sanitised(name)+" is not a skill of the hub, so it has no history of its own",
+		return fail(exitRefused, sanitised(name)+" is not a skill of the account repo, so it has no history of its own",
 			"a skill of a shared source is at the version it was installed at or last published; fork it with '"+skillCommand("fork", name)+"' to give its edits a history")
 	case !held && inLibrary:
-		return fail(exitRefused, sanitised(name)+" is not a skill of the hub, so it has no history",
+		return fail(exitRefused, sanitised(name)+" is not a skill of the account repo, so it has no history",
 			"import it with '"+adoptCommand(name)+"' to give its edits a history")
 	case !held:
 		return inv.noLibrarySkill(name)

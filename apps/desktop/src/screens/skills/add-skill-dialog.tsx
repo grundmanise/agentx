@@ -62,7 +62,7 @@ export const FIND_SKILLS_LABEL = "find skills";
 
 /**
  * The hints of `source skills` and `skill add` that name a command, in the app's words: the
- * hub's skills are under Hub, and Sources shows what a source holds.
+ * account repo's skills are under Account repo, and Sources shows what a source holds.
  */
 const linkHintRules: HintRule[] = [
   ...addSourceHintRules,

@@ -128,7 +128,7 @@ const openSources = async (
 const commandLines = (cli: MockCli) =>
   later(cli).map((line) => line.slice(0, -1).join(" "));
 
-test("the sources row: one pill per shared source, Hub, the counts and the stale dots", async ({
+test("the sources row: one pill per shared source, Account, the counts and the stale dots", async ({
   cli,
   page,
 }) => {
@@ -136,16 +136,16 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
   expect(await names(sourcesRow(page))).toEqual([
     "acme/skills",
     "zeta/tools",
-    "Hub",
+    "Account",
   ]);
   await expect(pill(page, "acme/skills")).toHaveAttribute(
     "aria-pressed",
     "true"
   );
-  // A count once the listing is read; Hub's from `source list`.
+  // A count once the listing is read; Account's from `source list`.
   await expect(pill(page, "acme/skills")).toHaveText("acme/skills8");
   await expect(pill(page, "zeta/tools")).toHaveText("zeta/tools");
-  await expect(pill(page, "Hub")).toHaveText("Hub2");
+  await expect(pill(page, "Account")).toHaveText("Account2");
   await expect(
     pill(page, "acme/skills").getByTitle("Not checked in 3 days")
   ).toBeAttached();
@@ -192,10 +192,10 @@ test("the open source's card: its name, its full URL linking to the repository, 
   await pill(page, "zeta/tools").click();
   await expect(fact(page, "Fetched")).toHaveText("Not yet");
 
-  // The hub is managed in Settings: its card has no Remove.
-  await pill(page, "Hub").click();
+  // The account repo is managed in Settings: its card has no Remove.
+  await pill(page, "Account").click();
   await expect(
-    details(page).getByRole("heading", { name: "me/hub" })
+    details(page).getByRole("heading", { name: "me/my-skills" })
   ).toBeVisible();
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
@@ -203,7 +203,7 @@ test("the open source's card: its name, its full URL linking to the repository, 
   // A search answers across every source: the card stays.
   await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
   await expect(
-    details(page).getByRole("heading", { name: "me/hub" })
+    details(page).getByRole("heading", { name: "me/my-skills" })
   ).toBeVisible();
 });
 
@@ -1210,13 +1210,13 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
     ],
     exitCode: 3,
   });
-  cli.register(["source", "add", "me/hub"], {
+  cli.register(["source", "add", "me/my-skills"], {
     events: [
       {
         code: "refused",
         hint: "run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one",
         message:
-          "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch",
+          "https://github.com/me/my-skills is the account repo: it holds one branch per skill rather than skills on one branch",
         type: "error",
       },
     ],
@@ -1231,34 +1231,34 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
     "Couldn't reach bad/repo. Check that the repository exists and that you can read it."
   );
 
-  await urlField(page).fill("me/hub");
+  await urlField(page).fill("me/my-skills");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   // The CLI's hint names commands: the dialog names the place in the app instead.
   await expect(alert).toHaveText(
-    "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub."
+    "https://github.com/me/my-skills is the account repo: it holds one branch per skill rather than skills on one branch. See and install its skills under Account."
   );
   await expect(dialog(page)).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([
     "source add bad/repo",
-    "source add me/hub",
+    "source add me/my-skills",
   ]);
 });
 
-test("Hub lists the hub's installable skills and adds by name", async ({
+test("Account lists the account repo's installable skills and adds by name", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
-  await pill(page, "Hub").click();
+  await pill(page, "Account").click();
   await expect(row(page, "release-notes")).toBeVisible();
-  expect(await skillNames(grid(page, "Hub"))).toEqual([
+  expect(await skillNames(grid(page, "Account"))).toEqual([
     "my-pdf",
     "release-notes",
   ]);
   await expect(rowLine(page, "my-pdf")).toContainText("from acme/skills");
-  // Your skills on the hub open to their description alone.
+  // Your skills on the account repo open to their description alone.
   await row(page, "release-notes").click();
-  await expect(opened(page, "release-notes")).toHaveText("hub skill");
+  await expect(opened(page, "release-notes")).toHaveText("account skill");
 
   const add = cli.register(["skill", "add", "--name", "release-notes"], {
     events: [{ name: "release-notes", type: "library_skill" }],
@@ -1535,7 +1535,7 @@ test("the page of a skill in its source", () => {
   ).toEqual(cases);
 });
 
-test("the dates of a card's skill: a source's by its source and subpath, a hub skill's by its fork id", () => {
+test("the dates of a card's skill: a source's by its source and subpath, an account skill's by its fork id", () => {
   const added = "2026-10-02T09:00:00Z";
   const installs: Install[] = [
     { added, fork_id: "a1a1a1a1a1a1", name: "my-pdf" },

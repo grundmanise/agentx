@@ -721,7 +721,7 @@ func TestSkillCheckSkipsARemovedSource(t *testing.T) {
 // has no update, and a skill made by skill new, which has no upstream, is
 // not checked at all. A newer upstream version is pinned as the fork's
 // candidate and reported with kind managed, the upstream it came from,
-// the coordinates of its base, no source while no hub is set,
+// the coordinates of its base, no source while no account repo is set,
 // and the files it changes there, which skill list shows and skill diff
 // --update reads back. A fork named otherwise than its upstream is not
 // reported as renamed by an update that keeps the upstream's name. Once
@@ -748,7 +748,7 @@ func TestSkillCheckFindsAForkUpdate(t *testing.T) {
 	equal(t, "upstream_subpath", up["upstream_subpath"], "skills/alpha")
 	for _, key := range []string{"source", "subpath"} {
 		if _, ok := up[key]; ok {
-			t.Errorf("an update of a skill with no hub to publish to carries a %s: %v", key, up[key])
+			t.Errorf("an update of a skill with no account repo to publish to carries a %s: %v", key, up[key])
 		}
 	}
 	equal(t, "upstream_commit", up["upstream_commit"], first)

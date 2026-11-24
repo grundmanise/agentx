@@ -16,16 +16,16 @@ import (
 )
 
 // A publish of a managed skill of a shared source, a source that is not
-// the hub, pushes the skill's edits to the branch of the source
+// the account repo, pushes the skill's edits to the branch of the source
 // it is installed from: one commit on what the branch holds, whose one
 // parent is the branch's tip and which changes the skill's folder alone,
 // written with the user's own git identity and no trailer of agentx's. No
 // fork branch, fork id or machine id ever reaches a shared source, and
 // only a publish that names the skill pushes there: a bare publish covers
-// hub skills alone. The hub is never needed, read or
+// account skills alone. The account repo is never needed, read or
 // fetched.
 //
-// A publish never merges, as for the hub: when the source
+// A publish never merges, as for the account repo: when the source
 // changed the skill since it was installed, the publish is refused, and an
 // update takes the change in first. The push is leased on the commit the
 // source's branch was fetched at, so a branch that moved between the fetch
@@ -135,7 +135,7 @@ func (inv *invocation) publishShared(ctx context.Context, name, message string) 
 	}
 	rec, ok := records[name]
 	switch {
-	case ok && rec.Kind == lineage.KindFork: // a journal finished above made it a hub skill
+	case ok && rec.Kind == lineage.KindFork: // a journal finished above made it an account skill
 		return inv.publish(ctx, []string{name}, message)
 	case !ok:
 		return inv.noLibrarySkill(name)

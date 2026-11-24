@@ -335,7 +335,7 @@ func progressPhases(events []jsonEvent) []string {
 // names it and nothing holds it, or a record holds it for a directory this
 // machine no longer has. The rest name a skill no record covers, which is
 // refused as agentx skill import refuses an unmanaged skill: one agentx manages
-// already, a name the library, the store or the hub
+// already, a name the library, the store or the account repo
 // holds for another skill, directories that differ between two clients, a
 // symlink where the directory would be, and what keeps a directory from
 // moving into a worktree.
@@ -347,12 +347,12 @@ func TestAdoptRefusesAName(t *testing.T) {
 		"gone":  {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/gone"},
 	})
 	h.mustRun("skill", "new", "mine")
-	h.setHub(newHubRemote(t, h))
-	// Branches for the names the store and the hub hold.
+	h.setAccount(newAccountRemote(t, h))
+	// Branches for the names the store and the account repo hold.
 	tip := h.ref(lineage.ForkRef("mine"))
 	for _, ref := range []string{
 		lineage.ManagedRef("shared"), lineage.ManagedRef("dup"), lineage.ManagedRef("lost"),
-		lineage.RemoteForkPrefix(hubRemoteName(t, h)) + "published",
+		lineage.RemoteForkPrefix(accountRemoteName(t, h)) + "published",
 	} {
 		h.storeGit("update-ref", ref, tip)
 	}
@@ -402,7 +402,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 		{"nowhere", exitNotFound, `no skill called "nowhere" can be imported: no record names it`},
 		{"gone", exitNotFound, "this machine no longer holds it"},
 		{"shared", exitRefused, "shared is already managed by agentx"},
-		{"mine", exitRefused, "mine is already a hub skill"},
+		{"mine", exitRefused, "mine is already an account skill"},
 		{"dup", exitRefused, "the library already holds a skill called dup, a skill of a shared source, so " + filepath.Join(claude, "dup") + " cannot be imported under that name"},
 		{"lost", exitRefused, "agentx already manages a skill called lost, so " + filepath.Join(claude, "lost") + " cannot be imported under that name"},
 		{"published", exitRefused, "you already published a skill called published, so " + filepath.Join(claude, "published") + " cannot be imported under that name"},
@@ -445,7 +445,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 
 // TestAdoptTakesOverAnUnmanagedSkill adopts, in one home, three skills
 // with their files as they are. One the library holds, which no tool
-// recorded, becomes a hub skill in its place: its content is the
+// recorded, becomes an account skill in its place: its content is the
 // first commit of a branch of its own, by the user and with a new fork id,
 // its directory moves into the worktree and the library holds a symlink to
 // it. One three clients hold the same directory of comes out of the first
@@ -462,9 +462,9 @@ func TestAdoptTakesOverAnUnmanagedSkill(t *testing.T) {
 	h.withIdentity("Ada Lovelace", "ada@example.com")
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "notes"), "SKILL.md"), skill("notes", "Take notes"))
 	text := h.mustRun("skill", "import", "notes")
-	// No hub is set, so the adoption ends with how to publish it.
+	// No account repo is set, so the adoption ends with how to publish it.
 	equal(t, "the text output", text.stdout, "✓ imported notes\n"+
-		"No hub is set: run 'agentx source add <url> --hub', then 'agentx skill publish notes' to publish it.\n")
+		"No account repo is set: run 'agentx source add <url> --account', then 'agentx skill publish notes' to publish it.\n")
 	tip := h.ref(lineage.ForkRef("notes"))
 	equal(t, "the history", h.storeGit("rev-list", "--parents", lineage.ForkRef("notes")), tip)
 	equal(t, "the author", h.storeGit("log", "-1", "--format=%an <%ae>", tip), "Ada Lovelace <ada@example.com>")

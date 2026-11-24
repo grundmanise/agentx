@@ -8,9 +8,9 @@ const table: [Problem, string][] = [
   [
     {
       hint: "choose another name",
-      message: "the store already holds release-notes as a hub skill",
+      message: "the store already holds release-notes as an account skill",
     },
-    "The store already holds release-notes as a hub skill. Choose another name.",
+    "The store already holds release-notes as an account skill. Choose another name.",
   ],
   [{ message: "no such skill" }, "No such skill."],
   [{ hint: "try again.", message: "it failed." }, "It failed. Try again."],
@@ -41,9 +41,9 @@ const table: [Problem, string][] = [
   [
     {
       hint: "list its skills",
-      message: "https://github.com/me/hub is the hub",
+      message: "https://github.com/me/my-skills is the account repo",
     },
-    "https://github.com/me/hub is the hub. List its skills.",
+    "https://github.com/me/my-skills is the account repo. List its skills.",
   ],
   [{ message: "release-notes is taken" }, "release-notes is taken."],
   [{ message: "can't write ~/.agentx" }, "Can't write ~/.agentx."],

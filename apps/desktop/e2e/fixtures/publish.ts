@@ -1,8 +1,8 @@
-// The machine the Publish tests run against: a hub skill edited since it was
+// The machine the Publish tests run against: an account skill edited since it was
 // published, one never published, an edited skill of a source this machine can write to, an
 // edited skill of a read-only source and a skill of a source as it was installed. `source list`
-// answers with the hub and both sources, or, on the second machine, without the
-// hub. Inline events with only the fields the tests check.
+// answers with the account repo and both sources, or, on the second machine, without the
+// account repo. Inline events with only the fields the tests check.
 import type {
   DiffEvent,
   LibraryEntry,
@@ -10,7 +10,7 @@ import type {
 } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
-import { HUB, ACME, configurations, filesOf, ZETA } from "./skills.ts";
+import { ACCOUNT, ACME, configurations, filesOf, ZETA } from "./skills.ts";
 
 const LIBRARY = "/home/me/.agents/skills";
 const universal = ["codex", "gemini-cli"];
@@ -31,7 +31,7 @@ const placements = (name: string): LibraryPlacement[] => [
   })),
 ];
 
-const hubSkill = (
+const accountSkill = (
   name: string,
   fields: Partial<LibraryEntry> = {}
 ): LibraryEntry => ({
@@ -40,7 +40,7 @@ const hubSkill = (
   kind: "managed",
   name,
   placements: placements(name),
-  source: HUB,
+  source: ACCOUNT,
   state: "current",
   universal,
   ...fields,
@@ -64,8 +64,8 @@ const ofSource = (
 });
 
 export const library: LibraryEntry[] = [
-  hubSkill("changelog", { state: "modified" }),
-  hubSkill("draft", { drift: ["not published"] }),
+  accountSkill("changelog", { state: "modified" }),
+  accountSkill("draft", { drift: ["not published"] }),
   ofSource("lint", ZETA, "modified"),
   ofSource("pdf", ACME, "current"),
   ofSource("review", ACME, "modified"),
@@ -79,11 +79,11 @@ export const inventory = {
   type: "inventory",
 } satisfies InlineEvent;
 
-const hub: InlineEvent = {
-  hub: true,
+const account: InlineEvent = {
+  account: true,
   id: "2222222222222222",
   type: "source",
-  url: HUB,
+  url: ACCOUNT,
 };
 
 const shared: InlineEvent[] = [
@@ -91,11 +91,11 @@ const shared: InlineEvent[] = [
   { access: "read-only", id: "3333333333333333", type: "source", url: ZETA },
 ];
 
-/** What `source list` answers: the hub and two shared sources. */
-export const sources: InlineEvent[] = [hub, ...shared];
+/** What `source list` answers: the account repo and two shared sources. */
+export const sources: InlineEvent[] = [account, ...shared];
 
-/** What `source list` answers on a machine with no hub set. */
-export const sourcesWithoutHub: InlineEvent[] = shared;
+/** What `source list` answers on a machine with no account repo set. */
+export const sourcesWithoutAccount: InlineEvent[] = shared;
 
 const diff = (
   name: string,

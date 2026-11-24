@@ -111,10 +111,10 @@ export const CommandPalette = ({
   }
   const rows = useSkillRows();
   const sync = useSyncState();
-  const outgoing = sync?.kind === "hub" ? sync.outgoing : [];
+  const outgoing = sync?.kind === "account" ? sync.outgoing : [];
 
   const actions: PaletteItem[] = [];
-  const readOnly = sync?.kind === "hub" ? sync.readOnly : undefined;
+  const readOnly = sync?.kind === "account" ? sync.readOnly : undefined;
   if (outgoing.length > 0 && readOnly === undefined) {
     actions.push({
       group: "ACTIONS",

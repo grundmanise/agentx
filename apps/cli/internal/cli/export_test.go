@@ -282,7 +282,7 @@ func TestExportHelpNamesTheMachineAndTheFile(t *testing.T) {
 
 // TestExportLeavesOutWhatItsReaderRefuses: a library directory whose name
 // no branch can carry, and one whose import branch carries no lineage,
-// which would read as a hub skill, are no entries this very
+// which would read as an account skill, are no entries this very
 // CLI's reader accepts, and the reader refuses the whole snapshot, so one
 // stray directory cost the settings restore too. Each is left out and said
 // out loud instead, and so is what export cannot read of the library, as

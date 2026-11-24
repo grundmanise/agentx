@@ -1,13 +1,13 @@
-// The machine the title bar's sync status and the palette tests run against: two hub
+// The machine the title bar's sync status and the palette tests run against: two account repo
 // skills edited since they were published, one never published, and two skills of a source, one
-// with an update serve found. `source list` answers with the hub and the source, or
-// without the hub. Variants: nothing to publish, and no hub; serve can also
+// with an update serve found. `source list` answers with the account repo and the source, or
+// without the account repo. Variants: nothing to publish, and no account repo; serve can also
 // find what another of your machines published. Inline events with only the fields the tests
 // check.
 import type { LibraryEntry, LibraryPlacement } from "#/cli/events.gen.ts";
 
 import type { InlineEvent, MockCli } from "../harness/cli.ts";
-import { HUB, ACME, configurations, filesOf } from "./skills.ts";
+import { ACCOUNT, ACME, configurations, filesOf } from "./skills.ts";
 
 const LIBRARY = "/home/me/.agents/skills";
 const universal = ["codex", "gemini-cli"];
@@ -27,7 +27,7 @@ const placements = (name: string): LibraryPlacement[] => [
   })),
 ];
 
-const hubSkill = (
+const accountSkill = (
   name: string,
   fields: Partial<LibraryEntry> = {}
 ): LibraryEntry => ({
@@ -36,7 +36,7 @@ const hubSkill = (
   kind: "managed",
   name,
   placements: placements(name),
-  source: HUB,
+  source: ACCOUNT,
   state: "current",
   universal,
   ...fields,
@@ -57,9 +57,9 @@ const ofSource = (name: string): LibraryEntry => ({
 
 /** changelog and notes hold edits not published; draft was never published. */
 export const library: LibraryEntry[] = [
-  hubSkill("changelog", { state: "modified" }),
-  hubSkill("draft", { drift: ["not published"] }),
-  hubSkill("notes", { state: "modified" }),
+  accountSkill("changelog", { state: "modified" }),
+  accountSkill("draft", { drift: ["not published"] }),
+  accountSkill("notes", { state: "modified" }),
   ofSource("pdf"),
   ofSource("review"),
 ];
@@ -101,23 +101,23 @@ export const notesFromAnotherMachine: InlineEvent = {
   files: [{ path: "SKILL.md", status: "modified" }],
   kind: "managed",
   name: "notes",
-  source: HUB,
+  source: ACCOUNT,
   type: "update_available",
   upstream_commit: "",
 };
 
-/** What `source list` answers: the hub and the source. */
+/** What `source list` answers: the account repo and the source. */
 export const sources: InlineEvent[] = [
-  { hub: true, id: "2222222222222222", type: "source", url: HUB },
+  { account: true, id: "2222222222222222", type: "source", url: ACCOUNT },
   { access: "read-only", id: "1111111111111111", type: "source", url: ACME },
 ];
 
-/** What `source list` answers on a machine with no hub. */
-export const sourcesWithoutHub: InlineEvent[] = sources.filter(
-  (s) => s.type === "source" && s.hub !== true
+/** What `source list` answers on a machine with no account repo. */
+export const sourcesWithoutAccount: InlineEvent[] = sources.filter(
+  (s) => s.type === "source" && s.account !== true
 );
 
-export type Variant = "edited" | "synced" | "no-hub";
+export type Variant = "edited" | "synced" | "no-account";
 
 export interface LaunchOptions {
   /** Whether serve found the update of pdf; it does unless a test says otherwise. */
@@ -144,7 +144,7 @@ export const launch = (
     ],
   });
   cli.register(["source", "list"], {
-    events: variant === "no-hub" ? sourcesWithoutHub : sources,
+    events: variant === "no-account" ? sourcesWithoutAccount : sources,
   });
   for (const entry of entries) {
     cli.register(["skill", "history", entry.name], { events: [] });
@@ -153,7 +153,7 @@ export const launch = (
     });
     cli.register(["skill", "diff", entry.name], { events: [] });
   }
-  // What the Add skills screen reads when it opens: your skills on the hub and the source's.
+  // What the Add skills screen reads when it opens: your skills on the account repo and the source's.
   cli.register(["skill", "list", "--remote"], { events: [] });
   cli.register(["source", "skills", "1111111111111111"], { events: [] });
 };

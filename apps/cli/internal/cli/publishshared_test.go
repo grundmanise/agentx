@@ -17,7 +17,7 @@ import (
 )
 
 // sharedPublishHarness is a home that installed every skill of a shared
-// source, alpha and beta, from a blobless fetch, with no hub
+// source, alpha and beta, from a blobless fetch, with no account repo
 // set. The source holds a README beside the skills and a symlink in
 // alpha's folder, which the install leaves out. It returns the source's
 // one commit.
@@ -45,14 +45,14 @@ var sharedPublishHome = &fixtureHome{
 }
 
 // TestPublishToASharedSource publishes an edited alpha to the shared
-// source it was installed from, on a home with no hub: one
+// source it was installed from, on a home with no account repo: one
 // commit on the source's main, whose one parent is the commit it was
 // installed at, which changes alpha's folder alone, keeps the symlink the
 // source holds there, is written by the user's identity with the message
 // -m gives and no trailer of agentx's, and no other ref reaches the
 // source; alpha stays managed and reads current. Then another clone
 // pushes to beta's folder, and a second publish of alpha fast-forwards
-// onto it, fetching the source alone although a hub git cannot
+// onto it, fetching the source alone although an account repo git cannot
 // reach is set. A branch another clone moves in beta's folder between the
 // fetch and the push is fetched again and published on top of, unless it
 // moves again at the second push, exit 6. One moved
@@ -90,16 +90,16 @@ func TestPublishToASharedSource(t *testing.T) {
 	equal(t, "alpha's state", lib0["state"], stateCurrent)
 	equal(t, "the result", h.one(out.stdout, "result")["summary"], "published alpha")
 
-	// Another clone of the source changes beta, and a hub is
-	// set, holding a hub skill, that git cannot reach, which the
+	// Another clone of the source changes beta, and an account repo is
+	// set, holding an account skill, that git cannot reach, which the
 	// publish neither fetches nor fails on.
 	s.run("reset", "--hard", "--quiet")
 	s.write("skills/beta/notes.md", "beta notes, theirs\n")
 	other := s.commit("Edit beta")
 	writeFile(t, filepath.Join(lib, "notes.md"), "alpha notes, mine again\n")
-	remote := newHubRemote(t, h)
-	h.setHub(remote)
-	h.mustRun("skill", "new", "jot") // a hub skill, which a check fetches the hub for
+	remote := newAccountRemote(t, h)
+	h.setAccount(remote)
+	h.mustRun("skill", "new", "jot") // an account skill, which a check fetches the account repo for
 	if err := os.Rename(remote, remote+".away"); err != nil {
 		t.Fatal(err)
 	}
@@ -111,8 +111,8 @@ func TestPublishToASharedSource(t *testing.T) {
 		t.Error("the publish fetched nothing")
 	}
 	for _, line := range strings.Split(out.stderr, "\n") {
-		if strings.Contains(line, " fetch --") && strings.Contains(line, hubRemoteName(t, h)) {
-			t.Errorf("the publish fetched the hub: %s", line)
+		if strings.Contains(line, " fetch --") && strings.Contains(line, accountRemoteName(t, h)) {
+			t.Errorf("the publish fetched the account repo: %s", line)
 		}
 	}
 	second := s.query("rev-parse", "main")

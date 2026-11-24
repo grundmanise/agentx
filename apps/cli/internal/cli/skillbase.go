@@ -12,12 +12,12 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// hubRecord is the branch the store holds for the skill called
+// accountRecord is the branch the store holds for the skill called
 // name, read in the one for-each-ref a listing reads, and false when it
 // holds none, as a store that does not exist yet holds none. A
 // command that works on managed skills and forks alike reads it first, to
 // tell which of the two it was given.
-func (inv *invocation) hubRecord(ctx context.Context, name string) (string, lineage.Record, bool, error) {
+func (inv *invocation) accountRecord(ctx context.Context, name string) (string, lineage.Record, bool, error) {
 	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return "", lineage.Record{}, false, storeFailure(err)
@@ -35,7 +35,7 @@ func (inv *invocation) hubRecord(ctx context.Context, name string) (string, line
 // managedRefusal refuses a skill with no base version to read, rec being
 // its branch and ok whether it has one, each for its own reason: an
 // unmanaged skill has none, and a branch whose trailers agentx cannot read
-// records none it can trust. Callers send a hub skill elsewhere
+// records none it can trust. Callers send an account skill elsewhere
 // first, since its versions are its own history.
 func managedRefusal(name string, rec lineage.Record, ok bool) error {
 	switch {
@@ -56,10 +56,10 @@ func managedRefusal(name string, rec lineage.Record, ok bool) error {
 // unmanaged one.
 func notAForkRefusal(name string, ok bool) error {
 	if ok {
-		return fail(exitRefused, sanitised(name)+" is not a skill of the hub, so it has no commit of its own to compare with",
+		return fail(exitRefused, sanitised(name)+" is not a skill of the account repo, so it has no commit of its own to compare with",
 			"run '"+skillCommand("diff", name)+"' to compare with its base version")
 	}
-	return fail(exitRefused, sanitised(name)+" is not a skill of the hub, so it has no commit to compare with",
+	return fail(exitRefused, sanitised(name)+" is not a skill of the account repo, so it has no commit to compare with",
 		"import it first with '"+adoptCommand(name)+"'")
 }
 

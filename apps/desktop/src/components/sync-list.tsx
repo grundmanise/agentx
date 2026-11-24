@@ -1,6 +1,6 @@
 // The parts of the sync popover that the title bar's status opens (DESIGN.md §6 "Publish status
 // (title bar)"): a group of skills under its caption, a row for each skill, a short line, and the
-// footer that names the hub and when it was last checked. Each is a closed part: it
+// footer that names the account repo and when it was last checked. Each is a closed part: it
 // takes what it shows and what to call, never a class.
 import { useId } from "react";
 import type { ReactNode } from "react";
@@ -76,7 +76,7 @@ export const SyncNote = ({ children }: { children: ReactNode }) => (
 );
 
 /**
- * The hub's short form at the left, when it was last checked at the right. The remote
+ * The account repo's short form at the left, when it was last checked at the right. The remote
  * never truncates: the popover widens to fit it, and in a window too narrow even for that, the
  * time wraps under it.
  */

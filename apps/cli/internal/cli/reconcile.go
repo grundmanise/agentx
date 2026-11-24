@@ -44,7 +44,7 @@ const (
 	outcomeModified = "modified"
 	// outcomeInstallable is a skill the store holds and the library
 	// does not: a managed skill whose library directory is gone, a fork
-	// never placed on this machine, and a fork only the hub's
+	// never placed on this machine, and a fork only the account repo's
 	// branches hold.
 	outcomeInstallable = "installable"
 	// outcomeUnmanaged is a skill of the library no branch names.
@@ -514,7 +514,7 @@ func verdictPath(f forkSite, v forkVerdict) string {
 }
 
 // prepareWorktrees readies git's worktrees of the store at gitDir
-// for reconciliation, and, while a hub is set, reads the fork
+// for reconciliation, and, while an account repo is set, reads the fork
 // branches it holds, by name: registrations whose directory is gone are
 // pruned, which every locked worktree survives, and the pointers of every
 // fork's worktree of roots that no longer meet, as moving agentx home
@@ -552,14 +552,14 @@ func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, root
 		}
 	}
 	remote = map[string]bool{}
-	_, hub, ok, err := inv.hubSource()
+	_, account, ok, err := inv.accountSource()
 	if err != nil {
 		return nil, nil, err
 	}
 	if !ok {
 		return remote, repointed, nil
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, hub)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, account)
 	if err != nil {
 		return nil, nil, storeFailure(err)
 	}

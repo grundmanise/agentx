@@ -52,7 +52,7 @@ type adoptionEvent struct {
 
 // phaseFetch is the step a run reports for one source it fetches: the one
 // agentx skill import adds, and the ones source fetch, check-updates, publish and
-// the hub commands fetch.
+// the account repo commands fetch.
 const phaseFetch = "fetch"
 
 // adoptSelection is what one run of agentx skill import was asked to do: nothing
@@ -114,10 +114,10 @@ func newSkillImportCommand(inv *invocation) *cobra.Command {
 			"Whatever the library holds under the skill's name gives way to that version, so\n" +
 			"an edit made to the other tool's copy is gone. A skill installed from a place\n" +
 			"agentx cannot install from, such as a local folder, is imported with its files\n" +
-			"as they are: it becomes a hub skill and gets no updates.\n\n" +
+			"as they are: it becomes an account skill and gets no updates.\n\n" +
 			"An unmanaged skill no tool installed is imported too, unless --from is given:\n" +
 			"one the library holds, or a folder in an agent client's own skills directory.\n" +
-			"It is imported with its files as they are and becomes a hub skill: a\n" +
+			"It is imported with its files as they are and becomes an account skill: a\n" +
 			"branch of its own, skills/<name>, in the store, checked out as a\n" +
 			"worktree in agentx home, and a symlink to it in the library. A folder in a\n" +
 			"client's skills directory moves there and a symlink to the library takes its\n" +
@@ -169,8 +169,8 @@ func (s adoptSelection) check() error {
 // preview lists them and --all adopts them with the recorded ones. With
 // --all, a skill that cannot be adopted is listed and fails nothing, see
 // adoptChosen; one named as an argument is the run's to answer for. A skill
-// named as an argument that no record covers is one of those, adopted as a
-// hub skill with its files as they are, see planAdoption; every one named
+// named as an argument that no record covers is one of those, adopted as an
+// account skill with its files as they are, see planAdoption; every one named
 // is planned before anything changes and made first, so that the answer of
 // the batch, which may adopt some and refuse others, is the run's.
 //
@@ -381,7 +381,7 @@ type candidate struct {
 	fail   *failure // the refusal, which is how a run asked to adopt it answers
 	// asItIs says the record names nowhere agentx can install the skill
 	// from, and this machine holds a folder of it to keep: adopting it
-	// makes that folder a hub skill, see planAdoption.
+	// makes that folder an account skill, see planAdoption.
 	asItIs bool
 }
 
@@ -429,7 +429,7 @@ func (inv *invocation) adoptCandidates(records []record, lineage map[string]line
 // judge decides what can be done with one candidate from what is on this
 // machine alone: what the store already knows about the name, what
 // the record rules out, and whether it names a source agentx can fetch. A
-// name that is a hub skill, or a managed skill the
+// name that is an account skill, or a managed skill the
 // library holds, is managed already. A record that names no source agentx
 // can install from leaves the folder this machine holds of the skill to be
 // adopted as it is, see judgeAsItIs.
@@ -706,7 +706,7 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, lo
 	inv.summary = strings.Join(summaries, "; ")
 	if inv.publishHintDue {
 		out := inv.out
-		out.print("Imported skills stay on this machine until you publish them: run ", out.paint(label, "'agentx source add <url> --hub'"),
+		out.print("Imported skills stay on this machine until you publish them: run ", out.paint(label, "'agentx source add <url> --account'"),
 			", then ", out.paint(label, "'agentx skill publish <name>'"), ".")
 	}
 	inv.reportAdopted(b, covered, kept)
@@ -787,7 +787,7 @@ func (inv *invocation) reportUnadopted(left []unadopted, adopted int, mixed bool
 }
 
 // adoptAsItIs adopts each skill of names with its files as they are, see
-// planAdoption: the folder this machine holds of it becomes a hub skill.
+// planAdoption: the folder this machine holds of it becomes an account skill.
 // Each is reported as it lands. One that is refused is dropped from the
 // batch with its refusal, and takes no step of the batch's budget, which
 // counts the steps of an install. It returns the names that landed and what

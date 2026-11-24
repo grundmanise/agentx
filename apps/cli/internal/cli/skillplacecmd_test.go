@@ -8,7 +8,7 @@ import (
 )
 
 // placeHome is the machine of placementHarness with no source added: the
-// six configurations and nothing else, for a test that places a library hub
+// six configurations and nothing else, for a test that places a library account repo
 // skill and installs nothing.
 func placeHome(t *testing.T) *harness {
 	t.Helper()
@@ -242,12 +242,12 @@ func TestTheHintForAnEditedCopyTakesTheLibraryVersion(t *testing.T) {
 			remove: "agentx skill remove alpha --from cortex", again: "agentx skill place alpha --to cortex --copy",
 		},
 		{
-			what: "a name that starts with a dash", name: "-mine", install: placeHubCopy("-mine"),
+			what: "a name that starts with a dash", name: "-mine", install: placeAccountCopy("-mine"),
 			edit:   func(t *testing.T, _ *harness, place string) { editCopy(t, place) },
 			remove: "agentx skill remove --from cortex -- -mine", again: "agentx skill place --to cortex --copy -- -mine",
 		},
 		{
-			what: "a name a shell has to quote", name: "it's mine", install: placeHubCopy("it's mine"),
+			what: "a name a shell has to quote", name: "it's mine", install: placeAccountCopy("it's mine"),
 			edit:   func(t *testing.T, _ *harness, place string) { editCopy(t, place) },
 			remove: `agentx skill remove 'it'\''s mine' --from cortex`, again: `agentx skill place 'it'\''s mine' --to cortex --copy`,
 		},
@@ -291,9 +291,9 @@ func editCopy(t *testing.T, place string) {
 	writeFile(t, filepath.Join(place, "mine.md"), "a file of my own\n")
 }
 
-// placeHubCopy is a machine with no source whose library holds a hub skill
+// placeAccountCopy is a machine with no source whose library holds an account skill
 // called name, a copy of it placed in Cortex Code.
-func placeHubCopy(name string) func(t *testing.T) *harness {
+func placeAccountCopy(name string) func(t *testing.T) *harness {
 	return func(t *testing.T) *harness {
 		h := placeHome(t)
 		if err := os.MkdirAll(filepath.Join(h.library, name), 0o755); err != nil {

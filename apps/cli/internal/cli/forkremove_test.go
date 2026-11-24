@@ -21,7 +21,7 @@ import (
 // could commit to the branch at any moment. Then the removal takes the
 // placements, the library symlink, the worktree with its uncommitted edit
 // and ignored file, the branch and the copy mode, and drops the worktree's
-// registration, leaving nothing hidden; the hub keeps its
+// registration, leaving nothing hidden; the account repo keeps its
 // branch. --remote then on beta removes it here, but for a directory of
 // the user's at its library path, which stays, and a push git cannot make
 // leaves its branch there, exit 3, and run again it deletes that branch
@@ -29,9 +29,9 @@ import (
 // still has both forks, worktrees and all, after an update of every skill,
 // which reads them not published, and a bare publish leaves them out,
 // naming each; its removal of one drops the tracking configuration its
-// install from the hub wrote, and a publish of the other by name puts
+// install from the account repo wrote, and a publish of the other by name puts
 // it back. --remote of a skill of a shared source, or of one with no
-// source, is refused, exit 6, before the hub is fetched.
+// source, is refused, exit 6, before the account repo is fetched.
 func TestSkillRemoveOfAFork(t *testing.T) {
 	t.Parallel()
 	a, b, s, remote := twoHomes(t)
@@ -87,7 +87,7 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	equal(t, "what is left in the worktrees directory", strings.Join(hiddenEntries(t, filepath.Dir(root)), " "), "")
 	equal(t, "the remote's alpha", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), tip)
 
-	// A push git cannot make leaves the hub's branch, and the
+	// A push git cannot make leaves the account repo's branch, and the
 	// same command, run again, deletes it alone.
 	real, err := exec.LookPath("git")
 	if err != nil {
@@ -110,7 +110,7 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	a.env["PATH"] = path
 	equal(t, "an unreachable remote: exit", out.exit, 3)
 	e := a.one(out.stdout, "error")
-	equal(t, "its message", e["message"], "beta was removed from this machine, but the hub still holds skills/beta: git push: fatal: unable to access the remote")
+	equal(t, "its message", e["message"], "beta was removed from this machine, but the account repo still holds skills/beta: git push: fatal: unable to access the remote")
 	contains(t, "its hint", e["hint"].(string), "then run 'agentx skill remove beta --remote' again")
 	contains(t, "the directory left", out.stderr, betaLib+" is a directory agentx did not place there and was left as it is")
 	if _, err := os.Stat(filepath.Join(betaLib, "precious.md")); err != nil {
@@ -123,13 +123,13 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	for _, name := range []string{"alpha", "beta"} {
 		out = a.run("--json", "skill", "remove", name, "--remote")
 		equal(t, name+" --remote with no fork here: exit", out.exit, 0)
-		equal(t, "its summary", a.one(out.stdout, "result")["summary"], "removed skills/"+name+" from the hub; this machine has no skill called "+name)
+		equal(t, "its summary", a.one(out.stdout, "result")["summary"], "removed skills/"+name+" from the account repo; this machine has no skill called "+name)
 	}
 	equal(t, "the remote's branches", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)"), "")
 	equal(t, "a's remote-tracking branches", a.storeGit("for-each-ref", "--format=%(refname)", "refs/remotes/"), "")
 	out = a.run("skill", "remove", "beta", "--remote")
 	equal(t, "neither holds beta: exit", out.exit, 5)
-	contains(t, "neither holds beta: stderr", out.stderr, "neither this machine nor the hub holds a skill called beta")
+	contains(t, "neither holds beta: stderr", out.stderr, "neither this machine nor the account repo holds a skill called beta")
 
 	bTips := map[string]string{"alpha": b.ref(lineage.ForkRef("alpha")), "beta": b.ref(lineage.ForkRef("beta"))}
 	b.mustRun("skill", "update", "--all")
@@ -139,7 +139,7 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 			t.Errorf("b's %s: %v", name, err)
 		}
 	}
-	// That update's fetch found both branches gone from the hub,
+	// That update's fetch found both branches gone from the account repo,
 	// and nothing records it: b's skills read not published, and a publish
 	// of every skill names them rather than put them back.
 	for _, ev := range b.eventsOfType(b.mustRun("--json", "skill", "list").stdout, "library_skill") {
@@ -157,19 +157,19 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 		"alpha is not published: run 'agentx skill publish alpha' to publish it\n"+
 			"beta is not published: run 'agentx skill publish beta' to publish it")
 	equal(t, "the remote's branches after b's publish", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)"), "")
-	// b installed both from the hub, which made their branches track
-	// the hub's: a removal takes that tracking with the branch,
+	// b installed both from the account repo, which made their branches track
+	// the account repo's: a removal takes that tracking with the branch,
 	// so that a later fork of the name tracks nothing.
 	contains(t, "b's tracking", b.storeGit("config", "--get-regexp", `^branch\.`), "branch.skills/alpha.remote")
 	b.mustRun("skill", "remove", "alpha")
 	if tracking := b.storeGit("config", "--get-regexp", `^branch\.`); strings.Contains(tracking, "skills/alpha") || !strings.Contains(tracking, "skills/beta") {
 		t.Errorf("b's tracking after alpha's removal:\n%s", tracking)
 	}
-	// Published by name, beta is back on the hub.
+	// Published by name, beta is back on the account repo.
 	b.mustRun("skill", "publish", "beta")
 	equal(t, "the remote's beta, published again", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/beta"), bTips["beta"])
 
-	// --remote deletes only from the hub: a skill of a shared
+	// --remote deletes only from the account repo: a skill of a shared
 	// source and one with no source are refused before it is fetched.
 	b.mustRun("skill", "add", s.url, "--name", "alpha")
 	writeFile(t, mkdirs(t, filepath.Join(b.library, "mine"), "SKILL.md"), skill("mine", "My own"))
@@ -180,7 +180,7 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 		message, _ := b.one(out.stdout, "error")["message"].(string)
 		return message
 	}
-	equal(t, "alpha --remote: message", refused("alpha"), "alpha comes from "+s.url+", and agentx deletes skills only from the hub")
+	equal(t, "alpha --remote: message", refused("alpha"), "alpha comes from "+s.url+", and agentx deletes skills only from the account repo")
 	contains(t, "mine --remote: message", refused("mine"), "mine has no source")
 	equal(t, "b's alpha, kept", b.ref(lineage.ManagedRef("alpha")) != "", true)
 }
@@ -248,7 +248,7 @@ exec %GIT% "$@"
 	}
 }
 
-// TestRemoteDeleteRefusal is what a deletion the hub rejected
+// TestRemoteDeleteRefusal is what a deletion the account repo rejected
 // says, and what it says to do next: a default branch, which running again
 // would only be refused again, needs another default first; a branch moved
 // since the fetch is fetched again by running again; anything else is run
@@ -263,19 +263,19 @@ func TestRemoteDeleteRefusal(t *testing.T) {
 	}{
 		{"default branch", "pdf was removed from this machine",
 			gitx.PushStatus{Flag: '!', Summary: "[remote rejected]", Reason: "refusing to delete the current branch: refs/heads/skills/pdf"},
-			"pdf was removed from this machine, but the hub still holds skills/pdf: the hub rejected its deletion: refusing to delete the current branch: refs/heads/skills/pdf",
-			"make another branch the hub's default branch on its hosting service, then run 'agentx skill remove pdf --remote' again"},
+			"pdf was removed from this machine, but the account repo still holds skills/pdf: the account repo rejected its deletion: refusing to delete the current branch: refs/heads/skills/pdf",
+			"make another branch the account repo's default branch on its hosting service, then run 'agentx skill remove pdf --remote' again"},
 		{"moved since the fetch", "",
 			gitx.PushStatus{Flag: '!', Summary: "[rejected]", Reason: "stale info"},
-			"the hub still holds skills/pdf: the hub rejected its deletion: stale info",
+			"the account repo still holds skills/pdf: the account repo rejected its deletion: stale info",
 			"another machine moved it since the fetch; run 'agentx skill remove pdf --remote' again to delete what it holds now"},
 		{"a hook", "",
 			gitx.PushStatus{Flag: '!', Summary: "[remote rejected]", Reason: "pre-receive hook declined"},
-			"the hub still holds skills/pdf: the hub rejected its deletion: pre-receive hook declined",
+			"the account repo still holds skills/pdf: the account repo rejected its deletion: pre-receive hook declined",
 			"run 'agentx skill remove pdf --remote' again"},
 		{"no reason", "",
 			gitx.PushStatus{Flag: '!', Summary: "[rejected]"},
-			"the hub still holds skills/pdf: the hub rejected its deletion: [rejected]",
+			"the account repo still holds skills/pdf: the account repo rejected its deletion: [rejected]",
 			"run 'agentx skill remove pdf --remote' again"},
 	} {
 		f := remoteDeleteRefusal("pdf", tc.done, tc.status)

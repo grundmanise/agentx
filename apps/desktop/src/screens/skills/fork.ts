@@ -11,7 +11,7 @@ import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 /**
- * Whether the detail pane offers Fork: for a skill of a source and a plugin's skill. A hub
+ * Whether the detail pane offers Fork: for a skill of a source and a plugin's skill. An account repo
  * skill is already one, and `skill fork` refuses an unmanaged skill, which Adopt takes
  * over.
  */
@@ -123,7 +123,7 @@ const inPlaceHint = (
       form
     );
   }
-  if (message === `${target} is already a hub skill`) {
+  if (message === `${target} is already an account skill`) {
     return besideWays[form] ?? "choose another name";
   }
   return undefined;

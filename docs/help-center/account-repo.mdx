@@ -1,0 +1,65 @@
+---
+title: "Account repo"
+description: "The Git repository that carries your account skills and the snapshot of each machine to your other machines and your cloud agents. It is your own, and one per person."
+---
+
+Your account repo is a Git repository. agentx uses it to move your account skills and a snapshot of each machine between machines. It is your own repository, the one place you publish to. Skills that other people share, such as your company's, come from a [source](/sources) instead.
+
+If you can only read the account repo, you can install its skills, but you can't publish to it: the desktop app turns Publish off, and `agentx skill publish` fails when it pushes.
+
+You need it only for that. On a single machine, agentx works without it: the store in `~/.agentx` keeps the full history of your account skills.
+
+## When you need it
+
+- **A second machine**: publish your account skills on one machine, and install them on another.
+- **A backup**: save a snapshot of a machine, and restore it after a reinstall or on a new computer.
+- **Cloud agents**: the cloud machine has no computer of its own, so its snapshot on the account repo is its only state. See [Cloud agents](/cloud).
+
+Skills from a shared source never go through the account repo. Each machine installs them from their source.
+
+## What it holds
+
+agentx writes two kinds of branches, and does not use any other branch, such as `main`.
+
+| Branch | Holds | Written by | Read by |
+|---|---|---|---|
+| `skills/<name>` | An account skill, with its history. | `agentx skill publish` | `agentx skill add --name <name>` and `agentx skill update` on your other machines |
+| `machines/<id>` | The snapshot of one machine: its settings, and its skills with their placements. It holds no skill content. | `agentx snapshot save --machine <id>`, and `agentx skill place` or `agentx skill remove` with `--machine cloud` | `agentx snapshot apply --machine <id>`, and each cloud agent session |
+
+## Create it
+
+Create a repository on any Git host, such as GitHub or GitLab. Only these choices matter to agentx:
+
+- **Private or public**: make it private. A snapshot keeps each MCP server's command, arguments and URL, and these can hold a token. Each machine then needs Git credentials for it, such as an SSH key or a credential helper, and a cloud agent needs a [read-only token](/cloud#create-a-read-only-token). A public account repo needs no credentials to read over HTTPS, but anyone can read your skills and snapshots. An SSH URL needs an SSH key, even for a public repository.
+- **First files**: choose any. The repository can be empty, or have a README, a license or a `.gitignore` on its default branch, because agentx does not use that branch.
+- **Access**: a machine that publishes or saves snapshots needs write access. A machine that only installs and applies snapshots needs read access.
+- **A new repository**: use a repository that is not a source on any machine. One repository cannot be both a shared source and the account repo.
+
+## Add it
+
+On each machine, add the repository with `--account`:
+
+```sh
+agentx source add git@github.com:you/agentx-account.git --account
+```
+
+In the desktop app, open **Settings**, paste the URL under **Account repo** and select **Save**. **Change…** replaces it with another repository, and **Unlink** removes it. Your skills stay on the machine either way.
+
+Each machine can use its own URL for the same repository, such as SSH on your computer and HTTPS for a cloud agent. For the details, see [Add your account repo](/cli/source#add-your-account-repo). For how `agentx snapshot apply` treats two URLs of one repository, see [Apply a snapshot](/cli/snapshot#apply-a-snapshot).
+
+## See what is waiting to sync
+
+In the desktop app, the status at the right of the title bar shows how this machine stands with your account repo. Point at it to see what it counts.
+
+| Status | What it means | Select it to |
+|---|---|---|
+| **Set up sync** | No account repo is set. | Open **Settings** and add one. |
+| **3 to publish** | Your account skills with edits you have not published, or that you never published. | See each skill, marked edited or new, and publish them all with **Publish all**. |
+| **1 incoming** | Your account skills that changed on your other machines. | See each skill. Select one to open it, then select **Update** on its banner. |
+| **Synced** | Nothing to publish and nothing incoming. | See when agentx last checked your account repo. |
+
+With something both ways, the status shows both counts, such as **3 to publish · 1 incoming**.
+
+**Publish all** publishes every skill in the list in one go, the ones you never published included. To publish one skill, open it and select **Publish** on its banner.
+
+While the app is open, agentx checks your account repo in the background, and the status shows when it last did. To check now, select **Check updates** above the **Skills** list.

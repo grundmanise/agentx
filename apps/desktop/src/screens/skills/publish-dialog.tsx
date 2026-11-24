@@ -29,9 +29,9 @@ import { Spinner } from "#/components/ui/spinner.tsx";
 import { WithReason } from "#/components/with-reason.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
 import {
-  hubOf,
+  accountOf,
   notPublished,
-  readOnlyHubReason,
+  readOnlyAccountReason,
 } from "#/screens/skills/banners.ts";
 import { fileStatusLabels } from "#/screens/skills/files.tsx";
 import { shortSource } from "#/screens/skills/projection.ts";
@@ -39,9 +39,9 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import {
   alreadyPublished,
   changedElsewhere,
-  notifyNoHub,
+  notifyNoAccount,
   publishFailure,
-  refusedForHub,
+  refusedForAccount,
 } from "#/screens/skills/publish.ts";
 import { agentx } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
@@ -104,9 +104,13 @@ export const changeSummary = (files: FilesState) => {
 
 /**
  * The toast of a publish that ended, when the outcome has one of its own. A failure with none
- * keeps the toast the runner showed. `hubSet` is whether the store knows of one.
+ * keeps the toast the runner showed. `accountSet` is whether the store knows of one.
  */
-const reportPublish = (row: SkillRow, outcome: Outcome, hubSet: boolean) => {
+const reportPublish = (
+  row: SkillRow,
+  outcome: Outcome,
+  accountSet: boolean
+) => {
   const { name } = row;
   const event = outcome.events.find(
     (e) => e.type === "publish" && e.name === name
@@ -147,8 +151,8 @@ const reportPublish = (row: SkillRow, outcome: Outcome, hubSet: boolean) => {
     addActivity("success", text);
     return;
   }
-  if (refusedForHub(outcome, hubSet)) {
-    notifyNoHub();
+  if (refusedForAccount(outcome, accountSet)) {
+    notifyNoAccount();
   }
 };
 
@@ -282,7 +286,7 @@ const PublishForm = ({
     reportPublish(
       row,
       outcome,
-      hubOf(useAppStore.getState().sources) !== undefined
+      accountOf(useAppStore.getState().sources) !== undefined
     );
     onClose();
   };
@@ -333,12 +337,12 @@ const PublishForm = ({
   );
 };
 
-/** Where the publish goes: the hub for a hub skill, else the skill's source. */
+/** Where the publish goes: the account repo for an account skill, else the skill's source. */
 const Subtitle = ({ row }: { row: SkillRow }) => {
-  if (row.kind === "hub") {
+  if (row.kind === "account") {
     return (
       <DialogDescription>
-        {`The ${row.name} skill will be published to your hub.`}
+        {`The ${row.name} skill will be published to your account repo.`}
       </DialogDescription>
     );
   }
@@ -391,10 +395,10 @@ export const PublishButton = ({
   // The read of the latest opening: an earlier one that ends later does not replace it.
   const opening = useRef(0);
   const pending = useSettling(publishLabel(row.name));
-  // A hub skill cannot be published while the hub is read-only; a source's skill shows
+  // An account skill cannot be published while the account repo is read-only; a source's skill shows
   // Publish only while its source is writable.
   const readOnly = useAppStore((s) =>
-    row.kind === "hub" ? readOnlyHubReason(s.sources) : undefined
+    row.kind === "account" ? readOnlyAccountReason(s.sources) : undefined
   );
   const openDialog = async () => {
     opening.current += 1;
@@ -437,7 +441,7 @@ export const PublishButton = ({
   );
 };
 
-/** Open Settings, where a hub is set. */
+/** Open Settings, where an account repo is set. */
 export const OpenSettingsButton = () => (
   <Button
     variant="ghost"
