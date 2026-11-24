@@ -356,6 +356,15 @@ export const fleetWithoutWorkbench = {
   type: "fleet",
 } satisfies InlineEvent;
 
+/** A hub whose one other machine holds this machine's skills alone, in the same versions. */
+export const fleetOfSameSkills = {
+  machines: [
+    studio,
+    { ...atelier, skills: atelier.skills.filter((s) => s.name !== "scratch") },
+  ],
+  type: "fleet",
+} satisfies InlineEvent;
+
 /** A hub that holds this machine's report and no other machine. */
 export const fleetOfThisMachine = {
   machines: [studio],

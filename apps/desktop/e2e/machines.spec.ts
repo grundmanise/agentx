@@ -6,6 +6,7 @@ import type { Page } from "@playwright/test";
 
 import {
   fleet,
+  fleetOfSameSkills,
   fleetOfThisMachine,
   fleetWithoutWorkbench,
   inventory,
@@ -250,9 +251,14 @@ test("By skill lists every skill across the machines with what each machine has 
   await views(page).getByRole("radio", { name: "By machine" }).check();
   await expect(row(page, "studio")).toHaveAttribute("aria-current", "true");
 
-  // One machine has nothing to be compared with: its list and details show, with no switch.
+  // With every skill the same on every machine, one line says that nothing differs.
   await views(page).getByRole("radio", { name: "By skill" }).check();
-  await expect(bySkill(page)).toBeVisible();
+  await cli.serveEmit([fleetOfSameSkills]);
+  await expect(bySkill(page)).toContainText(
+    "No differences between your machines"
+  );
+
+  // One machine has nothing to be compared with: its list and details show, with no switch.
   await cli.serveEmit([fleetOfThisMachine]);
   await expect(row(page, "studio")).toHaveAttribute("aria-current", "true");
   await expect(views(page)).toHaveCount(0);
