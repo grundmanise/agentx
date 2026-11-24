@@ -12,6 +12,8 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import { Kbd, KbdGroup } from "#/components/ui/kbd.tsx";
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const Command = ({ ...props }: OwnProps<typeof CommandPrimitive>) => (
@@ -120,8 +122,12 @@ const CommandSeparator = ({
  * A row in `palette.row-text`, `palette.row-active` while selected. It is a `group`: a child
  * can follow its selection with `group-data-[selected=true]:`.
  */
-const CommandItem = ({ ...props }: OwnProps<typeof CommandPrimitive.Item>) => (
+const CommandItem = ({
+  track,
+  ...props
+}: OwnProps<typeof CommandPrimitive.Item> & Tracked) => (
   <CommandPrimitive.Item
+    {...trackAttribute(track)}
     data-slot="command-item"
     className="group rounded-palette-row text-palette-row-text data-[selected=true]:bg-palette-row-active data-[selected=true]:text-text-primary flex h-10.5 items-center gap-3 px-3 outline-none select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-30"
     {...props}

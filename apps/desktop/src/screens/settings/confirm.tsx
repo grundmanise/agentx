@@ -20,6 +20,8 @@ export const Confirm = ({
   detail,
   action,
   onConfirm,
+  track,
+  cancelTrack,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -29,6 +31,10 @@ export const Confirm = ({
   detail?: string;
   action: string;
   onConfirm: () => void;
+  /** The name a click on the button that runs the command is sent under. */
+  track: string;
+  /** The name a click on Cancel is sent under. */
+  cancelTrack: string;
 }) => (
   <AlertDialog open={open} onOpenChange={onOpenChange}>
     <AlertDialogContent>
@@ -43,9 +49,11 @@ export const Confirm = ({
       )}
       <AlertDialogFooter>
         <AlertDialogCancel asChild>
-          <Button variant="ghost">Cancel</Button>
+          <Button variant="ghost" track={cancelTrack}>
+            Cancel
+          </Button>
         </AlertDialogCancel>
-        <Button variant="danger" onClick={onConfirm}>
+        <Button variant="danger" track={track} onClick={onConfirm}>
           {action}
         </Button>
       </AlertDialogFooter>

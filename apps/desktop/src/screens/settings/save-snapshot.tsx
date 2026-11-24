@@ -47,6 +47,7 @@ const SaveForm = () => {
               onClick: () => {
                 void revealInFinder(path);
               },
+              track: "snapshot-toast.show",
             };
       },
       label: SAVE_LABEL,
@@ -99,7 +100,12 @@ const SaveForm = () => {
             setProblem(undefined);
           }}
         />
-        <Button type="submit" variant="secondary" disabled={!valid || pending}>
+        <Button
+          type="submit"
+          variant="secondary"
+          track="settings.snapshot-save"
+          disabled={!valid || pending}
+        >
           {pending && <Spinner />}
           Save
         </Button>
@@ -116,6 +122,8 @@ const SaveForm = () => {
         title={`Replace ${name}.json?`}
         description="A file with this name is already in your library."
         action="Replace"
+        track="replace-snapshot-dialog.confirm"
+        cancelTrack="replace-snapshot-dialog.cancel"
         onConfirm={() => {
           setOverwrite(false);
           void save(true);

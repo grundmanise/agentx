@@ -12,6 +12,8 @@ import type { VariantProps } from "class-variance-authority";
 import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui";
 import { createContext, useContext } from "react";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import { cn } from "#/lib/utils.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
@@ -109,13 +111,15 @@ const ToggleGroup = ({
   </ToggleGroupPrimitive.Root>
 );
 
-export type ToggleGroupItemProps = OwnProps<typeof ToggleGroupPrimitive.Item>;
+export type ToggleGroupItemProps = OwnProps<typeof ToggleGroupPrimitive.Item> &
+  Tracked;
 
 /** One choice of the group, drawn as the group's `kind`. */
-const ToggleGroupItem = (props: ToggleGroupItemProps) => {
+const ToggleGroupItem = ({ track, ...props }: ToggleGroupItemProps) => {
   const kind = useContext(ToggleGroupContext);
   return (
     <ToggleGroupPrimitive.Item
+      {...trackAttribute(track)}
       data-slot="toggle-group-item"
       className={toggleGroupItemVariants({ kind })}
       {...props}

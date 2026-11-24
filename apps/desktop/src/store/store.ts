@@ -103,7 +103,7 @@ export interface AppState {
    * The anonymous id usage data is sent under, from the `settings` event: there only while the
    * `telemetry` setting is on.
    */
-  telemetryId: string | undefined;
+  anonymousId: string | undefined;
   /** Whether the telemetry question was answered this session: it is not asked again. */
   telemetryAnswered: boolean;
   /** This machine and where agentx keeps its files, from `machine`. */
@@ -201,6 +201,7 @@ export type UpdateDiffRead =
 export const useAppStore = create<AppState>()(() => ({
   activity: [],
   adoption: [],
+  anonymousId: undefined,
   applied: undefined,
   conflicts: {},
   files: {},
@@ -221,7 +222,6 @@ export const useAppStore = create<AppState>()(() => ({
   skillMds: {},
   sources: [],
   telemetryAnswered: false,
-  telemetryId: undefined,
   updateDiffs: {},
   updates: {},
 }));

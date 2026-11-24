@@ -206,6 +206,7 @@ export const installAppUpdate = async () => {
         onClick: () => {
           void installAppUpdate();
         },
+        track: "toast.app-update",
       });
       return;
     }

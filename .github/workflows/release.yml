@@ -239,15 +239,11 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.goos == 'darwin' && '1' || '0' }}
           VERSION: ${{ needs.plan.outputs.version }}
-          # Where usage data goes once a user agrees to send it; a build without them sends nothing.
-          TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
-          TELEMETRY_KEY: ${{ secrets.TELEMETRY_KEY }}
           COPYFILE_DISABLE: 1 # no AppleDouble files in the macOS archives
         run: |
           mkdir -p "dist/$NAME"
-          pkg=github.com/grundmanise/agentx/apps/cli/internal/cli
           (cd apps/cli && go build -trimpath \
-            -ldflags "-s -w -X $pkg.cliVersion=$VERSION -X $pkg.telemetryHost=$TELEMETRY_HOST -X $pkg.telemetryKey=$TELEMETRY_KEY" \
+            -ldflags "-s -w -X github.com/grundmanise/agentx/apps/cli/internal/cli.cliVersion=$VERSION" \
             -o "../../dist/$NAME/agentx" .)
           cp LICENSE README.md "dist/$NAME/"
           tar -C "dist/$NAME" -czf "dist/$NAME.tar.gz" agentx LICENSE README.md
@@ -311,14 +307,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Before the Apple secrets are in the environment, so no frontend tool sees them. No
-      # pnpm check: the plan job releases only a commit whose CI passed, and CI runs it. The
-      # telemetry host and key are the CLI's: the app sends its own usage data there once a user
-      # agrees, and a build without them sends nothing.
+      # pnpm check: the plan job releases only a commit whose CI passed, and CI runs it.
       - name: Build the frontend
         working-directory: apps/desktop
         env:
-          VITE_TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
-          VITE_TELEMETRY_KEY: ${{ secrets.TELEMETRY_KEY }}
           SOURCEMAPS: ${{ secrets.POSTHOG_CLI_API_KEY != '' && 'true' || '' }}
         run: pnpm build ${SOURCEMAPS:+--sourcemap}
 
@@ -362,7 +354,6 @@ jobs:
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
           # Line tables for the Rust side's debug symbols. On macOS they go to a separate
           # agentx-desktop.dSYM, so the app itself does not grow.
           CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
@@ -387,11 +378,8 @@ jobs:
             echo "::warning title=Updates not signed::add the TAURI_SIGNING secrets, see RELEASING.md"
             updater=false
           fi
-          # The window may connect to the telemetry host, when the build has one, and nowhere else.
-          csp=$(jq -r .app.security.csp src-tauri/tauri.conf.json)
-          [ -z "$TELEMETRY_HOST" ] || csp=${csp/connect-src /connect-src $TELEMETRY_HOST }
-          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" --argjson updater "$updater" --arg csp "$csp" \
-            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}, app: {security: {csp: $csp}}}
+          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" --argjson updater "$updater" \
+            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}}
             | if $updater then .bundle.createUpdaterArtifacts = true else . end')
           pnpm tauri build --target "$TARGET" --bundles app,dmg --config "$config"
 
@@ -503,12 +491,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # No pnpm check, and the telemetry host and key, as for the macOS app.
+      # No pnpm check, as for the macOS app.
       - name: Build the frontend
         working-directory: apps/desktop
         env:
-          VITE_TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
-          VITE_TELEMETRY_KEY: ${{ secrets.TELEMETRY_KEY }}
           SOURCEMAPS: ${{ secrets.POSTHOG_CLI_API_KEY != '' && 'true' || '' }}
         run: pnpm build ${SOURCEMAPS:+--sourcemap}
 
@@ -540,7 +526,6 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          TELEMETRY_HOST: ${{ secrets.TELEMETRY_HOST }}
         run: |
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             updater=true
@@ -549,11 +534,8 @@ jobs:
             echo "::warning title=Updates not signed::add the TAURI_SIGNING secrets, see RELEASING.md"
             updater=false
           fi
-          # The window may connect to the telemetry host, when the build has one, and nowhere else.
-          csp=$(jq -r .app.security.csp src-tauri/tauri.conf.json)
-          [ -z "$TELEMETRY_HOST" ] || csp=${csp/connect-src /connect-src $TELEMETRY_HOST }
-          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" --argjson updater "$updater" --arg csp "$csp" \
-            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}, app: {security: {csp: $csp}}}
+          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" --argjson updater "$updater" \
+            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}}
             | if $updater then .bundle.createUpdaterArtifacts = true else . end')
           pnpm tauri build --target "$TARGET" --bundles deb,appimage --config "$config"
 

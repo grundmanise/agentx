@@ -1,35 +1,45 @@
-// The app's own usage data and crash reports, behind the `telemetry` setting the CLI keeps
-// (src/store/telemetry.ts, docs/help-center/telemetry.mdx). A release build names the host and
-// key it sends to, in VITE_TELEMETRY_HOST and VITE_TELEMETRY_KEY; a development or source build
-// names none, and then the SDK is never loaded. Otherwise, once the setting is on, the SDK starts
-// once per launch, under the CLI's anonymous telemetry id, and sends one `app_open` event and an
-// `$exception` event for each uncaught error, unhandled rejection or error the app's error
-// boundary catches. It keeps nothing on the machine, captures no click, page view or session, asks
-// for no feature flag or survey, makes no person profile, and every event leaves with the app's
-// own fields and the SDK's name alone, and with every user path in an error replaced by `<path>`,
-// as the CLI does. When the setting turns off, every event is dropped before it leaves, and the
-// next launch does not start the SDK. The SDK's own opt-out is not used: it stores itself in local
-// storage, which a later launch with the setting on would read.
+// The app's and the web UI's own usage data and crash reports, sent to PostHog under the
+// `telemetry` setting the CLI keeps (src/store/telemetry.ts, docs/help-center/telemetry.mdx).
+// Only a release build sends: one whose CLI reports a stable or nightly version. Once the setting
+// is on, the PostHog SDK starts once per launch, under the CLI's anonymous id, and sends what its
+// own hooks capture, and a `$pageview` for each screen, by its route alone; each click, with every
+// element's text and attributes masked, named by its `track` (src/lib/track.ts); and each uncaught
+// error and unhandled rejection, plus what the app's error boundary catches, with every user path
+// replaced by `<path>`. Every event carries the release channel, the surface (app or web) and the
+// CLI's version, beside the SDK's own device properties. It keeps nothing on the machine, records
+// no session, asks for no feature flag or survey, and makes no person profile. When the setting
+// turns off, every event is dropped before it leaves, and the next launch does not start the SDK.
+// The SDK's own opt-out is not used: it stores itself in local storage, which a later launch with
+// the setting on would read. In the app, the Tauri shell hears the same answer (`set_telemetry`)
+// for its own crash reports.
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  PostHog as Client,
-  PostHogConfig as ClientConfig,
+  PostHog,
+  PostHogConfig,
 } from "posthog-js/dist/module.slim.no-external.js";
 
+import { screenOf } from "#/app/kept-screens.tsx";
 import { inApp } from "#/lib/platform.ts";
 
-const host = import.meta.env.VITE_TELEMETRY_HOST ?? "";
-const key = import.meta.env.VITE_TELEMETRY_KEY ?? "";
+/** The agentx project's public token, which only lets a client send events. */
+const POSTHOG_TOKEN = "phc_xQuv9oeNiExAgBEey2FvxwbgSK3ZNyrDPVwbaugWgQHn";
+/** PostHog's EU cloud. */
+const POSTHOG_HOST = "https://eu.i.posthog.com";
 
-/** Whether this build names a host: one that names none never sends, nor asks. */
-export const telemetryBuild = host !== "";
+export type ReleaseChannel = "nightly" | "stable";
 
-/** What `app_info` reports: the app's version, and the platform by the names the CLI uses. */
-interface AppInfo {
-  version: string;
-  os: string;
-  arch: string;
-}
+/**
+ * The release channel of a CLI version, as `agentx update` tells them apart: nightly when it has
+ * `-nightly.`. A development or source build's version, such as `dev`, has none: it never sends.
+ */
+export const releaseChannel = (
+  cliVersion: string | undefined
+): ReleaseChannel | undefined => {
+  if (cliVersion === undefined || !/^\d+\.\d+\.\d+(?:-|$)/u.test(cliVersion)) {
+    return undefined;
+  }
+  return cliVersion.includes("-nightly.") ? "nightly" : "stable";
+};
 
 /**
  * An absolute path under a user's or the system's temporary directories: up to the next space,
@@ -59,102 +69,171 @@ const redactAll = (value: unknown): unknown => {
 };
 
 /**
- * The properties an event keeps: the app's own, the anonymous id, what the SDK names itself and
- * the event by, and an exception's. The SDK adds more of its own, the page's address and the
- * device's user agent, screen, time zone and language among them, which are dropped.
+ * The route of an address of the app, by its pattern: the screen's path, then `/:id` for anything
+ * under it, such as `/skills/:id` for a skill. The rest, a skill's name or a search among them, is
+ * never sent.
  */
-const KEPT = new Set([
-  "app_version",
-  "cli_version",
-  "os",
-  "arch",
-  "distinct_id",
-  "token",
-  "$lib",
-  "$lib_version",
-  "$insert_id",
-  "$time",
-  "$process_person_profile",
-]);
+export const routeOf = (address: string) => {
+  let hash = "";
+  try {
+    ({ hash } = new URL(address));
+  } catch {
+    return "/";
+  }
+  const pathname = hash.replace(/^#/u, "").split("?")[0] ?? "";
+  const screen = screenOf(pathname);
+  if (screen === undefined) {
+    return "/";
+  }
+  return pathname === screen.path ? screen.path : `${screen.path}/:id`;
+};
 
-const kept = (name: string) => KEPT.has(name) || name.startsWith("$exception");
+/** A property that holds an address: the page's, where it came from, or where the session began. */
+const isAddress = (name: string) => /(?:url|referrer)$/u.test(name);
+
+/** A property's value as it is sent: an address by its route, an exception without user paths. */
+const cleaned = (name: string, value: unknown) => {
+  if (isAddress(name) && typeof value === "string" && value !== "$direct") {
+    return routeOf(value);
+  }
+  return name.startsWith("$exception") ? redactAll(value) : value;
+};
 
 /** Whether the setting is on: events captured while it is off are dropped. */
 let sending = false;
+/** The route a page view was last sent for: a route shown again at once sends none. */
+let viewed = "";
 /** The SDK, once started this launch. */
-let started: Promise<Client> | undefined;
+let started: Promise<PostHog> | undefined;
 
-const beforeSend: NonNullable<ClientConfig["before_send"]> = (event) => {
+const beforeSend: NonNullable<PostHogConfig["before_send"]> = (event) => {
   if (event === null || !sending) {
     return null;
   }
-  const exception = event.event === "$exception";
-  const properties = Object.fromEntries(
+  const properties: Record<string, unknown> = Object.fromEntries(
     Object.entries(event.properties)
-      .filter(([name]) => kept(name))
-      .map(([name, value]) => [name, exception ? redactAll(value) : value])
+      // The window's host: the app's own, or the machine that serves the web UI.
+      .filter(([name]) => !name.endsWith("host"))
+      .map(([name, value]) => [name, cleaned(name, value)])
   );
+  if (typeof properties.$current_url === "string") {
+    properties.$pathname = properties.$current_url;
+  }
   return { ...event, properties };
 };
 
-const start = async (telemetryId: string, cliVersion: string) => {
-  const [{ default: client }, { ErrorTrackingExtensions }, info] =
-    await Promise.all([
-      import("posthog-js/dist/module.slim.no-external.js"),
-      import("posthog-js/dist/extension-bundles.js"),
-      invoke<AppInfo>("app_info"),
-      // What catches uncaught errors and rejections, bundled: the SDK loads no script of its own.
-      import("posthog-js/dist/exception-autocapture.js"),
-    ]);
-  client.init(key, {
-    __extensionClasses: ErrorTrackingExtensions,
+const start = async (
+  anonymousId: string,
+  cliVersion: string,
+  channel: ReleaseChannel
+) => {
+  const [
+    { default: client },
+    { AnalyticsExtensions, ErrorTrackingExtensions },
+  ] = await Promise.all([
+    import("posthog-js/dist/module.slim.no-external.js"),
+    import("posthog-js/dist/extension-bundles.js"),
+    // What catches uncaught errors and rejections, bundled: the SDK loads no script of its own.
+    import("posthog-js/dist/exception-autocapture.js"),
+  ]);
+  client.init(POSTHOG_TOKEN, {
+    // The slim build holds no capture hook of its own: clicks come with the analytics bundle,
+    // errors with the error tracking one.
+    __extensionClasses: { ...AnalyticsExtensions, ...ErrorTrackingExtensions },
     advanced_disable_flags: true,
-    api_host: host,
-    autocapture: false,
+    api_host: POSTHOG_HOST,
     before_send: beforeSend,
-    bootstrap: { distinctID: telemetryId },
+    bootstrap: { distinctID: anonymousId },
+    capture_dead_clicks: false,
     capture_exceptions: true,
+    capture_heatmaps: false,
     capture_pageleave: false,
+    // The app routes by the address's hash, which the SDK's own page views do not follow: the
+    // app sends one for each screen it shows (viewScreen).
     capture_pageview: false,
+    capture_performance: false,
     disable_external_dependency_loading: true,
     disable_session_recording: true,
     disable_surveys: true,
+    mask_all_element_attributes: true,
+    mask_all_text: true,
     // The filter drops what a website's crawlers send; the app's window has none, and the
     // webview of a test looks like one.
     opt_out_useragent_filter: true,
     persistence: "memory",
     person_profiles: "identified_only",
   });
-  client.capture("app_open", {
-    app_version: info.version,
-    arch: info.arch,
+  client.register({
     cli_version: cliVersion,
-    os: info.os,
+    release_channel: channel,
+    surface: inApp ? "app" : "web",
   });
+  client.capture("app_open");
+  viewed = location.hash.replace(/^#/u, "").split("?")[0] ?? "";
+  client.capture("$pageview");
   return client;
 };
 
 /**
- * Follows the `telemetry` setting: starts the SDK the first time it is on in this launch, with the
- * telemetry id of the `settings` event, and stops sending while it is off. A build without a host,
- * and the frontend in a browser, never start it.
+ * Tells the Tauri shell whether to send its own crash reports, and where. A shell without the
+ * command, an older one, is not an error.
+ */
+const tellShell = async (telemetry: Record<string, unknown>) => {
+  try {
+    await invoke("set_telemetry", { telemetry });
+  } catch {
+    // Nothing to tell.
+  }
+};
+
+/** What the Tauri shell was last told, so it hears each change once. */
+let told = "";
+
+/**
+ * Follows the `telemetry` setting: starts the SDK the first time it is on in this launch of a
+ * release build, under the anonymous id of the `settings` event, and stops sending while it is
+ * off. In the app, it tells the Tauri shell each change.
  */
 export const followTelemetry = (
   on: boolean,
-  telemetryId: string | undefined,
+  anonymousId: string | undefined,
   cliVersion: string | undefined
 ) => {
-  if (!telemetryBuild || !inApp || on === sending) {
-    return;
+  const channel = releaseChannel(cliVersion);
+  const ready =
+    on && anonymousId !== undefined && cliVersion !== undefined
+      ? channel
+      : undefined;
+  const sends = ready !== undefined;
+  // The shell sends its crash reports with no person, so it needs no id.
+  const telemetry = {
+    host: POSTHOG_HOST,
+    on: sends,
+    releaseChannel: channel,
+    token: POSTHOG_TOKEN,
+  };
+  if (inApp && JSON.stringify(telemetry) !== told) {
+    told = JSON.stringify(telemetry);
+    void tellShell(telemetry);
   }
-  if (on && started === undefined) {
-    if (telemetryId !== undefined && cliVersion !== undefined) {
-      sending = true;
-      started = start(telemetryId, cliVersion);
-    }
-    return;
+  sending = sends;
+  if (
+    ready !== undefined &&
+    started === undefined &&
+    anonymousId !== undefined &&
+    cliVersion !== undefined
+  ) {
+    started = start(anonymousId, cliVersion, ready);
   }
-  sending = on;
+};
+
+/** Sends a page view of the screen at `pathname`, while the setting is on. */
+export const viewScreen = async (pathname: string) => {
+  if (sending && started !== undefined && pathname !== viewed) {
+    viewed = pathname;
+    const client = await started;
+    client.capture("$pageview");
+  }
 };
 
 /** Sends an error the app's error boundary caught, while the setting is on. */

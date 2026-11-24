@@ -8,4 +8,5 @@ notify("Removed pdf from Cursor", {
   onClick: () => {
     document.title = "undone";
   },
+  track: "toast.undo",
 });

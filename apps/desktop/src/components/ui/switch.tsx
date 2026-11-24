@@ -7,6 +7,8 @@ import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { Switch as SwitchPrimitive } from "radix-ui";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const switchVariants = cva(
@@ -44,13 +46,15 @@ export type SwitchProps = Omit<
   OwnProps<typeof SwitchPrimitive.Root>,
   "checked" | "defaultChecked"
 > &
-  Pick<VariantProps<typeof switchVariants>, "size"> & {
+  Pick<VariantProps<typeof switchVariants>, "size"> &
+  Tracked & {
     /** Always set: a switch shows what the CLI reported, never a guess. */
     checked: boolean;
   };
 
-const Switch = ({ checked, size, ...props }: SwitchProps) => (
+const Switch = ({ checked, size, track, ...props }: SwitchProps) => (
   <SwitchPrimitive.Root
+    {...trackAttribute(track)}
     data-slot="switch"
     data-size={size ?? "default"}
     checked={checked}

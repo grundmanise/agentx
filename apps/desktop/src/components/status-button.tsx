@@ -8,6 +8,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 
 const dot = cva("rounded-shell-status-dot size-2 flex-none", {
   variants: {
@@ -44,8 +46,9 @@ export const StatusButton = ({
   busy = false,
   rim,
   onRimSettled = noop,
+  track,
   ...props
-}: {
+}: Tracked & {
   tone: StatusTone;
   icon?: ReactNode;
   label: string;
@@ -59,6 +62,7 @@ export const StatusButton = ({
     <TooltipTrigger asChild>
       <button
         type="button"
+        {...trackAttribute(track)}
         aria-busy={busy ? true : undefined}
         className="rounded-shell-status type-status text-shell-topbar-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-secondary h-status relative flex flex-none items-center gap-2 px-3"
         {...props}

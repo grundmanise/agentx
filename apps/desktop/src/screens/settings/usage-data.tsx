@@ -29,8 +29,10 @@ const SendUsageData = ({ checked }: { checked: boolean }) => {
           Send usage data
         </label>
         <span id={`${id}-line`} className="type-secondary text-text-muted">
-          Command names, exit codes and crash reports, never a path or a name.{" "}
+          Commands, screens, clicks by name and crash reports, never a path, a
+          name or anything you type.{" "}
           <Button
+            track="settings.usage-data-help"
             variant="link"
             size="inline"
             onClick={() => {
@@ -48,6 +50,7 @@ const SendUsageData = ({ checked }: { checked: boolean }) => {
           </span>
         )}
         <Switch
+          track="settings.usage-data"
           id={id}
           aria-describedby={`${id}-line`}
           title={checked ? "On · usage data is sent" : "Off · nothing is sent"}

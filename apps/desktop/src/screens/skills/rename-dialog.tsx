@@ -71,6 +71,7 @@ export const RenameButton = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(renameLabel(row));
   return (
     <Button
+      track="skill-detail.rename"
       variant="secondary"
       size="sm"
       disabled={pending}
@@ -171,11 +172,16 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
       </div>
       <DialogFooter>
         <DialogClose asChild>
-          <Button variant="ghost" disabled={pending}>
+          <Button
+            track="rename-dialog.cancel"
+            variant="ghost"
+            disabled={pending}
+          >
             Cancel
           </Button>
         </DialogClose>
         <Button
+          track="rename-dialog.confirm"
           type="submit"
           variant="primary"
           disabled={pending || !ready}

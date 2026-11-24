@@ -2,11 +2,13 @@ import { CommandKeyIcon } from "#/components/icons/command-key.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
 import { Kbd, KbdGroup } from "#/components/ui/kbd.tsx";
 import { isMac } from "#/lib/platform.ts";
+import { trackAttribute } from "#/lib/track.ts";
 
 /** The command field in the title bar: looks like a search input and opens the palette. */
 export const CommandField = ({ onOpen }: { onOpen: () => void }) => (
   <button
     type="button"
+    {...trackAttribute("top-bar.command-field")}
     onClick={onOpen}
     className="rounded-shell-command border-input-border bg-shell-content-bg type-command-field text-shell-topbar-text hover:border-input-border-focus hover:text-text-secondary h-command w-command flex items-center gap-2.5 border pr-1.5 pl-3.5"
   >
