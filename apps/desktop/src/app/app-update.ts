@@ -109,8 +109,13 @@ export const checkAppUpdateNow = async () => {
   useAppUpdateStore.setState({ checking: false });
 };
 
+// How many times the user turned Check for updates on or off, so a read that started before a
+// change does not undo it.
+let changes = 0;
+
 /** Turns the Check for updates preference on or off. A toast says when it could not be saved. */
 export const setCheckUpdates = async (on: boolean) => {
+  changes += 1;
   useAppUpdateStore.setState({ checkUpdates: on });
   try {
     await savePreferences({ check_updates: on });
@@ -120,9 +125,16 @@ export const setCheckUpdates = async (on: boolean) => {
   }
 };
 
-/** Reads the Check for updates preference into the store, and returns it. */
+/**
+ * Reads the Check for updates preference into the store, and returns it. When the user changed it
+ * while the read ran, the store keeps that change and this returns it.
+ */
 export const readCheckUpdates = async () => {
+  const before = changes;
   const { check_updates: on } = await readPreferences();
+  if (changes !== before) {
+    return useAppUpdateStore.getState().checkUpdates ?? on;
+  }
   useAppUpdateStore.setState({ checkUpdates: on });
   return on;
 };
@@ -180,7 +192,7 @@ export const installAppUpdate = async () => {
         },
       });
     });
-    await invoke("app_update_install");
+    await invoke("app_update_install", { version });
     useAppUpdateStore.setState({
       rim: { fraction: 1, state: "done" },
       update: { phase: "installed", version },

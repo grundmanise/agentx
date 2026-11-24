@@ -828,7 +828,7 @@ export class MockCli {
         return this.appUpdate;
       }
       case "app_update_install": {
-        return this.installAppUpdate();
+        return this.installAppUpdate(field(args, "version"));
       }
       case "app_restart": {
         this.restarts += 1;
@@ -842,9 +842,14 @@ export class MockCli {
     }
   }
 
-  private async installAppUpdate() {
+  private async installAppUpdate(version: unknown) {
     if (this.appUpdate === null) {
       throw new Error("no update was found to install");
+    }
+    if (this.appUpdate.version !== version) {
+      throw new Error(
+        `the update found is ${this.appUpdate.version}, not ${String(version)}`
+      );
     }
     if (this.holdingInstall && this.installEnded === undefined) {
       await nextDetail(this.installSignals, "end");

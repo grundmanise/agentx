@@ -17,8 +17,8 @@ const DEFAULTS: Preferences = {
   editor: { kind: "system" },
 };
 
-/** The preferences, each one missing or unreadable as its default. */
-export const readPreferences = async (): Promise<Preferences> => {
+/** The preferences as the file holds them, each one missing or unreadable as its default. */
+const readSaved = async (): Promise<Preferences> => {
   try {
     const saved = await invoke<Partial<Preferences>>("preferences_read");
     return { ...DEFAULTS, ...saved };
@@ -27,17 +27,27 @@ export const readPreferences = async (): Promise<Preferences> => {
   }
 };
 
-// The save going on, which the next one waits for, so two at once never write over each other's
-// change.
+// The save going on, which the next one and every read wait for, so two saves at once never
+// write over each other's change and a read never misses a change being saved.
 let saving: Promise<void> = Promise.resolve();
 
-const save = async (previous: Promise<void>, change: Partial<Preferences>) => {
+const settled = async (previous: Promise<void>) => {
   try {
     await previous;
   } catch {
     // A failed save leaves the next one to run; its caller heard of the failure.
   }
-  const preferences = { ...(await readPreferences()), ...change };
+};
+
+/** The preferences, once the saves going on are done; each missing or unreadable as its default. */
+export const readPreferences = async (): Promise<Preferences> => {
+  await settled(saving);
+  return await readSaved();
+};
+
+const save = async (previous: Promise<void>, change: Partial<Preferences>) => {
+  await settled(previous);
+  const preferences = { ...(await readSaved()), ...change };
   await invoke("preferences_write", { preferences });
 };
 
