@@ -77,7 +77,8 @@ test("each section shows what the store holds", async ({ cli, page }) => {
   await expect(thisMachine).toContainText(
     "Shown on skills you publish from here."
   );
-  await expect(thisMachine).toContainText(MACHINE_ID);
+  await expect(thisMachine.getByRole("term")).toHaveText("Machine id");
+  await expect(thisMachine.getByRole("definition")).toHaveText(MACHINE_ID);
   // Reports go to the hub: with none set, the switch takes no click and its line says why.
   await expect(reportSwitch(page)).toBeDisabled();
   await expect(reportSwitch(page)).toHaveAccessibleDescription(

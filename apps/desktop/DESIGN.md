@@ -1240,7 +1240,7 @@ A key or key combination such as `esc` or `⌘K` (`KbdGroup` and `Kbd`, `src/com
 The Settings page (`src/screens/settings`): the serif page title, then one section per area, a `shell.divider` hairline between sections and none above the first.
 
 - A section is a `settings.columns` grid with `settings.column-gap` and `settings.section-padding` above and below. The label column holds the label in `type.settings-label` `text.primary` and one line under it in `type.secondary` `text.muted`; the content column holds the rows, `settings.section-gap` apart.
-- Inputs are `input.height`. Paths and ids are `type.technical`, ids in `text.hint`.
+- Inputs are `input.height`. Paths and ids are `type.technical`, ids in `text.hint`. The machine id stands on one line after its name in `type.secondary` `text.muted`, 8 apart, under the label field.
 - A switch row (`src/screens/settings/switch-row.tsx`) is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch"). A setting that cannot change now keeps its row: the switch is disabled, and the line says what it needs first.
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.

@@ -1,7 +1,8 @@
 // This machine: the machine's label, which `config set label <value>` changes on Enter or when the
-// field loses focus with a changed value, and the machine id. Both come from the `machine` event,
-// which the store reads again after the label changes (src/store/loaders.ts). A refusal shows
-// under the field as one sentence-cased paragraph (`ProblemText`), the label sent keeping its case.
+// field loses focus with a changed value, and the machine id after its name. Both come from the
+// `machine` event, which the store reads again after the label changes (src/store/loaders.ts). A
+// refusal shows under the field as one sentence-cased paragraph (`ProblemText`), the label sent
+// keeping its case.
 // Under them, the Report inventory switch, bound to the `report_inventory` setting: it runs
 // `config set report_inventory true|false` and shows the setting as the CLI reports it. Reports
 // go to the hub, so without one the switch takes no click and its line says to add a hub first.
@@ -160,9 +161,12 @@ export const ThisMachineSection = () => {
     >
       {label !== undefined && <LabelField label={label} />}
       {id !== undefined && (
-        <p className="type-technical text-text-hint m-0" title="Machine id">
-          {id}
-        </p>
+        <dl className="m-0 flex min-w-0 items-baseline gap-2">
+          <dt className="type-secondary text-text-muted flex-none">
+            Machine id
+          </dt>
+          <dd className="type-technical text-text-hint m-0 break-all">{id}</dd>
+        </dl>
       )}
       {reports !== undefined && <ReportInventory checked={reports} hub={hub} />}
     </SettingsSection>
