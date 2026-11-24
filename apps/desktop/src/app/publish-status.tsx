@@ -51,7 +51,7 @@ import { useSkillRows } from "#/screens/skills/rows.ts";
 import { loadLabel } from "#/store/loaders.ts";
 import { usePending } from "#/store/runner.ts";
 import { useSettling } from "#/store/settle.ts";
-import { useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /**
  * The status, as the store says it: no hub, or with one, the skills to publish and
@@ -73,11 +73,11 @@ export const useSyncState = (): SyncState | undefined => {
   const rows = useSkillRows();
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);
-  const hub = useAppStore((s) => hubOf(s.sources));
-  const readOnly = useAppStore((s) => readOnlyHubReason(s.sources));
+  const hub = useAppStore((s) => hubOf(sourcesOf(s)));
+  const readOnly = useAppStore((s) => readOnlyHubReason(sourcesOf(s)));
   // The sources load once the checks pass: until their first answer, the status would guess.
   const loadingSources = usePending(loadLabel(["source", "list"]));
-  const noSources = useAppStore((s) => s.sources.length === 0);
+  const noSources = useAppStore((s) => sourcesOf(s).length === 0);
   if (inventory === undefined || (loadingSources && noSources)) {
     return undefined;
   }

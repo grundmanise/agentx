@@ -14,9 +14,8 @@ import type {
   InventoryEvent,
   MachineEvent,
   ReconcileEvent,
-  Settings,
   SkillFileEvent,
-  SourceEvent,
+  Source,
   SourceSkillEvent,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
@@ -98,10 +97,11 @@ export interface AppState {
    * until one did this session.
    */
   lastChecked: string | undefined;
-  settings: Settings | undefined;
-  /** This machine and where agentx keeps its files, from `machine`. */
-  machine: MachineEvent | undefined;
-  sources: SourceEvent[];
+  /**
+   * The store and its size on disk, from `machine`, read when Settings shows Storage: the
+   * inventory leaves them out, since every git write changes the size. Undefined before a read.
+   */
+  store: Pick<MachineEvent, "store" | "store_bytes"> | undefined;
   /** What `skill import` would take over, from its preview. */
   adoption: AdoptionEvent[];
   /** The controls whose command runs: label → run id. */
@@ -204,18 +204,22 @@ export const useAppStore = create<AppState>()(() => ({
   inventory: undefined,
   lastChecked: undefined,
   listings: {},
-  machine: undefined,
   pending: {},
   reconciles: [],
   refreshes: {},
   serveEnd: undefined,
   serveError: undefined,
-  settings: undefined,
   skillMds: {},
-  sources: [],
+  store: undefined,
   updateDiffs: {},
   updates: {},
 }));
+
+const noSources: Source[] = [];
+
+/** The sources of the settings, as the inventory lists them; none before the first inventory. */
+export const sourcesOf = (s: AppState): Source[] =>
+  s.inventory?.sources ?? noSources;
 
 let nextActivity = 1;
 

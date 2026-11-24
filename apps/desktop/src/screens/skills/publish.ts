@@ -25,7 +25,7 @@ import { currentRows } from "#/screens/skills/rows.ts";
 import { addSource, updateSkill } from "#/screens/skills/updates.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { afterSettled, runUntilSettled } from "#/store/settle.ts";
-import { addActivity, useAppStore } from "#/store/store.ts";
+import { addActivity, sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The label of Publish all, which shows as pending while its publish runs. */
 export const PUBLISH_ALL = "publish all";
@@ -306,7 +306,7 @@ export const publishAll = async (names: readonly string[]) => {
       useProgressStore.setState({ progress: undefined });
     }
   });
-  const hubSet = hubOf(useAppStore.getState().sources) !== undefined;
+  const hubSet = hubOf(sourcesOf(useAppStore.getState())) !== undefined;
   if (refusedForHub(outcome, hubSet)) {
     notifyNoHub();
     return;

@@ -470,7 +470,13 @@ func TestServeKeepsServingWhenTheStoreCannotBeRead(t *testing.T) {
 	p := h.serve(t, "--json")
 	first := p.next("inventory")
 	equal(t, "library at start", len(first["library"].([]any)), 1)
+	// The check at launch fetches the source, and the inventory after it
+	// lists the fetch: it is out once a refresh sent after the check is
+	// answered.
+	p.next("update_check")
+	p.passInventories = true
 	p.refreshed("idle")
+	p.passInventories = false
 
 	setHead("garbage\n")
 	p.refresh("broken")

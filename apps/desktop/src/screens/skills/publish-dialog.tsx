@@ -46,7 +46,7 @@ import {
 import { agentx } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
-import { addActivity, useAppStore } from "#/store/store.ts";
+import { addActivity, sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The label of the publish of `name`, for its pending state. */
 export const publishLabel = (name: string) => `publish ${name}`;
@@ -282,7 +282,7 @@ const PublishForm = ({
     reportPublish(
       row,
       outcome,
-      hubOf(useAppStore.getState().sources) !== undefined
+      hubOf(sourcesOf(useAppStore.getState())) !== undefined
     );
     onClose();
   };
@@ -394,7 +394,7 @@ export const PublishButton = ({
   // A hub skill cannot be published while the hub is read-only; a source's skill shows
   // Publish only while its source is writable.
   const readOnly = useAppStore((s) =>
-    row.kind === "hub" ? readOnlyHubReason(s.sources) : undefined
+    row.kind === "hub" ? readOnlyHubReason(sourcesOf(s)) : undefined
   );
   const openDialog = async () => {
     opening.current += 1;

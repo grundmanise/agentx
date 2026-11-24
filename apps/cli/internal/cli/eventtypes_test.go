@@ -198,13 +198,13 @@ var valueLists = []valueList{
 		{importSkillEvent{}, "Action"},
 	}},
 	{name: "MachineDerivation", values: []string{home.DerivedPlatform, home.DerivedRandom}, fields: []fieldRef{
-		{machineEvent{}, "Derivation"},
+		{scan.Machine{}, "Derivation"},
 	}},
 	{name: "UpdateCheckScope", values: []string{checkScopeAll, checkScopeHub}, fields: []fieldRef{
 		{updateCheckEvent{}, "Scope"},
 	}},
 	{name: "SourceAccess", values: []string{home.AccessWritable, home.AccessReadOnly, home.AccessUnknown}, fields: []fieldRef{
-		{sourceEvent{}, "Access"}, {home.Source{}, "Access"},
+		{scan.Source{}, "Access"}, {home.Source{}, "Access"},
 	}},
 	{name: "ProgressPhase", values: []string{
 		phaseFetch, phasePublish, phaseBlobs, phaseImport, phaseInstall, phasePlace, phaseRescan, phaseUpdate,
@@ -224,11 +224,12 @@ var typeOverrides = []typeOverride{
 // typeNames names the structs whose Go name would read wrongly in the app or
 // collide with another.
 var typeNames = map[reflect.Type]string{
-	reflect.TypeFor[scan.Skill]():   "SkillNode",
-	reflect.TypeFor[scan.Server]():  "McpServer",
-	reflect.TypeFor[home.Tool]():    "McpTool",
-	reflect.TypeFor[home.Source]():  "SettingsSource",
-	reflect.TypeFor[source.Match](): "SearchResult",
+	reflect.TypeFor[scan.Skill]():    "SkillNode",
+	reflect.TypeFor[scan.Server]():   "McpServer",
+	reflect.TypeFor[home.Tool]():     "McpTool",
+	reflect.TypeFor[home.Source]():   "SettingsSource",
+	reflect.TypeFor[scan.Settings](): "InventorySettings",
+	reflect.TypeFor[source.Match]():  "SearchResult",
 }
 
 // tsGen writes TypeScript declarations for Go structs by the rules

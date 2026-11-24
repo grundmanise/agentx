@@ -86,7 +86,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `name` | string | the client's display name |
 | `path` | string | the configuration directory of that client |
 
-`machine`, emitted by every `agentx machine` command:
+`machine`, emitted by every `agentx machine` command, and the `machine` field of the [inventory](#inventory):
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -99,7 +99,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `store` | string | the store, `store.git` in agentx home; absent until it is created (see [Store](#store)) |
 | `store_bytes` | integer | the size on disk of the store: the sizes of the regular files under `store.git` added up, read without a git process, a symlink counting nothing and never followed. A fork's worktree lies under `worktrees/` in agentx home, outside the repository, so what it holds is not counted. Absent with `store` |
 
-`source`, emitted by every `agentx source` command, one per source (see [Sources](#sources)), the hub included (see [Hub](#hub)), by `agentx skill add` for the source it installs from, by `agentx skill add` with no source for the upstream source of a skill it installs from the hub, when it adds one (see **Installing from the hub** under [Hub](#hub)), and by `agentx snapshot apply`, one per source of the settings it adds, the hub included (see **Applying** under [Snapshots](#snapshots)):
+`source`, emitted by every `agentx source` command, one per source (see [Sources](#sources)), the hub included (see [Hub](#hub)), by `agentx skill add` for the source it installs from, by `agentx skill add` with no source for the upstream source of a skill it installs from the hub, when it adds one (see **Installing from the hub** under [Hub](#hub)), and by `agentx snapshot apply`, one per source of the settings it adds, the hub included (see **Applying** under [Snapshots](#snapshots)). The `sources` field of the [inventory](#inventory) holds one per source, as `source list` emits it:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -551,7 +551,9 @@ The event:
 |---|---|---|
 | `instance_id` | string | fresh per process, or `AGENTX_INSTANCE_ID` |
 | `scan_counter` | integer | `1` for a one-shot scan |
-| `machine` | object | `id`, the machine id, and `label` |
+| `machine` | object | this machine: the [`machine`](#event-types) event `agentx machine` emits, without `type` and `schema_version`, and without `store` and `store_bytes`: every git write changes the size, and a scan reports no change of it |
+| `settings` | object | the machine settings no other field carries: `ignore_system_files` (see [Machine settings](#machine-settings)). The label is in `machine`, the sources in `sources`, the disabled and copy configurations in each configuration's `enabled` and `placement`, and `copy_mode` in each library placement's `mode` |
+| `sources` | array | one object per source of the settings, in their order, the hub included: the [`source`](#event-types) event `agentx source list` emits for it, every field and nothing else, without `type` and `schema_version`; `[]` when the settings hold none. Its `commit` and `skills` are left out when git cannot read the store, which a warning then says, unless the `library` warning already names the store |
 | `configurations` | array | the detected configurations, sorted by `id` |
 | `skills` | array | the skill nodes, sorted by `physical_id` |
 | `library` | array | one object per skill directory of the library, sorted by `name`: the [`library_skill`](#event-types) event `agentx skill list` emits for it, every field and nothing else, without `type` and `schema_version`, so its `kind` is `managed` or `unmanaged` and where a skill is published to and came from are its `source` and `upstream` fields; `[]` when the library holds no skill, or when git cannot read the store, which a warning then says (see below). A managed skill whose import branch the store holds but whose library directory is gone is not listed, and so has no `state` and no `drift`: it is named in `warnings` instead, one per skill, as `agentx skill list` names it (see **Listing** under [Skills](#skills)) |

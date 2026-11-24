@@ -18,8 +18,10 @@
 // The app checks the machine on launch (src/startup/startup.ts), so the mock starts out with a
 // passing launch: `version` and `doctor` replies, and a serve child that writes its first inventory
 // when it starts, which the first command does. Once the checks pass the store loads its slices
-// (src/store/loaders.ts), so the mock answers `config list`, `source list`, `skill import` and
-// `machine` too. A test replaces any of them with register() and onServeStart().
+// (src/store/loaders.ts), so the mock answers the adoption preview, `skill import`, too. This
+// machine, its settings and its sources come in the inventory: serveEmit fills in this machine,
+// the default settings and no sources unless the test's inventory says otherwise. A test replaces
+// any reply with register() and onServeStart().
 //
 // The mock also answers the native open dialog of Tauri's dialog plugin with the path a test gives
 // answerOpenDialog(), or with null, a Cancel, until one does, and records every Tauri call in `calls`.
@@ -153,15 +155,20 @@ export const passingDoctor: InlineEvent[] = [
 ];
 
 /** The reads the store runs once the checks pass (src/store/loaders.ts), with --json. */
-export const loadLines = [
-  ["config", "list", "--json"],
-  ["source", "list", "--json"],
-  ["skill", "import", "--json"],
-  ["machine", "--json"],
-];
+export const loadLines = [["skill", "import", "--json"]];
 
 /** The library on the machine a passing launch reports. */
 export const libraryPath = "/home/me/.agents/skills";
+
+/** This machine, as the inventory of a passing launch lists it. */
+export const thisMachine = {
+  derivation: "random",
+  home: "/home/me/.agentx",
+  id: "machine-1",
+  label: machineLabel,
+  library: libraryPath,
+  settings_file: "/home/me/.agentx/settings.json",
+} as const;
 
 /** The serve log file on the machine a passing launch reports. */
 export const serveLogPath = "/home/me/.local/state/agentx/logs/serve.log";
@@ -379,20 +386,9 @@ export class MockCli {
       events: [{ cli_version: cliVersion, type: "version" }],
     });
     this.register(["doctor"], { events: passingDoctor });
-    this.register(["config", "list"], { events: [{ type: "settings" }] });
-    this.register(["source", "list"]);
     this.register(["skill", "import"]);
     this.register(["machine"], {
-      events: [
-        {
-          home: "/home/me/.agentx",
-          id: "machine-1",
-          label: machineLabel,
-          library: libraryPath,
-          settings_file: "/home/me/.agentx/settings.json",
-          type: "machine",
-        },
-      ],
+      events: [{ ...thisMachine, type: "machine" }],
     });
   }
 
@@ -559,10 +555,12 @@ export class MockCli {
                     installs: [],
                     instance_id: `instance-${childId}`,
                     library: [],
-                    machine: { id: "machine-1", label: machineLabel },
+                    machine: thisMachine,
                     mcp_servers: [],
                     plugins: [],
+                    settings: { ignore_system_files: true },
                     skills: [],
+                    sources: [],
                     warnings: [],
                     ...event,
                   }

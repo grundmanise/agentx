@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import type { SourceEvent } from "#/cli/events.gen.ts";
+import type { Source } from "#/cli/events.gen.ts";
 import { loadListing } from "#/store/loaders.ts";
 
 /**
@@ -8,7 +8,7 @@ import { loadListing } from "#/store/loaders.ts";
  * after each fetch, which `source list` reports as a new last fetch: `source list` gives no count
  * for a shared source. A source never fetched has no listing to read.
  */
-export const useFetchedListings = (sources: SourceEvent[]) => {
+export const useFetchedListings = (sources: Source[]) => {
   // The fetch each listing was read for: source id → last_fetched.
   const read = useRef(new Map<string, string>());
   useEffect(() => {

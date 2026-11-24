@@ -203,7 +203,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	fork := "--work-tree=" + filepath.Dir(edited) + " "
-	count := func(what string, calls []string) {
+	count := func(what string, calls []string, want string) {
 		t.Helper()
 		var ran []string
 		for _, call := range calls {
@@ -226,17 +226,18 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 			}
 		}
 		sort.Strings(ran)
-		equal(t, what+": git runs", strings.Join(ran, " "), "add add config for-each-ref log read-tree read-tree write-tree write-tree")
+		equal(t, what+": git runs", strings.Join(ran, " "), want)
 	}
 	ghost := "ghost is managed in the store but the library holds no skill directory for it;" +
 		" run 'agentx skill add <source> --name ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
 	list := h.mustRun("skill", "list")
 	equal(t, "skill list's warning", list.stderr, "warning: "+ghost+"\n")
 	contains(t, "skill list", list.stdout, "modified, update available, merge pending  ")
-	count("skill list", calls())
+	count("skill list", calls(), "add add config for-each-ref log read-tree read-tree write-tree write-tree")
 	before := len(calls())
 	inventory := h.inventory(t)
-	count("the inventory", calls()[before:])
+	// The inventory's sources cost it one for-each-ref more, whatever their number.
+	count("the inventory", calls()[before:], "add add config for-each-ref for-each-ref log read-tree read-tree write-tree write-tree")
 	states := map[string]string{}
 	for _, e := range inventory["library"].([]any) {
 		entry := e.(map[string]any)

@@ -439,7 +439,7 @@ export const FilesSection = ({
 }) => {
   const request = filesRequestOf(row);
   const version = filesVersionOf(row);
-  const library = useAppStore((s) => s.machine?.library);
+  const library = useAppStore((s) => s.inventory?.machine.library);
   const locations = locationsOf(row, configurations, library);
   const read = useAppStore((s) => s.files[row.key]);
   const [open, setOpen] = useState<string[]>([SKILL_MD]);

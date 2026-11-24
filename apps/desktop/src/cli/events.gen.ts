@@ -121,6 +121,29 @@ export interface Settings {
   copy_mode: Record<string, string[]>;
 }
 
+export interface Machine {
+  id: string;
+  label: string;
+  derivation: MachineDerivation;
+  home: string;
+  settings_file: string;
+  library: string;
+}
+
+export interface Source {
+  id: string;
+  url: string;
+  alias?: string;
+  hub?: boolean;
+  pin?: string;
+  access?: SourceAccess;
+  access_checked?: string;
+  default_branch?: string;
+  last_fetched?: string;
+  commit?: string;
+  skills?: number;
+}
+
 export interface LibraryEntry {
   name: string;
   kind: SkillKind;
@@ -182,6 +205,8 @@ export interface Inventory {
   instance_id: string;
   scan_counter: number;
   machine: Machine;
+  settings: InventorySettings;
+  sources: Source[];
   configurations: Configuration[];
   skills: SkillNode[];
   library: LibraryEntry[];
@@ -224,9 +249,8 @@ export interface LibraryPlacement {
   kind: PlacementKind;
 }
 
-export interface Machine {
-  id: string;
-  label: string;
+export interface InventorySettings {
+  ignore_system_files: boolean;
 }
 
 export interface Configuration {
@@ -374,36 +398,19 @@ export interface ConfigRemovalEvent {
   path: string;
 }
 
-export interface MachineEvent {
+export interface MachineEvent extends Machine {
   type: "machine";
   schema_version: number;
-  id: string;
-  label: string;
-  derivation: MachineDerivation;
-  home: string;
-  settings_file: string;
-  library: string;
   store?: string;
   store_bytes?: number;
 }
 
-export interface SourceEvent {
+export interface SourceEvent extends Source {
   type: "source";
   schema_version: number;
-  id: string;
-  url: string;
-  alias?: string;
-  hub?: boolean;
-  pin?: string;
-  access?: SourceAccess;
-  access_checked?: string;
   access_reason?: string;
-  default_branch?: string;
   subpath?: string;
-  last_fetched?: string;
-  commit?: string;
   previous_commit?: string;
-  skills?: number;
 }
 
 export interface SourceSkillEvent {

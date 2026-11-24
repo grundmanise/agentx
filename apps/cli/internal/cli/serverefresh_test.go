@@ -129,6 +129,7 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	calls := countingGit(t, h)
 	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
+	p.passInventories = true // the adds and fetches change the sources the inventory lists
 	p.next("inventory")
 	// The check at launch fetches both sources and stamps both, the one no
 	// skill came from included, in its one write.
@@ -202,6 +203,7 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 
 	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
+	p.passInventories = true // the adds and fetches change the sources the inventory lists
 	p.next("inventory")
 	h.awaitWrite(t, before) // the check at launch, which fetched one
 	one.skill("skills/delta", "delta", "A skill added upstream", nil)

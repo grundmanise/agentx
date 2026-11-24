@@ -306,6 +306,10 @@ type serveProc struct {
 	exit   int           // read only after done
 	stderr lockedBuffer
 	cancel context.CancelFunc
+	// passInventories has response pass over inventory events too, for a
+	// test about something else while sources are added or fetched beside
+	// serve: each changes the inventory's sources.
+	passInventories bool
 }
 
 // lockedBuffer is a bytes.Buffer that one goroutine can write while another
@@ -445,7 +449,7 @@ func (p *serveProc) response(id any) (result, rpcError jsonEvent) {
 			if err := json.Unmarshal([]byte(line), &m); err != nil {
 				p.t.Fatalf("not a JSON message: %q: %v", line, err)
 			}
-			if m["jsonrpc"] == nil && (m["type"] == "reconcile" || m["type"] == "update_check") {
+			if m["jsonrpc"] == nil && (m["type"] == "reconcile" || m["type"] == "update_check" || p.passInventories && m["type"] == "inventory") {
 				continue
 			}
 			if m["jsonrpc"] != "2.0" || m["id"] != id {

@@ -10,6 +10,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -418,7 +419,7 @@ func (inv *invocation) removeHub(ctx context.Context, entry home.Source) error {
 	}); err != nil {
 		return mutationFailure(err)
 	}
-	inv.out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: entry.URL})
+	inv.out.emit(sourceEvent{event: newEvent("source"), Source: scan.Source{ID: id, URL: entry.URL}})
 	u := shownURL(entry.URL)
 	inv.summary = "the hub " + u + " is no longer set; your skills on this machine are as they were"
 	inv.out.done("the hub " + inv.out.paint(heading, u) + " is no longer set; your skills on this machine are as they were")

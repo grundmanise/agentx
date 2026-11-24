@@ -27,7 +27,7 @@ import type { HintRule } from "#/lib/app-hint.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { hubSource } from "#/screens/settings/source-rows.ts";
 import { agentx, usePending } from "#/store/runner.ts";
-import { useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** The pending label of `source add <url> --hub` from this section. */
@@ -288,7 +288,7 @@ const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
 
 /** The Hub section, from the Sources slice. */
 export const HubSection = () => {
-  const hub = useAppStore((s) => hubSource(s.sources));
+  const hub = useAppStore((s) => hubSource(sourcesOf(s)));
   return (
     <SettingsSection
       title="Hub"

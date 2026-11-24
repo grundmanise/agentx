@@ -102,8 +102,8 @@ const LabelField = ({ label }: { label: string }) => {
 };
 
 export const ThisMachineSection = () => {
-  const label = useAppStore((s) => s.machine?.label);
-  const id = useAppStore((s) => s.machine?.id);
+  const label = useAppStore((s) => s.inventory?.machine.label);
+  const id = useAppStore((s) => s.inventory?.machine.id);
   return (
     <SettingsSection
       title="This machine"

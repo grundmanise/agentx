@@ -4,7 +4,7 @@ import type {
   ConflictEvent,
   Configuration,
   LibraryPlacement,
-  SourceEvent,
+  Source,
 } from "#/cli/events.gen.ts";
 import { adoptArgs, displacedPlacement } from "#/screens/skills/placements.ts";
 import {
@@ -72,7 +72,7 @@ type Conflicts = Record<string, ConflictEvent>;
 /** What the banners read besides the row: the store's sources, conflicts and the skill's diff. */
 export interface BannerFacts {
   /** The added sources, from `source list`: the hub, and each source's access. */
-  sources: SourceEvent[];
+  sources: Source[];
   /** How many files `skill diff <name>` reports changed; undefined until it was read. */
   changedFiles?: number;
   /** The store's last `conflict` event of each skill, for the files a pending merge left. */
@@ -89,11 +89,11 @@ interface BannerRule {
 }
 
 /** The hub, the one source added with `--hub`, when one is set. */
-export const hubOf = (sources: SourceEvent[]) =>
+export const hubOf = (sources: Source[]) =>
   sources.find((s) => s.hub === true);
 
 /** Why Publish does nothing for a hub skill while the hub is read-only, as the last add or fetch of it found. */
-export const readOnlyHubReason = (sources: SourceEvent[]) => {
+export const readOnlyHubReason = (sources: Source[]) => {
   const hub = hubOf(sources);
   return hub?.access === "read-only"
     ? `${shortSource(hub.url)} is read-only`

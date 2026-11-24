@@ -63,7 +63,7 @@ const IgnoreSystemFiles = ({ checked }: { checked: boolean }) => {
 };
 
 export const ComparingEditsSection = () => {
-  const checked = useAppStore((s) => s.settings?.ignore_system_files);
+  const checked = useAppStore((s) => s.inventory?.settings.ignore_system_files);
   return (
     <SettingsSection
       title="Comparing edits"
