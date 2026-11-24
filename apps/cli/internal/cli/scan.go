@@ -89,8 +89,9 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 	return inventory, err
 }
 
-// inventory is the scan that is emitted, by agentx scan and by
-// every scan of agentx serve: the scan above, with the library listed as
+// inventory is the scan that is emitted, by agentx scan and, on a machine
+// that does not report its inventory, by every scan of agentx serve, see
+// serveChecks.scan: the scan above, with the library listed as
 // agentx skill list lists it and the installs as installs.json holds
 // them. The lineage it takes is read under the same
 // shared lock as the settings and the filesystem, in one for-each-ref, so an

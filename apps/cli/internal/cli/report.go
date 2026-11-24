@@ -296,6 +296,12 @@ type reportBranch struct {
 // name is the branch's short name, as every line names it.
 func (b reportBranch) name() string { return gitx.ReportBranch(b.id) }
 
+// written is the line that says a report was pushed to the branch, which
+// holds commit now.
+func (b reportBranch) written(commit string) string {
+	return "wrote this machine's report to " + b.name() + " on the hub at " + short(commit)
+}
+
 // readReportBranch reads the report branch of the machine id on the hub,
 // refusing, exit code 6, a machine with no hub set, see hubBranches.
 func (inv *invocation) readReportBranch(ctx context.Context, id string) (reportBranch, error) {
@@ -313,19 +319,28 @@ func (inv *invocation) readReportBranch(ctx context.Context, id string) (reportB
 }
 
 // hubBranches reads what the hub holds of the branches the patterns name,
-// see gitx.BranchTips, and brings the store's remote-tracking refs in step
-// with it: one ls-remote, then one fetch of the branches whose tip is not
-// the one their remote-tracking ref holds, which is none when nothing
-// moved, and the deletion of the remote-tracking ref of every report
-// branch the hub no longer holds. What it returns is each branch the hub
-// holds, by its short name, with the commit now in the store and when it
-// was committed. A hub git cannot reach is exit code 3. Nothing here runs
-// under the lock of agentx home.
+// see gitx.BranchTips, in one ls-remote, and brings the store's
+// remote-tracking refs in step with it, see heldBranches. A hub git cannot
+// reach is exit code 3. Nothing here runs under the lock of agentx home.
 func (inv *invocation) hubBranches(ctx context.Context, gitDir, remote, url string, patterns ...string) (map[string]gitx.Tracked, error) {
 	tips, err := inv.git.BranchTips(ctx, gitDir, remote, patterns...)
 	if err != nil {
 		return nil, unreachableRemote(url, err)
 	}
+	return inv.heldBranches(ctx, gitDir, remote, url, tips, nil, patterns...)
+}
+
+// heldBranches brings the store's remote-tracking refs in step with tips,
+// what one ls-remote said the hub holds of the branches the patterns name:
+// one fetch of the branches whose tip is not the one their remote-tracking
+// ref holds, which is none when nothing moved, and the deletion of the
+// remote-tracking ref of every report branch the hub no longer holds. What
+// it returns is each branch the hub holds, by its short name, with the
+// commit now in the store and when it was committed. before, when it is
+// not nil, runs ahead of the fetch, and only when there is one: the serve
+// child writes the hub's remote there, which a command has done before it
+// asks. A fetch that fails is exit code 3.
+func (inv *invocation) heldBranches(ctx context.Context, gitDir, remote, url string, tips map[string]string, before func() error, patterns ...string) (map[string]gitx.Tracked, error) {
 	tracked, err := inv.git.TrackedBranches(ctx, gitDir, remote, patterns...)
 	if err != nil {
 		return nil, storeFailure(err)
@@ -343,6 +358,11 @@ func (inv *invocation) hubBranches(ctx context.Context, gitDir, remote, url stri
 	}
 	slices.Sort(moved)
 	slices.Sort(gone)
+	if len(moved) > 0 && before != nil {
+		if err := before(); err != nil {
+			return nil, storeFailure(err)
+		}
+	}
 	if err := inv.git.FetchBranches(ctx, gitDir, remote, moved); err != nil {
 		return nil, unreachableRemote(url, err)
 	}
@@ -428,7 +448,8 @@ func (inv *invocation) writeReport(ctx context.Context, b reportBranch, data []b
 	return "", false, unreachableRemote(b.url, errors.New(reason))
 }
 
-// machineReportEvent reports what agentx machine report left on the hub.
+// machineReportEvent reports what a report of this machine left on the hub:
+// one agentx machine report made, or one serve pushed.
 type machineReportEvent struct {
 	event
 	Machine string `json:"machine"` // this machine's id
@@ -436,12 +457,18 @@ type machineReportEvent struct {
 	Pushed  bool   `json:"pushed"`  // false when the branch held this report already
 }
 
+// noReportUnlisted is why a machine whose library could not be listed,
+// since git cannot read the store, writes no report, exit code 8: a report
+// with an empty library would say the machine holds no skill of its own.
+// unlisted is the store's failure.
+func noReportUnlisted(unlisted *failure) error {
+	return fail(exitStore, "no report was written, since the library could not be listed: "+unlisted.message, unlisted.hint)
+}
+
 // machineReport is agentx machine report: it scans this machine and writes
 // its report to the hub. The hub is required, and read before the scan, so
 // that a machine with none is refused before anything is read. A machine
-// whose library cannot be listed, since git cannot read the store, writes
-// no report, exit code 8: a report with an empty library would say the
-// machine holds no skill of its own.
+// whose library cannot be listed writes no report, see noReportUnlisted.
 func (inv *invocation) machineReport(ctx context.Context) error {
 	if _, _, ok, err := inv.hubSource(); err != nil || !ok {
 		if err == nil {
@@ -454,7 +481,7 @@ func (inv *invocation) machineReport(ctx context.Context) error {
 		return err
 	}
 	if unlisted != nil {
-		return fail(exitStore, "no report was written, since the library could not be listed: "+unlisted.message, unlisted.hint)
+		return noReportUnlisted(unlisted)
 	}
 	data, err := reportDocument(inventory)
 	if err != nil {
@@ -469,10 +496,9 @@ func (inv *invocation) machineReport(ctx context.Context) error {
 		return err
 	}
 	inv.out.emit(machineReportEvent{event: newEvent("machine_report"), Machine: b.id, Commit: commit, Pushed: pushed})
-	where := b.name() + " on the hub"
-	done := "wrote this machine's report to " + where + " at " + short(commit)
+	done := b.written(commit)
 	if !pushed {
-		done = where + " holds this report already, at " + short(commit) + ", so nothing was pushed"
+		done = b.name() + " on the hub holds this report already, at " + short(commit) + ", so nothing was pushed"
 	}
 	inv.out.done(done)
 	inv.summary = done

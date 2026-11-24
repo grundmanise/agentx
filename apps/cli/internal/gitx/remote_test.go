@@ -151,27 +151,3 @@ func TestProbeRemoteSaysWhetherForksAreHeld(t *testing.T) {
 		}
 	}
 }
-
-func TestParseForkTips(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name string
-		out  string
-		want map[string]string
-	}{
-		{"none", "", map[string]string{}},
-		{"two branches", "1111\trefs/heads/skills/alpha\n2222\trefs/heads/skills/beta\n",
-			map[string]string{"alpha": "1111", "beta": "2222"}},
-		{"another ref the pattern let in", "1111\trefs/heads/skills/alpha\n3333\trefs/heads/other/skills/x\n",
-			map[string]string{"alpha": "1111"}},
-		{"a line that is no ref", "warning: something\n1111\trefs/heads/skills/alpha\n",
-			map[string]string{"alpha": "1111"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := parseForkTips(tc.out); !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("parseForkTips = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}

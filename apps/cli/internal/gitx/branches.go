@@ -3,6 +3,7 @@ package gitx
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,23 @@ func (r *Runner) BranchTips(ctx context.Context, gitDir, remote string, patterns
 		args = append(args, "refs/heads/"+p)
 	}
 	out, err := r.run(ctx, call{}, args...)
+	if err != nil {
+		return nil, err
+	}
+	return parseBranchTips(out, patterns), nil
+}
+
+// TipsAt is BranchTips of the repository at url, asked where no repository
+// is, as ProbeRemote asks: it needs no remote set up in the store, and no
+// configuration but the user's applies. The check the serve child repeats
+// asks so, for the fork branches and every machine's branch in its one
+// ls-remote.
+func (r *Runner) TipsAt(ctx context.Context, url string, patterns ...string) (map[string]string, error) {
+	args := append(networkConfig(), "ls-remote", "--refs", url)
+	for _, p := range patterns {
+		args = append(args, "refs/heads/"+p)
+	}
+	out, err := r.run(ctx, call{dir: os.TempDir()}, args...)
 	if err != nil {
 		return nil, err
 	}

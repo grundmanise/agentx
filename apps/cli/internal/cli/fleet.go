@@ -48,6 +48,13 @@ type fleet struct {
 	unread              map[string]string
 }
 
+// machineBranches are the patterns that name every branch of the hub a
+// machine of the fleet is read from: each report branch, and the cloud
+// machine's.
+func machineBranches() []string {
+	return []string{gitx.ReportBranches, gitx.MachineBranch(cloudMachine)}
+}
+
 // readFleet reads the hub's machines, refusing, exit code 6, a machine
 // with no hub set. A hub git cannot reach is exit code 3. A branch a view
 // cannot use is left out and warned of, and fails nothing: one machine's
@@ -57,21 +64,28 @@ func (inv *invocation) readFleet(ctx context.Context) (fleet, error) {
 	if err != nil {
 		return fleet{}, err
 	}
-	f := fleet{gitDir: gitDir, remote: remote, url: entry.URL, machines: []fleetMachine{}, unread: map[string]string{}}
-	cloud := gitx.MachineBranch(cloudMachine)
-	held, err := inv.hubBranches(ctx, gitDir, remote, entry.URL, gitx.ReportBranches, cloud)
+	held, err := inv.hubBranches(ctx, gitDir, remote, entry.URL, machineBranches()...)
 	if err != nil {
 		return fleet{}, err
 	}
+	return inv.fleetOf(ctx, gitDir, remote, entry.URL, held)
+}
+
+// fleetOf is the fleet the machine branches of the hub make, each read at
+// the commit its remote-tracking ref holds, see held. It reaches no remote.
+func (inv *invocation) fleetOf(ctx context.Context, gitDir, remote, url string, held map[string]gitx.Tracked) (fleet, error) {
+	f := fleet{gitDir: gitDir, remote: remote, url: url, machines: []fleetMachine{}, unread: map[string]string{}}
+	cloud := gitx.MachineBranch(cloudMachine)
 	for _, branch := range slices.Sorted(maps.Keys(held)) {
 		tip := held[branch]
 		var m fleetMachine
 		var why string
+		var err error
 		switch {
 		case tip.Committed.IsZero():
 			why = branch + " on the hub is skipped: it holds no commit"
 		case branch == cloud:
-			m, why, err = inv.cloudFleetMachine(ctx, machineBranch{gitDir: gitDir, remote: remote, url: entry.URL, id: cloudMachine, tip: tip.Commit})
+			m, why, err = inv.cloudFleetMachine(ctx, machineBranch{gitDir: gitDir, remote: remote, url: url, id: cloudMachine, tip: tip.Commit})
 		default:
 			m, why, err = inv.reportedMachine(ctx, gitDir, branch, tip.Commit)
 		}

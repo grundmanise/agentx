@@ -429,6 +429,14 @@ func (p *serveProc) refresh(id string) {
 	p.request(id, "refresh", nil)
 }
 
+// besideChecks reports whether e is an event serve emits on its own beside
+// what most tests are about: a reconcile event it starts with, the fleet
+// event of a check that found the hub's machines changed, or the
+// update_check that ends a check, whenever that check ends.
+func besideChecks(e jsonEvent) bool {
+	return e["type"] == "reconcile" || e["type"] == "fleet" || e["type"] == "update_check"
+}
+
 // response reads the response to the request with id, which must be the
 // next message but for the events next passes over. It returns its result
 // or its error.
@@ -445,7 +453,7 @@ func (p *serveProc) response(id any) (result, rpcError jsonEvent) {
 			if err := json.Unmarshal([]byte(line), &m); err != nil {
 				p.t.Fatalf("not a JSON message: %q: %v", line, err)
 			}
-			if m["jsonrpc"] == nil && (m["type"] == "reconcile" || m["type"] == "update_check") {
+			if m["jsonrpc"] == nil && besideChecks(m) {
 				continue
 			}
 			if m["jsonrpc"] != "2.0" || m["id"] != id {
@@ -518,8 +526,7 @@ func (p *serveProc) answered(id any) jsonEvent {
 }
 
 // next returns the next stdout event, which must be of type typ. The
-// reconcile events a serve starts with, and the update_check that ends
-// each of its update checks, whenever that check ends, are passed over
+// events serve emits beside its checks, see besideChecks, are passed over
 // unless typ asks for one: most tests are about what comes around them.
 func (p *serveProc) next(typ string) jsonEvent {
 	p.t.Helper()
@@ -538,7 +545,7 @@ func (p *serveProc) next(typ string) jsonEvent {
 			if e["schema_version"] != float64(schemaVersion) {
 				p.t.Errorf("event %v: schema_version = %v, want %d", e, e["schema_version"], schemaVersion)
 			}
-			if (e["type"] == "reconcile" || e["type"] == "update_check") && e["type"] != typ {
+			if besideChecks(e) && e["type"] != typ {
 				continue
 			}
 			if e["type"] != typ {
