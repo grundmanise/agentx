@@ -15,6 +15,7 @@ import {
 } from "./fixtures/skills.ts";
 import {
   lettersHubDiffs,
+  lettersUpdateDiffs,
   pdfUpdateDiffs,
   updateDiffsOf,
 } from "./fixtures/update-diffs.ts";
@@ -275,6 +276,37 @@ test.describe("the What's new sheet", () => {
     await expect(sheet(page)).not.toContainText(
       "Published from another machine"
     );
+  });
+
+  test("reads the changes again when a hub update moved the base of an update from upstream", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf-letters");
+    await seeChanges(page, "pdf-letters").click();
+    await expect(block(page, "examples.md")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet(page)).toHaveCount(0);
+
+    // The hub update took in a newer version of the original, and the same candidate stays: its
+    // update now changes SKILL.md alone.
+    cli.register(["skill", "diff", "pdf-letters", "--update"], {
+      events: lettersUpdateDiffs.slice(0, 1),
+    });
+    const moved = updatesLibrary.map((entry) =>
+      entry.name === "pdf-letters"
+        ? {
+            ...entry,
+            base_hash: "h-pdf-between",
+            upstream_commit: "5e4d3c2b1a0f9",
+          }
+        : entry
+    );
+    await cli.serveEmit([{ ...inventoryOf(moved), scan_counter: 2 }]);
+    await seeChanges(page, "pdf-letters").click();
+    await expect(block(page, "SKILL.md")).toBeVisible();
+    await expect(block(page, "examples.md")).toHaveCount(0);
+    expect(updateDiffs(cli)).toHaveLength(2);
   });
 
   test("says when the changes could not be read, in the sheet", async ({

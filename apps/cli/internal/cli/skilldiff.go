@@ -209,7 +209,8 @@ func noUpdateRefusal(name string) error {
 // merging it brings in, and not how it differs from the fork's own
 // commits. Each diff event names its step. A fork with neither is refused
 // as a managed skill with no update is, or, with no upstream, as one that
-// has none to update from.
+// has none to update from. A fork whose hub branch shares no commit with
+// its own is refused as its update is, see hubAheadOf.
 func (inv *invocation) forkDiffUpdate(ctx context.Context, gitDir string, rec lineage.Record) error {
 	name := rec.Name
 	tip, base, err := inv.hubAheadOf(ctx, gitDir, rec)
@@ -257,7 +258,10 @@ func (inv *invocation) forkDiffUpdate(ctx context.Context, gitDir string, rec li
 // of the hub left its remote-tracking branch, and the commit the two share,
 // when that branch holds commits the fork's lacks, see hubAhead: what
 // the hub step of the fork's update takes in. Both are "" when it holds
-// none, the hub holds no branch of the fork, or no hub is set.
+// none, the hub holds no branch of the fork, or no hub is set. A branch
+// that shares no commit with the fork's is the refusal the hub step
+// gives, see judgePull, since the update stops there and applies nothing
+// from upstream.
 func (inv *invocation) hubAheadOf(ctx context.Context, gitDir string, rec lineage.Record) (tip, base string, err error) {
 	_, remote, set, err := inv.hubSource()
 	if err != nil || !set {
@@ -276,7 +280,10 @@ func (inv *invocation) hubAheadOf(ctx context.Context, gitDir string, rec lineag
 		return "", "", storeFailure(err)
 	}
 	base = strings.TrimSpace(out)
-	if status != 0 || base == tip { // no commit in common, which an update refuses, or nothing the fork lacks
+	switch {
+	case status != 0:
+		return "", "", unrelatedHubRefusal(rec)
+	case base == tip: // nothing the fork lacks
 		return "", "", nil
 	}
 	return tip, base, nil

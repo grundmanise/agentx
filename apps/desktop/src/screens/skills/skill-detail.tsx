@@ -180,12 +180,11 @@ export const SkillDetail = ({
     const read = s.updateDiffs[row.name];
     return read?.candidate === update ? read?.diffs : undefined;
   });
-  const base = row.entry?.base_hash ?? "";
   useEffect(() => {
     if (update !== undefined) {
-      void loadUpdateDiff(row.name, update, base);
+      void loadUpdateDiff(row.name, update);
     }
-  }, [row.name, update, base]);
+  }, [row.name, update]);
   const banner = bannerFor(row, configurations, {
     changedFiles,
     conflicts,

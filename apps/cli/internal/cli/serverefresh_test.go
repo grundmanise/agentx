@@ -385,9 +385,9 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 // holds what b's remote-tracking branches hold, each hub check is one
 // ls-remote, fetches nothing and writes nothing, and ends in an
 // update_check of scope hub that did not fetch. Once machine a
-// publishes alpha, the next hub check fetches and ends in an update_check
-// that fetched, and the next inventory says what the hub holds of alpha
-// that b lacks. With the hub out of
+// publishes alpha, the next hub check fetches, and the inventory that
+// says what the hub holds of alpha that b lacks goes out before that
+// check's update_check, which fetched. With the hub out of
 // reach, the checks warn once, however many fail, each ending in an
 // update_check that is not ok, until one reaches it again.
 func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
@@ -427,16 +427,15 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	a.mustRun("skill", "publish", "alpha")
 	ahead, passed := p.nextEntry("alpha", func(e jsonEvent) bool { return e["hub_ahead"] != nil })
 	equal(t, "what the hub holds of alpha", ahead["hub_ahead"].(map[string]any)["commit"], published)
-	// The rescan the check's write sets off can come before its update_check.
-	var moved jsonEvent
+	// The check that fetched waits for the rescan it asks for, so the
+	// inventory that carries what it wrote comes before its update_check,
+	// also on a machine serve cannot watch.
 	for _, e := range passed {
 		if e["type"] == "update_check" && e["scope"] == checkScopeHub && e["fetched"] == true {
-			moved = e
+			t.Error("the update_check that fetched came before the inventory that carries what it wrote")
 		}
 	}
-	if moved == nil {
-		moved = checked(checkScopeHub)
-	}
+	moved := checked(checkScopeHub)
 	equal(t, "a remote another machine published to: ok", moved["ok"], true)
 	equal(t, "a remote another machine published to: fetched", moved["fetched"], true)
 

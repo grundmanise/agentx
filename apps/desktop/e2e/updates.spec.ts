@@ -616,6 +616,41 @@ test.describe("Check updates", () => {
     await expect(dialogRow(page, "pdf")).toBeVisible();
     await expect(dialogRow(page, "review")).toBeVisible();
   });
+
+  test("exit 3 with no update found: opens the dialog with the update the inventory still offers", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf", ["pdf"]);
+    // The source of pdf is the one it could not reach, so the check gives no event for pdf.
+    cli.register(["skill", "check-updates"], {
+      events: [
+        {
+          current: 1,
+          phase: "fetch",
+          subject: ACME,
+          total: 1,
+          type: "progress",
+        },
+        {
+          code: "source",
+          hint: "check that you can reach the source",
+          message: `could not check ${ACME}: git fetch: could not resolve host; not checked: pdf`,
+          type: "error",
+        },
+      ],
+      exitCode: 3,
+    });
+    await checkButton(page).click();
+    await rescan(cli, ["pdf"]);
+    await expect(
+      toasts(page).getByText(
+        "Couldn't reach acme/skills. Verify that you can reach the source.",
+        { exact: true }
+      )
+    ).toBeVisible();
+    await expect(dialogRow(page, "pdf")).toBeVisible();
+  });
 });
 
 test.describe("the Update skills dialog", () => {

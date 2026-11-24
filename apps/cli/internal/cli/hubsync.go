@@ -172,8 +172,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	case err != nil:
 		return "", nil, failureOf(storeFailure(err))
 	case status != 0:
-		return "", nil, refuse(exitRefused, sanitised(name)+" and the hub's "+strings.TrimPrefix(rec.Ref, "refs/heads/")+" share no commit, so they cannot be merged",
-			"run '"+skillCommand("history", name)+"' to read the history of yours")
+		return "", nil, unrelatedHubRefusal(rec)
 	case base == theirs:
 		return pullUpToDate, nil, nil
 	}
@@ -271,6 +270,14 @@ func sameForkRefusal(rec lineage.Record, there lineage.ForkLineage, doing string
 		return refuse(exitRefused, "the history of "+name+" here or of the hub's "+branch+" records no fork id, so nothing tells that they are one skill and "+name+" cannot be "+doing, rename)
 	}
 	return nil
+}
+
+// unrelatedHubRefusal is the refusal of the hub step of the fork rec when
+// the hub's branch of it shares no commit with its own, which cannot be
+// merged. skill diff --update gives it too, see hubAheadOf.
+func unrelatedHubRefusal(rec lineage.Record) *failure {
+	return refuse(exitRefused, sanitised(rec.Name)+" and the hub's "+strings.TrimPrefix(rec.Ref, "refs/heads/")+" share no commit, so they cannot be merged",
+		"run '"+skillCommand("history", rec.Name)+"' to read the history of yours")
 }
 
 // hubMergeSubject is the subject of the commit that merges what the

@@ -394,7 +394,7 @@ For what each code means, see [Exit codes](/cli/output#exit-codes). For `agentx 
 | Code | Cause | What to do |
 |---|---|---|
 | 1 | `skill remove` is given both `--remote` and `--from`; `skill rename` is given the skill's own name; the description is more than one line, holds a control character or is longer than 1024 bytes; `skill diff` is given both `--update` and `--commit`, or an empty `--commit`. | Fix the command line. |
-| 3 | `skill remove --remote` cannot reach the hub, or the remote refused to delete the skill's branch. `skill update` cannot reach the hub for a skill with no upstream. | Check your network and credentials, then run the command again. |
+| 3 | `skill remove --remote` cannot reach the hub, or the remote refused to delete the skill's branch. `skill update` cannot reach the hub for a skill with no upstream, or for a skill the hub held changes for when this machine last fetched it. | Check your network and credentials, then run the command again. |
 | 4 | The skill you fork, rename or remove has a merge pending, or `skill update` left a merge for you to [resolve](#resolve-a-conflict). | Finish the merge, or give it up with `agentx skill update <name> --abort`. |
 | 5 | agentx cannot find the skill you named in your library or in a plugin. For `skill remove --remote`, the hub does not hold it either. `skill place` finds no `SKILL.md`. `skill update` names a forked skill whose upstream source you removed. | Check the name. Add a `SKILL.md`, or add the source again. |
 | 6 | The name breaks the [naming rule](#choose-a-name), or a skill or folder already has it. | Choose another name. |

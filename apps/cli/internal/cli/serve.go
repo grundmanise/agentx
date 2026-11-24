@@ -293,7 +293,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		}
 	}
 	dirs, trees := inv.watchedDirs()
-	checks := &serveChecks{inv: inv}
+	checks := &serveChecks{inv: inv, requests: methods.requests}
 	return serve.Run(ctx, serve.Options{
 		Scan:         inv.serveScan,
 		Index:        inv.sourceIndex,
@@ -332,7 +332,8 @@ func (inv *invocation) serveFailed(err error) {
 // serve runs one at a time and makes each report on its loop's goroutine,
 // so failing needs no lock.
 type serveChecks struct {
-	inv *invocation
+	inv      *invocation
+	requests *serve.Requests // what asks the loop for the rescan after a check that wrote, see rescan
 	// failing is set while the checks fail to reach the hub, or
 	// fail as a whole: the check that starts failing warns, and those after
 	// it stay quiet until one succeeds again.
@@ -351,13 +352,15 @@ type serveChecks struct {
 // warning for each thing the check could not check, and its update_check. A
 // machine with no source runs no git at all, and neither does one with no
 // store; a source an import wrote stays a source not fetched,
-// store or not, until source add adds it. The rescan its write of
-// the version file sets off brings the candidates and markers it wrote
+// store or not, until source add adds it. The rescan it asks for once it
+// fetched, see rescan, brings the candidates and markers it wrote
 // into the next inventory, with what the hub holds that a fork lacks, and
 // every source ref it moved into the source index.
 func (c *serveChecks) startup(ctx context.Context) func() {
 	rep, err := c.inv.checkUpdates(ctx, true, "")
 	at := time.Now()
+	fetched := err == nil && len(rep.refreshed) > 0
+	c.rescan(ctx, fetched)
 	return func() {
 		if err == nil && rep.idle {
 			return // nothing to check, and nothing was
@@ -365,7 +368,17 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 		c.inv.reportServeCheck(rep, err)
 		ok := err == nil && !rep.hubFailed
 		c.failing = !ok
-		c.inv.reportUpdateCheck(checkScopeAll, at, ok, err == nil && len(rep.refreshed) > 0)
+		c.inv.reportUpdateCheck(checkScopeAll, at, ok, fetched)
+	}
+}
+
+// rescan asks the loop for a scan once a check that fetched has written,
+// and waits for it, so that the inventory that carries what the check wrote
+// goes out before its update_check, also when serve cannot watch for
+// changes. A scan that fails is reported as every rescan's is.
+func (c *serveChecks) rescan(ctx context.Context, fetched bool) {
+	if fetched && c.requests != nil {
+		_, _ = c.requests.Refresh(ctx)
 	}
 }
 
@@ -381,8 +394,9 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 // it, outside the lock, the comparison of hub skills placed here with
 // what it holds, and one write of its last_fetched, under the lock, waited
 // for as the check at start waits. Its report is that check's: its
-// warnings, then its update_check, and the rescan its write sets off brings
-// what the hub holds that a fork lacks into the next inventory. A failure is a
+// warnings, then its update_check, and the rescan it asks for once it
+// fetched, see rescan, brings what the hub holds that a fork lacks into the
+// next inventory. A failure is a
 // warning prefixed "update check: " when the checks start failing, and
 // none while they go on failing, see serveChecks.failing.
 func (c *serveChecks) hub(ctx context.Context) func() {
@@ -401,6 +415,8 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 		rep, err = inv.checkHubRemote(ctx, entry.URL, remote)
 	}
 	at := time.Now()
+	fetched := err == nil && rep.hubFetched
+	c.rescan(ctx, fetched)
 	return func() {
 		if err == nil && rep.idle {
 			return
@@ -410,7 +426,7 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 			inv.reportServeCheck(rep, err)
 		}
 		c.failing = !ok
-		inv.reportUpdateCheck(checkScopeHub, at, ok, err == nil && rep.hubFetched)
+		inv.reportUpdateCheck(checkScopeHub, at, ok, fetched)
 	}
 }
 

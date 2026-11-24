@@ -234,8 +234,9 @@ export const openUpdateDialog = () => {
  * then one source fetched at a time, in room it keeps from the start. When it found an update, the
  * toast goes and the Update skills dialog opens once the inventory that follows the check offers
  * it; else the toast says that all skills are up to date. A source it could not reach (exit 3) is
- * named in the toast, with a line of the app's own, and the updates it found elsewhere are listed
- * all the same, in the dialog.
+ * named in the toast, with a line of the app's own, and the updates the inventory offers are listed
+ * all the same, in the dialog: those it found elsewhere and those found before for the skills of
+ * that source.
  */
 export const checkUpdates = async () => {
   if (checkRunning()) {
@@ -267,10 +268,12 @@ export const checkUpdates = async () => {
         offered(found) === 0 ? "All skills are up to date" : undefined,
     }
   );
-  if (
-    (exitCode !== EXIT_CODES.ok && exitCode !== EXIT_CODES.source) ||
-    offered(events) === 0
-  ) {
+  if (exitCode !== EXIT_CODES.ok && exitCode !== EXIT_CODES.source) {
+    return;
+  }
+  // A source it could not reach (exit 3) gave no event for its skills, so their updates found
+  // before count only in the inventory: it decides below.
+  if (exitCode === EXIT_CODES.ok && offered(events) === 0) {
     return;
   }
   // Exit 3 keeps its toast, which names the source the check could not reach.

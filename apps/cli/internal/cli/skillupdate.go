@@ -364,7 +364,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 	if err := r.fetchHub(ctx, records); err != nil {
 		return err
 	}
-	names, libs := r.selection(records)
+	names, libs := r.selection(ctx, records)
 	r.selected = len(names)
 	pulled, dropped, err := r.hubStep(ctx, names, records)
 	if err != nil {
@@ -689,11 +689,11 @@ func (inv *invocation) finishJournals(ctx context.Context) error {
 // whose merge is pending, see hubStep: one the remote is behind is
 // judged up to date there, with nothing said, see afterHubStep. A
 // remote git could not reach selects, of those, the forks with no upstream
-// it held at the last fetch, which then fail, and those with a merge
-// pending. A skill with no candidate has nothing to update, an
-// upstream-removed one included, since the check that marks a skill deletes
-// its candidate.
-func (r *updateRun) selection(records map[string]lineage.Record) ([]string, map[string]scan.LibrarySkill) {
+// it held at the last fetch and those it held new commits of then, see
+// hubAhead, which then fail, and those with a merge pending. A skill with
+// no candidate has nothing to update, an upstream-removed one included,
+// since the check that marks a skill deletes its candidate.
+func (r *updateRun) selection(ctx context.Context, records map[string]lineage.Record) ([]string, map[string]scan.LibrarySkill) {
 	libs := map[string]scan.LibrarySkill{}
 	if !r.all {
 		for _, n := range r.names {
@@ -707,7 +707,7 @@ func (r *updateRun) selection(records map[string]lineage.Record) ([]string, map[
 	for n, rec := range records {
 		_, managed := rec.AtCandidate()
 		_, fork := rec.ForkCandidate()
-		if managed && rec.Kind == lineage.KindManaged || fork || r.published(n, rec) {
+		if managed && rec.Kind == lineage.KindManaged || fork || r.published(ctx, n, rec) {
 			names = append(names, n)
 		}
 	}
@@ -722,9 +722,9 @@ func (r *updateRun) selection(records map[string]lineage.Record) ([]string, map[
 // fork placed on this machine whose merge is pending, or that the hub, as
 // the run fetched it, holds another tip of. When git could not fetch it,
 // nothing is taken in from the tips the fetch before left, and a fork it
-// held is selected only when it has no upstream, for the hub step to
-// fail it, see hubStep.
-func (r *updateRun) published(name string, rec lineage.Record) bool {
+// held is selected only when it has no upstream, or when it held commits
+// the fork lacks, see hubAhead, for the hub step to fail it, see hubStep.
+func (r *updateRun) published(ctx context.Context, name string, rec lineage.Record) bool {
 	if r.hub == nil || rec.Kind != lineage.KindFork || !r.inv.forkPlaced(name) {
 		return false
 	}
@@ -733,7 +733,7 @@ func (r *updateRun) published(name string, rec lineage.Record) bool {
 	}
 	tip := r.hub.tips[name]
 	if r.hub.err != nil {
-		return tip != "" && rec.Fork != nil && rec.Fork.NoUpstream
+		return tip != "" && rec.Fork != nil && rec.Fork.NoUpstream || r.inv.hubAhead(ctx, rec, tip)
 	}
 	return tip != "" && tip != rec.Commit
 }

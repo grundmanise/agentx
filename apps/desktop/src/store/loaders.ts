@@ -424,15 +424,11 @@ export const updateDiffLabel = (name: string) => `update diff ${name}`;
 /**
  * Loads what the update of `name` changes: `skill diff <name> --update`, what `skill update <name>`
  * would apply, for a hub skill what the hub holds, else its upstream's update. `candidate` names
- * the versions the inventory offers (`updateKey`): the same update is read once, however often
- * its changes are shown, and a newer one reads again. A failed read is kept with the CLI's
- * message, and tried again the next time the changes are shown.
+ * the versions the inventory offers, the base among them (`updateKey`): the same update is read
+ * once, however often its changes are shown, and one of other versions reads again. A failed read
+ * is kept with the CLI's message, and tried again the next time the changes are shown.
  */
-export const loadUpdateDiff = async (
-  name: string,
-  candidate: string,
-  base: string
-) => {
+export const loadUpdateDiff = async (name: string, candidate: string) => {
   if (updateDiffCandidates.get(name) === candidate) {
     return;
   }
@@ -443,12 +439,8 @@ export const loadUpdateDiff = async (
       ? s
       : { updateDiffs: rest };
   });
-  // The changes kept from an earlier launch from this base to this candidate are this update's.
-  const kept = await cachedRead<DiffEvent[]>(
-    "update-diff",
-    name,
-    `${base}:${candidate}`
-  );
+  // The changes kept from an earlier launch of these versions are this update's.
+  const kept = await cachedRead<DiffEvent[]>("update-diff", name, candidate);
   if (updateDiffCandidates.get(name) !== candidate) {
     return;
   }
@@ -471,7 +463,7 @@ export const loadUpdateDiff = async (
     useAppStore.setState((s) => ({
       updateDiffs: { ...s.updateDiffs, [name]: { candidate, diffs } },
     }));
-    void keepRead("update-diff", name, `${base}:${candidate}`, diffs);
+    void keepRead("update-diff", name, candidate, diffs);
     return;
   }
   const error = outcome.events.find((e) => e.type === "error");

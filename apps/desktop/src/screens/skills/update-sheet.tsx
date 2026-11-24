@@ -93,7 +93,6 @@ const Patch = ({ path, patch }: { path: string; patch: string }) => {
  */
 const Changes = ({ update }: { update: UpdateOffer }) => {
   const key = updateKey(update);
-  const base = update.entry.base_hash ?? "";
   const stored = useAppStore((s) => s.updateDiffs[update.name]);
   // A read of other versions is not what this update changes.
   const read = stored?.candidate === key ? stored : undefined;
@@ -111,8 +110,8 @@ const Changes = ({ update }: { update: UpdateOffer }) => {
   }
 
   useEffect(() => {
-    void loadUpdateDiff(update.name, key, base);
-  }, [update.name, key, base]);
+    void loadUpdateDiff(update.name, key);
+  }, [update.name, key]);
 
   if (read === undefined) {
     return <LoadingPane label={READING} />;

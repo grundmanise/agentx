@@ -554,6 +554,71 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "alpha's candidate, left as it was", b.ref(lineage.CandidateRef("alpha")), sixth)
 }
 
+// TestSkillUpdateOfEverySkillFailsAForkTheHubWasAheadOf: b's alpha has
+// an upstream and no update from it, and the hub held commits of it that b
+// lacks at the last fetch. With the hub out of reach, the update of every
+// skill selects alpha all the same, since its hub step comes first, and
+// fails it, exit 3, as the update of alpha alone does.
+func TestSkillUpdateOfEverySkillFailsAForkTheHubWasAheadOf(t *testing.T) {
+	t.Parallel()
+	a, b, _, remote := twoHomes(t)
+	a.commitFork("alpha", forkNotes("one", "one, a"))
+	a.mustRun("skill", "publish", "alpha")
+	b.mustRun("skill", "check-updates")
+	equal(t, "alpha's candidate", b.ref(lineage.CandidateRef("alpha")), "")
+	before := b.ref(lineage.ForkRef("alpha"))
+	if err := os.Rename(remote, remote+".gone"); err != nil {
+		t.Fatal(err)
+	}
+	out := b.run("--json", "skill", "update", "--all")
+	equal(t, "the update of every skill: exit", out.exit, 3)
+	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "cannot reach the hub")
+	equal(t, "alpha's tip, left as it was", b.ref(lineage.ForkRef("alpha")), before)
+}
+
+// TestSkillDiffUpdateRefusesAHubBranchThatSharesNoCommit: the hub's
+// alpha is the same fork as b's by its id, but its history shares no
+// commit with b's, and upstream has a newer version. skill update refuses
+// the hub step, exit 6, and applies nothing from upstream, so skill diff
+// --update gives the same refusal and shows no update from upstream.
+func TestSkillDiffUpdateRefusesAHubBranchThatSharesNoCommit(t *testing.T) {
+	t.Parallel()
+	_, b, s, remote := twoHomes(t)
+	// The hub's history of alpha written again from another root commit,
+	// with the same trees and messages, the fork id among them.
+	const branch = "refs/heads/skills/alpha"
+	again := map[string]string{}
+	var tip string
+	for _, c := range strings.Fields(remoteGit(t, b, remote, "rev-list", "--reverse", "--topo-order", branch)) {
+		args := []string{"-c", "user.name=Hub", "-c", "user.email=hub@example.com", "commit-tree", c + "^{tree}"}
+		parents := strings.Fields(remoteGit(t, b, remote, "log", "-1", "--format=%P", c))
+		for _, p := range parents {
+			args = append(args, "-p", again[p])
+		}
+		message := remoteGit(t, b, remote, "log", "-1", "--format=%B", c)
+		if len(parents) == 0 {
+			message = "Another history\n\n" + message
+		}
+		tip = remoteGit(t, b, remote, append(args, "-m", message)...)
+		again[c] = tip
+	}
+	remoteGit(t, b, remote, "update-ref", branch, tip)
+	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
+	s.commit("second version")
+	b.mustRun("skill", "check-updates")
+	if b.ref(lineage.CandidateRef("alpha")) == "" {
+		t.Fatal("the check found no update of alpha from upstream")
+	}
+	const refused = "alpha and the hub's skills/alpha share no commit, so they cannot be merged"
+	out := b.run("--json", "skill", "diff", "alpha", "--update")
+	equal(t, "the diff: exit", out.exit, 6)
+	equal(t, "its error", b.one(out.stdout, "error")["message"], refused)
+	equal(t, "its diffs", len(b.eventsOfType(out.stdout, "diff")), 0)
+	out = b.run("--json", "skill", "update", "alpha")
+	equal(t, "the update: exit", out.exit, 6)
+	equal(t, "its error", b.one(out.stdout, "error")["message"], refused)
+}
+
 // TestSameForkRefusal is when a remote branch is the same fork as the local
 // branch of its name: by their fork ids alone.
 func TestSameForkRefusal(t *testing.T) {

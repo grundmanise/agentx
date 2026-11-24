@@ -189,11 +189,16 @@ export const updateVersions = (update: UpdateOffer): string => {
 };
 
 /**
- * What names the versions of an update, for the read of what it changes: a read of another one
- * is not this update's.
+ * What names the versions of an update, for the read of what it changes: the base version, which a
+ * hub update can move under an update from upstream, and the newer one. A read of another one is
+ * not this update's.
  */
 export const updateKey = (update: UpdateOffer) =>
-  `${update.hub?.commit ?? ""}:${update.upstream?.upstream_commit ?? ""}`;
+  [
+    update.entry.base_hash ?? "",
+    update.hub?.commit ?? "",
+    update.upstream?.upstream_commit ?? "",
+  ].join(":");
 
 /** The tool an adoption record names, as the product calls it. */
 export const toolName = (adoption: AdoptionEvent): string => {
