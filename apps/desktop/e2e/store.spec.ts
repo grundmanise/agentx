@@ -1,8 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import type { LibraryEntry } from "#/cli/events.gen.ts";
-
-import { library } from "./fixtures/skills.ts";
+import { pdfUpdate } from "./fixtures/updates.ts";
 import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -148,23 +146,26 @@ test("ignores an old child's events after a restart", async ({ cli, page }) => {
   await expect(value(page, "Freshness")).toHaveText("fresh");
 });
 
-test("shows serve's warnings in the activity list, not its debug lines or an old child's", async ({
+/** The activity log's lines whose text holds `text`, read through the store harness. */
+const logLines = (page: Page, text: string) =>
+  page
+    .getByRole("list", { exact: true, name: "Activity log" })
+    .getByRole("listitem")
+    .filter({ hasText: text });
+
+test("logs serve's warnings in its own words, not its debug lines or an old child's", async ({
   cli,
   page,
 }) => {
   await launch(cli, page);
   const warning =
     "update check: https://github.com/me/skills: git fetch: could not resolve host; not checked: pdf";
-  const activity = page
-    .getByRole("list", { name: "Activity" })
-    .getByRole("listitem");
 
   await cli.serveLog([
     { level: "debug", message: "update check: 1 source" },
     { level: "warn", message: warning },
   ]);
-  await expect(activity).toHaveText([warning]);
-  await expect(activity).toHaveAttribute("data-tone", "attention");
+  await expect(logLines(page, "update check:")).toHaveText([warning]);
 
   await cli.serveExit(null);
   cli.serveRestart(2);
@@ -172,60 +173,50 @@ test("shows serve's warnings in the activity list, not its debug lines or an old
   await expect(value(page, "Instance")).toHaveText("instance-2");
   await cli.serveLog([{ level: "warn", message: "reconcile: pdf" }], 1);
   // The old child's warning was handled before serveLog returned: it added nothing.
-  await expect(activity).toHaveText([warning]);
+  await expect(logLines(page, "reconcile: pdf")).toHaveCount(0);
+  await expect(logLines(page, "update check:")).toHaveText([warning]);
 });
 
-/** An inventory with this counter and this library. */
-const inventory = (counter: number, entries: LibraryEntry[]) => ({
-  ...firstInventory(),
-  library: entries,
-  scan_counter: counter,
-});
-
-test("tells each skill whose state or drift changed from one inventory to the next", async ({
+test("logs a failed scan and update check in serve's words, and nothing of what serve noticed change", async ({
   cli,
   page,
 }) => {
   await launch(cli, page);
-  // The Skills screen reads the files of the skill it shows.
-  for (const name of ["pdf", "scratch"]) {
-    cli.register(["skill", "files", name], {});
-    cli.register(["skill", "diff", name], {});
-  }
-  const [pdf, scratch] = ["pdf", "scratch"].map((name) => {
-    const entry = library.find((e) => e.name === name);
-    if (entry === undefined) {
-      throw new Error(`no ${name} in the library fixture`);
-    }
-    return entry;
-  });
-  const activity = page
-    .getByRole("list", { name: "Activity" })
-    .getByRole("listitem");
-  // Skills that arrive in the library are no change of state.
-  await cli.serveEmit([inventory(2, [pdf])]);
-  await expect(value(page, "Counter")).toHaveText("2");
-  await cli.serveEmit([
-    inventory(3, [{ ...pdf, drift: ["displaced", "missing"] }, scratch]),
-  ]);
-  await expect(value(page, "Counter")).toHaveText("3");
-  await cli.serveEmit([
-    inventory(4, [{ ...pdf, state: "modified" }]),
-    inventory(5, [{ ...pdf, state: "modified" }, scratch]),
-  ]);
-  await expect(value(page, "Counter")).toHaveText("5");
-  await expect(activity).toHaveText([
-    "pdf: modified",
-    "pdf: displaced, missing",
-  ]);
-  await expect(activity.first()).toHaveAttribute("data-tone", "attention");
+  const id = await refresh(cli, page);
 
-  // A new instance's first inventory is where every state starts.
-  await cli.serveExit(null);
-  cli.serveRestart(2);
-  await cli.serveEmit([inventory(1, [pdf, scratch])]);
-  await expect(value(page, "Instance")).toHaveText("instance-2");
-  await expect(activity).toHaveCount(2);
+  await cli.serveEmit([
+    { ...firstInventory(["codex"]), scan_counter: 2 },
+    { kind: "managed", name: "pdf", outcome: "repaired", type: "reconcile" },
+    pdfUpdate,
+    {
+      checked_at: "2026-11-24T09:00:00Z",
+      fetched: false,
+      instance_id: "instance-1",
+      ok: false,
+      scope: "hub",
+      type: "update_check",
+    },
+    {
+      error: "skills folder changed during the scan",
+      ok: false,
+      request_id: id,
+      type: "refresh_complete",
+    },
+  ]);
+  await expect(value(page, "Freshness")).toHaveText("failed");
+  // Serve's lines, the commands left out. The update check says nothing in words, so its line is
+  // the event; no line says the inventory, the repair or the update.
+  const serveLines = page
+    .getByRole("list", { exact: true, name: "Activity log" })
+    .getByRole("listitem")
+    .filter({ hasNotText: /^agentx /u });
+  await expect(serveLines).toHaveText([
+    "background scan started",
+    /^update_check \{.*"ok":false/u,
+    "skills folder changed during the scan",
+  ]);
+  await expect(serveLines.nth(1)).toHaveAttribute("data-tone", "failed");
+  await expect(serveLines.nth(2)).toHaveAttribute("data-tone", "failed");
 });
 
 test("ignores the inventory a one-shot writes, and keeps its outcome", async ({
@@ -241,8 +232,10 @@ test("ignores the inventory a one-shot writes, and keeps its outcome", async ({
     window.store.run(["scan"], { label: "scan", success: "Scanned" });
   });
   await expect(
-    page.getByRole("list", { name: "Activity" }).getByRole("listitem")
-  ).toHaveText(["Scanned"]);
+    page
+      .getByRole("region", { name: /^Notifications/u })
+      .getByText("Scanned", { exact: true })
+  ).toBeVisible();
   await expect(value(page, "Counter")).toHaveText("1");
   await expect(value(page, "Agents")).toHaveText("2");
 });

@@ -46,7 +46,7 @@ import {
 import { agentx } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
-import { addActivity, useAppStore } from "#/store/store.ts";
+import { useAppStore } from "#/store/store.ts";
 
 /** The label of the publish of `name`, for its pending state. */
 export const publishLabel = (name: string) => `publish ${name}`;
@@ -114,12 +114,11 @@ const reportPublish = (row: SkillRow, outcome: Outcome, hubSet: boolean) => {
   const result = event?.type === "publish" ? event.outcome : undefined;
   if (result === "behind" || result === "moved") {
     // A skill of a source is published to its source, which holds the newer version.
-    const text = changedElsewhere(
-      name,
-      row.kind === "source" ? row.entry?.source : undefined
-    );
     notify(
-      text,
+      changedElsewhere(
+        name,
+        row.kind === "source" ? row.entry?.source : undefined
+      ),
       {
         label: "Update",
         onClick: () => {
@@ -128,23 +127,15 @@ const reportPublish = (row: SkillRow, outcome: Outcome, hubSet: boolean) => {
       },
       { kind: "warning" }
     );
-    // A refused publish is in the activity list already, in the CLI's words.
-    if (outcome.exitCode === EXIT_CODES.ok) {
-      addActivity("attention", text);
-    }
     return;
   }
   // Nothing was sent: the skill already matches the published version, which is not a success.
   if (outcome.exitCode === EXIT_CODES.ok && result === "up to date") {
-    const text = alreadyPublished(name);
-    notify(text);
-    addActivity("attention", text);
+    notify(alreadyPublished(name));
     return;
   }
   if (outcome.exitCode === EXIT_CODES.ok) {
-    const text = `Published ${name} skill`;
-    notifySuccess(text);
-    addActivity("success", text);
+    notifySuccess(`Published ${name} skill`);
     return;
   }
   if (refusedForHub(outcome, hubSet)) {

@@ -58,8 +58,6 @@ const pane = (page: Page, name: string) =>
     .getByRole("article", { name });
 const chip = (article: Locator, name: string) =>
   article.getByRole("switch", { exact: true, name });
-const activity = (page: Page) =>
-  page.getByRole("list", { name: "Activity" }).getByRole("listitem");
 
 /** Opens a skill on the fixture machine: a library skill by its name, any other by its row's key. */
 const openSkill = async (
@@ -177,7 +175,6 @@ test.describe("chips", () => {
     page,
   }) => {
     await openSkill(cli, page, "pdf");
-    await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
     const warning =
       "/home/me/.claude/skills/pdf is a directory agentx did not place there and was left as it is; claude-code still sees it";
     cli.register(["skill", "remove", "pdf", "--from", "claude-code"], {
@@ -202,21 +199,16 @@ test.describe("chips", () => {
     await expect(toast).not.toContainText("still sees it");
     await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
     await expect(toast.getByRole("button", { name: "Dismiss" })).toBeVisible();
-    await expect(activity(page)).toHaveText([
-      "pdf skill wasn't removed from Claude Code",
-    ]);
-    await expect(activity(page)).toHaveAttribute("data-tone", "attention");
     expect(later(cli)).toEqual([
       ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
     ]);
   });
 
-  test("a skipped placement: says it wasn't added, with the warning and no Undo, logged as attention", async ({
+  test("a skipped placement: says it wasn't added, with the warning and no Undo", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "pdf");
-    await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
     const warning =
       "/home/me/.windsurf/skills/pdf is not this skill and was left as it is; no placement was made for windsurf";
     cli.register(["skill", "place", "pdf", "--to", "windsurf"], {
@@ -239,10 +231,6 @@ test.describe("chips", () => {
     );
     await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
     await expect(toast.getByRole("button", { name: "Dismiss" })).toBeVisible();
-    await expect(activity(page)).toHaveText([
-      "pdf skill wasn't added to Windsurf",
-    ]);
-    await expect(activity(page)).toHaveAttribute("data-tone", "attention");
     expect(later(cli)).toEqual([
       ["skill", "place", "pdf", "--to", "windsurf", "--json"],
     ]);

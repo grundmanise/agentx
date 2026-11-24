@@ -168,8 +168,9 @@ test("a command that succeeded keeps its line only, and its debug lines when it 
   const verbose = record(0, [], debug);
   // Its last 50.
   expect(verbose.output).toHaveLength(50);
-  expect(verbose.output[0]).toBe("debug: git 10");
-  expect(verbose.output.at(-1)).toBe("debug: git 59");
+  // Each as the CLI wrote it: its message, with no level before it.
+  expect(verbose.output[0]).toBe("git 10");
+  expect(verbose.output.at(-1)).toBe("git 59");
 });
 
 test("a line is cut after its credentials are replaced", () => {

@@ -1,6 +1,6 @@
 // The activity log: the last lines of what the app ran, a click's commands and the app's own, and
-// of what the background scan reported. A failure keeps its last lines. The palette and Settings
-// open it.
+// of what went wrong with the background scan. A failure keeps its last lines, in the CLI's own
+// words. The palette and Settings open it.
 import type { Page } from "@playwright/test";
 
 import { expect, serveLogPath, test } from "./harness/cli.ts";
@@ -74,16 +74,21 @@ test("a check that succeeds is one line, and one that fails keeps its last lines
   // Oldest first: what the launch ran by itself, the check that passed, then the failed one.
   await expect(lines(page, "agentx doctor")).toHaveCount(1);
   await expect(lines(page, "background scan started")).toHaveCount(1);
-  await expect(lines(page, "inventory updated: ")).toHaveCount(1);
+  // Serve's inventory is no line: the log has commands and what went wrong.
+  await expect(lines(page, "inventory")).toHaveCount(0);
   const checks = lines(page, "agentx skill check-updates");
   await expect(checks).toHaveCount(2);
   await expect(checks.nth(1)).toContainText("FAILED exit 3");
   await expect(log(page).getByText("1 failed")).toBeVisible();
 
-  // Under the failed check, its warning and its error, with the credentials of a URL replaced.
-  await expect(
-    lines(page, "warn: the fetch of acme/skills timed out")
-  ).toHaveCount(1);
+  // Under the failed check, its warning, its error and its hint, as the CLI wrote them, with the
+  // credentials of a URL replaced.
+  await expect(lines(page, "the fetch of acme/skills timed out")).toHaveText([
+    "the fetch of acme/skills timed out",
+  ]);
+  await expect(lines(page, "check your network")).toHaveText([
+    "check your network",
+  ]);
   await expect(
     lines(
       page,
@@ -98,7 +103,7 @@ test("a check that succeeds is one line, and one that fails keeps its last lines
     async () => await navigator.clipboard.readText()
   );
   expect(copied).toContain("agentx skill check-updates  FAILED exit 3");
-  expect(copied).toContain("    warn: the fetch of acme/skills timed out");
+  expect(copied).toContain("    the fetch of acme/skills timed out");
   expect(copied).not.toContain("s3cret-token");
 });
 
@@ -135,8 +140,8 @@ test("Settings opens the log, and Debug output runs later commands and serve wit
     1
   );
   await expect(
-    lines(page, "debug: git fetch --quiet src-1: exit status 0")
-  ).toHaveCount(1);
+    lines(page, "git fetch --quiet src-1: exit status 0")
+  ).toHaveText(["git fetch --quiet src-1: exit status 0"]);
 });
 
 test("Open serve.log shows the serve log file in the file manager", async ({

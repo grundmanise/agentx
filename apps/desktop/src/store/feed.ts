@@ -2,15 +2,13 @@
 // (docs/spec/inventory-ordering.md). Only the active child counts: a later child replaces it, and
 // the events of a child that ended or was replaced are dropped. Within one serve instance an
 // inventory applies only when its scan counter goes up; a new instance applies whatever it sends
-// first, since counters are never compared across instances. What serve notices goes to the
-// activity list: a library skill whose state or drift changed from one inventory of an instance to
-// the next, its reconcile and update events, and the warnings it logs on stderr. Its
-// `update_check` events say when the last update check ended, which the title bar shows. The
-// activity log (src/store/activity-log.ts) records the same, and each start, inventory, scan and
-// exit of the active child.
+// first, since counters are never compared across instances. Its `update_check` events say when
+// the last update check ended, which the title bar shows. The activity log
+// (src/store/activity-log.ts) records what went wrong with serve, in the CLI's own words: a scan
+// or update check that failed, an `error` event and a warning it logged, and each start and exit
+// of the active child.
 import type {
   InventoryEvent,
-  LibraryEntry,
   LogEvent,
   SearchResult,
 } from "#/cli/events.gen.ts";
@@ -22,15 +20,14 @@ import type {
   ServeExit,
   ServeLine,
 } from "#/cli/transport.ts";
-import { plural } from "#/lib/plural.ts";
 import {
+  eventLine,
   formatDuration,
   lastStderr,
   logBackground,
-  logLine,
   serveLogLine,
 } from "#/store/activity-log.ts";
-import { addActivity, useAppStore } from "#/store/store.ts";
+import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** The serve child whose events count; 0 before the first one starts. */
@@ -198,41 +195,15 @@ export const retryRefresh = async () => {
   await refresh();
 };
 
-/** "pdf: displaced, missing", or "pdf: modified" when it is in no drift, as the activity list says it. */
-const driftText = (entry: LibraryEntry) => {
-  const drift = entry.drift ?? [];
-  const now = drift.length > 0 ? drift.join(", ") : entry.state;
-  return now === undefined ? `${entry.name} changed` : `${entry.name}: ${now}`;
-};
-
-/**
- * The library skills of `after` whose state or drift is not what `before` showed, in the library's
- * order. A skill that arrived or left is no change of drift: the inventory shows that itself.
- */
-const driftChanges = (before: LibraryEntry[], after: LibraryEntry[]) => {
-  const previous = new Map(before.map((entry) => [entry.name, entry]));
-  return after.filter((entry) => {
-    const was = previous.get(entry.name);
-    return (
-      was !== undefined &&
-      (was.state !== entry.state ||
-        (was.drift ?? []).join("\n") !== (entry.drift ?? []).join("\n"))
-    );
-  });
-};
-
-/**
- * Applies an inventory, unless the same instance already applied one with a counter as high, and
- * says each library skill whose state or drift changed since the instance's inventory before. The
- * first inventory of an instance is where every state starts, not a change of one.
- */
+/** Applies an inventory, unless the same instance already applied one with a counter as high. */
 const applyInventory = (childId: number, event: InventoryEvent) => {
-  const { applied, inventory: before } = useAppStore.getState();
-  const sameInstance =
+  const { applied } = useAppStore.getState();
+  if (
     applied !== undefined &&
     applied.childId === childId &&
-    applied.instanceId === event.instance_id;
-  if (sameInstance && event.scan_counter <= applied.counter) {
+    applied.instanceId === event.instance_id &&
+    event.scan_counter <= applied.counter
+  ) {
     return;
   }
   set({
@@ -244,32 +215,14 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
     freshness: { kind: "fresh" },
     inventory: event,
   });
-  logBackground(
-    `inventory updated: ${[
-      plural(event.skills.length, "skill"),
-      plural(event.mcp_servers.length, "MCP server"),
-      plural(event.plugins.length, "plugin"),
-    ].join(", ")}`
-  );
-  if (sameInstance && before !== undefined) {
-    for (const entry of driftChanges(before.library, event.library)) {
-      addActivity("attention", driftText(entry));
-      logBackground(driftText(entry));
-    }
-  }
 };
 
 /** Clears an answered request, even when the inventory did not change. */
 const acknowledge = (event: RefreshCompleteEvent) => {
   rescans.get(event.request_id)?.(event);
   rescans.delete(event.request_id);
-  if (event.ok) {
-    logBackground("scan finished");
-  } else {
-    logBackground("scan failed", {
-      failed: true,
-      output: event.error === undefined ? [] : [event.error],
-    });
+  if (!event.ok) {
+    logBackground(event.error ?? eventLine(event), { failed: true });
   }
   const { refreshes } = useAppStore.getState();
   if (!Object.hasOwn(refreshes, event.request_id)) {
@@ -293,23 +246,16 @@ const apply = (childId: number, event: ServeEvent) => {
     answerSearch(event);
   } else if (event.type === "reconcile") {
     set((s) => ({ reconciles: [...s.reconciles, event] }));
-    const tone = event.outcome === "repaired" ? "success" : "attention";
-    if (event.outcome !== "restored") {
-      addActivity(tone, `${event.name}: ${event.outcome}`);
-    }
-    logBackground(`${event.name}: ${event.outcome}`);
   } else if (event.type === "update_available") {
     set((s) => ({ updates: { ...s.updates, [event.name]: event } }));
-    addActivity("success", `Update available for ${event.name}`);
-    logBackground(`update available for ${event.name}`);
   } else if (event.type === "update_check") {
     // The check's update_available events came before it, and stay: a check of the hub
     // alone adds to what the last full check found.
+    // It carries no words of its own: a check that failed shows as the event.
     if (event.ok) {
       set({ lastChecked: event.checked_at });
-      logBackground("update check finished");
     } else {
-      logBackground("update check failed", { failed: true });
+      logBackground(eventLine(event), { failed: true });
     }
   } else if (event.type === "error") {
     logBackground(event.message, {
@@ -327,17 +273,13 @@ const apply = (childId: number, event: ServeEvent) => {
 
 /**
  * A warning serve logged is something the user should know about, such as a source the update
- * check could not fetch or a fork it could not repair. Debug lines, and whatever level a later
- * CLI adds, stay in the serve log.
+ * check could not fetch or a fork it could not repair: the activity log shows its message. Debug
+ * lines, and whatever level a later CLI adds, stay in the serve log file, which the activity log
+ * shows in the file manager.
  */
 const applyLog = (event: LogEvent) => {
   if (event.level === "warn") {
-    addActivity("attention", event.message);
-  }
-  // Debug lines come by the hundred while serve logs at debug level: the serve log file holds
-  // them, which the activity log shows in the file manager.
-  if (event.level !== "debug") {
-    logBackground(logLine(event));
+    logBackground(event.message);
   }
 };
 

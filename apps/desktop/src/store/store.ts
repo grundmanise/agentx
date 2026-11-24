@@ -60,20 +60,6 @@ export interface ServeEnd {
   restarting: boolean;
 }
 
-export type Tone = "success" | "attention" | "danger";
-
-/** One line of the activity list: a command's outcome or something serve noticed. */
-export interface ActivityEntry {
-  id: number;
-  /** When it happened, as Date.now(). */
-  at: number;
-  tone: Tone;
-  message: string;
-}
-
-/** How many activity entries the store keeps; older ones drop off. */
-export const ACTIVITY_LIMIT = 200;
-
 export interface AppState {
   /** The last inventory applied, from the active serve child only. */
   inventory: InventoryEvent | undefined;
@@ -106,8 +92,6 @@ export interface AppState {
   adoption: AdoptionEvent[];
   /** The controls whose command runs: label → run id. */
   pending: Record<string, string>;
-  /** Newest first, at most ACTIVITY_LIMIT entries. */
-  activity: ActivityEntry[];
   /** The history of each hub skill read so far, by name. */
   histories: Record<string, HistoryRead>;
   /** The skills of each source listed so far, by source id, from `source skills <id>`. */
@@ -192,7 +176,6 @@ export type UpdateDiffRead =
   | { candidate: string; diffs?: undefined; failed: true; problem: Problem };
 
 export const useAppStore = create<AppState>()(() => ({
-  activity: [],
   adoption: [],
   applied: undefined,
   conflicts: {},
@@ -216,14 +199,3 @@ export const useAppStore = create<AppState>()(() => ({
   updateDiffs: {},
   updates: {},
 }));
-
-let nextActivity = 1;
-
-/** Adds an entry at the top of the activity list. */
-export const addActivity = (tone: Tone, message: string) => {
-  const entry = { at: Date.now(), id: nextActivity, message, tone };
-  nextActivity += 1;
-  useAppStore.setState((s) => ({
-    activity: [entry, ...s.activity].slice(0, ACTIVITY_LIMIT),
-  }));
-};
