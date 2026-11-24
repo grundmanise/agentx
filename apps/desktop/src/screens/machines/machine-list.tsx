@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { LogoStack } from "#/components/agent-logo.tsx";
 import { ListRow } from "#/components/list-row.tsx";
-import { Pill } from "#/components/pill.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { useNow } from "#/lib/now.ts";
 import { plural } from "#/lib/plural.ts";
 import { cn } from "#/lib/utils.ts";
@@ -53,7 +53,9 @@ const MachineRow = ({
       <span className="gap-row-line flex min-w-0 flex-1 flex-col">
         <span className="gap-row-inline flex h-5 items-center">
           <span className="type-row-name text-row-name truncate">{name}</span>
-          {machine.kind === "this" && <Pill tone="neutral">This machine</Pill>}
+          {machine.kind === "this" && (
+            <Badge tone="neutral">This machine</Badge>
+          )}
           <span className="flex-1" />
           {clients.length > 0 && (
             <LogoStack

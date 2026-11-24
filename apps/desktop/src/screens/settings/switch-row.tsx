@@ -3,7 +3,7 @@
 // the settings are read again after it, a spinner turns beside the switch, which takes no click.
 import { useId } from "react";
 
-import { Spinner } from "#/components/spinner.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { cn } from "#/lib/utils.ts";
 

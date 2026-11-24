@@ -4,7 +4,7 @@
 // as when no hub is set.
 import { useMemo } from "react";
 
-import { Pill } from "#/components/pill.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { alsoOn } from "#/screens/machines/across.ts";
 import { openMachine } from "#/screens/machines/open.ts";
@@ -48,7 +48,9 @@ export const AlsoOn = ({ row }: { row: SkillRow }) => {
             >
               {nameOf(machine)}
             </Button>
-            {version === "other" && <Pill tone="neutral">Another version</Pill>}
+            {version === "other" && (
+              <Badge tone="neutral">Another version</Badge>
+            )}
           </span>
         ))}
       </span>

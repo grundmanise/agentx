@@ -2,7 +2,7 @@ import { useId } from "react";
 import type { ReactNode } from "react";
 
 import { Segmented } from "#/components/filter-controls.tsx";
-import { Spinner } from "#/components/spinner.tsx";
+import { Spinner } from "#/components/ui/spinner.tsx";
 import { plural } from "#/lib/plural.ts";
 import { cn } from "#/lib/utils.ts";
 import { useMachinesView } from "#/screens/machines/view.ts";
@@ -66,7 +66,6 @@ export const MachinesHeader = ({
             )}
           >
             <Segmented
-              group="machines-view"
               options={views}
               value={by}
               onChange={(next) => {

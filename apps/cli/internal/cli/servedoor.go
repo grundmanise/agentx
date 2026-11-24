@@ -73,7 +73,8 @@ type serveDoor struct {
 // where with a listening event, and only then starts to send every event
 // serve emits on its own through the door as well, so the token goes to
 // stdout alone. The inventory is retained: it is the first thing a client
-// that connects later is sent. Its methods are those of serve's stdin.
+// that connects later is sent, see own. Its methods are those of serve's
+// stdin.
 func (inv *invocation) openDoor(address string, origins []string, methods map[string]rpc.Method) (*serveDoor, error) {
 	l, err := net.Listen("tcp", address)
 	if err != nil {
@@ -118,13 +119,18 @@ func (d *serveDoor) own(ev any) {
 	// The inventory is the first thing a client that connects later is
 	// sent, and a problem serve reported since, such as the serve lock
 	// another serve holds, follows it: a client that connects after serve
-	// refused to scan still learns why no inventory comes.
+	// refused to scan still learns why no inventory comes. The fleet comes
+	// after both and outlasts every inventory, since what the hub holds of
+	// the machines depends on no scan: serve emits the next one only when
+	// that changed, which a client that connects meanwhile cannot wait for.
 	keep := rpc.Passing
 	switch ev.(type) {
 	case inventoryEvent:
 		keep = rpc.Retained
 	case errorEvent:
 		keep = rpc.Note
+	case fleetEvent:
+		keep = rpc.Standing
 	}
 	d.rpc.Notify("event", eventParams{Stream: stream, Event: ev}, keep)
 }

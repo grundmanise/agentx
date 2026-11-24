@@ -1,17 +1,22 @@
 // The controls of a list's filter row and its Filter popover (DESIGN.md §2.2 "Filter row",
-// §6 "Checkbox (popover)" and "Segmented control"). Each is a closed control: it takes what it
-// shows and what to call, never a class. The choices are native radios and checkboxes under
-// their labels, covering them unseen so a click lands on the control, so the keyboard and a
-// screen reader work as they do on any form.
-import { cva } from "class-variance-authority";
+// §6 "Checkbox (popover)" and "Segmented control"), composed of the ui primitives: the Filter
+// button, the chips' crosses and the sort and expand toggles are `Button`s, the Filter button's
+// count a `Badge`, the SHOW pills and the segmented controls a `ToggleGroup`, and an AGENTS row a
+// `Checkbox` under its label. The tags of `FilterTagsChip` stay native buttons: a pill with a
+// cross that fades in over its label, which no Button variant draws (Button is `button.radius`).
+// Each is a closed control: it takes what it shows and what to call, never a class.
+import { useId } from "react";
 import type { ReactNode } from "react";
 
-import { CheckMark } from "#/components/check-mark.tsx";
 import { ArrowDownIcon } from "#/components/icons/arrow-down.tsx";
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { CollapseIcon } from "#/components/icons/collapse.tsx";
 import { ExpandIcon } from "#/components/icons/expand.tsx";
 import { FilterIcon } from "#/components/icons/filter.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import { Checkbox } from "#/components/ui/checkbox.tsx";
+import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group.tsx";
 import { cn } from "#/lib/utils.ts";
 
 /**
@@ -27,27 +32,23 @@ export const FilterButton = ({
   count: number;
   onClick?: () => void;
 }) => (
-  <button
-    type="button"
-    className={cn(
-      "rounded-button type-button-sm h-filter inline-flex items-center gap-2 px-3 font-medium",
-      count > 0
-        ? "bg-filter-active-bg text-filter-active-text"
-        : "bg-filter-bg text-filter-text hover:text-text-primary"
-    )}
+  <Button
+    variant={count > 0 ? "filter-active" : "filter"}
+    size="filter"
     {...props}
   >
     <FilterIcon size="xs" />
     <span>Filter</span>
     {count > 0 && (
-      <span
+      <Badge
+        tone="filter-count"
+        size="filter-count"
         aria-label={`${count} applied`}
-        className="rounded-pill bg-filter-badge-bg type-key-hint text-on-accent size-filter-badge inline-flex items-center justify-center"
       >
         {count}
-      </span>
+      </Badge>
     )}
-  </button>
+  </Button>
 );
 
 /** A chip in the filter row echoing an applied filter, with a cross that clears it. */
@@ -63,14 +64,14 @@ export const FilterChip = ({
 }) => (
   <span className="rounded-pill bg-filter-chip-bg type-button-sm text-filter-chip-text h-filter inline-flex min-w-0 items-center gap-2 pr-1 pl-2">
     {children}
-    <button
-      type="button"
+    <Button
+      variant="filter-chip"
+      size="chip"
       aria-label={clearLabel}
       onClick={onClear}
-      className="rounded-button hover:bg-filter-chip-hover hover:text-text-primary inline-flex size-5.5 items-center justify-center"
     >
       <CloseIcon size="xs" />
-    </button>
+    </Button>
   </span>
 );
 
@@ -164,19 +165,23 @@ export const SortToggle = ({
   order: "asc" | "desc";
   onToggle: () => void;
 }) => (
-  <button
-    type="button"
+  <Button
+    variant="filter-toggle"
+    size="filter-toggle"
     aria-label={`Sort: ${sortLabels[order].name}`}
     title={`Sort: ${sortLabels[order].name}`}
     onClick={onToggle}
-    className={cn(
-      "rounded-button type-button-sm text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary inline-flex h-7 items-center gap-1 px-2 font-medium",
-      order === "desc" && "[&>svg]:rotate-180"
-    )}
   >
-    <span aria-hidden>{sortLabels[order].shown}</span>
-    <ArrowDownIcon size="xs" />
-  </button>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1",
+        order === "desc" && "[&>svg]:rotate-180"
+      )}
+    >
+      <span aria-hidden>{sortLabels[order].shown}</span>
+      <ArrowDownIcon size="xs" />
+    </span>
+  </Button>
 );
 
 /** A group of choices in the popover, under its caption. */
@@ -195,62 +200,44 @@ export const ChoiceGroup = ({
   </fieldset>
 );
 
-/** One choice of a one-of group in the popover (SHOW), with its count. */
-export const ChoicePill = ({
-  group,
-  active,
-  count,
-  children,
-  onSelect,
+/**
+ * The choices of a one-of group in the popover (SHOW): a pill per choice, with its count. The
+ * fieldset of its `ChoiceGroup` names the radios, so the pills' own group adds no role.
+ */
+export const ChoicePills = <T extends string>({
+  options,
+  value,
+  onChange,
 }: {
-  /** The name shared by the radios of the group. */
-  group: string;
-  active: boolean;
-  count: number;
-  children: string;
-  onSelect: () => void;
+  options: { value: T; label: string; count: number }[];
+  value: T;
+  onChange: (value: T) => void;
 }) => (
-  <label
-    className={cn(
-      "rounded-pill type-secondary has-focus-visible:outline-shell-focus-ring relative inline-flex h-7.5 cursor-pointer items-center gap-2 px-3 has-focus-visible:outline-2 has-focus-visible:outline-offset-2",
-      active
-        ? "bg-button-secondary-bg text-text-primary"
-        : "text-text-muted hover:bg-popover-row-hover hover:text-text-primary"
-    )}
-  >
-    <input
-      type="radio"
-      name={group}
-      checked={active}
-      onChange={onSelect}
-      className="absolute inset-0 size-full cursor-pointer opacity-0"
-    />
-    <span>{children}</span>
-    <span
-      className={
-        active
-          ? "type-technical-sm text-text-muted"
-          : "type-technical-sm text-text-caption"
+  <ToggleGroup
+    kind="pill"
+    role="none"
+    value={value}
+    onValueChange={(next) => {
+      const option = options.find((o) => o.value === next);
+      if (option !== undefined) {
+        onChange(option.value);
       }
-    >
-      {count}
-    </span>
-  </label>
-);
-
-const trackVariants = cva(
-  "rounded-segmented border-segmented-track-border gap-segmented flex border p-0.5",
-  {
-    defaultVariants: { disabled: false, surface: "overlay" },
-    variants: {
-      disabled: { false: "", true: "opacity-50" },
-      surface: {
-        card: "bg-segmented-card-track-bg",
-        overlay: "bg-segmented-track-bg",
-        page: "bg-segmented-page-track-bg",
-      },
-    },
-  }
+    }}
+  >
+    {options.map((o) => (
+      <ToggleGroupItem key={o.value} value={o.value}>
+        <span>{o.label}</span>
+        <span
+          className={cn(
+            "type-technical-sm",
+            o.value === value ? "text-text-muted" : "text-text-caption"
+          )}
+        >
+          {o.count}
+        </span>
+      </ToggleGroupItem>
+    ))}
+  </ToggleGroup>
 );
 
 /**
@@ -259,7 +246,6 @@ const trackVariants = cva(
  * disabled and says so.
  */
 export const Segmented = <T extends string>({
-  group,
   options,
   value,
   onChange,
@@ -269,8 +255,6 @@ export const Segmented = <T extends string>({
   disabled = false,
   busy = false,
 }: {
-  /** The name shared by the radios of the control. */
-  group: string;
   options: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
@@ -283,41 +267,33 @@ export const Segmented = <T extends string>({
   disabled?: boolean;
   busy?: boolean;
 }) => (
-  <div
-    role="radiogroup"
+  <ToggleGroup
+    kind="segmented"
+    surface={surface}
+    value={value}
+    onValueChange={(next) => {
+      const option = options.find((o) => o.value === next);
+      if (option !== undefined) {
+        onChange(option.value);
+      }
+    }}
     aria-labelledby={labelledBy}
-    aria-busy={busy ? true : undefined}
-    aria-disabled={disabled || busy ? true : undefined}
     title={title}
-    className={trackVariants({ disabled: disabled || busy, surface })}
+    disabled={disabled}
+    busy={busy}
   >
     {options.map((o) => (
-      <label
-        key={o.value}
-        className={cn(
-          "rounded-segmented type-segment has-focus-visible:outline-shell-focus-ring relative inline-flex h-6 flex-1 cursor-pointer items-center justify-center px-2.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-disabled:cursor-default",
-          o.value === value
-            ? "bg-segmented-neutral-selected text-text-primary"
-            : "text-segmented-text hover:text-text-primary has-disabled:hover:text-segmented-text"
-        )}
-      >
-        <input
-          type="radio"
-          name={group}
-          checked={o.value === value}
-          disabled={disabled || busy}
-          onChange={() => {
-            onChange(o.value);
-          }}
-          className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-default"
-        />
+      <ToggleGroupItem key={o.value} value={o.value}>
         {o.label}
-      </label>
+      </ToggleGroupItem>
     ))}
-  </div>
+  </ToggleGroup>
 );
 
-/** A row of a many-of group in the popover (AGENTS): checkbox, what the caller shows, a label. */
+/**
+ * A row of a many-of group in the popover (AGENTS): checkbox, what the caller shows, a label. The
+ * whole row is the label of its checkbox, so a click anywhere on it toggles the box.
+ */
 export const CheckOption = ({
   checked,
   onChange,
@@ -326,20 +302,24 @@ export const CheckOption = ({
   checked: boolean;
   onChange: (checked: boolean) => void;
   children: ReactNode;
-}) => (
-  <label className="rounded-popover-row hover:bg-popover-row-hover has-focus-visible:outline-shell-focus-ring relative flex h-8.5 w-full cursor-pointer items-center gap-2.5 px-2 text-left has-focus-visible:outline-2 has-focus-visible:outline-offset-2">
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={(e) => {
-        onChange(e.target.checked);
-      }}
-      className="absolute inset-0 size-full cursor-pointer opacity-0"
-    />
-    <CheckMark checked={checked} />
-    {children}
-  </label>
-);
+}) => {
+  const id = useId();
+  return (
+    <label
+      htmlFor={id}
+      className="rounded-popover-row hover:bg-popover-row-hover has-focus-visible:outline-shell-focus-ring flex h-8.5 w-full cursor-pointer items-center gap-2.5 px-2 text-left has-focus-visible:outline-2 has-focus-visible:outline-offset-2"
+    >
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(next) => {
+          onChange(next === true);
+        }}
+      />
+      {children}
+    </label>
+  );
+};
 
 /**
  * The expand toggle, beside the sort toggle: one icon button on the ghost fill, like the sort
@@ -358,15 +338,15 @@ export const ExpandToggle = ({
 }) => {
   const name = open ? "Collapse all" : "Expand all";
   return (
-    <button
-      type="button"
+    <Button
+      variant="filter-toggle"
+      size="filter-icon"
       aria-label={name}
       title={name}
       disabled={disabled}
       onClick={onToggle}
-      className="rounded-button text-filter-sort-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-primary inline-flex size-7 items-center justify-center disabled:pointer-events-none disabled:opacity-50"
     >
       {open ? <CollapseIcon size="xs" /> : <ExpandIcon size="xs" />}
-    </button>
+    </Button>
   );
 };

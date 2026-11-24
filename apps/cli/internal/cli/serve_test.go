@@ -207,6 +207,10 @@ exec git "$@"
 		return pid
 	}
 	p := h.serve(t, "--json")
+	// Serve answers a run while it reconciles, which holds the lock, and
+	// source add gives up on a held lock before it runs any git. The first
+	// inventory comes once serve has reconciled.
+	p.next("inventory")
 	p.request("v", "run", map[string]any{"args": []string{"version"}})
 	result, _, run, _ := p.answer("v")
 	alike(t, "run events", h.types(run), []string{"version", "result"})

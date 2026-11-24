@@ -11,3 +11,13 @@ export type OwnProps<T extends ElementType> = Omit<
   ComponentProps<T>,
   "className" | "style"
 >;
+
+/**
+ * The props of a Radix overlay's content without its placement (`side`, `align`, their offsets and
+ * `collisionPadding`): where it opens is a closed `placement` variant of ours, and its gaps come
+ * from tokens (README "Rules for components").
+ */
+export type PlacedProps<T extends ElementType> = Omit<
+  OwnProps<T>,
+  "side" | "align" | "sideOffset" | "alignOffset" | "collisionPadding"
+>;

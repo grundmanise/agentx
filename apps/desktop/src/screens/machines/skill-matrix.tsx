@@ -1,7 +1,7 @@
 import { useId, useMemo } from "react";
 
 import { CheckIcon } from "#/components/icons/check.tsx";
-import { Pill } from "#/components/pill.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
   Table,
@@ -30,7 +30,7 @@ import { useMachinesView } from "#/screens/machines/view.ts";
  */
 const Mark = ({ cell }: { cell: Cell }) => {
   if (cell === "other") {
-    return <Pill tone="neutral">Another version</Pill>;
+    return <Badge tone="neutral">Another version</Badge>;
   }
   return cell === "same" ? (
     <span className="text-tone-primary-fg inline-flex align-middle">
@@ -65,7 +65,7 @@ const MachineCaption = ({
       </span>
       <span className="flex h-5 max-w-full items-center">
         {machine.kind === "this" ? (
-          <Pill tone="neutral">This machine</Pill>
+          <Badge tone="neutral">This machine</Badge>
         ) : (
           changed !== undefined && (
             <span className="type-row-desc text-row-desc truncate">

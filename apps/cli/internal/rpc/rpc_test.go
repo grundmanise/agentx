@@ -289,6 +289,34 @@ func TestANoteFollowsTheRetainedNotificationUntilTheNext(t *testing.T) {
 	third.want(`{"jsonrpc":"2.0","method":"event","params":{"n":5}}`)
 }
 
+// A standing notification is sent to a later client after the retained
+// one and its note, alone when nothing is retained. The next retained
+// notification drops the note and leaves it, and the next standing one
+// replaces it.
+func TestAStandingNotificationOutlastsTheRetainedOne(t *testing.T) {
+	t.Parallel()
+	d := open(t, nil)
+	d.Notify("event", map[string]int{"n": 1}, Standing)
+	first := d.dial(t)
+	first.want(`{"jsonrpc":"2.0","method":"event","params":{"n":1}}`)
+	d.Notify("event", map[string]int{"n": 2}, Retained)
+	d.Notify("event", map[string]int{"n": 3}, Note)
+	second := d.dial(t)
+	second.want(`{"jsonrpc":"2.0","method":"event","params":{"n":2}}`)
+	second.want(`{"jsonrpc":"2.0","method":"event","params":{"n":3}}`)
+	second.want(`{"jsonrpc":"2.0","method":"event","params":{"n":1}}`)
+	d.Notify("event", map[string]int{"n": 4}, Retained)
+	third := d.dial(t)
+	third.want(`{"jsonrpc":"2.0","method":"event","params":{"n":4}}`)
+	third.want(`{"jsonrpc":"2.0","method":"event","params":{"n":1}}`)
+	d.Notify("event", map[string]int{"n": 5}, Standing)
+	fourth := d.dial(t)
+	d.Notify("event", map[string]int{"n": 6}, Passing)
+	fourth.want(`{"jsonrpc":"2.0","method":"event","params":{"n":4}}`)
+	fourth.want(`{"jsonrpc":"2.0","method":"event","params":{"n":5}}`)
+	fourth.want(`{"jsonrpc":"2.0","method":"event","params":{"n":6}}`)
+}
+
 // A client that reads nothing is disconnected once its queue is full, and
 // the others are not held up by it.
 func TestAClientThatFallsBehindIsDisconnected(t *testing.T) {

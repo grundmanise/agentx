@@ -364,10 +364,11 @@ type serveChecks struct {
 	scanned atomic.Pointer[scannedInventory]
 	// reported is the report the hub's branch of this machine held when the
 	// last report was written or found written already; nil before the
-	// first and after one that failed.
+	// first, after one that failed and once the machine no longer reports.
 	reported []byte
-	// reportFailing is failing for the reports: set while they fail. A hub
-	// check that reached the hub writes the report again while it is set.
+	// reportFailing is failing for the reports: set while they fail, until
+	// one is written or the machine no longer reports. A hub check that
+	// reached the hub writes the report again while it is set.
 	reportFailing bool
 }
 
