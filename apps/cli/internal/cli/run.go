@@ -262,7 +262,7 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 			out.debugf("  at %s (%s:%d)", fr.Function, fr.Filename, fr.LineNo)
 		}
 		inv.reportCrash(ctx, p)
-		f := &failure{status: exitInternal, message: p.Error(), hint: "this is a bug in agentx: report it at " + issuesURL}
+		f := &failure{status: exitInternal, message: p.Error()}
 		out.fail(f)
 		out.result(false, f.message)
 		return f.status.exit

@@ -10,9 +10,6 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
-// issuesURL is where a user reports a bug.
-const issuesURL = "https://github.com/grundmanise/agentx/issues"
-
 // testPanic makes scan panic, with a message that names HOME and the
 // agentx home, when AGENTX_TEST_PANIC is 1: it is how the tests reach a
 // crash through the seam.

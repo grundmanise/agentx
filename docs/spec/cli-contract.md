@@ -351,7 +351,7 @@ An update another machine published to a hub skill, see **Checking for updates**
 | 7 | `locked` | another agentx command holds the lock |
 | 8 | `store` | the store is unusable: missing, corrupt, or a repository format this git cannot read |
 | 9 | `interrupted` | a stop signal ended the run before it finished, see [Stopping a run](#stopping-a-run) |
-| 10 | `internal` | an internal error, including a settings file or another tool's install record agentx cannot read, and a panic: its message is the error's, `panic: ` and what was passed to `panic`, with the hint to report it |
+| 10 | `internal` | an internal error, including a settings file or another tool's install record agentx cannot read, and a panic: its message is the error's, `panic: ` and what was passed to `panic` |
 
 In JSON mode the `error` event carries the code as its `code` field.
 
