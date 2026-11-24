@@ -337,6 +337,7 @@ func TestMachineReportListShow(t *testing.T) {
 	equal(t, "report again: exit", again.exit, 0)
 	contains(t, "report again", again.stdout, "reports/"+idA+" on the hub holds this report already, at "+short(first)+", so nothing was pushed")
 	equal(t, "the tip after the second report", remoteGit(t, a, remote, "rev-parse", "refs/heads/reports/"+idA), first)
+	contains(t, "list on the only machine of the hub", a.mustRun("machine", "list").stdout, "\nThe hub holds no other machine.\n")
 
 	writeFile(t, own, skill("own", "Edited"))
 	changed := a.run("machine", "report")

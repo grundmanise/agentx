@@ -209,7 +209,7 @@ func (inv *invocation) machineList(ctx context.Context) error {
 		}
 		out.render(t, "")
 		if len(others) == 0 {
-			out.print("The hub holds no other machine. A machine shows here once it has run ", out.paint(label, "agentx machine report"), ".")
+			out.print("The hub holds no other machine.")
 		}
 	}
 	for _, w := range f.warnings {
