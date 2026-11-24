@@ -179,6 +179,19 @@ export const doctorWith = (...changes: InlineEvent[]): InlineEvent[] =>
       ) ?? row
   );
 
+/**
+ * The keys of the reads the kept reads' index in IndexedDB names, such as `files:notes`. The app
+ * keeps a read after it shows it, so a test that relaunches waits for the key first.
+ */
+export const keptReads = async (page: Page) => {
+  await page.addScriptTag({
+    type: "module",
+    url: "/e2e/harness/kept-reads.ts",
+  });
+  await page.waitForFunction(() => "keptReads" in window);
+  return await page.evaluate(async () => await window.keptReads());
+};
+
 /** A registered reply, and for one that holds, what releases it. */
 export interface Registered {
   /** Sends the rest of the events and ends the run. */
