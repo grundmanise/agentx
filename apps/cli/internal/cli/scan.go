@@ -40,6 +40,7 @@ func newScanCommand(inv *invocation) *cobra.Command {
 			"agentx scan --json", "the inventory as JSON events, for a script",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			inv.testPanic()
 			if configuration != "" {
 				if err := inv.detectedConfiguration(configuration); err != nil {
 					return err
