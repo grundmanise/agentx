@@ -20,6 +20,8 @@ UI primitives come from shadcn/ui: add one with `pnpm dlx shadcn@latest add <nam
 
 ## Help center
 
+Before you add or change anything in `docs/help-center`, load the `mintlify` skill. It covers page frontmatter, navigation in `docs.json`, components and file conventions. It lives in `.agents/skills/mintlify`, and Claude Code reaches it through the `.claude/skills/mintlify` symlink. It's upstream content from `mintlify/docs`, so never edit it; update it with `npx skills update mintlify`, which also updates `skills-lock.json`.
+
 Keep the Help Center up to date. Whenever there's a new feature or a change in functionality, update the relevant user-facing documentation in `docs/help-center`. Keep the language clear, structured, and concise. Use an imperative tone.
 
 Mintlify publishes every file under `docs/help-center`, so treat anything you add there as public.
