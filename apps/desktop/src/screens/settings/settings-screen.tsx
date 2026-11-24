@@ -1,18 +1,20 @@
 // The Settings page (DESIGN.md §6 "Settings"): every machine setting on one page. Each row reads
 // a store slice and writes only through the CLI command named beside it; the app writes no file
-// of the CLI's. The one setting the app keeps itself is Editor, an app preference (ADR 0013).
+// of the CLI's. The settings the app keeps itself are Editor and App updates, app preferences
+// (ADR 0013).
 //
 // The page is the title and the list of sections below. A section is a component that renders
 // `SettingsSection` (`section.tsx`) with its label, the line under it and its content, or nothing
 // when it has nothing to show; the page draws the hairlines between them. To add a section, write
 // it in its own file in this folder and add it to `sections` at its slot below, in this order:
-// This machine, Hub, Adopt skills, Comparing edits, Editor, Storage, Command line,
+// This machine, Hub, Adopt skills, Comparing edits, Editor, App updates, Storage, Command line,
 // Activity log, Save snapshot, Apply snapshot. Insert the new entry under its slot's comment and
 // keep the comment.
 import type { ComponentType } from "react";
 
 import { ActivityLogSection } from "#/screens/settings/activity-log.tsx";
 import { AdoptSkillsSection } from "#/screens/settings/adopt-skills.tsx";
+import { AppUpdatesSection } from "#/screens/settings/app-updates.tsx";
 import { ApplySnapshotSection } from "#/screens/settings/apply-snapshot.tsx";
 import { CommandLineSection } from "#/screens/settings/command-line.tsx";
 import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
@@ -36,6 +38,7 @@ const sections: Section[] = [
   { Section: AdoptSkillsSection, id: "adopt-skills" },
   { Section: ComparingEditsSection, id: "comparing-edits" },
   { Section: EditorSection, id: "editor" },
+  { Section: AppUpdatesSection, id: "app-updates" },
   { Section: StorageSection, id: "storage" },
   { Section: CommandLineSection, id: "command-line" },
   { Section: ActivityLogSection, id: "activity-log" },

@@ -12,6 +12,7 @@ import { openPath } from "@tauri-apps/plugin-opener";
 
 import { notifyFailure } from "#/components/toast.tsx";
 import { inApp } from "#/lib/platform.ts";
+import { readPreferences, savePreferences } from "#/lib/preferences.ts";
 import { copyPathInstead, revealInFinder, showInLabel } from "#/lib/reveal.ts";
 
 /** The editor a skill opens in, as the app's preferences keep it. */
@@ -28,20 +29,10 @@ export interface DetectedEditor {
   name: string;
 }
 
-interface Preferences {
-  editor: EditorChoice;
-}
-
-const SYSTEM: EditorChoice = { kind: "system" };
-
 /** The editor the user chose, or the system default when none was saved or the read failed. */
 export const readEditor = async (): Promise<EditorChoice> => {
-  try {
-    const preferences = await invoke<Preferences>("preferences_read");
-    return preferences.editor;
-  } catch {
-    return SYSTEM;
-  }
+  const { editor } = await readPreferences();
+  return editor;
 };
 
 /** Saves the editor the user chose. False when it could not be saved, which a toast says. */
@@ -51,7 +42,7 @@ export const saveEditor = async (editor: EditorChoice): Promise<boolean> => {
     return false;
   }
   try {
-    await invoke("preferences_write", { preferences: { editor } });
+    await savePreferences({ editor });
     return true;
   } catch {
     notifyFailure("Couldn't save the editor");

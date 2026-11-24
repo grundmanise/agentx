@@ -85,9 +85,9 @@ agentx update
 
 It downloads the latest release for your system, checks it against the release's checksums and replaces the `agentx` that ran it. See [`agentx update`](/cli/update) for checking without installing, nightly builds and installing one version. Running the install command again also updates. If you installed to another directory, pass the same `--dir`. Leave out `--version`, or you get the same version again.
 
-If you installed with Homebrew, run `brew upgrade agentx` for the app with its CLI, or `brew upgrade agentx-cli` for the CLI alone. For a `--HEAD` install, run `brew upgrade --fetch-HEAD agentx-cli`. `agentx update` refuses an agentx that Homebrew installed, and tells you so.
+The app updates itself, with the CLI inside it. It checks for a new version after it starts and once a day. When it finds one, the title bar shows **Update to** and the version: click it to install, then click **Restart to update** to run the new version. On Linux, the `.deb` asks for your password to install. To turn the check off, open **Settings** and, under **App updates**, turn off **Check for updates**. **Check now** checks at once. A nightly build of the app updates to the newest nightly. `agentx update` refuses the CLI inside the app.
 
-If you installed an app package, download the newest one from [Install the app](#install-the-app) and install it over the old one. The app has no updater yet, and `agentx update` refuses the CLI inside it.
+If you installed with Homebrew, the app updates itself, and `brew upgrade` leaves it alone. Run `brew upgrade --greedy agentx` to upgrade it with Homebrew. Run `brew upgrade agentx-cli` for the CLI alone, or `brew upgrade --fetch-HEAD agentx-cli` for a `--HEAD` install. `agentx update` refuses an agentx that Homebrew installed, and tells you so.
 
 A running [`agentx serve`](/cli/serve) keeps the old version until it restarts. Quit and open the app to run the new version.
 
@@ -105,7 +105,7 @@ curl -fsSL https://agentx.wtf/install | sh -s -- --nightly
 
 Once you run a nightly, `agentx update` moves you to the newest nightly, and `agentx update --stable` takes you back to the latest release. Running the install command again does the same: with `--nightly` for a newer nightly, without it for the latest release. If GitHub refuses the command because of its rate limit, set `GITHUB_TOKEN` and run it again.
 
-For a nightly of the app, download its package from the nightly's page under [releases](https://github.com/grundmanise/agentx/releases), and install it as in [Install the app](#install-the-app).
+For a nightly of the app, download its package from the nightly's page under [releases](https://github.com/grundmanise/agentx/releases), and install it as in [Install the app](#install-the-app). It then updates itself to each newer nightly.
 
 With Homebrew, run `brew install --HEAD grundmanise/tap/agentx-cli` to build the latest code of the CLI on `main`.
 

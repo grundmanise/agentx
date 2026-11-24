@@ -4,7 +4,9 @@ name: Release
 # every 6 hours. A check is scheduled every 30 minutes, so when GitHub starts one late or drops it,
 # the next check can publish the nightly instead of the next day's run.
 # Every release carries the CLI for Linux and macOS, the macOS app as a disk image and the Linux
-# app as a .deb and an AppImage, each app with the CLI of the release inside it.
+# app as a .deb and an AppImage, each app with the CLI of the release inside it. With the updater
+# key, it also carries latest.json, the manifest the app reads to update itself: a stable release on
+# its own release, a nightly on the rolling prerelease nightly-updates.
 # Stable: run by hand from the Actions tab. It promotes a nightly, or another commit on
 # main, by tagging that commit vX.Y.Z and building it again with the stable version.
 # See RELEASING.md.
@@ -325,6 +327,9 @@ jobs:
       # With the secrets, Tauri imports the certificate into a temporary keychain, signs the app
       # and the CLI inside it, and notarizes the app. Without them the app is signed ad hoc: it
       # runs, but macOS asks the user to allow it in System Settings first.
+      # With the updater key, Tauri also packs the finished app into agentx.app.tar.gz, the file the
+      # updater installs, and signs it. tauri.conf.json leaves createUpdaterArtifacts off, so a
+      # local build needs no key.
       - name: Build the app
         id: app
         working-directory: apps/desktop
@@ -334,6 +339,8 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_CERTIFICATE_PASSWORD" ]; then
             echo "::warning title=App not signed::add the APPLE_CERTIFICATE secrets, see RELEASING.md"
@@ -348,16 +355,27 @@ jobs:
             echo "notarized=true" >> "$GITHUB_OUTPUT"
           fi
           unset APPLE_API_PRIVATE_KEY
-          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" \
-            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}}')
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            updater=true
+            echo "updater=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Updates not signed::add the TAURI_SIGNING secrets, see RELEASING.md"
+            updater=false
+          fi
+          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" --argjson updater "$updater" \
+            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}}
+            | if $updater then .bundle.createUpdaterArtifacts = true else . end')
           pnpm tauri build --target "$TARGET" --bundles app,dmg --config "$config"
 
       # The release asset has no version in its name, like the CLI archives, so
       # releases/latest/download/agentx_desktop_darwin_arm64.dmg always gets the newest.
+      # The update archive's signature goes to the publish job in the same artifact, which writes
+      # it into latest.json; it is not a release asset.
       - name: Check the app
         working-directory: apps/desktop/src-tauri/target/${{ env.TARGET }}/release/bundle
         env:
           NOTARIZED: ${{ steps.app.outputs.notarized }}
+          UPDATER: ${{ steps.app.outputs.updater }}
         run: |
           app=macos/agentx.app
           codesign --verify --deep --strict --verbose=2 "$app"
@@ -368,11 +386,19 @@ jobs:
           fi
           mkdir "$RUNNER_TEMP/app"
           mv dmg/*.dmg "$RUNNER_TEMP/app/agentx_desktop_darwin_arm64.dmg"
+          if [ "$UPDATER" = true ]; then
+            if [ ! -s macos/agentx.app.tar.gz ] || [ ! -s macos/agentx.app.tar.gz.sig ]; then
+              echo "::error title=Update not signed::Tauri made no signed agentx.app.tar.gz"
+              exit 1
+            fi
+            mv macos/agentx.app.tar.gz "$RUNNER_TEMP/app/agentx_desktop_darwin_arm64.app.tar.gz"
+            mv macos/agentx.app.tar.gz.sig "$RUNNER_TEMP/app/agentx_desktop_darwin_arm64.app.tar.gz.sig"
+          fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: agentx_desktop_darwin_arm64
-          path: ${{ runner.temp }}/app/agentx_desktop_darwin_arm64.dmg
+          path: ${{ runner.temp }}/app/*
           if-no-files-found: error
 
   # The app for Linux, a .deb and an AppImage per architecture, each with the Linux CLI of that
@@ -435,23 +461,47 @@ jobs:
         working-directory: apps/desktop
         run: pnpm build
 
+      # With the updater key, Tauri signs the .deb and the AppImage, which the updater installs
+      # as they are, as for the macOS app.
       - name: Build the app
+        id: app
         working-directory: apps/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" \
-            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}}')
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            updater=true
+            echo "updater=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Updates not signed::add the TAURI_SIGNING secrets, see RELEASING.md"
+            updater=false
+          fi
+          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" --argjson updater "$updater" \
+            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}}
+            | if $updater then .bundle.createUpdaterArtifacts = true else . end')
           pnpm tauri build --target "$TARGET" --bundles deb,appimage --config "$config"
 
       # The CLI inside each package must report the release version, as in the macOS app. The
       # assets have no version in their names, so releases/latest/download always gets the newest.
+      # The signatures go to the publish job in the same artifact, as for the macOS app.
       - name: Check the packages
         working-directory: apps/desktop/src-tauri/target/${{ env.TARGET }}/release/bundle
+        env:
+          UPDATER: ${{ steps.app.outputs.updater }}
         run: |
           mkdir "$RUNNER_TEMP/app" "$RUNNER_TEMP/deb"
           dpkg-deb -x deb/*.deb "$RUNNER_TEMP/deb"
           "$RUNNER_TEMP/deb/usr/bin/agentx" version --json | tee /dev/stderr | grep -F "\"cli_version\":\"$VERSION\""
           (cd appimage && image=(./*.AppImage) && "${image[0]}" --appimage-extract > /dev/null)
           appimage/squashfs-root/usr/bin/agentx version --json | tee /dev/stderr | grep -F "\"cli_version\":\"$VERSION\""
+          if [ "$UPDATER" = true ]; then
+            for sig in deb/*.deb.sig appimage/*.AppImage.sig; do
+              [ -s "$sig" ] || { echo "::error title=Update not signed::Tauri made no $sig"; exit 1; }
+            done
+            mv deb/*.deb.sig "$RUNNER_TEMP/app/$NAME.deb.sig"
+            mv appimage/*.AppImage.sig "$RUNNER_TEMP/app/$NAME.AppImage.sig"
+          fi
           mv deb/*.deb "$RUNNER_TEMP/app/$NAME.deb"
           mv appimage/*.AppImage "$RUNNER_TEMP/app/$NAME.AppImage"
 
@@ -497,11 +547,63 @@ jobs:
             echo "::notice title=Already published::$TAG"
             exit 0
           fi
+          # agentx_*.tar.gz takes the CLI archives and the macOS app's update archive. No pattern
+          # takes the signatures, *.sig: latest.json carries them.
           assets=(agentx_*.tar.gz agentx_*.dmg agentx_*.deb agentx_*.AppImage)
           sha256sum "${assets[@]}" > checksums.txt
           if [ "$CHANNEL" = nightly ]; then latest=(--prerelease --latest=false); else latest=(--latest); fi
           gh release create "$TAG" "${assets[@]}" checksums.txt \
             --target "$SHA" --title "$TAG" --notes-file notes.md "${latest[@]}"
+
+      # latest.json, the manifest the app's updater reads: the version, the notes and, per
+      # platform, the asset to install and its signature. A stable release carries its own, so
+      # releases/latest/download/latest.json is the newest release's. Nightlies share the rolling
+      # prerelease nightly-updates, whose tag has no -nightly. and no v, so the plan job and the
+      # cleanup below never take it for a nightly. A separate step, so that a re-run of this job
+      # writes the manifest again. Without every signature, there is no manifest for this release.
+      - name: Publish the update manifest
+        working-directory: dist
+        env:
+          NIGHTLY_UPDATES: nightly-updates
+        run: |
+          missing=()
+          platforms='{}'
+          while read -r platform asset; do
+            if [ ! -s "$asset.sig" ]; then missing+=("$asset"); continue; fi
+            platforms=$(jq -c --arg platform "$platform" --rawfile signature "$asset.sig" \
+              --arg url "https://github.com/$GH_REPO/releases/download/$TAG/$asset" \
+              '.[$platform] = {signature: ($signature | rtrimstr("\n")), url: $url}' <<< "$platforms")
+          done <<'EOF'
+          darwin-aarch64-app agentx_desktop_darwin_arm64.app.tar.gz
+          linux-x86_64-appimage agentx_desktop_linux_amd64.AppImage
+          linux-x86_64-deb agentx_desktop_linux_amd64.deb
+          linux-aarch64-appimage agentx_desktop_linux_arm64.AppImage
+          linux-aarch64-deb agentx_desktop_linux_arm64.deb
+          EOF
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::warning title=No update manifest::no signature for ${missing[*]}, see RELEASING.md"
+            exit 0
+          fi
+          pub_date=$(gh release view "$TAG" --json publishedAt --jq .publishedAt)
+          jq -n --arg version "$VERSION" --rawfile notes notes.md --arg pub_date "$pub_date" \
+            --argjson platforms "$platforms" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: $platforms}' > latest.json
+          if [ "$CHANNEL" = stable ]; then
+            gh release upload "$TAG" latest.json --clobber
+            exit 0
+          fi
+          if current=$(gh release download "$NIGHTLY_UPDATES" --pattern latest.json --output - 2> /dev/null | jq -r .version); then
+            # A re-run of an older nightly must not take the nightlies back to it.
+            if [ "$(printf '%s\n' "$current" "$VERSION" | sort -V | tail -n1)" != "$VERSION" ]; then
+              echo "::notice title=Update manifest kept::$NIGHTLY_UPDATES already offers $current"
+              exit 0
+            fi
+          elif ! gh release view "$NIGHTLY_UPDATES" > /dev/null 2>&1; then
+            gh release create "$NIGHTLY_UPDATES" --target "$SHA" --prerelease --latest=false \
+              --title "Nightly updates" \
+              --notes "Holds only latest.json, the manifest nightly builds of the app read to update themselves. Each nightly replaces it. Download the app from the nightly releases."
+          fi
+          gh release upload "$NIGHTLY_UPDATES" latest.json --clobber
 
       # The tap, grundmanise/homebrew-tap, holds the cask `agentx`, the app with its CLI, for
       # notarized apps only, and the formula `agentx-cli`, the CLI built from source. This

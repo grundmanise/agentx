@@ -1224,6 +1224,7 @@ The Settings page (`src/screens/settings`): the serif page title, then one secti
 - A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`.
+- App updates holds an app preference too (ADR 0013, ADR 0019): a switch row that turns the background check off, on by default, and a secondary button that checks at once, pending (§6) while it runs. With no update, a plain toast says so; an update it finds shows in the title bar (§6 "App update (title bar)"). A browser has no app to update, so there the section is left out. The wording is in `src/screens/settings/app-updates.tsx`.
 - Hub, once set, shows its URL in `type.technical` with a neutral Read-only pill beside it when access is limited, as a source card does (§6 "Source card"); a remote you can write to has no tag.
 - Import skills sits after Hub: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
 - A choice that replaces something (an existing snapshot file on Save snapshot, the machine's settings on Apply snapshot) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
@@ -1241,6 +1242,16 @@ At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/c
 - Last checked is when serve's last update check ended well, or Check updates reached every source or all but some; until either, the popover and tooltip say it was not checked yet. It reads as a relative time that keeps time while the app is open, once a minute.
 - While the publish runs, and until the inventory that follows arrives, the label counts its progress and the pill is `aria-busy`; so is Publish all, with a `Spinner`. The run's progress also runs on the pill's rim, the `sm` progress rim (§8 "Progress rim").
 - Hidden while the startup layer shows, and until the inventory and the sources are read, so it never guesses a state.
+
+### App update (title bar)
+
+Left of the sync status, `button.gap` apart (`src/app/app-update-status.tsx`, which holds its wording): the same pill (§6 "Publish status (title bar)"), with the `ArrowUpIcon` (`2xs`, `accent.primary`) in the dot's box. It shows only while a check found an update of the app (ADR 0019), and never in a browser. It has three phases:
+
+- Available, naming the version: a click downloads and installs it. A tooltip says what the click does.
+- Installing, with the download's percent once the server gives a size: `aria-busy`, no tooltip, and the download on the pill's rim, the `sm` progress rim (§8 "Progress rim"). A failed install says so in a failure toast and the pill goes back to available. When a check found a newer update meanwhile, nothing is installed: the pill offers the newer version, and the failure toast names it with an action that installs it.
+- Installed: a click restarts the app into the new version. The app never restarts on its own.
+- A visually hidden polite live region beside the pill (`StatusAnnouncement`) holds the phase, never the percent.
+- The app checks after the startup checks pass, never during them, and once a day while it runs, unless Check for updates is off in Settings (§6 "Settings").
 
 ### Sidebar
 
