@@ -64,6 +64,7 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 	}
 	forgetAccess(&doc.Settings)
 	keepHubRemote(&doc.Settings, here)
+	doc.Settings.Telemetry = here.Telemetry // consent is this machine's own
 	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		return home.SaveSettings(inv.dirs.Home, doc.Settings)
 	}); err != nil {

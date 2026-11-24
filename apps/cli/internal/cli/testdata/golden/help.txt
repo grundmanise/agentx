@@ -47,7 +47,7 @@ MACHINES
 SETTINGS
   config list                            Print every setting
   config get <key>                       Print one setting
-  config set <key> <value>               Change label, accept_operations or ignore_system_files
+  config set <key> <value>               Change one setting
   config enable <configuration>          Select a client for placements by default
   config disable <configuration>         Leave a client out of placements by default
   config placement <id> <mode>           Choose whether a client gets symlinks or copies

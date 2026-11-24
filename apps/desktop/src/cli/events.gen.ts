@@ -104,6 +104,7 @@ export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
 export interface Settings {
   schema_version: number;
   label?: string;
+  telemetry?: string;
   accept_operations: boolean;
   ignore_system_files: boolean;
   disabled_configurations: string[];
@@ -355,6 +356,7 @@ export interface SettingsEvent {
   type: "settings";
   schema_version: number;
   settings: Settings;
+  anonymous_id?: string;
 }
 
 export interface ConfigRemovalEvent {

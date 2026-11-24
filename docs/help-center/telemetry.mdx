@@ -1,0 +1,53 @@
+---
+title: "Usage data"
+description: "What anonymous usage data agentx can send to PostHog, and how to turn it on or off."
+---
+
+agentx can send anonymous usage data to [PostHog](https://posthog.com), in its EU cloud. We use it to find what breaks and to make agentx better for you. agentx sends nothing until you agree.
+
+## Answer the question
+
+The first time you run [`agentx scan`](/cli/scan) in a terminal, agentx prints the inventory, then what it may send, and asks:
+
+```text
+Send anonymous usage data? [y/N]
+```
+
+Type `y` to agree. Press Enter, or type anything else, to decline. agentx stores your answer in the `telemetry` setting and does not ask again.
+
+A scan without a terminal, such as one in a script or with `--json`, does not ask. The next scan in a terminal asks instead.
+
+In the desktop app, a dialog asks the same question after the first scan.
+
+## What agentx may send
+
+- The command name, without arguments or values, such as `skill add` or `config set`
+- The exit code and how long the command took
+- The app version, release channel (`stable` or `nightly`), OS and CPU type
+- A non-reversible, hashed anonymous id
+- Crash reports, with every path removed
+
+agentx sends one event for each command you run, when the command ends. [`agentx serve`](/cli/serve) also sends one when it starts.
+
+It never sends paths, skill or server names, URLs, or anything you type. Your IP address is not stored.
+
+## The anonymous id
+
+The anonymous id is a keyed hash of the [machine id](/cli/machine). It can't be turned back into the machine id. [`agentx machine reset-id`](/cli/machine) changes both.
+
+## Change your answer
+
+```sh
+agentx config set telemetry off
+agentx config set telemetry on
+```
+
+`agentx config get telemetry` prints `on`, `off` or `unset`.
+
+In the desktop app, use the switch in Settings.
+
+## Turn it off for every run
+
+Set `DO_NOT_TRACK=1` in your environment. agentx then neither asks nor sends, whatever the setting says.
+
+Only stable and nightly releases send usage data. A build from source never asks and never sends.

@@ -9,10 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"time"
 
+	"github.com/posthog/posthog-go/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/crash"
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
@@ -153,15 +156,30 @@ func (inv *invocation) serveOnce(ctx context.Context) error {
 // serving is an error event of its own rather than its end: another serve
 // holding the lock, a scan that fails, as one does without git, and
 // watching that fails.
-func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Writer, address string, origins []string) error {
+//
+// A panic in a request's method ends serve as a panic in serve itself
+// would: the request is answered with it, and serve returns it once the
+// runs in flight have stopped.
+func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Writer, address string, origins []string) (err error) {
 	inv.prepareServe()
+	inv.capture(ctx, eventServeStart, posthog.Properties{"duration_ms": time.Since(inv.started).Milliseconds()})
 	methods, err := inv.newServeMethods()
 	if err != nil {
 		return err
 	}
 	ctx, stop := context.WithCancel(ctx)
+	var panicked atomic.Pointer[crash.Panic] // the first panic of a method, see guardMethods
+	defer func() {
+		if p := panicked.Load(); p != nil {
+			err = p
+		}
+	}()
 	defer stop()
-	stdio := rpc.ServeStdio(ctx, stdin, lockedWriter{w: inv.out, out: stdout}, methods.table())
+	table := guardMethods(methods.table(), func(p *crash.Panic) {
+		panicked.CompareAndSwap(nil, p)
+		stop()
+	})
+	stdio := rpc.ServeStdio(ctx, stdin, lockedWriter{w: inv.out, out: stdout}, table)
 	// The end of stdin ends serve once the runs it asked for have stopped,
 	// and serve ending for another reason stops them and waits for them
 	// too, so that no command it started outlives it.
@@ -177,7 +195,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 	// so that whoever started serve learns at once where it is; a client
 	// that connects meanwhile is answered as stdin is.
 	if address != "" {
-		door, err := inv.openDoor(address, origins, methods.table())
+		door, err := inv.openDoor(address, origins, table)
 		if err != nil {
 			return err
 		}
@@ -456,4 +474,23 @@ func plural(n int, noun string) string {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// guardMethods wraps each method so that a panic in it answers its request
+// with the panic and is handed to crashed, instead of ending the process
+// on the request's goroutine.
+func guardMethods(methods map[string]rpc.Method, crashed func(*crash.Panic)) map[string]rpc.Method {
+	guarded := make(map[string]rpc.Method, len(methods))
+	for name, method := range methods {
+		guarded[name] = func(ctx context.Context, c rpc.Call) (result any, rpcErr *rpc.Error) {
+			defer func() {
+				if p := crash.Recovered(recover()); p != nil {
+					crashed(p)
+					result, rpcErr = nil, &rpc.Error{Code: rpc.CodeFailed, Message: p.Error()}
+				}
+			}()
+			return method(ctx, c)
+		}
+	}
+	return guarded
 }
