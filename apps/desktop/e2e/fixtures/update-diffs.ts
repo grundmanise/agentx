@@ -129,6 +129,14 @@ export const releaseNotesUpdateDiffs: InlineEvent[] = [
   },
 ];
 
+/**
+ * What another of your machines published to pdf-letters, when the hub holds it besides the newer
+ * version from upstream: the hub step, which comes first, alone.
+ */
+export const lettersHubDiffs: InlineEvent[] = releaseNotesUpdateDiffs.map(
+  (d) => ({ ...d, name: "pdf-letters" })
+);
+
 /** The `skill diff <name> --update` read of every update of e2e/fixtures/updates.ts, by name. */
 export const updateDiffsOf: Record<string, InlineEvent[]> = {
   draft: [],

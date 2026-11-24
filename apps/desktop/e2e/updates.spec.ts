@@ -12,7 +12,12 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
-import { pdfUpdateDiffs, updateDiffsOf } from "./fixtures/update-diffs.ts";
+import {
+  lettersHubDiffs,
+  lettersUpdateDiffs,
+  pdfUpdateDiffs,
+  updateDiffsOf,
+} from "./fixtures/update-diffs.ts";
 import {
   ACME,
   allUpdates,
@@ -118,16 +123,19 @@ const rescan = async (cli: MockCli, names: readonly string[]) => {
 
 /**
  * Opens the Skills screen on the fixture machine, on `name`, with serve's first inventory offering
- * an update for each skill of `names`.
+ * an update for each skill of `names`, or the updates of `library`, and `updateDiffs` as what
+ * `skill diff <skill> --update` answers, by skill.
  */
 const open = async (
   cli: MockCli,
   page: Page,
   name: string,
-  names: readonly string[] = withUpdates
+  names: readonly string[] = withUpdates,
+  library = libraryWith(names),
+  updateDiffs = updateDiffsOf
 ) => {
-  cli.onServeStart({ events: [inventoryOf(libraryWith(names))] });
-  for (const [skill, diffs] of Object.entries(updateDiffsOf)) {
+  cli.onServeStart({ events: [inventoryOf(library)] });
+  for (const [skill, diffs] of Object.entries(updateDiffs)) {
     cli.register(["skill", "diff", skill, "--update"], { events: diffs });
   }
   cli.register(["skill", "history", "pdf-letters"], { events: history });
@@ -346,6 +354,57 @@ test.describe("banners", () => {
       ).toBeVisible();
     });
   }
+
+  test("a hub skill with both updates: what the hub holds first, then the upstream's once it is taken in", async ({
+    cli,
+    page,
+  }) => {
+    const both = updatesLibrary.map((entry) =>
+      entry.name === "pdf-letters"
+        ? {
+            ...entry,
+            hub_ahead: { commit: "77e1d0c0ffee", time: "2026-10-01T18:30:00Z" },
+          }
+        : entry
+    );
+    await open(cli, page, "pdf-letters", withUpdates, both, {
+      ...updateDiffsOf,
+      "pdf-letters": lettersHubDiffs,
+    });
+    const hub = pane(page, "pdf-letters").getByRole("note", {
+      name: "Published from another machine",
+    });
+    await expect(hub).toBeVisible();
+    await expect(hub.getByText("template.md", { exact: true })).toBeVisible();
+    await expect(pane(page, "pdf-letters").getByRole("note")).toHaveCount(1);
+
+    cli.register(["skill", "update", "pdf-letters"], {
+      events: [updated("pdf-letters", "modified")],
+    });
+    cli.register(["skill", "diff", "pdf-letters", "--update"], {
+      events: lettersUpdateDiffs,
+    });
+    await update(page, "pdf-letters").click();
+    await expect(
+      toasts(page).getByText("Updated pdf-letters skill. Publish when ready.")
+    ).toBeVisible();
+    // The scan that follows: the hub holds nothing new, and the candidate stays.
+    await cli.serveEmit([{ ...inventoryOf(updatesLibrary), scan_counter: 2 }]);
+    await answerRefreshes(cli);
+    const upstream = pane(page, "pdf-letters").getByRole("note", {
+      name: "New version from acme/skills",
+    });
+    await expect(upstream).toBeVisible();
+    await expect(
+      upstream.getByText(
+        "SKILL.md · examples.md · Your local edits are kept.",
+        {
+          exact: true,
+        }
+      )
+    ).toBeVisible();
+    expect(later(cli)).toEqual([["skill", "update", "pdf-letters", "--json"]]);
+  });
 
   test("a pending merge comes first: its banner in place of the update's", async ({
     cli,

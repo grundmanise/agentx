@@ -139,10 +139,10 @@ export const shortSource = (url: string): string => {
 export const shortId = (id: string) => id.slice(0, 7);
 
 /**
- * An update of a library skill, as its inventory entry says it (docs/spec/cli-contract.md,
+ * The one update of a library skill, as its inventory entry says it (docs/spec/cli-contract.md,
  * `library_skill`): what another of your machines published to the hub that a hub skill lacks,
- * which the update takes in first, and the newer version the last update check found, from its
- * source or its upstream. A skill has one or both.
+ * else the newer version the last update check found, from its source or its upstream. A hub
+ * skill takes one update at a time, the hub's first, so it has `hub` or `upstream`, never both.
  */
 export interface UpdateOffer {
   name: string;
@@ -153,37 +153,33 @@ export interface UpdateOffer {
   upstream?: LibraryCandidate;
 }
 
-/** The update the inventory entry offers, if any. */
-export const offerOf = (entry: LibraryEntry): UpdateOffer | undefined =>
-  entry.candidate === undefined && entry.hub_ahead === undefined
+/** The update the inventory entry offers, if any: what the hub holds first, else the candidate. */
+export const offerOf = (entry: LibraryEntry): UpdateOffer | undefined => {
+  if (entry.hub_ahead !== undefined) {
+    return { entry, hub: entry.hub_ahead, name: entry.name };
+  }
+  return entry.candidate === undefined
     ? undefined
-    : {
-        entry,
-        name: entry.name,
-        ...(entry.hub_ahead === undefined ? {} : { hub: entry.hub_ahead }),
-        ...(entry.candidate === undefined ? {} : { upstream: entry.candidate }),
-      };
+    : { entry, name: entry.name, upstream: entry.candidate };
+};
 
-/** Whether an update is only what another of your machines published to a hub skill. */
+/** Whether an update is what another of your machines published to a hub skill. */
 export const fromAnotherMachine = (update: UpdateOffer) =>
-  update.upstream === undefined;
+  update.hub !== undefined;
 
-/** The newer version an update brings, by its date when the CLI dates it: the upstream's, else the hub's. */
+/** The newer version an update brings, by its date when the CLI dates it. */
 export const newerTime = (update: UpdateOffer) =>
-  update.upstream === undefined
-    ? update.hub?.time
-    : update.upstream.upstream_time;
+  update.hub?.time ?? update.upstream?.upstream_time;
 
 /**
  * The two versions of an update, base then newer, each by its date when the CLI dates it, else by
- * its short id. An update from another machine alone has no base version, so it names the newer
- * alone.
+ * its short id. An update from another machine has no base version, so it names the newer alone.
  */
 export const updateVersions = (update: UpdateOffer): string => {
   const time = newerTime(update);
   const newer =
     time === undefined
-      ? shortId(update.upstream?.upstream_commit ?? update.hub?.commit ?? "")
+      ? shortId(update.hub?.commit ?? update.upstream?.upstream_commit ?? "")
       : formatDate(time);
   if (fromAnotherMachine(update)) {
     return newer;

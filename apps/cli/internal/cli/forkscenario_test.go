@@ -165,8 +165,7 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	equal(t, "b's state once published", b.listed("alpha")["state"], stateCurrent)
 	out = a.mustRun("skill", "update", "alpha")
 	equal(t, "a's update, naming only the subject of the newest of the three commits it lacked", out.stdout,
-		"✓ updated alpha to the latest published version: \"alpha: merge the hub (test-host)\"\n"+
-			"alpha is up to date as of the last update check; run agentx skill check-updates to look again\n")
+		"✓ updated alpha to the latest published version: \"alpha: merge the hub (test-host)\"\n")
 	equal(t, "a's alpha", a.ref(lineage.ForkRef("alpha")), merged)
 	for _, h := range []*harness{a, b} {
 		dir := h.forkDir("alpha", "alpha")
@@ -566,7 +565,7 @@ exec `+shellWord(real)+` "$@"
 	out := a.mustRun("--json", "skill", "update", "alpha")
 	a.env["PATH"] = path
 	equal(t, "the pull", a.one(out.stdout, "pull")["outcome"], pullFastForward)
-	contains(t, "the summary", a.one(out.stdout, "result")["summary"].(string), "updated alpha to the latest published version; it is up to date with its upstream")
+	equal(t, "the summary", a.one(out.stdout, "result")["summary"].(string), "updated alpha to the latest published version")
 	equal(t, "what the journal held", fileBody(t, held), "a's own notes\n")
 	equal(t, "a's notes.local", fileBody(t, filepath.Join(alphaA, "notes.local")), "b's notes, committed\n")
 	equal(t, "a's build.log", fileBody(t, filepath.Join(alphaA, "build.log")), "a's build\n")

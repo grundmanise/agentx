@@ -321,9 +321,12 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 }
 
 // TestSkillUpdateOfAForkPullsThenMerges updates on machine b a fork that
-// machine a published a commit of and whose upstream has a new version: the
-// update takes in a's commit first, as a merge of its own with b's commit,
-// then merges the upstream version on top of it, two commits on b's branch.
+// machine a published a commit of and whose upstream has a new version. A
+// fork takes one update at a time, the hub step first: the diff of the
+// update shows a's commit alone, and the update takes in only that, as a
+// merge of its own with b's commit, with the upstream version left as the
+// candidate. The diff then shows the upstream version, and the next update
+// merges it on top, a second commit on b's branch.
 //
 // Then b's check pins a third version for both forks, and a takes a fourth
 // into alpha and publishes it. b's update of every fork fast-forwards alpha
@@ -362,25 +365,30 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	contains(t, "its hint, with an upstream update listed too", out.stdout, "agentx skill diff <name> --update")
 	candidate := b.ref(lineage.CandidateRef("alpha"))
 	// The inventory says what the hub holds that b lacks, and the diff of
-	// the update shows it, then the update from upstream, in the order
-	// the update takes them in.
+	// the update shows that step alone, as the update takes it in alone.
 	equal(t, "what the hub holds of alpha", b.listed("alpha")["hub_ahead"].(map[string]any)["commit"], theirs)
-	diff := b.mustRun("--json", "skill", "diff", "alpha", "--update")
-	var steps []string
-	for _, e := range b.eventsOfType(diff.stdout, "diff") {
-		steps = append(steps, fmt.Sprint(e["step"], " ", e["path"]))
-	}
-	equal(t, "the diff's steps", strings.Join(steps, ", "), "hub notes.md, upstream notes.md")
-	contains(t, "the diff's summary", b.one(diff.stdout, "result")["summary"].(string), "what the hub holds of alpha at "+short(theirs))
+	equal(t, "the diff's steps", diffSteps(b, "alpha"), "hub notes.md")
 
 	out = b.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "pull outcome", b.one(out.stdout, "pull")["outcome"], pullMerged)
-	tip := b.ref(lineage.ForkRef("alpha"))
-	hub := b.storeGit("rev-parse", tip+"^1")
-	equal(t, "the update's parents", b.parents(tip), hub+"\n"+candidate)
+	equal(t, "the summary", b.one(out.stdout, "result")["summary"], "updated alpha to the latest published version")
+	hub := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "the hub merge's parents", b.parents(hub), mine+"\n"+theirs)
 	equal(t, "its subject", b.storeGit("log", "-1", "--format=%s", hub), "alpha: merge the hub (test-host)")
 	equal(t, "its author", b.storeGit("log", "-1", "--format=%an <%ae>", hub), "Machine B <b@example.com>")
+	equal(t, "b's notes after the hub step", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes("one", "one, a", "three", "three, b"))
+	equal(t, "the candidate the hub step left", b.ref(lineage.CandidateRef("alpha")), candidate)
+	_, ahead := b.listed("alpha")["hub_ahead"]
+	equal(t, "what the hub holds of alpha once taken in", ahead, false)
+	equal(t, "the candidate in the inventory", b.listed("alpha")["candidate"].(map[string]any)["upstream_commit"], second)
+
+	// Now the diff of the update shows the update from upstream, and
+	// the next update merges it on top of the hub step.
+	equal(t, "the next diff's steps", diffSteps(b, "alpha"), "upstream notes.md")
+	out = b.mustRun("--json", "skill", "update", "alpha")
+	equal(t, "no pull event", len(b.eventsOfType(out.stdout, "pull")), 0)
+	tip := b.ref(lineage.ForkRef("alpha"))
+	equal(t, "the update's parents", b.parents(tip), hub+"\n"+candidate)
 	equal(t, "the base", b.trailer(tip, lineage.TrailerBase), candidate)
 	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes("one", "one, a", "three", "three, b", "seven", "seven, upstream"))
 	equal(t, "the candidate", b.ref(lineage.CandidateRef("alpha")), "")
@@ -440,7 +448,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "its kind", update["kind"], lineage.KindManaged)
 	equal(t, "its files", fmt.Sprint(update["files"]), "[map[path:notes.md status:added]]")
 	// A skill with no upstream reads what the hub holds as its update too.
-	diff = b.mustRun("--json", "skill", "diff", "notes", "--update")
+	diff := b.mustRun("--json", "skill", "diff", "notes", "--update")
 	got := b.one(diff.stdout, "diff")
 	equal(t, "the diff of what the hub holds", fmt.Sprint(got["step"], " ", got["status"], " ", got["path"]), "hub added notes.md")
 	if lastFetched(t, b, "file://"+remote) == backdated {
@@ -521,6 +529,29 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	e := b.one(out.stdout, "error")
 	equal(t, "its code", e["code"], "source")
 	contains(t, "its message", e["message"].(string), "could not check the hub file://"+remote+": cannot reach it: ")
+
+	// A fork the hub held new commits of at the last fetch takes them in
+	// first, so a hub git cannot reach fails its update, exit 3, and
+	// the update from upstream waits, as its diff shows.
+	if err := os.Rename(remote+".gone", remote); err != nil {
+		t.Fatal(err)
+	}
+	a.commitFork("alpha", forkNotes("one", "one, a", "two", "two, a", "three", "three, b", "seven", "seven, fourth", "eight", "eight, fourth"))
+	a.mustRun("skill", "publish", "alpha")
+	s.write("skills/alpha/notes.md", forkNotes("six", "six, sixth", "seven", "seven, fourth", "eight", "eight, fourth"))
+	s.commit("sixth version")
+	b.mustRun("skill", "check-updates")
+	before = b.ref(lineage.ForkRef("alpha"))
+	sixth := b.ref(lineage.CandidateRef("alpha"))
+	if err := os.Rename(remote, remote+".gone"); err != nil {
+		t.Fatal(err)
+	}
+	equal(t, "the diff's steps with the hub out of reach", diffSteps(b, "alpha"), "hub notes.md")
+	out = b.run("--json", "skill", "update", "alpha")
+	equal(t, "the update of a fork the hub held new commits of: exit", out.exit, 3)
+	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "cannot reach the hub")
+	equal(t, "alpha's tip, left as it was", b.ref(lineage.ForkRef("alpha")), before)
+	equal(t, "alpha's candidate, left as it was", b.ref(lineage.CandidateRef("alpha")), sixth)
 }
 
 // TestSameForkRefusal is when a remote branch is the same fork as the local
@@ -584,4 +615,15 @@ func TestReportSync(t *testing.T) {
 			equal(t, "the line", stdout.String(), tc.want)
 		})
 	}
+}
+
+// diffSteps is the step and the path of each diff event of 'skill diff
+// <name> --update' on h, in the order the command emits them.
+func diffSteps(h *harness, name string) string {
+	h.t.Helper()
+	var steps []string
+	for _, e := range h.eventsOfType(h.mustRun("--json", "skill", "diff", name, "--update").stdout, "diff") {
+		steps = append(steps, fmt.Sprint(e["step"], " ", e["path"]))
+	}
+	return strings.Join(steps, ", ")
 }

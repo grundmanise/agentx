@@ -220,7 +220,7 @@ agentx skill update release-notes
 
 - agentx merges the new version into your fork. Your changes are kept, and upstream changes to lines you did not touch come in.
 - The merge is committed on the skill's branch, as `release-notes: merge upstream 5d6e7f8 (laptop)`. Nothing is pushed: the fork shows as `modified` until you [publish](/cli/skill#publish-a-skill) it.
-- With a [hub](/hub) set, agentx first [updates the fork to what your other machines published](/cli/skill#update-to-what-another-machine-published), then merges the new version on top, as two commits. If Git cannot reach the remote, agentx warns and takes the upstream version alone.
+- With a [hub](/hub) set, the fork takes one update at a time. If your other machines published changes to it, the update [takes in only those](/cli/skill#update-to-what-another-machine-published). Run `agentx skill update <name>` again to merge the new upstream version. If Git cannot reach the remote, agentx warns and takes the upstream version alone, unless the hub held changes for the fork when this machine last fetched it: then the update stops with exit code 3.
 - Your unpublished edits are kept. See [Unpublished edits are kept](#unpublished-edits-are-kept).
 - [Files that stay local](#files-that-stay-local) are kept. If the new version holds a file at a path your ignore rules cover, that file replaces your local one, as `git checkout` does.
 - `agentx skill update --all` updates every managed skill with an update, your hub skills included.

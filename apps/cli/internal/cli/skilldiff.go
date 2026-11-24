@@ -27,8 +27,9 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 			"file turned into a symlink included. Files git ignores do not. Nothing is\n" +
 			"written to the library. With --update, show instead what\n" +
 			"'agentx skill update <name>' would apply: what the update\n" +
-			"'" + checkUpdatesCommand + "' found changes in the base version, and for a hub\n" +
-			"skill, first, what another machine published to the hub as last fetched.\n\n" +
+			"'" + checkUpdatesCommand + "' found changes in the base version, or for a hub\n" +
+			"skill, what another machine published to the hub as last fetched, which its\n" +
+			"update takes in before the update from upstream.\n\n" +
 			"For a hub skill, show its unpublished edits: how its skill directory\n" +
 			"differs from its last published version, the newest commit of its branch the\n" +
 			"hub holds as last fetched, or from the commit that created it when the\n" +
@@ -66,11 +67,11 @@ type diffEvent struct {
 	Path   string `json:"path"`
 	Status string `json:"status"` // added, modified or deleted
 	Patch  string `json:"patch"`
-	Step   string `json:"step,omitempty"` // with --update, the step of a fork's update: hub or upstream; absent otherwise
+	Step   string `json:"step,omitempty"` // with --update, the update of a fork it is: hub or upstream; absent otherwise
 }
 
-// The steps of a fork's update a diff of skill diff --update can be, see
-// forkDiffUpdate.
+// The updates of a fork a diff of skill diff --update can be, see
+// forkDiffUpdate: one at a time, the hub step first.
 const (
 	diffStepHub      = "hub"      // the hub step: what another machine published
 	diffStepUpstream = "upstream" // the merge of the update from upstream
@@ -161,9 +162,9 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 // skillDiffUpdate shows what 'agentx skill update <name>' would apply, as
 // the store holds it now: it reads nothing else, writes nothing and never
 // reaches the network. A managed skill's update is the one the last check
-// found, see upstreamChanges. A fork's is its hub step first, then that
-// update, see forkDiffUpdate. A skill with neither has nothing to show,
-// and the refusal says how to look for an update.
+// found, see lineage.Record.AtCandidate. A fork's is its hub step when it has one,
+// else that update, see forkDiffUpdate. A skill with neither has nothing
+// to show, and the refusal says how to look for an update.
 func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
 		return inv.noLibrarySkill(name)
@@ -197,34 +198,37 @@ func noUpdateRefusal(name string) error {
 		"run '"+checkUpdatesCommand+"' to look for one; it pins what it finds for this command to show")
 }
 
-// forkDiffUpdate is skill diff --update of the fork rec, in the order its
-// update applies it, each part only when there is one. First its hub
-// step, see judgePull: what the hub's branch of it, as last fetched,
-// changed since the commit the two share, which is what another machine
-// published. Then the update the last check found from its upstream,
-// compared with the fork's base version, the import commit its history
-// names, exactly as a managed skill's: what the update changes upstream,
-// which is what merging it brings in, and not how it differs from the
-// fork's own commits. After a hub step, that base is the one the hub
-// step leaves, see pulledFork, and an update it took in, or left stale,
-// is none. Each diff event names its step. A fork
-// the hub holds nothing new for is refused as a managed skill with no
-// update is, or, with no upstream, as one that has none to update from.
+// forkDiffUpdate is skill diff --update of the fork rec: the one update
+// its next update applies, since a fork takes one at a time. When the
+// hub's branch of it, as last fetched, holds commits the fork lacks, that
+// is its hub step, see judgePull: what that branch changed since the
+// commit the two share, which is what another machine published. Else it
+// is the update the last check found from its upstream, compared with the
+// fork's base version, the import commit its history names, exactly as a
+// managed skill's: what the update changes upstream, which is what
+// merging it brings in, and not how it differs from the fork's own
+// commits. Each diff event names its step. A fork with neither is refused
+// as a managed skill with no update is, or, with no upstream, as one that
+// has none to update from.
 func (inv *invocation) forkDiffUpdate(ctx context.Context, gitDir string, rec lineage.Record) error {
 	name := rec.Name
 	tip, base, err := inv.hubAheadOf(ctx, gitDir, rec)
 	if err != nil {
 		return err
 	}
-	var hubFiles []fileDiff
 	if tip != "" {
 		dir, err := inv.forkDir(ctx, gitDir, rec)
 		if err != nil {
 			return err
 		}
-		if hubFiles, err = diffTrees(ctx, inv.git, gitDir, base+":"+dir, tip+":"+dir); err != nil {
+		files, err := diffTrees(ctx, inv.git, gitDir, base+":"+dir, tip+":"+dir)
+		if err != nil {
 			return storeFailure(err)
 		}
+		at := " at " + short(tip)
+		subject := diffSubject{plain: "what the hub holds of " + name + at, painted: "what the hub holds of " + inv.out.paint(heading, sanitised(name)) + at}
+		inv.reportDiff(subject, name, diffStepHub, "the version both share at "+short(base), files, 0)
+		return nil
 	}
 	if rec.Fork == nil {
 		recs := map[string]lineage.Record{name: rec}
@@ -233,70 +237,20 @@ func (inv *invocation) forkDiffUpdate(ctx context.Context, gitDir string, rec li
 		}
 		rec = recs[name]
 	}
-	after := rec
-	if tip != "" {
-		if after, err = inv.pulledFork(ctx, gitDir, rec, tip, base); err != nil {
-			return err
-		}
-	}
-	var baseErr error
-	forkBase, f := forkBaseRecord(after)
-	c, upstream := lineage.Record{}, false
+	forkBase, f := forkBaseRecord(rec)
 	if f != nil {
-		baseErr = f
-	} else {
-		c, upstream = forkBase.AtCandidate()
+		return f
 	}
-	switch {
-	case tip == "" && baseErr != nil:
-		return baseErr
-	case tip == "" && !upstream:
+	c, ok := forkBase.AtCandidate()
+	if !ok {
 		return noUpdateRefusal(name)
 	}
-	var summaries []string
-	if tip != "" {
-		at := " at " + short(tip)
-		subject := diffSubject{plain: "what the hub holds of " + name + at, painted: "what the hub holds of " + inv.out.paint(heading, sanitised(name)) + at}
-		inv.reportDiff(subject, name, diffStepHub, "the version both share at "+short(base), hubFiles, 0)
-		summaries = append(summaries, inv.summary)
-	}
-	if upstream {
-		files, err := diffTrees(ctx, inv.git, gitDir, forkBase.Commit+":"+forkBase.Import.Dir(), c.Commit+":"+c.Import.Dir())
-		if err != nil {
-			return storeFailure(err)
-		}
-		inv.reportUpdateDiff(name, diffStepUpstream, forkBase, c, files)
-		summaries = append(summaries, inv.summary)
-	}
-	inv.summary = strings.Join(summaries, "; ")
-	return nil
-}
-
-// pulledFork is the fork rec as the hub step of its update leaves its
-// lineage, tip being the hub's branch of it and shared the commit the two
-// share, see judgePull: the remote's lineage after a fast-forward, and
-// after a merge the fork's own with the base lineage.PickBase chooses. Its
-// candidate is gone when the new base leaves it stale, see staleCandidate,
-// as the update deletes it then. One git log reads the remote's lineage.
-func (inv *invocation) pulledFork(ctx context.Context, gitDir string, rec lineage.Record, tip, shared string) (lineage.Record, error) {
-	walked, err := lineage.Walk(ctx, inv.git, gitDir, []string{tip})
+	files, err := diffTrees(ctx, inv.git, gitDir, forkBase.Commit+":"+forkBase.Import.Dir(), c.Commit+":"+c.Import.Dir())
 	if err != nil {
-		return rec, storeFailure(err)
+		return storeFailure(err)
 	}
-	next := walked[tip]
-	if shared != rec.Commit && rec.Fork != nil {
-		there := next
-		next = *rec.Fork
-		if lineage.PickBase(ctx, inv.git, gitDir, *rec.Fork, there) != rec.Fork.Base {
-			next.Base, next.BaseTree, next.BaseTime, next.Import = there.Base, there.BaseTree, there.BaseTime, there.Import
-		}
-	}
-	pulled := rec
-	pulled.Fork = &next
-	if inv.staleCandidate(ctx, gitDir, rec, next.Base, next.Import) != "" {
-		pulled.Candidate = nil
-	}
-	return pulled, nil
+	inv.reportUpdateDiff(name, diffStepUpstream, forkBase, c, files)
+	return nil
 }
 
 // hubAheadOf is the hub's branch of the fork rec, as the last fetch

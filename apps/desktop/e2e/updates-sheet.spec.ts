@@ -1,8 +1,8 @@
 // The What's new sheet: See changes on an update's banner opens it with what
 // `skill diff <name> --update` read when the skill was selected, one block per changed file with
-// its status, its path and the patch with the diff tints. A hub skill's update that takes in what
-// another machine published, then a newer version from upstream, shows the two under a caption
-// each. Escape and Close close it.
+// its status, its path and the patch with the diff tints. A hub skill takes one update at a time:
+// what another machine published comes before a newer version from upstream. Escape and Close
+// close it.
 import type { Page } from "@playwright/test";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -14,9 +14,8 @@ import {
   reviewDiffs,
 } from "./fixtures/skills.ts";
 import {
-  lettersUpdateDiffs,
+  lettersHubDiffs,
   pdfUpdateDiffs,
-  releaseNotesUpdateDiffs,
   updateDiffsOf,
 } from "./fixtures/update-diffs.ts";
 import { inventoryOf, updatesLibrary } from "./fixtures/updates.ts";
@@ -257,7 +256,7 @@ test.describe("the What's new sheet", () => {
     await expect(sheet(page)).toHaveCount(0);
   });
 
-  test("a fork behind its hub with a newer upstream: what the hub holds, then the upstream's version, each under its caption", async ({
+  test("a fork behind its hub with a newer upstream: only what the hub holds, which its update takes in first", async ({
     cli,
     page,
   }) => {
@@ -266,24 +265,16 @@ test.describe("the What's new sheet", () => {
         ? { ...entry, hub_ahead: { commit: "77e1d0c0ffee" } }
         : entry
     );
-    const hub = releaseNotesUpdateDiffs.map((d) => ({
-      ...d,
-      name: "pdf-letters",
-    }));
-    await open(
-      cli,
-      page,
-      "pdf-letters",
-      { events: [...hub, ...lettersUpdateDiffs] },
-      library
-    );
+    await open(cli, page, "pdf-letters", { events: lettersHubDiffs }, library);
     await seeChanges(page, "pdf-letters").click();
-    // In the order the update takes them in: the hub's, then the upstream's.
-    await expect(sheet(page)).toContainText(
-      /Published from another machine.*template\.md.*New version from acme\/skills.*examples\.md/su
-    );
+    // One update, under no caption: the hub's version, by its short id.
+    await expect(sheet(page)).toContainText("77e1d0c");
     await expect(block(page, "template.md")).toContainText("added");
-    await expect(block(page, "examples.md")).toContainText("deleted");
+    await expect(block(page, "examples.md")).toHaveCount(0);
+    await expect(sheet(page)).not.toContainText("New version from");
+    await expect(sheet(page)).not.toContainText(
+      "Published from another machine"
+    );
   });
 
   test("says when the changes could not be read, in the sheet", async ({

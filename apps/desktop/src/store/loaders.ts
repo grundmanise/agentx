@@ -423,7 +423,7 @@ export const updateDiffLabel = (name: string) => `update diff ${name}`;
 
 /**
  * Loads what the update of `name` changes: `skill diff <name> --update`, what `skill update <name>`
- * would apply, a fork's hub step and its upstream's update each under its step. `candidate` names
+ * would apply, for a hub skill what the hub holds, else its upstream's update. `candidate` names
  * the versions the inventory offers (`updateKey`): the same update is read once, however often
  * its changes are shown, and a newer one reads again. A failed read is kept with the CLI's
  * message, and tried again the next time the changes are shown.

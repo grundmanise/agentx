@@ -203,11 +203,12 @@ const driftText = (e: DriftEvent) => {
   return now === undefined ? `${e.name} changed` : `${e.name}: ${now}`;
 };
 
-/** The versions of the update a library entry offers, "" when it offers none. */
+/**
+ * The newer version of the one update a library entry offers, "" when it offers none: what the hub
+ * holds first, else the candidate, as the Skills screen offers them.
+ */
 const offeredVersions = (entry: LibraryEntry) =>
-  entry.candidate === undefined && entry.hub_ahead === undefined
-    ? ""
-    : `${entry.hub_ahead?.commit ?? ""}:${entry.candidate?.upstream_commit ?? ""}`;
+  entry.hub_ahead?.commit ?? entry.candidate?.upstream_commit ?? "";
 
 /**
  * The library skills of `after` that offer an update `before` did not offer them, a newer one

@@ -43,10 +43,11 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"recorded on its branch first, and stay unpublished until\n" +
 			"'agentx skill publish <name>'. A conflict waits as for a skill of a shared\n" +
 			"source, and its worktree and branch stay as they are until it is applied. With a\n" +
-			"hub set, it is fetched first, and the skill is first updated to the\n" +
-			"latest version your other machines published, as a commit of its own. A skill\n" +
-			"made with 'agentx skill new' has no upstream: its update only brings it to the\n" +
-			"latest published version.\n\n" +
+			"hub set, it is fetched first. When your other machines published a newer\n" +
+			"version of the skill, the update takes in that version alone, as a commit of its\n" +
+			"own, and the update from upstream waits for the next run. A skill made with\n" +
+			"'agentx skill new' has no upstream: its update only brings it to the latest\n" +
+			"published version.\n\n" +
 			"Name several skills to update them in one run, under one hold of the lock: the\n" +
 			"run goes on past a skill it cannot update, as --all does, and reports each skill\n" +
 			"as it is done with it. Pass --all instead of names to update every managed skill\n" +
@@ -392,16 +393,23 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 		var u *updating
 		var f *failure
 		fork := managed && rec.Kind == lineage.KindFork
+		if fork && slices.Contains(pulled, n) {
+			// A fork takes one update at a time: the hub step moved
+			// it, so its update from upstream, if it still has one,
+			// waits for the next run.
+			inv.summary = "updated " + n + " to the latest published version"
+			if rec.Fork != nil && rec.Fork.NoUpstream {
+				inv.summary += "; it has no upstream to update from"
+			}
+			continue // ended once it is reported, see reportForks
+		}
 		if fork && r.hub != nil && rec.Fork != nil && rec.Fork.NoUpstream && !inv.mergePending(n) {
-			// A fork with no upstream is up to date once its hub step
-			// took in what the hub held, or found nothing to take
-			// in; one the hub holds no branch of has nothing to
-			// take in until it is published. One with a merge pending goes
-			// on to judgeForkUpdate, the one way that completes it.
+			// A fork with no upstream is up to date when its hub step
+			// found nothing to take in; one the hub holds no branch of
+			// has nothing to take in until it is published. One with a
+			// merge pending goes on to judgeForkUpdate, the one way that
+			// completes it.
 			switch {
-			case slices.Contains(pulled, n):
-				inv.summary = "updated " + n + " to the latest published version; it has no upstream to update from"
-				continue // ended once it is reported, see reportForks
 			case !r.all && r.hub.tips[n] == "":
 				inv.summary = n + " has no branch on the hub; run '" + publishCommand(n) + "' to publish it"
 				inv.out.print(inv.out.paint(heading, sanitised(n)), " has no branch on the hub; run ",
@@ -421,21 +429,14 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 		switch {
 		case f != nil:
 			r.drop(n, f)
-		case u == nil && r.all: // a fork whose hub step took in the update its candidate named
-			continue
 		case u == nil: // a name the last check found no update for, which only a run of names asks about
 			inv.summary = n + " is up to date as of the last update check; run '" + checkUpdatesCommand + "' to look again"
-			if len(pulled) > 0 {
-				inv.summary = "updated " + n + " to the latest published version; it is up to date with its upstream as of the last update check"
-			}
 			inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date as of the last update check; run ",
 				inv.out.paint(label, checkUpdatesCommand), " to look again")
 			if !r.several() {
-				return inv.reportForks(ctx, pulled)
+				return nil
 			}
-			if !slices.Contains(pulled, n) {
-				r.end(n) // a fork the hub step moved ends once it is reported, see reportForks
-			}
+			r.end(n)
 		case u.merged.conflicted && (u.fork == nil || !u.fork.start): // a merge pending with files still to resolve, left as it is
 			r.pending = append(r.pending, u)
 		case fork:
@@ -457,16 +458,10 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 			return err
 		}
 	}
-	var onlyPulled []string
-	for _, n := range pulled {
-		if !slices.ContainsFunc(r.applied, func(u *updating) bool { return u.name == n }) {
-			onlyPulled = append(onlyPulled, n)
-		}
-	}
-	if err := inv.reportForks(ctx, onlyPulled); err != nil {
+	if err := inv.reportForks(ctx, pulled); err != nil {
 		return err
 	}
-	for _, n := range onlyPulled {
+	for _, n := range pulled {
 		r.end(n)
 	}
 	if len(r.applied) > 0 || len(r.pending) > 0 {
@@ -489,9 +484,10 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 
 // afterHubStep is what a run over every skill goes on to update once
 // the hub step ran, see hubStep: the skills it selected but for
-// the forks that have no update from upstream, a candidate other than
-// their base version, and no merge pending. Those were selected for the
-// hub step alone, since the hub held another tip of them,
+// the forks the hub step moved, whose update from upstream waits for the
+// next run, and the forks that have no update from upstream, a candidate
+// other than their base version, and no merge pending. Those were selected
+// for the hub step alone, since the hub held another tip of them,
 // and it already took in what there was: a fork with no upstream is up to
 // date then, and one the remote is behind, with commits not yet published,
 // was up to date all along, so nothing is said of either. The forks the
@@ -501,7 +497,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, names []string) error {
 func (r *updateRun) afterHubStep(names []string, records map[string]lineage.Record, pulled []string, dropped map[string]bool) []string {
 	var kept []string
 	for _, n := range names {
-		if dropped[n] {
+		if dropped[n] || slices.Contains(pulled, n) {
 			continue
 		}
 		if rec, ok := records[n]; ok && rec.Kind == lineage.KindFork && !r.inv.mergePending(n) {
@@ -523,8 +519,8 @@ func (r *updateRun) afterHubStep(names []string, records map[string]lineage.Reco
 // reach neither warns nor fails it. The remote-tracking branches are read
 // once, after the fetch: --all selects from them, see selection, and the
 // hub step takes in what they hold, see hubStep. A fetch that fails
-// is no failure of the run here: the hub step answers for it, and
-// --all selects from what the fetch before left.
+// is no failure of the run here: the hub step answers for it from what
+// the fetch before left, and --all selects from that.
 func (r *updateRun) fetchHub(ctx context.Context, records map[string]lineage.Record) error {
 	inv := r.inv
 	need := false
@@ -551,10 +547,8 @@ func (r *updateRun) fetchHub(ctx context.Context, records map[string]lineage.Rec
 		return err
 	}
 	a := &hubFetch{entry: entry, remote: remote, err: inv.fetchForks(ctx, r.gitDir, remote, false)}
-	if a.err == nil || r.all {
-		if a.tips, err = lineage.ListRemote(ctx, inv.git, r.gitDir, remote); err != nil {
-			return storeFailure(err)
-		}
+	if a.tips, err = lineage.ListRemote(ctx, inv.git, r.gitDir, remote); err != nil {
+		return storeFailure(err)
 	}
 	r.hub = a
 	return nil
@@ -562,19 +556,23 @@ func (r *updateRun) fetchHub(ctx context.Context, records map[string]lineage.Rec
 
 // hubStep is the first step of a fork's update when the run fetched
 // the hub, see fetchHub: what another machine published of
-// the fork is taken in first, see syncFork, as a commit of its own, before
-// the update from upstream merges on top of it. With --all that covers
-// every fork placed here that another machine published to, see selection,
-// a fork with no upstream included, which its hub step alone brings up
-// to date. A fork with a merge pending is left to the update, which
+// the fork is taken in first, see syncFork, as a commit of its own. A fork
+// takes one update at a time: a fork whose branch the step moved takes no
+// update from upstream in the same run. Its candidate stays for the next
+// run, unless the new base leaves it stale, see staleCandidate. With --all
+// that covers every fork placed here that another machine published to,
+// see selection, a fork with no upstream included, which its hub step
+// alone brings up to date. A fork with a merge pending is left to the update, which
 // completes it; one whose remote branch holds nothing it lacks, or that
 // the remote holds no branch of, is left as it is, with nothing reported.
 // A fork whose hub step conflicts, and so is left pending, or is
 // refused, is dropped from the run, see drop, and its update from upstream
 // waits: dropped names them. pulled names the forks whose branch it moved,
 // in name order. A remote git could not reach drops each fork with no
-// upstream, exit code 3, since it has nothing else to update from; for the
-// others it is a warning, and the update from upstream goes on without it.
+// upstream, exit code 3, since it has nothing else to update from, and
+// each fork the hub held new commits of at the last fetch, see hubAhead,
+// since its hub step comes first; for the others it is a warning, and
+// the update from upstream goes on without it.
 func (r *updateRun) hubStep(ctx context.Context, names []string, records map[string]lineage.Record) (pulled []string, dropped map[string]bool, err error) {
 	inv := r.inv
 	a := r.hub
@@ -592,7 +590,7 @@ func (r *updateRun) hubStep(ctx context.Context, names []string, records map[str
 		var upstream []string
 		for _, n := range forks {
 			rec := records[n]
-			if rec.Fork != nil && rec.Fork.NoUpstream {
+			if rec.Fork != nil && rec.Fork.NoUpstream || inv.hubAhead(ctx, rec, a.tips[n]) {
 				dropped[n] = true
 				r.drop(n, unreachableRemote(a.entry.URL, a.err))
 				continue
