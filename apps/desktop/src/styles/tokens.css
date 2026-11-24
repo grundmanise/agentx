@@ -212,6 +212,7 @@
   /* Segmented control */
   --color-segmented-track-bg: var(--gray-950);
   --color-segmented-card-track-bg: var(--gray-980);
+  --color-segmented-page-track-bg: var(--gray-980);
   --color-segmented-track-border: var(--gray-870);
   --color-segmented-text: var(--gray-50);
   --color-segmented-yours-selected: var(--color-accent-yours);
@@ -704,6 +705,8 @@
   --gap-detail-facts: 40px;
   --gap-detail-facts-y: 12px;
   --width-plugin-name-col: 200px;
+  --width-machines-skill-col: 280px;
+  --width-machines-machine-col: 168px;
   --padding-add-card: 6px;
 
   /* Overlays */

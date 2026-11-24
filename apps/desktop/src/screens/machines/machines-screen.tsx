@@ -6,7 +6,9 @@ import { useRouteKey } from "#/lib/route-key.ts";
 import { MachineDetail } from "#/screens/machines/machine-detail.tsx";
 import { MachineList } from "#/screens/machines/machine-list.tsx";
 import { machinePath } from "#/screens/machines/open.ts";
+import { SkillMatrix } from "#/screens/machines/skill-matrix.tsx";
 import { useMachines } from "#/screens/machines/use-machines.ts";
+import { useMachinesView } from "#/screens/machines/view.ts";
 import { hubOf } from "#/screens/skills/banners.ts";
 import { OpenSettingsButton } from "#/screens/skills/publish-dialog.tsx";
 import { loadFleet, loadLabel } from "#/store/loaders.ts";
@@ -38,12 +40,14 @@ const Note = ({
 );
 
 /**
- * The Machines screen: this machine, the other machines that wrote an inventory report to the hub
- * and the cloud machine in the list on the left, and the open machine on the right, with the
- * skills each of its agents sees. This machine is the applied inventory; the others are what the
- * hub holds, read with `machine list` each time the screen opens and after a report is removed,
- * and sent by serve after its check of the hub. The open machine is the route, so another screen
- * can open a machine by its path.
+ * The Machines screen, in one of two views. By machine, the view it opens in: this machine, the
+ * other machines that wrote an inventory report to the hub and the cloud machine in the list on
+ * the left, and the open machine on the right, with the skills each of its agents sees. By skill
+ * (skill-matrix.tsx): every skill across the machines. The views are offered once another machine
+ * shows, and the one chosen stays until the app quits (view.ts). This machine is the applied
+ * inventory; the others are what the hub holds, read with `machine list` each time the screen
+ * opens and after a report is removed, and sent by serve after its check of the hub. The open
+ * machine is the route, so another screen can open a machine by its path.
  */
 export const MachinesScreen = () => {
   const navigate = useNavigate();
@@ -51,6 +55,7 @@ export const MachinesScreen = () => {
   const hub = useHubSet();
   const fleetRead = useAppStore((s) => s.fleet !== undefined);
   const reading = usePending(loadLabel(["machine", "list"]));
+  const by = useMachinesView((s) => s.by);
   // A screen that shows again runs its effects again: the hub is read each time this one opens,
   // while a hub is set, since the command needs one.
   useEffect(() => {
@@ -62,6 +67,11 @@ export const MachinesScreen = () => {
   // machine.
   const routeKey = useRouteKey();
   const selected = machines.find((m) => m.id === routeKey) ?? machines[0];
+  // One machine has nothing to be compared with: the screen is then its list and details alone.
+  const switchable = machines.length > 1;
+  if (switchable && by === "skill") {
+    return <SkillMatrix machines={machines} reading={reading} />;
+  }
   let note: ReactNode;
   if (hub === false) {
     note = (
@@ -85,6 +95,7 @@ export const MachinesScreen = () => {
           void navigate(machinePath(machine.id));
         }}
         reading={reading}
+        switchable={switchable}
         note={note}
       />
       <section

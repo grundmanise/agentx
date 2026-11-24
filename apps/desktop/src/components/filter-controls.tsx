@@ -247,14 +247,16 @@ const trackVariants = cva(
       surface: {
         card: "bg-segmented-card-track-bg",
         overlay: "bg-segmented-track-bg",
+        page: "bg-segmented-page-track-bg",
       },
     },
   }
 );
 
 /**
- * A segmented control of equal segments, one selected: STATE in the popover, and the placement
- * on an agent client card. While `busy`, its command runs: it is disabled and says so.
+ * A segmented control of equal segments, one selected: STATE in the popover, the placement on an
+ * agent client card, and the view of the Machines screen. While `busy`, its command runs: it is
+ * disabled and says so.
  */
 export const Segmented = <T extends string>({
   group,
@@ -276,8 +278,8 @@ export const Segmented = <T extends string>({
   labelledBy?: string;
   /** What the control decides, on hover. */
   title?: string;
-  /** What it sits on: the popover (the default) or a card. */
-  surface?: "overlay" | "card";
+  /** What it sits on: the popover (the default), a card or the page. */
+  surface?: "overlay" | "card" | "page";
   disabled?: boolean;
   busy?: boolean;
 }) => (

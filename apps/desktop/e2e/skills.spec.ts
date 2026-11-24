@@ -741,7 +741,16 @@ test.describe("the detail pane", () => {
           - text: Another version
     `);
 
+    // A name opens its machine in the By machine view, whichever view the Machines screen was
+    // left in.
     cli.register(["machine", "list"], { events: [fleet] });
+    const nav = page.getByRole("navigation", { name: "Main" });
+    await nav.getByRole("link", { name: "Machines" }).click();
+    await page.getByRole("radio", { name: "By skill" }).check();
+    await expect(
+      page.getByRole("table", { name: "Skills on your machines" })
+    ).toBeVisible();
+    await nav.getByRole("link", { name: "Skills" }).click();
     await details.getByRole("button", { name: "workbench" }).click();
     await expect(page).toHaveURL(
       new RegExp(`#/machines/${WORKBENCH_ID}$`, "u")

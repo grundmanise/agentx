@@ -3,9 +3,10 @@ import type { ReactNode } from "react";
 import { LogoStack } from "#/components/agent-logo.tsx";
 import { ListRow } from "#/components/list-row.tsx";
 import { Pill } from "#/components/pill.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { useNow } from "#/lib/now.ts";
 import { plural } from "#/lib/plural.ts";
+import { cn } from "#/lib/utils.ts";
+import { MachinesHeader } from "#/screens/machines/machines-header.tsx";
 import { changedWhen, nameOf } from "#/screens/machines/projection.ts";
 import type { MachineView } from "#/screens/machines/projection.ts";
 
@@ -69,14 +70,16 @@ const MachineRow = ({
 };
 
 /**
- * The Machines list column: the title and count, then this machine, the other machines the hub
- * holds and the cloud machine, and under them a line when no other machine can show yet.
+ * The Machines list column, the left of the By machine view: the head of the screen, then this
+ * machine, the other machines the hub holds and the cloud machine, and under them a line when no
+ * other machine can show yet.
  */
 export const MachineList = ({
   machines,
   selectedId,
   onSelect,
   reading,
+  switchable,
   note,
 }: {
   machines: MachineView[];
@@ -84,6 +87,8 @@ export const MachineList = ({
   onSelect: (machine: MachineView) => void;
   /** The hub is being read: a spinner turns beside the count. */
   reading: boolean;
+  /** The screen has another view to switch to: the head then holds the switch. */
+  switchable: boolean;
   /** What stands under the rows while no other machine shows. */
   note?: ReactNode;
 }) => {
@@ -94,21 +99,18 @@ export const MachineList = ({
       aria-busy={reading ? true : undefined}
       className="w-split-list bg-shell-content-bg border-shell-divider flex flex-none flex-col border-r"
     >
-      <div className="pt-split-header-top px-split-header flex items-baseline gap-3 pb-0">
-        <h1 className="type-page-title text-text-primary m-0">Machines</h1>
-        <span
-          aria-label={plural(machines.length, "machine")}
-          className="type-technical text-text-caption"
-        >
-          {machines.length}
-        </span>
-        {reading && (
-          <span className="text-text-hint flex self-center">
-            <Spinner />
-          </span>
+      <MachinesHeader
+        count={machines.length}
+        reading={reading}
+        by={switchable ? "machine" : undefined}
+      />
+      <div
+        className={cn(
+          "pr-split-list-right pb-split-list-bottom pl-split-list-left flex min-h-0 flex-1 flex-col gap-6 overflow-auto",
+          // Under the switch, its row's own padding stands above the rows.
+          switchable ? "pt-0" : "pt-split-list-top"
         )}
-      </div>
-      <div className="pt-split-list-top pr-split-list-right pb-split-list-bottom pl-split-list-left flex min-h-0 flex-1 flex-col gap-6 overflow-auto">
+      >
         <ul className="gap-rows m-0 flex list-none flex-col p-0">
           {machines.map((machine) => (
             <li key={machine.id} className="flex">

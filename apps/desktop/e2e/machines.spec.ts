@@ -1,7 +1,7 @@
 // The Machines screen: this machine from its inventory, the other machines and the cloud machine
 // from what the hub holds (`machine list`, and serve's `fleet` event), the open machine's agents
-// and skills, Remove report (`machine remove <id>`), and the line that stands in for the other
-// machines while none can show.
+// and skills, the By skill view of every skill across the machines, Remove report
+// (`machine remove <id>`), and the line that stands in for the other machines while none can show.
 import type { Page } from "@playwright/test";
 
 import {
@@ -23,6 +23,11 @@ const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
 const detail = (page: Page) =>
   page.getByRole("region", { exact: true, name: "Machine details" });
+const bySkill = (page: Page) =>
+  page.getByRole("region", { exact: true, name: "Machines by skill" });
+/** The switch between the screen's views, under its title. */
+const views = (page: Page) =>
+  page.getByRole("radiogroup", { name: "Machines" });
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 
@@ -34,6 +39,12 @@ const rowNames = async (page: Page) =>
     .evaluateAll((buttons) =>
       buttons.map((b) => b.getAttribute("aria-label") ?? "")
     );
+
+/** The skills the By skill table lists, top to bottom. */
+const skillNames = async (page: Page) => {
+  const cells = await bySkill(page).getByRole("rowheader").allInnerTexts();
+  return cells.map((text) => text.split("\n")[0]);
+};
 
 /** How many times `args` ran. */
 const runs = (cli: MockCli, args: string[]) =>
@@ -174,6 +185,64 @@ test("the cloud machine shows what each cloud session is given", async ({
           - listitem: commit-message Library Hub
           - listitem: release-notes Library Hub
   `);
+});
+
+test("By skill lists every skill across the machines with what each machine has of it, and Only differences leaves the skills that differ", async ({
+  cli,
+  page,
+}) => {
+  await openMachines(cli, page, fleet);
+  await views(page).getByRole("radio", { name: "By skill" }).check();
+  // A column per machine, in the list's order. A machine is compared with the first one that
+  // holds the skill: changelog is edited on workbench and at an older commit of its source on the
+  // cloud machine, whose skills have no content hash, so its hub skills claim no difference.
+  await expect(bySkill(page).getByRole("table")).toMatchAriaSnapshot(`
+    - table "Skills on your machines":
+      - rowgroup:
+        - row "Skill studio This machine atelier Changed 2 hours ago workbench Changed Mar 9, 2025 Cloud machine Changed 3 days ago"
+      - rowgroup:
+        - row "changelog example/skills Has it Has it Another version Another version"
+        - row "commit-message Hub Has it Has it Has it Has it"
+        - row "lint review plugin Not there Not there Has it Not there"
+        - row "release-notes Hub Not there Not there Has it Has it"
+        - row "scratch Skills directory Not there Has it Has it Not there"
+  `);
+
+  // commit-message is the same on every machine.
+  await bySkill(page)
+    .getByRole("checkbox", { name: "Only differences" })
+    .click();
+  await expect
+    .poll(async () => await skillNames(page))
+    .toEqual(["changelog", "lint", "release-notes", "scratch"]);
+
+  // The view stays as it was left while another screen shows.
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await nav.getByRole("link", { name: "Agents" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Agents" })
+  ).toBeVisible();
+  await nav.getByRole("link", { name: "Machines" }).click();
+  await expect(
+    bySkill(page).getByRole("checkbox", { name: "Only differences" })
+  ).toBeChecked();
+  expect(await skillNames(page)).toEqual([
+    "changelog",
+    "lint",
+    "release-notes",
+    "scratch",
+  ]);
+
+  // By machine is the list and the open machine again.
+  await views(page).getByRole("radio", { name: "By machine" }).check();
+  await expect(row(page, "studio")).toHaveAttribute("aria-current", "true");
+
+  // One machine has nothing to be compared with: its list and details show, with no switch.
+  await views(page).getByRole("radio", { name: "By skill" }).check();
+  await expect(bySkill(page)).toBeVisible();
+  await cli.serveEmit([fleetOfThisMachine]);
+  await expect(row(page, "studio")).toHaveAttribute("aria-current", "true");
+  await expect(views(page)).toHaveCount(0);
 });
 
 test("the hub is read each time the screen opens, a failed read keeps the list, and what serve finds on the hub replaces it", async ({
