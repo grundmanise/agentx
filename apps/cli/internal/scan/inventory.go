@@ -56,7 +56,9 @@ type Machine struct {
 // own, the configuration lists are each configuration's enabled and
 // placement, and copy_mode is each library placement's mode.
 type Settings struct {
-	IgnoreSystemFiles bool `json:"ignore_system_files"`
+	IgnoreSystemFiles bool   `json:"ignore_system_files"`
+	Telemetry         string `json:"telemetry,omitempty"`    // on or off; empty until answered
+	AnonymousID       string `json:"anonymous_id,omitempty"` // the id usage data is sent under, while telemetry is on
 }
 
 // Source is one source of the machine settings, as source list reports it:

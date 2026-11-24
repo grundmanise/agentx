@@ -252,6 +252,8 @@ export interface LibraryPlacement {
 
 export interface InventorySettings {
   ignore_system_files: boolean;
+  telemetry?: string;
+  anonymous_id?: string;
 }
 
 export interface Configuration {

@@ -158,11 +158,18 @@ func (inv *invocation) offerTelemetry(ctx context.Context, in io.Reader) error {
 	return nil
 }
 
-// settingsAnonymousID is the anonymous id the settings event carries: set
-// only while the setting is on and DO_NOT_TRACK is unset, which counts as
-// off for the desktop app too.
+// carriesAnonymousID reports whether the settings event and the
+// inventory's settings carry the anonymous id: only while the setting is
+// on and DO_NOT_TRACK is unset, which counts as off for the desktop app
+// too.
+func (inv *invocation) carriesAnonymousID(s home.Settings) bool {
+	return s.Telemetry == telemetryOn && !inv.doNotTrack()
+}
+
+// settingsAnonymousID is the anonymous id the settings event carries, see
+// carriesAnonymousID.
 func (inv *invocation) settingsAnonymousID(s home.Settings) string {
-	if s.Telemetry != telemetryOn || inv.doNotTrack() {
+	if !inv.carriesAnonymousID(s) {
 		return ""
 	}
 	id, err := inv.anonymousIDNow(context.Background())

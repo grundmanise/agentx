@@ -190,7 +190,10 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 			// read; the sources below are read under this lock too, so
 			// that a source being added or removed is never seen half
 			// written.
-			settings = scan.Settings{IgnoreSystemFiles: s.IgnoreSystemFiles}
+			settings = scan.Settings{IgnoreSystemFiles: s.IgnoreSystemFiles, Telemetry: s.Telemetry}
+			if inv.carriesAnonymousID(s) {
+				settings.AnonymousID = anonymousID(machineID)
+			}
 			machine = inv.machineOf(machineID, derivation, s)
 			// When each skill last entered and left the library, as the
 			// commands that did it recorded, read under the lock they write
