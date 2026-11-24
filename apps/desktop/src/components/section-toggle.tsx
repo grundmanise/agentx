@@ -110,9 +110,7 @@ export const SectionToggle = ({
         ) : (
           <Tooltip>
             <TooltipTrigger asChild>{caption}</TooltipTrigger>
-            <TooltipContent side="top" align="start">
-              {title}
-            </TooltipContent>
+            <TooltipContent placement="above-start">{title}</TooltipContent>
           </Tooltip>
         )}
         {count !== undefined && (

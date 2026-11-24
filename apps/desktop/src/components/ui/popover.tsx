@@ -1,12 +1,12 @@
 // shadcn/ui Popover (`pnpm dlx shadcn@latest add popover`), on our tokens: DESIGN.md §6
 // "Popover". Its parts keep shadcn's names and `data-slot` attributes and take no `className`;
-// the content's padding is a variant.
+// the content's padding, width and placement are variants.
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import type { ReactNode } from "react";
 
-import type { OwnProps } from "#/lib/utils.ts";
+import type { OwnProps, PlacedProps } from "#/lib/utils.ts";
 
 const Popover = ({ ...props }: OwnProps<typeof PopoverPrimitive.Root>) => (
   <PopoverPrimitive.Root data-slot="popover" {...props} />
@@ -49,24 +49,30 @@ const popoverContentVariants = cva(
   }
 );
 
-/** Below its anchor, aligned to its start, `popover.offset` away, `popover.window-inset` from the window's edges. */
+// Where the content opens: below its anchor, aligned to its start or its end.
+const popoverPlacements = {
+  "below-end": { align: "end", side: "bottom" },
+  "below-start": { align: "start", side: "bottom" },
+} as const;
+
+/** Below its anchor (`placement`), `popover.offset` away, `popover.window-inset` from the window's edges. */
 const PopoverContent = ({
   padding,
   width,
-  align = "start",
-  // popover.offset
-  sideOffset = 8,
-  // popover.window-inset
-  collisionPadding = 10,
+  placement = "below-start",
   ...props
-}: OwnProps<typeof PopoverPrimitive.Content> &
-  VariantProps<typeof popoverContentVariants>) => (
+}: PlacedProps<typeof PopoverPrimitive.Content> &
+  VariantProps<typeof popoverContentVariants> & {
+    placement?: keyof typeof popoverPlacements;
+  }) => (
   <PopoverPrimitive.Portal>
     <PopoverPrimitive.Content
       data-slot="popover-content"
-      align={align}
-      sideOffset={sideOffset}
-      collisionPadding={collisionPadding}
+      {...popoverPlacements[placement]}
+      // popover.offset
+      sideOffset={8}
+      // popover.window-inset
+      collisionPadding={10}
       className={popoverContentVariants({ padding, width })}
       {...props}
     />
