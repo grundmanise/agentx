@@ -208,6 +208,28 @@ test("the hub is read each time the screen opens, a failed read keeps the list, 
     .toEqual(["studio", "atelier", "Cloud machine"]);
 });
 
+test("a row says how long ago as of now when the screen shows again", async ({
+  cli,
+  page,
+}) => {
+  await page.clock.install();
+  await openMachines(cli, page, fleet);
+  await expect(row(page, "atelier")).toHaveAccessibleDescription(
+    "Changed 2 hours ago · 1 skill"
+  );
+  // An hour passes while another screen shows, where the hidden screen keeps no time.
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await nav.getByRole("link", { name: "Agents" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Agents" })
+  ).toBeVisible();
+  await page.clock.fastForward("01:00:00");
+  await nav.getByRole("link", { name: "Machines" }).click();
+  await expect(row(page, "atelier")).toHaveAccessibleDescription(
+    "Changed 3 hours ago · 1 skill"
+  );
+});
+
 test("Remove report asks first, then runs machine remove and reads the hub again", async ({
   cli,
   page,
