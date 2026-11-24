@@ -68,7 +68,7 @@ Go module in `apps/cli`:
 | `make test-cli` | Runs every test with the race detector, never from cache | `go test -race -count=1 ./...` |
 | `make check-cli` | Runs all the CLI checks CI runs, in the same order | `fmt-check-cli lint-cli tidy-check-cli build-cli test-cli` |
 | `make check-desktop` | Runs all the desktop app checks CI runs: the frontend, then the Tauri shell | `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm test`, `pnpm build`, then `cargo fmt --check` and `cargo clippy --locked -- -D warnings` |
-| `make check-docs` | Checks the Help Center: `docs.json` and every page build, and every internal link and anchor points to a page or heading that exists | `mint validate`, then `mint broken-links --check-anchors`, in `docs/help-center` |
+| `make check-docs` | Checks the Help Center: `docs.json` and every page build, and every internal link and anchor points to a page or heading that exists | `pnpm install --filter agentx`, then `mint validate` and `mint broken-links --check-anchors` in `docs/help-center` |
 | `make check` | Runs every check CI runs | `check-cli check-desktop check-docs` |
 
 To run the tests without the race detector, as CI does on macOS, use `make test-cli RACE=`.
@@ -81,8 +81,8 @@ CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
 including Playwright's Chromium. The desktop app's own commands, such as `pnpm fix`, are in its
 [README](apps/desktop/README.md).
 
-`make check-docs` needs only Node. It runs the Mintlify CLI through `npx`, at the version pinned in the
-`Makefile`. CI runs it on pull requests that change `docs/help-center`.
+`make check-docs` needs Node and pnpm. It installs only the root package, where `package.json` pins the
+Mintlify CLI (`mint`). CI runs it on pull requests that change `docs/help-center`.
 
 ## Make a change
 

@@ -20,10 +20,15 @@ minimumReleaseAge: 1440
 # Fail when a package's publish trust drops below that of its earlier releases.
 trustPolicy: no-downgrade
 
-# Install scripts run only for the packages listed here; any other package with one fails the
-# install (strictDepBuilds is on by default). No dependency needs one today: esbuild is not in the
-# tree, and Tailwind's oxide engine and the other native tools ship prebuilt per-platform packages.
-allowBuilds: {}
+# Install scripts run only for the packages listed here as true; any other package with one fails
+# the install (strictDepBuilds is on by default). No dependency needs one today: Tailwind's oxide
+# engine and the other native tools ship prebuilt per-platform packages. The packages set to false
+# come with the Mintlify CLI (`mint`), whose `validate` and `broken-links` run without their builds.
+allowBuilds:
+  '@parcel/watcher': false
+  esbuild: false
+  keytar: false
+  sharp: false
 
 # When the running pnpm is not the version pinned in the root packageManager field, download and
 # run the pinned one (the default, set here so the choice is explicit). pnpm 11 replaced

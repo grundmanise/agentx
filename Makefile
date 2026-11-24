@@ -10,7 +10,6 @@ DESKTOP = apps/desktop
 DOCS = docs/help-center
 # Pinned in one place.
 GOLANGCI_LINT_VERSION = $(shell cat $(CLI)/.golangci-lint-version)
-MINT_VERSION = 4.3.88
 # `go run pkg@version` resolves its toolchain from that package's own go.mod and
 # ignores ours, so a machine whose `go` predates the linter's minimum switches
 # down to that minimum, and the binary it builds then refuses this module's
@@ -60,7 +59,9 @@ check-desktop:
 	cd $(DESKTOP)/src-tauri && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked
 
 # The Help Center in docs/help-center: docs.json and the pages build, and every internal link and
-# anchor points to a page or heading that exists. Needs Node 20.17 or later.
+# anchor points to a page or heading that exists. Installs only the root package, where the root
+# package.json pins the Mintlify CLI (`mint`). Needs Node 26 or later and pnpm 12.
 check-docs:
-	cd $(DOCS) && npx --yes mint@$(MINT_VERSION) validate
-	cd $(DOCS) && npx --yes mint@$(MINT_VERSION) broken-links --check-anchors
+	pnpm install --frozen-lockfile --filter agentx
+	cd $(DOCS) && pnpm exec mint validate
+	cd $(DOCS) && pnpm exec mint broken-links --check-anchors

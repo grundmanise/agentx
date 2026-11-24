@@ -7,12 +7,18 @@ on:
       - docs/help-center/**
       - .github/workflows/docs.yml
       - Makefile
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
   push:
     branches: [main]
     paths:
       - docs/help-center/**
       - .github/workflows/docs.yml
       - Makefile
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,9 +34,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Reads the pnpm version from packageManager in the root package.json.
+      - uses: pnpm/action-setup@v6
+
       - uses: actions/setup-node@v7
         with:
-          # The Node version in .node-version. The Mintlify CLI needs 20.17 or later.
+          # The Node version in .node-version, which engines in package.json requires.
           node-version-file: .node-version
+          cache: pnpm
 
       - run: make check-docs
