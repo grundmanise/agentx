@@ -18,9 +18,16 @@ A machine shows on your other machines once it writes its inventory report to yo
 1. On that machine, open **Settings**.
 2. Under **This machine**, turn on **Report inventory**.
 
-While the switch is on, agentx writes the machine's report to your hub when its skills change. The switch is off by default. Without a hub, you cannot turn it on.
+While the switch is on and the desktop app is open, agentx writes the machine's report to your hub on its own:
 
-On a machine without the desktop app, run [`agentx machine report`](/cli/machine#write-this-machines-report).
+- **After a change**: about a minute after the machine's skills last changed. Several changes in a row make one report.
+- **When the app starts**: after about a minute, if the report on your hub is not the one of this machine as it is now.
+
+The first report follows about a minute after you turn the switch on. The switch is off by default, and you turn it on machine by machine. Without a hub, you cannot turn it on.
+
+The switch is the machine setting `report_inventory`. See [Let agentx write the report](/cli/machine#let-agentx-write-the-report).
+
+On a machine without the desktop app, or to write the report now, run [`agentx machine report`](/cli/machine#write-this-machines-report).
 
 The report holds the names of the machine's skills and plugins, their versions and their sources. It holds no path, no machine setting and no file of any skill. Anyone who can read your hub can read the report. For everything it holds, see [Write this machine's report](/cli/machine#write-this-machines-report).
 
@@ -32,9 +39,9 @@ Open **Machines**. The list shows:
 2. Your other machines that wrote a report, by label.
 3. The [cloud machine](/cloud), from its snapshot.
 
-Each row shows the machine's label, its agents, when its report last changed on the hub, and how many skills its agents see. The date is not when the machine was last on.
+Each row shows the machine's label, its agents, when its report last changed on the hub, and how many skills its agents see. A skill that several agents see counts once. The date is not when the machine was last on.
 
-agentx reads your hub each time you open the screen.
+agentx reads your hub each time you open the screen. While the app is open, it also checks your hub every 10 minutes and updates the list when a report changed.
 
 ## See a machine's skills
 
@@ -59,7 +66,7 @@ Remove the report of a machine you no longer use.
 1. Open **Machines** and select the machine.
 2. Select **Remove report**, then **Remove**.
 
-agentx deletes the report from your hub, and the machine leaves the list. Nothing changes on that machine. A machine that still reports shows again after its next report.
+agentx deletes the report from your hub, and the machine leaves the list. Nothing changes on that machine. A machine that writes its report again, on its own or with `agentx machine report`, shows again.
 
 **Remove report** shows on your other machines. The cloud machine writes no report.
 
