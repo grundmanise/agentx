@@ -260,7 +260,7 @@ export const fleet = {
   type: "fleet",
 } satisfies InlineEvent;
 
-/** The hub once the report of `workbench` is removed. */
+/** The hub once the report of `workbench` is gone. */
 export const fleetWithoutWorkbench = {
   machines: [studio, atelier, cloud],
   type: "fleet",

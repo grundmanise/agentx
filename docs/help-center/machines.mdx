@@ -59,17 +59,10 @@ Under them, each agent of the machine lists the skills it sees, and where each s
 
 For the cloud machine, the skills are what each cloud agent session is given. To change them, see [Change the cloud machine's skills](/cloud#change-the-cloud-machines-skills).
 
-## Remove a machine's report
+## Take a machine off the list
 
-Remove the report of a machine you no longer use.
-
-1. Open **Machines** and select the machine.
-2. Select **Remove report**, then **Remove**.
-
-agentx deletes the report from your hub, and the machine leaves the list. Nothing changes on that machine. A machine that writes its report again, on its own or with `agentx machine report`, shows again.
-
-**Remove report** shows on your other machines. The cloud machine writes no report.
+To take a machine off the list, open **Settings** on that machine and select **Unlink** under **Hub**: unlinking the hub deletes the machine's report from it. Turning **Report inventory** off keeps the last report, so the machine stays in the list.
 
 ## From the command line
 
-`agentx machine list`, `agentx machine show` and `agentx machine remove` do the same. See [See the skills of your other machines](/cli/machine#see-the-skills-of-your-other-machines).
+`agentx machine list` and `agentx machine show` do the same. See [See the skills of your other machines](/cli/machine#see-the-skills-of-your-other-machines).

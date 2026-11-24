@@ -49,8 +49,8 @@ const Note = ({
  * The Machines screen: this machine, the other machines that wrote an inventory report to the hub
  * and the cloud machine in the list on the left, and the open machine on the right, with the
  * skills each of its agents sees. This machine is the applied inventory; the others are what the
- * hub holds, read with `machine list` each time the screen opens and after a report is removed,
- * and sent by serve after its check of the hub. Nothing here compares two machines.
+ * hub holds, read with `machine list` each time the screen opens and sent by serve after its
+ * check of the hub. Nothing here compares two machines.
  */
 export const MachinesScreen = () => {
   const machines = useMachines();

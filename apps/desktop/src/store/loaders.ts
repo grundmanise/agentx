@@ -1,9 +1,9 @@
 // The slices that one-shot reads fill: settings, sources and the adoption preview. Each loads
 // once the startup checks pass, and again after the commands that change it. The adoption preview
 // also loads when Settings opens and on Check updates. The machines the hub holds load when the
-// Machines screen opens and after a report is removed. The update check of
-// `skill check-updates` replaces the update candidates serve found and sets when the last check
-// ended, and `skill update` takes away those of the skills it updated.
+// Machines screen opens. The update check of `skill check-updates` replaces the update candidates
+// serve found and sets when the last check ended, and `skill update` takes away those of the
+// skills it updated.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
   CliEvent,
@@ -223,8 +223,7 @@ export const loadAdoption = joined(async () => {
 /**
  * Loads what the hub holds of every machine: `machine list`, which reads the hub and fetches only
  * the reports that changed. The Machines screen calls it when it opens, while a hub is set, since
- * the command needs one. A call while the hub is read joins that run; `afterWrite`, a call after
- * a report is removed, reads it once more after.
+ * the command needs one. A call while the hub is read joins that run.
  */
 export const loadFleet = joined(async () => {
   await load(["machine", "list"], (events) => {
@@ -529,10 +528,7 @@ const reloadReads = (command: string, args: readonly string[]) => {
   if (command.startsWith("config ") || command === "snapshot apply") {
     void loadSettings();
   }
-  // Removing a report changes what the hub holds, and nothing of this machine.
-  if (command === "machine remove") {
-    void loadFleet({ afterWrite: true });
-  } else if (command.startsWith("machine ")) {
+  if (command.startsWith("machine ")) {
     void loadMachine();
   }
   // The label is the machine's: Settings shows it from `machine`, which reads it again.
