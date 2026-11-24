@@ -84,13 +84,6 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `settings` | object | the machine settings as they now are, in the shape of the settings file below, with `label` filled in from the hostname when it is not set |
 | `telemetry_id` | string | the [telemetry id](#telemetry), present exactly when `telemetry` is `on` and `DO_NOT_TRACK` is unset, so the desktop app sends under the same id, and only then |
 
-`consent`, emitted by `agentx scan --json` and `agentx serve` once, right after the first `inventory`, while the `telemetry` setting is unset and telemetry is offered (see [Telemetry](#telemetry)):
-
-| Field | Type | Meaning |
-|---|---|---|
-| `topic` | string | `telemetry` |
-| `state` | string | `unset` |
-
 `config_removal`, emitted by `agentx config remove`, one per configuration it removed, sorted by `id`, before the `settings` event:
 
 | Field | Type | Meaning |
@@ -500,7 +493,7 @@ The machine id names one computer across reinstalls. It is derived, in this orde
 
 Usage data is opt-in and anonymous. It is **offered** when a host is known, from `AGENTX_TELEMETRY_ENDPOINT` or set in the release build, and `DO_NOT_TRACK` is unset; a source build has no host and never offers, records or sends. It is **recorded** when it is offered and the `telemetry` setting is `on`. Nothing is recorded or sent while the setting is absent or `off`.
 
-**Consent.** While telemetry is offered and the setting is absent, `agentx scan` without `--json` asks after it printed the inventory, when a person is there to answer (stdin and stdout are terminals, or `AGENTX_INTERACTIVE` is `1`): it prints what is sent and `Send anonymous usage data? [y/N] `, reads one line, and stores `on` for `y` or `yes`, in any case, and `off` for anything else, as a mutation. A run with no one to answer asks nothing and stores nothing, so a later run asks. `agentx scan --json` and `agentx serve` ask nothing and emit the `consent` event once after the first inventory instead; the desktop app answers with `config set telemetry`. The setting is this machine's own: `snapshot save` leaves it out and `snapshot apply` keeps the machine's value.
+**Consent.** While telemetry is offered and the setting is absent, `agentx scan` without `--json` asks after it printed the inventory, when a person is there to answer (stdin and stdout are terminals, or `AGENTX_INTERACTIVE` is `1`): it prints what is sent and `Send anonymous usage data? [y/N] `, reads one line, and stores `on` for `y` or `yes`, in any case, and `off` for anything else, as a mutation. A run with no one to answer asks nothing and stores nothing, so a later run asks. `agentx scan --json` and `agentx serve` never ask: the desktop app reads the setting from the `settings` event, asks itself while `telemetry` is absent, and answers with `config set telemetry`. The setting is this machine's own: `snapshot save` leaves it out and `snapshot apply` keeps the machine's value.
 
 **The telemetry id** is HMAC-SHA256 with the key `agentx-telemetry-id/v1` over the machine id, rendered as the first 32 lowercase hex characters. It differs from the machine id, cannot be joined with it without the machine id itself, and changes with `agentx machine reset-id`.
 

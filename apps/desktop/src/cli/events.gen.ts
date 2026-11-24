@@ -368,13 +368,6 @@ export interface SettingsEvent {
   telemetry_id?: string;
 }
 
-export interface ConsentEvent {
-  type: "consent";
-  schema_version: number;
-  topic: string;
-  state: string;
-}
-
 export interface ConfigRemovalEvent {
   type: "config_removal";
   schema_version: number;
@@ -673,7 +666,6 @@ export type CliEvent =
   | VersionEvent
   | UpdateEvent
   | SettingsEvent
-  | ConsentEvent
   | ConfigRemovalEvent
   | MachineEvent
   | SourceEvent

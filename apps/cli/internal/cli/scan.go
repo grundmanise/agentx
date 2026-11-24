@@ -51,7 +51,6 @@ func newScanCommand(inv *invocation) *cobra.Command {
 			}
 			inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
 			if inv.out.json {
-				inv.emitConsent()
 				return nil
 			}
 			inv.printInventory(inventory)
