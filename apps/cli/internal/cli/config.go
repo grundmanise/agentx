@@ -307,7 +307,7 @@ func settingSetter(key, value string) (func(*home.Settings), error) {
 		return func(s *home.Settings) { s.IgnoreSystemFiles = b }, err
 	case "telemetry":
 		if value != telemetryOn && value != telemetryOff {
-			return nil, fail(exitUsage, fmt.Sprintf("invalid value %q for telemetry", value), "use on or off")
+			return nil, fail(exitUsage, fmt.Sprintf("telemetry must be on or off, not %q", value), "")
 		}
 		return func(s *home.Settings) { s.Telemetry = value }, nil
 	case "schema_version", "disabled_configurations", "copy_configurations", "sources", "copy_mode":

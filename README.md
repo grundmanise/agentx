@@ -78,15 +78,16 @@ Supports 75 agents:
 | Windsurf, GitHub Copilot | ✓ | ✓ | |
 | All others | ✓ | | |
 
-> Under active development. The command-line tool already:
->
-> - inventories every agent configuration and what it sees: [`agentx scan`](https://docs.agentx.wtf/cli/scan)
-> - installs skills from git sources and places them in your agent clients: [`agentx skill add`](https://docs.agentx.wtf/cli/skill#install-a-skill)
-> - checks for newer versions and applies them, one skill, several in one run or all at once, merging your own edits into each update: [`agentx skill check-updates`](https://docs.agentx.wtf/cli/skill#check-for-updates), [`agentx skill update`](https://docs.agentx.wtf/cli/skill#update-a-skill)
-> - imports the skills already on your machine: the ones the Vercel skills CLI or Skillshare installed from a git source are installed from it, so agentx can update them too, and any other becomes a hub skill: [`agentx skill import`](https://docs.agentx.wtf/cli/skill-import)
-> - forks skills into hub skills, with a history you publish to your hub and install on your other machines: [`agentx skill fork`](https://docs.agentx.wtf/cli/fork), [`agentx skill publish`](https://docs.agentx.wtf/cli/skill#publish-a-skill)
->
-> The desktop app is in progress.
+## Goals and non-goals
+
+Goals:
+- one person multi-machine and multi-agent workflows
+
+Not goals:
+
+- company-wide skill distribution and sharing
+
+See [ADR 0020](docs/adr/0020-agentx-is-for-one-person-and-their-one-hub.md).
 
 ## Project docs
 

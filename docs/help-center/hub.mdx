@@ -1,9 +1,9 @@
 ---
 title: "Hub"
-description: "The Git repository that carries your hub skills and the snapshot of each machine to your other machines and your cloud agents. It can be your own, one your machines share, or one someone else keeps to share skills."
+description: "The Git repository that carries your hub skills and the snapshot of each machine to your other machines and your cloud agents. It is your own, and you have one."
 ---
 
-Your hub is a Git repository. agentx uses it to move your hub skills and a snapshot of each machine between machines. It can be your own repository, one your machines share, or one someone else keeps to share skills with you, such as a team.
+Your hub is a Git repository. agentx uses it to move your hub skills and a snapshot of each machine between machines. It is your own repository, the one place you publish to. Skills that other people share, such as your company's, come from a [source](/sources) instead.
 
 If you can only read the hub, you can install its skills, but you can't publish to it: the desktop app turns Publish off, and `agentx skill publish` fails when it pushes.
 
@@ -43,7 +43,7 @@ On each machine, add the repository with `--hub`:
 agentx source add git@github.com:you/agentx-hub.git --hub
 ```
 
-In the desktop app, open **Settings**, paste the URL under **Hub** and select **Save**. **Change…** replaces it with another repository, and **Detach** removes it. Your skills stay on the machine either way.
+In the desktop app, open **Settings**, paste the URL under **Hub** and select **Save**. **Change…** replaces it with another repository, and **Unlink** removes it. Your skills stay on the machine either way.
 
 Each machine can use its own URL for the same repository, such as SSH on your computer and HTTPS for a cloud agent. For the details, see [Add your hub](/cli/source#add-your-hub). For how `agentx snapshot apply` treats two URLs of one repository, see [Apply a snapshot](/cli/snapshot#apply-a-snapshot).
 

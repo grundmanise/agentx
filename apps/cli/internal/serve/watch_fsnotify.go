@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/crash"
 )
 
 // fsnotifyBackend keeps one non-recursive watch per directory, since the
@@ -24,6 +26,7 @@ func newBackend(sig signals) (backend, error) {
 	}
 	events, errs := w.Events, w.Errors
 	go func() { // until Close closes both channels
+		defer crash.Recover(sig.crashed)
 		for events != nil || errs != nil {
 			select {
 			case _, ok := <-events:
