@@ -46,3 +46,5 @@ symlinks?
 OpenCode
 Cline
 WebSocket
+cron
+systemd

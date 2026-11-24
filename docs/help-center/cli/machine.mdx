@@ -127,6 +127,54 @@ The setting is off until you turn it on, and you turn it on machine by machine. 
 
 If agentx cannot write the report, for example because the machine is offline or cannot push to your hub, it tries again after the next change, and when it next reaches your hub.
 
+### Report from a machine without the desktop app
+
+On a server, or any machine where the desktop app does not run, run `agentx machine report` on a timer. A run that finds nothing changed pushes nothing.
+
+Before you set up the timer, check that the command works with no prompt:
+
+1. Run `command -v agentx` and use the full path it prints. A timer does not read your shell's `PATH`.
+2. Run `agentx machine report` once. Git must push to your hub without asking for a password, for example with an SSH key that has write access to the hub.
+
+With cron, run `crontab -e` and add one line. This one reports every 15 minutes:
+
+```text
+*/15 * * * * /home/you/.local/bin/agentx machine report >/dev/null 2>&1
+```
+
+With systemd, create two files in `~/.config/systemd/user`. The first is `agentx-report.service`:
+
+```ini
+[Unit]
+Description=Write the agentx inventory report of this machine
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/agentx machine report
+```
+
+The second is `agentx-report.timer`:
+
+```ini
+[Unit]
+Description=Write the agentx inventory report every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target
+```
+
+Then start the timer:
+
+```sh
+systemctl --user enable --now agentx-report.timer
+```
+
+A user timer runs only while you are logged in. To keep it running after you log out, run `loginctl enable-linger`.
+
 ### List the machines
 
 ```sh
