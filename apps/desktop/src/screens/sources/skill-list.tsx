@@ -24,6 +24,7 @@ import {
 import { formatDate } from "#/lib/dates.ts";
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
+import { trackAttribute } from "#/lib/track.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
 import { openSkill, skillPath } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
@@ -193,6 +194,7 @@ const SeeFullSkill = ({ page }: { page: string }) => (
   <a
     href={page}
     title={page}
+    {...trackAttribute("sources.skill-see-full")}
     className="type-secondary text-text-primary pointer-events-auto inline-flex flex-none items-center gap-1 font-medium underline underline-offset-2"
     onClick={(e) => {
       e.preventDefault();
@@ -210,6 +212,7 @@ const TakenText = ({ taken }: { taken: TakenReason }) => (
     {taken.before}
     <a
       href={`#${skillPath(taken.skill)}`}
+      {...trackAttribute("sources.skill-taken-open")}
       className="text-text-primary underline underline-offset-2"
       onClick={(e) => {
         e.preventDefault();
@@ -347,6 +350,7 @@ const AddedRemove = ({
     <RemoveSwap
       status={status}
       label={`Remove ${name ?? card.name}`}
+      track="sources.skill-remove"
       busy={name !== undefined && busy}
       onClick={() => {
         if (name !== undefined) {
@@ -421,6 +425,7 @@ const SkillItemView = ({
     action = (
       <Toggle
         kind="check"
+        track="sources.skill-select"
         pressed={selected}
         onPressedChange={() => {
           onToggle(card);
@@ -439,6 +444,7 @@ const SkillItemView = ({
     <AccordionItem variant="list" value={card.key} selected={selected}>
       <AccordionTrigger
         variant="list"
+        track="sources.skill-expand"
         label={card.name}
         description={description === "" ? undefined : descriptionId}
         open={open}

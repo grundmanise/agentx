@@ -5,9 +5,6 @@ import { defineConfig } from "vite";
 // Tauri serves the dev build from a fixed port and expects it to fail rather than move.
 export default defineConfig(({ command }) => ({
   build: { outDir: "dist", target: "safari16" },
-  // The end-to-end tests run a second dev server, with a telemetry host, at once: it keeps its
-  // optimized dependencies apart, so neither server rewrites the other's and reloads its pages.
-  cacheDir: process.env.VITE_CACHE_DIR,
   clearScreen: false,
   // Names the build, so that a launch reads only the inventory its own build kept
   // (src/store/launch-cache.ts). The dev server keeps one name: what it kept outlives a restart.

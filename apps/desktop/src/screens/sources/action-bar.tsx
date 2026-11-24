@@ -83,6 +83,7 @@ export const ActionBar = ({
       label={`Add ${count}`}
       running={adding}
       stopLabel="Stop adding"
+      track="sources.add-skills"
       onRun={onAdd}
       onStop={onCancel}
     />

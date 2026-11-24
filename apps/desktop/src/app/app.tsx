@@ -16,6 +16,7 @@ import { TelemetryDialog } from "#/app/telemetry-dialog.tsx";
 import { TopBar } from "#/app/top-bar.tsx";
 import { Toaster } from "#/components/ui/sonner.tsx";
 import { setNavigate } from "#/lib/navigate.ts";
+import { viewScreen } from "#/lib/telemetry.ts";
 import { cn } from "#/lib/utils.ts";
 import { AgentsScreen } from "#/screens/agents/agents-screen.tsx";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
@@ -122,6 +123,11 @@ export const App = () => {
   // A route that is no screen's goes to Skills.
   const { pathname } = useLocation();
   const known = screenOf(pathname) !== undefined;
+
+  // Each screen the app shows is a page view, while usage data is sent.
+  useEffect(() => {
+    void viewScreen(pathname);
+  }, [pathname]);
 
   // The command runner navigates from outside React, as on exit code 4.
   const navigate = useNavigate();

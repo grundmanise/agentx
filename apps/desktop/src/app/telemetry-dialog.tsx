@@ -1,8 +1,8 @@
-// The telemetry question (docs/help-center/telemetry.mdx): asked once the app has started, while
-// the `settings` event says the `telemetry` setting has no value, in a build that names a
-// telemetry host. It lists what is sent, and both answers run `config set telemetry`, which gives
-// the setting a value, so no later launch asks. "Don't send" is the default: it has the focus, and
-// Escape answers with it.
+// The telemetry question (docs/help-center/telemetry.mdx): asked once the app has started, in a
+// release build (one whose CLI reports a stable or nightly version), while the `settings` event
+// says the `telemetry` setting has no value. It lists what may be sent, and both answers run
+// `config set telemetry`, which gives the setting a value, so no later launch asks. "Don't send"
+// is the default: it has the focus, and Escape answers with it.
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -14,24 +14,18 @@ import {
 } from "#/components/ui/alert-dialog.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
-import { telemetryBuild } from "#/lib/telemetry.ts";
+import { releaseChannel } from "#/lib/telemetry.ts";
+import { useStartup } from "#/startup/startup.ts";
 import { useAppStore } from "#/store/store.ts";
 import { TELEMETRY_PAGE, setTelemetry } from "#/store/telemetry.ts";
 
-/** What each command sends, field by field, as the help center lists it. */
-const FIELDS: [string, string][] = [
-  [
-    "telemetry_id",
-    "an id derived from the machine id, which it cannot be traced back to",
-  ],
-  ["cli_version", "the version agentx version prints"],
-  ["schema_version", "the version of the --json output"],
-  ["os, arch", "darwin or linux, amd64 or arm64"],
-  ["command", "the command words only, without arguments or flag values"],
-  ["exit_code", "the exit code"],
-  ["duration_ms", "how long the command ran"],
-  ["json", "whether you gave --json"],
-  ["at", "when the command ended, to the minute"],
+/** What may be sent, as the help center lists it. */
+const SENT = [
+  "the commands the app runs, as in the terminal",
+  "the screens you open and the buttons you click, by name only",
+  "errors and crashes, with every path removed",
+  "the app version, release channel, OS, screen size, language and time zone",
+  "a non-reversible, hashed anonymous id",
 ];
 
 /** Answers the question, which is not asked again this session, even if the command fails. */
@@ -41,16 +35,23 @@ const answer = (on: boolean) => {
 };
 
 export const TelemetryDialog = () => {
-  const asking = useAppStore(
+  const release = useStartup((s) => {
+    const { version } = s.findings;
+    return (
+      version !== undefined &&
+      "cliVersion" in version &&
+      releaseChannel(version.cliVersion) !== undefined
+    );
+  });
+  const unanswered = useAppStore(
     (s) =>
-      telemetryBuild &&
       !s.telemetryAnswered &&
       s.settings !== undefined &&
       s.settings.telemetry === undefined
   );
   return (
     <AlertDialog
-      open={asking}
+      open={release && unanswered}
       onOpenChange={(open) => {
         if (!open) {
           answer(false);
@@ -59,46 +60,58 @@ export const TelemetryDialog = () => {
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Send anonymous usage data?</AlertDialogTitle>
+          <AlertDialogTitle>Help improve agentx</AlertDialogTitle>
           <AlertDialogDescription>
-            Each command sends these fields and nothing else: no path, skill
-            name, server name, source URL, hostname or machine label.
+            Send anonymous usage data to PostHog? We use it to find what breaks
+            and to make agentx better for you.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ul aria-label="What is sent" className="m-0 flex flex-col gap-1 p-0">
-          {FIELDS.map(([name, meaning]) => (
-            <li key={name} className="type-secondary text-text-muted list-none">
-              <span className="type-technical text-text-secondary">{name}</span>{" "}
-              {meaning}
-            </li>
-          ))}
-        </ul>
+        <div className="flex flex-col gap-1">
+          <p className="type-secondary text-text-secondary m-0">It may send:</p>
+          <ul
+            aria-label="What may be sent"
+            className="m-0 flex flex-col gap-1 pl-5"
+          >
+            {SENT.map((line) => (
+              <li
+                key={line}
+                className="type-secondary text-text-muted list-disc"
+              >
+                {line}
+              </li>
+            ))}
+          </ul>
+        </div>
         <p className="type-secondary text-text-muted m-0">
-          A crash sends the error type, its message and a stack trace, with
-          paths removed. Change this any time in Settings.
+          It never sends paths, skill or server names, URLs, on-screen text or
+          anything you type. Your IP address is not stored.
         </p>
         <AlertDialogFooter>
           <div className="flex min-w-0 flex-1 items-center">
             <Button
+              track="telemetry-dialog.details"
               variant="link"
               size="inline"
               onClick={() => {
                 void openInBrowser(TELEMETRY_PAGE);
               }}
             >
-              What is sent
+              Details
             </Button>
           </div>
           <AlertDialogCancel asChild>
-            <Button variant="ghost">Don&apos;t send</Button>
+            <Button track="telemetry-dialog.dont-send" variant="ghost">
+              Don&apos;t send
+            </Button>
           </AlertDialogCancel>
           <Button
+            track="telemetry-dialog.send"
             variant="primary"
             onClick={() => {
               answer(true);
             }}
           >
-            Send
+            Send usage data
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

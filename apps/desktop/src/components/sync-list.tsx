@@ -5,6 +5,9 @@
 import { useId } from "react";
 import type { ReactNode } from "react";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
+
 /** A group of rows under its caption, named by it: To publish, Incoming. */
 export const SyncGroup = ({
   caption,
@@ -34,13 +37,15 @@ const row =
 
 /**
  * A skill in a group: its name, and what the group says of it at the right. With `onOpen` the
- * row is a button that opens the skill.
+ * row is a button that opens the skill, a click on which is sent under `track`, one name for
+ * every row of the group.
  */
 export const SyncRow = ({
   name,
   meta,
   onOpen,
-}: {
+  track,
+}: Tracked & {
   name: string;
   meta?: string;
   onOpen?: () => void;
@@ -60,6 +65,7 @@ export const SyncRow = ({
       ) : (
         <button
           type="button"
+          {...trackAttribute(track)}
           onClick={onOpen}
           className="rounded-popover-row hover:bg-popover-row-hover focus-visible:outline-shell-focus-ring flex h-8 w-full cursor-pointer items-center justify-between gap-2.5 px-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2"
         >

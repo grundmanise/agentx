@@ -1,13 +1,15 @@
 import { useState } from "react";
 
 import { Spinner } from "#/components/ui/spinner.tsx";
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 
 /**
  * A primary button that runs a command and stops it (DESIGN.md §6 "Run button"). While the command
  * runs it keeps its size: the label stays in place, hidden, under a `Spinner`, and pointing at it
  * or focusing it shows Stop, which a click does. The pointer that clicked it shows Stop only once it
  * has left and come back, so the spinner is what a click shows. Its name says what it does at each
- * moment.
+ * moment. A click is sent under `track` while it runs or not; its `running` property says which.
  */
 export const RunButton = ({
   label,
@@ -15,7 +17,8 @@ export const RunButton = ({
   stopLabel = "Stop",
   onRun,
   onStop,
-}: {
+  track,
+}: Tracked & {
   label: string;
   running: boolean;
   /** The name the button has while it runs, for a screen reader; it shows Stop. */
@@ -28,6 +31,7 @@ export const RunButton = ({
   return (
     <button
       type="button"
+      {...trackAttribute(track)}
       data-running={running ? "" : undefined}
       data-stoppable={running && !clicked ? "" : undefined}
       aria-busy={running}

@@ -5,6 +5,8 @@
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import type { ReactNode } from "react";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import type { OwnProps, PlacedProps } from "#/lib/utils.ts";
 
 /**
@@ -65,9 +67,11 @@ const DropdownMenuGroup = ({
 
 /** A row of `menu.row-radius`, `menu.row-hover` when pointed at or focused; its lines stack. */
 const DropdownMenuItem = ({
+  track,
   ...props
-}: OwnProps<typeof DropdownMenuPrimitive.Item>) => (
+}: OwnProps<typeof DropdownMenuPrimitive.Item> & Tracked) => (
   <DropdownMenuPrimitive.Item
+    {...trackAttribute(track)}
     data-slot="dropdown-menu-item"
     className="rounded-menu-row focus:bg-menu-row-hover flex cursor-default flex-col items-start gap-0.5 px-2.5 py-2 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-30"
     {...props}

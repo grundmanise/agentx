@@ -1,8 +1,7 @@
-// Usage data (docs/help-center/telemetry.mdx): the telemetry dialog, asked while the `telemetry`
-// setting has no value, the Usage data switch in Settings, both bound to `config set telemetry`,
-// and the app's own events and crash reports. It runs in two projects (playwright.config.ts):
-// `chromium`, whose dev server has no telemetry host, and `telemetry`, whose dev server has one,
-// which these tests intercept and record.
+// Usage data (docs/help-center/telemetry.mdx): the telemetry question, asked in a release build
+// while the `telemetry` setting has no value, the Usage data switch in Settings, both bound to
+// `config set telemetry`, and what the app sends to PostHog, which these tests intercept and
+// decode. The mocked CLI reports a source build's version unless a test reports a release one.
 import { gunzipSync } from "node:zlib";
 
 import type { Page, Request } from "@playwright/test";
@@ -10,21 +9,22 @@ import type { Page, Request } from "@playwright/test";
 import type { Settings } from "#/cli/events.gen.ts";
 
 import {
-  appInfo,
   cliVersion,
   expect,
   firstInventory,
   machineLabel,
+  posthogHost,
   test,
 } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
-import { telemetryHost, telemetryKey } from "./harness/telemetry-host.ts";
 
-const TELEMETRY_ID = "5d1c0a9e7f3b4c2a8e6d4f1b3a5c7e9d";
+const ANONYMOUS_ID = "5d1c0a9e7f3b4c2a8e6d4f1b3a5c7e9d";
+const STABLE = "1.2.0";
+const NIGHTLY = "1.3.0-nightly.20261124.7";
 
 /**
  * The `settings` event of `config list`, with the `telemetry` setting as given, or none, and the
- * telemetry id while it is on, unless `id` is false, as under DO_NOT_TRACK.
+ * anonymous id while it is on, unless `id` is false, as under DO_NOT_TRACK.
  */
 const settingsEvent = (telemetry?: "on" | "off", id = true): InlineEvent => {
   const settings: Settings = {
@@ -39,8 +39,15 @@ const settingsEvent = (telemetry?: "on" | "off", id = true): InlineEvent => {
     ...(telemetry === undefined ? {} : { telemetry }),
   };
   return telemetry === "on" && id
-    ? { settings, telemetry_id: TELEMETRY_ID, type: "settings" }
+    ? { settings, telemetry_id: ANONYMOUS_ID, type: "settings" }
     : { settings, type: "settings" };
+};
+
+/** The CLI reports `version`: a release build's, stable unless given, or another. */
+const release = (cli: MockCli, version = STABLE) => {
+  cli.register(["version"], {
+    events: [{ cli_version: version, type: "version" }],
+  });
 };
 
 /** A home whose `telemetry` setting has no value. */
@@ -49,7 +56,7 @@ const unanswered = (cli: MockCli) => {
 };
 
 const dialog = (page: Page) =>
-  page.getByRole("alertdialog", { name: "Send anonymous usage data?" });
+  page.getByRole("alertdialog", { name: "Help improve agentx" });
 
 const usageSwitch = (page: Page) =>
   page.getByRole("switch", { name: "Send usage data" });
@@ -74,77 +81,8 @@ const refreshes = (cli: MockCli) =>
 
 const isLaunched = async (page: Page) => {
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
+  await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
 };
-
-test.describe("a build without a host", () => {
-  test.beforeEach(() => {
-    test.skip(test.info().project.name !== "chromium");
-  });
-
-  test("never asks, with the setting unanswered", async ({ cli, page }) => {
-    unanswered(cli);
-    await page.goto("/");
-    await isLaunched(page);
-    await expect.poll(() => cli.commands.length).toBeGreaterThan(4);
-    await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
-    await expect(dialog(page)).toHaveCount(0);
-  });
-
-  test("the switch in Settings shows the setting and runs the same command", async ({
-    cli,
-    page,
-  }) => {
-    answers(cli, "off");
-    answers(cli, "on");
-    cli.register(["config", "list"], { events: [settingsEvent()] });
-    await page.goto("/#/settings");
-    const region = page.getByRole("region", {
-      exact: true,
-      name: "Usage data",
-    });
-    await expect(region).toBeVisible();
-    // No value yet: nothing is sent, so the switch is off.
-    await expect(usageSwitch(page)).not.toBeChecked();
-
-    cli.register(["config", "list"], { events: [settingsEvent("on")] });
-    await usageSwitch(page).click();
-    await expect(usageSwitch(page)).toBeChecked();
-
-    cli.register(["config", "list"], { events: [settingsEvent("off")] });
-    await usageSwitch(page).click();
-    await expect(usageSwitch(page)).not.toBeChecked();
-    expect(telemetrySets(cli)).toEqual([
-      "config set telemetry on --json",
-      "config set telemetry off --json",
-    ]);
-    // The app writes no file: every call went to serve, the supervisor or the opener.
-    expect(
-      cli.calls.filter((c) => c.startsWith("plugin:fs") || c.includes("write"))
-    ).toEqual([]);
-  });
-
-  test("a build without a host never loads the SDK, with the setting on", async ({
-    cli,
-    page,
-  }) => {
-    const elsewhere: string[] = [];
-    page.on("request", (r) => {
-      if (
-        !r.url().startsWith("http://localhost:1420/") ||
-        r.url().includes("posthog-js")
-      ) {
-        elsewhere.push(r.url());
-      }
-    });
-    cli.register(["config", "list"], { events: [settingsEvent("on")] });
-    await page.goto("/");
-    await isLaunched(page);
-    await expect.poll(() => cli.commands.length).toBeGreaterThan(4);
-    await page.getByRole("link", { name: "Settings" }).click();
-    await expect(usageSwitch(page)).toBeChecked();
-    expect(elsewhere).toEqual([]);
-  });
-});
 
 /** One event as the SDK sends it. */
 interface SentEvent {
@@ -164,7 +102,7 @@ const isSentEvent = (value: unknown): value is SentEvent =>
   typeof Reflect.get(value, "event") === "string" &&
   typeof Reflect.get(value, "properties") === "object";
 
-/** The events of a batch the SDK posted with the test's key. */
+/** The events of a batch the SDK posted. */
 const eventsOf = (request: Request): SentEvent[] => {
   const raw = request.postDataBuffer();
   if (raw === null) {
@@ -174,11 +112,7 @@ const eventsOf = (request: Request): SentEvent[] => {
   const body: unknown = JSON.parse(
     (raw[0] === 0x1f ? gunzipSync(raw) : raw).toString()
   );
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    Reflect.get(body, "api_key") !== telemetryKey
-  ) {
+  if (typeof body !== "object" || body === null) {
     return [];
   }
   const batch: unknown = Reflect.get(body, "batch");
@@ -188,7 +122,7 @@ const eventsOf = (request: Request): SentEvent[] => {
 /** Intercepts the telemetry host, answering 200, and records what reaches it. */
 const intercept = async (page: Page): Promise<Sent> => {
   const sent: Sent = { events: [], paths: [] };
-  await page.route(`${telemetryHost}/**`, async (route) => {
+  await page.route(`${posthogHost}/**`, async (route) => {
     const request = route.request();
     sent.paths.push(new URL(request.url()).pathname);
     sent.events.push(...eventsOf(request));
@@ -214,15 +148,6 @@ const exceptionValue = (event: SentEvent): string => {
 const named = (sent: Sent, name: string) =>
   sent.events.filter((e) => e.event === name);
 
-/** The properties the app sets itself, which do not start with `$`, by name. */
-const ownProperties = (event: SentEvent) => {
-  const own = Object.keys(event.properties).filter(
-    (k) => !k.startsWith("$") && k !== "distinct_id" && k !== "token"
-  );
-  own.sort((a, b) => a.localeCompare(b));
-  return own;
-};
-
 /** Turns the setting on in Settings, which starts the SDK, or off. */
 const flip = async (cli: MockCli, page: Page, value: "on" | "off") => {
   answers(cli, value);
@@ -231,50 +156,54 @@ const flip = async (cli: MockCli, page: Page, value: "on" | "off") => {
 };
 
 test.describe("the question", () => {
-  test.beforeEach(() => {
-    test.skip(test.info().project.name !== "telemetry");
+  test("a source build never asks", async ({ cli, page }) => {
+    unanswered(cli);
+    await page.goto("/");
+    await isLaunched(page);
+    await expect.poll(() => cli.commands.length).toBeGreaterThan(4);
+    await expect(dialog(page)).toHaveCount(0);
   });
 
-  test("asks once the app has started, while the setting has no value", async ({
+  test("a release build asks once it has started, while the setting has no value", async ({
     cli,
     page,
   }) => {
+    release(cli);
     unanswered(cli);
     await page.goto("/");
     await expect(dialog(page)).toBeVisible();
     // Under it, the screens the first inventory filled, out of reach while it asks.
     await expect(page.locator("main")).toHaveAttribute("aria-busy", "false");
 
-    const fields = dialog(page).getByRole("list", { name: "What is sent" });
-    await expect(fields.getByRole("listitem")).toHaveText([
-      /^telemetry_id /u,
-      /^cli_version /u,
-      /^schema_version /u,
-      /^os, arch /u,
-      /^command the command words only, without arguments or flag values$/u,
-      /^exit_code /u,
-      /^duration_ms /u,
-      /^json /u,
-      /^at /u,
+    await expect(dialog(page)).toContainText(
+      "Send anonymous usage data to PostHog? We use it to find what breaks and to make agentx better for you."
+    );
+    const sent = dialog(page).getByRole("list", { name: "What may be sent" });
+    await expect(sent.getByRole("listitem")).toHaveText([
+      "the commands the app runs, as in the terminal",
+      "the screens you open and the buttons you click, by name only",
+      "errors and crashes, with every path removed",
+      "the app version, release channel, OS, screen size, language and time zone",
+      "a non-reversible, hashed anonymous id",
     ]);
     await expect(dialog(page)).toContainText(
-      "A crash sends the error type, its message and a stack trace, with paths removed."
+      "It never sends paths, skill or server names, URLs, on-screen text or anything you type. Your IP address is not stored."
     );
     // "Don't send" is the default: it has the focus.
     await expect(
       dialog(page).getByRole("button", { name: "Don't send" })
     ).toBeFocused();
 
-    await dialog(page).getByRole("button", { name: "What is sent" }).click();
+    await dialog(page).getByRole("button", { name: "Details" }).click();
     expect(cli.openedUrls).toEqual(["https://docs.agentx.wtf/telemetry"]);
   });
 
   test("a setting with a value asks nothing", async ({ cli, page }) => {
+    release(cli);
     answers(cli, "off");
     await page.goto("/");
     await isLaunched(page);
     await expect.poll(() => cli.commands.length).toBeGreaterThan(4);
-    await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
     await expect(dialog(page)).toHaveCount(0);
   });
 
@@ -282,6 +211,7 @@ test.describe("the question", () => {
     cli,
     page,
   }) => {
+    release(cli);
     unanswered(cli);
     cli.register(["config", "set", "telemetry", "on"], {
       events: [settingsEvent("on")],
@@ -290,9 +220,7 @@ test.describe("the question", () => {
     await expect(dialog(page)).toBeVisible();
     const before = refreshes(cli);
 
-    await dialog(page)
-      .getByRole("button", { exact: true, name: "Send" })
-      .click();
+    await dialog(page).getByRole("button", { name: "Send usage data" }).click();
     await expect(dialog(page)).toHaveCount(0);
     await expect
       .poll(() => telemetrySets(cli))
@@ -308,6 +236,7 @@ test.describe("the question", () => {
     cli,
     page,
   }) => {
+    release(cli);
     unanswered(cli);
     cli.register(["config", "set", "telemetry", "off"], {
       events: [settingsEvent("off")],
@@ -319,6 +248,7 @@ test.describe("the question", () => {
       .toEqual(["config set telemetry off --json"]);
 
     cli.restart();
+    release(cli);
     unanswered(cli);
     await page.reload();
     await expect(dialog(page)).toBeVisible();
@@ -331,61 +261,103 @@ test.describe("the question", () => {
         "config set telemetry off --json",
       ]);
   });
+
+  test("the switch in Settings shows the setting and runs the same command", async ({
+    cli,
+    page,
+  }) => {
+    answers(cli, "off");
+    answers(cli, "on");
+    unanswered(cli);
+    await page.goto("/#/settings");
+    const region = page.getByRole("region", {
+      exact: true,
+      name: "Usage data",
+    });
+    await expect(region).toBeVisible();
+    // No value yet: nothing is sent, so the switch is off.
+    await expect(usageSwitch(page)).not.toBeChecked();
+
+    cli.register(["config", "list"], { events: [settingsEvent("on")] });
+    await usageSwitch(page).click();
+    await expect(usageSwitch(page)).toBeChecked();
+
+    cli.register(["config", "list"], { events: [settingsEvent("off")] });
+    await usageSwitch(page).click();
+    await expect(usageSwitch(page)).not.toBeChecked();
+    expect(telemetrySets(cli)).toEqual([
+      "config set telemetry on --json",
+      "config set telemetry off --json",
+    ]);
+    // The app writes no file: every call went to serve, the supervisor or the opener.
+    expect(
+      cli.calls.filter((c) => c.startsWith("plugin:fs") || c.includes("write"))
+    ).toEqual([]);
+  });
 });
 
-test.describe("what the app sends", () => {
-  test.beforeEach(() => {
-    test.skip(test.info().project.name !== "telemetry");
-  });
+/** What the app tells the Tauri shell of the setting, in a nightly build. */
+const told = (on: boolean) => ({
+  telemetry: {
+    host: posthogHost,
+    on,
+    releaseChannel: "nightly",
+    token: expect.stringMatching(/^phc_/u),
+  },
+});
 
-  test("one app_open per launch, under the CLI's id, with the app's fields alone", async ({
+/** Every event's properties, as one text, to look for what must never be sent. */
+const allText = (sent: Sent) => JSON.stringify(sent.events);
+
+test.describe("what the app sends", () => {
+  test("app_open, screens by route and clicks by name, under the CLI's id and channel", async ({
     cli,
     page,
   }) => {
     const sent = await intercept(page);
+    release(cli, NIGHTLY);
     cli.register(["config", "list"], { events: [settingsEvent("on")] });
     await page.goto("/");
     await isLaunched(page);
     await expect.poll(() => named(sent, "app_open").length).toBe(1);
 
     const [open] = named(sent, "app_open");
-    expect(ownProperties(open)).toEqual([
-      "app_version",
-      "arch",
-      "cli_version",
-      "os",
-    ]);
     expect(open.properties).toMatchObject({
-      app_version: appInfo.version,
-      arch: appInfo.arch,
-      cli_version: cliVersion,
-      distinct_id: TELEMETRY_ID,
-      os: appInfo.os,
+      $process_person_profile: false,
+      cli_version: NIGHTLY,
+      distinct_id: ANONYMOUS_ID,
+      release_channel: "nightly",
+      surface: "app",
     });
+    // The SDK's own device properties stay.
+    expect(open.properties).toHaveProperty("$screen_width");
+    expect(open.properties).toHaveProperty("$timezone");
 
-    // Clicks and screens capture nothing: the next batch holds only an error thrown after them.
+    // A screen by its route, a skill's by its pattern: the skill's name is never sent.
+    await page.goto("/#/skills/secret-skill");
     await page.getByRole("link", { name: "Settings" }).click();
-    await page.getByRole("link", { name: "Skills" }).click();
-    await page.evaluate(() => {
-      setTimeout(() => {
-        throw new Error("after the clicks");
-      }, 0);
-    });
-    await expect.poll(() => named(sent, "$exception").length).toBe(1);
-    expect(sent.events.map((e) => e.event)).toEqual(["app_open", "$exception"]);
-    // No feature flag, configuration or recording request: only batches of events.
-    expect(new Set(sent.paths)).toEqual(new Set(["/e/"]));
-    for (const event of sent.events) {
-      for (const page_property of [
-        "$current_url",
-        "$host",
-        "$pathname",
-        "$referrer",
-      ]) {
-        expect(event.properties).not.toHaveProperty(page_property);
-      }
-      expect(event.properties.$process_person_profile).toBe(false);
+    await expect
+      .poll(() =>
+        named(sent, "$pageview").map((e) => e.properties.$current_url)
+      )
+      .toEqual(expect.arrayContaining(["/skills/:id", "/settings"]));
+    for (const view of named(sent, "$pageview")) {
+      expect(view.properties.$pathname).toBe(view.properties.$current_url);
     }
+
+    // A click carries its name, and neither the element's text nor its attributes.
+    await page
+      .getByRole("region", { exact: true, name: "Usage data" })
+      .getByRole("button", { name: "What is sent" })
+      .click();
+    await expect
+      .poll(() => named(sent, "$autocapture").map((e) => e.properties.action))
+      .toContain("settings.usage-data-help");
+
+    expect(allText(sent)).not.toContain("secret-skill");
+    expect(allText(sent)).not.toContain("What is sent");
+    expect(allText(sent)).not.toContain("localhost:1420");
+    expect(new Set(sent.paths)).toEqual(new Set(["/e/"]));
     // The SDK keeps nothing on the machine: the only stored keys are the app's own.
     const stored = await page.evaluate(() => Object.keys(localStorage));
     expect(stored.filter((k) => !k.startsWith("agentx."))).toEqual([]);
@@ -393,12 +365,14 @@ test.describe("what the app sends", () => {
 
     // A new launch sends its own app_open.
     cli.restart();
+    release(cli, NIGHTLY);
     await page.reload();
     await expect.poll(() => named(sent, "app_open").length).toBe(2);
   });
 
   test("errors are sent with user paths removed", async ({ cli, page }) => {
     const sent = await intercept(page);
+    release(cli);
     cli.register(["config", "list"], { events: [settingsEvent("on")] });
     await page.goto("/");
     await expect.poll(() => named(sent, "app_open").length).toBe(1);
@@ -418,9 +392,8 @@ test.describe("what the app sends", () => {
       "open <path>: permission denied",
       "read <path> failed",
     ]);
-    const bodies = JSON.stringify(sent.events);
-    expect(bodies).not.toContain("/Users/");
-    expect(bodies).not.toContain("/home/jane");
+    expect(allText(sent)).not.toContain("/Users/");
+    expect(allText(sent)).not.toContain("/home/jane");
   });
 
   test("turning the setting off stops capture at once", async ({
@@ -428,6 +401,7 @@ test.describe("what the app sends", () => {
     page,
   }) => {
     const sent = await intercept(page);
+    release(cli);
     cli.register(["config", "list"], { events: [settingsEvent("on")] });
     await page.goto("/#/settings");
     await expect.poll(() => named(sent, "app_open").length).toBe(1);
@@ -449,11 +423,23 @@ test.describe("what the app sends", () => {
       }, 0);
     });
     await expect.poll(() => named(sent, "$exception").length).toBe(1);
-    expect(JSON.stringify(sent.events)).not.toContain("while off");
-    expect(JSON.stringify(sent.events)).toContain("on again");
+    expect(allText(sent)).not.toContain("while off");
+    expect(allText(sent)).toContain("on again");
   });
 
-  test("with the setting off, not answered, or without a telemetry id, the SDK never loads", async ({
+  test("the Tauri shell hears each change of the setting, for its own crash reports", async ({
+    cli,
+    page,
+  }) => {
+    release(cli, NIGHTLY);
+    cli.register(["config", "list"], { events: [settingsEvent("on")] });
+    await page.goto("/#/settings");
+    await expect.poll(() => cli.telemetryTold.at(-1)).toEqual(told(true));
+    await flip(cli, page, "off");
+    await expect.poll(() => cli.telemetryTold.at(-1)).toEqual(told(false));
+  });
+
+  test("off, not answered, without an anonymous id, or in a source build, the SDK never loads", async ({
     cli,
     page,
   }) => {
@@ -464,19 +450,29 @@ test.describe("what the app sends", () => {
         loaded.push(r.url());
       }
     });
+    release(cli);
     cli.register(["config", "list"], { events: [settingsEvent("off")] });
     await page.goto("/#/settings");
     await expect(usageSwitch(page)).not.toBeChecked();
 
     // Not answered: the question shows, and the SDK waits for the answer.
     cli.restart();
+    release(cli);
     unanswered(cli);
     await page.reload();
     await expect(dialog(page)).toBeVisible();
 
-    // On, without the telemetry id, which the CLI leaves out while DO_NOT_TRACK is set.
+    // On, without the anonymous id, which the CLI leaves out while DO_NOT_TRACK is set.
     cli.restart();
+    release(cli);
     cli.register(["config", "list"], { events: [settingsEvent("on", false)] });
+    await page.reload();
+    await expect(usageSwitch(page)).toBeChecked();
+
+    // On, with the id, in a source build.
+    cli.restart();
+    release(cli, cliVersion);
+    cli.register(["config", "list"], { events: [settingsEvent("on")] });
     await page.reload();
     await expect(usageSwitch(page)).toBeChecked();
     await page.evaluate(() => {

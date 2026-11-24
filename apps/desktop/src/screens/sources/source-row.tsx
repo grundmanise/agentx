@@ -43,6 +43,7 @@ export const SourceRow = ({
         <Toggle
           key={pill.key}
           kind="source-pill"
+          track="sources.pill-open"
           pressed={pressed}
           onPressedChange={() => {
             onOpen(pill.key);

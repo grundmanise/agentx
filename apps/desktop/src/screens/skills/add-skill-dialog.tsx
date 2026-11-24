@@ -290,6 +290,7 @@ const AddSkillForm = ({
             }}
           />
           <Button
+            track="add-skill-dialog.find"
             type="submit"
             variant="secondary"
             disabled={link.trim() === "" || adding}
@@ -313,6 +314,7 @@ const AddSkillForm = ({
               // Inset as the rows are, so its checkbox heads their column.
               <div className="px-3">
                 <SelectAllRow
+                  track="add-skill-dialog.select-all"
                   selected={selected.length}
                   total={selectable.length}
                   onSelectAll={() => {
@@ -354,9 +356,12 @@ const AddSkillForm = ({
       )}
       <DialogFooter>
         <DialogClose asChild>
-          <Button variant="ghost">Cancel</Button>
+          <Button track="add-skill-dialog.cancel" variant="ghost">
+            Cancel
+          </Button>
         </DialogClose>
         <Button
+          track="add-skill-dialog.install"
           variant="primary"
           disabled={found === undefined || selected.length === 0 || finding}
           aria-busy={adding ? true : undefined}

@@ -8,6 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import type { Tracked } from "#/lib/track.ts";
 
 const toggleVariants = cva(
   "group/toggle rounded-row gap-group focus-visible:outline-shell-focus-ring flex min-w-0 items-center text-left focus-visible:outline-2",
@@ -70,7 +71,8 @@ export const SectionToggle = ({
   detail,
   action,
   level = "subgroup",
-}: {
+  track,
+}: Tracked & {
   /** The section's caption, uppercase like every caption. */
   label: string;
   /** A small mark before the caption, such as an agent's logo. */
@@ -93,7 +95,7 @@ export const SectionToggle = ({
   const hasAction = action !== undefined && action !== null;
   const caption = <span className={labelVariants({ level })}>{label}</span>;
   const toggle = (
-    <CollapsibleTrigger asChild>
+    <CollapsibleTrigger asChild track={track}>
       <button
         type="button"
         className={toggleVariants({

@@ -14,11 +14,13 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu.tsx";
+import type { Tracked } from "#/lib/track.ts";
 
 /**
  * The action, then the menu's trigger, in one ghost button group. `size` is `icon` for an action
  * that shows an icon, named by `label`, and `sm` for one that shows its label; the trigger is
- * square, as tall as the action.
+ * square, as tall as the action. A click on the action is sent under `track`, one on the trigger
+ * under `track` with `.menu` after it.
  */
 export const SplitButton = ({
   size,
@@ -30,7 +32,8 @@ export const SplitButton = ({
   menuTitle,
   onOpenChange,
   menu,
-}: {
+  track,
+}: Tracked & {
   size: "icon" | "sm";
   /** What the action shows: its icon, or its label. */
   children: ReactNode;
@@ -51,6 +54,7 @@ export const SplitButton = ({
       size={size}
       aria-label={label}
       title={title}
+      track={track}
       onClick={onClick}
     >
       {children}
@@ -63,6 +67,7 @@ export const SplitButton = ({
           size={size === "icon" ? "icon" : "icon-sm"}
           aria-label={menuLabel}
           title={menuTitle}
+          track={`${track}.menu`}
         >
           <MoreIcon />
         </Button>

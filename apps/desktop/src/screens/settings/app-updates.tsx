@@ -31,6 +31,7 @@ const CheckUpdates = ({ checked }: { checked: boolean }) => {
       </span>
       <Switch
         id={id}
+        track="settings.check-updates-toggle"
         aria-label="Check for updates"
         aria-describedby={`${id}-line`}
         checked={checked}
@@ -60,6 +61,7 @@ export const AppUpdatesSection = () => {
       <div className="flex">
         <Button
           variant="secondary"
+          track="settings.check-updates-now"
           aria-busy={checking ? true : undefined}
           disabled={checking}
           onClick={() => {

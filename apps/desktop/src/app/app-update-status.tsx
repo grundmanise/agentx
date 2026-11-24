@@ -60,6 +60,7 @@ export const AppUpdateStatus = () => {
         busy={update.phase === "installing"}
         rim={rim}
         onRimSettled={settleAppUpdateRim}
+        track="top-bar.app-update"
         onClick={
           update.phase === "installing"
             ? undefined

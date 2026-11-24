@@ -82,7 +82,7 @@ export const loadSettings = async () => {
     const event = events.find((e) => e.type === "settings");
     return event === undefined
       ? {}
-      : { settings: event.settings, telemetryId: event.telemetry_id };
+      : { anonymousId: event.telemetry_id, settings: event.settings };
   });
 };
 

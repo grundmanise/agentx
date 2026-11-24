@@ -124,42 +124,6 @@ async fn editor_open(app: tauri::AppHandle, sup: Sup<'_>, path: String) -> Resul
     editor::launch(&words, &env).await
 }
 
-/// What the app's usage data names it by (docs/help-center/telemetry.mdx): its version, and the
-/// operating system and architecture by the names the CLI gives them.
-#[derive(serde::Serialize)]
-struct AppInfo {
-    version: String,
-    os: &'static str,
-    arch: &'static str,
-}
-
-#[tauri::command(rename_all = "snake_case")]
-fn app_info(app: tauri::AppHandle) -> AppInfo {
-    AppInfo {
-        version: app.package_info().version.to_string(),
-        os: go_os(std::env::consts::OS),
-        arch: go_arch(std::env::consts::ARCH),
-    }
-}
-
-/// An operating system as Go names it, which the CLI reports: `darwin` for macOS.
-fn go_os(os: &'static str) -> &'static str {
-    if os == "macos" {
-        "darwin"
-    } else {
-        os
-    }
-}
-
-/// An architecture as Go names it, which the CLI reports: `amd64` and `arm64`.
-fn go_arch(arch: &'static str) -> &'static str {
-    match arch {
-        "x86_64" => "amd64",
-        "aarch64" => "arm64",
-        other => other,
-    }
-}
-
 /// Where serve's stderr is written: `~/Library/Logs/agentx` on macOS, `$XDG_STATE_HOME/agentx/logs`
 /// elsewhere.
 fn log_dir(env: &HashMap<String, String>) -> PathBuf {
@@ -218,8 +182,7 @@ pub fn run() {
             editor_open,
             app_update::app_update_check,
             app_update::app_update_install,
-            app_update::app_restart,
-            app_info
+            app_update::app_restart
         ])
         .build(tauri::generate_context!())
         .expect("error while building the agentx desktop app");
@@ -229,17 +192,4 @@ pub fn run() {
             tauri::async_runtime::block_on(sup.shutdown());
         }
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{go_arch, go_os};
-
-    #[test]
-    fn names_the_platform_as_the_cli_does() {
-        assert_eq!(go_os("macos"), "darwin");
-        assert_eq!(go_os("linux"), "linux");
-        assert_eq!(go_arch("x86_64"), "amd64");
-        assert_eq!(go_arch("aarch64"), "arm64");
-    }
 }

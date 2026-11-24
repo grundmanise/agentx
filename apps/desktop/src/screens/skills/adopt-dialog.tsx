@@ -181,8 +181,15 @@ const Refused = ({ rows }: { rows: AdoptRow[] }) => {
         className="border-overlay-border flex min-h-0 flex-col gap-2 border-t pt-3"
       >
         <div>
-          <CollapsibleTrigger asChild>
-            <Button variant="plain" size="inline">
+          <CollapsibleTrigger
+            track="adopt-dialog.toggle-not-importable"
+            asChild
+          >
+            <Button
+              track="adopt-dialog.toggle-not-importable"
+              variant="plain"
+              size="inline"
+            >
               <span
                 className={
                   open
@@ -301,11 +308,16 @@ export const AdoptDialog = ({
           {run === undefined || running ? (
             <>
               <DialogClose asChild>
-                <Button variant="ghost" disabled={running}>
+                <Button
+                  track="adopt-dialog.cancel"
+                  variant="ghost"
+                  disabled={running}
+                >
                   Cancel
                 </Button>
               </DialogClose>
               <Button
+                track="adopt-dialog.import"
                 variant="primary"
                 disabled={running || offered.length === 0}
                 aria-busy={running ? true : undefined}
@@ -318,7 +330,7 @@ export const AdoptDialog = ({
               </Button>
             </>
           ) : (
-            <Button variant="primary" onClick={close}>
+            <Button track="adopt-dialog.done" variant="primary" onClick={close}>
               Done
             </Button>
           )}

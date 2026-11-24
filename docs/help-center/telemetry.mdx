@@ -17,7 +17,7 @@ Type `y` to agree. Press Enter, or type anything else, to decline. agentx stores
 
 A scan without a terminal, such as one in a script or with `--json`, does not ask. The next scan in a terminal asks instead.
 
-In the desktop app, a dialog asks the same question after the first scan.
+In the desktop app and the web UI, a dialog asks the same question after the first scan.
 
 ## What is sent
 
@@ -41,17 +41,17 @@ agentx derives the telemetry id from the machine id with a one-way hash. Nobody 
 
 The same answer covers crash reports. When agentx crashes, it sends the error type, the error message and a stack trace, with every path removed.
 
-## What the desktop app sends
+## What the desktop app and the web UI send
 
-The same answer covers the desktop app. Each time it opens, it sends one event under the same telemetry id:
+The same answer covers the desktop app and the web UI. They send to PostHog under the same anonymous id, with the PostHog JavaScript SDK:
 
-| Field | Value |
-|---|---|
-| `app_version` | The version of the app |
-| `cli_version` | The version of agentx inside the app |
-| `os`, `arch` | `darwin` or `linux`, `amd64` or `arm64` |
+- each screen you open, by its route alone, such as `/skills/:id` for a skill, never the skill's name
+- each button, menu item or link you click, by a fixed name, such as `skills.expand-all`. PostHog masks the text and attributes of every element, so it never sees what a button says or where a link goes.
+- errors and crashes: the error type, the message and a stack trace, with every path removed
+- the app version, the release channel (`stable` or `nightly`), and whether it ran in the app or the web UI
+- what the SDK reports about the window: OS, browser, screen and window size, language and time zone
 
-When the app crashes, it sends the error type, the error message and a stack trace, with every path removed. It sends nothing about its window or your device: no page address, user agent, screen size, time zone or language, and it stores nothing for the data on your machine.
+They never send a path, a skill or server name, an address, the text on the screen or anything you type. PostHog does not store your IP address. The SDK stores nothing on your machine and records no session.
 
 ## Change your answer
 
@@ -68,7 +68,7 @@ In the desktop app, use the **Send usage data** switch in Settings. The app stop
 
 Set `DO_NOT_TRACK=1` in your environment. agentx and the desktop app then send nothing, and agentx does not ask, whatever the setting says.
 
-A build from source, of agentx or of the desktop app, has no destination for the data, so it never asks and never sends.
+A build from source, of agentx or of the desktop app, never asks and never sends: only stable and nightly releases do.
 
 ## Where the data goes
 
