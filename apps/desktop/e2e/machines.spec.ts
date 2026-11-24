@@ -208,6 +208,19 @@ test("By skill lists every skill across the machines with what each machine has 
         - row "scratch Skills directory Not there Has it Has it Not there"
   `);
 
+  // In a window too narrow for every machine, the columns scroll sideways under the skills.
+  await page.setViewportSize({ height: 700, width: 1100 });
+  const table = bySkill(page).getByRole("region", {
+    name: "Skills on your machines",
+  });
+  const name = table.getByRole("rowheader", { name: /^changelog/u });
+  const before = await name.boundingBox();
+  await table.evaluate((el) => {
+    el.scrollLeft = 120;
+  });
+  expect(await table.evaluate((el) => el.scrollLeft)).toBe(120);
+  expect(await name.boundingBox()).toEqual(before);
+
   // commit-message is the same on every machine.
   await bySkill(page)
     .getByRole("checkbox", { name: "Only differences" })

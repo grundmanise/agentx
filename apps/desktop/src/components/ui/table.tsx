@@ -8,7 +8,8 @@ import type { VariantProps } from "class-variance-authority";
 import type { OwnProps } from "#/lib/utils.ts";
 
 // With `scroll`, the table takes the rest of a column's height and scrolls on its own, its column
-// captions pinned to the top (`TableHead` `sticky`).
+// captions pinned to the top (`TableHead` `sticky`) and, when it is wider than its place, its
+// first column to the left (`pinned`).
 const tableContainerVariants = cva("relative w-full", {
   defaultVariants: { scroll: false },
   variants: {
@@ -78,41 +79,56 @@ const alignVariants = {
 };
 
 // A column caption in `table.header-text`; `sticky` pins it to the top of a scrolling table, on
-// the content background so rows pass under it.
+// the content background so rows pass under it. `pinned`, on the first column of a table that
+// scrolls sideways, pins it to the left edge the same way, so the other columns pass under it; the
+// caption that is both stands over the captions and over the column.
 const tableHeadVariants = cva(
   "text-table-header-text px-2 pb-1.5 align-bottom font-normal wrap-break-word",
   {
-    defaultVariants: { align: "start", sticky: false },
+    compoundVariants: [
+      { className: "z-10", pinned: false, sticky: true },
+      { className: "z-0", pinned: true, sticky: false },
+      { className: "z-20", pinned: true, sticky: true },
+    ],
+    defaultVariants: { align: "start", pinned: false, sticky: false },
     variants: {
       align: alignVariants,
-      sticky: { false: "", true: "bg-shell-content-bg sticky top-0 z-10" },
+      pinned: { false: "", true: "bg-shell-content-bg sticky left-0" },
+      sticky: { false: "", true: "bg-shell-content-bg sticky top-0" },
     },
   }
 );
 
 const TableHead = ({
   align,
+  pinned,
   sticky,
   ...props
 }: OwnProps<"th"> & VariantProps<typeof tableHeadVariants>) => (
   <th
     data-slot="table-head"
-    className={tableHeadVariants({ align, sticky })}
+    className={tableHeadVariants({ align, pinned, sticky })}
     {...props}
   />
 );
 
+// `pinned`, on the cells of the first column of a table that scrolls sideways, keeps them at the
+// left edge on the content background.
 const tableCellVariants = cva(
   "text-text-secondary px-2 py-2 align-middle font-normal",
   {
-    defaultVariants: { align: "start" },
-    variants: { align: alignVariants },
+    defaultVariants: { align: "start", pinned: false },
+    variants: {
+      align: alignVariants,
+      pinned: { false: "", true: "bg-shell-content-bg sticky left-0 z-0" },
+    },
   }
 );
 
 /** A body cell; with `scope="row"` it renders a row header (`th`). */
 const TableCell = ({
   align,
+  pinned,
   scope,
   ...props
 }: OwnProps<"td"> &
@@ -121,13 +137,13 @@ const TableCell = ({
     <th
       data-slot="table-cell"
       scope="row"
-      className={tableCellVariants({ align })}
+      className={tableCellVariants({ align, pinned })}
       {...props}
     />
   ) : (
     <td
       data-slot="table-cell"
-      className={tableCellVariants({ align })}
+      className={tableCellVariants({ align, pinned })}
       {...props}
     />
   );

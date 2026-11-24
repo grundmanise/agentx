@@ -120,7 +120,7 @@ export const SkillMatrix = ({
     <section
       aria-label="Machines by skill"
       aria-busy={reading ? true : undefined}
-      className="bg-shell-content-bg flex min-w-0 flex-1 flex-col"
+      className="bg-shell-content-bg flex min-h-0 min-w-0 flex-1 flex-col"
     >
       <MachinesHeader count={machines.length} reading={reading} by="skill">
         <OnlyDifferences />
@@ -145,7 +145,9 @@ export const SkillMatrix = ({
               </colgroup>
               <TableHeader>
                 <TableRow tone="header">
-                  <TableHead sticky>Skill</TableHead>
+                  <TableHead sticky pinned>
+                    Skill
+                  </TableHead>
                   {machines.map((machine) => (
                     <TableHead key={machine.id} sticky align="center">
                       <MachineCaption machine={machine} now={now} />
@@ -157,7 +159,7 @@ export const SkillMatrix = ({
               <TableBody>
                 {rows.map((row) => (
                   <TableRow key={row.key}>
-                    <TableCell scope="row">
+                    <TableCell scope="row" pinned>
                       <span className="gap-row-line flex min-w-0 flex-col">
                         <span
                           title={row.name}
