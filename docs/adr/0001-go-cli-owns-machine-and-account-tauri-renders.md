@@ -5,6 +5,8 @@ date: 2026-09-16
 
 # The Go CLI owns the machine and the account; the Tauri app only renders
 
+Amended 2026-11-23: the app checks for and installs its own updates over the network (ADR 0019), the one exception to "never opens a network connection". It cannot be the CLI's job, since the CLI lives inside the app's bundle.
+
 agentx has two executables that ship together. The Go CLI, `agentx`, is the only component that reads or writes the machine, runs git, computes identities, signs in, and syncs. The desktop app is a Tauri 2 shell with a React frontend that spawns the CLI, reads its structured output and renders it. The app never scans, never parses a config file, never computes an identity, never opens a network connection. The CLI is a single static binary that is complete on its own from a terminal or CI.
 
 ## Contract between the two
