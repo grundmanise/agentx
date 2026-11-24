@@ -292,6 +292,15 @@ test("without a hub, one line says to set one and opens Settings", async ({
   await expect(list(page)).toContainText(
     "Set a hub to see your other machines here."
   );
+  // The machines of a hub that is no longer set, which serve may still send, do not show.
+  await cli.serveEmit([fleet]);
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(() => localStorage.getItem("agentx.launch"))
+    )
+    .toContain(WORKBENCH_ID);
+  expect(await rowNames(page)).toEqual(["studio"]);
   await list(page).getByRole("button", { name: "Open Settings" }).click();
   await expect(page).toHaveURL(/#\/settings$/u);
 });

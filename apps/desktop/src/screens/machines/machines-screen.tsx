@@ -1,25 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { MachineDetail } from "#/screens/machines/machine-detail.tsx";
 import { MachineList } from "#/screens/machines/machine-list.tsx";
-import { projectMachines } from "#/screens/machines/projection.ts";
+import { useMachines } from "#/screens/machines/use-machines.ts";
 import { hubOf } from "#/screens/skills/banners.ts";
 import { OpenSettingsButton } from "#/screens/skills/publish-dialog.tsx";
 import { loadFleet, loadLabel } from "#/store/loaders.ts";
 import { usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
-
-/** The machines the screen lists; a new list only when a slice it reads changes. */
-const useMachines = () => {
-  const inventory = useAppStore((s) => s.inventory);
-  const machine = useAppStore((s) => s.machine);
-  const fleet = useAppStore((s) => s.fleet);
-  return useMemo(
-    () => projectMachines(inventory, machine, fleet),
-    [inventory, machine, fleet]
-  );
-};
 
 /** Whether a hub is set; undefined until the sources are read, when the screen would guess. */
 const useHubSet = () => {
