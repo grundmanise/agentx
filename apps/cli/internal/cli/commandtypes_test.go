@@ -50,6 +50,9 @@ func commandTree(root *cobra.Command) (map[string]map[string]bool, map[string]bo
 	var walk func(cmd *cobra.Command) error
 	walk = func(cmd *cobra.Command) error {
 		for _, sub := range cmd.Commands() {
+			if sub.Hidden {
+				continue // agentx's own, never run by the app
+			}
 			if sub.HasSubCommands() {
 				if err := walk(sub); err != nil {
 					return err

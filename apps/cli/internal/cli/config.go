@@ -19,11 +19,12 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
-const settableKeys = "label, accept_operations, ignore_system_files"
+const settableKeys = "label, accept_operations, ignore_system_files, telemetry"
 
 type settingsEvent struct {
 	event
-	Settings home.Settings `json:"settings"`
+	Settings    home.Settings `json:"settings"`
+	TelemetryID string        `json:"telemetry_id,omitempty"` // the id usage data is sent under, while telemetry is on
 }
 
 func newConfigCommand(inv *invocation) *cobra.Command {
@@ -83,12 +84,13 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:         "set <key> <value>",
-		Short:       "Change label, accept_operations or ignore_system_files",
+		Short:       "Change one setting",
 		Annotations: map[string]string{annotationSection: "settings"},
 		Args:        cobra.ExactArgs(2),
 		Example: examples(
 			`agentx config set label "work laptop"`, "name this machine",
 			"agentx config set ignore_system_files true", "keep .DS_Store and swap files out of skill commits",
+			"agentx config set telemetry off", "stop sending anonymous usage data",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apply, err := settingSetter(args[0], args[1])
@@ -116,6 +118,9 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 			})
 			if err != nil {
 				return err
+			}
+			if args[0] == "telemetry" && s.Telemetry == telemetryOff {
+				_ = os.RemoveAll(spoolDir(inv.dirs.Home)) // what was recorded before is not sent either
 			}
 			inv.emitSettings(s)
 			inv.out.done(inv.out.paint(label, args[0]) + " is now " + inv.out.paint(heading, args[1]))
@@ -303,6 +308,11 @@ func settingSetter(key, value string) (func(*home.Settings), error) {
 	case "ignore_system_files":
 		b, err := parseBool(key, value)
 		return func(s *home.Settings) { s.IgnoreSystemFiles = b }, err
+	case "telemetry":
+		if value != telemetryOn && value != telemetryOff {
+			return nil, fail(exitUsage, fmt.Sprintf("invalid value %q for telemetry", value), "use on or off")
+		}
+		return func(s *home.Settings) { s.Telemetry = value }, nil
 	case "schema_version", "disabled_configurations", "copy_configurations", "sources", "copy_mode":
 		return nil, fail(exitUsage, key+" cannot be changed with config set", "settable keys: "+settableKeys)
 	}
@@ -391,8 +401,9 @@ func (inv *invocation) label(s home.Settings) string {
 }
 
 func (inv *invocation) emitSettings(s home.Settings) {
+	id := inv.settingsTelemetryID(s)
 	s.Label = inv.label(s)
-	inv.out.emit(settingsEvent{event: newEvent("settings"), Settings: s})
+	inv.out.emit(settingsEvent{event: newEvent("settings"), Settings: s, TelemetryID: id})
 }
 
 type settingRow struct{ key, value string }
@@ -426,6 +437,7 @@ func (inv *invocation) settingRows(s home.Settings) []settingRow {
 		{"label", inv.label(s)},
 		{"accept_operations", strconv.FormatBool(s.AcceptOperations)},
 		{"ignore_system_files", strconv.FormatBool(s.IgnoreSystemFiles)},
+		{"telemetry", telemetryValue(s)},
 		{"disabled_configurations", strings.Join(s.DisabledConfigurations, ", ")},
 		{"copy_configurations", strings.Join(s.CopyConfigurations, ", ")},
 		{"sources", compactValue(s.Sources)},
@@ -448,4 +460,13 @@ func compact(raw json.RawMessage) string {
 		return string(raw)
 	}
 	return b.String()
+}
+
+// telemetryValue is the telemetry setting as config reports it: unset
+// until answered.
+func telemetryValue(s home.Settings) string {
+	if s.Telemetry == "" {
+		return telemetryUnset
+	}
+	return s.Telemetry
 }

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -27,6 +28,8 @@ type invocation struct {
 	instance string // the instance_id inventories carry, fixed once per run
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 	summary  string // what the result event says about a run that succeeded
+	started  time.Time
+	command  string // the command's words, such as "skill add", once parsed; "" before
 	// publishHintOnce says a run over many skills says once, once they are
 	// done, that the skills it made hub skills are not published, see
 	// noHubRemoteHint; publishHintDue says one of them needs it said.
@@ -115,7 +118,7 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	// --color is scanned the same way, so that an error cobra reports before
 	// it parsed the flags, such as an unknown command, is painted as asked.
 	out := &writer{stdout: stdout, stderr: stderr, env: env, json: slices.Contains(args, "--json"), color: colorFromArgs(args)}
-	inv := &invocation{env: env, out: out}
+	inv := &invocation{env: env, out: out, started: time.Now()}
 
 	root := newRoot(inv)
 	if args == nil {
@@ -129,7 +132,9 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	} else {
 		root.SetOut(stdout)
 	}
-	return finish(ctx, inv, root.ExecuteContext(ctx))
+	code := finish(ctx, inv, root.ExecuteContext(ctx))
+	inv.recordRun(ctx, code)
+	return code
 }
 
 // colorFromArgs returns the value of --color on the command line, as
@@ -169,6 +174,7 @@ func newRoot(inv *invocation) *cobra.Command {
 				return fail(exitUsage, fmt.Sprintf("invalid value %q for --color", colorFlag), "use on or off")
 			}
 			inv.parsed = true
+			inv.command = strings.TrimPrefix(strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()), " ")
 			dirs, err := home.Resolve(inv.env)
 			if err != nil {
 				return fail(exitUsage, err.Error(), "set HOME to your home directory")
@@ -203,6 +209,7 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newDoctorCommand(inv))
 	root.AddCommand(newVersionCommand(inv))
 	root.AddCommand(newUpdateCommand(inv))
+	root.AddCommand(newTelemetryCommand(inv))
 	return root
 }
 
@@ -288,4 +295,20 @@ func knownFailure(dir string, err error) (*failure, bool) {
 		return nil, false
 	}
 	return f, true
+}
+
+// recordRun spools the command event of a run that ended with code and
+// starts a flush, both only while telemetry is recording. The flush's own
+// run is never recorded.
+func (inv *invocation) recordRun(ctx context.Context, code int) {
+	if inv.command == flushCommand {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	inv.spoolRecord(ctx, recordCommand, map[string]any{
+		"exit_code":   code,
+		"duration_ms": time.Since(inv.started).Milliseconds(),
+		"json":        inv.out.json,
+	})
+	inv.startFlush(ctx)
 }

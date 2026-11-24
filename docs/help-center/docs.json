@@ -39,7 +39,7 @@
       {
         "group": "This machine",
         "icon": "laptop",
-        "pages": ["cli/machine", "cli/config", "agent-placement", "remove-agent", "cli/snapshot", "cli/doctor", "cli/update", "activity-log"]
+        "pages": ["cli/machine", "cli/config", "telemetry", "agent-placement", "remove-agent", "cli/snapshot", "cli/doctor", "cli/update", "activity-log"]
       },
       {
         "group": "Reference",

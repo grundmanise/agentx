@@ -33,6 +33,10 @@ _Avoid_: device, host, node
 The stable identifier of a machine, derived from the computer's platform identity, so agentx reinstalled on the same computer is the same machine. A random id is used only where no platform identity exists.
 _Avoid_: device id, installation id
 
+**Telemetry id**:
+The anonymous id usage data is sent under, derived one way from the machine id, so it cannot be traced back to the machine. Exists only while the user has agreed to send usage data.
+_Avoid_: user id, anonymous id, distinct id
+
 ### Identity
 
 **Logical asset**:
@@ -227,7 +231,7 @@ _Avoid_: original, parent, snapshot
 The ~/.agentx directory holding the store clone with its worktrees, the machine settings, local mutation journals and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
 
 **Machine settings**:
-The one file in agentx home holding what only this machine decides: its label, enabled configurations, the placement mode of each configuration, sources and their pins, and copy modes. Leaves the machine only inside a snapshot.
+The one file in agentx home holding what only this machine decides: its label, enabled configurations, the placement mode of each configuration, sources and their pins, copy modes, and whether to send usage data. Leaves the machine only inside a snapshot, without the answer about usage data.
 _Avoid_: config, preferences, local state
 
 **App preference**:

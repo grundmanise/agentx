@@ -198,8 +198,13 @@ func (inv *invocation) serveScan(ctx context.Context) (scan.Inventory, error) {
 // touches it.
 func (inv *invocation) inventoryReporter() func(scan.Inventory) {
 	var library map[string]scan.LibraryEntry
+	first := true
 	return func(inventory scan.Inventory) {
 		inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
+		if first {
+			first = false
+			inv.emitConsent() // once per serve, after its first inventory
+		}
 		inv.out.print(inv.out.paint(heading, fmt.Sprintf("inventory %d", inventory.ScanCounter)), ": ",
 			plural(len(inventory.Configurations), "configuration"), ", ", plural(len(inventory.Skills), "skill"))
 		for _, ev := range driftTransitions(library, inventory) {
@@ -234,6 +239,10 @@ func (inv *invocation) serveOnce(ctx context.Context) error {
 // watching that fails.
 func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Writer, address string, origins []string) error {
 	inv.prepareServe()
+	inv.spoolRecord(ctx, recordServeStart, map[string]any{
+		"duration_ms": time.Since(inv.started).Milliseconds(),
+		"json":        inv.out.json,
+	})
 	methods, err := inv.newServeMethods()
 	if err != nil {
 		return err
@@ -301,7 +310,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		Check:        checks.startup,
 		Recheck:      checks.hub,
 		RecheckEvery: hubCheckEvery,
-		Jobs:         []serve.Job{inv.maintenanceJob},
+		Jobs:         []serve.Job{inv.maintenanceJob, inv.serveTelemetryJob},
 		Inventory:    inv.inventoryReporter(),
 		Fail:         inv.serveFailed,
 		Warn:         inv.out.warn,
