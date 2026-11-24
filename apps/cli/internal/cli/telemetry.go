@@ -213,9 +213,10 @@ func (inv *invocation) setTelemetry(ctx context.Context, value string) error {
 }
 
 // settingsTelemetryID is the telemetry id the settings event carries: set
-// only while the setting is on.
+// only while the setting is on and DO_NOT_TRACK is unset, which counts as
+// off for the desktop app too.
 func (inv *invocation) settingsTelemetryID(s home.Settings) string {
-	if s.Telemetry != telemetryOn {
+	if s.Telemetry != telemetryOn || inv.doNotTrack() {
 		return ""
 	}
 	id, err := inv.telemetryIDNow(context.Background())
