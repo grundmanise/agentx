@@ -35,6 +35,7 @@ export const checkTools = async () => {
       onClick: () => {
         void cancelCommand(CHECK_TOOLS);
       },
+      track: "check-tools-toast.cancel",
     },
     { kind: "progress", lasting: true }
   );

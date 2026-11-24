@@ -22,6 +22,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "#/components/ui/command.tsx";
+import type { Tracked } from "#/lib/track.ts";
 import { AddSkillDialog } from "#/screens/skills/add-skill-dialog.tsx";
 import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { openSkill } from "#/screens/skills/open.ts";
@@ -33,7 +34,7 @@ import { checkUpdates } from "#/screens/skills/updates.ts";
 import { openActivityLog } from "#/store/activity-log.ts";
 import { rescan } from "#/store/feed.ts";
 
-export interface PaletteItem {
+export interface PaletteItem extends Tracked {
   /** Names the row among all others: two skills can share a name. */
   id: string;
   group: "ACTIONS" | "GO TO" | "SKILLS";
@@ -84,6 +85,7 @@ const skillItems = (rows: SkillRow[]): PaletteItem[] =>
       run: () => {
         openSkill(row.key);
       },
+      track: "palette.open-skill",
     }));
 
 /**
@@ -125,6 +127,7 @@ export const CommandPalette = ({
       run: () => {
         void publishAll(outgoing.map((skill) => skill.name));
       },
+      track: "palette.publish-all",
     });
   }
   actions.push(
@@ -136,6 +139,7 @@ export const CommandPalette = ({
       run: () => {
         setAdding(true);
       },
+      track: "palette.add-skill",
     },
     {
       group: "ACTIONS",
@@ -145,6 +149,7 @@ export const CommandPalette = ({
       run: () => {
         setCreating(true);
       },
+      track: "palette.create-skill",
     },
     {
       group: "ACTIONS",
@@ -154,6 +159,7 @@ export const CommandPalette = ({
       run: () => {
         void checkUpdates();
       },
+      track: "palette.check-updates",
     },
     {
       group: "ACTIONS",
@@ -163,6 +169,7 @@ export const CommandPalette = ({
       run: () => {
         void rescanMachine();
       },
+      track: "palette.rescan",
     },
     {
       group: "ACTIONS",
@@ -172,6 +179,7 @@ export const CommandPalette = ({
       run: () => {
         openActivityLog();
       },
+      track: "palette.activity-log",
     }
   );
   const goTo: PaletteItem[] = allScreens.map((s) => ({
@@ -183,6 +191,7 @@ export const CommandPalette = ({
       // The screen as the user left it, as from the sidebar.
       void navigate(lastRoute(s.path));
     },
+    track: `palette.go-${s.track}`,
   }));
   const skills = skillItems(rows);
   const items = [
@@ -219,6 +228,7 @@ export const CommandPalette = ({
                       key={i.id}
                       value={i.id}
                       keywords={[i.label]}
+                      track={i.track}
                       onSelect={() => {
                         onOpenChange(false);
                         i.run();

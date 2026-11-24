@@ -25,6 +25,7 @@ const CheckTools = ({ rows }: { rows: ServerRow[] }) => {
     <Button
       variant="ghost"
       size="sm"
+      track="servers.check-tools"
       aria-busy={checking}
       title={
         when === undefined ? "No check yet" : `Last check: ${formatDate(when)}`

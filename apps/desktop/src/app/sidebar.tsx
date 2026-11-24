@@ -7,6 +7,7 @@ import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { ArrowUpIcon } from "#/components/icons/arrow-up.tsx";
 import { BadgeButton } from "#/components/ui/badge.tsx";
 import { plural } from "#/lib/plural.ts";
+import { trackAttribute } from "#/lib/track.ts";
 import { cn } from "#/lib/utils.ts";
 import { UpdateSkillsDialog } from "#/screens/skills/update-dialog.tsx";
 import {
@@ -30,7 +31,7 @@ const MachineLabel = () => {
  * It goes back to the route its screen last showed, such as the skill selected there.
  */
 const NavItem = ({
-  screen: { icon: ScreenIcon, label, path },
+  screen: { icon: ScreenIcon, label, path, track },
   nested = false,
 }: {
   screen: Screen;
@@ -40,6 +41,7 @@ const NavItem = ({
   return (
     <Link
       to={useLastRoute(path)}
+      {...trackAttribute(`sidebar.${track}`)}
       aria-current={active ? "page" : undefined}
       className={cn(
         "rounded-shell-nav type-nav gap-nav-icon flex items-center px-2.5",
@@ -68,6 +70,7 @@ const UpdatePill = () => {
       <BadgeButton
         id={UPDATE_PILL_ID}
         tone="update"
+        {...trackAttribute("sidebar.update-pill")}
         aria-label={plural(n, "update")}
         title="Update skills"
         onClick={openUpdateDialog}

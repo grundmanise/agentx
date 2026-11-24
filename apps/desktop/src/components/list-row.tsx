@@ -1,6 +1,8 @@
 import { useId } from "react";
 import type { ReactNode } from "react";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import { cn } from "#/lib/utils.ts";
 
 /**
@@ -15,7 +17,8 @@ export const ListRow = ({
   selected,
   onSelect,
   children,
-}: {
+  track,
+}: Tracked & {
   /** The row's accessible name: the name of what it shows. */
   label: string;
   /** The row's accessible description: its state, markers and description line, unseen. */
@@ -28,6 +31,7 @@ export const ListRow = ({
   return (
     <button
       type="button"
+      {...trackAttribute(track)}
       aria-label={label}
       aria-describedby={description === undefined ? undefined : descriptionId}
       aria-current={selected ? "true" : undefined}

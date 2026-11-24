@@ -121,6 +121,7 @@ export const ForkButton = ({ row }: { row: SkillRow }) => {
   const merging = row.entry?.pending_merge === true;
   const button = (
     <Button
+      track="skill-detail.fork"
       variant="secondary"
       size="sm"
       disabled={pending}
@@ -227,6 +228,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
             Use a different name
           </span>
           <Switch
+            track="fork-dialog.toggle-rename"
             id={switchId}
             aria-label="Use a different name"
             checked={renaming}
@@ -270,11 +272,12 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       </div>
       <DialogFooter>
         <DialogClose asChild>
-          <Button variant="ghost" disabled={pending}>
+          <Button track="fork-dialog.cancel" variant="ghost" disabled={pending}>
             Cancel
           </Button>
         </DialogClose>
         <Button
+          track="fork-dialog.confirm"
           type="submit"
           variant="primary"
           disabled={pending || (renaming && !nameValid)}

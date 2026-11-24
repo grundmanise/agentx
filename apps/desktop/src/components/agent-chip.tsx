@@ -6,6 +6,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import { cn } from "#/lib/utils.ts";
 
 /**
@@ -53,7 +55,8 @@ export const AgentChip = ({
   locked = false,
   pending = false,
   onClick,
-}: {
+  track,
+}: Tracked & {
   /** The 28px logo, or stacked logos for Universal. */
   logo: ReactNode;
   name: string;
@@ -72,6 +75,7 @@ export const AgentChip = ({
     <button
       type="button"
       role="switch"
+      {...trackAttribute(track)}
       aria-checked={on}
       aria-label={state === "displaced" ? `${name}, displaced` : name}
       aria-busy={pending ? true : undefined}

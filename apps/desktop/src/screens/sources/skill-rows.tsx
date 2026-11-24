@@ -64,6 +64,7 @@ const SkillRow = ({
         {text(
           <Checkbox
             id={id}
+            track="add-skill-dialog.row-select"
             aria-label={card.name}
             aria-describedby={
               card.description === "" ? undefined : descriptionId

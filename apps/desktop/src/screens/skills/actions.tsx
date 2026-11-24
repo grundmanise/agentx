@@ -21,6 +21,7 @@ import {
 import { Button } from "#/components/ui/button.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { revealIfThere, revealInFinder } from "#/lib/reveal.ts";
+import type { Tracked } from "#/lib/track.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
   adoptArgs,
@@ -113,6 +114,7 @@ const adoptRefusal = (
             onClick: () => {
               useAdoptReplace.setState({ request: { paths: replace, row } });
             },
+            track: "adopt-toast.replace",
           },
     details: folders.map(({ path, why }) => `${path} ${why}`),
     keep: [row.name],
@@ -149,15 +151,17 @@ export const adopt = async (row: SkillRow, force = false) => {
 
 /** A small ghost button that runs a command, pending while the command and its inventory come. */
 const ActionButton = ({
+  track,
   label,
   pending,
   onClick,
-}: {
+}: Tracked & {
   label: string;
   pending: boolean;
   onClick: () => void;
 }) => (
   <Button
+    track={track}
     variant="ghost"
     size="sm"
     disabled={pending}
@@ -175,6 +179,7 @@ export const AddToAgents = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(label);
   return (
     <ActionButton
+      track="skill-banner.add-to-agents"
       label="Add to agents"
       pending={pending}
       onClick={() => {
@@ -193,6 +198,7 @@ export const Adopt = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(adoptLabel(row));
   return (
     <ActionButton
+      track="skill-banner.import"
       label="Import"
       pending={pending}
       onClick={() => {
@@ -237,6 +243,7 @@ export const Reconnect = ({
   return (
     <>
       <ActionButton
+        track="skill-banner.reconnect"
         label="Reconnect"
         pending={pending}
         onClick={() => {
@@ -256,9 +263,12 @@ export const Reconnect = ({
           </p>
           <AlertDialogFooter>
             <AlertDialogCancel asChild>
-              <Button variant="ghost">Cancel</Button>
+              <Button track="reconnect-dialog.cancel" variant="ghost">
+                Cancel
+              </Button>
             </AlertDialogCancel>
             <Button
+              track="reconnect-dialog.replace"
               variant="danger"
               onClick={() => {
                 setConfirm(false);
@@ -312,9 +322,12 @@ export const AdoptReplaceConfirm = () => {
         ))}
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
-            <Button variant="ghost">Cancel</Button>
+            <Button track="adopt-replace-dialog.cancel" variant="ghost">
+              Cancel
+            </Button>
           </AlertDialogCancel>
           <Button
+            track="adopt-replace-dialog.replace"
             variant="danger"
             onClick={() => {
               close();
@@ -336,6 +349,7 @@ export const AddSource = ({ source }: { source: string }) => {
   const pending = useSettling(addSourceLabel(source));
   return (
     <ActionButton
+      track="skill-banner.add-source"
       label="Add source"
       pending={pending}
       onClick={() => {
@@ -353,6 +367,7 @@ export const UpdateButton = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(updateLabel(row.name));
   return (
     <Button
+      track="skill-banner.update"
       variant="primary"
       size="sm"
       disabled={pending}
@@ -382,6 +397,7 @@ export const SeeChanges = ({ row }: { row: SkillRow }) => {
   return (
     <>
       <Button
+        track="skill-banner.see-changes"
         ref={button}
         variant="ghost"
         size="sm"
@@ -424,6 +440,7 @@ export const ShowMergeFolder = ({ name }: { name: string }) => {
   const home = useAppStore((s) => s.machine?.home);
   return (
     <Button
+      track="skill-banner.show-merge-folder"
       variant="ghost"
       size="sm"
       disabled={home === undefined}
@@ -447,6 +464,7 @@ export const ApplyMerge = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(updateLabel(row.name));
   return (
     <Button
+      track="skill-banner.apply-merge"
       variant="primary"
       size="sm"
       disabled={pending}
@@ -471,6 +489,7 @@ export const DiscardEdits = ({ row }: { row: SkillRow }) => {
   return (
     <>
       <Button
+        track="skill-banner.discard-edits"
         variant="danger"
         size="sm"
         disabled={pending}
@@ -490,9 +509,12 @@ export const DiscardEdits = ({ row }: { row: SkillRow }) => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel asChild>
-              <Button variant="ghost">Cancel</Button>
+              <Button track="discard-edits-dialog.cancel" variant="ghost">
+                Cancel
+              </Button>
             </AlertDialogCancel>
             <Button
+              track="discard-edits-dialog.confirm"
               variant="danger"
               onClick={() => {
                 setConfirm(false);

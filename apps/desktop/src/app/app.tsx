@@ -13,9 +13,11 @@ import { SOURCES_PATH, titles } from "#/app/screens.ts";
 import { Sidebar } from "#/app/sidebar.tsx";
 import { StaleBar } from "#/app/stale-bar.tsx";
 import { StartupLayer } from "#/app/startup-layer.tsx";
+import { TelemetryDialog } from "#/app/telemetry-dialog.tsx";
 import { TopBar } from "#/app/top-bar.tsx";
 import { Toaster } from "#/components/ui/sonner.tsx";
 import { setNavigate } from "#/lib/navigate.ts";
+import { viewScreen } from "#/lib/telemetry.ts";
 import { cn } from "#/lib/utils.ts";
 import { AgentsScreen } from "#/screens/agents/agents-screen.tsx";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
@@ -123,6 +125,11 @@ export const App = () => {
   const { pathname } = useLocation();
   const known = screenOf(pathname) !== undefined;
 
+  // Each screen the app shows is a page view, while usage data is sent.
+  useEffect(() => {
+    void viewScreen(pathname);
+  }, [pathname]);
+
   // The command runner navigates from outside React, as on exit code 4.
   const navigate = useNavigate();
   useEffect(() => {
@@ -188,6 +195,7 @@ export const App = () => {
       </Activity>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ActivityLogSheet />
+      {startup.ready && <TelemetryDialog />}
       <Toaster />
     </div>
   );

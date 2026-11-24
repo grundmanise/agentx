@@ -17,7 +17,7 @@ Type `y` to agree. Press Enter, or type anything else, to decline. agentx stores
 
 A scan without a terminal, such as one in a script or with `--json`, does not ask. The next scan in a terminal asks instead.
 
-In the desktop app, a dialog asks the same question after the first scan.
+In the desktop app and the web UI, a dialog asks the same question after the first scan.
 
 ## What agentx may send
 
@@ -30,6 +30,19 @@ In the desktop app, a dialog asks the same question after the first scan.
 agentx sends one event for each command you run, when the command ends. [`agentx serve`](/cli/serve) also sends one when it starts.
 
 It never sends paths, skill or server names, URLs, or anything you type. Your IP address is not stored.
+
+## What the desktop app and the web UI may send
+
+The same answer covers the desktop app and the web UI. They send under the same anonymous id:
+
+- Each screen you open, by its route alone, such as `/skills/:id` for a skill, never the skill's name
+- Each button, menu item or link you click, by a fixed name, such as `skills.expand-all`. PostHog masks the text and attributes of every element, so it never sees what a button says or where a link goes.
+- Errors and crashes, with every path removed
+- The app version, release channel, and whether it ran in the app or the web UI
+- What PostHog's SDK reports about the window: OS, browser, screen and window size, language and time zone
+- The commands the app runs, as in the terminal
+
+They never send paths, skill or server names, URLs, on-screen text or anything you type. The SDK stores nothing on your machine and records no session.
 
 ## The anonymous id
 
@@ -44,10 +57,10 @@ agentx config set telemetry on
 
 `agentx config get telemetry` prints `on`, `off` or `unset`.
 
-In the desktop app, use the switch in Settings.
+In the desktop app and the web UI, use the **Send anonymous usage data** switch in Settings. The app stops sending as soon as you turn it off.
 
 ## Turn it off for every run
 
-Set `DO_NOT_TRACK=1` in your environment. agentx then neither asks nor sends, whatever the setting says.
+Set `DO_NOT_TRACK=1` in your environment. agentx and the desktop app then send nothing, and agentx does not ask, whatever the setting says.
 
 Only stable and nightly releases send usage data. A build from source never asks and never sends.

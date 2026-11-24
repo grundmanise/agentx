@@ -89,7 +89,12 @@ const ItemName = ({ name, onOpen }: { name: string; onOpen?: () => void }) => {
         {onOpen === undefined ? (
           label
         ) : (
-          <Button variant="link" size="inline" onClick={onOpen}>
+          <Button
+            variant="link"
+            size="inline"
+            track="plugin-detail.item-open"
+            onClick={onOpen}
+          >
             {label}
           </Button>
         )}
@@ -178,9 +183,24 @@ export const PluginDetail = ({
 }) => {
   const tabs = (
     [
-      { count: row.skills.length, label: "Skills", value: "skills" },
-      { count: row.servers.length, label: "MCP servers", value: "servers" },
-      { count: row.hooks.length, label: "Hooks", value: "hooks" },
+      {
+        count: row.skills.length,
+        label: "Skills",
+        track: "plugin-detail.tab-skills",
+        value: "skills",
+      },
+      {
+        count: row.servers.length,
+        label: "MCP servers",
+        track: "plugin-detail.tab-servers",
+        value: "servers",
+      },
+      {
+        count: row.hooks.length,
+        label: "Hooks",
+        track: "plugin-detail.tab-hooks",
+        value: "hooks",
+      },
     ] as const
   ).filter((t) => t.count > 0);
   const [tab, setTab] = useState<string>(tabs[0]?.value ?? "skills");
@@ -227,6 +247,7 @@ export const PluginDetail = ({
               href={`file://${row.path}`}
               title={showInLabel()}
               tone="secondary"
+              track="plugin-detail.path-reveal"
               onOpen={() => {
                 void revealInFinder(row.path);
               }}
@@ -245,6 +266,7 @@ export const PluginDetail = ({
                     key={twin.key}
                     variant="link"
                     size="inline"
+                    track="plugin-detail.twin-open"
                     onClick={() => {
                       onSelect(twin);
                     }}
@@ -272,7 +294,7 @@ export const PluginDetail = ({
         >
           <TabsList aria-label="Contents">
             {tabs.map((t) => (
-              <TabsTrigger key={t.value} value={t.value}>
+              <TabsTrigger key={t.value} value={t.value} track={t.track}>
                 {t.label}
                 <span className="type-technical-sm text-text-caption">
                   {t.count}
