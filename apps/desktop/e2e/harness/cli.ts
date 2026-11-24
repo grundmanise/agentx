@@ -846,13 +846,13 @@ export class MockCli {
     if (this.appUpdate === null) {
       throw new Error("no update was found to install");
     }
-    if (this.appUpdate.version !== version) {
-      throw new Error(
-        `the update found is ${this.appUpdate.version}, not ${String(version)}`
-      );
-    }
+    // Held, a test can offer a newer update meanwhile, as a check that ends before the install
+    // starts does.
     if (this.holdingInstall && this.installEnded === undefined) {
       await nextDetail(this.installSignals, "end");
+    }
+    if (this.appUpdate.version !== version) {
+      return this.appUpdate.version;
     }
     if (this.installEnded === true) {
       throw new Error("signature does not match");

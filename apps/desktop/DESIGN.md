@@ -1248,7 +1248,7 @@ At the right end of the title bar (`src/app/publish-status.tsx`, drawn by `src/c
 Left of the sync status, `button.gap` apart (`src/app/app-update-status.tsx`, which holds its wording): the same pill (§6 "Publish status (title bar)"), with the `ArrowUpIcon` (`2xs`, `accent.primary`) in the dot's box. It shows only while a check found an update of the app (ADR 0019), and never in a browser. It has three phases:
 
 - Available, naming the version: a click downloads and installs it. A tooltip says what the click does.
-- Installing, with the download's percent once the server gives a size: `aria-busy`, no tooltip, and the download on the pill's rim, the `sm` progress rim (§8 "Progress rim"). A failed install says so in a failure toast and the pill goes back to available.
+- Installing, with the download's percent once the server gives a size: `aria-busy`, no tooltip, and the download on the pill's rim, the `sm` progress rim (§8 "Progress rim"). A failed install says so in a failure toast and the pill goes back to available. When a check found a newer update meanwhile, nothing is installed: the pill offers the newer version, and the failure toast names it with an action that installs it.
 - Installed: a click restarts the app into the new version. The app never restarts on its own.
 - A visually hidden polite live region beside the pill (`StatusAnnouncement`) holds the phase, never the percent.
 - The app checks after the startup checks pass, never during them, and once a day while it runs, unless Check for updates is off in Settings (§6 "Settings").

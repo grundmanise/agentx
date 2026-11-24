@@ -192,7 +192,23 @@ export const installAppUpdate = async () => {
         },
       });
     });
-    await invoke("app_update_install", { version });
+    const newer = await invoke<string | null>("app_update_install", {
+      version,
+    });
+    if (newer !== null) {
+      // A check found a newer update meanwhile: nothing was installed, and the title bar offers it.
+      useAppUpdateStore.setState({
+        rim: { fraction: 0, state: "stopped" },
+        update: { phase: "available", version: newer },
+      });
+      notifyFailure(`Update failed. agentx ${newer} is available`, {
+        label: "Update",
+        onClick: () => {
+          void installAppUpdate();
+        },
+      });
+      return;
+    }
     useAppUpdateStore.setState({
       rim: { fraction: 1, state: "done" },
       update: { phase: "installed", version },
@@ -213,6 +229,6 @@ export const restartApp = async () => {
   try {
     await invoke("app_restart");
   } catch {
-    notifyFailure("Couldn't restart agentx. Quit and open it again");
+    notifyFailure("Couldn't restart agentx. Quit and reopen it manually");
   }
 };

@@ -84,14 +84,14 @@ pub async fn app_update_check(
 
 /// Downloads the update the last check found, checks its signature and installs it in place of
 /// the app, sending `app-update-progress` as it downloads. The app runs the new version once it
-/// restarts. `version` is the version the title bar shows: when a later check found another one,
-/// nothing is installed.
+/// restarts. `version` is the version the title bar shows: when a later check found a newer one,
+/// nothing is installed and this returns the newer version, which the title bar then offers.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn app_update_install(
     app: AppHandle,
     found: State<'_, Found>,
     version: String,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     let mut update = found
         .0
         .lock()
@@ -99,10 +99,7 @@ pub async fn app_update_install(
         .clone()
         .ok_or("no update was found to install")?;
     if update.version != version {
-        return Err(format!(
-            "the update found is {}, not {version}",
-            update.version
-        ));
+        return Ok(Some(update.version));
     }
     // The update does not take the check's timeout.
     update.timeout = Some(DOWNLOAD_TIMEOUT);
@@ -122,7 +119,8 @@ pub async fn app_update_install(
             || {},
         )
         .await
-        .map_err(|err| err.to_string())
+        .map_err(|err| err.to_string())?;
+    Ok(None)
 }
 
 /// Quits and opens the app again, so the installed update runs. The exit stops the serve child

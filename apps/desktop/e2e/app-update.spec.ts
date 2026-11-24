@@ -56,6 +56,27 @@ test("a failed install says so and offers the update again", async ({
   expect(cli.restarts).toBe(0);
 });
 
+test("a newer update found during an install installs nothing and offers the newer one", async ({
+  cli,
+  page,
+}) => {
+  launch(cli, "synced");
+  cli.offerAppUpdate("0.4.0");
+  cli.holdAppUpdateInstall();
+  await page.goto("/#/skills");
+
+  await updateButton(page).click();
+  cli.offerAppUpdate("0.5.0");
+  cli.endAppUpdateInstall();
+  await expect(toasts(page)).toContainText(
+    "Update failed. agentx 0.5.0 is available"
+  );
+  await expect(updateButton(page)).toHaveAccessibleName("Update to 0.5.0");
+
+  await toasts(page).getByRole("button", { name: "Update" }).click();
+  await expect(updateButton(page)).toHaveAccessibleName("Restart to update");
+});
+
 test("with no update, the title bar shows nothing for it", async ({
   cli,
   page,
