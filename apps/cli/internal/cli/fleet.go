@@ -36,16 +36,11 @@ type fleetMachine struct {
 	reportContents
 }
 
-// fleet is one read of the hub's machines: the store and the hub's git
-// remote and URL it was read through, the machines whose branch a view can
-// use, sorted by id, a warning for each branch it cannot, and the tip of
-// every report branch named after a machine id whose report it cannot use,
-// by that id, which a removal still deletes.
+// fleet is one read of the hub's machines: the machines whose branch a view
+// can use, sorted by id, and a warning for each branch it cannot.
 type fleet struct {
-	gitDir, remote, url string
-	machines            []fleetMachine
-	warnings            []string
-	unread              map[string]string
+	machines []fleetMachine
+	warnings []string
 }
 
 // machineBranches are the patterns that name every branch of the hub a
@@ -74,7 +69,7 @@ func (inv *invocation) readFleet(ctx context.Context) (fleet, error) {
 // fleetOf is the fleet the machine branches of the hub make, each read at
 // the commit its remote-tracking ref holds, see held. It reaches no remote.
 func (inv *invocation) fleetOf(ctx context.Context, gitDir, remote, url string, held map[string]gitx.Tracked) (fleet, error) {
-	f := fleet{gitDir: gitDir, remote: remote, url: url, machines: []fleetMachine{}, unread: map[string]string{}}
+	f := fleet{machines: []fleetMachine{}}
 	cloud := gitx.MachineBranch(cloudMachine)
 	for _, branch := range slices.Sorted(maps.Keys(held)) {
 		tip := held[branch]
@@ -94,9 +89,6 @@ func (inv *invocation) fleetOf(ctx context.Context, gitDir, remote, url string, 
 		}
 		if why != "" {
 			f.warnings = append(f.warnings, why)
-			if id, _ := gitx.ReportMachine(branch); computerID.MatchString(id) {
-				f.unread[id] = tip.Commit
-			}
 			continue
 		}
 		m.Commit, m.ChangedAt = tip.Commit, tip.Committed.Format(time.RFC3339)
@@ -426,62 +418,4 @@ func shownSkills(held reportContents, id string) []shownSkill {
 	slices.SortStableFunc(plugins, order)
 	slices.SortStableFunc(own, order)
 	return slices.Concat(library, slices.CompactFunc(plugins, same), slices.CompactFunc(own, same))
-}
-
-// machineRemove is agentx machine remove: it deletes a machine's report
-// branch on the hub, leased on the tip just read, so that a report the
-// machine wrote since is not deleted, and the branch's remote-tracking
-// ref. The cloud machine writes no report and is refused, exit code 1,
-// before anything is read. A machine id that names a report branch no view
-// can use deletes that branch too. A deletion git could not make or the
-// hub rejected is exit code 3.
-func (inv *invocation) machineRemove(ctx context.Context, arg string) error {
-	switch arg {
-	case "":
-		return noMachineGiven()
-	case cloudMachine:
-		return fail(exitUsage, "the "+cloudMachine+" machine writes no report, so there is none to remove",
-			"take a skill off it with 'agentx skill remove <name> --machine "+cloudMachine+"'")
-	}
-	f, err := inv.readFleet(ctx)
-	if err != nil {
-		return err
-	}
-	reports := slices.DeleteFunc(slices.Clone(f.machines), func(m fleetMachine) bool { return m.Machine.ID == cloudMachine })
-	id, tip, name := arg, f.unread[arg], arg
-	if tip == "" {
-		m, err := machineNamed(arg, reports)
-		if err != nil {
-			return err
-		}
-		id, tip, name = m.Machine.ID, m.Commit, sanitised(m.Machine.Label)
-	}
-	branch := gitx.ReportBranch(id)
-	again := "run 'agentx machine remove " + id + "' again"
-	s, err := inv.git.DeleteRemoteBranch(ctx, f.gitDir, f.remote, branch, tip)
-	switch {
-	case err != nil:
-		return fail(exitSource, "the hub still holds "+branch+": "+trimGit(err.Error()),
-			"check that you can reach "+shownURL(f.url)+" with git, then "+again)
-	case s.Rejected() && strings.Contains(s.Why(), "current branch"):
-		return fail(exitSource, "the hub still holds "+branch+": the hub rejected its deletion: "+sanitised(s.Why()),
-			"make another branch the hub's default branch on its hosting service, then "+again)
-	case s.Rejected() && strings.Contains(s.Why(), "stale info"):
-		return fail(exitSource, "the hub still holds "+branch+": the hub rejected its deletion: "+sanitised(s.Why()),
-			"the machine wrote a report since the read; "+again+" to delete what the branch holds now")
-	case s.Rejected():
-		return fail(exitSource, "the hub still holds "+branch+": the hub rejected its deletion: "+sanitised(s.Why()), again)
-	}
-	if err := inv.git.DropTracked(ctx, f.gitDir, f.remote, []string{branch}); err != nil {
-		return storeFailure(err)
-	}
-	done := "removed the report of " + name + " from the hub, " + branch + "; a machine that still reports writes its report again"
-	inv.out.done(done)
-	inv.summary = done
-	for _, w := range f.warnings {
-		if !strings.HasPrefix(w, branch+" ") {
-			inv.out.warn(w)
-		}
-	}
-	return nil
 }

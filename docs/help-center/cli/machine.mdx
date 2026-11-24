@@ -99,7 +99,7 @@ The report holds:
 - each library skill with its source, its version, its placements, and whether you edited it
 - its plugins
 
-The report holds no path, no machine settings, no MCP server and no file of any skill. Anyone who can read your hub can read the report: the machine's label, the names of your skills and plugins, and your source URLs.
+The report holds no path on the machine, no machine settings, no MCP server and no file of any skill. Anyone who can read your hub can read the report: the machine's label, the names of your skills and plugins, and your source URLs.
 
 | Exit code | Cause |
 |---|---|
@@ -199,16 +199,30 @@ The command shows what the hub holds of the machine. It does not compare it with
 | 5 | The hub holds no report of that machine. |
 | 6 | No hub is set. Or the name matches more than one machine: agentx lists them, so give the machine id. |
 
-### Remove a machine's report
+### Remove a report from the hub
+
+A machine's report leaves the hub when that machine disconnects from the hub. On that machine, remove the hub:
 
 ```sh
-agentx machine remove studio
+agentx source remove git@github.com:you/agentx-hub.git
 ```
 
 ```text
-✓ removed the report of studio from the hub, reports/7c1f0a2e9b3d4c5e8f6a1b2c3d4e5f60; a machine that still reports writes its report again
+✓ the hub ssh://git@github.com/you/agentx-hub is no longer set; your skills on this machine are as they were
+✓ deleted this machine's report, reports/3ea501b8fb5db1ad3cc85268972d7012, from ssh://git@github.com/you/agentx-hub
 ```
 
-Remove the report of a machine you no longer use. The command deletes the branch `reports/<machine id>` from the hub and does not ask for confirmation. Nothing changes on that machine. If it writes its report again, with `agentx machine report` or on its own, its report is back.
+agentx removes the hub from the machine, then deletes the branch `reports/<machine id>` from the hub. [Replacing the hub](/cli/source#add-your-hub) deletes the report from the hub you replace.
 
-The cloud machine writes no report, so `agentx machine remove cloud` stops with exit code 1. To take a skill off the cloud machine, see [Change the cloud machine's skills](/cloud#change-the-cloud-machines-skills).
+If Git cannot delete the branch, for example because the hub is out of reach, the hub is removed from the machine all the same. agentx prints a warning with the Git command that deletes the branch:
+
+```text
+warning: ssh://git@github.com/you/agentx-hub still holds reports/3ea501b8fb5db1ad3cc85268972d7012, this machine's report: <reason>
+  delete it with 'git push ssh://git@github.com/you/agentx-hub --delete reports/3ea501b8fb5db1ad3cc85268972d7012'
+```
+
+No machine deletes the report of another machine. For a machine you no longer have, delete its branch on the hub with Git. `agentx machine show` prints the machine id:
+
+```sh
+git push git@github.com:you/agentx-hub.git --delete reports/7c1f0a2e9b3d4c5e8f6a1b2c3d4e5f60
+```

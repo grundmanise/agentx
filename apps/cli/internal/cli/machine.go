@@ -101,10 +101,11 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 			"can show which skills this one has and which agent clients see them.\n\n" +
 			"The report names the machine, its agent configurations, every skill an agent\n" +
 			"client sees with its content hash, the library's skills with their sources, and\n" +
-			"the plugins. It holds no path, no settings, no MCP server and no content of a\n" +
-			"skill. Whoever can read the hub can read it.\n\n" +
+			"the plugins. It holds no path on the machine, no settings, no MCP server and no\n" +
+			"content of a skill. Whoever can read the hub can read it.\n\n" +
 			"A report the branch holds already is pushed nowhere. Otherwise it is one commit\n" +
-			"on the branch, pushed without force.",
+			"on the branch, pushed without force. The report leaves the hub when this\n" +
+			"machine does: 'agentx source remove' of the hub deletes it there.",
 		Args:    cobra.NoArgs,
 		Example: examples("agentx machine report", "write this machine's report to the hub"),
 		RunE:    func(cmd *cobra.Command, args []string) error { return inv.machineReport(cmd.Context()) },
@@ -143,20 +144,6 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 			"agentx machine show cloud", "the cloud machine, from its snapshot",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.machineShow(cmd.Context(), args[0]) },
-	})
-	cmd.AddCommand(&cobra.Command{
-		Use:   "remove <machine>",
-		Short: "Delete a machine's report from the hub",
-		Long: "Delete the report branch of a machine from the hub, such as that of a machine\n" +
-			"you no longer use. Nothing on that machine changes, and a machine that still\n" +
-			"reports writes its report again.\n\n" +
-			"<machine> is a machine's label, its id or the start of its id. The cloud\n" +
-			"machine writes no report and has none to remove.",
-		Args: cobra.ExactArgs(1),
-		Example: examples(
-			"agentx machine remove old-laptop", "delete the report of a machine by its label",
-		),
-		RunE: func(cmd *cobra.Command, args []string) error { return inv.machineRemove(cmd.Context(), args[0]) },
 	})
 	return cmd
 }

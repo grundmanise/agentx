@@ -91,9 +91,10 @@ func TestHubRemoteRefusesASharedSourceOfItsURL(t *testing.T) {
 // adds it again, still the hub, and finds the fork published in between;
 // source list marks it, and source fetch fetches its forks. Adding another
 // URL with --hub replaces the entry and forgets what the first one held, a
-// fork's tracking following it; source remove detaches it: its
-// configuration, its remote-tracking branches and its entry go, and the
-// local fork stays.
+// fork's tracking following it, and deletes this machine's report from the
+// hub replaced; source remove detaches it: its configuration, its
+// remote-tracking branches and its entry go, and the local fork stays. A
+// hub this machine knows no report of its own on is pushed nothing.
 func TestTheHubRemoteIsSetReplacedAndDetached(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -134,9 +135,13 @@ func TestTheHubRemoteIsSetReplacedAndDetached(t *testing.T) {
 	contains(t, "source fetch", h.mustRun("source", "fetch", "--all").stdout, "re-fetched "+url+": 1 skill\n")
 
 	h.storeGit("config", "branch.skills/notes.remote", name)
+	h.mustRun("machine", "report")
 	other := newHubRemote(t, h)
 	otherURL := "file://" + other
-	contains(t, "replaced", h.setHub(other).stdout, "the hub is now "+otherURL+"; it holds")
+	replaced := h.setHub(other).stdout
+	contains(t, "replaced", replaced, "the hub is now "+otherURL+"; it holds")
+	contains(t, "replaced: this machine's report", replaced, "deleted this machine's report, reports/")
+	equal(t, "the report branches of the hub replaced", remoteGit(t, h, remote, "for-each-ref", "refs/heads/reports/"), "")
 	if sources, _ := readSettingsFile(t, h)["sources"].([]any); len(sources) != 1 {
 		t.Errorf("the settings hold %v, want the new hub alone", readSettingsFile(t, h)["sources"])
 	}
@@ -147,8 +152,10 @@ func TestTheHubRemoteIsSetReplacedAndDetached(t *testing.T) {
 	}
 	equal(t, "the fork's tracking", h.storeGit("config", "--get", "branch.skills/notes.remote"), source.RemoteName(source.ID(otherURL)))
 
+	calls := countingGit(t, h)
 	contains(t, "source remove", h.mustRun("source", "remove", otherURL).stdout,
 		"the hub "+otherURL+" is no longer set; your skills on this machine are as they were")
+	equal(t, "source remove: pushes to a hub with no report of this machine", strings.Count(strings.Join(calls(), "\n"), " push "), 0)
 	if out, err := h.storeGitErr("config", "--get-regexp", "^(remote\\.|branch\\.)"); err == nil {
 		t.Errorf("source remove left configuration: %s", out)
 	}

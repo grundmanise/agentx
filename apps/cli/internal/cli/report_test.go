@@ -207,12 +207,11 @@ func (h *harness) asMachine(id string) {
 }
 
 // TestMachineReportRefusesWithoutWritingAnything: a machine with no hub
-// has nowhere to report to, exit code 6, and the cloud machine has no
-// report to remove, exit code 1, before anything is read. With a hub, a
-// push the hub does not take writes no report, each answer of the hub
-// with its own exit code and hint: a branch another writer moved and a
-// push a hook declined are exit code 6, a push the host denies and one
-// whose answer names nothing of the branch exit code 3.
+// has nowhere to report to, exit code 6. With a hub, a push the hub does
+// not take writes no report, each answer of the hub with its own exit code
+// and hint: a branch another writer moved and a push a hook declined are
+// exit code 6, a push the host denies and one whose answer names nothing
+// of the branch exit code 3.
 func TestMachineReportRefusesWithoutWritingAnything(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -222,11 +221,6 @@ func TestMachineReportRefusesWithoutWritingAnything(t *testing.T) {
 		equal(t, strings.Join(args, " ")+" with no hub: exit", out.exit, 6)
 		contains(t, strings.Join(args, " ")+" with no hub", out.stderr, "no hub is set")
 	}
-	out := h.run("machine", "remove", "cloud")
-	equal(t, "remove cloud: exit", out.exit, 1)
-	contains(t, "remove cloud", out.stderr, "the cloud machine writes no report, so there is none to remove")
-	contains(t, "remove cloud: hint", out.stderr, "agentx skill remove <name> --machine cloud")
-
 	remote := newHubRemote(t, h)
 	h.setHub(remote)
 	real, err := exec.LookPath("git")
@@ -270,7 +264,7 @@ exec `+real+` "$@"
 	equal(t, "this machine's tracking refs", h.storeGit("for-each-ref", gitx.TrackingPrefix(hubRemoteName(t, h))+"reports/"), "")
 }
 
-// TestMachineReportListShowRemove is an inventory report's way through the
+// TestMachineReportListShow is an inventory report's way through the
 // hub, between two computers and the cloud machine.
 //
 // The first computer reports: one commit on reports/<its id> whose one
@@ -285,10 +279,9 @@ exec `+real+` "$@"
 // the cloud machine from its snapshot among them, and as text one row a
 // machine, itself first from a scan made now, then the others by label,
 // the cloud machine last. It shows the first computer by its label and by
-// the start of its id, with each skill's origin, and removes its report:
-// the branch and its remote-tracking ref are gone, and the machine is then
-// one the hub holds nothing of, exit code 5.
-func TestMachineReportListShowRemove(t *testing.T) {
+// the start of its id, with each skill's origin. A name no machine of the
+// hub has is exit code 5.
+func TestMachineReportListShow(t *testing.T) {
 	t.Parallel()
 	const idA, idB = "0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210"
 	a, s := installHarness(t)
@@ -411,26 +404,57 @@ func TestMachineReportListShowRemove(t *testing.T) {
 	equal(t, "show by the start of an id: exit", out.exit, 0)
 	equal(t, "show by the start of an id", asJSON(t, b.one(out.stdout, "fleet")["machines"]), asJSON(t, []any{fromA}))
 
-	removed := b.run("machine", "remove", "studio")
-	equal(t, "remove: exit", removed.exit, 0)
-	equal(t, "remove", removed.stdout, "✓ removed the report of studio from the hub, reports/"+idA+"; a machine that still reports writes its report again\n")
-	equal(t, "the hub's report branches", remoteGit(t, b, remote, "for-each-ref", "--format=%(refname)", "refs/heads/reports/"), "refs/heads/reports/"+idB)
-	equal(t, "the second computer's tracking refs", b.storeGit("for-each-ref", "--format=%(refname)", gitx.TrackingPrefix(hubRemoteName(t, b))+"reports/"),
-		gitx.TrackingPrefix(hubRemoteName(t, b))+"reports/"+idB)
-	gone := b.run("machine", "show", "studio")
+	gone := b.run("machine", "show", "laptop")
 	equal(t, "show of a machine with no report: exit", gone.exit, 5)
-	contains(t, "show of a machine with no report", gone.stderr, "the hub holds no report of a machine called studio")
+	contains(t, "show of a machine with no report", gone.stderr, "the hub holds no report of a machine called laptop")
 	contains(t, "show of a machine with no report: its hint", gone.stderr,
 		"a machine shows there once you run 'agentx machine report' on it, or turn on its report_inventory setting")
 }
 
+// TestRemovingTheHubDeletesThisMachinesReport: source remove of the hub
+// deletes this machine's report branch there, once the hub is no longer
+// set. A hub git cannot reach is removed all the same, exit code 0, with a
+// warning that names the branch left there and the git command that
+// deletes it.
+func TestRemovingTheHubDeletesThisMachinesReport(t *testing.T) {
+	t.Parallel()
+	const id = "0123456789abcdef0123456789abcdef"
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	remote := newHubRemote(t, h)
+	url := "file://" + remote
+	h.setHub(remote)
+	h.mustRun("machine", "report")
+	out := h.run("source", "remove", url)
+	equal(t, "remove: exit", out.exit, 0)
+	equal(t, "remove", out.stdout, "✓ the hub "+url+" is no longer set; your skills on this machine are as they were\n"+
+		"✓ deleted this machine's report, reports/"+id+", from "+url+"\n")
+	equal(t, "the hub's report branches", remoteGit(t, h, remote, "for-each-ref", "refs/heads/reports/"), "")
+
+	h.setHub(remote)
+	h.mustRun("machine", "report")
+	if err := os.Rename(remote, remote+".away"); err != nil {
+		t.Fatal(err)
+	}
+	out = h.run("--json", "source", "remove", url)
+	equal(t, "remove of a hub out of reach: exit", out.exit, 0)
+	equal(t, "remove of a hub out of reach: events", strings.Join(h.types(h.events(out.stdout)), " "), "source result")
+	warnings := h.eventsOfType(out.stderr, "log")
+	equal(t, "remove of a hub out of reach: warnings", len(warnings), 1)
+	message := warnings[0]["message"].(string)
+	contains(t, "the warning", message, url+" still holds reports/"+id+", this machine's report: ")
+	contains(t, "the warning's way on", message, "; delete it with 'git push "+url+" --delete reports/"+id+"'")
+	if sources, _ := readSettingsFile(t, h)["sources"].([]any); len(sources) != 0 {
+		t.Errorf("source remove left the entry: %v", readSettingsFile(t, h)["sources"])
+	}
+}
+
 // TestMachineListSkipsABranchItCannotUse: a report branch no view can use
 // and a cloud machine whose snapshot cannot be read are each one warning
-// and fail nothing, and the machines beside them are listed. The report
-// branch is still one machine remove deletes, by its machine id.
+// and fail nothing, and the machines beside them are listed.
 func TestMachineListSkipsABranchItCannotUse(t *testing.T) {
 	t.Parallel()
-	const good, bad = "0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210"
+	const bad = "fedcba9876543210fedcba9876543210"
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	remote := newHubRemote(t, h)
@@ -460,8 +484,4 @@ func TestMachineListSkipsABranchItCannotUse(t *testing.T) {
 	equal(t, "the warnings", strings.Join(warnings, "\n"),
 		"reports/"+bad+" on the hub is skipped: its inventory.json is a report of schema version 2, and this agentx reads version 1; upgrade agentx here to read it\n"+
 			"the cloud machine is not listed: machines/cloud is not an agentx snapshot: it carries no settings")
-
-	removed := h.run("machine", "remove", bad)
-	equal(t, "remove of a report no view can use: exit", removed.exit, 0)
-	equal(t, "the hub's report branches", remoteGit(t, h, remote, "for-each-ref", "--format=%(refname)", "refs/heads/reports/"), "refs/heads/reports/"+good)
 }

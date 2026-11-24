@@ -19,6 +19,8 @@ cask "agentx" do
     strategy :github_latest
   end
 
+  # The app updates itself, so brew upgrade skips it; brew upgrade --greedy still upgrades it.
+  auto_updates true
   depends_on arch: :arm64
   # agentx runs git 2.40 or later, newer than some macOS versions ship.
   depends_on formula: "git"
