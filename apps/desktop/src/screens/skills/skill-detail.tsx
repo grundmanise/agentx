@@ -11,8 +11,10 @@ import { openInEditor } from "#/lib/editor.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import { AgentsSection } from "#/screens/skills/agents-section.tsx";
+import { AlsoOn } from "#/screens/skills/also-on.tsx";
 import { BannerView } from "#/screens/skills/banner-view.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
+import { DetailRow } from "#/screens/skills/detail-row.tsx";
 import { detailsOf, originPage } from "#/screens/skills/details.ts";
 import type { Detail } from "#/screens/skills/details.ts";
 import { canEdit, skillFile } from "#/screens/skills/edit.ts";
@@ -143,8 +145,9 @@ const EditButton = ({ row }: { row: SkillRow }) => {
  * library skill; the other actions come with the changes that add them); then the description. No
  * status pill: the banner is the status. One banner, with its button; AGENTS, whose chips add and
  * remove placements, and, when some agent sees more than one skill of this name, a notice under the
- * chips whose Details shows what each agent sees; FILES; then DETAILS and HISTORY side by side. Every control runs one
- * command and redraws from the inventory that follows.
+ * chips whose Details shows what each agent sees; FILES; then DETAILS, whose last row names the
+ * other machines that hold the skill (also-on.tsx), and HISTORY side by side. Every control runs
+ * one command and redraws from the inventory that follows.
  */
 export const SkillDetail = ({
   row,
@@ -284,15 +287,11 @@ export const SkillDetail = ({
           <Caption>Details</Caption>
           <dl className="gap-detail-kv m-0 flex flex-col">
             {details.map((d, i) => (
-              <div key={`${d.key}-${i}`} className="gap-detail-kv flex">
-                <dt className="type-secondary text-text-hint w-detail-key flex-none">
-                  {d.key}
-                </dt>
-                <dd className="type-technical-sm text-text-secondary m-0 min-w-0 flex-1 break-all">
-                  <DetailValue detail={d} />
-                </dd>
-              </div>
+              <DetailRow key={`${d.key}-${i}`} label={d.key}>
+                <DetailValue detail={d} />
+              </DetailRow>
             ))}
+            <AlsoOn row={row} />
           </dl>
         </section>
         {/* Only hub skills keep a history; other skills show no section. */}

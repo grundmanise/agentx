@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { ReactNode } from "react";
+import { useNavigate } from "react-router";
 
+import { useRouteKey } from "#/lib/route-key.ts";
 import { MachineDetail } from "#/screens/machines/machine-detail.tsx";
 import { MachineList } from "#/screens/machines/machine-list.tsx";
+import { machinePath } from "#/screens/machines/open.ts";
 import { useMachines } from "#/screens/machines/use-machines.ts";
 import { hubOf } from "#/screens/skills/banners.ts";
 import { OpenSettingsButton } from "#/screens/skills/publish-dialog.tsx";
@@ -39,9 +42,11 @@ const Note = ({
  * and the cloud machine in the list on the left, and the open machine on the right, with the
  * skills each of its agents sees. This machine is the applied inventory; the others are what the
  * hub holds, read with `machine list` each time the screen opens and after a report is removed,
- * and sent by serve after its check of the hub. Nothing here compares two machines.
+ * and sent by serve after its check of the hub. The open machine is the route, so another screen
+ * can open a machine by its path.
  */
 export const MachinesScreen = () => {
+  const navigate = useNavigate();
   const machines = useMachines();
   const hub = useHubSet();
   const fleetRead = useAppStore((s) => s.fleet !== undefined);
@@ -53,9 +58,10 @@ export const MachinesScreen = () => {
       void loadFleet();
     }
   }, [hub]);
-  const [selectedId, setSelectedId] = useState<string | undefined>();
-  // The machine opened last while it is listed, else the first one: this machine.
-  const selected = machines.find((m) => m.id === selectedId) ?? machines[0];
+  // The machine the route names, `/machines/<id>`, while it is listed, else the first one: this
+  // machine.
+  const routeKey = useRouteKey();
+  const selected = machines.find((m) => m.id === routeKey) ?? machines[0];
   let note: ReactNode;
   if (hub === false) {
     note = (
@@ -76,7 +82,7 @@ export const MachinesScreen = () => {
         machines={machines}
         selectedId={selected?.id}
         onSelect={(machine) => {
-          setSelectedId(machine.id);
+          void navigate(machinePath(machine.id));
         }}
         reading={reading}
         note={note}

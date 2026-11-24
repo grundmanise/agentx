@@ -72,17 +72,17 @@ test("the list shows this machine, the other machines by label and the cloud mac
   await expect(list(page).getByLabel("4 machines")).toHaveText("4");
   // A skill inside a project is not counted, as a report leaves it out.
   await expect(row(page, "studio")).toHaveAccessibleDescription(
-    "This machine. 1 skill"
+    "This machine. 2 skills"
   );
   await expect(row(page, "atelier")).toHaveAccessibleDescription(
-    "Changed 2 hours ago · 1 skill"
+    "Changed 2 hours ago · 3 skills"
   );
-  // A name counts once, however many agents see it: the four its details list.
+  // A name counts once, however many agents see it: the five its details list.
   await expect(row(page, "workbench")).toHaveAccessibleDescription(
-    "Changed Mar 9, 2025 · 4 skills"
+    "Changed Mar 9, 2025 · 5 skills"
   );
   await expect(row(page, "Cloud machine")).toHaveAccessibleDescription(
-    "Changed 3 days ago · 2 skills"
+    "Changed 3 days ago · 3 skills"
   );
   await expect(row(page, "workbench").getByRole("img")).toHaveCount(3);
 
@@ -95,13 +95,15 @@ test("the list shows this machine, the other machines by label and the cloud mac
       - term: Machine id
       - definition: ${MACHINE_ID}
       - region "Claude Code":
-        - heading "Claude Code 1" [level=2]
+        - heading "Claude Code 2" [level=2]
         - list:
           - listitem: changelog Library example/skills
+          - listitem: commit-message Library Hub
       - region "Codex":
-        - heading "Codex 1" [level=2]
+        - heading "Codex 2" [level=2]
         - list:
           - listitem: changelog Library example/skills
+          - listitem: commit-message Library Hub
   `);
 
   // Another machine: its facts, then what each agent sees and where each skill comes from.
@@ -119,16 +121,18 @@ test("the list shows this machine, the other machines by label and the cloud mac
       - term: Last change
       - definition: Mar 9, 2025, 10:00 AM
       - region "Claude Code":
-        - heading "Claude Code 4" [level=2]
+        - heading "Claude Code 5" [level=2]
         - list:
           - listitem: changelog Modified Library example/skills
+          - listitem: commit-message Library Hub
           - listitem: release-notes Library Hub
           - listitem: lint review plugin
           - listitem: scratch Skills directory
       - region "Codex":
-        - heading "Codex 2" [level=2]
+        - heading "Codex 3" [level=2]
         - list:
           - listitem: changelog Modified Library example/skills
+          - listitem: commit-message Library Hub
           - listitem: release-notes Library Hub
       - region "Cursor":
         - heading "Cursor 1 Disabled" [level=2]
@@ -164,9 +168,10 @@ test("the cloud machine shows what each cloud session is given", async ({
         - list:
           - listitem: changelog Library example/skills
       - region "Codex":
-        - heading "Codex 2" [level=2]
+        - heading "Codex 3" [level=2]
         - list:
           - listitem: changelog Library example/skills
+          - listitem: commit-message Library Hub
           - listitem: release-notes Library Hub
   `);
 });
@@ -215,7 +220,7 @@ test("a row says how long ago as of now when the screen shows again", async ({
   await page.clock.install();
   await openMachines(cli, page, fleet);
   await expect(row(page, "atelier")).toHaveAccessibleDescription(
-    "Changed 2 hours ago · 1 skill"
+    "Changed 2 hours ago · 3 skills"
   );
   // An hour passes while another screen shows, where the hidden screen keeps no time.
   const nav = page.getByRole("navigation", { name: "Main" });
@@ -226,7 +231,7 @@ test("a row says how long ago as of now when the screen shows again", async ({
   await page.clock.fastForward("01:00:00");
   await nav.getByRole("link", { name: "Machines" }).click();
   await expect(row(page, "atelier")).toHaveAccessibleDescription(
-    "Changed 3 hours ago · 1 skill"
+    "Changed 3 hours ago · 3 skills"
   );
 });
 

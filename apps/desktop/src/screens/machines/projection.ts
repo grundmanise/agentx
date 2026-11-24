@@ -252,8 +252,8 @@ const skillCountOf = (agents: readonly AgentGroup[]) =>
 
 /**
  * A library entry as what its machine holds of the skill. Its logical id counts when the entry
- * names a fork id or a source: with neither, the id is the skill's content, which says nothing of
- * the skill on another machine.
+ * names a fork id, or a source and the directory in it, as the CLI forms the id from them: with
+ * neither, the id is the skill's content, which says nothing of the skill on another machine.
  */
 export const holdingOf = (
   entry: Pick<
@@ -262,13 +262,15 @@ export const holdingOf = (
     | "logical_id"
     | "fork_id"
     | "source"
+    | "subpath"
     | "content_hash"
     | "upstream_commit"
   >
 ): Holding => ({
   contentHash: entry.content_hash,
   logicalId:
-    (entry.fork_id ?? "") !== "" || (entry.source ?? "") !== ""
+    (entry.fork_id ?? "") !== "" ||
+    ((entry.source ?? "") !== "" && entry.subpath !== undefined)
       ? entry.logical_id
       : undefined,
   name: entry.name,

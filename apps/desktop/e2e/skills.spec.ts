@@ -7,6 +7,13 @@ import {
 } from "./fixtures/adoption.ts";
 import { manyAgentsInventory, manyConfigurations } from "./fixtures/agents.ts";
 import {
+  fleet,
+  inventory as studioInventory,
+  thisMachine,
+  WORKBENCH_ID,
+} from "./fixtures/fleet.ts";
+import { hub } from "./fixtures/hub.ts";
+import {
   adoption,
   configurations,
   fileReads,
@@ -695,6 +702,55 @@ test.describe("the detail pane", () => {
     await expect(pane(page, "pdf-letters")).toBeVisible();
     await expect(page).toHaveURL(/#\/skills\/pdf-letters$/u);
     await expect(list(page).locator("[aria-current=true]")).toHaveCount(1);
+  });
+
+  test("a skill other machines hold: Also on names them and marks another version, and a name opens its machine", async ({
+    cli,
+    page,
+  }) => {
+    // This machine and what its hub holds (fixtures/fleet.ts): serve sends the machines it last
+    // found there.
+    cli.onServeStart({ events: [studioInventory, fleet] });
+    cli.register(["machine"], { events: [thisMachine] });
+    cli.register(["source", "list"], { events: [hub] });
+    cli.register(["skill", "files", "changelog"], {
+      events: filesOf("changelog"),
+    });
+    await page.goto("/#/skills/changelog");
+    // The other machines by label, then the cloud machine: the same on atelier, edited on
+    // workbench, and at an older commit of its source on the cloud machine.
+    const details = pane(page, "changelog").getByRole("region", {
+      name: "Details",
+    });
+    await expect(details).toMatchAriaSnapshot(`
+      - region "Details":
+        - heading "Details" [level=2]
+        - term: Source
+        - definition:
+          - link "https://github.com/example/skills/skills/changelog"
+        - term: Version
+        - definition: 9d8c7b6
+        - term: State
+        - definition: current
+        - term: Also on
+        - definition:
+          - button "atelier"
+          - button "workbench"
+          - text: Another version
+          - button "Cloud machine"
+          - text: Another version
+    `);
+
+    cli.register(["machine", "list"], { events: [fleet] });
+    await details.getByRole("button", { name: "workbench" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`#/machines/${WORKBENCH_ID}$`, "u")
+    );
+    await expect(
+      page
+        .getByRole("region", { name: "Machine details" })
+        .getByRole("heading", { level: 1, name: "workbench" })
+    ).toBeVisible();
   });
 
   test("a hub skill: its history, with Show all opening the sheet", async ({

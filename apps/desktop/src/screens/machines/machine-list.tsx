@@ -6,15 +6,11 @@ import { Pill } from "#/components/pill.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { useNow } from "#/lib/now.ts";
 import { plural } from "#/lib/plural.ts";
-import { changedWhen } from "#/screens/machines/projection.ts";
+import { changedWhen, nameOf } from "#/screens/machines/projection.ts";
 import type { MachineView } from "#/screens/machines/projection.ts";
 
 /** How many agent logos a row draws; the rest are a "+n" count. */
 const MAX_LOGOS = 4;
-
-/** The name a machine goes by: its label, or what the glossary calls the cloud machine. */
-export const nameOf = (machine: MachineView) =>
-  machine.kind === "cloud" ? "Cloud machine" : machine.label;
 
 /**
  * One machine's row: its label, the This machine pill and its agents' logos, then when its report
