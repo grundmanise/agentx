@@ -26,7 +26,7 @@ agentx writes three kinds of branches, and does not use any other branch, such a
 |---|---|---|---|
 | `skills/<name>` | A hub skill, with its history. | `agentx skill publish` | `agentx skill add --name <name>` and `agentx skill update` on your other machines |
 | `machines/<id>` | The snapshot of one machine: its settings, and its skills with their placements. It holds no skill content. | `agentx snapshot save --machine <id>`, and `agentx skill place` or `agentx skill remove` with `--machine cloud` | `agentx snapshot apply --machine <id>`, and each cloud agent session |
-| `reports/<id>` | The inventory report of one machine: its agent configurations, the skills its agent clients see, its library's skills and its plugins. It holds no path, no settings, no MCP server and no skill content. | `agentx machine report` on that machine, and the desktop app on its own while the machine setting `report_inventory` is on | `agentx machine list` and `agentx machine show` on your other machines |
+| `reports/<id>` | The inventory report of one machine: its agent configurations, the skills its agent clients see, its library's skills and its plugins. It holds no path on the machine, no settings, no MCP server and no skill content. | `agentx machine report` on that machine, and the desktop app on its own while the machine setting `report_inventory` is on | `agentx machine list` and `agentx machine show` on your other machines |
 
 agentx pushes to your hub only when you run a command, with one exception: on a machine where you turned the setting `report_inventory` on, it writes that machine's inventory report on its own. See [Let agentx write the report](/cli/machine#let-agentx-write-the-report).
 
@@ -47,7 +47,7 @@ On each machine, add the repository with `--hub`:
 agentx source add git@github.com:you/agentx-hub.git --hub
 ```
 
-In the desktop app, open **Settings**, paste the URL under **Hub** and select **Save**. **Change…** replaces it with another repository, and **Detach** removes it. Your skills stay on the machine either way.
+In the desktop app, open **Settings**, paste the URL under **Hub** and select **Save**. **Change…** replaces it with another repository, and **Unlink** removes it. Your skills stay on the machine either way. If the hub holds this machine's [inventory report](/cli/machine#remove-a-report-from-the-hub), agentx deletes it from the hub the machine leaves.
 
 Each machine can use its own URL for the same repository, such as SSH on your computer and HTTPS for a cloud agent. For the details, see [Add your hub](/cli/source#add-your-hub). For how `agentx snapshot apply` treats two URLs of one repository, see [Apply a snapshot](/cli/snapshot#apply-a-snapshot).
 

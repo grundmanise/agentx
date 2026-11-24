@@ -97,7 +97,7 @@ func (c *serveChecks) report(ctx context.Context) func() {
 // goroutine, once this machine no longer reports: when it reports again,
 // the branch is read again and a report that fails warns.
 func (c *serveChecks) forgetReports() {
-	c.reportFailing, c.reported = false, nil
+	c.reportFailing, c.reported = false, writtenReport{}
 }
 
 // reportWrite reports what one report came to. One that was pushed is a
@@ -114,10 +114,10 @@ func (c *serveChecks) reportWrite(w writtenReport, err error) {
 		if !c.reportFailing {
 			out.warn("machine report: " + err.Error())
 		}
-		c.reportFailing, c.reported = true, nil
+		c.reportFailing, c.reported = true, writtenReport{}
 		return
 	}
-	c.reportFailing, c.reported = false, w.data
+	c.reportFailing, c.reported = false, w
 	if !w.pushed {
 		return
 	}
@@ -133,9 +133,9 @@ func (c *serveChecks) reportWrite(w writtenReport, err error) {
 // machine report writes one, outside the lock: the document is built, the
 // machine's branch is read, see readReportBranch, and the document is
 // pushed when the branch does not hold it, see writeReport. A document
-// that is the one the branch held after the last report is written
-// nowhere and no git is run for it: nothing was written then, and data is
-// nil. An inventory whose library could not be listed writes no report
+// the branch is known to hold, see holds, is written nowhere and the hub is
+// not called for it: nothing was written then, and data is nil. An
+// inventory whose library could not be listed writes no report
 // and is a failure, as for the command. After a push, the hub's machines
 // are read again from the store's remote-tracking refs, which the push
 // moved, with no call to the hub.
@@ -145,7 +145,7 @@ func (c *serveChecks) writeScanned(ctx context.Context, sc *scannedInventory) (w
 		return writtenReport{}, noReportUnlisted(sc.unlisted)
 	}
 	data, err := reportDocument(sc.inventory)
-	if err != nil || bytes.Equal(data, c.reported) {
+	if err != nil || c.holds(ctx, data) {
 		return writtenReport{}, err
 	}
 	b, err := inv.readReportBranch(ctx, sc.inventory.Machine.ID)
@@ -165,4 +165,21 @@ func (c *serveChecks) writeScanned(ctx context.Context, sc *scannedInventory) (w
 		}
 	}
 	return w, nil
+}
+
+// holds reports whether this machine's branch on the hub holds the document
+// data as far as the store knows, with no call to the hub: data is the
+// report serve last wrote or found written, and the remote-tracking ref of
+// the branch that held it is still at the commit it held it at. The ref
+// goes with the hub when the machine leaves it, see removeHub, so a hub set
+// in its place, or set again, takes the report at the next one, changed or
+// not; and a read of the hub's machines moves or drops the ref when the
+// hub's branch is no longer the one this serve left.
+func (c *serveChecks) holds(ctx context.Context, data []byte) bool {
+	r := c.reported
+	if !bytes.Equal(data, r.data) {
+		return false
+	}
+	tracked, err := c.inv.git.TrackedBranches(ctx, r.branch.gitDir, r.branch.remote, r.branch.name())
+	return err == nil && tracked[r.branch.name()].Commit == r.commit
 }

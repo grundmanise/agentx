@@ -38,7 +38,9 @@ func (p *serveProc) lineStarting(prefix string) string {
 // event with the commit the hub's branch holds, a commit with no parent,
 // so nothing was written before it, then the fleet with this machine in
 // it, read from the store with no call to the hub. A change after that is
-// one more commit on the first. A serve that prints text reports too, with
+// one more commit on the first. A hub set in place of that one while serve
+// runs takes the report with no other change, in a commit with no parent,
+// and the hub replaced holds none. A serve that prints text reports too, with
 // the library listed: at start, its report line names the commit, and the
 // report lists the skill added before it started. With the hub out of
 // reach, a change is a warning prefixed "machine report: " and serve runs
@@ -84,6 +86,15 @@ func TestServeWritesThisMachinesReport(t *testing.T) {
 	h.addLibrarySkill(t, "lint")
 	second := pushed()["commit"].(string)
 	equal(t, "the second report's parents", remoteGit(t, h, remote, "log", "-1", "--format=%P", second), first)
+
+	replaced := remote
+	remote = newHubRemote(t, h)
+	h.runBesideServe("source", "add", remote, "--hub")
+	moved := pushed()["commit"].(string)
+	onHub, _, _ := reportOnHub(t, h, remote, id)
+	equal(t, "the report on the hub set in its place", onHub, moved)
+	equal(t, "its parents", remoteGit(t, h, remote, "log", "-1", "--format=%P", moved), "")
+	equal(t, "the reports the hub replaced holds", remoteGit(t, h, replaced, "for-each-ref", "refs/heads/reports/"), "")
 	equal(t, "exit", p.close(), 0)
 	equal(t, "warnings of the report", len(p.logged("warn", "machine report: ")), 0)
 
@@ -114,7 +125,7 @@ func TestServeWritesThisMachinesReport(t *testing.T) {
 	named(t, doc["library"], "name", "format")
 	equal(t, "exit of the serve that prints text", text.close(), 0)
 	equal(t, "warnings of the report that could not be written", strings.Count(text.stderr.String(), warning), 1)
-	equal(t, "the commits of the report branch", remoteGit(t, h, remote, "rev-list", "--count", fourth), "4")
+	equal(t, "the commits of the report branch", remoteGit(t, h, remote, "rev-list", "--count", fourth), "3")
 }
 
 // TestReportWrite: a report that failed is one warning prefixed "machine
@@ -149,8 +160,8 @@ func TestReportWrite(t *testing.T) {
 		equal(t, step.name+": stderr", stderr.String(), step.want)
 	}
 	equal(t, "stdout", stdout.String(), "")
-	equal(t, "the report the branch is known to hold after a failure", string(c.reported), "")
+	equal(t, "the report the branch is known to hold after a failure", string(c.reported.data), "")
 	c.reportWrite(held, nil)
 	c.forgetReports()
-	equal(t, "the report the branch is known to hold once the machine no longer reports", string(c.reported), "")
+	equal(t, "the report the branch is known to hold once the machine no longer reports", string(c.reported.data), "")
 }
