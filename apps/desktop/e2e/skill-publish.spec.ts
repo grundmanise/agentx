@@ -154,6 +154,9 @@ test.describe("banners", () => {
     await expect(note).toHaveAccessibleName("Edits not published");
     await expect(note).toContainText("Publish to share them on acme/skills.");
     await expect(note.getByRole("button")).toHaveText(["Publish"]);
+    await expect(
+      pane(page, "review").getByRole("region", { name: "Files" })
+    ).toContainText("edited");
     expect(diffReads(cli, "review")).toBe(1);
   });
 
