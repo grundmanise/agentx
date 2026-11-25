@@ -1,5 +1,6 @@
 // The app's preferences (ADR 0013), one file the Rust side reads and writes whole: the editor a
-// skill opens in, and whether the app checks for its own updates (ADR 0019). A save reads the
+// skill opens in, whether it opens a skill the app just created, and whether the app checks for
+// its own updates (ADR 0019). A save reads the
 // file first and changes only the preference it names, so saving one never resets another. The
 // editor (`editor.ts`) and app updates (`app-update.ts`) call this and never the commands.
 import { invoke } from "@tauri-apps/api/core";
@@ -8,6 +9,8 @@ import type { EditorChoice } from "#/lib/editor.ts";
 
 export interface Preferences {
   editor: EditorChoice;
+  /** Whether the editor opens a skill once the app creates it. */
+  open_after_create: boolean;
   /** Whether the app checks for its own updates after it starts and once a day. */
   check_updates: boolean;
 }
@@ -15,6 +18,7 @@ export interface Preferences {
 const DEFAULTS: Preferences = {
   check_updates: true,
   editor: { kind: "system" },
+  open_after_create: false,
 };
 
 /** The preferences as the file holds them, each one missing or unreadable as its default. */

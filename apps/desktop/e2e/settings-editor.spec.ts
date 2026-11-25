@@ -1,6 +1,7 @@
 // The Editor section of Settings: System default, the editors found on this machine and a custom
-// command line, one choice, saved in the app's own preferences and kept across a restart (a page
-// reload, which keeps the mocked preferences file).
+// command line, one choice, and the Open editor after creating a skill switch, saved in the app's
+// own preferences and kept across a restart (a page reload, which keeps the mocked preferences
+// file).
 import type { Page } from "@playwright/test";
 
 import { expect, test } from "./harness/cli.ts";
@@ -28,6 +29,10 @@ const expectChoices = async (page: Page, names: string[]) => {
     })
   );
 };
+const openAfterCreate = (page: Page) =>
+  section(page).getByRole("switch", {
+    name: "Open editor after creating a skill",
+  });
 const commandField = (page: Page) =>
   section(page).getByRole("textbox", { name: "Custom command" });
 
@@ -77,6 +82,7 @@ test("a detected editor, once chosen, is still chosen after a restart", async ({
     .toEqual({
       check_updates: true,
       editor: { id: "zed", kind: "app", name: "Zed" },
+      open_after_create: false,
     });
 
   await restart(cli, page);
@@ -117,6 +123,7 @@ test("Custom command shows its field, saves the command on Enter, and keeps it a
     .toEqual({
       check_updates: true,
       editor: { command: "subl -n", kind: "custom" },
+      open_after_create: false,
     });
 
   await restart(cli, page);
@@ -127,7 +134,11 @@ test("Custom command shows its field, saves the command on Enter, and keeps it a
   await choice(page, "System default").click();
   await expect
     .poll(() => cli.savedPreferences)
-    .toEqual({ check_updates: true, editor: { kind: "system" } });
+    .toEqual({
+      check_updates: true,
+      editor: { kind: "system" },
+      open_after_create: false,
+    });
   await choice(page, "Custom command").click();
   await expect(commandField(page)).toHaveValue("subl -n");
 });
@@ -137,4 +148,25 @@ test("with no editor found, the choice is System default or Custom command", asy
 }) => {
   await openSettings(page);
   await expectChoices(page, ["System default", "Custom command"]);
+});
+
+test("Open editor after creating a skill is off by default, and stays on after a restart once turned on", async ({
+  cli,
+  page,
+}) => {
+  await openSettings(page);
+  await expect(openAfterCreate(page)).not.toBeChecked();
+
+  await openAfterCreate(page).click();
+  await expect(openAfterCreate(page)).toBeChecked();
+  await expect
+    .poll(() => cli.savedPreferences)
+    .toEqual({
+      check_updates: true,
+      editor: { kind: "system" },
+      open_after_create: true,
+    });
+
+  await restart(cli, page);
+  await expect(openAfterCreate(page)).toBeChecked();
 });
