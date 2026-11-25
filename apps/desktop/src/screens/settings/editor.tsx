@@ -1,12 +1,21 @@
 // Editor: the application a skill opens in when the user edits it (Create and edit, and Edit in
 // the Skills detail pane). One choice: System default, each editor found on this machine, or a
-// custom command line, to which the file's path is added. It is the app's own preference, which
-// `src/lib/editor.ts` reads and saves; no CLI command runs, and no setting of the CLI changes.
+// custom command line, to which the file's path is added. Then the Open editor after creating a
+// skill switch: off, the Created toast offers Open editor instead. Both are the app's own
+// preferences, which `src/lib/editor.ts` reads and saves; no CLI command runs, and no setting of
+// the CLI changes.
 import { useEffect, useId, useState } from "react";
 
 import { Input } from "#/components/ui/input.tsx";
 import { RadioGroup, RadioGroupItem } from "#/components/ui/radio-group.tsx";
-import { detectEditors, readEditor, saveEditor } from "#/lib/editor.ts";
+import { Switch } from "#/components/ui/switch.tsx";
+import {
+  detectEditors,
+  readEditor,
+  readOpenAfterCreate,
+  saveEditor,
+  saveOpenAfterCreate,
+} from "#/lib/editor.ts";
 import type { DetectedEditor, EditorChoice } from "#/lib/editor.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 
@@ -139,19 +148,54 @@ const EditorChoices = ({
   );
 };
 
+const OpenAfterCreate = ({ initial }: { initial: boolean }) => {
+  const [checked, setChecked] = useState(initial);
+  const id = useId();
+  return (
+    <label
+      htmlFor={id}
+      className="flex cursor-pointer items-start justify-between gap-6"
+    >
+      <span className="type-body text-text-primary">
+        Open editor after creating a skill
+      </span>
+      <Switch
+        id={id}
+        track="settings.open-after-create-toggle"
+        aria-label="Open editor after creating a skill"
+        checked={checked}
+        onCheckedChange={(on) => {
+          setChecked(on);
+          void (async () => {
+            if (!(await saveOpenAfterCreate(on))) {
+              setChecked(!on);
+            }
+          })();
+        }}
+      />
+    </label>
+  );
+};
+
 export const EditorSection = () => {
   const [read, setRead] = useState<
-    { editor: EditorChoice; found: DetectedEditor[] } | undefined
+    | {
+        editor: EditorChoice;
+        found: DetectedEditor[];
+        openAfterCreate: boolean;
+      }
+    | undefined
   >();
   useEffect(() => {
     let current = true;
     void (async () => {
-      const [editor, found] = await Promise.all([
+      const [editor, found, openAfterCreate] = await Promise.all([
         readEditor(),
         detectEditors(),
+        readOpenAfterCreate(),
       ]);
       if (current) {
-        setRead({ editor, found });
+        setRead({ editor, found, openAfterCreate });
       }
     })();
     return () => {
@@ -164,7 +208,10 @@ export const EditorSection = () => {
       description="The application that opens a skill when you edit it."
     >
       {read !== undefined && (
-        <EditorChoices initial={read.editor} found={read.found} />
+        <>
+          <EditorChoices initial={read.editor} found={read.found} />
+          <OpenAfterCreate initial={read.openAfterCreate} />
+        </>
       )}
     </SettingsSection>
   );
