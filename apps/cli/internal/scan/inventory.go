@@ -132,7 +132,7 @@ type Occurrence struct {
 	Plugin        string `json:"plugin,omitempty"` // the plugin the placement belongs to
 	// AlsoAt are the other paths the configuration reaches the same
 	// directory through, sorted, as Cursor reaches a library skill through
-	// Claude Code's link to it too; the client loads it once.
+	// a link to it in ~/.cursor/skills too; the client loads it once.
 	AlsoAt []string `json:"also_at,omitempty"`
 }
 

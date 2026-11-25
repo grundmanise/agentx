@@ -40,12 +40,9 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"A skill the library does not hold, only folders of it in the clients' own\n" +
 			"skills directories, is taken off the machine with every one of those folders,\n" +
 			"when they all hold the same files.\n\n" +
-			"A client that reads another client's skills directory keeps seeing the skill\n" +
-			"through that client's placement after --from removes its own, and the removal\n" +
-			"warns: remove the skill from that client too to take it from both. Two clients\n" +
-			"that share one skills directory, one a symlink to the other, share each\n" +
-			"placement in it: --from naming one takes the skill from both, and the removal\n" +
-			"warns.\n\n" +
+			"Two clients that share one skills directory, one a symlink to the other,\n" +
+			"share each placement in it: --from naming one takes the skill from both, and\n" +
+			"the removal warns.\n\n" +
 			"A managed skill whose library directory was deleted outside agentx can still be\n" +
 			"removed without --from: its import branch and the placements agentx made go.\n\n" +
 			"Removing a hub skill also deletes its worktree, with any unpublished\n" +
@@ -636,10 +633,9 @@ func (inv *invocation) refuseUniversal(named []string, name string) error {
 // as removalDeletes finds them for the removal itself.
 //
 // A client is named by the directories it reads, not by whose directory the
-// path is in. Cursor reads Claude Code's skills directory, so a link agentx
-// made there takes the skill from Cursor as well as from Claude Code, while
-// a directory of the user's that the removal would leave takes the skill
-// from nobody. A universal client with a directory of its own under the
+// path is in. A client whose skills directory is a symlink to Claude Code's
+// loses a link agentx made there along with Claude Code, while a directory
+// of the user's that the removal would leave takes the skill from nobody. A universal client with a directory of its own under the
 // name is named all the same: it loses the library skill, and the removal
 // says which directory of its own it still sees.
 //
@@ -957,11 +953,11 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 // else would ever correct the claim.
 //
 // A removal with --from takes only the covered configurations' own
-// placements, and a client that reads another client's skills directory
-// keeps seeing the skill through that
-// client's placement. The run reports the covered configuration as done,
-// so the warning names whose placement it still sees the skill through and
-// which removal takes it from both.
+// placements, and a client whose skills directory is a symlink to another
+// client's keeps seeing the skill through that client's placement. The run
+// reports the covered configuration as done, so the warning names whose
+// placement it still sees the skill through and which removal takes it from
+// both.
 //
 // A placement the run already reported as left in place is not named twice:
 // its own warning said the configuration still sees it.

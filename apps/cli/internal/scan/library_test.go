@@ -193,13 +193,12 @@ func TestSkillsDirsOfTheClientsThatReadTheLibrary(t *testing.T) {
 		{"claude-code", d, []string{"/u/.claude/skills"}, false},
 		{"codex", d, []string{"/u/.codex/skills", "/u/.agents/skills"}, true},
 		{"gemini-cli", d, []string{"/u/.gemini/skills", "/u/.agents/skills"}, true},
-		{"cursor", d, []string{"/u/.cursor/skills", "/u/.claude/skills", "/u/.codex/skills", "/u/.agents/skills"}, true},
+		{"cursor", d, []string{"/u/.cursor/skills", "/u/.agents/skills"}, true},
 		{"github-copilot", d, []string{"/u/.copilot/skills", "/u/.agents/skills"}, true},
 		{"github-copilot", withCopilotHome, []string{"/elsewhere/copilot/skills"}, false},
-		{"opencode", d, []string{"/u/.config/opencode/skills", "/u/.claude/skills", "/u/.agents/skills"}, true},
+		{"opencode", d, []string{"/u/.config/opencode/skills", "/u/.agents/skills"}, true},
 		{"cline", d, []string{"/u/.cline/skills", "/u/.agents/skills"}, true},
-		{"devin", d, []string{"/u/.config/devin/skills", "/u/.agents/skills", "/u/.codeium/windsurf/skills", "/u/.codex/skills", "/u/.copilot/skills", "/u/.kiro/skills"}, true},
-		{"devin", withCopilotHome, []string{"/u/.config/devin/skills", "/u/.agents/skills", "/u/.codeium/windsurf/skills", "/u/.codex/skills", "/elsewhere/copilot/skills", "/u/.kiro/skills"}, true},
+		{"devin", d, []string{"/u/.config/devin/skills", "/u/.agents/skills"}, true},
 	}
 	for _, tt := range tests {
 		c, ok := Lookup(tt.slug)
@@ -219,11 +218,10 @@ func TestSkillsDirsOfTheClientsThatReadTheLibrary(t *testing.T) {
 	}
 }
 
-// TestProjectSkillsDirsFollowTheReads covers the project-scope directories,
-// composed from the same reads as the user-scope ones: a client's own
-// project directory, then those of the clients it reads, then the project's
+// TestProjectSkillsDirsFollowTheLibrary covers the project-scope
+// directories: a client's own project directory, then the project's
 // .agents/skills for a client that reads the library.
-func TestProjectSkillsDirsFollowTheReads(t *testing.T) {
+func TestProjectSkillsDirsFollowTheLibrary(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		slug string
@@ -231,10 +229,10 @@ func TestProjectSkillsDirsFollowTheReads(t *testing.T) {
 	}{
 		{"claude-code", []string{".claude/skills"}},
 		{"codex", []string{".codex/skills", ".agents/skills"}},
-		{"cursor", []string{".cursor/skills", ".claude/skills", ".codex/skills", ".agents/skills"}},
+		{"cursor", []string{".cursor/skills", ".agents/skills"}},
 		{"github-copilot", []string{".github/skills", ".agents/skills"}},
-		{"opencode", []string{".agents/skills", ".claude/skills"}},
-		{"devin", []string{".devin/skills", ".agents/skills", ".windsurf/skills", ".codex/skills", ".github/skills", ".kiro/skills", ".claude/skills"}},
+		{"opencode", []string{".agents/skills"}},
+		{"devin", []string{".devin/skills", ".agents/skills"}},
 	}
 	for _, tt := range tests {
 		c, ok := Lookup(tt.slug)
@@ -247,19 +245,13 @@ func TestProjectSkillsDirsFollowTheReads(t *testing.T) {
 	}
 }
 
-// TestReadsNameRegisteredClients guards the reads table: every client it
-// lists, and every client a read names, is one the registry knows. A read
-// names the library and Windsurf's directories by name.
-func TestReadsNameRegisteredClients(t *testing.T) {
+// TestReadsTheLibraryNamesRegisteredClients guards readsTheLibrary: every
+// client it lists is one the registry knows.
+func TestReadsTheLibraryNamesRegisteredClients(t *testing.T) {
 	t.Parallel()
-	for slug, rs := range reads {
+	for slug := range readsTheLibrary {
 		if _, ok := Lookup(slug); !ok {
-			t.Errorf("reads lists %s, which the registry does not know", slug)
-		}
-		for _, r := range rs {
-			if _, ok := Lookup(r.from); r.from != library && r.from != windsurf && !ok {
-				t.Errorf("%s reads %s, which the registry does not know", slug, r.from)
-			}
+			t.Errorf("readsTheLibrary lists %s, which the registry does not know", slug)
 		}
 	}
 }

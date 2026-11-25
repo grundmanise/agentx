@@ -23,10 +23,7 @@ func (devin) ProjectSkillsDir() string       { return ".devin/skills" }
 func (c devin) MCPConfigs(d home.Dirs) []MCPConfig {
 	return []MCPConfig{
 		{Path: filepath.Join(c.ConfigDir(d), "mcp_config.json"), Format: mcp.DevinJSON},
-		{Path: filepath.Join(windsurfDir(d), "mcp_config.json"), Format: mcp.DevinJSON},
+		{Path: filepath.Join(d.User, ".codeium", "windsurf", "mcp_config.json"), Format: mcp.DevinJSON},
 	}
 }
 func (devin) Plugins(home.Dirs, func(string)) []InstalledPlugin { return nil }
-
-// windsurfDir is the user directory Windsurf kept its configuration in.
-func windsurfDir(d home.Dirs) string { return filepath.Join(d.User, ".codeium", "windsurf") }

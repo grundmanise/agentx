@@ -101,7 +101,7 @@ func (h *harness) portable(text string) string {
 }
 
 var fixtures = map[string]fixture{
-	"cursor-sees-claude": {
+	"claude-skill-beside-cursor": {
 		dirs: []string{".cursor"},
 		files: map[string]string{
 			".claude/skills/commit/SKILL.md": skill("commit", "Write a commit message"),
@@ -461,10 +461,13 @@ func occurrences(t *testing.T, h *harness, inventory jsonEvent, name string) []s
 	return rows
 }
 
-func TestScanCursorSeesClaudeSkill(t *testing.T) {
+// TestScanCursorReadsOnlyItsOwnFolderAndTheLibrary covers a skill only in
+// Claude Code's folder: agentx models no client reading another client's
+// folder, so Cursor is not listed with it.
+func TestScanCursorReadsOnlyItsOwnFolderAndTheLibrary(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixtures["cursor-sees-claude"])
+	h.build(t, fixtures["claude-skill-beside-cursor"])
 	inventory := h.inventory(t)
 
 	equal(t, "machine.id", inventory["machine"].(map[string]any)["id"], "0123456789abcdef0123456789abcdef")
@@ -484,12 +487,11 @@ func TestScanCursorSeesClaudeSkill(t *testing.T) {
 	equal(t, "skill count", len(inventory["skills"].([]any)), 1)
 	want := []string{
 		"claude-code directory user ~/.claude/skills/commit",
-		"cursor directory user ~/.claude/skills/commit",
 	}
 	if got := occurrences(t, h, inventory, "commit"); !reflect.DeepEqual(got, want) {
 		t.Errorf("occurrences = %v, want %v", got, want)
 	}
-	equal(t, "edges", len(inventory["edges"].([]any)), 4) // machine to two configurations, two configurations to one skill
+	equal(t, "edges", len(inventory["edges"].([]any)), 3) // machine to two configurations, Claude Code to the skill
 
 	out := h.run("scan")
 	equal(t, "exit", out.exit, 0)
@@ -498,7 +500,7 @@ func TestScanCursorSeesClaudeSkill(t *testing.T) {
 	contains(t, "stdout", out.stdout, "Cursor (cursor)")
 	contains(t, "stdout", out.stdout, "Claude Code (claude-code)  "+filepath.Join(h.home, ".claude")+"  enabled")
 	contains(t, "stdout", out.stdout, "commit  directory  user  "+filepath.Join(h.home, ".claude/skills/commit"))
-	equal(t, "commit rows", strings.Count(out.stdout, "commit  directory  user"), 2)
+	equal(t, "commit rows", strings.Count(out.stdout, "commit  directory  user"), 1)
 }
 
 func TestScanSymlinkChainAndLibrary(t *testing.T) {
@@ -519,7 +521,7 @@ func TestScanSymlinkChainAndLibrary(t *testing.T) {
 	alsoAt := map[string][]string{
 		"claude-code": nil,
 		"codex":       {"~/.codex/skills/commit"},
-		"cursor":      {"~/.claude/skills/commit", "~/.codex/skills/commit", "~/.cursor/skills/commit"},
+		"cursor":      {"~/.cursor/skills/commit"},
 	}
 	for _, o := range inventory["skills"].([]any)[0].(map[string]any)["occurrences"].([]any) {
 		occ := o.(map[string]any)
@@ -579,8 +581,8 @@ func TestScanProjectScope(t *testing.T) {
 		got[name] = occurrences(t, h, inventory, name)
 	}
 	want := map[string][]string{
-		"commit":  {"claude-code directory user ~/.claude/skills/commit", "cursor directory user ~/.claude/skills/commit"},
-		"migrate": {"claude-code directory project ~/work/app/.claude/skills/migrate", "cursor directory project ~/work/app/.claude/skills/migrate"},
+		"commit":  {"claude-code directory user ~/.claude/skills/commit"},
+		"migrate": {"claude-code directory project ~/work/app/.claude/skills/migrate"},
 		"lint":    {"cursor directory project ~/work/app/.agents/skills/lint", "github-copilot directory project ~/work/app/.agents/skills/lint"},
 		"release": {"github-copilot directory project ~/work/app/.github/skills/release"},
 		"x":       nil,
@@ -607,7 +609,7 @@ func TestScanProjectScope(t *testing.T) {
 func TestScanConfigurationFlag(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixtures["cursor-sees-claude"])
+	h.build(t, fixtures["claude-skill-beside-cursor"])
 
 	whole := h.inventory(t)
 	targeted := h.inventory(t, "--configuration", "cursor")
@@ -626,7 +628,7 @@ func TestScanConfigurationFlag(t *testing.T) {
 func TestScanHoldsSharedLock(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixtures["cursor-sees-claude"])
+	h.build(t, fixtures["claude-skill-beside-cursor"])
 
 	out := h.run("--json", "scan")
 	equal(t, "exit", out.exit, 0)
@@ -642,7 +644,7 @@ func TestScanHoldsSharedLock(t *testing.T) {
 func TestConfigEnableDisable(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixtures["cursor-sees-claude"])
+	h.build(t, fixtures["claude-skill-beside-cursor"])
 
 	enabled := func(inventory jsonEvent) map[string]bool {
 		m := map[string]bool{}

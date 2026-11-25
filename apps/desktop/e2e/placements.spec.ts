@@ -5,7 +5,6 @@ import type { Locator, Page } from "@playwright/test";
 
 import {
   inventory,
-  LIBRARY,
   manyAgentsInventory,
   manyConfigurations,
 } from "./fixtures/agents.ts";
@@ -405,60 +404,6 @@ test.describe("chips", () => {
     );
     await cursor.click({ force: true });
     expect(later(cli)).toEqual([]);
-  });
-
-  test("an agent that sees the skill through another's folder: its chip runs nothing, and the other's removes it from both", async ({
-    cli,
-    page,
-  }) => {
-    // Cursor reads Claude Code's skills directory, so it sees pdf through Claude Code's placement.
-    const path = "/home/me/.claude-code/skills/pdf";
-    const throughClaude = {
-      ...inventory,
-      skills: inventory.skills.map((node) =>
-        node.name === "pdf"
-          ? {
-              ...node,
-              occurrences: [
-                ...node.occurrences,
-                {
-                  configuration: "cursor",
-                  id: `cursor:${path}`,
-                  kind: "symlink" as const,
-                  path,
-                  resolved_path: `${LIBRARY}/pdf`,
-                  scope: "user" as const,
-                },
-              ],
-            }
-          : node
-      ),
-    } satisfies InlineEvent;
-    await openSkill(cli, page, "pdf", "pdf", throughClaude);
-    const article = pane(page, "pdf");
-    const cursor = chip(article, "Cursor");
-    await expect(cursor).toBeChecked();
-    await expect(cursor).toHaveAttribute("aria-disabled", "true");
-    await cursor.hover();
-    await expect(page.getByRole("tooltip")).toHaveText(
-      "Cursor reads Claude Code's skills folder, so it sees pdf there. Remove it from Claude Code to remove it from both"
-    );
-    await cursor.click({ force: true });
-    expect(later(cli)).toEqual([]);
-
-    const claude = chip(article, "Claude Code");
-    await expect(claude).toHaveAttribute(
-      "title",
-      "Remove from Claude Code and Cursor"
-    );
-    cli.register(["skill", "remove", "pdf", "--from", "claude-code"]);
-    await claude.click();
-    await expect(
-      toasts(page).getByText("Removed pdf from Claude Code and Cursor")
-    ).toBeVisible();
-    expect(later(cli)).toEqual([
-      ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
-    ]);
   });
 });
 

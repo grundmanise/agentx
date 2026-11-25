@@ -10,11 +10,8 @@ import { trackAttribute } from "#/lib/track.ts";
 import type { Tracked } from "#/lib/track.ts";
 import { cn } from "#/lib/utils.ts";
 
-/**
- * Whether an agent client sees the skill: on, off, on through a placement that was displaced, or
- * on only through another client's placement, as Cursor sees one placed in Claude Code.
- */
-export type AgentChipState = "on" | "off" | "displaced" | "inherited";
+/** Whether an agent client sees the skill: on, off, or on through a placement that was displaced. */
+export type AgentChipState = "on" | "off" | "displaced";
 
 /** The chip's compact switch, drawn only: the chip is the control. */
 const ChipSwitch = ({ on, inert }: { on: boolean; inert: boolean }) => (
@@ -42,7 +39,7 @@ const ChipSwitch = ({ on, inert }: { on: boolean; inert: boolean }) => (
  * one button. It shows the state the inventory reports, and nothing else: while its command runs
  * and until the next inventory arrives it is pending, with a spinner in place of the switch. A
  * locked chip is dimmed and its `title` says why; it stays a button, since a click toasts the reason,
- * which is the caller's to answer. An inert chip, displaced or inherited, keeps its on look with a
+ * which is the caller's to answer. An inert chip, a displaced one, keeps its on look with a
  * disabled switch: a click changes nothing, and the Tooltip says why. It stays focusable, so the
  * keyboard reaches the Tooltip too.
  */
