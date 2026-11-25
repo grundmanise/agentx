@@ -209,8 +209,8 @@ test.describe("chips", () => {
   }) => {
     await openSkill(cli, page, "pdf");
     const warning =
-      "/home/me/.windsurf/skills/pdf is not this skill and was left as it is; no placement was made for windsurf";
-    cli.register(["skill", "place", "pdf", "--to", "windsurf"], {
+      "/home/me/.config/devin/skills/pdf is not this skill and was left as it is; no placement was made for devin";
+    cli.register(["skill", "place", "pdf", "--to", "devin"], {
       events: [
         {
           ok: true,
@@ -221,17 +221,17 @@ test.describe("chips", () => {
       logs: [{ level: "warn", message: warning }],
     });
 
-    await chip(pane(page, "pdf"), "Windsurf").click();
+    await chip(pane(page, "pdf"), "Devin").click();
     const toast = toasts(page)
       .getByRole("listitem")
-      .filter({ hasText: "pdf skill wasn't added to Windsurf" });
+      .filter({ hasText: "pdf skill wasn't added to Devin" });
     await expect(toast).toContainText(
-      "/home/me/.windsurf/skills/pdf has other files. It was left as is."
+      "/home/me/.config/devin/skills/pdf has other files. It was left as is."
     );
     await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
     await expect(toast.getByRole("button", { name: "Dismiss" })).toBeVisible();
     expect(later(cli)).toEqual([
-      ["skill", "place", "pdf", "--to", "windsurf", "--json"],
+      ["skill", "place", "pdf", "--to", "devin", "--json"],
     ]);
   });
 
@@ -449,7 +449,7 @@ test.describe("many agents", () => {
       "Universal",
       "Cursor",
       "GitHub Copilot",
-      "Windsurf",
+      "Devin",
     ]);
     await expect(more).toHaveText(`Show ${26 - collapsed.names.length} more`);
 

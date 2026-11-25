@@ -41,6 +41,7 @@ func (pathClient) at(d home.Dirs, spec string) string {
 // configuration: eve, promptscript, replit and the universal pseudo-agent.
 // Zenflow is left out as well: it is Zencoder's desktop app, reads the same
 // skills directory as Zencoder's IDE agents, and is one agent to agentx.
+// So is Windsurf: it is Devin Desktop now, part of the devin client.
 var pathClients = []Client{
 	pathClient{"adal", "AdaL", ".adal", ".adal/skills", ".adal/skills"},
 	pathClient{"aider-desk", "AiderDesk", ".aider-desk", ".aider-desk/skills", ".aider-desk/skills"},
@@ -61,7 +62,6 @@ var pathClients = []Client{
 	pathClient{"cortex", "Cortex Code", ".snowflake/cortex", ".snowflake/cortex/skills", ".cortex/skills"},
 	pathClient{"crush", "Crush", ".config/crush", ".config/crush/skills", ".crush/skills"},
 	pathClient{"deepagents", "Deep Agents", ".deepagents", ".deepagents/agent/skills", ".agents/skills"},
-	pathClient{"devin", "Devin for Terminal", "xdg/devin", "xdg/devin/skills", ".devin/skills"},
 	pathClient{"dexto", "Dexto", ".dexto", "library", ".agents/skills"},
 	pathClient{"droid", "Droid", ".factory", ".factory/skills", ".agents/skills"},
 	pathClient{"firebender", "Firebender", ".firebender", ".firebender/skills", ".agents/skills"},

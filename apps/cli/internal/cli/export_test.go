@@ -152,12 +152,12 @@ func TestExportListsTheLibraryWithItsPlacements(t *testing.T) {
 	h := newHarness(t)
 	// Three clients that each keep their own skills directory and read no
 	// other's, so a placement is in one configuration alone.
-	h.build(t, fixture{dirs: []string{".claude", ".copilot", ".codeium/windsurf"}})
+	h.build(t, fixture{dirs: []string{".claude", ".copilot", ".kiro"}})
 	s, _, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--all")
-	h.mustRun("skill", "remove", "alpha", "--from", "windsurf")
-	h.mustRun("skill", "remove", "beta", "--from", "claude-code", "--from", "github-copilot", "--from", "windsurf")
+	h.mustRun("skill", "remove", "alpha", "--from", "kiro-cli")
+	h.mustRun("skill", "remove", "beta", "--from", "claude-code", "--from", "github-copilot", "--from", "kiro-cli")
 	// A fork branch with no library directory, and a directory put in the
 	// library by hand, which no branch knows about.
 	h.storeGit("update-ref", "refs/heads/skills/zeta", h.storeGit("rev-parse", "refs/heads/managed/alpha"))

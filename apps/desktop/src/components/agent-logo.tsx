@@ -4,9 +4,9 @@ import type { HTMLAttributes, ReactElement, RefCallback } from "react";
 import claudeCode from "#/assets/logos/claude-code.svg";
 import codex from "#/assets/logos/codex.svg";
 import cursor from "#/assets/logos/cursor.svg";
+import devin from "#/assets/logos/devin.svg";
 import geminiCli from "#/assets/logos/gemini-cli.svg";
 import githubCopilot from "#/assets/logos/github-copilot.svg";
-import windsurf from "#/assets/logos/windsurf.svg";
 import type { Configuration } from "#/cli/events.gen.ts";
 import {
   HoverCard,
@@ -28,9 +28,9 @@ const logos: Record<string, string> = {
   "claude-code": claudeCode,
   codex,
   cursor,
+  devin,
   "gemini-cli": geminiCli,
   "github-copilot": githubCopilot,
-  windsurf,
 };
 
 /**

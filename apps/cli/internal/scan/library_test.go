@@ -198,6 +198,7 @@ func TestSkillsDirsOfTheClientsThatReadTheLibrary(t *testing.T) {
 		{"github-copilot", withCopilotHome, []string{"/elsewhere/copilot/skills"}, false},
 		{"opencode", d, []string{"/u/.config/opencode/skills", "/u/.agents/skills"}, true},
 		{"cline", d, []string{"/u/.cline/skills", "/u/.agents/skills"}, true},
+		{"devin", d, []string{"/u/.config/devin/skills", "/u/.agents/skills"}, true},
 	}
 	for _, tt := range tests {
 		c, ok := Lookup(tt.slug)
@@ -231,7 +232,7 @@ func TestProjectSkillsDirsFollowTheLibrary(t *testing.T) {
 		{"cursor", []string{".cursor/skills", ".agents/skills"}},
 		{"github-copilot", []string{".github/skills", ".agents/skills"}},
 		{"opencode", []string{".agents/skills"}},
-		{"windsurf", []string{".windsurf/skills"}},
+		{"devin", []string{".devin/skills", ".agents/skills"}},
 	}
 	for _, tt := range tests {
 		c, ok := Lookup(tt.slug)

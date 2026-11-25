@@ -49,6 +49,8 @@ func (h *harness) build(t *testing.T, f fixture) {
 	t.Helper()
 	h.library = filepath.Join(h.home, ".agents", "skills")
 	h.env["AGENTX_LIBRARY"] = h.library
+	h.config = filepath.Join(h.home, ".config")
+	h.env["XDG_CONFIG_HOME"] = h.config
 	for _, dir := range f.dirs {
 		if err := os.MkdirAll(filepath.Join(h.home, dir), 0o755); err != nil {
 			t.Fatal(err)
@@ -106,7 +108,7 @@ var fixtures = map[string]fixture{
 		},
 	},
 	"all-clients": {
-		dirs: []string{".codex", ".gemini", ".codeium/windsurf", ".copilot", ".cursor/skills/.hidden", ".cursor/skills/node_modules/pkg", ".cursor/skills/no-skill-md"},
+		dirs: []string{".codex", ".gemini", ".config/devin", ".copilot", ".cursor/skills/.hidden", ".cursor/skills/node_modules/pkg", ".cursor/skills/no-skill-md"},
 		files: map[string]string{
 			".claude/skills/commit/SKILL.md":           skill("commit", "Write a commit message"),
 			".cursor/skills/review/SKILL.md":           "---\nname: \"review\"\ndescription: >-\n  Review a change\n  before merging\n---\n",
@@ -115,10 +117,10 @@ var fixtures = map[string]fixture{
 			".cursor/skills/no-skill-md/README.md":     "no skill here",
 			".codex/skills/plan/SKILL.md":              skill("plan", "Plan a task"),
 			".gemini/skills/plan/SKILL.md":             skill("plan", "Plan a task"),
-			".codeium/windsurf/skills/deploy/SKILL.md": skill("deploy", "Deploy the service"),
+			".config/devin/skills/deploy/SKILL.md":     skill("deploy", "Deploy the service"),
 			".copilot/skills/test/SKILL.md":            skill("test", "Write tests"),
 		},
-		settings: `{"schema_version":1,"disabled_configurations":["windsurf"],"copy_mode":{"review":["cursor"]}}`,
+		settings: `{"schema_version":1,"disabled_configurations":["devin"],"copy_mode":{"review":["cursor"]}}`,
 	},
 	"symlink-chain": {
 		dirs: []string{".codex"},
@@ -211,7 +213,7 @@ var fixtures = map[string]fixture{
 		project: "work/app",
 	},
 	"mcp-all-clients": {
-		dirs: []string{".claude", ".codex", ".cursor", ".gemini", ".codeium/windsurf", ".copilot"},
+		dirs: []string{".claude", ".codex", ".cursor", ".gemini", ".config/devin", ".copilot"},
 		files: map[string]string{
 			".claude.json": `{"numStartups": 3, "mcpServers": {
   "context7": {"type": "stdio", "command": "npx", "args": ["-y", "@upstash/context7-mcp@1.0.0"], "env": {"CONTEXT7_TOKEN": "secret-claude-env-value"}},
@@ -227,9 +229,9 @@ var fixtures = map[string]fixture{
   "stream": {"httpUrl": "https://stream.example.com/mcp"},
   "git": {"command": "pipx", "args": ["run", "mcp-server-git"]},
   "local": {"command": "python", "args": ["-m", "my_server"], "env": {"DB": "secret-gemini-env-value"}}}}`,
-			".codeium/windsurf/mcp_config.json": `{"mcpServers": {
-  "remote": {"serverUrl": "https://remote.example.com/mcp", "headers": {"API_KEY": "secret-windsurf-header-value"}},
-  "pg": {"command": "docker", "args": ["run", "--rm", "-i", "ghcr.io/example/pg-mcp:2.0"], "env": {"PGURL": "secret-windsurf-env-value"}}}}`,
+			".config/devin/mcp_config.json": `{"mcpServers": {
+  "remote": {"serverUrl": "https://remote.example.com/mcp", "headers": {"API_KEY": "secret-devin-header-value"}},
+  "pg": {"command": "docker", "args": ["run", "--rm", "-i", "ghcr.io/example/pg-mcp:2.0"], "env": {"PGURL": "secret-devin-env-value"}}}}`,
 			".copilot/mcp-config.json": `{"mcpServers": {
   "sentry": {"type": "local", "command": "npx", "args": ["@sentry/mcp-server@latest"], "env": {"SENTRY_TOKEN": "secret-copilot-env-value"}, "tools": ["*"]},
   "cloudflare": {"type": "sse", "url": "https://docs.mcp.cloudflare.com/sse", "tools": ["*"]},

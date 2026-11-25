@@ -70,12 +70,12 @@ To build the app, see [`apps/desktop/README.md`](apps/desktop/README.md).
 
 ## Status
 
-Supports 75 agents:
+Supports 73 agents:
 
 | Agent | Skills | MCP servers | Plugins |
 | --- | :---: | :---: | :---: |
 | Claude Code, Codex, Cursor, Gemini CLI | ✓ | ✓ | ✓ |
-| Windsurf, GitHub Copilot | ✓ | ✓ | |
+| Devin, GitHub Copilot | ✓ | ✓ | |
 | All others | ✓ | | |
 
 ## Goals and non-goals
