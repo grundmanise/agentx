@@ -667,10 +667,7 @@ jobs:
             gh release upload "$TAG" latest.json --clobber
             exit 0
           fi
-          # Not a pipe into jq: a pipe takes jq's status, which is 0 on no input, so a missing
-          # release would look like an empty manifest.
           if manifest=$(gh release download "$NIGHTLY_UPDATES" --pattern latest.json --output - 2> /dev/null); then
-            # A manifest jq cannot read gets replaced.
             current=$(jq -r .version <<< "$manifest" 2> /dev/null || true)
             # A re-run of an older nightly must not take the nightlies back to it.
             if [ "$(printf '%s\n' "$current" "$VERSION" | sort -V | tail -n1)" != "$VERSION" ]; then
