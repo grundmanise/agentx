@@ -179,7 +179,7 @@ func TestHelpSections(t *testing.T) {
 	for _, s := range []string{
 		"Read and change the settings\n\nUsage:\n  agentx config <command> [arguments]\n\nSETTINGS\n  list ",
 		"  get <key>  ",
-		"  disable <configuration>  Leave a client out of placements by default\n",
+		"  disable <id>...        Leave a client out of placements by default\n",
 		"\nExamples:\n  agentx config list  ",
 		"\nGlobal flags: --json, --verbose, --color (see 'agentx --help')\n\nRun 'agentx config <command> --help' for the details, flags and examples of a command.\n",
 	} {
