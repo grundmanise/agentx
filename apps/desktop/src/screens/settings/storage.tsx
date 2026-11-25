@@ -27,7 +27,7 @@ const Place = ({ name, value }: { name: string; value: string }) => (
   <SettingsRow
     name={name}
     control={
-      <span className="type-technical text-text-secondary text-right break-all">
+      <span className="type-technical text-text-secondary text-right break-all select-text">
         {value}
       </span>
     }

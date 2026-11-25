@@ -122,7 +122,11 @@ export const ThisMachineCard = () => {
       {id !== undefined && (
         <SettingsRow
           name="Machine id"
-          control={<span className="type-technical text-text-hint">{id}</span>}
+          control={
+            <span className="type-technical text-text-hint select-text">
+              {id}
+            </span>
+          }
         />
       )}
       <StorageRows />
