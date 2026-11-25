@@ -21,6 +21,7 @@ import { ForkButton } from "#/screens/skills/fork-dialog.tsx";
 import { canFork } from "#/screens/skills/fork.ts";
 import { HistorySection } from "#/screens/skills/history.tsx";
 import { openSkill } from "#/screens/skills/open.ts";
+import { removeName } from "#/screens/skills/placements.ts";
 import {
   filesVersionOf,
   glyphOf,
@@ -93,7 +94,7 @@ const Origin = ({ row }: { row: SkillRow }) => {
   );
 };
 
-/** Remove, a danger ghost for every library skill; pending until the skill has left the inventory. */
+/** Remove, a danger ghost for every skill `skill remove` takes; pending until the skill has left the inventory. */
 const RemoveButton = ({
   row,
   onClick,
@@ -146,7 +147,7 @@ const EditButton = ({ row }: { row: SkillRow }) => {
  * (unless the banner says where the skill came from), a pill per fork made from it under a new
  * name, which opens that fork, and at its right end the action row (Edit for a skill the user may
  * write to, Fork for a skill of a source or a plugin's, Rename for a hub skill, Remove for a
- * library skill; the other actions come with the changes that add them); then the description. No
+ * skill `skill remove` takes; the other actions come with the changes that add them); then the description. No
  * status pill: the banner is the status. One banner, with its button; AGENTS, whose chips add and
  * remove placements, and, when some agent sees more than one skill of this name, a notice under the
  * chips whose Details shows what each agent sees; FILES; then DETAILS and HISTORY side by side. Every control runs one
@@ -252,7 +253,7 @@ export const SkillDetail = ({
             {canEdit(row) && <EditButton row={row} />}
             {canFork(row) && <ForkButton row={row} />}
             {canRename(row) && <RenameButton row={row} />}
-            {row.entry !== undefined && (
+            {removeName(row) !== undefined && (
               <RemoveButton
                 row={row}
                 onClick={() => {
@@ -282,7 +283,7 @@ export const SkillDetail = ({
           }}
         />
       </section>
-      {row.entry !== undefined && (
+      {removeName(row) !== undefined && (
         <RemoveDialog
           row={row}
           configurations={configurations}

@@ -1,5 +1,5 @@
-// adoptArgs, as a table: the `skill import` command line that takes over each unmanaged skill, or
-// none for a skill `skill import` has no way to take.
+// importOf, as a table: the `skill import` command line that takes over each unmanaged skill, or
+// why `skill import` has no way to take it.
 import { expect, test } from "@playwright/test";
 
 import type {
@@ -7,7 +7,7 @@ import type {
   InventoryEvent,
   SkillNode,
 } from "#/cli/events.gen.ts";
-import { adoptArgs } from "#/screens/skills/placements.ts";
+import { adoptArgs, importOf } from "#/screens/skills/placements.ts";
 import { projectRows } from "#/screens/skills/projection.ts";
 
 import { inventory as refusedInventory } from "./fixtures/adoption.ts";
@@ -97,8 +97,12 @@ const rowOf = (
   return row;
 };
 
-// [what the skill is, its row, the command line]
-const table: [string, ReturnType<typeof rowOf>, string[] | undefined][] = [
+// [what the skill is, its row, the command line, or a distinctive part of why there is none]
+const table: [
+  string,
+  ReturnType<typeof rowOf>,
+  string[] | string | undefined,
+][] = [
   [
     "a library skill another tool recorded",
     rowOf("scratch", [record("scratch", "candidate")]),
@@ -112,12 +116,12 @@ const table: [string, ReturnType<typeof rowOf>, string[] | undefined][] = [
   [
     "a library skill whose record the CLI refuses",
     rowOf("legacy", [record("legacy", "refused")], refusedInventory),
-    undefined,
+    "It can't be imported",
   ],
   [
     "a library skill whose record says agentx manages it",
     rowOf("scratch", [record("scratch", "managed")]),
-    undefined,
+    "agentx already manages it",
   ],
   [
     "a directory in a client's own skills directory",
@@ -137,24 +141,38 @@ const table: [string, ReturnType<typeof rowOf>, string[] | undefined][] = [
   [
     "a directory under a name the library holds another skill by",
     rowOf("skill:h-own-pdf", [], inventory, [ownPdf]),
-    undefined,
+    "Your library already has a skill named pdf",
   ],
   [
     "a symlink in a client's own skills directory",
     rowOf("skill:h-linked", [], inventory, [linked]),
-    undefined,
+    "It's a link",
   ],
   [
     "a skill of a project",
     rowOf("skill:h-own-project-notes", [], inventory, [inProject]),
-    undefined,
+    "It's in a project's folder",
   ],
   ["a plugin's skill", rowOf("skill:h-commit", []), undefined],
   ["a skill of a source", rowOf("pdf", []), undefined],
 ];
 
 for (const [what, row, want] of table) {
-  test(`adoptArgs(${what})`, () => {
-    expect(adoptArgs(row)).toEqual(want);
+  test(`importOf(${what})`, () => {
+    const result = importOf(row);
+    if (typeof want === "string") {
+      expect(
+        result !== undefined && "why" in result ? result.why : ""
+      ).toContain(want);
+    } else {
+      expect(adoptArgs(row)).toEqual(want);
+    }
   });
 }
+
+test("importOf names the library skill in the way of a folder", () => {
+  expect(importOf(rowOf("skill:h-own-pdf", [], inventory, [ownPdf]))).toEqual({
+    inTheWay: "pdf",
+    why: "Your library already has a skill named pdf, this folder's name. Import or remove that skill first",
+  });
+});

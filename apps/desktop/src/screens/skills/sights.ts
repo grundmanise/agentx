@@ -16,6 +16,12 @@ export interface Place {
   kind: PlaceKind;
   /** The plugin's name, or the name of the agent whose folder it is. */
   label: string;
+  /**
+   * What tells the skill there from the others: its content hash, so that copies with the same
+   * content are one skill, or, for a plugin's, the place itself, since a plugin's skill changes
+   * with the plugin.
+   */
+  content: string;
   agents: Configuration[];
 }
 
@@ -43,7 +49,7 @@ const ownerOf = (o: Occurrence, configurations: Configuration[]) =>
 const placeOf = (
   o: Occurrence,
   configurations: Configuration[]
-): Omit<Place, "agents"> => {
+): Omit<Place, "agents" | "content"> => {
   if (o.plugin !== undefined) {
     return { key: `plugin:${o.plugin}`, kind: "plugin", label: o.plugin };
   }
@@ -111,25 +117,34 @@ export const sightsOf = (
   const places = new Map<string, Place>();
   const own = new Set<string>();
   const add = (
-    place: Omit<Place, "agents">,
+    place: Omit<Place, "agents" | "content">,
+    content: string,
     agent: Configuration,
     mine: boolean
   ) => {
-    const kept = places.get(place.key) ?? { ...place, agents: [] };
+    const key =
+      place.kind === "project" ? `${place.key}:${content}` : place.key;
+    const kept = places.get(key) ?? {
+      ...place,
+      agents: [],
+      content: place.kind === "plugin" ? place.key : content,
+      key,
+    };
     if (!kept.agents.some((a) => a.id === agent.id)) {
       kept.agents.push(agent);
     }
-    places.set(place.key, kept);
+    places.set(key, kept);
     if (mine) {
-      own.add(place.key);
+      own.add(key);
     }
   };
   const byId = new Map(configurations.map((c) => [c.id, c]));
   for (const r of [row, ...others]) {
     const mine = r === row;
+    const content = r.entry?.content_hash ?? r.node?.content_hash ?? r.key;
     if (r.entry !== undefined) {
       for (const agent of libraryAgents(r, configurations)) {
-        add({ key: LIBRARY, kind: "library", label: "" }, agent, mine);
+        add({ key: LIBRARY, kind: "library", label: "" }, content, agent, mine);
       }
       // A fork of a plugin's skill under its own name has the plugin's content until it is edited,
       // so the inventory holds the two as one skill, under the library's row: the plugin's copy
@@ -137,7 +152,7 @@ export const sightsOf = (
       for (const o of r.occurrences) {
         const c = byId.get(o.configuration);
         if (o.plugin !== undefined && c !== undefined) {
-          add(placeOf(o, configurations), c, false);
+          add(placeOf(o, configurations), content, c, false);
         }
       }
       continue;
@@ -145,7 +160,7 @@ export const sightsOf = (
     for (const o of r.occurrences) {
       const c = byId.get(o.configuration);
       if (c !== undefined) {
-        add(placeOf(o, configurations), c, mine);
+        add(placeOf(o, configurations), content, c, mine);
       }
     }
   }
@@ -183,10 +198,17 @@ const agentsOf = (sights: NameSights) => {
   return agents;
 };
 
-/** The agents that see more than one skill of the name, the most used first. */
+/** How many skills `places` hold: copies with the same content outside a plugin are one skill. */
+const skillsIn = (places: Place[]) =>
+  new Set(places.map((p) => p.content)).size;
+
+/**
+ * The agents that see more than one skill of the name, the most used first. An agent that sees
+ * copies with the same content in two places sees one skill.
+ */
 export const clashingOf = (sights: NameSights): Configuration[] => {
   const by = placesByAgent(sights);
-  return agentsOf(sights).filter((a) => (by.get(a.id)?.length ?? 0) > 1);
+  return agentsOf(sights).filter((a) => skillsIn(by.get(a.id) ?? []) > 1);
 };
 
 /** Agents in runs that share a key, in the order of their first agent. */
@@ -231,7 +253,7 @@ export const clashText = (sights: NameSights): ClashText | undefined => {
   }
   return {
     text: "Agents that see more than one may pick the wrong skill.",
-    title: `Found ${places.length} skills named ${sights.name}`,
+    title: `Found ${skillsIn(places)} skills named ${sights.name}`,
   };
 };
 
@@ -318,7 +340,7 @@ export const sightsTable = (sights: NameSights): SightsTable => {
     key: a.id,
     sees: seesOf([a]),
   }));
-  const alone = agentsOf(sights).filter((a) => placesOf(a).length === 1);
+  const alone = agentsOf(sights).filter((a) => !clashing.includes(a));
   for (const group of groupBy(alone, (a) => keyOfPlaces(placesOf(a)))) {
     rows.push({
       agents: group,

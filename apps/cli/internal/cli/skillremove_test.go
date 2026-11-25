@@ -452,3 +452,54 @@ func TestSkillRemoveSanitisesTheNameAndQuotesThePaths(t *testing.T) {
 	contains(t, "what was deleted", out.stdout, "  deleted \""+h.library+quoted+"\n")
 	equal(t, "lines", len(lines), 3)
 }
+
+// TestSkillRemoveDeletesTheCopiesItCanTrace takes an unmanaged library
+// skill off the machine with the folders of it the clients' own skills
+// directories hold with the same files, a client that reads the library
+// included, and leaves one that holds other files, saying so.
+func TestSkillRemoveDeletesTheCopiesItCanTrace(t *testing.T) {
+	t.Parallel()
+	h, _ := placementHarness(t)
+	body := skill("notes", "Take notes")
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "notes"), "SKILL.md"), body)
+	claude := filepath.Join(h.home, ".claude", "skills", "notes")
+	codex := filepath.Join(h.home, ".codex", "skills", "notes")
+	edited := filepath.Join(h.home, ".snowflake/cortex", "skills", "notes")
+	writeFile(t, mkdirs(t, claude, "SKILL.md"), body)
+	writeFile(t, mkdirs(t, codex, "SKILL.md"), body)
+	writeFile(t, mkdirs(t, edited, "SKILL.md"), skill("notes", "My own notes"))
+
+	out := h.run("skill", "remove", "notes")
+	equal(t, "exit", out.exit, 0)
+	nothingAt(t, "the library directory", filepath.Join(h.library, "notes"))
+	nothingAt(t, "Claude Code's copy", claude)
+	nothingAt(t, "Codex's copy", codex)
+	contains(t, "the folder with other files", fileBody(t, filepath.Join(edited, "SKILL.md")), "My own notes")
+	contains(t, "stderr", out.stderr, edited+" is a directory agentx did not place there")
+}
+
+// TestSkillRemoveOfFoldersAlone takes off the machine a skill only the
+// clients' own skills directories hold, every folder of it at once, and
+// refuses when the folders hold different files, removing nothing.
+func TestSkillRemoveOfFoldersAlone(t *testing.T) {
+	t.Parallel()
+	h, _ := placementHarness(t)
+	body := skill("notes", "Take notes")
+	claude := filepath.Join(h.home, ".claude", "skills", "notes")
+	codex := filepath.Join(h.home, ".codex", "skills", "notes")
+	writeFile(t, mkdirs(t, claude, "SKILL.md"), body)
+	writeFile(t, mkdirs(t, codex, "SKILL.md"), body)
+
+	out := h.run("skill", "remove", "notes")
+	equal(t, "exit", out.exit, 0)
+	nothingAt(t, "Claude Code's folder", claude)
+	nothingAt(t, "Codex's folder", codex)
+	contains(t, "the result", out.stdout, "removed notes from the clients' skills directories: 2 placements")
+
+	writeFile(t, mkdirs(t, claude, "SKILL.md"), body)
+	writeFile(t, mkdirs(t, codex, "SKILL.md"), skill("notes", "Other notes"))
+	differ := h.run("skill", "remove", "notes")
+	equal(t, "exit", differ.exit, exitRefused.exit)
+	contains(t, "stderr", differ.stderr, "the folders of notes hold different files, so nothing was removed")
+	contains(t, "Claude Code's folder", fileBody(t, filepath.Join(claude, "SKILL.md")), "Take notes")
+}

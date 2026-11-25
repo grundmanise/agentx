@@ -6,7 +6,11 @@ import type {
   LibraryPlacement,
   Source,
 } from "#/cli/events.gen.ts";
-import { adoptArgs, displacedPlacement } from "#/screens/skills/placements.ts";
+import {
+  adoptArgs,
+  displacedPlacement,
+  importOf,
+} from "#/screens/skills/placements.ts";
 import {
   fromAnotherMachine,
   shortSource,
@@ -40,6 +44,8 @@ export type BannerAction =
   | { kind: "put-back"; placement: LibraryPlacement; agent: string }
   /** The `skill import` command line of `adoptArgs`, for an unmanaged skill it can take over. */
   | { kind: "adopt" }
+  /** Opens the library skill `name`, which keeps an unmanaged skill from being imported. */
+  | { kind: "open-skill"; name: string }
   /** `source add <url>`, for a skill whose source was removed. */
   | { kind: "add-source"; source: string }
   /** Opens the Publish dialog, which runs `skill publish <name>`. */
@@ -218,6 +224,31 @@ const table: BannerRule[] = [
       tone: "neutral",
     }),
     when: (row) => adoptArgs(row) !== undefined,
+  },
+  {
+    // An unmanaged skill `skill import` cannot take, and why.
+    banner: (row) => {
+      const result = importOf(row);
+      const why = result !== undefined && "why" in result ? result : undefined;
+      const refused = row.adoption?.state === "refused";
+      return {
+        action:
+          why?.inTheWay === undefined
+            ? undefined
+            : { kind: "open-skill", name: why.inTheWay },
+        coversOrigin: refused,
+        text: why?.why,
+        title:
+          refused && row.adoption !== undefined
+            ? `Added by ${toolName(row.adoption)}`
+            : "Not managed by agentx",
+        tone: "neutral",
+      };
+    },
+    when: (row) => {
+      const result = importOf(row);
+      return result !== undefined && "why" in result;
+    },
   },
   {
     banner: (row) => {

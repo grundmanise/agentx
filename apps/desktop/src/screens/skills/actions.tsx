@@ -362,6 +362,20 @@ export const AddSource = ({ source }: { source: string }) => {
   );
 };
 
+/** Open: selects the library skill `name`, which keeps the skill of the banner from being imported. */
+export const OpenSkill = ({ name }: { name: string }) => (
+  <Button
+    track="skill-banner.open-skill"
+    variant="ghost"
+    size="sm"
+    onClick={() => {
+      openSkill(name);
+    }}
+  >
+    {`Open ${name}`}
+  </Button>
+);
+
 /** Update: `skill update <name>`, the primary action of an update's banner. */
 export const UpdateButton = ({ row }: { row: SkillRow }) => {
   const pending = useSettling(updateLabel(row.name));
