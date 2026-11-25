@@ -1,13 +1,23 @@
-// One card of the Settings page (DESIGN.md §6 "Settings"): its title, then its rows, a hairline
-// between two of them. Cards stack in the order `settings-screen.tsx` lists them; a card that has
-// nothing to show renders nothing.
+// One card of the Settings page (DESIGN.md §6 "Settings"), on shadcn's Card: its title, then its
+// rows, a hairline between two of them. Cards stack in the order `settings-screen.tsx` lists them;
+// a card that has nothing to show renders nothing.
 //
-// A row (`SettingsRow`) is the setting's name over its line at the left and its control at the
-// right; what shows under the row, such as a field or a result, comes after them. A row with no
-// name is only what it holds, such as the Editor's radio group. With
+// A row (`SettingsRow`), on shadcn's Item, is the setting's name over its line at the left and its
+// control at the right; what shows under the row, such as a field or a result, comes on a line of
+// its own. A row with no name is only what it holds, such as the Editor's radio group. With
 // `htmlFor`, the whole row labels that control, so a click anywhere on it toggles a switch.
 import { useId } from "react";
 import type { ReactNode } from "react";
+
+import { Card, CardContent, CardTitle } from "#/components/ui/card.tsx";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemFooter,
+  ItemTitle,
+} from "#/components/ui/item.tsx";
 
 export interface SettingsCardProps {
   /** The card's title, such as "This machine". */
@@ -18,24 +28,17 @@ export interface SettingsCardProps {
 export const SettingsCard = ({ title, children }: SettingsCardProps) => {
   const id = useId();
   return (
-    <section
-      aria-labelledby={id}
-      className="bg-card-bg border-card-border rounded-card pt-settings-card-top px-settings-card-x pb-settings-card-bottom border"
-    >
-      <h2 id={id} className="type-settings-label text-text-primary m-0">
-        {title}
-      </h2>
-      <div className="divide-card-border flex flex-col divide-y">
-        {children}
-      </div>
-    </section>
+    <Card aria-labelledby={id}>
+      <CardTitle id={id}>{title}</CardTitle>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 };
 
 export interface SettingsRowProps {
-  /** The setting's name, in `type.body` `text.primary`. */
+  /** The setting's name. */
   name?: ReactNode;
-  /** The line under the name, in `type.secondary` `text.muted`. */
+  /** The line under the name. */
   line?: ReactNode;
   /** The line's id, for the control's `aria-describedby`. */
   lineId?: string;
@@ -56,38 +59,29 @@ export const SettingsRow = ({
   children,
 }: SettingsRowProps) => {
   if (name === undefined) {
-    return <div className="py-settings-row">{children}</div>;
+    return <Item>{children}</Item>;
   }
-  const head = (
+  const parts = (
     <>
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="type-body text-text-primary">{name}</span>
+      <ItemContent>
+        <ItemTitle>{name}</ItemTitle>
         {line !== undefined && (
-          <span id={lineId} className="type-secondary text-text-muted">
-            {line}
-          </span>
+          <ItemDescription id={lineId}>{line}</ItemDescription>
         )}
-      </span>
-      {control !== undefined && (
-        <span className="flex max-w-3/5 flex-none flex-wrap items-center justify-end gap-2">
-          {control}
-        </span>
+      </ItemContent>
+      {control !== undefined && <ItemActions>{control}</ItemActions>}
+      {children !== undefined && children !== false && (
+        <ItemFooter>{children}</ItemFooter>
       )}
     </>
   );
-  return (
-    <div className="py-settings-row gap-settings-row flex flex-col">
-      {htmlFor === undefined ? (
-        <div className="flex items-center justify-between gap-6">{head}</div>
-      ) : (
-        <label
-          htmlFor={htmlFor}
-          className="flex cursor-pointer items-center justify-between gap-6"
-        >
-          {head}
-        </label>
-      )}
-      {children}
-    </div>
+  return htmlFor === undefined ? (
+    <Item>{parts}</Item>
+  ) : (
+    <Item asChild>
+      <label htmlFor={htmlFor} className="cursor-pointer">
+        {parts}
+      </label>
+    </Item>
   );
 };
