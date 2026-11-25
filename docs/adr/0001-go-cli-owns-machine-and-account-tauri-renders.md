@@ -7,7 +7,9 @@ date: 2026-09-16
 
 Amended 2026-11-23: the app checks for and installs its own updates over the network (ADR 0019), the one exception to "never opens a network connection". It cannot be the CLI's job, since the CLI lives inside the app's bundle.
 
-Amended 2026-11-24: once the user agrees to send usage data, the app sends its own usage events and crash reports from its window to PostHog's EU cloud (`https://eu.i.posthog.com`, docs/help-center/telemetry.mdx), and only in a stable or nightly release. It is the second exception to "never opens a network connection": the CLI cannot see the app's screens, clicks or crashes. The CLI still owns the setting and the anonymous id; the app reads both from the `settings` event.
+Amended 2026-11-24: once the user agrees to send usage data, the app sends its own usage events and crash reports from its window to PostHog's EU cloud (`https://eu.i.posthog.com`, docs/help-center/telemetry.mdx), and only in a stable or nightly release. It is the second exception to "never opens a network connection": the CLI cannot see the app's screens, clicks or crashes. The CLI still owns the setting and the anonymous id; the app reads both from the `settings` field of the inventory.
+
+Also amended 2026-11-24: with the same setting on, the Rust side sends its own panics to PostHog through PostHog's Rust SDK (`panic_reports.rs`), the third exception: nothing else sees a panic of the Rust side, since it ends the app. It sends nothing until the window tells it the setting is on.
 
 agentx has two executables that ship together. The Go CLI, `agentx`, is the only component that reads or writes the machine, runs git, computes identities, signs in, and syncs. The desktop app is a Tauri 2 shell with a React frontend that spawns the CLI, reads its structured output and renders it. The app never scans, never parses a config file, never computes an identity, never opens a network connection. The CLI is a single static binary that is complete on its own from a terminal or CI.
 

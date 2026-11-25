@@ -9,7 +9,7 @@ import type {
   InstallableSkillEvent,
   LibraryEntry,
   SearchResult,
-  SourceEvent,
+  Source,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { formatAgo } from "#/lib/dates.ts";
@@ -32,7 +32,7 @@ export interface SourcePill {
   /** How many skills it holds: its listing's length, or your skills on the hub. */
   skills?: number;
   /** The entry `source list` gave: the shared source, or the hub for Hub. */
-  source: SourceEvent;
+  source: Source;
 }
 
 const compareLabels = (a: string, b: string) =>
@@ -44,7 +44,7 @@ const compareLabels = (a: string, b: string) =>
  * reports none for a shared source.
  */
 export const sourcePills = (
-  sources: SourceEvent[],
+  sources: Source[],
   listings: Readonly<Record<string, readonly unknown[] | undefined>> = {}
 ): SourcePill[] => {
   const shared = sources
@@ -172,7 +172,7 @@ export const skillPage = (
 };
 
 /** The ref a source's pages are read at: the commit it was fetched at, else its pin, else HEAD. */
-export const pageRef = (source: SourceEvent | undefined): string =>
+export const pageRef = (source: Source | undefined): string =>
   source?.commit ?? source?.pin ?? "HEAD";
 
 /**

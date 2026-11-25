@@ -370,83 +370,82 @@ func words(v any) string {
 	return strings.Join(out, ",")
 }
 
-// TestServeEmitsADriftEventOnEachTransition runs serve while a managed skill
+// libraryEntry is the library entry of the skill called name in an
+// inventory event.
+func libraryEntry(t *testing.T, inventory jsonEvent, name string) jsonEvent {
+	t.Helper()
+	for _, e := range inventory["library"].([]any) {
+		if entry := e.(map[string]any); entry["name"] == name {
+			return entry
+		}
+	}
+	t.Fatalf("no library entry for %s in %v", name, inventory["library"])
+	return nil
+}
+
+// standing is a library entry's kind, state and drift as one line, the
+// state "" when it has none: what the desktop app tells a skill's drift by.
+func standing(entry jsonEvent) string {
+	state, drift := "", ""
+	if s, ok := entry["state"].(string); ok {
+		state = s
+	}
+	if entry["drift"] != nil {
+		drift = words(entry["drift"])
+	}
+	return fmt.Sprint(entry["kind"], " ", state, " [", drift, "]")
+}
+
+// TestServeInventoriesFollowEachTransition runs serve while a managed skill
 // goes through every state: edited in an editor, missing a placement,
 // displaced from another, put back by hand, its source removed and added
-// again, and left without its branch. Each change is followed by one drift
-// event, after the inventory that shows it and naming that inventory, with the
-// state and drift before and after; the first inventory is where every
-// state starts and is followed by none. A source removed and added again
-// changes the settings alone, and serve follows them as it follows the
-// library.
-func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
+// again, and left without its branch. Each change is in the next
+// inventory's library entry, which is what the desktop app compares to
+// tell a transition. A source removed and added again changes the settings
+// alone, and serve follows them as it follows the library.
+func TestServeInventoriesFollowEachTransition(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
 	first := p.next("inventory")
+	equal(t, "at start", standing(libraryEntry(t, first, "alpha")), "managed "+stateCurrent+" []")
 	p.refreshed("start") // the message after the first inventory
 
-	change := func(id string, do func()) jsonEvent {
+	change := func(id string, do func()) string {
 		t.Helper()
 		do()
-		var inventory, found jsonEvent
+		var inventory jsonEvent
 		for _, e := range p.until(id) {
-			switch e["type"] {
-			case "inventory":
+			if e["type"] == "inventory" {
 				inventory = e
-			case "drift":
-				if found != nil {
-					t.Fatalf("%s: a second drift event %v after %v", id, e, found)
-				}
-				if inventory == nil {
-					t.Fatalf("%s: a drift event before any inventory: %v", id, e)
-				}
-				found = e
-				equal(t, id+": scan_counter", e["scan_counter"], inventory["scan_counter"])
-				equal(t, id+": instance_id", e["instance_id"], first["instance_id"])
 			}
 		}
-		if found == nil {
-			t.Fatalf("%s: no drift event", id)
+		if inventory == nil {
+			t.Fatalf("%s: no inventory", id)
 		}
-		equal(t, id+": name", found["name"], "alpha")
-		return found
-	}
-	expect := func(e jsonEvent, kind, state, drift, previousState, previousDrift string) {
-		t.Helper()
-		got := []any{e["kind"], e["state"], words(e["drift"]), e["previous_state"], words(e["previous_drift"])}
-		want := []any{kind, state, drift, previousState, previousDrift}
-		for i, field := range []string{"kind", "state", "drift", "previous_state", "previous_drift"} {
-			if want[i] == "" && field != "drift" && field != "previous_drift" {
-				want[i] = nil
-			}
-			equal(t, e["name"].(string)+" "+field, got[i], want[i])
-		}
+		return standing(libraryEntry(t, inventory, "alpha"))
 	}
 
 	lib := filepath.Join(h.library, "alpha")
 	notes := filepath.Join(lib, "notes.md")
 	installed := readText(t, notes)
 	// An edit saved in an editor reaches serve through the watcher alone:
-	// no refresh is asked for, and the drift follows the inventory it made.
+	// no refresh is asked for.
 	replaceFile(t, notes, "edited in an editor\n")
-	inventory := p.next("inventory")
-	edited := p.next("drift")
-	equal(t, "edited: scan_counter", edited["scan_counter"], inventory["scan_counter"])
-	expect(edited, "managed", stateModified, "", stateCurrent, "")
+	equal(t, "edited", standing(libraryEntry(t, p.next("inventory"), "alpha")), "managed "+stateModified+" []")
 
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	expect(change("unplaced", func() { remove(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")) }),
-		"managed", stateModified, "missing", stateModified, "")
-	expect(change("displaced", func() { remove(t, claude); copyTree(t, lib, claude) }),
-		"managed", stateModified, "displaced,missing", stateModified, "missing")
-	expect(change("restored", func() { replaceFile(t, notes, installed) }),
-		"managed", stateCurrent, "displaced,missing", stateModified, "displaced,missing")
-	expect(change("source-removed", func() { h.runBesideServe("source", "remove", s.url) }),
-		"managed", stateCurrent, "displaced,missing,source removed", stateCurrent, "displaced,missing")
-	expect(change("source-added", func() { h.runBesideServe("source", "add", s.url) }),
-		"managed", stateCurrent, "displaced,missing", stateCurrent, "displaced,missing,source removed")
+	equal(t, "unplaced", change("unplaced", func() { remove(t, filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")) }),
+		"managed "+stateModified+" [missing]")
+	equal(t, "displaced", change("displaced", func() { remove(t, claude); copyTree(t, lib, claude) }),
+		"managed "+stateModified+" [displaced,missing]")
+	equal(t, "restored", change("restored", func() { replaceFile(t, notes, installed) }),
+		"managed "+stateCurrent+" [displaced,missing]")
+	equal(t, "source removed", change("source-removed", func() { h.runBesideServe("source", "remove", s.url) }),
+		"managed "+stateCurrent+" [displaced,missing,source removed]")
+	equal(t, "source added", change("source-added", func() { h.runBesideServe("source", "add", s.url) }),
+		"managed "+stateCurrent+" [displaced,missing]")
 
 	// A skill that arrives in the library is in the next inventory.
 	h.runBesideServe("skill", "add", s.url, "--name", "beta")
@@ -459,13 +458,12 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	if arrived == nil || len(arrived["library"].([]any)) != 2 {
 		t.Fatalf("the inventory after beta arrived = %v, want alpha and beta", arrived)
 	}
-	expect(change("unmanaged", func() { h.storeGit("update-ref", "-d", "refs/heads/managed/alpha") }),
-		"unmanaged", "", "", stateCurrent, "displaced,missing")
+	equal(t, "unmanaged", change("unmanaged", func() { h.storeGit("update-ref", "-d", "refs/heads/managed/alpha") }), "unmanaged  []")
 
 	equal(t, "exit", p.close(), 0)
 	p.next("result")
-	// A single pass has nothing to compare with and emits no drift; its
-	// inventory shows the skill as it now is.
+	// A single pass emits its inventory alone, which shows the skill as it
+	// now is.
 	out := h.serveOnce("--json")
 	if got := strings.Join(h.types(h.events(out.stdout)), ","); got != "inventory,result" {
 		t.Errorf("serve --once emitted %s, want inventory,result", got)
@@ -627,7 +625,8 @@ func (p *serveProc) nextOf(typ string) jsonEvent {
 }
 
 // TestServeReportsForkDrift runs serve over a skill made by skill new and
-// changes it three ways, each reaching serve through the watcher alone: an
+// changes it three ways, each reaching serve's inventories through the
+// watcher alone: an
 // edit saved through the library makes the fork modified, still not
 // published, skill publish makes it current and published, and, after
 // another edit, a commit made with git in the fork's worktree leaves it
@@ -644,25 +643,34 @@ func TestServeReportsForkDrift(t *testing.T) {
 	first := p.next("inventory")["library"].([]any)
 	equal(t, "the fork's first state", first[0].(map[string]any)["state"], stateCurrent)
 	p.refreshed("start") // the message after the first inventory
-	expect := func(what, state, previous string, drift ...string) {
+	// Each change is the next inventory whose entry for the fork differs
+	// from the one before, as the desktop app tells it.
+	was := "managed " + stateCurrent + " []"
+	expect := func(what, state string, drift ...string) {
 		t.Helper()
-		e := p.nextOf("drift")
-		got := fmt.Sprint(e["name"], " ", e["kind"], " ", e["state"], " ", e["previous_state"], " [", words(e["drift"]), "]")
-		equal(t, what, got, "notes managed "+state+" "+previous+" ["+strings.Join(drift, " ")+"]")
+		for {
+			now := standing(libraryEntry(t, p.nextOf("inventory"), "notes"))
+			if now == was {
+				continue
+			}
+			was = now
+			equal(t, what, now, "managed "+state+" ["+strings.Join(drift, ",")+"]")
+			return
+		}
 	}
 
 	tip := h.ref(lineage.ForkRef("notes"))
 	replaceFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited in an editor"))
-	expect("an edit", stateModified, stateCurrent, driftNotPublished)
+	expect("an edit", stateModified, driftNotPublished)
 	equal(t, "the branch while serve runs", h.ref(lineage.ForkRef("notes")), tip) // serve never records an edit
 	h.runBesideServe("skill", "publish", "notes")
-	expect("skill publish", stateCurrent, stateModified)
+	expect("skill publish", stateCurrent)
 	replaceFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited again"))
-	expect("another edit", stateModified, stateCurrent)
+	expect("another edit", stateModified)
 	gitIn(t, h, filepath.Join(h.agentx, "worktrees", "notes"),
 		"-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit", "-q", "-a", "-m", "By hand")
 	h.runBesideServe("skill", "publish", "notes")
-	expect("a commit made with git, then published", stateCurrent, stateModified)
+	expect("a commit made with git, then published", stateCurrent)
 	equal(t, "exit", p.close(), 0)
 }
 

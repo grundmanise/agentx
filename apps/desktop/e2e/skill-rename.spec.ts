@@ -2,7 +2,6 @@
 // new name; with a name another skill has, it keeps the dialog open with the CLI's words.
 import type { Page } from "@playwright/test";
 
-import { sources } from "./fixtures/agents.ts";
 import { commitHelperForked, commitHelperRenamed } from "./fixtures/fork.ts";
 import { adoption, filesOf } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
@@ -28,7 +27,6 @@ const openSkill = async (
 ) => {
   cli.onServeStart({ events: [commitHelperForked] });
   cli.register(["skill", "import"], { events: adoption });
-  cli.register(["source", "list"], { events: sources });
   for (const n of ["commit-helper", "my-commit-helper", "release-notes"]) {
     cli.register(["skill", "history", n], { events: [] });
     cli.register(["skill", "files", n], { events: filesOf(n) });

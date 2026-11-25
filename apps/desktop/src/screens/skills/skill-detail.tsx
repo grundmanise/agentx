@@ -36,7 +36,7 @@ import { SightsNotice } from "#/screens/skills/sights-view.tsx";
 import { sightsOf } from "#/screens/skills/sights.ts";
 import { loadUpdateDiff } from "#/store/loaders.ts";
 import { useSettling } from "#/store/settle.ts";
-import { useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 const Caption = ({ children }: { children: string }) => (
   <h2 className="type-caption text-text-caption m-0">{children}</h2>
@@ -123,7 +123,7 @@ const RemoveButton = ({
  * says where the library is.
  */
 const EditButton = ({ row }: { row: SkillRow }) => {
-  const library = useAppStore((s) => s.machine?.library);
+  const library = useAppStore((s) => s.inventory?.machine.library);
   if (library === undefined) {
     return null;
   }
@@ -169,7 +169,7 @@ export const SkillDetail = ({
   // What opened the Remove dialog. It stays while the dialog closes, so its text does not change.
   const [removing, setRemoving] = useState<"button" | "universal">("button");
   const [removeOpen, setRemoveOpen] = useState(false);
-  const sources = useAppStore((s) => s.sources);
+  const sources = useAppStore(sourcesOf);
   // How many files `skill diff` found changed, from the FILES read of this version of the skill.
   const changedFiles = useAppStore((s) => {
     const read = s.files[row.key];

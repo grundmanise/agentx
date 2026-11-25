@@ -175,6 +175,7 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	h := serveHarness(t)
 	requireGit(t)
 	p := h.serve(t, "--json")
+	p.passInventories = true // the adds and fetches change the sources the inventory lists
 	p.next("inventory")
 	if got := p.search("s0", "commit"); len(got) != 0 {
 		t.Errorf("results before any source = %q", got)
@@ -240,6 +241,7 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 
 	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
+	p.passInventories = true // the adds and fetches change the sources the inventory lists
 	p.next("inventory")
 	whole := []string{s.url + " commit commit"}
 	if got := p.search("s0", "commit"); !reflect.DeepEqual(got, whole) {

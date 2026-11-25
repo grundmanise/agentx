@@ -1,14 +1,16 @@
-// The sync status at the right of the title bar: its states from the inventory, where the
-// library says what another machine published, and the Sources slice, the popover it opens with
-// what there is to publish and what is incoming, Publish all from that popover, and when the hub
-// was last checked. Every click's command line is asserted as the mocked CLI recorded it.
+// The sync status at the right of the title bar: its states from the inventory, the sources it
+// lists and what its library says another machine published, the popover it opens with what
+// there is to publish and what is incoming, Publish all from that popover, and when the hub was
+// last checked. Every click's command line is asserted as the mocked CLI recorded it.
 import type { Page } from "@playwright/test";
 
 import type { PublishOutcome } from "#/cli/events.gen.ts";
 
 import {
   fromAnotherMachine,
+  hub,
   launch,
+  sources,
   syncedLibrary,
 } from "./fixtures/palette-publish.ts";
 import { HUB, configurations } from "./fixtures/skills.ts";
@@ -118,6 +120,7 @@ test.describe("states", () => {
             : entry
         ),
         scan_counter: 2,
+        sources,
         type: "inventory",
       },
     ]);
@@ -203,27 +206,14 @@ test.describe("popover", () => {
     cli,
     page,
   }) => {
-    launch(cli, "edited");
-    cli.register(["source", "list"], {
-      events: [
-        {
-          hub: true,
-          id: "2222222222222222",
-          type: "source",
-          url: LONG_REMOTE,
-        },
-      ],
-    });
+    launch(cli, "edited", { hub: { ...hub, url: LONG_REMOTE } });
     await page.goto("/");
     await expect(status(page)).toHaveText("3 to publish");
     // Checked a while ago, so the time takes the most room it can.
     await cli.serveEmit([
       {
         checked_at: new Date(Date.now() - 3_000_000).toISOString(),
-        fetched: true,
-        instance_id: "instance-1",
         ok: true,
-        scope: "hub",
         type: "update_check",
       },
     ]);
@@ -273,18 +263,12 @@ test.describe("popover", () => {
     await cli.serveEmit([
       {
         checked_at: checkedAt,
-        fetched: true,
-        instance_id: "instance-1",
         ok: true,
-        scope: "hub",
         type: "update_check",
       },
       {
         checked_at: new Date().toISOString(),
-        fetched: false,
-        instance_id: "instance-1",
         ok: false,
-        scope: "hub",
         type: "update_check",
       },
     ]);

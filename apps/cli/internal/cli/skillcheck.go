@@ -170,9 +170,9 @@ type checkReport struct {
 	removed   []removedSkill
 	failures  []checkFailure
 	notes     []string // what a candidate the check moved leaves out or calls otherwise
-	// hubFetched is set when the check fetched the hub, and
-	// hubFailed when it set out to and could not reach it.
-	hubFetched, hubFailed bool
+	// hubFailed is set when the check set out to reach the hub and
+	// could not.
+	hubFailed bool
 }
 
 // skillCheckUpdates is agentx skill check-updates: the update check,
@@ -458,7 +458,6 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 			rep.failures = append(rep.failures, cf)
 		}
 	}
-	rep.hubFetched = acc.fetched && added[acc.entry.URL]
 	rep.hubFailed = acc.entry.URL != "" && !acc.fetched && added[acc.entry.URL]
 	if len(rep.refreshed) == 0 && len(rep.failures) == 0 { // every source it set out to check was removed meanwhile
 		rep.idle = true

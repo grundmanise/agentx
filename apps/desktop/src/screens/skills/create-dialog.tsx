@@ -148,7 +148,7 @@ const CreateSkillForm = ({
     afterSettled(() => {
       onClose();
       openSkill(created);
-      const library = useAppStore.getState().machine?.library;
+      const library = useAppStore.getState().inventory?.machine.library;
       if (library !== undefined) {
         void openInEditor(skillFile(library, created));
       }

@@ -437,7 +437,7 @@ const revealMergeFolder = async (checkout: string, name: string) => {
  * folder. agentx home is the machine's, from `machine`; the button waits for it.
  */
 export const ShowMergeFolder = ({ name }: { name: string }) => {
-  const home = useAppStore((s) => s.machine?.home);
+  const home = useAppStore((s) => s.inventory?.machine.home);
   return (
     <Button
       track="skill-banner.show-merge-folder"

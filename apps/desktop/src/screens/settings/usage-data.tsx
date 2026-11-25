@@ -1,6 +1,7 @@
-// Usage data: the Send anonymous usage data switch, bound to the `telemetry` setting (src/store/telemetry.ts).
-// It runs `config set telemetry on|off` and shows the setting as the CLI reports it, off while the
-// setting has no value: pending while the command runs and while the settings are read again.
+// Usage data: the Send anonymous usage data switch, bound to the `telemetry` setting
+// (src/store/telemetry.ts). It runs `config set telemetry on|off` and shows the setting as the
+// inventory carries it, off while the setting has no value: pending while the command runs and
+// until the inventory that follows it arrives.
 import { useId } from "react";
 
 import { Button } from "#/components/ui/button.tsx";
@@ -8,8 +9,7 @@ import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
-import { loadLabel } from "#/store/loaders.ts";
-import { usePending } from "#/store/runner.ts";
+import { useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 import {
   TELEMETRY_LABEL,
@@ -19,9 +19,7 @@ import {
 
 const SendUsageData = ({ checked }: { checked: boolean }) => {
   const id = useId();
-  const running = usePending(TELEMETRY_LABEL);
-  const reading = usePending(loadLabel(["config", "list"]));
-  const pending = running || reading;
+  const pending = useSettling(TELEMETRY_LABEL);
   return (
     <div className="flex items-start justify-between gap-6">
       <span className="flex min-w-0 flex-col gap-1">
@@ -64,7 +62,7 @@ const SendUsageData = ({ checked }: { checked: boolean }) => {
 };
 
 export const UsageDataSection = () => {
-  const settings = useAppStore((s) => s.settings);
+  const settings = useAppStore((s) => s.inventory?.settings);
   return (
     <SettingsSection
       title="Usage data"

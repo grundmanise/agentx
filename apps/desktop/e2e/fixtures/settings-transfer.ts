@@ -1,6 +1,8 @@
 // What the Save snapshot and Apply snapshot sections of Settings are tested against: the sources
 // before and after a snapshot is applied, and the events of `snapshot save`,
 // `snapshot apply --yes` and a `source add` that cannot reach its source.
+import type { Source } from "#/cli/events.gen.ts";
+
 import type { InlineEvent } from "../harness/cli.ts";
 
 export const LIBRARY = "/home/me/.agents/skills";
@@ -13,21 +15,19 @@ export const VENDOR = "https://github.com/vendor/skills";
 export const SNAPSHOT = "/home/me/Downloads/agentx-snapshot.json";
 
 /** This machine's sources before the import: its hub and one shared source, both fetched. */
-export const sourcesBefore: InlineEvent[] = [
+export const sourcesBefore: Source[] = [
   {
     access: "writable",
     hub: true,
     id: "s-hub",
     last_fetched: "2026-11-05T10:00:00Z",
     skills: 3,
-    type: "source",
     url: HUB,
   },
   {
     commit: "a1a1a1a1a1a1",
     id: "s-vendor",
     last_fetched: "2026-11-05T10:00:00Z",
-    type: "source",
     url: VENDOR,
   },
 ];
@@ -36,26 +36,23 @@ export const sourcesBefore: InlineEvent[] = [
  * The sources after the import: the imported settings set another hub and a pinned
  * team source, neither fetched here, and keep the vendor source, which this machine has fetched.
  */
-export const sourcesAfterImport: InlineEvent[] = [
+export const sourcesAfterImport: Source[] = [
   {
     hub: true,
     id: "s-new-hub",
     last_fetched: "2026-11-01T09:00:00Z",
-    type: "source",
     url: NEW_HUB,
   },
   {
     id: "s-team",
     last_fetched: "2026-11-01T09:00:00Z",
     pin: "v2",
-    type: "source",
     url: TEAM,
   },
   {
     commit: "a1a1a1a1a1a1",
     id: "s-vendor",
     last_fetched: "2026-11-05T10:00:00Z",
-    type: "source",
     url: VENDOR,
   },
 ];

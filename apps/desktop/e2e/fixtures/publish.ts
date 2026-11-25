@@ -1,12 +1,13 @@
 // The machine the Publish tests run against: a hub skill edited since it was
 // published, one never published, an edited skill of a source this machine can write to, an
-// edited skill of a read-only source and a skill of a source as it was installed. `source list`
-// answers with the hub and both sources, or, on the second machine, without the
-// hub. Inline events with only the fields the tests check.
+// edited skill of a read-only source and a skill of a source as it was installed. The inventory
+// lists the hub and both sources, or, on the second machine, both sources without the hub.
+// Inline events with only the fields the tests check.
 import type {
   DiffEvent,
   LibraryEntry,
   LibraryPlacement,
+  Source,
 } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
@@ -71,31 +72,31 @@ export const library: LibraryEntry[] = [
   ofSource("review", ACME, "modified"),
 ];
 
-/** The serve child's first inventory on this machine. */
-export const inventory = {
-  configurations,
-  library,
-  scan_counter: 1,
-  type: "inventory",
-} satisfies InlineEvent;
+const hub: Source = { hub: true, id: "2222222222222222", url: HUB };
 
-const hub: InlineEvent = {
-  hub: true,
-  id: "2222222222222222",
-  type: "source",
-  url: HUB,
-};
-
-const shared: InlineEvent[] = [
-  { access: "writable", id: "1111111111111111", type: "source", url: ACME },
-  { access: "read-only", id: "3333333333333333", type: "source", url: ZETA },
+const shared: Source[] = [
+  { access: "writable", id: "1111111111111111", url: ACME },
+  { access: "read-only", id: "3333333333333333", url: ZETA },
 ];
 
-/** What `source list` answers: the hub and two shared sources. */
-export const sources: InlineEvent[] = [hub, ...shared];
+/** The sources the inventory lists: the hub and two shared sources. */
+export const sources: Source[] = [hub, ...shared];
 
-/** What `source list` answers on a machine with no hub set. */
-export const sourcesWithoutHub: InlineEvent[] = shared;
+/** The sources the inventory lists on a machine with no hub set. */
+export const sourcesWithoutHub: Source[] = shared;
+
+/** The serve child's first inventory on this machine, which lists `listed` as its sources. */
+export const inventoryWith = (listed = sources) =>
+  ({
+    configurations,
+    library,
+    scan_counter: 1,
+    sources: listed,
+    type: "inventory",
+  }) satisfies InlineEvent;
+
+/** The serve child's first inventory on this machine. */
+export const inventory = inventoryWith();
 
 const diff = (
   name: string,
@@ -105,7 +106,7 @@ const diff = (
   name,
   patch: `diff --git a/${path} b/${path}\n`,
   path,
-  schema_version: 4,
+  schema_version: 5,
   status,
   type: "diff",
 });

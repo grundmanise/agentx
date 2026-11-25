@@ -9,7 +9,6 @@ import {
   LIBRARY,
   manyAgentsInventory,
   manyConfigurations,
-  sources,
 } from "./fixtures/agents.ts";
 import { adoption } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
@@ -36,7 +35,6 @@ const card = (page: Page, name: string) =>
 const openAgents = async (cli: MockCli, page: Page) => {
   cli.onServeStart({ events: [inventory] });
   cli.register(["skill", "import"], { events: adoption });
-  cli.register(["source", "list"], { events: sources });
   await page.goto("/#/agents");
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
   await expect(card(page, "Claude Code")).toBeVisible();
@@ -103,7 +101,6 @@ test("the Universal card wraps many agents into rows and stacks five logos", asy
     .map((c, i) => ({ ...c, reads_library: i >= 4 }));
   cli.onServeStart({ events: [{ ...manyAgentsInventory(), configurations }] });
   cli.register(["skill", "import"], { events: adoption });
-  cli.register(["source", "list"], { events: sources });
   await page.goto("/#/agents");
   const universal = card(page, "Universal");
   await expect(universal.getByRole("region")).toHaveCount(20);

@@ -13,10 +13,8 @@ import type {
   InstallableSkillEvent,
   InventoryEvent,
   MachineEvent,
-  ReconcileEvent,
-  Settings,
   SkillFileEvent,
-  SourceEvent,
+  Source,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 
@@ -59,20 +57,6 @@ export interface ServeEnd {
   restarting: boolean;
 }
 
-export type Tone = "success" | "attention" | "danger";
-
-/** One line of the activity list: a command's outcome or something serve noticed. */
-export interface ActivityEntry {
-  id: number;
-  /** When it happened, as Date.now(). */
-  at: number;
-  tone: Tone;
-  message: string;
-}
-
-/** How many activity entries the store keeps; older ones drop off. */
-export const ACTIVITY_LIMIT = 200;
-
 export interface AppState {
   /** The last inventory applied, from the active serve child only. */
   inventory: InventoryEvent | undefined;
@@ -87,31 +71,23 @@ export interface AppState {
    * serve holds: serve keeps running and answering, and reports it with an `error` event.
    */
   serveError: ServeError | undefined;
-  /** The reconcile events of the active serve child's start. */
-  reconciles: ReconcileEvent[];
   /**
    * When an update check last ended well (RFC 3339): serve's own, by its `update_check` event, or
    * a `skill check-updates` run, which reached every source or all but some (exit 3). Undefined
    * until one did this session.
    */
   lastChecked: string | undefined;
-  settings: Settings | undefined;
   /**
-   * The anonymous id usage data is sent under, from the `settings` event: there only while the
-   * `telemetry` setting is on.
+   * The store and its size on disk, from `machine`, read when Settings shows Storage: the
+   * inventory leaves them out, since every git write changes the size. Undefined before a read.
    */
-  anonymousId: string | undefined;
+  store: Pick<MachineEvent, "store" | "store_bytes"> | undefined;
   /** Whether the telemetry question was answered this session: it is not asked again. */
   telemetryAnswered: boolean;
-  /** This machine and where agentx keeps its files, from `machine`. */
-  machine: MachineEvent | undefined;
-  sources: SourceEvent[];
   /** What `skill import` would take over, from its preview. */
   adoption: AdoptionEvent[];
   /** The controls whose command runs: label → run id. */
   pending: Record<string, string>;
-  /** Newest first, at most ACTIVITY_LIMIT entries. */
-  activity: ActivityEntry[];
   /** The history of each hub skill read so far, by name. */
   histories: Record<string, HistoryRead>;
   /** The skills of each source listed so far, by source id, from `source skills <id>`. */
@@ -196,9 +172,7 @@ export type UpdateDiffRead =
   | { candidate: string; diffs?: undefined; failed: true; problem: Problem };
 
 export const useAppStore = create<AppState>()(() => ({
-  activity: [],
   adoption: [],
-  anonymousId: undefined,
   applied: undefined,
   conflicts: {},
   files: {},
@@ -209,26 +183,18 @@ export const useAppStore = create<AppState>()(() => ({
   inventory: undefined,
   lastChecked: undefined,
   listings: {},
-  machine: undefined,
   pending: {},
-  reconciles: [],
   refreshes: {},
   serveEnd: undefined,
   serveError: undefined,
-  settings: undefined,
   skillMds: {},
-  sources: [],
+  store: undefined,
   telemetryAnswered: false,
   updateDiffs: {},
 }));
 
-let nextActivity = 1;
+const noSources: Source[] = [];
 
-/** Adds an entry at the top of the activity list. */
-export const addActivity = (tone: Tone, message: string) => {
-  const entry = { at: Date.now(), id: nextActivity, message, tone };
-  nextActivity += 1;
-  useAppStore.setState((s) => ({
-    activity: [entry, ...s.activity].slice(0, ACTIVITY_LIMIT),
-  }));
-};
+/** The sources of the settings, as the inventory lists them; none before the first inventory. */
+export const sourcesOf = (s: AppState): Source[] =>
+  s.inventory?.sources ?? noSources;

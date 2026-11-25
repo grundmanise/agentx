@@ -1467,7 +1467,7 @@ func TestServeChecksInTextMode(t *testing.T) {
 			}
 			if !strings.HasPrefix(line, "inventory ") {
 				got = line
-				equal(t, "the check's line", got, "check all: ok, fetched")
+				equal(t, "the check's line", got, "check: ok")
 			}
 		case <-deadline:
 			t.Fatalf("no line of the check within %s", serveDeadline)

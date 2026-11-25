@@ -53,7 +53,7 @@ const inventory = (counter: number) => ({
   mcp_servers: [],
   plugins: [],
   scan_counter: counter,
-  schema_version: 4,
+  schema_version: 5,
   skills: [],
   type: "inventory",
 });
@@ -111,14 +111,14 @@ test("a run is a run request whose events stream before its result", async ({
     throw new Error("no connection");
   }
   sendEvent(ws, {
-    event: { cli_version: "1.2.0", schema_version: 4, type: "version" },
+    event: { cli_version: "1.2.0", schema_version: 5, type: "version" },
     id: runId,
     stream: "stdout",
   });
   await expect(received(page)).toHaveCount(1);
 
   sendEvent(ws, {
-    event: { level: "info", message: "hi", schema_version: 4, type: "log" },
+    event: { level: "info", message: "hi", schema_version: 5, type: "log" },
     id: runId,
     stream: "stderr",
   });
@@ -129,14 +129,14 @@ test("a run is a run request whose events stream before its result", async ({
   expect(await items(page)).toEqual([
     {
       value: {
-        event: { cli_version: "1.2.0", schema_version: 4, type: "version" },
+        event: { cli_version: "1.2.0", schema_version: 5, type: "version" },
         kind: "event",
       },
       what: "line",
     },
     {
       value: {
-        event: { level: "info", message: "hi", schema_version: 4, type: "log" },
+        event: { level: "info", message: "hi", schema_version: 5, type: "log" },
         kind: "log",
       },
       what: "line",
@@ -148,11 +148,11 @@ test("a run is a run request whose events stream before its result", async ({
     {
       value: {
         cancelled: false,
-        events: [{ cli_version: "1.2.0", schema_version: 4, type: "version" }],
+        events: [{ cli_version: "1.2.0", schema_version: 5, type: "version" }],
         exitCode: 0,
         invalid: [{ line: "not json", stream: "stdout" }],
         logs: [
-          { level: "info", message: "hi", schema_version: 4, type: "log" },
+          { level: "info", message: "hi", schema_version: 5, type: "log" },
         ],
         timedOut: false,
       },
@@ -241,7 +241,7 @@ test("serve's start passes on its inventory, and refresh and search answer as ev
     event: {
       level: "warn",
       message: "careful",
-      schema_version: 4,
+      schema_version: 5,
       type: "log",
     },
     stream: "stderr",
@@ -265,7 +265,7 @@ test("serve's start passes on its inventory, and refresh and search answer as ev
           ok: true,
           request_id: "r1",
           scan_counter: 4,
-          schema_version: 4,
+          schema_version: 5,
           type: "refresh_complete",
         },
         kind: "event",
@@ -280,7 +280,7 @@ test("serve's start passes on its inventory, and refresh and search answer as ev
           query: "pdf",
           request_id: "s1",
           results: [],
-          schema_version: 4,
+          schema_version: 5,
           type: "search",
         },
         kind: "event",
@@ -293,7 +293,7 @@ test("serve's start passes on its inventory, and refresh and search answer as ev
         event: {
           level: "warn",
           message: "careful",
-          schema_version: 4,
+          schema_version: 5,
           type: "log",
         },
         kind: "log",
@@ -333,7 +333,7 @@ test("a refresh whose scan failed is a refresh_complete that is not ok", async (
       instance_id: "i1",
       ok: false,
       request_id: "r1",
-      schema_version: 4,
+      schema_version: 5,
       type: "refresh_complete",
     },
     kind: "event",

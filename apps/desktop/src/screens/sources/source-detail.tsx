@@ -5,7 +5,7 @@
 // The Hub card has no Remove: Settings manages the hub.
 import type { Ref } from "react";
 
-import type { SourceEvent } from "#/cli/events.gen.ts";
+import type { Source } from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SelectableLink } from "#/components/selectable-link.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
@@ -21,7 +21,7 @@ import {
 } from "#/screens/sources/projection.ts";
 
 /** The source as `source add` takes it: its URL, with `#<pin>` when pinned. */
-const fullSource = (source: SourceEvent) =>
+const fullSource = (source: Source) =>
   source.pin === undefined ? source.url : `${source.url}#${source.pin}`;
 
 /** The value of a fact the CLI does not report. */
@@ -54,7 +54,7 @@ const Fact = ({
  * The full URL under the name, a link to its repository when its URL names one. It is
  * selectable: a drag selects its text, and the release that ends the drag opens nothing.
  */
-const SourceUrl = ({ source }: { source: SourceEvent }) => {
+const SourceUrl = ({ source }: { source: Source }) => {
   const text = fullSource(source);
   const page = webUrl(source.url);
   return (
@@ -87,7 +87,7 @@ export const SourceDetail = ({
   onRemove,
   removeRef,
 }: {
-  source: SourceEvent;
+  source: Source;
   /** How many skills it holds, once known. */
   skills: number | undefined;
   /** Date.now(), for the Fetched fact. */

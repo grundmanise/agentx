@@ -153,17 +153,32 @@ func TestTelemetry(t *testing.T) {
 		}
 	}
 
+	// The inventory's settings carry the setting and the anonymous id as
+	// the settings event does.
+	inventorySettings(t, h, map[string]any{"ignore_system_files": true, "telemetry": "on", "anonymous_id": id})
+
 	h.mustRun("machine", "reset-id")
 	machine = h.events(h.run("--json", "machine").stdout)[0]
-	if next := anonymousID(machine["id"].(string)); next == id {
+	next := anonymousID(machine["id"].(string))
+	if next == id {
 		t.Error("the anonymous id did not change with the machine id")
 	}
+	inventorySettings(t, h, map[string]any{"ignore_system_files": true, "telemetry": "on", "anonymous_id": next})
 
 	sent := len(c.entries(t))
 	h.mustRun("config", "set", "telemetry", "off")
 	h.mustRun("config", "list")
+	inventorySettings(t, h, map[string]any{"ignore_system_files": true, "telemetry": "off"})
 	if got := len(c.entries(t)); got != sent {
 		t.Errorf("sent %d events after telemetry off", got-sent)
+	}
+}
+
+// inventorySettings checks the settings of the inventory a scan emits.
+func inventorySettings(t *testing.T, h *harness, want map[string]any) {
+	t.Helper()
+	if got := h.inventory(t)["settings"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("inventory settings = %v, want %v", got, want)
 	}
 }
 
@@ -190,6 +205,11 @@ func TestTelemetryNeverAsked(t *testing.T) {
 			if _, ok := settings["anonymous_id"]; ok && name == "DO_NOT_TRACK" {
 				t.Errorf("the settings event carries an anonymous id under DO_NOT_TRACK: %v", settings)
 			}
+			want := map[string]any{"ignore_system_files": true, "telemetry": "on"}
+			if id, ok := settings["anonymous_id"]; ok {
+				want["anonymous_id"] = id
+			}
+			inventorySettings(t, h, want)
 			h.mustRun("config", "list")
 			if c.raw() != "" {
 				t.Errorf("sent %q", c.raw())

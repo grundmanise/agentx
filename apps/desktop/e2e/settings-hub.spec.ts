@@ -1,17 +1,22 @@
 import type { Page } from "@playwright/test";
 
+import type { Source } from "#/cli/events.gen.ts";
+
 import { HUB, ACME, hub, sharedOnly, sources } from "./fixtures/hub.ts";
 import type { MockCli } from "./harness/cli.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
 
 const launchLines = [
   ["version", "--json"],
   ["doctor", "--json"],
 ];
 
+/** The read of the store and its size, which Settings runs each time it shows. */
+const storeLines = [["machine", "--json"]];
+
 /** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
 const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
+  [...launchLines, ...loadLines, ...storeLines].some(
     (known) => known.join(" ") === line.join(" ")
   );
 
@@ -29,23 +34,23 @@ const urlField = (page: Page) =>
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 
-/** Opens Settings on a machine whose `source list` reports `listed`. */
+/** The first inventory, with `listed` as the sources. */
+const inventoryWith = (listed: Source[], scanCounter = 1) => ({
+  ...firstInventory(),
+  scan_counter: scanCounter,
+  sources: listed,
+});
+
+/** Opens Settings on a machine whose inventory lists `listed`. */
 const openSettings = async (cli: MockCli, page: Page, listed = sources) => {
-  cli.register(["source", "list"], { events: listed });
+  cli.onServeStart({ events: [inventoryWith(listed)] });
   await page.goto("/#/settings");
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })
   ).toBeVisible();
-  // The store's read at launch has been answered.
-  await expect
-    .poll(
-      () =>
-        cli.commands.filter((l) => l[0] === "source" && l[1] === "list").length
-    )
-    .toBe(1);
 };
 
-test("the hub with what the Sources slice reports", async ({ cli, page }) => {
+test("the hub with what the inventory lists", async ({ cli, page }) => {
   await openSettings(cli, page);
   const remote = hubSection(page);
   await expect(remote).toContainText(
@@ -73,7 +78,7 @@ test("a read-only hub has a Read-only tag beside its URL", async ({
   ).toBeVisible();
 });
 
-test("set the hub: Save runs source add --hub, and the row comes from the next source list", async ({
+test("set the hub: Save runs source add --hub, and the row comes from the next inventory", async ({
   cli,
   page,
 }) => {
@@ -85,21 +90,15 @@ test("set the hub: Save runs source add --hub, and the row comes from the next s
   cli.register(["source", "add", "git@github.com:me/hub.git", "--hub"], {
     events: [
       { current: 1, phase: "fetch", subject: HUB, type: "progress" },
-      { ...hub, last_fetched: new Date().toISOString() },
+      { ...hub, last_fetched: new Date().toISOString(), type: "source" },
     ],
-  });
-  // The read after the add waits, so the screen can be seen before it.
-  const relisted = cli.register(["source", "list"], {
-    events: [...sharedOnly, hub],
-    holdAfter: 0,
   });
   await urlField(page).fill("git@github.com:me/hub.git");
   await urlField(page).press("Enter");
   await expect(toasts(page).getByText("Linked hub")).toBeVisible();
-  // The field stays until `source list` reports the hub.
-  await relisted.started;
+  // The field stays until the inventory lists the hub.
   await expect(urlField(page)).toBeVisible();
-  relisted.release();
+  await cli.serveEmit([inventoryWith([...sharedOnly, hub], 2)]);
   await expect(hubSection(page).getByText(HUB, { exact: true })).toBeVisible();
   expect(commandLines(cli)).toEqual([
     "source add git@github.com:me/hub.git --hub",
@@ -194,7 +193,7 @@ test("Change… warns before it replaces the hub", async ({ cli, page }) => {
   await expect(confirm).toHaveCount(0);
 
   cli.register(["source", "add", next, "--hub"], {
-    events: [{ ...hub, url: next }],
+    events: [{ ...hub, type: "source", url: next }],
   });
   await save.click();
   await confirm.getByRole("button", { name: "Change" }).click();
@@ -203,7 +202,7 @@ test("Change… warns before it replaces the hub", async ({ cli, page }) => {
   expect(commandLines(cli)).toEqual([`source add ${next} --hub`]);
 });
 
-test("Unlink warns, runs source remove and shows the field once source list has no hub", async ({
+test("Unlink warns, runs source remove and shows the field once the inventory has no hub", async ({
   cli,
   page,
 }) => {
@@ -218,11 +217,11 @@ test("Unlink warns, runs source remove and shows the field once source list has 
   cli.register(["source", "remove", HUB], {
     events: [{ id: hub.id, type: "source", url: HUB }],
   });
-  cli.register(["source", "list"], { events: sharedOnly });
   await confirm.getByRole("button", { name: "Unlink" }).click();
   await expect(
     toasts(page).getByText("The hub is no longer set")
   ).toBeVisible();
+  await cli.serveEmit([inventoryWith(sharedOnly, 2)]);
   await expect(urlField(page)).toBeVisible();
   await expect(urlField(page)).toHaveValue("");
   expect(commandLines(cli)).toEqual([`source remove ${HUB}`]);

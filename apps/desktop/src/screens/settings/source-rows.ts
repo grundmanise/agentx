@@ -1,8 +1,8 @@
 // What the Hub section of Settings shows, projected from the Sources slice
 // (`source list`). Pure functions, so the section and the tests read the hub the same
 // way.
-import type { SourceEvent } from "#/cli/events.gen.ts";
+import type { Source } from "#/cli/events.gen.ts";
 
 /** The hub: the one entry `source add --hub` wrote, if any. */
-export const hubSource = (sources: SourceEvent[]): SourceEvent | undefined =>
+export const hubSource = (sources: Source[]): Source | undefined =>
   sources.find((s) => s.hub === true);

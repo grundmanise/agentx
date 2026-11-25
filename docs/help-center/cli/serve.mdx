@@ -27,28 +27,16 @@ The desktop app runs serve with [`--json`](/cli/output#json-output) and talks to
 
 Serve watches agentx home (`~/.agentx`), the library and the skills directory of every agent client agentx knows, such as `~/.claude/skills`. It does not watch the clients' MCP configuration files: a change there shows at the next rescan.
 
-Serve sees a skill added, removed or edited, whatever tool made the change. The next inventory shows it. A hub skill shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits for you.
+Serve sees a skill added, removed or edited, whatever tool made the change. The next inventory shows it. The inventory also carries this machine, its settings and its sources, so a change such as `agentx config set` or `agentx source add` in a terminal reaches the desktop app too. A hub skill shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits for you.
 
 ## What serve repairs at start
 
-When serve starts, it checks each skill on disk and repairs what it can. It prints one line for each skill that needs attention. A skill that is fine prints no line:
+When serve starts, before the first inventory, it repairs your hub skills. If a hub skill's [worktree](/cli/fork#where-your-skills-live) or library symlink is missing or broken, for example after you moved `~/.agentx`, serve checks it out again from its branch. Serve prints no line for this. The first inventory shows the repaired skills.
 
-```text
-reconcile beta: modified
-reconcile release-notes: repaired
-inventory 1: 3 configurations, 6 skills
-```
+Serve does not repair a hub skill in these cases. [`agentx skill list`](/cli/skill#list-your-skills) shows a warning for each one that says what to do:
 
-| Outcome | What it means | What to do |
-|---|---|---|
-| `repaired` | A hub skill had a missing or broken [worktree](/cli/fork#where-your-skills-live) or library symlink, for example after you moved `~/.agentx`. Serve checked it out again from its branch. | Nothing. |
-| `worktree missing` | Serve could not repair a hub skill. A Git command you ran in its worktree, such as a merge, is unfinished, or the worktree is on another branch. | Finish or abort the Git command, or switch the worktree back to the skill's branch. Then run [`agentx skill place <name>`](/cli/fork#recover-a-hub-skill). |
-| `adopt candidate` | A folder of yours is where a hub skill belongs. Serve leaves it as it is. | Adopt it with [`agentx skill place <name> --force`](/cli/fork#something-in-the-way). |
-| `modified` | You edited a skill you installed from a source. | Nothing. |
-| `installable` | A skill you installed whose folder is gone, or a hub skill that is not placed on this machine. | Install a skill of a source again with `agentx skill add <source> --name <name>`, or stop managing it with `agentx skill remove <name>`. Place a hub skill with `agentx skill place <name>`, or install it from your hub with `agentx skill add --name <name>`. |
-| `unmanaged` | A folder in your library that no source manages. | Nothing. |
-
-An edited hub skill prints no line here. [`agentx skill list`](/cli/skill#list-your-skills) shows it as `modified` until you publish your edits.
+- A Git command you ran in its worktree, such as a merge, is unfinished, or the worktree is on another branch. Finish or abort the Git command, or switch the worktree back to the skill's branch. Then run [`agentx skill place <name>`](/cli/fork#recover-a-hub-skill).
+- A folder of yours is where the hub skill belongs. Serve leaves it as it is. Adopt it with [`agentx skill place <name> --force`](/cli/fork#something-in-the-way).
 
 Serve repairs only what is missing or broken. It does not delete or overwrite your files.
 

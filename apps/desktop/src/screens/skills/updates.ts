@@ -17,14 +17,13 @@ import type {
 } from "#/cli/events.gen.ts";
 import { dismissToast, notify } from "#/components/toast.tsx";
 import type { ToastAction } from "#/components/toast.tsx";
-import { andList } from "#/lib/plural.ts";
 import { checkingText } from "#/screens/skills/checking-text.tsx";
 import { offerOf, shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow, UpdateOffer } from "#/screens/skills/projection.ts";
 import { cancelCommand, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { afterSettled, runUntilSettled } from "#/store/settle.ts";
-import { addActivity, useAppStore } from "#/store/store.ts";
+import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** The label of Check updates, which the runner shows as pending while the check runs. */
@@ -456,12 +455,6 @@ const rowChange = (
   ...(warnings.length > 0 ? { warnings } : {}),
 });
 
-/** The activity entry of merges that wait for the user: "review skill has conflicts. …". */
-const conflictsText = (names: string[]) =>
-  names.length === 1
-    ? `${names[0]} skill has conflicts. Resolve them to finish the update`
-    : `${andList(names)} skills have conflicts. Resolve them to finish the updates`;
-
 /** Whether a command ended in a way the runner answers itself: the lock, the store, a cancel. */
 const answeredByRunner = (outcome: Outcome) =>
   outcome.exitCode === EXIT_CODES.locked ||
@@ -475,15 +468,6 @@ const stoppedProblem = (outcome: Outcome): Problem => ({
       ? "agentx skill update did not finish"
       : `agentx could not start: ${outcome.startError}`,
 });
-
-/** The activity entry the run adds once it ended: what it did, in the words of its summary. */
-const logRun = (run: UpdateRun) => {
-  const rows = selectedRows(run);
-  const clean = rows.every(
-    (r) => UPDATED.has(r.status) && (r.warnings ?? []).length === 0
-  );
-  addActivity(clean ? "success" : "attention", runSummaryText(run));
-};
 
 /**
  * Updates the skills of `rows` that are selected in one `skill update <name>...`, the names in the
@@ -535,14 +519,6 @@ export const updateSkills = async (rows: UpdateRunRow[]) => {
         }
       }
     },
-    ownActivity: (ended) => {
-      const conflicts = names.filter((name) =>
-        ended.events.some((e) => e.type === "conflict" && e.name === name)
-      );
-      return ended.exitCode === EXIT_CODES.pending_merge && conflicts.length > 0
-        ? { message: conflictsText(conflicts), tone: "attention" }
-        : undefined;
-    },
     ownFailure: true,
     retry: () => {
       openUpdateDialog();
@@ -573,7 +549,5 @@ export const updateSkills = async (rows: UpdateRunRow[]) => {
     });
     return;
   }
-  const ended: UpdateRun = { ...run, phase: "ended" };
-  useUpdateRun.setState({ run: ended });
-  logRun(ended);
+  useUpdateRun.setState({ run: { ...run, phase: "ended" } });
 };

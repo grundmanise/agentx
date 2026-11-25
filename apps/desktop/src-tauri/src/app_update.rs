@@ -3,7 +3,8 @@
 // `tauri.conf.json` and replaces the app, the CLI inside it included. The new version runs after
 // a restart, which the user starts. A nightly follows the nightlies and a release the stable
 // releases, from the app's own version; a build that is no release, version 0.0.0, has no
-// channel and finds nothing. This is the one place the Rust side reaches the network.
+// channel and finds nothing. Beside panic_reports.rs, this is the one place the Rust side reaches
+// the network.
 
 use std::sync::Mutex;
 use std::time::Duration;

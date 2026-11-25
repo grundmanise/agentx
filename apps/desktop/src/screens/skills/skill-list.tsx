@@ -69,7 +69,7 @@ import {
 } from "#/screens/skills/section-rails.ts";
 import { SkillRowItem } from "#/screens/skills/skill-row.tsx";
 import { checkUpdates, useCheckingUpdates } from "#/screens/skills/updates.ts";
-import { useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** What the agent chip says: the one agent chosen, or how many. */
 const agentChipLabel = (agents: string[], chosen: Configuration[]): string => {
@@ -543,7 +543,7 @@ const SkillGroups = ({
   onToggle: (key: string) => void;
 }) => {
   // What the rows' banners read besides the row, for their alert triangles.
-  const sources = useAppStore((s) => s.sources);
+  const sources = useAppStore(sourcesOf);
   const conflicts = useAppStore((s) => s.conflicts);
   const facts = useMemo(() => ({ conflicts, sources }), [conflicts, sources]);
   const forks = useMemo(() => forksByOriginal(rows), [rows]);
