@@ -65,11 +65,11 @@ The first scan in a terminal then asks once whether to send anonymous usage data
 
 ## See who reads what
 
-A client can read other clients' directories. Cursor reads `~/.claude/skills` and `~/.codex/skills` next to its own `~/.cursor/skills`, and OpenCode reads `~/.claude/skills`, so a skill you put in the Claude Code directory appears under them too. Some clients, such as Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode and Cline, read the library at `~/.agents/skills` directly, so every library skill appears under them without any link in their own directories. GitHub Copilot stops reading the library when `COPILOT_HOME` is set, and then keeps its skills in `$COPILOT_HOME/skills`. Cline also reads its own `~/.cline/skills`. See [Where skills live](/cli/skill#where-skills-live).
+Each client is listed with the skills in its own directory. Some clients, such as Codex, Cursor, Devin, Gemini CLI, GitHub Copilot, OpenCode and Cline, read the library at `~/.agents/skills` directly, so every library skill appears under them without any link in their own directories. GitHub Copilot stops reading the library when `COPILOT_HOME` is set, and then keeps its skills in `$COPILOT_HOME/skills`. Cline also reads its own `~/.cline/skills`. When a client reaches one skill folder through both its own directory and the library, such as a link in `~/.cursor/skills` to a library skill, agentx lists the skill once under that client. See [Where skills live](/cli/skill#where-skills-live).
 
 ## Read the servers
 
-agentx reads the user-scope MCP configuration of Claude Code (`~/.claude.json`), Codex (`~/.codex/config.toml`), Cursor (`~/.cursor/mcp.json`), Gemini CLI (`~/.gemini/settings.json`), Windsurf (`~/.codeium/windsurf/mcp_config.json`) and GitHub Copilot (`~/.copilot/mcp-config.json`). Other clients contribute skills only.
+agentx reads the user-scope MCP configuration of Claude Code (`~/.claude.json`), Codex (`~/.codex/config.toml`), Cursor (`~/.cursor/mcp.json`), Gemini CLI (`~/.gemini/settings.json`), Devin (`~/.config/devin/mcp_config.json` and `~/.codeium/windsurf/mcp_config.json`) and GitHub Copilot (`~/.copilot/mcp-config.json`). Other clients contribute skills only.
 
 The inventory shows the command and arguments of a local server and the URL of a remote one. It hides the values of environment variables and headers. A secret written directly into a command argument or a URL still appears.
 
@@ -92,7 +92,7 @@ A handshake starts or connects to every MCP server and records the tools, prompt
 - agentx fills in placeholders such as `${API_KEY}` from your environment, the way the declaring client does. The inventory shows the declaration as written.
 - For a remote server that Claude Code declares, agentx leaves Claude Code's credential variables empty in the URL and headers, as Claude Code does. These include `AWS_SECRET_ACCESS_KEY` and every `ANTHROPIC_*` and `CLAUDE_*` variable. Run with `--verbose` to see which ones agentx left empty.
 - A remote server receives its declared headers at its declared URL. For Codex, agentx reads the values of `env_http_headers` and `bearer_token_env_var` from your environment.
-- agentx skips a server you turned off in its client, and its row shows `(disabled)`. agentx reads this setting from Codex (`enabled = false`), Gemini CLI (`mcp.excluded`, `mcp.allowed` and `gemini mcp disable`) and GitHub Copilot (`/mcp disable`). Claude Code, Cursor and Windsurf store it where agentx cannot read it, so agentx handshakes those servers. agentx also skips every server of a plugin you turned off in Claude Code or Codex.
+- agentx skips a server you turned off in its client, and its row shows `(disabled)`. agentx reads this setting from Codex (`enabled = false`), Gemini CLI (`mcp.excluded`, `mcp.allowed` and `gemini mcp disable`), GitHub Copilot (`/mcp disable`) and Devin (`disabled: true`). Claude Code and Cursor store it where agentx cannot read it, so agentx handshakes those servers. agentx also skips every server of a plugin you turned off in Claude Code or Codex.
 
 agentx compares what each server offers. The same server declared in two clients stays one server. When the two declarations offer different tools, the server has two versions, and each declaration shows the one it answered with.
 

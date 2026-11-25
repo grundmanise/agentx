@@ -1,18 +1,18 @@
-The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to windsurf` turns a symlink into a copy. To convert every placement already in the client as well, add `--convert`:
+The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to kiro-cli` turns a symlink into a copy. To convert every placement already in the client as well, add `--convert`:
 
 ```sh
-agentx config placement windsurf copy --convert
+agentx config placement kiro-cli copy --convert
 ```
 
 ```text
-✓ windsurf now places copies, 2 skills converted
-  alpha  copy  /home/me/.codeium/windsurf/skills/alpha
-  beta   copy  /home/me/.codeium/windsurf/skills/beta
+✓ kiro-cli now places copies, 2 skills converted
+  alpha  copy  /home/me/.kiro/skills/alpha
+  beta   copy  /home/me/.kiro/skills/beta
 ```
 
 To copies, every symlink to the library becomes a copy. To symlinks, every copy agentx placed becomes a symlink to the library. `--convert` places no skill that is not in the client already, and leaves your own directories and links as they are.
 
-A copy you edited in place is different from the library, so `--convert` keeps it as a copy, warns, and counts it as skipped. To discard your edits and get a symlink, run `agentx skill remove <name> --from windsurf`, then `agentx skill place <name> --to windsurf`.
+A copy you edited in place is different from the library, so `--convert` keeps it as a copy, warns, and counts it as skipped. To discard your edits and get a symlink, run `agentx skill remove <name> --from kiro-cli`, then `agentx skill place <name> --to kiro-cli`.
 
 ---
 title: "agentx config"
@@ -87,16 +87,16 @@ If another agentx command is running, the command stops with exit code 7. Run it
 ## Enable or disable a configuration
 
 ```sh
-agentx config disable windsurf
-agentx config enable windsurf
+agentx config disable kiro-cli
+agentx config enable kiro-cli
 ```
 
 ```text
-✓ windsurf is now disabled
-✓ windsurf is now enabled
+✓ kiro-cli is now disabled
+✓ kiro-cli is now enabled
 ```
 
-Name several ids to change them all at once, such as `agentx config disable windsurf cursor`.
+Name several ids to change them all at once, such as `agentx config disable kiro-cli cursor`.
 
 Every configuration `agentx scan` detects starts enabled. When you install or place a skill without `--to`, agentx places it only in enabled configurations. Disable a configuration to skip it. Enable it to include it again.
 
@@ -109,17 +109,17 @@ A client that reads the library directly, such as Codex, still sees every skill 
 Enabling a client changes only where later installs go. To also place every skill in your library in that client, add `--place-all` and name one client:
 
 ```sh
-agentx config enable windsurf --place-all
+agentx config enable kiro-cli --place-all
 ```
 
 ```text
-✓ windsurf is now enabled
-✓ placed 2 skills in windsurf
-  pdf   symlink  /home/me/.codeium/windsurf/skills/pdf -> /home/me/.agents/skills/pdf
-  xlsx  symlink  /home/me/.codeium/windsurf/skills/xlsx -> /home/me/.agents/skills/xlsx
+✓ kiro-cli is now enabled
+✓ placed 2 skills in kiro-cli
+  pdf   symlink  /home/me/.kiro/skills/pdf -> /home/me/.agents/skills/pdf
+  xlsx  symlink  /home/me/.kiro/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
-The output has one row for each skill, with its path in Windsurf's skills directory.
+The output has one row for each skill, with its path in Kiro CLI's skills directory.
 
 agentx places each skill as a symlink. If agentx already keeps a copy of a skill for this client, it places a copy. See [Copy instead of link](/cli/skill#copy-instead-of-link).
 
@@ -141,22 +141,22 @@ To place one skill at a time, use [`agentx skill place`](/cli/skill#place-a-skil
 agentx skips a placement when something of yours is already at the path, or when it cannot write to the client's skills directory. It prints a warning for each skipped path, places the other skills, and exits with code 0. The client is then enabled with only some of your skills:
 
 ```text
-warning: /home/me/.codeium/windsurf/skills/pdf is not this skill and was left as it is; no placement was made for windsurf
-✓ windsurf is now enabled
-✓ placed 1 skill in windsurf, 1 placement skipped
-  xlsx  symlink  /home/me/.codeium/windsurf/skills/xlsx -> /home/me/.agents/skills/xlsx
+warning: /home/me/.kiro/skills/pdf is not this skill and was left as it is; no placement was made for kiro-cli
+✓ kiro-cli is now enabled
+✓ placed 1 skill in kiro-cli, 1 placement skipped
+  xlsx  symlink  /home/me/.kiro/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
-Windsurf does not see pdf, so pdf has no row.
+Kiro CLI does not see pdf, so pdf has no row.
 
 agentx also skips a copy it keeps for the client when the copy differs from the library, for example because you edited it. The copy stays as it is. The warning names the commands that replace it:
 
 ```text
-warning: windsurf's copy of pdf is different from the library, so it was left unchanged (/home/me/.codeium/windsurf/skills/pdf)
-  to replace it with the library version: agentx skill remove pdf --from windsurf && agentx skill place pdf --to windsurf --copy
-✓ windsurf is now enabled
-✓ placed 1 skill in windsurf, 1 placement skipped
-  xlsx  symlink  /home/me/.codeium/windsurf/skills/xlsx -> /home/me/.agents/skills/xlsx
+warning: kiro-cli's copy of pdf is different from the library, so it was left unchanged (/home/me/.kiro/skills/pdf)
+  to replace it with the library version: agentx skill remove pdf --from kiro-cli && agentx skill place pdf --to kiro-cli --copy
+✓ kiro-cli is now enabled
+✓ placed 1 skill in kiro-cli, 1 placement skipped
+  xlsx  symlink  /home/me/.kiro/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
 See [A copy that differs from the library](/cli/skill#a-copy-that-differs-from-the-library).
@@ -166,18 +166,18 @@ See [A copy that differs from the library](/cli/skill#a-copy-that-differs-from-t
 agentx places a skill in a client as a symlink to the library by default. For a client that does not follow symlinks, choose a copy:
 
 ```sh
-agentx config placement windsurf copy
-agentx config placement windsurf symlink
+agentx config placement kiro-cli copy
+agentx config placement kiro-cli symlink
 ```
 
 ```text
-✓ windsurf now places copies
-✓ windsurf now places symlinks
+✓ kiro-cli now places copies
+✓ kiro-cli now places symlinks
 ```
 
 The choice applies to every later placement in that client: `agentx skill add`, `agentx skill place`, `agentx skill new`, `agentx skill fork` and `agentx config enable --place-all`. `--copy` still places a copy in every client it covers.
 
-The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to windsurf` turns a symlink into a copy. To turn every symlink in the client into a copy at once, run `agentx config enable windsurf --place-all`. To turn a copy back into a symlink, run `agentx skill remove <name> --from windsurf`, then `agentx skill place <name> --to windsurf`.
+The command changes nothing on disk. A skill already in the client keeps its placement until you place it again: `agentx skill place <name> --to kiro-cli` turns a symlink into a copy. To turn every symlink in the client into a copy at once, run `agentx config enable kiro-cli --place-all`. To turn a copy back into a symlink, run `agentx skill remove <name> --from kiro-cli`, then `agentx skill place <name> --to kiro-cli`.
 
 A client that reads the library directly, such as Codex, has no choice to make: the command exits with code 1. In the desktop app, choose on the agent's card under **Agents**. See [Choose symlink or copy for an agent](/agent-placement).
 

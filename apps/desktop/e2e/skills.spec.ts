@@ -287,6 +287,38 @@ test.describe("the list", () => {
     ]);
   });
 
+  test("an agent whose skills folder links to the library: the row and the chip show it with the universal agents", async ({
+    cli,
+    page,
+  }) => {
+    await openSkills(cli, page, "/#/skills/pdf", {
+      ...inventory,
+      configurations: inventory.configurations.map((c) =>
+        c.id === "claude-code" ? { ...c, placement: "library" as const } : c
+      ),
+      library: inventory.library.map((e) => ({
+        ...e,
+        placements: e.placements.map((p) =>
+          p.configuration === "claude-code"
+            ? { ...p, kind: "library" as const, mode: "library" as const }
+            : p
+        ),
+      })),
+    });
+    expect(await names(row(page, "pdf").getByRole("img"))).toEqual([
+      "Claude Code",
+      "Codex",
+      "Gemini CLI",
+    ]);
+    const agents = page.getByRole("region", { name: "Skill details" });
+    await expect(
+      agents.getByRole("switch", { exact: true, name: "Claude Code" })
+    ).toBeChecked();
+    await expect(
+      agents.getByRole("switch", { exact: true, name: "Universal" })
+    ).toBeChecked();
+  });
+
   test("shows a monogram for an agent client with no bundled logo", async ({
     cli,
     page,
@@ -536,7 +568,7 @@ test.describe("filters", () => {
         - checkbox "Cursor"
         - checkbox /^Universal Cline, Codex/
         - checkbox "GitHub Copilot"
-        - checkbox "Windsurf"
+        - checkbox "Devin"
         - checkbox "OpenCode"
         - button "Show 20 more"
     `);

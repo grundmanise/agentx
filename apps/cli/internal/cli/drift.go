@@ -272,7 +272,7 @@ func ownPlaces(targets []placeTarget, library, name string, disabled, copies []s
 	var places []placeSite
 	var keys []placeKey // the key of each of places, in the same order
 	for _, t := range targets {
-		if t.readsLibrary {
+		if t.atLibrary {
 			continue
 		}
 		path := t.ownPlace(library, name)

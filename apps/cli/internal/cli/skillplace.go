@@ -70,11 +70,12 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 
 // placeTarget is one configuration a placement is made in.
 type placeTarget struct {
-	id           string
-	name         string // the configuration's name, such as Claude Code
-	dir          string // the client's own skills directory
-	readsLibrary bool   // the library entry is the placement; a symlink would list the skill twice
-	copies       bool   // copy_configurations lists it, so a placement made there is a copy, see withCopies
+	id        string
+	name      string // the configuration's name, such as Claude Code
+	dir       string // the client's own skills directory
+	atLibrary bool   // the library entry is the placement: the client reads the library, or its skills directory links to it
+	linked    bool   // the placement is the library entry only because the client's skills directory links to the library
+	copies    bool   // copy_configurations lists it, so a placement made there is a copy, see withCopies
 }
 
 // ownPlace is where this configuration's placement of the skill called name
@@ -83,7 +84,7 @@ type placeTarget struct {
 // for any other. A path the client sees the skill through in another
 // client's skills directory is that other client's placement, not this one.
 func (t placeTarget) ownPlace(library, name string) string {
-	if t.readsLibrary {
+	if t.atLibrary {
 		return filepath.Join(library, name)
 	}
 	return filepath.Join(t.dir, name)
@@ -120,8 +121,10 @@ type placeable struct {
 func (inv *invocation) detectedTargets() []placeTarget {
 	var targets []placeTarget
 	for _, c := range scan.Detect(inv.dirs) {
-		t := placeTarget{id: c.Slug(), name: c.Name(), dir: scan.PlacementDir(c, inv.dirs), readsLibrary: scan.ReadsLibrary(c, inv.dirs)}
-		if t.dir == "" && !t.readsLibrary {
+		reads := scan.ReadsLibrary(c, inv.dirs)
+		linked := !reads && scan.LinksToLibrary(c, inv.dirs)
+		t := placeTarget{id: c.Slug(), name: c.Name(), dir: scan.PlacementDir(c, inv.dirs), atLibrary: reads || linked, linked: linked}
+		if t.dir == "" && !t.atLibrary {
 			continue // a client the registry gives no skills directory has nowhere to place into
 		}
 		targets = append(targets, t)
@@ -303,7 +306,7 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 		// staged, since a sweep of a directory two configurations share would
 		// take a sibling this plan staged a moment earlier.
 		for _, t := range detected {
-			if !t.readsLibrary && containsString(asked, t.id) {
+			if !t.atLibrary && containsString(asked, t.id) {
 				sweepStaged(t.dir)
 			}
 		}
@@ -377,7 +380,7 @@ func (inv *invocation) noLibrarySkill(name string) error {
 // the library, the branch and every other placement undone, and a run that
 // aborted here would leave a journal no later command could finish.
 func (inv *invocation) stagePlacement(m *home.Mutation, p placeable, t placeTarget, libPath string, asCopy bool, recordedCopies []string, done *placements) {
-	if t.readsLibrary {
+	if t.atLibrary {
 		done.placed = append(done.placed, t)
 		return
 	}
@@ -881,10 +884,10 @@ func (inv *invocation) printAdoptions(adoptions []string) {
 
 // ownPlacements are the placements the text of a command that placed a
 // skill shows: one per configuration it covered, the one at that
-// configuration's own place. The rescan finds more than that. A client that
-// reads another client's skills directory sees the skill through that
-// client's placement as well as its own, and printing both under it would
-// give one client two rows for one placement.
+// configuration's own place. The rescan finds more than that. A client whose
+// skills directory is a symlink to another client's sees the skill through
+// that client's placement as well as its own, and printing both under it
+// would give one client two rows for one placement.
 // That path is the other client's placement and is shown as that client's
 // row. The library_skill event is left as the rescan found it, every path
 // included, for whoever wants each way a client sees the skill.

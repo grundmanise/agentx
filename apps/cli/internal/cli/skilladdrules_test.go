@@ -172,8 +172,8 @@ func TestThePlaceHintRunsAsItIsPrinted(t *testing.T) {
 	}{
 		{"alpha", []string{"cursor"}, false, "agentx skill place alpha --to cursor",
 			[]string{"alpha", "--to", "cursor"}},
-		{"alpha", []string{"cursor", "windsurf"}, true, "agentx skill place alpha --to cursor --to windsurf --copy",
-			[]string{"alpha", "--to", "cursor", "--to", "windsurf", "--copy"}},
+		{"alpha", []string{"cursor", "devin"}, true, "agentx skill place alpha --to cursor --to devin --copy",
+			[]string{"alpha", "--to", "cursor", "--to", "devin", "--copy"}},
 		{"alpha", nil, false, "agentx skill place alpha", []string{"alpha"}},
 		{"mine", nil, true, "agentx skill place mine --copy", []string{"mine", "--copy"}},
 		{"-mine", []string{"cursor"}, false, "agentx skill place --to cursor -- -mine",

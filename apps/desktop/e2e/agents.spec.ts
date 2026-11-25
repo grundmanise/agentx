@@ -64,8 +64,8 @@ test("lists the Universal card first, then the direct agents, with their counts"
   await expect(card(page, "GitHub Copilot")).toContainText(
     "0 skills · 0 servers · 0 plugins"
   );
-  await expect(card(page, "Windsurf").getByRole("switch")).not.toBeChecked();
-  await expect(card(page, "Windsurf").getByRole("switch")).toHaveAttribute(
+  await expect(card(page, "Devin").getByRole("switch")).not.toBeChecked();
+  await expect(card(page, "Devin").getByRole("switch")).toHaveAttribute(
     "title",
     "Disabled · skipped by default"
   );
@@ -120,10 +120,10 @@ test("turning an agent on runs config enable, and Place all places the library t
   page,
 }) => {
   await openAgents(cli, page);
-  const toggle = card(page, "Windsurf").getByRole("switch", {
+  const toggle = card(page, "Devin").getByRole("switch", {
     name: "Enabled",
   });
-  const enable = cli.register(["config", "enable", "windsurf"], {
+  const enable = cli.register(["config", "enable", "devin"], {
     events: [{ type: "settings" }],
     holdAfter: 0,
   });
@@ -135,14 +135,14 @@ test("turning an agent on runs config enable, and Place all places the library t
   // The switch shows the inventory's state until the next inventory arrives.
   await expect(toggle).not.toBeChecked();
   enable.release();
-  await expect(toasts(page).getByText("Windsurf enabled")).toBeVisible();
+  await expect(toasts(page).getByText("Devin enabled")).toBeVisible();
   await expect.poll(() => cli.serveRequests.length).toBe(1);
   await expect(toggle).toHaveAttribute("aria-busy", "true");
   await cli.serveEmit([
     {
       ...inventory,
       configurations: inventory.configurations.map((c) =>
-        c.id === "windsurf" ? { ...c, enabled: true } : c
+        c.id === "devin" ? { ...c, enabled: true } : c
       ),
       scan_counter: 2,
     },
@@ -156,16 +156,15 @@ test("turning an agent on runs config enable, and Place all places the library t
   await expect(toggle).toBeChecked();
   await expect(toggle).not.toHaveAttribute("aria-busy");
 
-  // Seven library skills, none placed in Windsurf.
+  // Seven library skills, none placed in Devin.
   const warning =
-    "windsurf: /home/me/.windsurf/skills/scratch is not a placement agentx made and was left as it is";
-  cli.register(["config", "enable", "windsurf", "--place-all"], {
+    "devin: /home/me/.config/devin/skills/scratch is not a placement agentx made and was left as it is";
+  cli.register(["config", "enable", "devin", "--place-all"], {
     events: [
       { type: "settings" },
       {
         ok: true,
-        summary:
-          "windsurf is now enabled, 6 skills placed, 1 placement skipped",
+        summary: "devin is now enabled, 6 skills placed, 1 placement skipped",
         type: "result",
       },
     ],
@@ -174,12 +173,12 @@ test("turning an agent on runs config enable, and Place all places the library t
   await toasts(page).getByRole("button", { name: "Place all 7" }).click();
   const toast = toasts(page)
     .getByRole("listitem")
-    .filter({ hasText: "Placed 6 skills in Windsurf, 1 skipped" });
+    .filter({ hasText: "Placed 6 skills in Devin, 1 skipped" });
   await expect(toast).toBeVisible();
   await expect(toast).toContainText(warning);
   expect(later(cli)).toEqual([
-    ["config", "enable", "windsurf", "--json"],
-    ["config", "enable", "windsurf", "--place-all", "--json"],
+    ["config", "enable", "devin", "--json"],
+    ["config", "enable", "devin", "--place-all", "--json"],
   ]);
 });
 
@@ -372,8 +371,8 @@ test("Remove on a column of the Universal card removes that agent", async ({
 
 test("Cancel in the Remove dialog runs nothing", async ({ cli, page }) => {
   await openAgents(cli, page);
-  await selectRemove(page, card(page, "Windsurf"), "Windsurf");
-  const dialog = page.getByRole("alertdialog", { name: "Remove Windsurf?" });
+  await selectRemove(page, card(page, "Devin"), "Devin");
+  const dialog = page.getByRole("alertdialog", { name: "Remove Devin?" });
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
   expect(later(cli)).toEqual([]);
@@ -419,24 +418,24 @@ test("a click on cards selects them, and the bar enables, disables or removes th
   const bar = page.getByRole("toolbar", { name: "Selected agents" });
   const universal = card(page, "Universal");
 
-  await select(card(page, "Windsurf"));
+  await select(card(page, "Devin"));
   await select(card(page, "Cursor"));
   await expect(
     card(page, "Cursor").getByRole("button", { name: "Select Cursor" })
   ).toHaveAttribute("aria-pressed", "true");
   await expect(bar).toContainText("2 selected");
-  cli.register(["config", "enable", "windsurf"], {
+  cli.register(["config", "enable", "devin"], {
     events: [{ type: "settings" }],
   });
   await bar.getByRole("button", { name: "Enable" }).click();
-  await expect(toasts(page).getByText("Windsurf enabled")).toBeVisible();
+  await expect(toasts(page).getByText("Devin enabled")).toBeVisible();
   await expect(bar).toBeHidden();
   await expect.poll(() => cli.serveRequests.length).toBe(1);
   await cli.serveEmit(
     answered(
       cli,
       inventory.configurations.map((c) =>
-        c.id === "windsurf" ? { ...c, enabled: true } : c
+        c.id === "devin" ? { ...c, enabled: true } : c
       )
     )
   );
@@ -482,8 +481,33 @@ test("a click on cards selects them, and the bar enables, disables or removes th
     toasts(page).getByText("Removed Codex and GitHub Copilot")
   ).toBeVisible();
   expect(later(cli)).toEqual([
-    ["config", "enable", "windsurf", "--json"],
+    ["config", "enable", "devin", "--json"],
     ["config", "disable", "cursor", "--json"],
     ["config", "remove", "codex", "github-copilot", "--yes", "--json"],
   ]);
+});
+
+test("an agent whose skills folder links to the library: a direct agent whose placement is fixed", async ({
+  cli,
+  page,
+}) => {
+  cli.onServeStart({
+    events: [
+      {
+        ...inventory,
+        configurations: inventory.configurations.map((c) =>
+          c.id === "claude-code" ? { ...c, placement: "library" as const } : c
+        ),
+      },
+    ],
+  });
+  cli.register(["skill", "import"], { events: adoption });
+  await page.goto("/#/agents");
+  const claude = page
+    .getByRole("region", { name: "Direct agents" })
+    .getByRole("article", { exact: true, name: "Claude Code" });
+  await expect(claude).toBeVisible();
+  const control = claude.getByRole("radiogroup", { name: "Placement" });
+  await expect(control.getByRole("radio", { name: "Symlink" })).toBeChecked();
+  await expect(control.getByRole("radio", { name: "Copy" })).toBeDisabled();
 });

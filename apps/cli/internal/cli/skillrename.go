@@ -115,7 +115,7 @@ func (inv *invocation) keepCopies(fk *forking) error {
 	}
 	var targets []placeTarget
 	for _, t := range inv.detectedTargets() {
-		if !planned[t.id] && !t.readsLibrary && slices.Contains(modes[fk.src.name], t.id) {
+		if !planned[t.id] && !t.atLibrary && slices.Contains(modes[fk.src.name], t.id) {
 			_, err := os.Lstat(t.ownPlace(inv.dirs.Library, fk.src.name))
 			planned[t.id] = err == nil
 		}

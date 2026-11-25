@@ -5,7 +5,6 @@ import type { Locator, Page } from "@playwright/test";
 
 import {
   inventory,
-  LIBRARY,
   manyAgentsInventory,
   manyConfigurations,
 } from "./fixtures/agents.ts";
@@ -121,7 +120,9 @@ test.describe("chips", () => {
     // The chip shows what the inventory says, not what the command will do.
     await expect(cursor).not.toBeChecked();
     place.release();
-    await expect(toasts(page).getByText("Added pdf to Cursor")).toBeVisible();
+    await expect(
+      toasts(page).getByText("Added pdf skill to Cursor")
+    ).toBeVisible();
     await expect.poll(() => cli.serveRequests.length).toBe(1);
     // The command ended; the inventory that follows has not come: still pending.
     await expect(cursor).toHaveAttribute("aria-busy", "true");
@@ -134,7 +135,7 @@ test.describe("chips", () => {
     cli.register(["skill", "remove", "pdf", "--from", "cursor"]);
     await toasts(page).getByRole("button", { name: "Undo" }).click();
     await expect(
-      toasts(page).getByText("Removed pdf from Cursor")
+      toasts(page).getByText("Removed pdf skill from Cursor")
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "place", "pdf", "--to", "cursor", "--json"],
@@ -156,11 +157,11 @@ test.describe("chips", () => {
 
     await claude.click();
     await expect(
-      toasts(page).getByText("Removed pdf from Claude Code")
+      toasts(page).getByText("Removed pdf skill from Claude Code")
     ).toBeVisible();
     await toasts(page).getByRole("button", { name: "Undo" }).click();
     await expect(
-      toasts(page).getByText("Added pdf to Claude Code")
+      toasts(page).getByText("Added pdf skill to Claude Code")
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
@@ -208,8 +209,8 @@ test.describe("chips", () => {
   }) => {
     await openSkill(cli, page, "pdf");
     const warning =
-      "/home/me/.windsurf/skills/pdf is not this skill and was left as it is; no placement was made for windsurf";
-    cli.register(["skill", "place", "pdf", "--to", "windsurf"], {
+      "/home/me/.config/devin/skills/pdf is not this skill and was left as it is; no placement was made for devin";
+    cli.register(["skill", "place", "pdf", "--to", "devin"], {
       events: [
         {
           ok: true,
@@ -220,17 +221,17 @@ test.describe("chips", () => {
       logs: [{ level: "warn", message: warning }],
     });
 
-    await chip(pane(page, "pdf"), "Windsurf").click();
+    await chip(pane(page, "pdf"), "Devin").click();
     const toast = toasts(page)
       .getByRole("listitem")
-      .filter({ hasText: "pdf skill wasn't added to Windsurf" });
+      .filter({ hasText: "pdf skill wasn't added to Devin" });
     await expect(toast).toContainText(
-      "/home/me/.windsurf/skills/pdf has other files. It was left as is."
+      "/home/me/.config/devin/skills/pdf has other files. It was left as is."
     );
     await expect(toast.getByRole("button", { name: "Undo" })).toHaveCount(0);
     await expect(toast.getByRole("button", { name: "Dismiss" })).toBeVisible();
     expect(later(cli)).toEqual([
-      ["skill", "place", "pdf", "--to", "windsurf", "--json"],
+      ["skill", "place", "pdf", "--to", "devin", "--json"],
     ]);
   });
 
@@ -406,60 +407,6 @@ test.describe("chips", () => {
     await cursor.click({ force: true });
     expect(later(cli)).toEqual([]);
   });
-
-  test("an agent that sees the skill through another's folder: its chip runs nothing, and the other's removes it from both", async ({
-    cli,
-    page,
-  }) => {
-    // Cursor reads Claude Code's skills directory, so it sees pdf through Claude Code's placement.
-    const path = "/home/me/.claude-code/skills/pdf";
-    const throughClaude = {
-      ...inventory,
-      skills: inventory.skills.map((node) =>
-        node.name === "pdf"
-          ? {
-              ...node,
-              occurrences: [
-                ...node.occurrences,
-                {
-                  configuration: "cursor",
-                  id: `cursor:${path}`,
-                  kind: "symlink" as const,
-                  path,
-                  resolved_path: `${LIBRARY}/pdf`,
-                  scope: "user" as const,
-                },
-              ],
-            }
-          : node
-      ),
-    } satisfies InlineEvent;
-    await openSkill(cli, page, "pdf", "pdf", throughClaude);
-    const article = pane(page, "pdf");
-    const cursor = chip(article, "Cursor");
-    await expect(cursor).toBeChecked();
-    await expect(cursor).toHaveAttribute("aria-disabled", "true");
-    await cursor.hover();
-    await expect(page.getByRole("tooltip")).toHaveText(
-      "Cursor reads Claude Code's skills folder, so it sees pdf there. Remove it from Claude Code to remove it from both"
-    );
-    await cursor.click({ force: true });
-    expect(later(cli)).toEqual([]);
-
-    const claude = chip(article, "Claude Code");
-    await expect(claude).toHaveAttribute(
-      "title",
-      "Remove from Claude Code and Cursor"
-    );
-    cli.register(["skill", "remove", "pdf", "--from", "claude-code"]);
-    await claude.click();
-    await expect(
-      toasts(page).getByText("Removed pdf from Claude Code and Cursor")
-    ).toBeVisible();
-    expect(later(cli)).toEqual([
-      ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
-    ]);
-  });
 });
 
 /** The names of the chips in view, in order, and how many rows they and the button take. */
@@ -502,7 +449,7 @@ test.describe("many agents", () => {
       "Universal",
       "Cursor",
       "GitHub Copilot",
-      "Windsurf",
+      "Devin",
     ]);
     await expect(more).toHaveText(`Show ${26 - collapsed.names.length} more`);
 
@@ -651,7 +598,7 @@ test.describe("banners", () => {
     });
     await banner.getByRole("button", { name: "Add to agents" }).click();
     await expect(
-      toasts(page).getByText("Added draft to 3 agents")
+      toasts(page).getByText("Added draft skill to 3 agents")
     ).toBeVisible();
     expect(later(cli)).toEqual([["skill", "place", "draft", "--json"]]);
   });
@@ -718,7 +665,7 @@ test.describe("banners", () => {
     await dialog.getByRole("button", { name: "Replace" }).click();
     await expect(dialog).toBeHidden();
     await expect(
-      toasts(page).getByText("Reconnected release-notes to Cursor")
+      toasts(page).getByText("Reconnected release-notes skill to Cursor")
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "place", "release-notes", "--to", "cursor", "--json"],

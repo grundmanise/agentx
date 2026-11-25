@@ -289,7 +289,7 @@ func TestSkillRemoveFromASymlinkedClient(t *testing.T) {
 // beside --from universal, and the hint offers the removal that can be
 // done, --from universal, with every configuration it would take the skill
 // from, in id order: the universal clients and Claude Code, whose symlink or
-// recorded copy agentx would delete, and not Windsurf, whose directory is
+// recorded copy agentx would delete, and not Kiro CLI, whose directory is
 // the user's and would stay.
 //
 // Beside --from universal the refusal is this one and not the usage error
@@ -322,16 +322,16 @@ func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 	for _, mode := range []string{modeSymlink, modeCopy} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
-			h, s := universalHarness(t, ".codeium/windsurf")
+			h, s := universalHarness(t, ".kiro")
 			add := []string{"skill", "add", s.url, "--name", "alpha", "--to", "claude-code"}
 			if mode == modeCopy {
 				add = append(add, "--copy")
 			}
 			equal(t, "add", h.run(add...).exit, 0)
-			// A directory of the user's own where Windsurf would have its
+			// A directory of the user's own where Kiro CLI would have its
 			// placement: the whole removal leaves it, so the hint may not say
-			// Windsurf loses the skill.
-			mine := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+			// Kiro CLI loses the skill.
+			mine := filepath.Join(h.home, ".kiro", "skills", "alpha")
 			if err := os.MkdirAll(mine, 0o755); err != nil {
 				t.Fatal(err)
 			}

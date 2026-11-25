@@ -13,7 +13,7 @@ import (
 func placeHome(t *testing.T) *harness {
 	t.Helper()
 	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".snowflake/cortex", ".codeium/windsurf", ".copilot", ".codex", ".gemini"}})
+	h.build(t, fixture{dirs: []string{".claude", ".snowflake/cortex", ".kiro", ".copilot", ".codex", ".gemini"}})
 	return h
 }
 

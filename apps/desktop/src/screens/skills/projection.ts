@@ -303,7 +303,7 @@ const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
   const kind = kindOf(entry);
   const node = nodeOf(entry, c.inventory.skills);
   const direct = entry.placements
-    .filter((p) => p.mode !== "library" && !c.universal.has(p.configuration))
+    .filter((p) => !c.universal.has(p.configuration))
     .map((p) => p.configuration);
   const drift = entry.drift ?? [];
   const row: SkillRow = {
@@ -736,7 +736,7 @@ export interface SkillLocation {
 /**
  * Every place a skill is on disk, the one Show in Finder opens first: for a skill the library
  * holds, the library entry, `<library>/<name>`, then each placement in a client's own skills
- * directory; for a skill a client holds on its own, or a plugin's, each occurrence. Placements
+ * directory, one whose skills directory links to the library included; for a skill a client holds on its own, or a plugin's, each occurrence. Placements
  * and occurrences come in the order the row lists its agents, then by path. Symlinks that lead
  * to one place are one place, at the first one's position, with each agent client once: the
  * menu shows that place once, with the agents that use it, and calls a symlink into the library
@@ -817,7 +817,12 @@ export const locationsOf = (
     }
     return locations;
   }
-  const placements = row.entry.placements.filter((p) => p.mode !== "library");
+  const reads = new Set(
+    configurations.filter((c) => c.reads_library).map((c) => c.id)
+  );
+  const placements = row.entry.placements.filter(
+    (p) => p.mode !== "library" || !reads.has(p.configuration)
+  );
   placements.sort(
     (a, b) =>
       rank(a.configuration) - rank(b.configuration) ||
@@ -827,13 +832,15 @@ export const locationsOf = (
     const through = row.occurrences.find(
       (o) => o.configuration === p.configuration && o.path === p.path
     );
+    const directory = through?.resolved_path ?? p.path;
     add({
       clients: [client(p.configuration)],
-      directory: through?.resolved_path ?? p.path,
+      directory,
       key: `${p.configuration}:${p.path}`,
       label: name(p.configuration),
       path: p.path,
-      symlink: p.kind === "symlink",
+      symlink:
+        p.kind === "symlink" || (p.mode === "library" && directory !== p.path),
     });
   }
   return locations;

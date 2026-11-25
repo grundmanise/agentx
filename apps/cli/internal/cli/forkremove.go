@@ -423,7 +423,7 @@ func libraryKept(libPath, state, name string, targets []placeTarget) string {
 	}
 	var readers []string
 	for _, t := range targets {
-		if t.readsLibrary {
+		if t.atLibrary {
 			readers = append(readers, t.id)
 		}
 	}

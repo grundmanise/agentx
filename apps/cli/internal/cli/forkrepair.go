@@ -138,7 +138,7 @@ func (inv *invocation) placeFork(ctx context.Context, rec lineage.Record, target
 		}
 		sweepStaged(inv.worktreesDir())
 		for _, t := range targets {
-			if !t.readsLibrary {
+			if !t.atLibrary {
 				sweepStaged(t.dir)
 			}
 		}

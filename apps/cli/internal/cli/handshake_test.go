@@ -429,7 +429,7 @@ func TestScanHandshakeDeclarations(t *testing.T) {
 	h := newHarness(t)
 	web := webServer(t).URL
 	h.build(t, fixture{
-		dirs: []string{".claude", ".codex", ".cursor", ".gemini", ".codeium/windsurf", ".copilot"},
+		dirs: []string{".claude", ".codex", ".cursor", ".gemini", ".config/devin", ".copilot"},
 		files: map[string]string{
 			// Claude Code: a variable, a default, a credential variable a
 			// remote header never receives, and a local command.
@@ -448,10 +448,13 @@ func TestScanHandshakeDeclarations(t *testing.T) {
   "gemini-excluded": {"command": %[2]q, "args": ["--exit"]},
   "Gemini-Toggled": {"command": %[2]q, "args": ["--linger"]}}}`, web+"/gemini", mcpServer),
 			".gemini/mcp-server-enablement.json": `{"gemini-toggled": {"enabled": false}}`,
-			// Windsurf: ${env:NAME} and ${file:/path}.
+			// Devin: ${env:NAME}, ${file:/path} and disabled.
+			".config/devin/mcp_config.json": fmt.Sprintf(`{"mcpServers": {
+  "devin-env": {"url": %q, "headers": {"X-Key": "${env:AGENTX_TEST_KEY}"}},
+  "devin-off": {"command": %q, "args": ["--hang", "--exit"], "disabled": true}}}`, web+"/devin-env", mcpServer),
+			// Windsurf's file, which Devin still reads.
 			".codeium/windsurf/mcp_config.json": fmt.Sprintf(`{"mcpServers": {
-  "windsurf-env": {"serverUrl": %q, "headers": {"X-Key": "${env:AGENTX_TEST_KEY}"}},
-  "windsurf-file": {"serverUrl": %q, "headers": {"X-Key": "${file:$HOME/key.txt}"}}}}`, web+"/windsurf-env", web+"/windsurf-file"),
+  "devin-file": {"serverUrl": %q, "headers": {"X-Key": "${file:$HOME/key.txt}"}}}}`, web+"/devin-file"),
 			"key.txt": "secret-hand-header-value\n",
 			// Copilot CLI: ${VAR}, ~ in cwd, and /mcp disable.
 			".copilot/mcp-config.json": fmt.Sprintf(`{"mcpServers": {
@@ -512,7 +515,7 @@ enabled = false
 		"bearer": "tool search", "there": "tool add", "here": "tool add", "inside": "tool add",
 		"claude-key": "tool search", "claude-default": "tool search", "claude-local": "tool add",
 		"cursor-key": "tool search", "cursor-local": "tool add",
-		"gemini-key": "tool search", "windsurf-env": "tool search", "windsurf-file": "tool search",
+		"gemini-key": "tool search", "devin-env": "tool search", "devin-file": "tool search",
 		"copilot-key": "tool search", "copilot-home": "tool add",
 	} {
 		equal(t, name+" handshake", occurrence(name)["handshake"], true)
@@ -533,7 +536,7 @@ enabled = false
 
 	// Turned off, by its own declaration or with its plugin: never started,
 	// no warning, no failure.
-	for _, name := range []string{"off", "quiet", "gemini-excluded", "Gemini-Toggled", "copilot-off"} {
+	for _, name := range []string{"off", "quiet", "gemini-excluded", "Gemini-Toggled", "copilot-off", "devin-off"} {
 		occ := occurrence(name)
 		equal(t, name+" enabled", occ["enabled"], false)
 		equal(t, name+" handshake", occ["handshake"], false)

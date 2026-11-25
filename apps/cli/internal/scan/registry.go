@@ -7,7 +7,7 @@ var registry = append([]Client{
 	codex{},
 	cursor{},
 	geminiCLI{},
-	windsurf{},
+	devin{},
 	githubCopilot{},
 }, pathClients...)
 

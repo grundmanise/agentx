@@ -53,7 +53,7 @@ func (inv *invocation) refreshCopies(ctx context.Context, m *home.Mutation, gitD
 	}
 	var seen []seenPlace // every path judged
 	for _, t := range inv.detectedTargets() {
-		if t.readsLibrary || !slices.Contains(recorded, t.id) {
+		if t.atLibrary || !slices.Contains(recorded, t.id) {
 			continue
 		}
 		place := t.ownPlace(inv.dirs.Library, name)

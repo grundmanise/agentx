@@ -41,21 +41,22 @@ const dirname = (path: string) => {
 };
 
 /**
- * The library's path, from a library occurrence of the inventory: a library-mode placement, or
- * an occurrence in a configuration that reads the library. Undefined when the inventory shows none.
+ * The library's path, from a library occurrence of the inventory in a configuration that reads
+ * the library: a library-mode placement, or any occurrence. Undefined when the inventory shows
+ * none.
  */
 export const libraryPathOf = (
   inventory: InventoryEvent
 ): string | undefined => {
-  const placement = inventory.library
-    .flatMap((e) => e.placements)
-    .find((p) => p.mode === "library");
-  if (placement !== undefined) {
-    return dirname(placement.path);
-  }
   const universal = new Set(
     inventory.configurations.filter((c) => c.reads_library).map((c) => c.id)
   );
+  const placement = inventory.library
+    .flatMap((e) => e.placements)
+    .find((p) => p.mode === "library" && universal.has(p.configuration));
+  if (placement !== undefined) {
+    return dirname(placement.path);
+  }
   const occurrence = inventory.skills
     .flatMap((n) => n.occurrences)
     .find((o) => universal.has(o.configuration) && o.plugin === undefined);

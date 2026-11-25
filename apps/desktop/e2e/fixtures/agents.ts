@@ -21,9 +21,10 @@ import {
 
 /** Sorted by id, as an inventory lists them: four direct, two reading the library. */
 export const configurations: Configuration[] = [
-  ...four,
+  ...four.filter((c) => c.id < "devin"),
+  configuration("devin", { enabled: false, name: "Devin" }),
+  ...four.filter((c) => c.id > "devin"),
   configuration("github-copilot", { name: "GitHub Copilot" }),
-  configuration("windsurf", { enabled: false, name: "Windsurf" }),
 ];
 
 const serverOccurrence = (
@@ -140,6 +141,7 @@ const many: [id: string, name: string, readsLibrary?: boolean][] = [
   ["cortex", "Cortex Code"],
   ["crush", "Crush"],
   ["cursor", "Cursor"],
+  ["devin", "Devin"],
   ["droid", "Droid"],
   ["gemini-cli", "Gemini CLI", true],
   ["github-copilot", "GitHub Copilot"],
@@ -155,7 +157,6 @@ const many: [id: string, name: string, readsLibrary?: boolean][] = [
   ["roo", "Roo Code"],
   ["trae", "Trae"],
   ["warp", "Warp", true],
-  ["windsurf", "Windsurf"],
   ["zed", "Zed", true],
   ["zencoder", "Zencoder"],
 ];

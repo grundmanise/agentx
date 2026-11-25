@@ -57,7 +57,7 @@ func (p adoptPlace) ids() []string { return targetIDs(p.targets) }
 // A client that reads it sees the skill there, and a link in its own
 // skills directory would list the skill twice.
 func (p adoptPlace) linked() bool {
-	return slices.ContainsFunc(p.targets, func(t placeTarget) bool { return !t.readsLibrary })
+	return slices.ContainsFunc(p.targets, func(t placeTarget) bool { return !t.atLibrary })
 }
 
 // same reports whether p holds what o holds: the tree git would record
@@ -432,7 +432,7 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 			// the library has that skill already, and a hub skill is
 			// never placed over a directory.
 			hint := "rename the folder and import it under the new name, or "
-			switch i := slices.IndexFunc(dirs[0].targets, func(t placeTarget) bool { return !t.readsLibrary }); {
+			switch i := slices.IndexFunc(dirs[0].targets, func(t placeTarget) bool { return !t.atLibrary }); {
 			case i < 0:
 				hint += "remove it"
 			case hubSkill:

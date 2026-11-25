@@ -18,10 +18,8 @@ type pathClient struct {
 func (p pathClient) Slug() string                 { return p.slug }
 func (p pathClient) Name() string                 { return p.name }
 func (p pathClient) ConfigDir(d home.Dirs) string { return p.at(d, p.config) }
-func (p pathClient) SkillsDirs(d home.Dirs) []string {
-	return []string{p.at(d, p.skills)}
-}
-func (p pathClient) ProjectSkillsDirs() []string { return []string{p.project} }
+func (p pathClient) SkillsDir(d home.Dirs) string { return p.at(d, p.skills) }
+func (p pathClient) ProjectSkillsDir() string     { return p.project }
 
 // MCPConfigs and Plugins: a path client contributes skills only.
 func (pathClient) MCPConfigs(home.Dirs) []MCPConfig                  { return nil }
@@ -37,27 +35,13 @@ func (pathClient) at(d home.Dirs, spec string) string {
 	return filepath.Join(d.User, spec)
 }
 
-// readsMore is a path client that reads more user skills directories after
-// its own, each named as a pathClient's skills are.
-type readsMore struct {
-	pathClient
-	more []string
-}
-
-func (r readsMore) SkillsDirs(d home.Dirs) []string {
-	dirs := r.pathClient.SkillsDirs(d)
-	for _, spec := range r.more {
-		dirs = append(dirs, r.at(d, spec))
-	}
-	return dirs
-}
-
 // pathClients is the agent list of the skills CLI (npm package skills 1.7.0)
 // minus the six clients with their own file and minus the agents that are
 // only detected from a project directory, which have no user-scope
 // configuration: eve, promptscript, replit and the universal pseudo-agent.
 // Zenflow is left out as well: it is Zencoder's desktop app, reads the same
 // skills directory as Zencoder's IDE agents, and is one agent to agentx.
+// So is Windsurf: it is Devin Desktop now, part of the devin client.
 var pathClients = []Client{
 	pathClient{"adal", "AdaL", ".adal", ".adal/skills", ".adal/skills"},
 	pathClient{"aider-desk", "AiderDesk", ".aider-desk", ".aider-desk/skills", ".aider-desk/skills"},
@@ -68,7 +52,7 @@ var pathClients = []Client{
 	pathClient{"augment", "Augment", ".augment", ".augment/skills", ".augment/skills"},
 	pathClient{"autohand-code", "Autohand Code CLI", ".autohand", ".autohand/skills", ".autohand/skills"},
 	pathClient{"bob", "IBM Bob", ".bob", ".bob/skills", ".bob/skills"},
-	readsMore{pathClient{"cline", "Cline", ".cline", ".cline/skills", ".agents/skills"}, []string{"library"}},
+	pathClient{"cline", "Cline", ".cline", ".cline/skills", ".agents/skills"},
 	pathClient{"codearts-agent", "CodeArts Agent", ".codeartsdoer", ".codeartsdoer/skills", ".codeartsdoer/skills"},
 	pathClient{"codebuddy", "CodeBuddy", ".codebuddy", ".codebuddy/skills", ".codebuddy/skills"},
 	pathClient{"codemaker", "Codemaker", ".codemaker", ".codemaker/skills", ".codemaker/skills"},
@@ -78,7 +62,6 @@ var pathClients = []Client{
 	pathClient{"cortex", "Cortex Code", ".snowflake/cortex", ".snowflake/cortex/skills", ".cortex/skills"},
 	pathClient{"crush", "Crush", ".config/crush", ".config/crush/skills", ".crush/skills"},
 	pathClient{"deepagents", "Deep Agents", ".deepagents", ".deepagents/agent/skills", ".agents/skills"},
-	pathClient{"devin", "Devin for Terminal", "xdg/devin", "xdg/devin/skills", ".devin/skills"},
 	pathClient{"dexto", "Dexto", ".dexto", "library", ".agents/skills"},
 	pathClient{"droid", "Droid", ".factory", ".factory/skills", ".agents/skills"},
 	pathClient{"firebender", "Firebender", ".firebender", ".firebender/skills", ".agents/skills"},
@@ -106,7 +89,7 @@ var pathClients = []Client{
 	pathClient{"neovate", "Neovate", ".neovate", ".neovate/skills", ".neovate/skills"},
 	pathClient{"ona", "Ona", ".ona", ".ona/skills", ".ona/skills"},
 	pathClient{"openclaw", "OpenClaw", ".openclaw", ".openclaw/skills", "skills"},
-	readsMore{pathClient{"opencode", "OpenCode", "xdg/opencode", "xdg/opencode/skills", ".agents/skills"}, []string{".claude/skills", "library"}},
+	pathClient{"opencode", "OpenCode", "xdg/opencode", "xdg/opencode/skills", ".agents/skills"},
 	pathClient{"openhands", "OpenHands", ".openhands", ".openhands/skills", ".openhands/skills"},
 	pathClient{"pi", "Pi", ".pi/agent", ".pi/agent/skills", ".pi/skills"},
 	pathClient{"pochi", "Pochi", ".pochi", ".pochi/skills", ".pochi/skills"},
