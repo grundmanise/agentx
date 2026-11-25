@@ -101,11 +101,11 @@ const toggle = (
         if (add) {
           return placedNowhere(events)
             ? `${row.name} skill wasn't added to ${c.name}`
-            : `Added ${row.name} to ${c.name}`;
+            : `Added ${row.name} skill to ${c.name}`;
         }
         return stillSees(logs, c.id)
           ? `${row.name} skill wasn't removed from ${c.name}`
-          : `Removed ${row.name} from ${removed}`;
+          : `Removed ${row.name} skill from ${removed}`;
       },
       warnings: (logs) => logs.map((log) => shortWarning(log.message, c.id)),
     }
