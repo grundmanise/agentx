@@ -23,14 +23,13 @@ type Client interface {
 	// ConfigDir is the user-scope configuration directory. The client is
 	// detected when it exists.
 	ConfigDir(d home.Dirs) string
-	// SkillsDirs are the user-scope skills directories the client reads, its
-	// own first, then other clients' directories and the library where the
-	// client reads them. A client that lists the library reads it directly,
-	// so a library skill needs no placement in its own directory.
-	SkillsDirs(d home.Dirs) []string
-	// ProjectSkillsDirs are the project-scope skills directories, relative
-	// to a project root.
-	ProjectSkillsDirs() []string
+	// SkillsDir is the client's own user-scope skills directory, the library
+	// for a client that has no other. SkillsDirs adds the directories it
+	// reads besides it.
+	SkillsDir(d home.Dirs) string
+	// ProjectSkillsDir is the client's own project-scope skills directory,
+	// relative to a project root. ProjectSkillsDirs adds the others it reads.
+	ProjectSkillsDir() string
 	// MCPConfigs are the user-scope files that declare MCP servers; nil for
 	// a client whose files agentx does not parse.
 	MCPConfigs(d home.Dirs) []MCPConfig
@@ -98,7 +97,7 @@ func UserSkillsDirs(d home.Dirs) []string {
 	var dirs []string
 	seen := map[string]bool{}
 	for _, c := range registry {
-		for _, dir := range c.SkillsDirs(d) {
+		for _, dir := range SkillsDirs(c, d) {
 			if !seen[dir] {
 				seen[dir] = true
 				dirs = append(dirs, dir)

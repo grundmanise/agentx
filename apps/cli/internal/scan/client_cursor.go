@@ -15,19 +15,8 @@ func (cursor) Slug() string                 { return "cursor" }
 func (cursor) Name() string                 { return "Cursor" }
 func (cursor) ConfigDir(d home.Dirs) string { return filepath.Join(d.User, ".cursor") }
 
-// SkillsDirs: Cursor also reads the Claude Code and Codex user skills
-// directories, and the library.
-func (c cursor) SkillsDirs(d home.Dirs) []string {
-	return []string{
-		filepath.Join(c.ConfigDir(d), "skills"),
-		filepath.Join(claudeCode{}.ConfigDir(d), "skills"),
-		filepath.Join(codex{}.ConfigDir(d), "skills"),
-		d.Library,
-	}
-}
-func (cursor) ProjectSkillsDirs() []string {
-	return []string{".cursor/skills", ".claude/skills", ".codex/skills", ".agents/skills"}
-}
+func (c cursor) SkillsDir(d home.Dirs) string { return filepath.Join(c.ConfigDir(d), "skills") }
+func (cursor) ProjectSkillsDir() string       { return ".cursor/skills" }
 func (c cursor) MCPConfigs(d home.Dirs) []MCPConfig {
 	return []MCPConfig{{Path: filepath.Join(c.ConfigDir(d), "mcp.json"), Format: mcp.CursorJSON}}
 }

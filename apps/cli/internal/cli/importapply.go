@@ -238,7 +238,7 @@ func (r *applyRun) read(ctx context.Context, states []importSkillEvent) error {
 	r.targets = inv.detectedTargets()
 	r.reads = map[string][]string{}
 	for _, c := range scan.Detect(inv.dirs) {
-		r.reads[c.Slug()] = c.SkillsDirs(inv.dirs)
+		r.reads[c.Slug()] = scan.SkillsDirs(c, inv.dirs)
 	}
 	return nil
 }

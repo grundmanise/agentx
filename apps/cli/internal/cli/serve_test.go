@@ -400,8 +400,7 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 		}
 		seen[dir] = true
 	}
-	// Cursor reads the Claude Code and Codex directories, and several clients
-	// read the library: each is one tree, not one per client.
+	// Several clients read the library: it is one tree, not one per client.
 	for _, dir := range []string{"/u/.codex/skills", "/u/.config/opencode/skills"} {
 		if !seen[dir] {
 			t.Errorf("%s is not watched", dir)

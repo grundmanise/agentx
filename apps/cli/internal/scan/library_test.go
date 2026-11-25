@@ -193,10 +193,10 @@ func TestSkillsDirsOfTheClientsThatReadTheLibrary(t *testing.T) {
 		{"claude-code", d, []string{"/u/.claude/skills"}, false},
 		{"codex", d, []string{"/u/.codex/skills", "/u/.agents/skills"}, true},
 		{"gemini-cli", d, []string{"/u/.gemini/skills", "/u/.agents/skills"}, true},
-		{"cursor", d, []string{"/u/.cursor/skills", "/u/.claude/skills", "/u/.codex/skills", "/u/.agents/skills"}, true},
+		{"cursor", d, []string{"/u/.cursor/skills", "/u/.agents/skills"}, true},
 		{"github-copilot", d, []string{"/u/.copilot/skills", "/u/.agents/skills"}, true},
 		{"github-copilot", withCopilotHome, []string{"/elsewhere/copilot/skills"}, false},
-		{"opencode", d, []string{"/u/.config/opencode/skills", "/u/.claude/skills", "/u/.agents/skills"}, true},
+		{"opencode", d, []string{"/u/.config/opencode/skills", "/u/.agents/skills"}, true},
 		{"cline", d, []string{"/u/.cline/skills", "/u/.agents/skills"}, true},
 	}
 	for _, tt := range tests {
@@ -204,7 +204,7 @@ func TestSkillsDirsOfTheClientsThatReadTheLibrary(t *testing.T) {
 		if !ok {
 			t.Fatalf("no client %s", tt.slug)
 		}
-		if got := c.SkillsDirs(tt.dirs); !slices.Equal(got, tt.want) {
+		if got := SkillsDirs(c, tt.dirs); !slices.Equal(got, tt.want) {
 			t.Errorf("%s with COPILOT_HOME %q: skills dirs = %v, want %v", tt.slug, tt.dirs.CopilotHome, got, tt.want)
 		}
 		if got := ReadsLibrary(c, tt.dirs); got != tt.reads {
@@ -214,5 +214,43 @@ func TestSkillsDirsOfTheClientsThatReadTheLibrary(t *testing.T) {
 	c, _ := Lookup("github-copilot")
 	if got := c.ConfigDir(withCopilotHome); got != "/elsewhere/copilot" {
 		t.Errorf("Copilot's configuration directory with COPILOT_HOME = %s, want /elsewhere/copilot", got)
+	}
+}
+
+// TestProjectSkillsDirsFollowTheLibrary covers the project-scope
+// directories: a client's own project directory, then the project's
+// .agents/skills for a client that reads the library.
+func TestProjectSkillsDirsFollowTheLibrary(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		slug string
+		want []string
+	}{
+		{"claude-code", []string{".claude/skills"}},
+		{"codex", []string{".codex/skills", ".agents/skills"}},
+		{"cursor", []string{".cursor/skills", ".agents/skills"}},
+		{"github-copilot", []string{".github/skills", ".agents/skills"}},
+		{"opencode", []string{".agents/skills"}},
+		{"windsurf", []string{".windsurf/skills"}},
+	}
+	for _, tt := range tests {
+		c, ok := Lookup(tt.slug)
+		if !ok {
+			t.Fatalf("no client %s", tt.slug)
+		}
+		if got := ProjectSkillsDirs(c); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: project skills dirs = %v, want %v", tt.slug, got, tt.want)
+		}
+	}
+}
+
+// TestReadsTheLibraryNamesRegisteredClients guards readsTheLibrary: every
+// client it lists is one the registry knows.
+func TestReadsTheLibraryNamesRegisteredClients(t *testing.T) {
+	t.Parallel()
+	for slug := range readsTheLibrary {
+		if _, ok := Lookup(slug); !ok {
+			t.Errorf("readsTheLibrary lists %s, which the registry does not know", slug)
+		}
 	}
 }

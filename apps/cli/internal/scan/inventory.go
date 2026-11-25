@@ -130,6 +130,10 @@ type Occurrence struct {
 	Kind          string `json:"kind"` // symlink, copy or directory
 	Scope         string `json:"scope"`
 	Plugin        string `json:"plugin,omitempty"` // the plugin the placement belongs to
+	// AlsoAt are the other paths the configuration reaches the same
+	// directory through, sorted, as Cursor reaches a library skill through
+	// a link to it in ~/.cursor/skills too; the client loads it once.
+	AlsoAt []string `json:"also_at,omitempty"`
 }
 
 // LibraryEntry is one skill directory of the library as agentx reports it:
@@ -285,7 +289,7 @@ func Read(o Options) *Scan {
 		},
 	}
 	for _, c := range Detect(o.Dirs) {
-		dirs := c.SkillsDirs(o.Dirs)
+		dirs := SkillsDirs(c, o.Dirs)
 		conf := Configuration{
 			ID:           c.Slug(),
 			Client:       c.Slug(),
@@ -305,16 +309,16 @@ func Read(o Options) *Scan {
 		conf.LogicalID = conf.PhysicalID
 		b.inventory.Configurations = append(b.inventory.Configurations, conf)
 		b.inventory.Edges = append(b.inventory.Edges, Edge{From: o.MachineID, To: conf.PhysicalID})
-		for _, dir := range dirs {
-			for _, p := range b.skillsIn(dir) {
-				b.add(conf, p, ScopeUser, "")
-			}
+		for _, l := range b.loadedOnce(dirs, o.Dirs.Library) {
+			b.add(conf, l.placement, ScopeUser, "", l.also...)
 		}
 		if o.Project != "" {
-			for _, rel := range c.ProjectSkillsDirs() {
-				for _, p := range b.skillsIn(filepath.Join(o.Project, rel)) {
-					b.add(conf, p, ScopeProject, "")
-				}
+			var project []string
+			for _, rel := range ProjectSkillsDirs(c) {
+				project = append(project, filepath.Join(o.Project, rel))
+			}
+			for _, l := range b.loadedOnce(project, filepath.Join(o.Project, projectLibrary)) {
+				b.add(conf, l.placement, ScopeProject, "", l.also...)
 			}
 		}
 		for _, cfg := range c.MCPConfigs(o.Dirs) {
@@ -371,7 +375,7 @@ func (s *Scan) Inventory() (Inventory, map[string]home.Handshake) {
 
 // add records one placement of a skill inside conf, owned by plugin when
 // the placement is inside one, and returns the skill's node.
-func (s *Scan) add(conf Configuration, p placement, scope, plugin string) *Skill {
+func (s *Scan) add(conf Configuration, p placement, scope, plugin string, also ...string) *Skill {
 	node, ok := s.nodes[p.info.contentHash]
 	if !ok {
 		node = &Skill{
@@ -390,6 +394,7 @@ func (s *Scan) add(conf Configuration, p placement, scope, plugin string) *Skill
 		Kind:          s.kind(conf, p, scope),
 		Scope:         scope,
 		Plugin:        plugin,
+		AlsoAt:        also,
 	}
 	occ.ID = id("occurrence", conf.PhysicalID, node.PhysicalID, scope, s.portable(p.path))
 	if !s.seen[occ.ID] {

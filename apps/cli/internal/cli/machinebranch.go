@@ -471,7 +471,7 @@ func cloudUniversal(id string) bool {
 		return false
 	}
 	d := home.Dirs{User: cloudUser, Library: filepath.Join(cloudUser, ".agents", "skills")}
-	return slices.Contains(c.SkillsDirs(d), d.Library)
+	return slices.Contains(scan.SkillsDirs(c, d), d.Library)
 }
 
 // cloudUser is the home cloudUniversal reads the registry in: any path
