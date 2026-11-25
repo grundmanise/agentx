@@ -45,7 +45,10 @@ export const pdfUpdateDiffs: InlineEvent[] = [
   },
 ];
 
-/** The new version of the original pdf-letters was forked from: SKILL.md edited, examples gone. */
+/**
+ * The new version of the original pdf-letters was forked from, the update's upstream step:
+ * SKILL.md edited, examples gone.
+ */
 export const lettersUpdateDiffs: InlineEvent[] = [
   {
     name: "pdf-letters",
@@ -61,6 +64,7 @@ export const lettersUpdateDiffs: InlineEvent[] = [
     ].join("\n"),
     path: "SKILL.md",
     status: "modified",
+    step: "upstream",
     type: "diff",
   },
   {
@@ -78,6 +82,66 @@ export const lettersUpdateDiffs: InlineEvent[] = [
     ].join("\n"),
     path: "examples.md",
     status: "deleted",
+    step: "upstream",
     type: "diff",
   },
 ];
+
+/** The newer version of review from its source: SKILL.md edited. */
+export const reviewUpdateDiffs: InlineEvent[] = [
+  {
+    name: "review",
+    patch: [
+      "diff --git a/SKILL.md b/SKILL.md",
+      "index 1a2b3c4..9b8c7d6 100644",
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -2,1 +2,1 @@",
+      "-description: Review a pull request.",
+      "+description: Review a pull request, file by file.",
+      "",
+    ].join("\n"),
+    path: "SKILL.md",
+    status: "modified",
+    type: "diff",
+  },
+];
+
+/** What another of your machines published to release-notes: a template added. */
+export const releaseNotesUpdateDiffs: InlineEvent[] = [
+  {
+    name: "release-notes",
+    patch: [
+      "diff --git a/template.md b/template.md",
+      "new file mode 100644",
+      "index 0000000..77e1d0c",
+      "--- /dev/null",
+      "+++ b/template.md",
+      "@@ -0,0 +1,2 @@",
+      "+# Release notes",
+      "+## What changed",
+      "",
+    ].join("\n"),
+    path: "template.md",
+    status: "added",
+    step: "hub",
+    type: "diff",
+  },
+];
+
+/**
+ * What another of your machines published to pdf-letters, when the hub holds it besides the newer
+ * version from upstream: the hub step, which comes first, alone.
+ */
+export const lettersHubDiffs: InlineEvent[] = releaseNotesUpdateDiffs.map(
+  (d) => ({ ...d, name: "pdf-letters" })
+);
+
+/** The `skill diff <name> --update` read of every update of e2e/fixtures/updates.ts, by name. */
+export const updateDiffsOf: Record<string, InlineEvent[]> = {
+  draft: [],
+  pdf: pdfUpdateDiffs,
+  "pdf-letters": lettersUpdateDiffs,
+  "release-notes": releaseNotesUpdateDiffs,
+  review: reviewUpdateDiffs,
+};

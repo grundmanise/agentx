@@ -11,12 +11,9 @@ const none: SkillRow[] = [];
 
 const rowsOf = ({
   inventory,
-  updates,
   adoption,
-}: Pick<AppState, "inventory" | "updates" | "adoption">) =>
-  inventory === undefined
-    ? none
-    : projectRows({ adoption, inventory, updates });
+}: Pick<AppState, "inventory" | "adoption">) =>
+  inventory === undefined ? none : projectRows({ adoption, inventory });
 
 /** Every skill on the machine as a row, from the store as it is now. */
 export const currentRows = () => rowsOf(useAppStore.getState());
@@ -24,7 +21,6 @@ export const currentRows = () => rowsOf(useAppStore.getState());
 /** Every skill on the machine as a row; a new list only when the inventory or a slice it reads changes. */
 export const useSkillRows = () => {
   const inventory = useAppStore((s) => s.inventory);
-  const updates = useAppStore((s) => s.updates);
   const adoption = useAppStore((s) => s.adoption);
-  return rowsOf({ adoption, inventory, updates });
+  return rowsOf({ adoption, inventory });
 };

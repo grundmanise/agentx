@@ -25,9 +25,10 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// updateCheckEvent ends the report of one update check of the serve child,
-// after its update_available events: when it ended, and whether it reached
-// what it set out to check.
+// updateCheckEvent ends the report of one update check of the serve child:
+// when it ended, and whether it reached what it set out to check. What
+// the check found reaches the next inventory instead: the candidates it
+// pinned, and what the hub holds that a fork lacks, see LibraryEntry.
 type updateCheckEvent struct {
 	event
 	CheckedAt string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
@@ -230,7 +231,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		}
 	}
 	dirs, trees := inv.watchedDirs()
-	checks := &serveChecks{inv: inv}
+	checks := &serveChecks{inv: inv, requests: methods.requests}
 	return serve.Run(ctx, serve.Options{
 		Scan:         inv.serveScan,
 		Index:        inv.sourceIndex,
@@ -269,7 +270,8 @@ func (inv *invocation) serveFailed(err error) {
 // serve runs one at a time and makes each report on its loop's goroutine,
 // so failing needs no lock.
 type serveChecks struct {
-	inv *invocation
+	inv      *invocation
+	requests *serve.Requests // what asks the loop for the rescan after a check that wrote, see rescan
 	// failing is set while the checks fail to reach the hub, or
 	// fail as a whole: the check that starts failing warns, and those after
 	// it stay quiet until one succeeds again.
@@ -284,18 +286,19 @@ type serveChecks struct {
 // waits for the lock rather than giving up on it, since it runs in the
 // background and a command holding the lock for a moment is no reason to
 // drop what it fetched. It reports nothing as it goes and never ends serve:
-// the report it returns is made on the loop's goroutine and carries one
-// update_available per update, with this process's instance id, a warning
-// for each thing the check could not check, and its update_check. A
+// the report it returns is made on the loop's goroutine and carries a
+// warning for each thing the check could not check, and its update_check. A
 // machine with no source runs no git at all, and neither does one with no
 // store; a source an import wrote stays a source not fetched,
-// store or not, until source add adds it. The rescan its write of
-// the version file sets off brings the candidates and markers it wrote
-// into the next inventory, and every source ref it moved into the source
-// index.
+// store or not, until source add adds it. The rescan it asks for once it
+// fetched, see rescan, brings the candidates and markers it wrote
+// into the next inventory, with what the hub holds that a fork lacks, and
+// every source ref it moved into the source index.
 func (c *serveChecks) startup(ctx context.Context) func() {
 	rep, err := c.inv.checkUpdates(ctx, true, "")
 	at := time.Now()
+	fetched := err == nil && len(rep.refreshed) > 0
+	c.rescan(ctx, fetched)
 	return func() {
 		if err == nil && rep.idle {
 			return // nothing to check, and nothing was
@@ -304,6 +307,16 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 		ok := err == nil && !rep.hubFailed
 		c.failing = !ok
 		c.inv.reportUpdateCheck(at, ok)
+	}
+}
+
+// rescan asks the loop for a scan once a check that fetched has written,
+// and waits for it, so that the inventory that carries what the check wrote
+// goes out before its update_check, also when serve cannot watch for
+// changes. A scan that fails is reported as every rescan's is.
+func (c *serveChecks) rescan(ctx context.Context, fetched bool) {
+	if fetched && c.requests != nil {
+		_, _ = c.requests.Refresh(ctx)
 	}
 }
 
@@ -318,8 +331,10 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 // update check of the hub alone, see checkUpdates: one fetch of
 // it, outside the lock, the comparison of hub skills placed here with
 // what it holds, and one write of its last_fetched, under the lock, waited
-// for as the check at start waits. Its report is that check's: one
-// update_available per update, then its update_check. A failure is a
+// for as the check at start waits. Its report is that check's: its
+// warnings, then its update_check, and the rescan it asks for once it
+// fetched, see rescan, brings what the hub holds that a fork lacks into the
+// next inventory. A failure is a
 // warning prefixed "update check: " when the checks start failing, and
 // none while they go on failing, see serveChecks.failing.
 func (c *serveChecks) hub(ctx context.Context) func() {
@@ -338,6 +353,8 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 		rep, err = inv.checkHubRemote(ctx, entry.URL, remote)
 	}
 	at := time.Now()
+	fetched := err == nil && len(rep.refreshed) > 0 // a check of the hub alone fetches only the hub
+	c.rescan(ctx, fetched)
 	return func() {
 		if err == nil && rep.idle {
 			return
@@ -376,8 +393,8 @@ func (inv *invocation) checkHubRemote(ctx context.Context, url, remote string) (
 
 // reportServeCheck reports what an update check of the serve child found,
 // every warning prefixed "update check: ": the failure that ended the whole
-// check, or each source or skill it could not check, each note, and then
-// one update_available per update.
+// check, or each source or skill it could not check, and each note. The
+// updates it found are not reported: the next inventory carries them.
 func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 	if err != nil {
 		inv.out.warn("update check: " + err.Error())
@@ -388,13 +405,6 @@ func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 	}
 	for _, note := range rep.notes {
 		inv.out.warn("update check: " + note)
-	}
-	for _, ev := range rep.updates {
-		ev.InstanceID = inv.instanceID()
-		inv.out.emit(ev)
-		from, to := ev.versions()
-		inv.out.print(inv.out.paint(heading, "update "+sanitised(ev.Name)), ": ",
-			short(from), " -> ", short(to), ", ", plural(len(ev.Files), "file"))
 	}
 }
 

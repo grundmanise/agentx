@@ -89,7 +89,6 @@ const rowOf = (
   const rows = projectRows({
     adoption: records,
     inventory: whole,
-    updates: {},
   });
   const row = rows.find((r) => r.key === key);
   if (row === undefined) {

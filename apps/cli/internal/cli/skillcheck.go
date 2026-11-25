@@ -54,11 +54,9 @@ func newSkillCheckUpdatesCommand(inv *invocation) *cobra.Command {
 // is published to and where it came from, the version it
 // is at, a fork's being the last import merged into it, the version the
 // check pinned as its candidate and every file that version changes, each
-// path relative to the skill's directory. The serve child emits the same
-// event, carrying its instance id.
+// path relative to the skill's directory.
 type updateAvailableEvent struct {
 	event
-	InstanceID              string        `json:"instance_id,omitempty"` // serve only
 	Name                    string        `json:"name"`
 	Kind                    string        `json:"kind"`
 	Source                  string        `json:"source,omitempty"`           // where the skill is published to
@@ -237,13 +235,10 @@ func (inv *invocation) printCheck(rep checkReport) {
 	if len(rep.refreshed) > 0 || len(rep.failures) == 0 {
 		out.done(rep.summary())
 	}
-	upstream := false
 	for _, ev := range rep.updates {
 		state := updateAvailable
 		if ev.fromHub() {
 			state = publishedElsewhere
-		} else {
-			upstream = true
 		}
 		from, to := ev.versions()
 		out.print("  ", out.paint(heading, sanitised(ev.Name)), "  ", out.paint(warnStyle, state), "  ",
@@ -262,12 +257,9 @@ func (inv *invocation) printCheck(rep checkReport) {
 		out.print("  ", out.paint(heading, sanitised(r.name)), "  ", out.paint(warnStyle, driftUpstreamRemoved), "  ",
 			sanitised(where), " at ", short(r.commit))
 	}
-	switch {
-	case upstream:
+	if len(rep.updates) > 0 {
 		out.print("Apply an update with ", out.paint(label, "agentx skill update <name>"),
 			", or read it first with ", out.paint(label, "agentx skill diff <name> --update"), ".")
-	case len(rep.updates) > 0: // only what other machines published, which skill diff --update does not read
-		out.print("Apply an update with ", out.paint(label, "agentx skill update <name>"), ".")
 	}
 }
 

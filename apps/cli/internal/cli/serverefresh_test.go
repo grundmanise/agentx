@@ -386,9 +386,9 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 // an update_check that is ok. Then, while the hub holds what b's
 // remote-tracking branches hold, each hub check is one ls-remote, fetches
 // nothing and writes nothing, and ends in an update_check that is ok.
-// Once machine a publishes alpha, the next hub check fetches, announces
-// the update a published as the check at launch would, with this serve's
-// instance id, and ends in an update_check that is ok. With the hub out of
+// Once machine a publishes alpha, the next hub check fetches, the next
+// inventory says what the hub holds of alpha that b lacks, and the check
+// ends in an update_check that is ok. With the hub out of
 // reach, the checks warn once, however many fail, each ending in an
 // update_check that is not ok, until one reaches it again.
 func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
@@ -399,7 +399,7 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	url := "file://" + remote
 	calls := countingGit(t, b)
 	p := b.serve(t, "--json")
-	first := p.next("inventory")
+	p.next("inventory")
 	checked := func() jsonEvent {
 		t.Helper()
 		e, _ := p.nextMatching("an update_check", func(e jsonEvent) bool { return e["type"] == "update_check" })
@@ -424,10 +424,8 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 
 	published := a.commitFork("alpha", forkNotes("one", "one, a"))
 	a.mustRun("skill", "publish", "alpha")
-	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["name"] == "alpha" })
-	equal(t, "the update's instance_id", update["instance_id"], first["instance_id"])
-	equal(t, "its source", update["source"], url)
-	equal(t, "its candidate", update["candidate"], published)
+	ahead, _ := p.nextEntry("alpha", func(e jsonEvent) bool { return e["hub_ahead"] != nil })
+	equal(t, "what the hub holds of alpha", ahead["hub_ahead"].(map[string]any)["commit"], published)
 	equal(t, "a remote another machine published to: ok", checked()["ok"], true)
 	if fetched() == atLaunch {
 		t.Error("the check of a remote another machine published to fetched nothing")

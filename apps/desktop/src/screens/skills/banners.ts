@@ -77,6 +77,8 @@ export interface BannerFacts {
   changedFiles?: number;
   /** The store's last `conflict` event of each skill, for the files a pending merge left. */
   conflicts?: Conflicts;
+  /** The paths `skill diff <name> --update` reports for the skill's update; undefined until it was read. */
+  updateFiles?: string[];
 }
 
 interface BannerRule {
@@ -119,9 +121,9 @@ const agentName = (configurations: Configuration[], id: string) =>
   configurations.find((c) => c.id === id)?.name ?? id;
 
 /** The files an update changes, by path, joined as one line, then the promise when the skill has edits. */
-const changedFiles = (row: SkillRow) =>
+const changedFiles = (row: SkillRow, facts: BannerFacts) =>
   [
-    ...(row.update?.files ?? []).map((f) => f.path),
+    ...(facts.updateFiles ?? []),
     ...(row.modified ? ["Your local edits are kept."] : []),
   ].join(" · ");
 
@@ -130,11 +132,8 @@ const changedFiles = (row: SkillRow) =>
  * upstream.
  */
 const updateOrigin = (row: SkillRow) => {
-  const upstream =
-    row.kind === "hub"
-      ? (row.update?.upstream ?? row.entry?.upstream)
-      : undefined;
-  return shortSource(upstream ?? row.update?.source ?? row.entry?.source ?? "");
+  const upstream = row.kind === "hub" ? row.entry?.upstream : undefined;
+  return shortSource(upstream ?? row.entry?.source ?? "");
 };
 
 /** What a pending merge left to resolve, with the number of files when a `conflict` event said it. */
@@ -159,20 +158,20 @@ const table: BannerRule[] = [
     when: (row) => row.entry?.pending_merge === true,
   },
   {
-    banner: (row) => ({
+    banner: (row, _configurations, facts) => ({
       action: { kind: "update" },
       icon: "update",
-      text: changedFiles(row),
+      text: changedFiles(row, facts),
       title: `New version from ${updateOrigin(row)}`,
       tone: "primary",
     }),
     when: (row) => row.update !== undefined && !fromAnotherMachine(row.update),
   },
   {
-    banner: (row) => ({
+    banner: (_row, _configurations, facts) => ({
       action: { kind: "update" },
       icon: "update",
-      text: (row.update?.files ?? []).map((f) => f.path).join(" · "),
+      text: (facts.updateFiles ?? []).join(" · "),
       title: "Published from another machine",
       tone: "primary",
     }),
