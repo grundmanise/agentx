@@ -391,6 +391,8 @@ export class MockCli {
   private appUpdate: { version: string; current_version: string } | null = null;
   /** The version the app reports for itself. */
   appVersion = "0.3.0";
+  /** The `nightlies` argument of each update check, in order. */
+  readonly appUpdateNightlies: unknown[] = [];
   private holdingInstall = false;
   /** How the held install ended, once the test ended it: failed or not. */
   private installEnded: boolean | undefined;
@@ -855,6 +857,7 @@ export class MockCli {
       }
       case "app_update_check": {
         this.appUpdateChecks += 1;
+        this.appUpdateNightlies.push(field(args, "nightlies"));
         return this.appUpdate;
       }
       case "app_update_install": {

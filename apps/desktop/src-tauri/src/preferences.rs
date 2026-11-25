@@ -1,6 +1,6 @@
 // The app's preferences (ADR 0013): what the desktop app alone decides on this machine, today the
-// editor a skill opens in, whether it opens a skill the app just created, and whether the app
-// checks for its own updates (ADR 0019). They are one JSON file, `preferences.json`, in the app's
+// editor a skill opens in, whether it opens a skill the app just created, whether the app
+// checks for its own updates and whether it takes nightly builds (ADR 0019). They are one JSON file, `preferences.json`, in the app's
 // config directory, which the app reads and writes itself. They are not machine settings: the CLI
 // never reads them, and a snapshot does not carry them.
 
@@ -25,6 +25,10 @@ pub struct Preferences {
     /// Whether the app checks for its own updates after it starts and once a day. On by default.
     #[serde(default = "on")]
     pub check_updates: bool,
+    /// Whether the app takes nightly builds too. Unset, a nightly build takes them and a release
+    /// does not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include_nightlies: Option<bool>,
 }
 
 const fn on() -> bool {
@@ -37,6 +41,7 @@ impl Default for Preferences {
             editor: Editor::default(),
             open_after_create: false,
             check_updates: true,
+            include_nightlies: None,
         }
     }
 }
@@ -78,6 +83,7 @@ mod tests {
             },
             open_after_create: true,
             check_updates: false,
+            include_nightlies: Some(true),
         };
         write(&file, &custom).unwrap();
         assert_eq!(read(&file), custom);
@@ -85,6 +91,7 @@ mod tests {
         assert!(written.contains("\"kind\": \"custom\""), "{written}");
         assert!(written.contains("\"check_updates\": false"), "{written}");
         assert!(written.contains("\"open_after_create\": true"), "{written}");
+        assert!(written.contains("\"include_nightlies\": true"), "{written}");
 
         std::fs::write(&file, b"{\"editor\":{\"kind\":\"vim\"}}").unwrap();
         assert_eq!(read(&file), Preferences::default());

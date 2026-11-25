@@ -1,10 +1,12 @@
 // The app's own updates (ADR 0019), which the Rust side's updater finds and installs: it reads
-// the update manifest of the app's channel. After the startup checks pass, and then once a day,
+// the stable releases' update manifest, and the nightlies' too while Include nightly builds is on
+// (by default in a nightly build). After the startup checks pass, and then once a day,
 // the app checks for an update unless Automatic update checks is off in Settings, whose Check for
 // updates checks at once. An update the check finds shows in the title bar
 // (`app-update-status.tsx`), whose click installs it: the download's progress runs on its rim,
 // and once it is installed a click restarts the app into the new version. A browser has no app to
 // update, so none of this runs there.
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
@@ -45,6 +47,8 @@ interface AppUpdateState {
   checkedAt?: number;
   /** The Check for updates preference; undefined until it is read. */
   checkUpdates?: boolean;
+  /** Whether checks take nightly builds too; undefined until it is read. */
+  includeNightlies?: boolean;
 }
 
 const useAppUpdateStore = create<AppUpdateState>()(() => ({
@@ -72,6 +76,32 @@ export const useAppUpdateChecking = () => useAppUpdateStore((s) => s.checking);
 /** The Check for updates preference; undefined until it is read. */
 export const useCheckUpdates = () => useAppUpdateStore((s) => s.checkUpdates);
 
+/** Whether checks take nightly builds too; undefined until it is read. */
+export const useIncludeNightlies = () =>
+  useAppUpdateStore((s) => s.includeNightlies);
+
+// How many times the user turned Include nightly builds on or off, so a read that started before
+// a change does not undo it.
+let nightlyChanges = 0;
+
+/**
+ * Reads the Include nightly builds preference into the store, and returns it: unset, on in a
+ * nightly build and off in a release.
+ */
+export const readIncludeNightlies = async () => {
+  const before = nightlyChanges;
+  const [{ include_nightlies: saved }, version] = await Promise.all([
+    readPreferences(),
+    getVersion(),
+  ]);
+  const on = saved ?? version.includes("-nightly.");
+  if (nightlyChanges !== before) {
+    return useAppUpdateStore.getState().includeNightlies ?? on;
+  }
+  useAppUpdateStore.setState({ includeNightlies: on });
+  return on;
+};
+
 /**
  * Asks the Rust side for an update. An update already installing or installed stays as it is.
  * With `manual`, a toast says when there is none or the check failed; a background check is
@@ -83,7 +113,10 @@ const check = async (manual: boolean) => {
     return;
   }
   try {
-    const found = await invoke<Available | null>("app_update_check");
+    const nightlies = await readIncludeNightlies();
+    const found = await invoke<Available | null>("app_update_check", {
+      nightlies,
+    });
     useAppUpdateStore.setState({ checkedAt: Date.now() });
     // An install that started meanwhile keeps its state.
     const now = useAppUpdateStore.getState().update;
@@ -130,6 +163,23 @@ export const setCheckUpdates = async (on: boolean) => {
     useAppUpdateStore.setState({ checkUpdates: !on });
     notifyFailure("Couldn't save the setting");
   }
+};
+
+/**
+ * Turns Include nightly builds on or off, then checks again in the background, so the update the
+ * title bar offers follows it. A toast says when it could not be saved.
+ */
+export const setIncludeNightlies = async (on: boolean) => {
+  nightlyChanges += 1;
+  useAppUpdateStore.setState({ includeNightlies: on });
+  try {
+    await savePreferences({ include_nightlies: on });
+  } catch {
+    useAppUpdateStore.setState({ includeNightlies: !on });
+    notifyFailure("Couldn't save the setting");
+    return;
+  }
+  await check(false);
 };
 
 /**

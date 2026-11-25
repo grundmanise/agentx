@@ -7,6 +7,8 @@ date: 2026-11-23
 
 The desktop app had no way to update. The CLI lives inside the app's bundle, so `agentx update` refuses it on purpose, and a user had to download a new package by hand and install it over the old one. Running `agentx update --check` from the app and showing a download link was tried and removed: the app could only tell, not update. The app now updates itself, the CLI inside it included, from the same releases that ADR 0007 describes.
 
+Amended 2026-11-25: the app preference Include nightly builds, on by default in a nightly build and off in a release, decides which manifests a check reads: the stable one, and the nightly one too when it is on. The check offers the newest update the manifests announce, and only one newer than the app, so turning nightlies off leaves a nightly as it is until a newer stable release. Settings has an Updates card: the version, when the app last checked, Check for updates, Release notes, Automatic update checks (the Check for updates preference) and Include nightly builds.
+
 ## Decision
 
 | Concern | Choice | Why |

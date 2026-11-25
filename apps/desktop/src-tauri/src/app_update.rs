@@ -1,9 +1,10 @@
-// The app's own updates (ADR 0019): Tauri's updater plugin reads the update manifest of the app's
-// channel, and on Install downloads the update, checks its signature against the public key in
+// The app's own updates (ADR 0019): Tauri's updater plugin reads the stable releases' update
+// manifest, and the nightlies' too when the Include nightly builds preference is on, and on
+// Install downloads the newest update it found, checks its signature against the public key in
 // `tauri.conf.json` and replaces the app, the CLI inside it included. The new version runs after
-// a restart, which the user starts. A nightly follows the nightlies and a release the stable
-// releases, from the app's own version; a build that is no release, version 0.0.0, has no
-// channel and finds nothing. Beside panic_reports.rs, this is the one place the Rust side reaches
+// a restart, which the user starts. An update is only ever newer than the app, so turning
+// nightlies off leaves a nightly as it is until a newer stable release comes; a build that is no
+// release, version 0.0.0, finds nothing. Beside panic_reports.rs, this is the one place the Rust side reaches
 // the network.
 
 use std::sync::Mutex;
@@ -26,16 +27,42 @@ const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 /// The event that carries the download's progress while an update installs.
 pub const PROGRESS_EVENT: &str = "app-update-progress";
 
-/// The update manifest of the channel `version` belongs to, or none for a build that is no
-/// release.
-pub fn manifest_url(version: &str) -> Option<&'static str> {
+/// The manifests a check reads for `version`: none for a build that is no release, the stable
+/// releases' one, and the nightlies' too with `nightlies`.
+pub fn manifest_urls(version: &str, nightlies: bool) -> Vec<&'static str> {
     if version == "0.0.0" {
-        None
-    } else if version.contains("-nightly.") {
-        Some(NIGHTLY)
+        Vec::new()
+    } else if nightlies {
+        vec![STABLE, NIGHTLY]
     } else {
-        Some(STABLE)
+        vec![STABLE]
     }
+}
+
+/// The update of the newest version, or none.
+fn newest(updates: Vec<Update>) -> Option<Update> {
+    updates.into_iter().max_by(|a, b| {
+        match (
+            semver::Version::parse(&a.version),
+            semver::Version::parse(&b.version),
+        ) {
+            (Ok(a), Ok(b)) => a.cmp(&b),
+            _ => a.version.cmp(&b.version),
+        }
+    })
+}
+
+/// Reads the manifest at `url`, and returns the update it announces when it is newer than this
+/// app.
+async fn check_one(app: &AppHandle, url: &str) -> Result<Option<Update>, String> {
+    app.updater_builder()
+        .endpoints(vec![url.parse().map_err(|err| format!("{err}"))?])
+        .map(|builder| builder.timeout(CHECK_TIMEOUT))
+        .and_then(|builder| builder.build())
+        .map_err(|err| err.to_string())?
+        .check()
+        .await
+        .map_err(|err| err.to_string())
 }
 
 /// The update the last check found, which Install installs.
@@ -56,25 +83,32 @@ pub struct Progress {
     pub total: Option<u64>,
 }
 
-/// Reads the channel's manifest, and returns the update it announces when it is newer than this
-/// app; Install then installs that one.
+/// Reads the manifests `manifest_urls` names, and returns the newest update they announce that is
+/// newer than this app; Install then installs that one. It fails only when no manifest could be
+/// read.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn app_update_check(
     app: AppHandle,
     found: State<'_, Found>,
+    nightlies: bool,
 ) -> Result<Option<Available>, String> {
-    let Some(url) = manifest_url(&app.package_info().version.to_string()) else {
-        return Ok(None);
-    };
-    let update = app
-        .updater_builder()
-        .endpoints(vec![url.parse().map_err(|err| format!("{err}"))?])
-        .map(|builder| builder.timeout(CHECK_TIMEOUT))
-        .and_then(|builder| builder.build())
-        .map_err(|err| err.to_string())?
-        .check()
-        .await
-        .map_err(|err| err.to_string())?;
+    let urls = manifest_urls(&app.package_info().version.to_string(), nightlies);
+    let mut updates = Vec::new();
+    let mut failure = None;
+    let mut read = false;
+    for url in urls {
+        match check_one(&app, url).await {
+            Ok(update) => {
+                read = true;
+                updates.extend(update);
+            }
+            Err(err) => failure = Some(err),
+        }
+    }
+    if let (false, Some(err)) = (read, failure) {
+        return Err(err);
+    }
+    let update = newest(updates);
     let available = update.as_ref().map(|update| Available {
         version: update.version.clone(),
         current_version: update.current_version.clone(),
@@ -136,10 +170,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_channel_follows_the_version() {
-        assert_eq!(manifest_url("0.0.0"), None);
-        assert_eq!(manifest_url("0.3.0"), Some(STABLE));
-        assert_eq!(manifest_url("1.2.3"), Some(STABLE));
-        assert_eq!(manifest_url("0.3.0-nightly.20261001.42"), Some(NIGHTLY));
+    fn the_manifests_follow_the_nightlies_preference() {
+        assert!(manifest_urls("0.0.0", true).is_empty());
+        assert!(manifest_urls("0.0.0", false).is_empty());
+        assert_eq!(manifest_urls("0.3.0", false), vec![STABLE]);
+        assert_eq!(manifest_urls("0.3.0", true), vec![STABLE, NIGHTLY]);
+        assert_eq!(
+            manifest_urls("0.3.0-nightly.20261001.42", false),
+            vec![STABLE]
+        );
+        assert_eq!(
+            manifest_urls("0.3.0-nightly.20261001.42", true),
+            vec![STABLE, NIGHTLY]
+        );
     }
 }
