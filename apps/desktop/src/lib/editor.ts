@@ -50,6 +50,27 @@ export const saveEditor = async (editor: EditorChoice): Promise<boolean> => {
   }
 };
 
+/** Whether the editor opens a skill once the app creates it; off when the read failed. */
+export const readOpenAfterCreate = async (): Promise<boolean> => {
+  const { open_after_create: on } = await readPreferences();
+  return on;
+};
+
+/** Saves whether the editor opens a skill once the app creates it. False when it could not be saved, which a toast says. */
+export const saveOpenAfterCreate = async (on: boolean): Promise<boolean> => {
+  if (!inApp) {
+    notifyFailure("Couldn't save the setting. A browser can't keep it");
+    return false;
+  }
+  try {
+    await savePreferences({ open_after_create: on });
+    return true;
+  } catch {
+    notifyFailure("Couldn't save the setting");
+    return false;
+  }
+};
+
 /** The editors the app knows that are on this machine; none when they could not be listed. */
 export const detectEditors = async (): Promise<DetectedEditor[]> => {
   try {

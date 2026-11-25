@@ -128,6 +128,7 @@ test("the switch saves Check for updates and keeps the editor", async ({
     .toEqual({
       check_updates: false,
       editor: { command: "code --wait", kind: "custom" },
+      open_after_create: false,
     });
 });
 
