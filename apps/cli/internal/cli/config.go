@@ -141,13 +141,13 @@ func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
 	var placeAll bool
 	example := examples(
 		"agentx config enable cursor", "new installs also go to Cursor",
-		"agentx config enable cursor windsurf", "new installs also go to Cursor and Windsurf",
+		"agentx config enable cursor devin", "new installs also go to Cursor and Devin",
 		"agentx config enable cursor --place-all", "and place every skill the library holds in it now",
 	)
 	if disable {
 		example = examples(
 			"agentx config disable cursor", "new installs skip Cursor",
-			"agentx config disable cursor windsurf", "new installs skip Cursor and Windsurf",
+			"agentx config disable cursor devin", "new installs skip Cursor and Devin",
 		)
 	}
 	cmd := &cobra.Command{

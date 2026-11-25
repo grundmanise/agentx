@@ -56,8 +56,9 @@ const (
 	JSON Format = iota
 	// CursorJSON is JSON with Cursor's placeholders.
 	CursorJSON
-	// WindsurfJSON is JSON with Windsurf's placeholders.
-	WindsurfJSON
+	// DevinJSON is JSON with Devin's placeholders, where disabled: true
+	// turns a server off.
+	DevinJSON
 	// CopilotJSON is JSON with Copilot CLI's placeholders.
 	CopilotJSON
 	// GeminiJSON is JSON where url is an SSE endpoint and httpUrl a
@@ -153,6 +154,9 @@ func server(f Format, name string, e map[string]any) Server {
 		}
 		s.HeaderKeys = keys(e["headers"])
 		s.headers = values(e["headers"])
+		if f == DevinJSON {
+			s.Disabled, _ = e["disabled"].(bool)
+		}
 	}
 	switch {
 	case s.Command != "":

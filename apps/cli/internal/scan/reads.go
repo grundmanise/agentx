@@ -21,6 +21,7 @@ var readsTheLibrary = map[string]func(home.Dirs) bool{
 	"cline":          always,
 	"codex":          always,
 	"cursor":         always,
+	"devin":          always,
 	"gemini-cli":     always,
 	"github-copilot": func(d home.Dirs) bool { return d.CopilotHome == "" },
 	"opencode":       always,

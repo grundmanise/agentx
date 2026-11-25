@@ -12,7 +12,7 @@ import (
 )
 
 // placementHarness is a machine with six configurations, one source added
-// and nothing installed yet. Claude Code, Cortex Code, Windsurf and GitHub
+// and nothing installed yet. Claude Code, Cortex Code, Kiro CLI and GitHub
 // Copilot keep their own skills directories, which gives a command four
 // placement paths to put four different things at; Codex and Gemini CLI
 // read the library itself, so their occurrence is the library entry.
@@ -25,7 +25,7 @@ func placementHarness(t *testing.T) (*harness, *sourceRepo) {
 // placementHome is the home placementHarness hands out.
 var placementHome = &fixtureHome{
 	source: "skills",
-	dirs:   []string{".claude", ".snowflake/cortex", ".codeium/windsurf", ".copilot", ".codex", ".gemini"},
+	dirs:   []string{".claude", ".snowflake/cortex", ".kiro", ".copilot", ".codex", ".gemini"},
 	build: func(h *harness, s *sourceRepo) []string {
 		buildExecutable(s)
 		h.mustRun("source", "add", s.url)
@@ -165,7 +165,7 @@ func TestSkillRemoveTakesTheSkillOffTheMachine(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--copy").exit, 0)
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cortex,github-copilot,windsurf")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cortex,github-copilot,kiro-cli")
 	// A candidate ref, which a later spec writes and this command deletes.
 	head := h.storeGit("rev-parse", "refs/heads/managed/alpha")
 	h.storeGit("update-ref", "refs/agentx/candidate/alpha", strings.TrimSpace(head))
@@ -173,7 +173,7 @@ func TestSkillRemoveTakesTheSkillOffTheMachine(t *testing.T) {
 
 	out := h.run("--json", "skill", "remove", "alpha")
 	equal(t, "exit", out.exit, 0)
-	for _, rel := range []string{".claude/skills/alpha", ".snowflake/cortex/skills/alpha", ".codeium/windsurf/skills/alpha", ".copilot/skills/alpha"} {
+	for _, rel := range []string{".claude/skills/alpha", ".snowflake/cortex/skills/alpha", ".kiro/skills/alpha", ".copilot/skills/alpha"} {
 		nothingAt(t, "the placement", filepath.Join(h.home, filepath.FromSlash(rel)))
 	}
 	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
@@ -196,14 +196,14 @@ func TestSkillRemoveDeletesOnlyWhatAgentxMade(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	// Claude Code gets the symlink an install makes; Cortex Code gets a copy
-	// agentx records; Windsurf and GitHub Copilot get placements of the
+	// agentx records; Kiro CLI and GitHub Copilot get placements of the
 	// user's own that agentx must not touch.
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code").exit, 0)
 	equal(t, "place", h.run("skill", "place", "alpha", "--to", "cortex", "--copy").exit, 0)
 
 	// A real directory holding exactly the library's version, which nothing
 	// recorded as a copy: it looks like agentx's work and is not.
-	unrecorded := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+	unrecorded := filepath.Join(h.home, ".kiro", "skills", "alpha")
 	copyTree(t, filepath.Join(h.library, "alpha"), unrecorded)
 	writeFile(t, filepath.Join(unrecorded, "mine.md"), "the user's own file\n")
 	// A symlink of the user's own, to a directory of theirs.
@@ -313,11 +313,11 @@ func TestSkillRemoveDropsTheCopyModeOfWhatItRemoved(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--copy").exit, 0)
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cortex,github-copilot,windsurf")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cortex,github-copilot,kiro-cli")
 
 	out := h.run("skill", "remove", "alpha", "--from", "cortex")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,github-copilot,windsurf")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,github-copilot,kiro-cli")
 	nothingAt(t, "the copy", filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha"))
 	if _, err := os.Stat(filepath.Join(h.home, ".claude", "skills", "alpha", "SKILL.md")); err != nil {
 		t.Errorf("another configuration's copy was removed: %v", err)

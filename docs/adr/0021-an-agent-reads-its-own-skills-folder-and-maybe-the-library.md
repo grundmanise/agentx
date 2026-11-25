@@ -20,5 +20,5 @@ Some agents also read other agents' skills folders: Cursor reads `~/.claude/skil
 
 ## Consequences
 
-- A skill only in another agent's folder does not show under the agent that reads that folder. To reach every agent, put the skill in the library.
+- A skill only in another agent's folder does not show under the agent that reads that folder. To reach every agent, put the skill in the library: agents that read it see it there, and agentx places it in the folder of every other agent.
 - Plugins and MCP servers follow the same rule: Cursor loads Claude Code plugins, and agentx lists them under Claude Code only.

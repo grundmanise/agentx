@@ -109,7 +109,7 @@ func placesNothing(t *testing.T, h *harness, args ...string) string {
 func TestSkillPlacePutsBackMissingPlacements(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "cortex", "--to", "windsurf")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "cortex", "--to", "kiro-cli")
 	h.mustRun("skill", "place", "alpha", "--to", "github-copilot", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
@@ -142,7 +142,7 @@ func TestSkillPlacePutsBackMissingPlacements(t *testing.T) {
 	equal(t, "drift", drift(ev), "")
 	equal(t, "state", ev["state"], stateCurrent)
 	equal(t, "placements", strings.Join(placementsOf(t, ev), ";"),
-		"claude-code symlink symlink;codex library library;cortex symlink symlink;gemini-cli library library;github-copilot copy copy;windsurf symlink symlink")
+		"claude-code symlink symlink;codex library library;cortex symlink symlink;gemini-cli library library;github-copilot copy copy;kiro-cli symlink symlink")
 	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "placed alpha in 6 configurations, 1 placement as copy;")
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
 	equal(t, "one mutation", mutationVersion(t, h), version+1)
@@ -348,11 +348,11 @@ func TestSkillPlaceReplacesTheLibrarysLinkWithACopy(t *testing.T) {
 func TestSkillPlaceLeavesWhatIsNotDrift(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "windsurf", "--to", "github-copilot")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "kiro-cli", "--to", "github-copilot")
 	h.mustRun("skill", "place", "alpha", "--to", "cortex", "--copy")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
-	windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+	kiro := filepath.Join(h.home, ".kiro", "skills", "alpha")
 	copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
 	mine := filepath.Join(h.home, "my-alpha")
 	copyTree(t, filepath.Join(h.library, "alpha"), mine)
@@ -375,10 +375,10 @@ func TestSkillPlaceLeavesWhatIsNotDrift(t *testing.T) {
 	sameTree(t, "cortex's edited copy", libraryTree(t, cortex), edited)
 	nothingAt(t, "copilot's place", copilot)
 
-	remove(t, windsurf)
+	remove(t, kiro)
 	out := h.mustRun("--json", "skill", "place", "alpha")
 	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "placed alpha in 3 configurations, 2 placements skipped;")
-	linksToLibrary(t, "windsurf's placement", windsurf, filepath.Join(h.library, "alpha"))
+	linksToLibrary(t, "kiro-cli's placement", kiro, filepath.Join(h.library, "alpha"))
 	linksToLibrary(t, "claude's own link", claude, mine)
 	sameTree(t, "cortex's edited copy", libraryTree(t, cortex), edited)
 	nothingAt(t, "copilot's place", copilot)
@@ -414,7 +414,7 @@ func TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
 			lib := filepath.Join(h.library, "alpha")
 			skills := filepath.Join(h.home, ".claude", "skills")
 			cortex := filepath.Join(h.home, ".snowflake/cortex", "skills", "alpha")
-			windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+			kiro := filepath.Join(h.home, ".kiro", "skills", "alpha")
 			remove(t, skills)
 			if c.reverse {
 				if err := os.Rename(h.library, skills); err != nil {
@@ -431,7 +431,7 @@ func TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
 			equal(t, "universal clients", fmt.Sprint(ev["universal"]), "[codex gemini-cli]")
 			equal(t, "placements", strings.Join(placementsOf(t, ev), ";"),
 				"claude-code library library;codex library library;cortex symlink symlink;"+
-					"gemini-cli library library;github-copilot symlink symlink;windsurf symlink symlink")
+					"gemini-cli library library;github-copilot symlink symlink;kiro-cli symlink symlink")
 
 			for _, flag := range []string{"", "--force"} {
 				args := []string{"alpha"}
@@ -475,13 +475,13 @@ func TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
 				}
 			}
 
-			remove(t, windsurf)
+			remove(t, kiro)
 			text := h.mustRun("skill", "place", "alpha").stdout
 			contains(t, "the text", text, "✓ placed alpha in 6 configurations\n")
-			contains(t, "the text", text, "\n  windsurf        symlink  "+windsurf+" -> "+lib+"\n")
-			linksToLibrary(t, "windsurf's placement", windsurf, lib)
+			contains(t, "the text", text, "\n  kiro-cli        symlink  "+kiro+" -> "+lib+"\n")
+			linksToLibrary(t, "kiro-cli's placement", kiro, lib)
 			sameTree(t, "the library directory after putting it back", libraryTree(t, lib), held)
-			cleanAfterPlace(t, h, h.library, skills, filepath.Dir(windsurf))
+			cleanAfterPlace(t, h, h.library, skills, filepath.Dir(kiro))
 		})
 	}
 }
@@ -1596,15 +1596,15 @@ func TestSkillPlaceRecoversACopyWhenKilled(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
 			h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "cortex")
-			h.mustRun("skill", "place", "alpha", "--to", "windsurf", "--to", "github-copilot", "--copy")
+			h.mustRun("skill", "place", "alpha", "--to", "kiro-cli", "--to", "github-copilot", "--copy")
 			lib := filepath.Join(h.library, "alpha")
 			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-			windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+			kiro := filepath.Join(h.home, ".kiro", "skills", "alpha")
 			copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
 			want := libraryTree(t, lib)
 			displace(t, lib, claude, true)
-			remove(t, windsurf)
-			link(t, lib, windsurf)
+			remove(t, kiro)
+			link(t, lib, kiro)
 
 			out := killedPlace(t, h, "alpha", "--force")
 			steps := readJournal(t, h)
@@ -1620,13 +1620,13 @@ func TestSkillPlaceRecoversACopyWhenKilled(t *testing.T) {
 			}
 			sameTree(t, "the library directory", libraryTree(t, lib), want)
 			linksToLibrary(t, "claude's placement", claude, lib)
-			for _, place := range []string{windsurf, copilot} {
+			for _, place := range []string{kiro, copilot} {
 				if _, ok := isSymlink(t, place); ok {
 					t.Errorf("%s is a symlink, want the copy copy_mode records", place)
 				}
 				sameTree(t, "the copy at "+place, libraryTree(t, place), want)
 			}
-			cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(windsurf), filepath.Dir(copilot))
+			cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(kiro), filepath.Dir(copilot))
 			equal(t, "drift", drift(h.listed("alpha")), "")
 		})
 	}
