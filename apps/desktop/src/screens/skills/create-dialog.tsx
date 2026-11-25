@@ -26,6 +26,7 @@ import {
   breaksSkillNameRule,
   isSkillName,
   SKILL_NAME_RULE,
+  typedSkillName,
 } from "#/lib/skill-name.ts";
 import { skillFile } from "#/screens/skills/edit.ts";
 import { openSkill } from "#/screens/skills/open.ts";
@@ -177,7 +178,7 @@ const CreateSkillForm = ({
           aria-invalid={broken || nameRefused ? true : undefined}
           value={name}
           onChange={(e) => {
-            setName(e.target.value);
+            setName(typedSkillName(e.currentTarget));
             if (nameRefused) {
               setRefusal(undefined);
             }
