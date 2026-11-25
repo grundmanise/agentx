@@ -1,8 +1,8 @@
 // The telemetry question (docs/help-center/telemetry.mdx): asked once the app has started, in a
 // release build (one whose CLI reports a stable or nightly version), while the inventory this
-// launch's serve child sent says the `telemetry` setting has no value. It lists what may be sent,
+// launch's serve child sent says the `telemetry` setting has no value. It links to what is sent,
 // and both answers run `config set telemetry`, which gives the setting a value, so no later launch
-// asks. "Don't allow" is the default: it has the focus, and Escape answers with it.
+// asks. "No thanks" is the default: it has the focus, and Escape answers with it.
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -22,15 +22,6 @@ import {
   liveSettings,
   setTelemetry,
 } from "#/store/telemetry.ts";
-
-/** What may be sent, as the help center lists it. */
-const SENT = [
-  "the commands the app runs, as in the terminal",
-  "the screens you open and the buttons you click, by name only",
-  "errors and crashes, with every path removed",
-  "the app version, release channel, OS, screen size, language and time zone",
-  "a non-reversible, hashed anonymous id",
-];
 
 /** Answers the question, which is not asked again this session, even if the command fails. */
 const answer = (on: boolean) => {
@@ -66,32 +57,14 @@ export const TelemetryDialog = () => {
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Help improve agentx</AlertDialogTitle>
+          <AlertDialogTitle>Analytics and crash reporting</AlertDialogTitle>
           <AlertDialogDescription>
-            Send anonymous usage data to PostHog? We use it to find what breaks
-            and to make agentx better for you.
+            Allow agentx to send anonymous usage data and crash reports to
+            PostHog? This helps us fix bugs and improve agentx for you. They
+            never include paths, names or anything you type. You can change this
+            any time in Settings.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="flex flex-col gap-1">
-          <p className="type-secondary text-text-secondary m-0">It may send:</p>
-          <ul
-            aria-label="What may be sent"
-            className="m-0 flex flex-col gap-1 pl-5"
-          >
-            {SENT.map((line) => (
-              <li
-                key={line}
-                className="type-secondary text-text-muted list-disc"
-              >
-                {line}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="type-secondary text-text-muted m-0">
-          It never sends paths, skill or server names, URLs, on-screen text or
-          anything you type. Your IP address is not stored.
-        </p>
         <AlertDialogFooter>
           <div className="flex min-w-0 flex-1 items-center">
             <Button
@@ -102,12 +75,12 @@ export const TelemetryDialog = () => {
                 void openInBrowser(TELEMETRY_PAGE);
               }}
             >
-              Details
+              What is sent
             </Button>
           </div>
           <AlertDialogCancel asChild>
             <Button track="telemetry-dialog.dont-allow" variant="ghost">
-              Don&apos;t allow
+              No thanks
             </Button>
           </AlertDialogCancel>
           <Button
@@ -117,7 +90,7 @@ export const TelemetryDialog = () => {
               answer(true);
             }}
           >
-            Allow anonymous data
+            Allow
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

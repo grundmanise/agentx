@@ -9,7 +9,7 @@ export interface SettingsSectionProps {
   /** The section label, such as "This machine". */
   title: string;
   /** The line under the label, in `text.muted`; absent for a section that needs none. */
-  description?: ReactNode;
+  description?: string;
   children: ReactNode;
 }
 
