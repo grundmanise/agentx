@@ -319,6 +319,7 @@ export interface Occurrence {
   kind: OccurrenceKind;
   scope: OccurrenceScope;
   plugin?: string;
+  also_at?: string[];
 }
 
 export interface ServerVersion {

@@ -666,7 +666,7 @@ func (inv *invocation) wholeRemovalReach(name string) ([]string, error) {
 	gone := removalDeletes(inv.detectedTargets(), name, inv.libraryPath(name), modes[name], true)
 	var ids []string
 	for _, c := range scan.Detect(inv.dirs) {
-		for _, dir := range c.SkillsDirs(inv.dirs) {
+		for _, dir := range scan.SkillsDirs(c, inv.dirs) {
 			if leadsInto(filepath.Join(dir, name), gone) {
 				ids = append(ids, c.Slug())
 				break

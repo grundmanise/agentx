@@ -204,7 +204,7 @@ func TestSkillsDirsOfTheClientsThatReadTheLibrary(t *testing.T) {
 		if !ok {
 			t.Fatalf("no client %s", tt.slug)
 		}
-		if got := c.SkillsDirs(tt.dirs); !slices.Equal(got, tt.want) {
+		if got := SkillsDirs(c, tt.dirs); !slices.Equal(got, tt.want) {
 			t.Errorf("%s with COPILOT_HOME %q: skills dirs = %v, want %v", tt.slug, tt.dirs.CopilotHome, got, tt.want)
 		}
 		if got := ReadsLibrary(c, tt.dirs); got != tt.reads {
@@ -214,5 +214,49 @@ func TestSkillsDirsOfTheClientsThatReadTheLibrary(t *testing.T) {
 	c, _ := Lookup("github-copilot")
 	if got := c.ConfigDir(withCopilotHome); got != "/elsewhere/copilot" {
 		t.Errorf("Copilot's configuration directory with COPILOT_HOME = %s, want /elsewhere/copilot", got)
+	}
+}
+
+// TestProjectSkillsDirsFollowTheReads covers the project-scope directories,
+// composed from the same reads as the user-scope ones: a client's own
+// project directory, then those of the clients it reads, then the project's
+// .agents/skills for a client that reads the library.
+func TestProjectSkillsDirsFollowTheReads(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		slug string
+		want []string
+	}{
+		{"claude-code", []string{".claude/skills"}},
+		{"codex", []string{".codex/skills", ".agents/skills"}},
+		{"cursor", []string{".cursor/skills", ".claude/skills", ".codex/skills", ".agents/skills"}},
+		{"github-copilot", []string{".github/skills", ".agents/skills"}},
+		{"opencode", []string{".agents/skills", ".claude/skills"}},
+		{"windsurf", []string{".windsurf/skills"}},
+	}
+	for _, tt := range tests {
+		c, ok := Lookup(tt.slug)
+		if !ok {
+			t.Fatalf("no client %s", tt.slug)
+		}
+		if got := ProjectSkillsDirs(c); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: project skills dirs = %v, want %v", tt.slug, got, tt.want)
+		}
+	}
+}
+
+// TestReadsNameRegisteredClients guards the reads table: every client it
+// lists, and every client a read names, is one the registry knows.
+func TestReadsNameRegisteredClients(t *testing.T) {
+	t.Parallel()
+	for slug, rs := range reads {
+		if _, ok := Lookup(slug); !ok {
+			t.Errorf("reads lists %s, which the registry does not know", slug)
+		}
+		for _, r := range rs {
+			if _, ok := Lookup(r.from); r.from != library && !ok {
+				t.Errorf("%s reads %s, which the registry does not know", slug, r.from)
+			}
+		}
 	}
 }

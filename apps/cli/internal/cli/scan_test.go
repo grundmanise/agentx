@@ -509,21 +509,32 @@ func TestScanSymlinkChainAndLibrary(t *testing.T) {
 	want := []string{
 		"claude-code symlink user ~/.claude/skills/commit",
 		"codex directory user ~/.agents/skills/commit",
-		"codex symlink user ~/.codex/skills/commit",
 		"cursor directory user ~/.agents/skills/commit",
-		"cursor symlink user ~/.claude/skills/commit",
-		"cursor symlink user ~/.codex/skills/commit",
-		"cursor symlink user ~/.cursor/skills/commit",
 	}
 	if got := occurrences(t, h, inventory, "commit"); !reflect.DeepEqual(got, want) {
 		t.Errorf("occurrences = %v, want %v", got, want)
 	}
+	alsoAt := map[string][]string{
+		"claude-code": nil,
+		"codex":       {"~/.codex/skills/commit"},
+		"cursor":      {"~/.claude/skills/commit", "~/.codex/skills/commit", "~/.cursor/skills/commit"},
+	}
 	for _, o := range inventory["skills"].([]any)[0].(map[string]any)["occurrences"].([]any) {
-		equal(t, "resolved_path", h.portable(o.(map[string]any)["resolved_path"].(string)), "~/.agents/skills/commit")
+		occ := o.(map[string]any)
+		equal(t, "resolved_path", h.portable(occ["resolved_path"].(string)), "~/.agents/skills/commit")
+		var got []string
+		if paths, ok := occ["also_at"].([]any); ok {
+			for _, p := range paths {
+				got = append(got, h.portable(p.(string)))
+			}
+		}
+		if want := alsoAt[occ["configuration"].(string)]; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s also_at = %v, want %v", occ["configuration"], got, want)
+		}
 	}
 
 	out := h.run("scan")
-	contains(t, "stdout", out.stdout, "commit  symlink    user  "+filepath.Join(h.home, ".cursor/skills/commit")+" -> "+filepath.Join(h.home, ".agents/skills/commit"))
+	contains(t, "stdout", out.stdout, "Cursor (cursor)  "+filepath.Join(h.home, ".cursor")+"  enabled  1 skill\n")
 }
 
 // TestScanSanitisesUntrustedNames covers a skill whose frontmatter names it
@@ -724,7 +735,7 @@ func TestScanSpawnBudget(t *testing.T) {
 	}
 	equal(t, "skills", len(inventory["skills"].([]any)), 100)
 	for _, s := range inventory["skills"].([]any) {
-		equal(t, "occurrences per skill", len(s.(map[string]any)["occurrences"].([]any)), 5) // codex, gemini-cli, and cursor through the library and through Claude Code's directory
+		equal(t, "occurrences per skill", len(s.(map[string]any)["occurrences"].([]any)), 4) // claude-code, codex, gemini-cli and cursor, once though it reads the library and Claude Code's directory
 	}
 	// The startup gate runs `git --version` once; the scan itself spawns
 	// nothing, this machine having no store to read lineage from.

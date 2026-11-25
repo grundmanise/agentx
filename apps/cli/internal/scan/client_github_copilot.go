@@ -21,18 +21,8 @@ func (githubCopilot) ConfigDir(d home.Dirs) string {
 	return filepath.Join(d.User, ".copilot")
 }
 
-// SkillsDirs: Copilot CLI reads the library too (since 1.0.11), except when
-// COPILOT_HOME is set, which stops it reading the library (since 1.0.66).
-func (c githubCopilot) SkillsDirs(d home.Dirs) []string {
-	dirs := []string{filepath.Join(c.ConfigDir(d), "skills")}
-	if d.CopilotHome == "" {
-		dirs = append(dirs, d.Library)
-	}
-	return dirs
-}
-func (githubCopilot) ProjectSkillsDirs() []string {
-	return []string{".github/skills", ".agents/skills"}
-}
+func (c githubCopilot) SkillsDir(d home.Dirs) string { return filepath.Join(c.ConfigDir(d), "skills") }
+func (githubCopilot) ProjectSkillsDir() string       { return ".github/skills" }
 
 // MCPConfigs is mcp-config.json; the servers `/mcp disable` turned off are
 // listed in settings.json under disabledMcpServers.

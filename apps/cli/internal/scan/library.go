@@ -63,7 +63,7 @@ func ContentHashAt(dir string) (contentHash string, warnings []string) {
 // first. A client that reads the library directly needs no placement of its
 // own, so ReadsLibrary decides before this is asked for.
 func PlacementDir(c Client, d home.Dirs) string {
-	dirs := c.SkillsDirs(d)
+	dirs := SkillsDirs(c, d)
 	if len(dirs) == 0 {
 		return ""
 	}
@@ -76,7 +76,7 @@ func PlacementDir(c Client, d home.Dirs) string {
 // the placement and a second entry would make that client list the skill
 // twice.
 func ReadsLibrary(c Client, d home.Dirs) bool {
-	return readsLibrary(c.SkillsDirs(d), d.Library)
+	return readsLibrary(SkillsDirs(c, d), d.Library)
 }
 
 // readsLibrary reports whether one of dirs is the library directory: named

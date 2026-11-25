@@ -15,13 +15,11 @@ import (
 
 type claudeCode struct{}
 
-func (claudeCode) Slug() string                 { return "claude-code" }
-func (claudeCode) Name() string                 { return "Claude Code" }
-func (claudeCode) ConfigDir(d home.Dirs) string { return filepath.Join(d.User, ".claude") }
-func (c claudeCode) SkillsDirs(d home.Dirs) []string {
-	return []string{filepath.Join(c.ConfigDir(d), "skills")}
-}
-func (claudeCode) ProjectSkillsDirs() []string { return []string{".claude/skills"} }
+func (claudeCode) Slug() string                   { return "claude-code" }
+func (claudeCode) Name() string                   { return "Claude Code" }
+func (claudeCode) ConfigDir(d home.Dirs) string   { return filepath.Join(d.User, ".claude") }
+func (c claudeCode) SkillsDir(d home.Dirs) string { return filepath.Join(c.ConfigDir(d), "skills") }
+func (claudeCode) ProjectSkillsDir() string       { return ".claude/skills" }
 
 // MCPConfigs: user-scope servers live in ~/.claude.json, not in settings.json.
 func (claudeCode) MCPConfigs(d home.Dirs) []MCPConfig {
