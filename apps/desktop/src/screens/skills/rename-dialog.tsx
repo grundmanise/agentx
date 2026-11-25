@@ -26,6 +26,7 @@ import {
   breaksSkillNameRule,
   isSkillName,
   SKILL_NAME_RULE,
+  typedSkillName,
 } from "#/lib/skill-name.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
@@ -157,7 +158,7 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
           value={name}
           disabled={pending}
           onChange={(e) => {
-            setName(e.target.value);
+            setName(typedSkillName(e.currentTarget));
             setRefusal(undefined);
           }}
         />

@@ -1,7 +1,8 @@
 // The Create skill dialog, from the Skills header: the name checked as the CLI
 // checks it, `skill new` with `--description` only when one is given, the new skill selected under
-// HUB once the inventory that follows lists it, its SKILL.md opened in the editor chosen in
-// Settings, and a refused name's message under Name. And the Add skill dialog, which Add opens:
+// HUB once the inventory that follows lists it, Open editor on the Created toast, or its SKILL.md
+// opened in the editor chosen in Settings when Open editor after creating a skill is on, and a
+// refused name's message under Name. And the Add skill dialog, which Add opens:
 // Find skills runs `source skills` on the pasted link, the skills picked go to the agents chosen
 // with one `skill add`, which adds the source, the first is selected once the inventory lists it,
 // Cancel after a lookup runs nothing, and a refusal shows under the field.
@@ -541,7 +542,6 @@ test("the name is checked as the CLI checks it", async ({ cli, page }) => {
 
   const refused = [
     "My-Skill",
-    "my skill",
     "my_skill",
     "-my-skill",
     "my--skill",
@@ -568,6 +568,27 @@ test("the name is checked as the CLI checks it", async ({ cli, page }) => {
     .getByRole("button", { exact: true, name: "Cancel" })
     .click();
   await expect(dialog(page)).toBeHidden();
+});
+
+test("a space typed or pasted in Name becomes a hyphen, and the caret stays where it was", async ({
+  cli,
+  page,
+}) => {
+  await openDialog(cli, page);
+  const field = nameField(page);
+
+  await field.pressSequentially("release notes");
+  await expect(field).toHaveValue("release-notes");
+  await expect(createButton(page)).toBeEnabled();
+
+  await field.evaluate((input: HTMLInputElement) => {
+    input.setSelectionRange("release-".length, "release-".length);
+  });
+  await field.pressSequentially("pdf big ");
+  await expect(field).toHaveValue("release-pdf-big-notes");
+
+  await field.fill("weekly report\tdraft");
+  await expect(field).toHaveValue("weekly-report-draft");
 });
 
 test("the description is invalid and Create is disabled past 1024 characters", async ({
@@ -601,13 +622,45 @@ test("the description is invalid and Create is disabled past 1024 characters", a
   await expect(dialog(page)).toBeHidden();
 });
 
-test("Create opens the new skill's SKILL.md in the chosen editor once it is selected", async ({
+test("Create offers Open editor on its toast and opens no editor by itself", async ({
+  cli,
+  page,
+}) => {
+  await openDialog(cli, page);
+  await nameField(page).fill(NEW_SKILL);
+  cli.register(["skill", "new", NEW_SKILL], { events: createdEvents });
+  await createButton(page).click();
+  const toast = toasts(page)
+    .getByRole("listitem")
+    .filter({ hasText: `Created ${NEW_SKILL} skill` });
+  await expect(toast).toBeVisible();
+
+  await answerRefresh(cli);
+  await expect(
+    hubGroup(page).getByRole("button", { exact: true, name: NEW_SKILL })
+  ).toHaveAttribute("aria-current", "true");
+  expect(cli.editorOpens).toEqual([]);
+
+  await toast.getByRole("button", { exact: true, name: "Open editor" }).click();
+  await expect
+    .poll(() => cli.editorOpens)
+    .toEqual([
+      {
+        editor: { kind: "system" },
+        path: `${libraryPath}/${NEW_SKILL}/SKILL.md`,
+      },
+    ]);
+  await expect(toast).toBeHidden();
+  expect(later(cli)).toEqual([["skill", "new", NEW_SKILL, "--json"]]);
+});
+
+test("with Open editor after creating a skill on, Create opens the new skill's SKILL.md in the chosen editor once it is selected", async ({
   cli,
   page,
 }) => {
   const zed = { id: "zed", kind: "app", name: "Zed" };
   cli.answerEditors([{ id: "zed", name: "Zed" }]);
-  cli.savePreferences({ editor: zed });
+  cli.savePreferences({ editor: zed, open_after_create: true });
   await openDialog(cli, page);
   await nameField(page).fill(NEW_SKILL);
   cli.register(["skill", "new", NEW_SKILL], { events: createdEvents });
@@ -626,6 +679,9 @@ test("Create opens the new skill's SKILL.md in the chosen editor once it is sele
   await expect(
     toasts(page).getByText(`Created ${NEW_SKILL} skill`)
   ).toBeVisible();
+  await expect(
+    toasts(page).getByRole("button", { exact: true, name: "Open editor" })
+  ).toHaveCount(0);
   expect(later(cli)).toEqual([["skill", "new", NEW_SKILL, "--json"]]);
 });
 
@@ -633,6 +689,7 @@ test("with the system default, Create opens SKILL.md through the opener", async 
   cli,
   page,
 }) => {
+  cli.savePreferences({ editor: { kind: "system" }, open_after_create: true });
   await openDialog(cli, page);
   await nameField(page).fill(NEW_SKILL);
   cli.register(["skill", "new", NEW_SKILL], { events: createdEvents });
