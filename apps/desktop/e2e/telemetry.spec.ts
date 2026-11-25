@@ -187,10 +187,8 @@ test.describe("the question", () => {
     await expect(dialog(page)).toContainText(
       "Allow agentx to send anonymous usage data and crash reports to PostHog? This helps us fix bugs and improve agentx for you. They never include paths, names or anything you type. You can change this any time in Settings."
     );
-    // "No thanks" is the default: it has the focus.
-    await expect(
-      dialog(page).getByRole("button", { name: "No thanks" })
-    ).toBeFocused();
+    // No button has the focus when it opens.
+    await expect(dialog(page).locator(":focus")).toHaveCount(0);
 
     await dialog(page).getByRole("button", { name: "What is sent" }).click();
     expect(cli.openedUrls).toEqual(["https://docs.agentx.wtf/telemetry"]);

@@ -2,7 +2,7 @@
 // release build (one whose CLI reports a stable or nightly version), while the inventory this
 // launch's serve child sent says the `telemetry` setting has no value. It links to what is sent,
 // and both answers run `config set telemetry`, which gives the setting a value, so no later launch
-// asks. "No thanks" is the default: it has the focus, and Escape answers with it.
+// asks. No button has the focus when it opens; Escape answers "No thanks".
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -55,7 +55,11 @@ export const TelemetryDialog = () => {
         }
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>Analytics and crash reporting</AlertDialogTitle>
           <AlertDialogDescription>

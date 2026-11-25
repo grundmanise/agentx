@@ -66,7 +66,7 @@ export const UsageDataSection = () => {
   return (
     <SettingsSection
       title="Analytics and crash reporting"
-      description="Anonymous usage data and crash reports."
+      description="Help improve agentx with anonymous usage data."
     >
       {settings !== undefined && (
         <SendUsageData checked={settings.telemetry === "on"} />
