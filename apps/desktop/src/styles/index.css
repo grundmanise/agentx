@@ -72,6 +72,10 @@
   --border-radius: var(--radius-toast);
   font-family: var(--font-sans);
 }
+:root [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+  width: fit-content;
+  max-width: var(--width);
+}
 /* The lines under a tinted toast's message stay quiet, so its tone shows in the title and icon. */
 :root [data-sonner-toaster] [data-sonner-toast] [data-description] {
   color: var(--color-toast-description);
