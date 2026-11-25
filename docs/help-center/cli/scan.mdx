@@ -92,7 +92,7 @@ A handshake starts or connects to every MCP server and records the tools, prompt
 - agentx fills in placeholders such as `${API_KEY}` from your environment, the way the declaring client does. The inventory shows the declaration as written.
 - For a remote server that Claude Code declares, agentx leaves Claude Code's credential variables empty in the URL and headers, as Claude Code does. These include `AWS_SECRET_ACCESS_KEY` and every `ANTHROPIC_*` and `CLAUDE_*` variable. Run with `--verbose` to see which ones agentx left empty.
 - A remote server receives its declared headers at its declared URL. For Codex, agentx reads the values of `env_http_headers` and `bearer_token_env_var` from your environment.
-- agentx skips a server you turned off in its client, and its row shows `(disabled)`. agentx reads this setting from Codex (`enabled = false`), Gemini CLI (`mcp.excluded`, `mcp.allowed` and `gemini mcp disable`) and GitHub Copilot (`/mcp disable`). Claude Code, Cursor and Windsurf store it where agentx cannot read it, so agentx handshakes those servers.
+- agentx skips a server you turned off in its client, and its row shows `(disabled)`. agentx reads this setting from Codex (`enabled = false`), Gemini CLI (`mcp.excluded`, `mcp.allowed` and `gemini mcp disable`) and GitHub Copilot (`/mcp disable`). Claude Code, Cursor and Windsurf store it where agentx cannot read it, so agentx handshakes those servers. agentx also skips every server of a plugin you turned off in Claude Code or Codex.
 
 agentx compares what each server offers. The same server declared in two clients stays one server. When the two declarations offer different tools, the server has two versions, and each declaration shows the one it answered with.
 
@@ -122,7 +122,7 @@ Plugins are listed under the configuration they are installed in, with their ver
 
 | Client | What agentx reads |
 |---|---|
-| Claude Code | The install records in `~/.claude/plugins/installed_plugins.json` and each plugin's directory. |
+| Claude Code | The install records in `~/.claude/plugins/installed_plugins.json`, each plugin's directory and `enabledPlugins` in `~/.claude/settings.json`. A plugin set to `false` there shows `(disabled)`, and so does each of its servers. A plugin with no entry there shows no enabled state. agentx does not read a project's settings or managed settings, which can override yours. |
 | Codex | The `[plugins."<name>@<marketplace>"]` tables in `~/.codex/config.toml` and the plugin copies under `~/.codex/plugins/cache`. A plugin, or a plugin's server, with `enabled = false` shows `(disabled)`. A plugin installed through your account has no table, so it shows no enabled state. |
 | Cursor | Your local plugins under `~/.cursor/plugins/local` and the marketplace plugins cached under `~/.cursor/plugins/cache`. Cursor stores which plugins are enabled in your account, so a listed plugin may be turned off. Claude Code plugins that Cursor also loads are listed under Claude Code only. |
 | Gemini CLI | The extensions under `~/.gemini/extensions`. An extension reports no hooks and no icon. |
