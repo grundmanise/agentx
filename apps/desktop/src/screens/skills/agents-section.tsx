@@ -68,8 +68,9 @@ const shortWarning = (message: string, id: string): string => {
 
 /**
  * Adds or removes the skill's placement in `c`, with an Undo that does the opposite. Off: `skill
- * place <name> --to <id>`; on: `skill remove <name> --from <id>`. A placement that was skipped, or a removal that left `c` seeing the skill, says so, with the CLI's warning
- * under it, and has no Undo: there is nothing to undo.
+ * place <name> --to <id>`; on: `skill remove <name> --from <id>`. A placement that was skipped,
+ * or a removal that left `c` seeing the skill, says so, with the CLI's warning under it, and has no
+ * Undo: there is nothing to undo.
  */
 const toggle = (row: SkillRow, c: Configuration, add: boolean) => {
   const undo: ToastAction = {
@@ -93,11 +94,11 @@ const toggle = (row: SkillRow, c: Configuration, add: boolean) => {
         if (add) {
           return placedNowhere(events)
             ? `${row.name} skill wasn't added to ${c.name}`
-            : `Added ${row.name} to ${c.name}`;
+            : `Added ${row.name} skill to ${c.name}`;
         }
         return stillSees(logs, c.id)
           ? `${row.name} skill wasn't removed from ${c.name}`
-          : `Removed ${row.name} from ${c.name}`;
+          : `Removed ${row.name} skill from ${c.name}`;
       },
       warnings: (logs) => logs.map((log) => shortWarning(log.message, c.id)),
     }

@@ -186,7 +186,7 @@ export const AddToAgents = ({ row }: { row: SkillRow }) => {
         void runUntilSettled(["skill", "place", row.name], {
           label,
           success: (events) =>
-            `Added ${row.name} to ${agentsWord(placedCount(events))}`,
+            `Added ${row.name} skill to ${agentsWord(placedCount(events))}`,
         });
       }}
     />
@@ -228,7 +228,7 @@ export const Reconnect = ({
     const args = ["skill", "place", row.name, "--to", placement.configuration];
     const outcome = await runUntilSettled(force ? [...args, "--force"] : args, {
       label,
-      success: `Reconnected ${row.name} to ${agent}`,
+      success: `Reconnected ${row.name} skill to ${agent}`,
     });
     if (
       !force &&

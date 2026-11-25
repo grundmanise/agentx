@@ -120,7 +120,9 @@ test.describe("chips", () => {
     // The chip shows what the inventory says, not what the command will do.
     await expect(cursor).not.toBeChecked();
     place.release();
-    await expect(toasts(page).getByText("Added pdf to Cursor")).toBeVisible();
+    await expect(
+      toasts(page).getByText("Added pdf skill to Cursor")
+    ).toBeVisible();
     await expect.poll(() => cli.serveRequests.length).toBe(1);
     // The command ended; the inventory that follows has not come: still pending.
     await expect(cursor).toHaveAttribute("aria-busy", "true");
@@ -133,7 +135,7 @@ test.describe("chips", () => {
     cli.register(["skill", "remove", "pdf", "--from", "cursor"]);
     await toasts(page).getByRole("button", { name: "Undo" }).click();
     await expect(
-      toasts(page).getByText("Removed pdf from Cursor")
+      toasts(page).getByText("Removed pdf skill from Cursor")
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "place", "pdf", "--to", "cursor", "--json"],
@@ -155,11 +157,11 @@ test.describe("chips", () => {
 
     await claude.click();
     await expect(
-      toasts(page).getByText("Removed pdf from Claude Code")
+      toasts(page).getByText("Removed pdf skill from Claude Code")
     ).toBeVisible();
     await toasts(page).getByRole("button", { name: "Undo" }).click();
     await expect(
-      toasts(page).getByText("Added pdf to Claude Code")
+      toasts(page).getByText("Added pdf skill to Claude Code")
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
@@ -596,7 +598,7 @@ test.describe("banners", () => {
     });
     await banner.getByRole("button", { name: "Add to agents" }).click();
     await expect(
-      toasts(page).getByText("Added draft to 3 agents")
+      toasts(page).getByText("Added draft skill to 3 agents")
     ).toBeVisible();
     expect(later(cli)).toEqual([["skill", "place", "draft", "--json"]]);
   });
@@ -663,7 +665,7 @@ test.describe("banners", () => {
     await dialog.getByRole("button", { name: "Replace" }).click();
     await expect(dialog).toBeHidden();
     await expect(
-      toasts(page).getByText("Reconnected release-notes to Cursor")
+      toasts(page).getByText("Reconnected release-notes skill to Cursor")
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "place", "release-notes", "--to", "cursor", "--json"],
