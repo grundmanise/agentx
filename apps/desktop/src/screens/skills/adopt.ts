@@ -3,8 +3,8 @@
 // group's Adopt all both start through the adopt dialog (`adopt-dialog.tsx`). The run is
 // `skill import --from <tool> --all` per tool, one after another. Each skill of the dialog is a
 // row whose state follows the run's `progress` events, and whose result is the `adoption` event
-// the run reports for it. The dialog shows the result, so no toast does; the activity list still
-// logs each run.
+// the run reports for it. The dialog shows the result, so no toast does; the Activity log has
+// each run's command line and how it ended.
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -12,9 +12,8 @@ import type { AdoptionEvent, CliEvent } from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import { plural } from "#/lib/plural.ts";
 import { toolName } from "#/screens/skills/projection.ts";
-import type { ActivityText, Outcome } from "#/store/runner.ts";
+import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
-import { addActivity } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** The value of `skill import --from` that names a tool. */
@@ -179,28 +178,6 @@ export const summaryText = (run: AdoptRun) =>
 const adoptionsOf = (events: CliEvent[]) =>
   events.filter((e) => e.type === "adoption");
 
-/**
- * The activity entry of one tool's run that reported its skills: how many of those it offered it
- * adopted, `success` when it adopted them all. A record the preview refused is not counted: the
- * run covers it too, and reports it refused again.
- */
-const activityOf = (
-  events: CliEvent[],
-  offered: ReadonlySet<string>
-): ActivityText | undefined => {
-  const adoption = adoptionsOf(events);
-  if (adoption.length === 0) {
-    return undefined;
-  }
-  const adopted = adoption.filter(
-    (e) => e.state === "adopted" && offered.has(e.name)
-  ).length;
-  return {
-    message: adoptedText(adopted, offered.size),
-    tone: adopted >= offered.size ? "success" : "attention",
-  };
-};
-
 /** A step of the run that names a skill moves its row on. */
 const stepped = (row: AdoptRow, phase: string): AdoptRow => {
   if (row.status !== "waiting" && row.status !== "running") {
@@ -307,18 +284,10 @@ const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
           started: run.started + (phase === "blobs" ? 1 : 0),
         }));
       },
-      ownActivity: (failed) => activityOf(failed.events, offered),
       ownFailure: true,
     }
   );
   const adoption = adoptionsOf(outcome.events);
-  if (outcome.exitCode === EXIT_CODES.ok) {
-    const text = activityOf(outcome.events, offered);
-    const warnings = otherWarnings(outcome);
-    if (text !== undefined) {
-      addActivity(warnings.length > 0 ? "attention" : text.tone, text.message);
-    }
-  }
   if (adoption.length > 0) {
     update((run) => ({
       ...run,

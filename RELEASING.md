@@ -81,6 +81,7 @@ them a release still publishes, but the step that needs them shows a warning and
 | `APPLE_API_PRIVATE_KEY` | The contents of the key's `.p8` file | |
 | `TAURI_SIGNING_PRIVATE_KEY` | The private key of the app's updater, made by `tauri signer generate` | The release has no update manifest, so installed apps are not offered it. A stable release also leaves `releases/latest/download/latest.json` missing until the next signed one |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The password of that key | |
+| `POSTHOG_CLI_API_KEY` | A PostHog personal API key made with the "Source map upload" preset (error tracking write, organization read), which uploads the app's source maps and the macOS app's debug symbols to the PostHog project | A crash of the app or the web UI shows in the built JavaScript, and a panic of the Rust side shows function names but no file or line |
 | `HOMEBREW_TAP_DEPLOY_KEY` | The private half of a deploy key with write access to `grundmanise/homebrew-tap` | Stable releases don't update the Homebrew cask and formula |
 
 To make the Apple secrets, with a membership of the Apple Developer Program:

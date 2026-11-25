@@ -1,5 +1,5 @@
 // The one way a control runs a command. The control shows its command as pending, the command
-// runs, and the outcome is a toast and an activity entry. The caller says when its command only
+// runs, and the outcome is a toast. The caller says when its command only
 // reads, with `sideEffect: false`. After any other command, whatever its exit code, the serve
 // child is asked to scan again: the screens redraw from the inventory that follows, never from a
 // result the app predicts. The command's outcome and the inventory's freshness are separate
@@ -19,8 +19,8 @@ import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
 import { skillNamesOf } from "#/lib/problem-text.ts";
 import { refresh } from "#/store/feed.ts";
-import { addActivity, useAppStore } from "#/store/store.ts";
-import type { Problem, Tone } from "#/store/store.ts";
+import { useAppStore } from "#/store/store.ts";
+import type { Problem } from "#/store/store.ts";
 
 /** The command that `args` name: the longest run of leading words that is one. */
 export const commandOf = (args: readonly string[]): string => {
@@ -37,12 +37,12 @@ export interface CommandOptions {
   label: string;
   /**
    * False for a command that only reads, such as `skill diff` or the preview that `skill import`
-   * with no argument is: no scan follows it, and it adds no activity entry. Leave it out for a
+   * with no argument is: no scan follows it. Leave it out for a
    * command that may change something, and for one of unknown kind.
    */
   sideEffect?: boolean;
   /**
-   * The toast and activity entry when the command exits 0; none when the events say the control
+   * The toast when the command exits 0; none when the events say the control
    * shows the outcome itself. The logs are the command's log events, its warnings among them.
    */
   success?:
@@ -69,15 +69,10 @@ export interface CommandOptions {
   deadlineMs?: number;
   /**
    * The control shows a failure itself, where it happened: the runner then shows no error toast
-   * and no "Stopped", and still logs the activity entry. "Another agentx command is running" and
+   * and no "Stopped". "Another agentx command is running" and
    * its Retry still show, since the control cannot run the command again.
    */
   ownFailure?: boolean;
-  /**
-   * With `ownFailure`, the activity entry of a failure the control words itself, in the tone and
-   * words of what it shows; undefined leaves the runner's own danger entry.
-   */
-  ownActivity?: (outcome: Outcome) => ActivityText | undefined;
   /**
    * The control shows a merge the command left pending itself, where it happened: exit 4 then
    * opens no skill, so a run of several commands stays where it is.
@@ -98,12 +93,6 @@ export interface CommandOptions {
    * a longer sequence; by default it runs this command again.
    */
   retry?: () => void;
-}
-
-/** An activity entry's tone and words. */
-export interface ActivityText {
-  tone: Tone;
-  message: string;
 }
 
 export interface Outcome {
@@ -250,33 +239,10 @@ const keepConflicts = (events: CliEvent[]) => {
 };
 
 /**
- * The activity entry of a failure: the CLI's problem as a danger entry, or the control's own
- * words for a failure it shows itself (`ownActivity`).
- */
-const logFailure = (
-  options: CommandOptions,
-  outcome: Outcome,
-  problem: Problem
-) => {
-  const own =
-    options.ownFailure === true ? options.ownActivity?.(outcome) : undefined;
-  if (own === undefined) {
-    addActivity("danger", problem.message);
-  } else {
-    addActivity(own.tone, own.message);
-  }
-};
-
-/**
  * Shows a command that exited 0: its success text, as a success toast, or, with warnings, as an
- * attention toast with them under it. The activity entry asks for attention rather than reporting
- * plain success when there are warnings: a placement skipped, a copy that differed.
+ * attention toast with them under it: a placement skipped, a copy that differed.
  */
-const reportSuccess = (
-  options: CommandOptions,
-  outcome: Outcome,
-  log: boolean
-) => {
+const reportSuccess = (options: CommandOptions, outcome: Outcome) => {
   const { events, logs } = outcome;
   const text =
     typeof options.success === "function"
@@ -296,9 +262,6 @@ const reportSuccess = (
   } else {
     notifySuccess(text, action);
   }
-  if (log) {
-    addActivity(warnings.length > 0 ? "attention" : "success", text);
-  }
 };
 
 /** Shows the outcome, by exit code (docs/spec/cli-contract.md, Exit codes). */
@@ -306,18 +269,16 @@ const report = (
   args: readonly string[],
   options: CommandOptions,
   outcome: Outcome,
-  log: boolean,
   again: () => void
 ) => {
   const { exitCode, events } = outcome;
   if (exitCode === EXIT_CODES.ok) {
-    reportSuccess(options, outcome, log);
+    reportSuccess(options, outcome);
     return;
   }
   if (exitCode === EXIT_CODES.locked) {
-    const text = "Another agentx command is running";
     notify(
-      text,
+      "Another agentx command is running",
       {
         label: "Retry",
         onClick: again,
@@ -325,24 +286,15 @@ const report = (
       },
       { kind: "warning" }
     );
-    if (log) {
-      addActivity("attention", text);
-    }
     return;
   }
   if (exitCode === EXIT_CODES.interrupted && outcome.cancelled) {
     if (options.ownFailure !== true) {
       notify("Stopped");
     }
-    if (log) {
-      addActivity("attention", "Stopped");
-    }
     return;
   }
   const problem = problemOf(args, outcome);
-  if (log) {
-    logFailure(options, outcome, problem);
-  }
   // Exit 8: the startup layer comes back (src/startup/startup.ts) and says why.
   if (exitCode === EXIT_CODES.store) {
     return;
@@ -366,8 +318,7 @@ const report = (
 /**
  * Runs `agentx <args> --json` for the control named `options.label`, and returns how it ended
  * so that the caller can follow up. It never rejects: a CLI that could not start is an outcome.
- * A command that only reads (`options.sideEffect` is false) asks for no scan after it and adds no
- * activity entry.
+ * A command that only reads (`options.sideEffect` is false) asks for no scan after it.
  */
 export const agentx = async (
   args: readonly string[],
@@ -414,7 +365,6 @@ export const agentx = async (
     args,
     options,
     outcome,
-    !read,
     options.retry ??
       (() => {
         void agentx(args, options);

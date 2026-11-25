@@ -1,18 +1,15 @@
 package cli
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
-	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // TestClassifyFork is the rule reconciliation, the listing's warnings and
@@ -69,36 +66,6 @@ func TestClassifyFork(t *testing.T) {
 			t.Parallel()
 			equal(t, "verdict", classifyFork(tc.facts), tc.want)
 		})
-	}
-}
-
-// reconciled reads serve's stdout up to its first inventory, which it
-// returns with the reconcile events before it, in order; any other event
-// before the inventory fails the test.
-func (p *serveProc) reconciled() (events []jsonEvent, inventory jsonEvent) {
-	p.t.Helper()
-	deadline := time.After(serveDeadline)
-	for {
-		select {
-		case line, ok := <-p.lines:
-			if !ok {
-				p.t.Fatal("serve ended before its first inventory")
-			}
-			var e jsonEvent
-			if err := json.Unmarshal([]byte(line), &e); err != nil {
-				p.t.Fatalf("not a JSON event: %q: %v", line, err)
-			}
-			switch e["type"] {
-			case "reconcile":
-				events = append(events, e)
-			case "inventory":
-				return events, e
-			default:
-				p.t.Fatalf("serve emitted %v before its first inventory", e)
-			}
-		case <-deadline:
-			p.t.Fatalf("no inventory within %s", serveDeadline)
-		}
 	}
 }
 
@@ -162,31 +129,20 @@ func TestForkWarningsSayWhatIsMissing(t *testing.T) {
 
 // TestServeReconcilesAtStart starts serve over a home built by earlier
 // commands, as agentx installed again over an existing agentx home finds
-// it, and reads one reconcile event per skill name, sorted, before the
-// first inventory: a managed skill that holds its base, a .DS_Store of its
-// own beside it, is restored, an edited one modified, one whose library
-// directory went installable, and so is a fork only the hub's
-// branches hold; a fork placed as it was is restored, and stays its
-// worktree's owner beside a copy of the worktree, one whose worktree was
-// deleted by hand is checked out again and repaired, one whose skill
-// directory was deleted while a git merge waits in its worktree is
-// worktree missing, the merge kept, and one whose registration was
-// removed by hand, its worktree then a directory git does not know, is an
-// adopt candidate left as it is; a directory of the library no branch
-// names is unmanaged, even when the hub holds a fork of its
-// name. Before that, git's registration of a worktree whose directory is
-// gone is pruned, while a pending merge's locked checkout stays; the
-// repair rewrites the version file.
+// it, and reads its first inventory, which no other event comes before: a
+// fork placed as it was stays as it is, and stays its worktree's owner
+// beside a copy of the worktree; one whose worktree was deleted by hand is
+// checked out again and linked; one whose skill directory was deleted
+// while a git merge waits in its worktree is left as it is, the merge
+// kept; and one whose registration was removed by hand, its worktree then
+// a directory git does not know, is left as it is. The inventory warns of
+// the last two and of nothing it put back. Before that, git's registration
+// of a worktree whose directory is gone is pruned, while a pending merge's
+// locked checkout stays; the repair rewrites the version file.
 func TestServeReconcilesAtStart(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	s.skill("skills/gamma", "gamma", "The third skill", nil)
-	s.commit("gamma")
-	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta", "--name", "gamma", "--fetch")
-	writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder\n")
-	writeFile(t, filepath.Join(h.library, "beta", "notes.md"), "my notes\n")
-	remove(t, filepath.Join(h.library, "gamma"))
-	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--fetch")
 	for _, name := range []string{"kept", "gone", "orphan", "busy"} {
 		h.mustRun("skill", "new", name)
 	}
@@ -201,49 +157,16 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	admin, _ := home.AdminDirOf(orphan)
 	remove(t, admin)
 	orphanTree := libraryTree(t, orphan)
-	tip := h.ref(lineage.ForkRef("kept"))
-	// The hub's branches, as a fetch of it leaves them.
-	const hub = "file:///nowhere/skills.git"
-	if err := home.Mutate(h.agentx, nil, func() error {
-		settings, err := home.LoadSettings(h.agentx)
-		if err != nil {
-			return err
-		}
-		settings.SetSource(home.Source{URL: hub, Hub: true})
-		return home.SaveSettings(h.agentx, settings)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	h.storeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(hub)), "far"), tip)
-	h.storeGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(hub)), "mine"), tip)
+	keptTree := libraryTree(t, kept)
 	stray := filepath.Join(t.TempDir(), "stray")
-	h.storeGit("worktree", "add", "--quiet", "--detach", stray, tip)
+	h.storeGit("worktree", "add", "--quiet", "--detach", stray, h.ref(lineage.ForkRef("kept")))
 	remove(t, stray)
 	pending := pendingCheckout(h, "alpha")
 	h.storeGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason, pending, h.ref(lineage.ManagedRef("alpha")))
 	version := mutationVersion(t, h)
 
 	p := h.serve(t, "--json")
-	events, inventory := p.reconciled()
-	var got []string
-	for _, e := range events {
-		line := e["name"].(string) + " " + e["kind"].(string) + " " + e["outcome"].(string)
-		if path, ok := e["path"].(string); ok {
-			line += " " + path
-		}
-		got = append(got, line)
-	}
-	equal(t, "the reconcile events", strings.Join(got, "\n"), strings.Join([]string{
-		"alpha managed restored",
-		"beta managed modified",
-		"busy managed worktree missing " + busy,
-		"far managed installable",
-		"gamma managed installable",
-		"gone managed repaired",
-		"kept managed restored",
-		"mine unmanaged unmanaged",
-		"orphan managed adopt candidate " + orphan,
-	}, "\n"))
+	inventory := p.next("inventory")
 	equal(t, "exit", p.close(), 0)
 
 	if !home.WorktreeAt(gone, "skills/gone") {
@@ -251,18 +174,31 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	}
 	equal(t, "git status in the repaired worktree", gitIn(t, h, gone, "status", "--porcelain"), "")
 	forkLinked(t, filepath.Join(h.library, "gone"), filepath.Join(gone, "gone"))
+	sameTree(t, "the fork placed as it was", libraryTree(t, kept), keptTree)
+	forkLinked(t, filepath.Join(h.library, "kept"), filepath.Join(kept, "kept"))
 	if !home.RegisteredIn(gitx.StorePath(h.agentx), kept) {
 		t.Error("the copy of a worktree took its registration")
 	}
 	if !lexists(mergeHead) {
 		t.Error("the merge waiting in a worktree was lost")
 	}
+	if lexists(filepath.Join(busy, "busy")) {
+		t.Error("the skill directory was laid out where a git merge waits")
+	}
 	sameTree(t, "the adopt candidate", libraryTree(t, orphan), orphanTree)
 	if home.RegisteredIn(gitx.StorePath(h.agentx), orphan) {
 		t.Error("the adopt candidate was registered")
 	}
-	contains(t, "the inventory's warnings", strings.Join(stringsOf(inventory["warnings"]), "\n"),
+	warned := strings.Join(stringsOf(inventory["warnings"]), "\n")
+	contains(t, "the inventory's warnings", warned,
 		orphan+" is in the way of orphan's worktree; run 'agentx skill place orphan --force' to adopt it")
+	contains(t, "the inventory's warnings", warned,
+		"busy's skill directory "+filepath.Join(busy, "busy")+" is missing from its worktree, where a git merge stopped part way")
+	for _, name := range []string{"gone", "kept"} {
+		if strings.Contains(warned, name+"'s ") {
+			t.Errorf("the inventory warns of %s:\n%s", name, warned)
+		}
+	}
 	list := h.storeGit("worktree", "list", "--porcelain")
 	if strings.Contains(list, stray) {
 		t.Errorf("the registration of a worktree whose directory is gone survived:\n%s", list)
@@ -311,7 +247,8 @@ func (h *harness) moveTo(t *testing.T, root string) {
 // TestServeRepairsWorktreesOfAMovedHome moves a home with a fork as a
 // whole, which leaves the worktree's pointers naming where it was, so that
 // no git runs in it, and starts serve there: it repairs them with git,
-// naming the worktree's path, and reports the fork repaired. The home
+// naming the worktree's path, so that the first inventory does not warn
+// of the fork, and rewrites the version file. The home
 // repo is one a git older than 2.48 made, which writes absolute pointers:
 // a newer git makes the repo write them relative, and a move breaks none.
 func TestServeRepairsWorktreesOfAMovedHome(t *testing.T) {
@@ -325,11 +262,16 @@ func TestServeRepairsWorktreesOfAMovedHome(t *testing.T) {
 	if !home.PointersMoved(root) {
 		t.Fatal("the move left the worktree's pointers meeting; nothing to repair")
 	}
+	version := mutationVersion(t, h)
 	p := h.serve(t, "--json")
-	events, _ := p.reconciled()
-	equal(t, "the events", len(events), 1)
-	equal(t, "the outcome", events[0]["outcome"], outcomeRepaired)
+	inventory := p.next("inventory")
 	equal(t, "exit", p.close(), 0)
+	if warned := strings.Join(stringsOf(inventory["warnings"]), "\n"); strings.Contains(warned, "notes's ") {
+		t.Errorf("the inventory warns of the repaired fork:\n%s", warned)
+	}
+	if mutationVersion(t, h) <= version {
+		t.Error("the repair did not rewrite the version file")
+	}
 	contains(t, "the worktrees", h.storeGit("worktree", "list", "--porcelain"), "worktree "+root+"\n")
 	equal(t, "git status in the worktree", gitIn(t, h, root, "status", "--porcelain"), "")
 }

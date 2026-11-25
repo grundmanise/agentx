@@ -5,7 +5,7 @@
 
 // The output schema version this app reads. An event of another version is
 // refused.
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 // What every event starts with.
 export interface Envelope {
@@ -63,14 +63,6 @@ export type PublishOutcome =
   | "denied"
   | "refused";
 export type PullOutcome = "fast-forward" | "merged" | "conflict" | "refused";
-export type ReconcileOutcome =
-  | "restored"
-  | "repaired"
-  | "worktree missing"
-  | "adopt candidate"
-  | "modified"
-  | "installable"
-  | "unmanaged";
 export type AdoptionState = "candidate" | "adopted" | "managed" | "refused";
 export type ImportState = "present" | "missing" | "different";
 export type ImportAction =
@@ -81,7 +73,6 @@ export type ImportAction =
   | "kept"
   | "skipped";
 export type MachineDerivation = "platform" | "random";
-export type UpdateCheckScope = "all" | "hub";
 export type SourceAccess = "writable" | "read-only" | "unknown";
 export type ProgressPhase =
   | "fetch"
@@ -621,36 +612,11 @@ export interface AdoptionEvent {
   reason?: string;
 }
 
-export interface ReconcileEvent {
-  type: "reconcile";
-  schema_version: number;
-  name: string;
-  kind: SkillKind;
-  outcome: ReconcileOutcome;
-  path?: string;
-}
-
-export interface DriftEvent {
-  type: "drift";
-  schema_version: number;
-  instance_id: string;
-  scan_counter: number;
-  name: string;
-  kind: SkillKind;
-  state?: SkillState;
-  drift: DriftState[];
-  previous_state?: SkillState;
-  previous_drift: DriftState[];
-}
-
 export interface UpdateCheckEvent {
   type: "update_check";
   schema_version: number;
-  instance_id: string;
-  scope: UpdateCheckScope;
   checked_at: string;
   ok: boolean;
-  fetched: boolean;
 }
 
 export interface ListeningEvent {
@@ -698,8 +664,6 @@ export type CliEvent =
   | InventoryEvent
   | DoctorEvent
   | AdoptionEvent
-  | ReconcileEvent
-  | DriftEvent
   | UpdateCheckEvent
   | ListeningEvent
   | OperationEvent

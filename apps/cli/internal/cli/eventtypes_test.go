@@ -59,8 +59,6 @@ var eventTypes = []struct {
 	{"inventory", inventoryEvent{}},
 	{"doctor", doctorEvent{}},
 	{"adoption", adoptionEvent{}},
-	{"reconcile", reconcileEvent{}},
-	{"drift", driftEvent{}},
 	{"update_check", updateCheckEvent{}},
 	{"listening", listeningEvent{}},
 }
@@ -116,16 +114,16 @@ func errorCodes() []string {
 // CLI writes.
 var valueLists = []valueList{
 	{name: "SkillKind", values: []string{lineage.KindManaged, lineage.KindUnmanaged}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "Kind"}, {reconcileEvent{}, "Kind"}, {driftEvent{}, "Kind"},
+		{scan.LibraryEntry{}, "Kind"},
 		{updateAvailableEvent{}, "Kind"}, {conflictEvent{}, "Kind"}, {snapshotSkill{}, "Kind"},
 	}},
 	{name: "SkillState", values: []string{stateCurrent, stateModified}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "State"}, {driftEvent{}, "State"}, {driftEvent{}, "PreviousState"},
+		{scan.LibraryEntry{}, "State"},
 	}},
 	{name: "DriftState", open: true, values: []string{
 		driftDisplaced, driftMissing, driftSourceRemoved, driftUpstreamRemoved, driftNotPublished,
 	}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "Drift"}, {driftEvent{}, "Drift"}, {driftEvent{}, "PreviousDrift"},
+		{scan.LibraryEntry{}, "Drift"},
 	}},
 	{name: "PlacementMode", values: []string{modeSymlink, modeCopy, modeLibrary}, fields: []fieldRef{
 		{scan.LibraryPlacement{}, "Mode"},
@@ -182,12 +180,6 @@ var valueLists = []valueList{
 	{name: "PullOutcome", values: []string{pullFastForward, pullMerged, pullConflict, pullRefused}, fields: []fieldRef{
 		{pullEvent{}, "Outcome"},
 	}},
-	{name: "ReconcileOutcome", values: []string{
-		outcomeRestored, outcomeRepaired, outcomeWorktreeMissing, outcomeAdoptCandidate,
-		outcomeModified, outcomeInstallable, outcomeUnmanaged,
-	}, fields: []fieldRef{
-		{reconcileEvent{}, "Outcome"},
-	}},
 	{name: "AdoptionState", values: []string{adoptCandidate, adoptAdopted, adoptManaged, adoptRefused}, fields: []fieldRef{
 		{adoptionEvent{}, "State"},
 	}},
@@ -199,9 +191,6 @@ var valueLists = []valueList{
 	}},
 	{name: "MachineDerivation", values: []string{home.DerivedPlatform, home.DerivedRandom}, fields: []fieldRef{
 		{scan.Machine{}, "Derivation"},
-	}},
-	{name: "UpdateCheckScope", values: []string{checkScopeAll, checkScopeHub}, fields: []fieldRef{
-		{updateCheckEvent{}, "Scope"},
 	}},
 	{name: "SourceAccess", values: []string{home.AccessWritable, home.AccessReadOnly, home.AccessUnknown}, fields: []fieldRef{
 		{scan.Source{}, "Access"}, {home.Source{}, "Access"},

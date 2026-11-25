@@ -15,51 +15,29 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
-// Reconciliation matches the branches of the store against what is
+// Reconciliation matches the fork branches of the store against what is
 // on disk, so that agentx installed again over an existing agentx home, or
-// a fork's worktree deleted by mistake, comes back as it was: every skill
-// is recognised from its branch and its library entry, a fork whose
+// a fork's worktree deleted by mistake, comes back as it was: a fork whose
 // worktree went is checked out again from its branch, and nothing is
-// deleted or overwritten. The outcomes, one per skill name, are these.
+// deleted or overwritten. classifyFork gives each fork one of these
+// outcomes, which the listing's warnings and skill place share.
 const (
-	// outcomeRestored is a skill found as its branch leaves it: a managed
-	// skill whose library directory holds its base version, or a fork
-	// whose library symlink leads into its registered worktree.
+	// outcomeRestored is a fork whose library symlink leads into its
+	// registered worktree.
 	outcomeRestored = "restored"
-	// outcomeRepaired is a fork whose worktree, skill directory or library
-	// symlink was missing, and was put back from its branch.
-	outcomeRepaired = "repaired"
 	// outcomeWorktreeMissing is a fork that was placed on this machine and
 	// whose worktree, the skill directory in it, or the library symlink
-	// into it, is gone or leads nowhere, and was not put back. It is not
-	// drift's missing, which is a configuration's place with nothing at it.
+	// into it, is gone or leads nowhere. It is not drift's missing, which
+	// is a configuration's place with nothing at it.
 	outcomeWorktreeMissing = "worktree missing"
 	// outcomeAdoptCandidate is a fork with something of its own in the
 	// way: a directory where its worktree belongs that is not registered as
 	// one, or a directory or a foreign symlink where its library symlink
-	// belongs. It is reported and left as it is.
+	// belongs. It is left as it is.
 	outcomeAdoptCandidate = "adopt candidate"
-	// outcomeModified is a managed skill whose library directory does not
-	// hold its base version.
-	outcomeModified = "modified"
-	// outcomeInstallable is a skill the store holds and the library
-	// does not: a managed skill whose library directory is gone, a fork
-	// never placed on this machine, and a fork only the hub's
-	// branches hold.
+	// outcomeInstallable is a fork never placed on this machine.
 	outcomeInstallable = "installable"
-	// outcomeUnmanaged is a skill of the library no branch names.
-	outcomeUnmanaged = "unmanaged"
 )
-
-// reconcileEvent is the outcome of one skill name, emitted by a
-// long-running serve before its first inventory.
-type reconcileEvent struct {
-	event
-	Name    string `json:"name"`
-	Kind    string `json:"kind"` // managed or unmanaged, see eventKind
-	Outcome string `json:"outcome"`
-	Path    string `json:"path,omitempty"` // what is in the way of an adopt candidate, the worktree of one whose worktree is missing
-}
 
 // libKind is what a fork's library entry is.
 type libKind int
@@ -96,7 +74,7 @@ type forkFacts struct {
 // forkVerdict is what reconciliation makes of a fork's facts: the outcome
 // before any repair, what is in the way of an adopt candidate, and what a
 // repair does. A fork with anything to repair is worktree missing until
-// the repair is made, and repaired once it is.
+// the repair is made.
 type forkVerdict struct {
 	outcome  string
 	inWay    string // "worktree" or "library symlink": what an adopt candidate's path is in the way of
@@ -360,125 +338,69 @@ func (inv *invocation) listLineage(ctx context.Context, gitDir string) (map[stri
 }
 
 // serveReconcile reconciles agentx home when a long-running serve starts,
-// before its first scan, and emits one reconcile event per skill name, by
-// name. It holds the lock throughout, waiting for it as the update check
-// does: the recovery and pruning every mutation starts with, then git's
-// registrations of worktrees whose directory is gone, which a locked
-// worktree, a fork's or a pending merge's, survives; then the pointers of
-// every fork's worktree that moved with agentx home, repaired with git,
-// each path named; then the classification, see classifyFork, and one
-// journal that repairs every fork whose worktree is missing. Adopt
-// candidates are reported and left as they are. The version file is
+// before its first scan. It holds the lock throughout, waiting for it as
+// the update check does: the recovery and pruning every mutation starts
+// with, then git's registrations of worktrees whose directory is gone,
+// which a locked worktree, a fork's or a pending merge's, survives; then
+// the pointers of every fork's worktree that moved with agentx home,
+// repaired with git, each path named; then the classification, see
+// classifyFork, and one journal that repairs every fork whose worktree is
+// missing. Adopt candidates are left as they are. The version file is
 // rewritten only when something was repaired. A repair that fails is a
-// warning, and its forks stay worktree missing.
+// warning, and its forks stay worktree missing. Serve reports nothing
+// else of it: the inventory shows what it put back, and the listing's
+// fork warnings name each fork it did not, see forkWarnings.
 //
 // A pending merge's checkout under merges/ is never classified or repaired
 // as a fork: the recovery every mutation starts with prunes a checkout
 // that is not registered, and a registration with no checkout.
 func (inv *invocation) serveReconcile(ctx context.Context) error {
-	var events []reconcileEvent
-	err := home.MutateQuietWaiting(ctx, inv.dirs.Home, inv.refs(ctx), func() (err error) {
-		events, err = inv.reconcile(ctx)
-		return err
+	return home.MutateQuietWaiting(ctx, inv.dirs.Home, inv.refs(ctx), func() error {
+		return inv.reconcile(ctx)
 	})
-	if err != nil {
-		return err
-	}
-	for _, ev := range events {
-		inv.out.emit(ev)
-		if ev.Outcome != outcomeRestored {
-			style := noteStyle
-			if ev.Outcome == outcomeAdoptCandidate || ev.Outcome == outcomeWorktreeMissing {
-				style = warnStyle
-			}
-			inv.out.print(inv.out.paint(heading, "reconcile "+sanitised(ev.Name)), ": ", inv.out.paint(style, ev.Outcome))
-		}
-	}
-	return nil
 }
 
-// reconcile is serveReconcile's work under the lock: what it repairs, and
-// the events it reports.
-func (inv *invocation) reconcile(ctx context.Context) ([]reconcileEvent, error) {
+// reconcile is serveReconcile's work under the lock.
+func (inv *invocation) reconcile(ctx context.Context) error {
 	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return nil, storeFailure(err)
+		return storeFailure(err)
 	}
-	sc, err := inv.skillContext(ctx)
+	if !exists {
+		return nil
+	}
+	records, err := inv.lineageRecords(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	remote, repointed := map[string]bool{}, map[string]bool{}
-	if exists {
-		var roots []string
-		for _, name := range slices.Sorted(maps.Keys(sc.records)) {
-			if sc.records[name].Kind == lineage.KindFork {
-				roots = append(roots, inv.worktreeRoot(name))
-			}
-		}
-		if remote, repointed, err = inv.prepareWorktrees(ctx, gitDir, roots); err != nil {
-			return nil, err
+	var forks []lineage.Record
+	var roots []string
+	for _, name := range slices.Sorted(maps.Keys(records)) {
+		if rec := records[name]; rec.Kind == lineage.KindFork {
+			forks = append(forks, rec)
+			roots = append(roots, inv.worktreeRoot(name))
 		}
 	}
-	libs := librarySkills(inv.dirs.Library)
-	names := map[string]bool{}
-	for name := range sc.records {
-		names[name] = true
+	repointed, err := inv.prepareWorktrees(ctx, gitDir, roots)
+	if err != nil {
+		return err
 	}
-	for name := range libs {
-		names[name] = true
-	}
-	for name := range remote {
-		names[name] = true
-	}
-	var events []reconcileEvent
 	var repairs []forkSite
-	for _, name := range slices.Sorted(maps.Keys(names)) {
-		ev := reconcileEvent{event: newEvent("reconcile"), Name: name}
-		rec, held := sc.records[name]
-		lib, inLibrary := libs[name]
-		switch {
-		case held && rec.Kind == lineage.KindFork:
-			f, v := inv.reconcileFork(ctx, gitDir, rec)
-			ev.Kind, ev.Outcome, ev.Path = lineage.KindManaged, v.outcome, verdictPath(f, v)
-			if v.outcome == outcomeRestored && repointed[name] {
-				ev.Outcome = outcomeRepaired
-			}
-			if v.repairs() && !v.pointers {
-				repairs = append(repairs, f)
-			}
-		case held:
-			ev.Kind = lineage.KindManaged
-			switch {
-			case !inLibrary:
-				ev.Outcome = outcomeInstallable
-			case sc.observe(ctx, inv, lib).modified:
-				ev.Outcome = outcomeModified
-			default:
-				ev.Outcome = outcomeRestored
-			}
-		case remote[name] && !inLibrary:
-			ev.Kind, ev.Outcome = lineage.KindManaged, outcomeInstallable
-		default:
-			ev.Kind, ev.Outcome = lineage.KindUnmanaged, outcomeUnmanaged
+	for _, rec := range forks {
+		if f, v := inv.reconcileFork(ctx, gitDir, rec); v.repairs() && !v.pointers {
+			repairs = append(repairs, f)
 		}
-		events = append(events, ev)
 	}
-	repaired := map[string]bool{}
+	repaired := false
 	if len(repairs) > 0 {
 		if repaired, err = inv.repairForks(ctx, repairs); err != nil {
 			inv.out.warn("reconcile: " + err.Error() + "; run 'agentx skill place <name>' for each of your skills whose worktree is missing")
 		}
 	}
-	for i := range events {
-		if repaired[events[i].Name] {
-			events[i].Outcome, events[i].Path = outcomeRepaired, ""
-		}
+	if !repaired && !repointed {
+		return nil
 	}
-	if len(repaired) == 0 && len(repointed) == 0 {
-		return events, nil
-	}
-	return events, home.BumpVersion(inv.dirs.Home)
+	return home.BumpVersion(inv.dirs.Home)
 }
 
 // reconcileFork finds and classifies the fork whose branch is rec. Its
@@ -500,38 +422,24 @@ func (inv *invocation) reconcileFork(ctx context.Context, gitDir string, rec lin
 	return f, classifyFork(facts)
 }
 
-// verdictPath is the path a reconcile event names: what is in the way of
-// an adopt candidate, and the worktree of a fork whose worktree is
-// missing.
-func verdictPath(f forkSite, v forkVerdict) string {
-	switch {
-	case v.inWay == "library symlink":
-		return f.libPath
-	case v.outcome == outcomeAdoptCandidate || v.outcome == outcomeWorktreeMissing:
-		return f.root
-	}
-	return ""
-}
-
-// prepareWorktrees readies git's worktrees of the store at gitDir
-// for reconciliation, and, while a hub is set, reads the fork
-// branches it holds, by name: registrations whose directory is gone are
-// pruned, which every locked worktree survives, and the pointers of every
-// fork's worktree of roots that no longer meet, as moving agentx home
-// leaves them, are repaired, each path named; repointed are the names of
-// the worktrees the repair put right. A directory of the worktrees
-// directory that is no fork's worktree is never repaired, nor is a copy of
-// another worktree, see repairable: git would hand it that worktree's
-// registration. A repair git cannot make leaves the worktree as it is, for
-// the classification to find.
-func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, roots []string) (remote, repointed map[string]bool, err error) {
+// prepareWorktrees readies git's worktrees of the store at gitDir for
+// reconciliation: registrations whose directory is gone are pruned, which
+// every locked worktree survives, and the pointers of every fork's
+// worktree of roots that no longer meet, as moving agentx home leaves
+// them, are repaired, each path named. It reports whether the repair put
+// any worktree right. A directory of the worktrees directory that is no
+// fork's worktree is never repaired, nor is a copy of another worktree,
+// see repairable: git would hand it that worktree's registration. A repair
+// git cannot make leaves the worktree as it is, for the classification to
+// find.
+func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, roots []string) (repointed bool, err error) {
 	list, err := inv.git.Worktrees(ctx, gitDir)
 	if err != nil {
-		return nil, nil, storeFailure(err)
+		return false, storeFailure(err)
 	}
 	if slices.ContainsFunc(list, func(w gitx.Worktree) bool { return w.Prunable }) {
 		if err := inv.git.PruneWorktrees(ctx, gitDir); err != nil {
-			return nil, nil, storeFailure(err)
+			return false, storeFailure(err)
 		}
 	}
 	var moved []string
@@ -540,45 +448,25 @@ func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, root
 			moved = append(moved, root)
 		}
 	}
-	repointed = map[string]bool{}
-	if len(moved) > 0 {
-		if err := inv.git.RepairWorktrees(ctx, gitDir, moved); err != nil {
-			inv.out.debugf("worktree repair: %v", err)
-		}
-		for _, root := range moved {
-			if !home.PointersMoved(root) {
-				repointed[filepath.Base(root)] = true
-			}
-		}
+	if len(moved) == 0 {
+		return false, nil
 	}
-	remote = map[string]bool{}
-	_, hub, ok, err := inv.hubSource()
-	if err != nil {
-		return nil, nil, err
+	if err := inv.git.RepairWorktrees(ctx, gitDir, moved); err != nil {
+		inv.out.debugf("worktree repair: %v", err)
 	}
-	if !ok {
-		return remote, repointed, nil
-	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, hub)
-	if err != nil {
-		return nil, nil, storeFailure(err)
-	}
-	for name := range tips {
-		remote[name] = true
-	}
-	return remote, repointed, nil
+	return slices.ContainsFunc(moved, func(root string) bool { return !home.PointersMoved(root) }), nil
 }
 
 // repairForks repairs, in one journal under the lock its caller holds,
 // every fork of sites whose worktree is missing, read again first, and
-// returns the names of the forks it repaired: the worktree added, the
+// reports whether it repaired any: the worktree added, the
 // skill's directory laid out from the branch tip and the library symlink
 // written, as stageForkRepair plans them. Placements are not touched: they
 // lead to the library entry, which the symlink puts back.
-func (inv *invocation) repairForks(ctx context.Context, sites []forkSite) (map[string]bool, error) {
+func (inv *invocation) repairForks(ctx context.Context, sites []forkSite) (bool, error) {
 	sweepStaged(inv.worktreesDir())
 	m := home.NewMutation(inv.dirs.Home)
-	repaired := map[string]bool{}
+	repaired := false
 	for _, f := range sites {
 		v := classifyFork(inv.forkFactsOf(f))
 		if v.outcome != outcomeWorktreeMissing || v.pointers || f.dir == "" {
@@ -586,12 +474,12 @@ func (inv *invocation) repairForks(ctx context.Context, sites []forkSite) (map[s
 		}
 		if _, err := inv.stageForkRepair(ctx, m, f, v); err != nil {
 			m.Discard()
-			return nil, err
+			return false, err
 		}
-		repaired[f.name] = true
+		repaired = true
 	}
 	if err := m.Apply(inv.refs(ctx)); err != nil {
-		return nil, mutationFailure(err)
+		return false, mutationFailure(err)
 	}
 	return repaired, nil
 }

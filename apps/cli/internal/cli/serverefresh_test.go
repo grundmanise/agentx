@@ -382,14 +382,13 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 
 // TestServeChecksTheHubRemoteWhileItRuns runs serve on machine b of
 // two that share a hub, with the hub check it repeats
-// made a few milliseconds apart. The check at launch ends in an
-// update_check of scope all that fetched. Then, while the hub
-// holds what b's remote-tracking branches hold, each hub check is one
-// ls-remote, fetches nothing and writes nothing, and ends in an
-// update_check of scope hub that did not fetch. Once machine a
-// publishes alpha, the next hub check fetches, announces the update a
-// published as the check at launch would, with this serve's instance id,
-// and ends in an update_check that fetched. With the hub out of
+// made a few milliseconds apart. The check at launch fetches and ends in
+// an update_check that is ok. Then, while the hub holds what b's
+// remote-tracking branches hold, each hub check is one ls-remote, fetches
+// nothing and writes nothing, and ends in an update_check that is ok.
+// Once machine a publishes alpha, the next hub check fetches, announces
+// the update a published as the check at launch would, with this serve's
+// instance id, and ends in an update_check that is ok. With the hub out of
 // reach, the checks warn once, however many fail, each ending in an
 // update_check that is not ok, until one reaches it again.
 func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
@@ -401,25 +400,23 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	calls := countingGit(t, b)
 	p := b.serve(t, "--json")
 	first := p.next("inventory")
-	checked := func(scope string) jsonEvent {
+	checked := func() jsonEvent {
 		t.Helper()
-		e, _ := p.nextMatching("update_check of scope "+scope, func(e jsonEvent) bool { return e["type"] == "update_check" && e["scope"] == scope })
-		equal(t, "instance_id", e["instance_id"], first["instance_id"])
+		e, _ := p.nextMatching("an update_check", func(e jsonEvent) bool { return e["type"] == "update_check" })
 		if _, err := time.Parse(time.RFC3339, e["checked_at"].(string)); err != nil {
 			t.Errorf("checked_at %q: %v", e["checked_at"], err)
 		}
 		return e
 	}
-	all := checked(checkScopeAll)
-	equal(t, "the check at launch: ok", all["ok"], true)
-	equal(t, "the check at launch: fetched", all["fetched"], true)
+	equal(t, "the check at launch: ok", checked()["ok"], true)
 	fetched := func() int { return strings.Count(strings.Join(calls(), "\n"), " fetch --") }
 	atLaunch, version := fetched(), mutationVersion(t, b)
+	if atLaunch == 0 {
+		t.Error("the check at launch fetched nothing")
+	}
 
 	for range 2 {
-		unchanged := checked(checkScopeHub)
-		equal(t, "an unchanged remote: ok", unchanged["ok"], true)
-		equal(t, "an unchanged remote: fetched", unchanged["fetched"], false)
+		equal(t, "an unchanged remote: ok", checked()["ok"], true)
 	}
 	equal(t, "an unchanged remote: fetches", fetched(), atLaunch)
 	equal(t, "an unchanged remote: writes", mutationVersion(t, b), version)
@@ -431,9 +428,10 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	equal(t, "the update's instance_id", update["instance_id"], first["instance_id"])
 	equal(t, "its source", update["source"], url)
 	equal(t, "its candidate", update["candidate"], published)
-	moved := checked(checkScopeHub)
-	equal(t, "a remote another machine published to: ok", moved["ok"], true)
-	equal(t, "a remote another machine published to: fetched", moved["fetched"], true)
+	equal(t, "a remote another machine published to: ok", checked()["ok"], true)
+	if fetched() == atLaunch {
+		t.Error("the check of a remote another machine published to fetched nothing")
+	}
 
 	away := remote + ".away"
 	if err := os.Rename(remote, away); err != nil {
@@ -441,16 +439,16 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	}
 	// A check that began before the rename can still report ok: wait for the first that failed.
 	p.nextMatching("a hub check of the remote out of reach", func(e jsonEvent) bool {
-		return e["type"] == "update_check" && e["scope"] == checkScopeHub && e["ok"] == false
+		return e["type"] == "update_check" && e["ok"] == false
 	})
 	for range 2 {
-		equal(t, "a hub out of reach: ok", checked(checkScopeHub)["ok"], false)
+		equal(t, "a hub out of reach: ok", checked()["ok"], false)
 	}
 	if err := os.Rename(away, remote); err != nil {
 		t.Fatal(err)
 	}
 	p.nextMatching("an update_check that is ok again", func(e jsonEvent) bool {
-		return e["type"] == "update_check" && e["scope"] == checkScopeHub && e["ok"] == true
+		return e["type"] == "update_check" && e["ok"] == true
 	})
 	equal(t, "exit", p.close(), 0)
 	var unreached []string
