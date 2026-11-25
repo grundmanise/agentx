@@ -90,7 +90,7 @@ const check = async (manual: boolean) => {
           : { phase: "available", version: found.version },
     });
     if (manual && found === null) {
-      notify("agentx is up to date");
+      notify("You're running the latest version");
     }
   } catch {
     if (manual) {

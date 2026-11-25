@@ -72,6 +72,14 @@
   --border-radius: var(--radius-toast);
   font-family: var(--font-sans);
 }
+/* A toast is as wide as its message, but a running command's toast keeps Sonner's width, so it
+   does not move as its progress count changes. */
+:root
+  [data-sonner-toaster]
+  [data-sonner-toast][data-styled="true"]:not([data-type="loading"]) {
+  width: fit-content;
+  max-width: var(--width);
+}
 /* The lines under a tinted toast's message stay quiet, so its tone shows in the title and icon. */
 :root [data-sonner-toaster] [data-sonner-toast] [data-description] {
   color: var(--color-toast-description);
