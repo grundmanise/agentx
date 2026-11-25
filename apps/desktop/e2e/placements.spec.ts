@@ -5,6 +5,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import {
   inventory,
+  LIBRARY,
   manyAgentsInventory,
   manyConfigurations,
 } from "./fixtures/agents.ts";
@@ -404,6 +405,48 @@ test.describe("chips", () => {
     );
     await cursor.click({ force: true });
     expect(later(cli)).toEqual([]);
+  });
+
+  test("agents that share one skills folder: removing it from one names both", async ({
+    cli,
+    page,
+  }) => {
+    const path = "/home/me/.claude-code/skills/pdf";
+    const shared = {
+      ...inventory,
+      skills: inventory.skills.map((node) =>
+        node.name === "pdf"
+          ? {
+              ...node,
+              occurrences: [
+                ...node.occurrences,
+                {
+                  configuration: "cursor",
+                  id: `cursor:${path}`,
+                  kind: "symlink" as const,
+                  path,
+                  resolved_path: `${LIBRARY}/pdf`,
+                  scope: "user" as const,
+                },
+              ],
+            }
+          : node
+      ),
+    } satisfies InlineEvent;
+    await openSkill(cli, page, "pdf", "pdf", shared);
+    const claude = chip(pane(page, "pdf"), "Claude Code");
+    await expect(claude).toHaveAttribute(
+      "title",
+      "Remove from Claude Code and Cursor"
+    );
+    cli.register(["skill", "remove", "pdf", "--from", "claude-code"]);
+    await claude.click();
+    await expect(
+      toasts(page).getByText("Removed pdf from Claude Code and Cursor")
+    ).toBeVisible();
+    expect(later(cli)).toEqual([
+      ["skill", "remove", "pdf", "--from", "claude-code", "--json"],
+    ]);
   });
 });
 

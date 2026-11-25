@@ -10,9 +10,38 @@ import type {
   Occurrence,
 } from "#/cli/events.gen.ts";
 import type { AgentChipState } from "#/components/agent-chip.tsx";
-import { plural } from "#/lib/plural.ts";
+import { andList, plural } from "#/lib/plural.ts";
 import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+
+/**
+ * The configurations whose own directory is the most specific one that holds `path`: usually one,
+ * two when they share a directory, one agent's a symlink to the other's, and none when it is in
+ * no agent's own directory. The most specific wins, since one agent's directory can sit inside
+ * another's, as Antigravity's `~/.gemini/antigravity` sits inside Gemini CLI's `~/.gemini`. A
+ * client that reads the library places nothing in its own directory, so it owns no path, as the
+ * CLI judges it.
+ */
+const ownersOf = (path: string, configurations: Configuration[]) => {
+  const holding = configurations.filter(
+    (c) => !c.reads_library && path.startsWith(`${c.path}/`)
+  );
+  const depth = Math.max(0, ...holding.map((c) => c.path.length));
+  return holding.filter((c) => c.path.length === depth);
+};
+
+/** The owners of each place `c` sees the skill at, at user scope and outside any plugin. */
+const ownersSeenBy = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+) =>
+  row.occurrences
+    .filter(
+      (o) =>
+        o.configuration === c.id && o.scope === "user" && o.plugin === undefined
+    )
+    .map((o) => ownersOf(o.path, configurations));
 
 /**
  * Whether a configuration sees the skill: through its placement, displaced when the placement's
@@ -28,6 +57,33 @@ export const chipStateOf = (
   }
   return row.occurrences.some((o) => o.configuration === c.id) ? "on" : "off";
 };
+
+/**
+ * The configurations that lose the skill with `c`'s placement: those that share `c`'s skills
+ * directory, one a symlink to the other's, and see the skill only there.
+ */
+const dependantsOf = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+): Configuration[] =>
+  configurations.filter((other) => {
+    if (other.id === c.id || other.reads_library) {
+      return false;
+    }
+    const owners = ownersSeenBy(row, other, configurations);
+    return (
+      owners.length > 0 &&
+      owners.every((each) => each.some((o) => o.id === c.id))
+    );
+  });
+
+/** The names a removal from `c` takes the skill from: `c` and every agent that shares its directory. */
+export const removedFrom = (
+  row: SkillRow,
+  c: Configuration,
+  configurations: Configuration[]
+) => andList([c, ...dependantsOf(row, c, configurations)].map((d) => d.name));
 
 /**
  * Why the switch of a chip in `state` is disabled, or undefined when a click changes what the agent
@@ -159,7 +215,8 @@ export const lockReason = (row: SkillRow): string | undefined =>
 export const chipTitle = (
   row: SkillRow,
   c: Configuration,
-  state: AgentChipState
+  state: AgentChipState,
+  configurations: Configuration[]
 ): string => {
   const locked = lockReason(row);
   if (locked !== undefined) {
@@ -168,7 +225,10 @@ export const chipTitle = (
   if (state === "off") {
     return `Add to ${c.name}`;
   }
-  return inertReason(row, c, state) ?? `Remove from ${c.name}`;
+  return (
+    inertReason(row, c, state) ??
+    `Remove from ${removedFrom(row, c, configurations)}`
+  );
 };
 
 /** The Universal chip's title: a universal client reads the library, so removal is removal. */
