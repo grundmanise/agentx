@@ -110,13 +110,12 @@ func write(t *testing.T, path, content string) {
 	}
 }
 
-// TestReadsLibraryFollowsLinksEitherWay: a skills directory is the library
-// when it is named by the library's path, or leads to the library directory
-// through a symlink, either way round, since a skill directory in it is
-// then the library's own. A directory of its own is not, and neither is
-// one that does not resolve, or any directory but the library's own path
-// when the library does not resolve.
-func TestReadsLibraryFollowsLinksEitherWay(t *testing.T) {
+// TestLinksToLibraryEitherWay: a skills directory links to the library
+// when it leads to the library directory through a symlink, either way
+// round, since a skill directory in it is then the library's own. The
+// library's own path, a directory of its own, one that does not resolve and
+// any directory when the library does not resolve do not.
+func TestLinksToLibraryEitherWay(t *testing.T) {
 	t.Parallel()
 	link := func(t *testing.T, target, path string) {
 		t.Helper()
@@ -127,34 +126,26 @@ func TestReadsLibraryFollowsLinksEitherWay(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
 		setup func(t *testing.T, library, skills string) // skills is a client's skills directory
-		named bool                                       // the library's path is among the directories too
 		want  bool
 	}{
-		{"the library named by its path", func(t *testing.T, library, skills string) {
-			mkdir(t, library)
-			mkdir(t, skills)
-		}, true, true},
 		{"a skills directory linked to the library", func(t *testing.T, library, skills string) {
 			mkdir(t, library)
 			link(t, library, skills)
-		}, false, true},
+		}, true},
 		{"the library linked to a skills directory", func(t *testing.T, library, skills string) {
 			mkdir(t, skills)
 			link(t, skills, library)
-		}, false, true},
+		}, true},
 		{"a skills directory of its own", func(t *testing.T, library, skills string) {
 			mkdir(t, library)
 			mkdir(t, skills)
-		}, false, false},
+		}, false},
 		{"a skills directory that does not exist", func(t *testing.T, library, _ string) {
 			mkdir(t, library)
-		}, false, false},
+		}, false},
 		{"a library that does not resolve", func(t *testing.T, _, skills string) {
 			mkdir(t, skills)
-		}, false, false},
-		{"a library that does not resolve, named by its path", func(t *testing.T, _, skills string) {
-			mkdir(t, skills)
-		}, true, true},
+		}, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -164,14 +155,38 @@ func TestReadsLibraryFollowsLinksEitherWay(t *testing.T) {
 			mkdir(t, filepath.Dir(library))
 			mkdir(t, filepath.Dir(skills))
 			tt.setup(t, library, skills)
-			dirs := []string{skills}
-			if tt.named {
-				dirs = append(dirs, library)
+			if got := linksToLibrary(skills, library); got != tt.want {
+				t.Errorf("linksToLibrary(%s, %s) = %t, want %t", skills, library, got, tt.want)
 			}
-			if got := readsLibrary(dirs, library); got != tt.want {
-				t.Errorf("readsLibrary(%v, %s) = %t, want %t", dirs, library, got, tt.want)
+			if linksToLibrary(library, library) {
+				t.Errorf("the library's own path links to itself")
 			}
 		})
+	}
+}
+
+// TestALinkedSkillsDirectoryDoesNotReadTheLibrary: Claude Code with
+// ~/.claude/skills made a link to the library reads its own directory, not
+// the library; only readsTheLibrary makes a client read it.
+func TestALinkedSkillsDirectoryDoesNotReadTheLibrary(t *testing.T) {
+	t.Parallel()
+	user := t.TempDir()
+	d := home.Dirs{User: user, Library: filepath.Join(user, ".agents", "skills")}
+	mkdir(t, d.Library)
+	mkdir(t, filepath.Join(user, ".claude"))
+	if err := os.Symlink(d.Library, filepath.Join(user, ".claude", "skills")); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := Lookup("claude-code")
+	if ReadsLibrary(c, d) {
+		t.Error("claude-code reads the library through its linked skills directory")
+	}
+	if !LinksToLibrary(c, d) {
+		t.Error("claude-code's skills directory does not link to the library")
+	}
+	codex, _ := Lookup("codex")
+	if !ReadsLibrary(codex, d) || LinksToLibrary(codex, d) {
+		t.Errorf("codex: reads %t, links %t, want true, false", ReadsLibrary(codex, d), LinksToLibrary(codex, d))
 	}
 }
 

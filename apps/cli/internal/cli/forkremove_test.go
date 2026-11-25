@@ -299,7 +299,7 @@ func TestUniversalLibraryNamesWhatAForkLoses(t *testing.T) {
 		{"a fork", true, "take pdf off the machine with 'agentx skill remove pdf --from universal', which removes it from claude-code, codex and deletes its worktree, with any unpublished edits, and its branch"},
 	} {
 		var f *failure
-		if !errors.As(universalLibrary([]string{"codex"}, "pdf", []string{"claude-code", "codex"}, tc.worktree), &f) {
+		if !errors.As(universalLibrary(universalRefusal([]string{"codex"}, "pdf"), "pdf", []string{"claude-code", "codex"}, tc.worktree), &f) {
 			t.Fatalf("%s: not a failure", tc.name)
 		}
 		equal(t, tc.name+": hint", f.hint, tc.hint)

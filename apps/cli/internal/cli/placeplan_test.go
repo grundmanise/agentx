@@ -55,7 +55,7 @@ func (r *placeRig) judge() (plain, forced string) {
 	r.t.Helper()
 	detected := []placeTarget{
 		{id: "claude-code", dir: filepath.Dir(r.claude)},
-		{id: "codex", readsLibrary: true},
+		{id: "codex", atLibrary: true},
 		{id: "cursor", dir: filepath.Dir(r.cursor)},
 	}
 	var asked []string

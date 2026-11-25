@@ -741,7 +741,7 @@ func (r *applyRun) place(ctx context.Context, e snapshotSkill, did string) (stri
 		}
 	}
 	for _, t := range r.targets {
-		if !t.readsLibrary && own[t.id] && !slices.Contains(e.Placements, t.id) {
+		if !t.atLibrary && own[t.id] && !slices.Contains(e.Placements, t.id) {
 			drop = append(drop, t.id)
 		}
 	}
@@ -772,11 +772,11 @@ func (r *applyRun) place(ctx context.Context, e snapshotSkill, did string) (stri
 func (r *applyRun) placeInto(want []string) []placeTarget {
 	var into []placeTarget
 	for _, t := range r.targets {
-		if t.readsLibrary || !slices.Contains(want, t.id) {
+		if t.atLibrary || !slices.Contains(want, t.id) {
 			continue
 		}
 		seen := slices.ContainsFunc(r.targets, func(o placeTarget) bool {
-			return o.id != t.id && !o.readsLibrary && slices.Contains(want, o.id) && slices.Contains(r.reads[t.id], o.dir)
+			return o.id != t.id && !o.atLibrary && slices.Contains(want, o.id) && slices.Contains(r.reads[t.id], o.dir)
 		})
 		if !seen {
 			into = append(into, t)

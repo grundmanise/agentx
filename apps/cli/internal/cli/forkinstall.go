@@ -632,7 +632,7 @@ func (inv *invocation) applyHubInstall(ctx context.Context, in *hubInstall, targ
 	place := in.managed == nil
 	if place {
 		for _, t := range targets {
-			if !t.readsLibrary {
+			if !t.atLibrary {
 				sweepStaged(t.dir)
 			}
 		}

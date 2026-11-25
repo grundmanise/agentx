@@ -389,15 +389,15 @@ func TestSkillPlaceLeavesWhatIsNotDrift(t *testing.T) {
 
 // TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink: a client whose
 // skills directory is a symlink to the library, or the library a symlink
-// to it, reads the library, and the skill's directory there is the library
-// directory itself, not a directory displacing a placement. Drift names
-// nothing there, the listing and a placement in Claude Code report the
-// skill there as the library entry, and skill place, whatever flag it is
-// given, leaves the library directory as it is, an edit of it included:
-// replacing that directory with the symlink would replace the library
-// with a link to itself. Removing the skill from Claude Code alone is
-// refused, as it is for any client that reads the library. A placement
-// that went missing elsewhere is still put back.
+// to it, still reads its own directory and is no universal client, but the
+// skill's directory there is the library directory itself, not a directory
+// displacing a placement. Drift names nothing there, the listing and a
+// placement in Claude Code report the skill there as the library entry,
+// and skill place, whatever flag it is given, leaves the library directory
+// as it is, an edit of it included: replacing that directory with the
+// symlink would replace the library with a link to itself. Removing the
+// skill from Claude Code alone is refused, since it would delete the
+// library entry. A placement that went missing elsewhere is still put back.
 func TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -428,7 +428,7 @@ func TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
 			held := libraryTree(t, lib)
 			ev := h.listed("alpha")
 			equal(t, "drift", drift(ev), "")
-			equal(t, "universal clients", fmt.Sprint(ev["universal"]), "[claude-code codex gemini-cli]")
+			equal(t, "universal clients", fmt.Sprint(ev["universal"]), "[codex gemini-cli]")
 			equal(t, "placements", strings.Join(placementsOf(t, ev), ";"),
 				"claude-code library library;codex library library;cortex symlink symlink;"+
 					"gemini-cli library library;github-copilot symlink symlink;windsurf symlink symlink")
@@ -452,14 +452,28 @@ func TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
 			equal(t, "the text of a placement", h.mustRun("skill", "place", "alpha", "--to", "claude-code").stdout,
 				"✓ placed alpha in 1 configuration\n"+
 					"  claude-code  library  "+filepath.Join(skills, "alpha")+"\n"+
-					"  always available to universal clients: claude-code, codex, gemini-cli\n")
+					"  always available to universal clients: codex, gemini-cli\n")
 			sameTree(t, "the library directory after a placement", libraryTree(t, lib), held)
 			cleanAfterPlace(t, h, h.library, skills)
 
 			removal := h.run("--json", "skill", "remove", "alpha", "--from", "claude-code")
 			equal(t, "exit of a removal from claude-code", removal.exit, 6)
-			equal(t, "the refusal", h.one(removal.stdout, "error")["message"], "claude-code reads the library directly, so alpha cannot be removed from it alone")
+			equal(t, "the refusal", h.one(removal.stdout, "error")["message"], "claude-code's skills directory links to the library, so alpha cannot be removed from it alone")
+			removal = h.run("--json", "skill", "remove", "alpha", "--from", "claude-code", "--from", "codex")
+			equal(t, "the refusal of two", h.one(removal.stdout, "error")["message"],
+				"codex reads the library directly and claude-code's skills directory links to the library, so alpha cannot be removed from them alone")
 			sameTree(t, "the library directory after a refused removal", libraryTree(t, lib), held)
+
+			refused := h.run("--json", "config", "placement", "claude-code", "copy")
+			equal(t, "exit of config placement", refused.exit, 1)
+			equal(t, "the placement refusal", h.one(refused.stdout, "error")["message"],
+				"claude-code's skills directory links to the library, so its placement is the library entry")
+			for _, c := range h.inventory(t)["configurations"].([]any) {
+				if conf := c.(map[string]any); conf["id"] == "claude-code" {
+					equal(t, "claude-code reads the library", conf["reads_library"], any(false))
+					equal(t, "claude-code's placement", conf["placement"], any("library"))
+				}
+			}
 
 			remove(t, windsurf)
 			text := h.mustRun("skill", "place", "alpha").stdout

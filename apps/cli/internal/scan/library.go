@@ -60,8 +60,9 @@ func ContentHashAt(dir string) (contentHash string, warnings []string) {
 
 // PlacementDir is the directory an explicit placement in this configuration
 // goes into: the client's own skills directory, which SkillsDirs lists
-// first. A client that reads the library directly needs no placement of its
-// own, so ReadsLibrary decides before this is asked for.
+// first. A client whose placement is the library entry needs none of its
+// own, see ReadsLibrary and LinksToLibrary, which decide before this is
+// asked for.
 func PlacementDir(c Client, d home.Dirs) string {
 	dirs := SkillsDirs(c, d)
 	if len(dirs) == 0 {
@@ -70,34 +71,35 @@ func PlacementDir(c Client, d home.Dirs) string {
 	return dirs[0]
 }
 
-// ReadsLibrary reports whether the client reads the library as one of its
-// own skills directories, or through one that leads to it by a symlink,
-// either way round, see readsLibrary, in which case the library entry is
-// the placement and a second entry would make that client list the skill
-// twice.
+// ReadsLibrary reports whether the client reads the library: its own skills
+// directory is the library, or readsTheLibrary names it. A skills directory
+// made a symlink to the library does not make a client read it, see
+// LinksToLibrary.
 func ReadsLibrary(c Client, d home.Dirs) bool {
-	return readsLibrary(SkillsDirs(c, d), d.Library)
+	return slices.Contains(SkillsDirs(c, d), d.Library)
 }
 
-// readsLibrary reports whether one of dirs is the library directory: named
-// by its path, or leading to the same directory through a symlink, either
-// way round, as a skills directory made a link to the library does. The
-// skill directory in such a skills directory is the library directory
-// itself, so a command that took it for a placement of its own would
-// replace the library with a link to itself. A path that does not resolve
-// is compared as it is written.
-func readsLibrary(dirs []string, library string) bool {
-	if slices.Contains(dirs, library) {
-		return true
+// LinksToLibrary reports whether the client's own skills directory and the
+// library are one directory through a symlink, either way round, as
+// ~/.claude/skills made a link to ~/.agents/skills is. The client still
+// reads its own directory, but a skill's directory there is the library
+// entry itself: a command that took it for a placement of its own would
+// replace the library entry with a link to itself, or delete it.
+func LinksToLibrary(c Client, d home.Dirs) bool {
+	return linksToLibrary(c.SkillsDir(d), d.Library)
+}
+
+// linksToLibrary reports whether dir leads to the same directory as library
+// through a symlink, either way round. A path that does not resolve leads
+// nowhere.
+func linksToLibrary(dir, library string) bool {
+	if dir == "" || dir == library {
+		return false
 	}
 	real, err := filepath.EvalSymlinks(library)
 	if err != nil {
 		return false
 	}
-	for _, dir := range dirs {
-		if resolved, err := filepath.EvalSymlinks(dir); err == nil && resolved == real {
-			return true
-		}
-	}
-	return false
+	resolved, err := filepath.EvalSymlinks(dir)
+	return err == nil && resolved == real
 }

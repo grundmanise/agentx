@@ -487,3 +487,28 @@ test("a click on cards selects them, and the bar enables, disables or removes th
     ["config", "remove", "codex", "github-copilot", "--yes", "--json"],
   ]);
 });
+
+test("an agent whose skills folder links to the library: a direct agent whose placement is fixed", async ({
+  cli,
+  page,
+}) => {
+  cli.onServeStart({
+    events: [
+      {
+        ...inventory,
+        configurations: inventory.configurations.map((c) =>
+          c.id === "claude-code" ? { ...c, placement: "library" as const } : c
+        ),
+      },
+    ],
+  });
+  cli.register(["skill", "import"], { events: adoption });
+  await page.goto("/#/agents");
+  const claude = page
+    .getByRole("region", { name: "Direct agents" })
+    .getByRole("article", { exact: true, name: "Claude Code" });
+  await expect(claude).toBeVisible();
+  const control = claude.getByRole("radiogroup", { name: "Placement" });
+  await expect(control.getByRole("radio", { name: "Symlink" })).toBeChecked();
+  await expect(control.getByRole("radio", { name: "Copy" })).toBeDisabled();
+});
