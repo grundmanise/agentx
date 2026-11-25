@@ -70,13 +70,18 @@ To build the app, see [`apps/desktop/README.md`](apps/desktop/README.md).
 
 ## Status
 
-Supports 73 agents:
+Supports 73 agents. The 10 most used agents get full support first.
 
 | Agent | Skills | MCP servers | Plugins |
 | --- | :---: | :---: | :---: |
 | Claude Code, Codex, Cursor, Gemini CLI | ✓ | ✓ | ✓ |
-| Devin, GitHub Copilot | ✓ | ✓ | |
+| GitHub Copilot | ✓ | ✓ | planned |
+| Devin | ✓ | ✓ | – |
+| Antigravity, OpenCode | ✓ | planned | planned |
+| Cline, Junie | ✓ | planned | – |
 | All others | ✓ | | |
+
+– means the agent has no such feature.
 
 ## Goals and non-goals
 
