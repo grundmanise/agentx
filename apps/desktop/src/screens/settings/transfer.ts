@@ -1,6 +1,6 @@
 // What the Save snapshot and Apply snapshot sections of Settings read from a name, a path and
 // the Sources slice: pure functions, so that the sections show only what the CLI reports.
-import type { SourceEvent } from "#/cli/events.gen.ts";
+import type { Source } from "#/cli/events.gen.ts";
 
 /** The name Save starts with: the snapshot is written to the library as agentx-snapshot.json. */
 export const DEFAULT_SNAPSHOT_NAME = "agentx-snapshot";
@@ -23,7 +23,7 @@ export const fileName = (path: string) =>
  * hub whose event carries no `skills` (this machine has not fetched it). Applying a
  * snapshot restores the settings entry of such a source and nothing of the source itself.
  */
-export const notFetched = (sources: readonly SourceEvent[]) =>
+export const notFetched = (sources: readonly Source[]) =>
   sources.filter((s) =>
     s.hub === true ? s.skills === undefined : s.commit === undefined
   );
@@ -32,7 +32,7 @@ export const notFetched = (sources: readonly SourceEvent[]) =>
  * The `source add` that adds `source` again as the settings hold it: the URL with `#<pin>` when it
  * is pinned, and `--hub` for the hub, which is a whole repository and has no pin.
  */
-export const sourceAddArgs = (source: SourceEvent): string[] => {
+export const sourceAddArgs = (source: Source): string[] => {
   if (source.hub === true) {
     return ["source", "add", source.url, "--hub"];
   }

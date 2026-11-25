@@ -21,6 +21,7 @@ import {
   libraryPath,
   loadLines,
   test,
+  thisMachine,
 } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -467,9 +468,11 @@ test("the places of a skill come from the inventory, the library first", () => {
     edges: [],
     installs: [],
     instance_id: "instance-1",
-    machine: { id: "machine-1", label: "studio-mac" },
+    machine: thisMachine,
     mcp_servers: [],
     schema_version: 5,
+    settings: { ignore_system_files: true },
+    sources: [],
     warnings: [],
     ...inventory,
   };

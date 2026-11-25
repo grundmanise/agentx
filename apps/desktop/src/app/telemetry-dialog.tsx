@@ -1,8 +1,8 @@
 // The telemetry question (docs/help-center/telemetry.mdx): asked once the app has started, in a
-// release build (one whose CLI reports a stable or nightly version), while the `settings` event
-// says the `telemetry` setting has no value. It lists what may be sent, and both answers run
-// `config set telemetry`, which gives the setting a value, so no later launch asks. "Don't allow"
-// is the default: it has the focus, and Escape answers with it.
+// release build (one whose CLI reports a stable or nightly version), while the inventory this
+// launch's serve child sent says the `telemetry` setting has no value. It lists what may be sent,
+// and both answers run `config set telemetry`, which gives the setting a value, so no later launch
+// asks. "Don't allow" is the default: it has the focus, and Escape answers with it.
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -17,7 +17,11 @@ import { openInBrowser } from "#/lib/open-url.ts";
 import { releaseChannel } from "#/lib/telemetry.ts";
 import { useStartup } from "#/startup/startup.ts";
 import { useAppStore } from "#/store/store.ts";
-import { TELEMETRY_PAGE, setTelemetry } from "#/store/telemetry.ts";
+import {
+  TELEMETRY_PAGE,
+  liveSettings,
+  setTelemetry,
+} from "#/store/telemetry.ts";
 
 /** What may be sent, as the help center lists it. */
 const SENT = [
@@ -43,12 +47,14 @@ export const TelemetryDialog = () => {
       releaseChannel(version.cliVersion) !== undefined
     );
   });
-  const unanswered = useAppStore(
-    (s) =>
+  const unanswered = useAppStore((s) => {
+    const settings = liveSettings(s);
+    return (
       !s.telemetryAnswered &&
-      s.settings !== undefined &&
-      s.settings.telemetry === undefined
-  );
+      settings !== undefined &&
+      settings.telemetry === undefined
+    );
+  });
   return (
     <AlertDialog
       open={release && unanswered}

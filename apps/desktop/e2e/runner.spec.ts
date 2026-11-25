@@ -43,7 +43,7 @@ const run = async (page: Page, args: string[], success?: string) => {
 const later = (cli: MockCli) =>
   cli.commands.slice(launchLines.length + loadLines.length);
 
-test("loads settings, sources and the adoption preview once the checks pass", async ({
+test("loads the adoption preview once the checks pass, and names this machine from the inventory", async ({
   cli,
   page,
 }) => {

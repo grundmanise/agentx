@@ -4,7 +4,6 @@
 // fork is selected once serve reports it.
 import type { Page } from "@playwright/test";
 
-import { sources } from "./fixtures/agents.ts";
 import {
   commitHelperForked,
   forked,
@@ -67,7 +66,6 @@ const openSkill = async (
 ) => {
   cli.onServeStart({ events: [first] });
   cli.register(["skill", "import"], { events: adoption });
-  cli.register(["source", "list"], { events: sources });
   for (const n of libraryNames) {
     cli.register(["skill", "history", n], { events: [] });
     cli.register(["skill", "files", n], { events: filesOf(n) });

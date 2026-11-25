@@ -1,46 +1,43 @@
 // Usage data (docs/help-center/telemetry.mdx): the telemetry question, asked in a release build
 // while the `telemetry` setting has no value, the Usage data switch in Settings, both bound to
 // `config set telemetry`, and what the app sends to PostHog, which these tests intercept and
-// decode. The mocked CLI reports a source build's version unless a test reports a release one.
+// decode. The setting and the anonymous id come in the inventory. The mocked CLI reports a source
+// build's version unless a test reports a release one.
 import { gunzipSync } from "node:zlib";
 
 import type { Page, Request } from "@playwright/test";
 
-import type { Settings } from "#/cli/events.gen.ts";
-
+import { inventoryWith, scanned } from "./fixtures/settings.ts";
 import {
   cliVersion,
   expect,
   firstInventory,
-  machineLabel,
   posthogHost,
   test,
 } from "./harness/cli.ts";
-import type { InlineEvent, MockCli } from "./harness/cli.ts";
+import type { MockCli } from "./harness/cli.ts";
 
 const ANONYMOUS_ID = "5d1c0a9e7f3b4c2a8e6d4f1b3a5c7e9d";
 const STABLE = "1.2.0";
 const NIGHTLY = "1.3.0-nightly.20261124.7";
 
 /**
- * The `settings` event of `config list`, with the `telemetry` setting as given, or none, and the
- * anonymous id while it is on, unless `id` is false, as under DO_NOT_TRACK.
+ * An inventory with the `telemetry` setting as given, or none, and the anonymous id while it is
+ * on, unless `id` is false, as under DO_NOT_TRACK.
  */
-const settingsEvent = (telemetry?: "on" | "off", id = true): InlineEvent => {
-  const settings: Settings = {
-    accept_operations: false,
-    copy_configurations: [],
-    copy_mode: {},
-    disabled_configurations: [],
-    ignore_system_files: true,
-    label: machineLabel,
-    schema_version: 1,
-    sources: [],
-    ...(telemetry === undefined ? {} : { telemetry }),
-  };
-  return telemetry === "on" && id
-    ? { anonymous_id: ANONYMOUS_ID, settings, type: "settings" }
-    : { settings, type: "settings" };
+const inventoryOf = (
+  telemetry?: "on" | "off",
+  { id = true, scanCounter = 1 } = {}
+) =>
+  inventoryWith({
+    scanCounter,
+    telemetry,
+    ...(telemetry === "on" && id ? { anonymousId: ANONYMOUS_ID } : {}),
+  });
+
+/** Each serve child the app starts from now on sends an inventory with this setting. */
+const launches = (cli: MockCli, telemetry?: "on" | "off", id = true) => {
+  cli.onServeStart({ events: [inventoryOf(telemetry, { id })] });
 };
 
 /** The CLI reports `version`: a release build's, stable unless given, or another. */
@@ -52,7 +49,7 @@ const release = (cli: MockCli, version = STABLE) => {
 
 /** A home whose `telemetry` setting has no value. */
 const unanswered = (cli: MockCli) => {
-  cli.register(["config", "list"], { events: [settingsEvent()] });
+  launches(cli);
 };
 
 const dialog = (page: Page) =>
@@ -61,13 +58,11 @@ const dialog = (page: Page) =>
 const usageSwitch = (page: Page) =>
   page.getByRole("switch", { name: "Send anonymous usage data" });
 
-/** Registers `config set telemetry <value>`, and the settings it leaves. */
-const answers = (cli: MockCli, value: "on" | "off") => {
+/** Registers `config set telemetry <value>`. */
+const answers = (cli: MockCli, value: "on" | "off") =>
   cli.register(["config", "set", "telemetry", value], {
-    events: [settingsEvent(value)],
+    events: [{ type: "settings" }],
   });
-  cli.register(["config", "list"], { events: [settingsEvent(value)] });
-};
 
 /** The `config set telemetry` lines the app ran, in order. */
 const telemetrySets = (cli: MockCli) =>
@@ -148,10 +143,21 @@ const exceptionValue = (event: SentEvent): string => {
 const named = (sent: Sent, name: string) =>
   sent.events.filter((e) => e.event === name);
 
-/** Turns the setting on in Settings, which starts the SDK, or off. */
-const flip = async (cli: MockCli, page: Page, value: "on" | "off") => {
+/**
+ * Turns the setting on in Settings, which starts the SDK, or off: the switch shows it once the
+ * inventory that follows, scan `scanCounter`, carries it.
+ */
+const flip = async (
+  cli: MockCli,
+  page: Page,
+  value: "on" | "off",
+  scanCounter: number
+) => {
   answers(cli, value);
+  const before = refreshes(cli);
   await usageSwitch(page).click();
+  await expect.poll(() => refreshes(cli)).toBe(before + 1);
+  await scanned(cli, inventoryOf(value, { scanCounter }));
   await expect(usageSwitch(page)).toBeChecked({ checked: value === "on" });
 };
 
@@ -160,7 +166,10 @@ test.describe("the question", () => {
     unanswered(cli);
     await page.goto("/");
     await isLaunched(page);
-    await expect.poll(() => cli.commands.length).toBeGreaterThan(4);
+    // The adoption preview runs once the first inventory has arrived and the checks pass.
+    await expect
+      .poll(() => cli.commands)
+      .toContainEqual(["skill", "import", "--json"]);
     await expect(dialog(page)).toHaveCount(0);
   });
 
@@ -200,10 +209,13 @@ test.describe("the question", () => {
 
   test("a setting with a value asks nothing", async ({ cli, page }) => {
     release(cli);
-    answers(cli, "off");
+    launches(cli, "off");
     await page.goto("/");
     await isLaunched(page);
-    await expect.poll(() => cli.commands.length).toBeGreaterThan(4);
+    // The adoption preview runs once the first inventory has arrived and the checks pass.
+    await expect
+      .poll(() => cli.commands)
+      .toContainEqual(["skill", "import", "--json"]);
     await expect(dialog(page)).toHaveCount(0);
   });
 
@@ -213,9 +225,7 @@ test.describe("the question", () => {
   }) => {
     release(cli);
     unanswered(cli);
-    cli.register(["config", "set", "telemetry", "on"], {
-      events: [settingsEvent("on")],
-    });
+    answers(cli, "on");
     await page.goto("/");
     await expect(dialog(page)).toBeVisible();
     const before = refreshes(cli);
@@ -242,9 +252,7 @@ test.describe("the question", () => {
   }) => {
     release(cli);
     unanswered(cli);
-    cli.register(["config", "set", "telemetry", "off"], {
-      events: [settingsEvent("off")],
-    });
+    answers(cli, "off");
     await page.goto("/");
     await dialog(page).getByRole("button", { name: "Don't allow" }).click();
     await expect
@@ -271,8 +279,6 @@ test.describe("the question", () => {
     page,
   }) => {
     answers(cli, "off");
-    answers(cli, "on");
-    unanswered(cli);
     await page.goto("/#/settings");
     const region = page.getByRole("region", {
       exact: true,
@@ -282,12 +288,30 @@ test.describe("the question", () => {
     // No value yet: nothing is sent, so the switch is off.
     await expect(usageSwitch(page)).not.toBeChecked();
 
-    cli.register(["config", "list"], { events: [settingsEvent("on")] });
+    const on = cli.register(["config", "set", "telemetry", "on"], {
+      events: [{ type: "settings" }],
+      holdAfter: 0,
+    });
     await usageSwitch(page).click();
+    await on.started;
+    await expect(usageSwitch(page)).toHaveAttribute("aria-busy", "true");
+    on.release();
+    await expect(
+      page
+        .getByRole("region", { name: /^Notifications/u })
+        .getByText("Sending anonymous usage data")
+    ).toBeVisible();
+    // The switch shows the setting as the inventory lists it until the next inventory.
+    await expect(usageSwitch(page)).toHaveAttribute("aria-busy", "true");
+    await expect(usageSwitch(page)).not.toBeChecked();
+    await scanned(cli, inventoryOf("on", { scanCounter: 2 }));
     await expect(usageSwitch(page)).toBeChecked();
+    await expect(usageSwitch(page)).not.toHaveAttribute("aria-busy");
 
-    cli.register(["config", "list"], { events: [settingsEvent("off")] });
+    const before = refreshes(cli);
     await usageSwitch(page).click();
+    await expect.poll(() => refreshes(cli)).toBe(before + 1);
+    await scanned(cli, inventoryOf("off", { scanCounter: 3 }));
     await expect(usageSwitch(page)).not.toBeChecked();
     expect(telemetrySets(cli)).toEqual([
       "config set telemetry on --json",
@@ -320,7 +344,7 @@ test.describe("what the app sends", () => {
   }) => {
     const sent = await intercept(page);
     release(cli, NIGHTLY);
-    cli.register(["config", "list"], { events: [settingsEvent("on")] });
+    launches(cli, "on");
     await page.goto("/");
     await isLaunched(page);
     await expect.poll(() => named(sent, "app_open").length).toBe(1);
@@ -377,7 +401,7 @@ test.describe("what the app sends", () => {
   test("errors are sent with user paths removed", async ({ cli, page }) => {
     const sent = await intercept(page);
     release(cli);
-    cli.register(["config", "list"], { events: [settingsEvent("on")] });
+    launches(cli, "on");
     await page.goto("/");
     await expect.poll(() => named(sent, "app_open").length).toBe(1);
 
@@ -406,11 +430,11 @@ test.describe("what the app sends", () => {
   }) => {
     const sent = await intercept(page);
     release(cli);
-    cli.register(["config", "list"], { events: [settingsEvent("on")] });
+    launches(cli, "on");
     await page.goto("/#/settings");
     await expect.poll(() => named(sent, "app_open").length).toBe(1);
 
-    await flip(cli, page, "off");
+    await flip(cli, page, "off", 2);
     // Turning it off stores nothing, so a later launch with the setting on sends again.
     const stored = await page.evaluate(() => Object.keys(localStorage));
     expect(stored.filter((k) => !k.startsWith("agentx."))).toEqual([]);
@@ -420,7 +444,7 @@ test.describe("what the app sends", () => {
       }, 0);
     });
     // On again: an error after it is sent, and the one thrown while off never was.
-    await flip(cli, page, "on");
+    await flip(cli, page, "on", 3);
     await page.evaluate(() => {
       setTimeout(() => {
         throw new Error("on again");
@@ -436,10 +460,10 @@ test.describe("what the app sends", () => {
     page,
   }) => {
     release(cli, NIGHTLY);
-    cli.register(["config", "list"], { events: [settingsEvent("on")] });
+    launches(cli, "on");
     await page.goto("/#/settings");
     await expect.poll(() => cli.telemetryTold.at(-1)).toEqual(told(true));
-    await flip(cli, page, "off");
+    await flip(cli, page, "off", 2);
     await expect.poll(() => cli.telemetryTold.at(-1)).toEqual(told(false));
   });
 
@@ -455,7 +479,7 @@ test.describe("what the app sends", () => {
       }
     });
     release(cli);
-    cli.register(["config", "list"], { events: [settingsEvent("off")] });
+    launches(cli, "off");
     await page.goto("/#/settings");
     await expect(usageSwitch(page)).not.toBeChecked();
 
@@ -469,14 +493,14 @@ test.describe("what the app sends", () => {
     // On, without the anonymous id, which the CLI leaves out while DO_NOT_TRACK is set.
     cli.restart();
     release(cli);
-    cli.register(["config", "list"], { events: [settingsEvent("on", false)] });
+    launches(cli, "on", false);
     await page.reload();
     await expect(usageSwitch(page)).toBeChecked();
 
     // On, with the id, in a source build.
     cli.restart();
     release(cli, cliVersion);
-    cli.register(["config", "list"], { events: [settingsEvent("on")] });
+    launches(cli, "on");
     await page.reload();
     await expect(usageSwitch(page)).toBeChecked();
     await page.evaluate(() => {

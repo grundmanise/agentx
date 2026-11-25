@@ -2,26 +2,14 @@
 // the palette offers no Publish all; Rename stays, since a rename changes only this machine.
 import type { Page } from "@playwright/test";
 
-import { launch } from "./fixtures/palette-publish.ts";
-import { HUB } from "./fixtures/skills.ts";
+import { hub, launch } from "./fixtures/palette-publish.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const READ_ONLY = "me/hub is read-only";
 
 const readOnlyHub = (cli: MockCli) => {
-  launch(cli, "edited");
-  cli.register(["source", "list"], {
-    events: [
-      {
-        access: "read-only",
-        hub: true,
-        id: "2222222222222222",
-        type: "source",
-        url: HUB,
-      },
-    ],
-  });
+  launch(cli, "edited", { hub: { ...hub, access: "read-only" } });
 };
 
 const status = (page: Page) =>

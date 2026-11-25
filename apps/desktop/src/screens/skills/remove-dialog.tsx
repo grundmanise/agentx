@@ -22,7 +22,7 @@ import { seenBy } from "#/screens/skills/placements.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import type { CommandOptions } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
-import { useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The label of the Remove control for `row`: the runner's name for it. */
 export const removeLabel = (row: SkillRow) => `remove ${row.key}`;
@@ -59,7 +59,7 @@ export const RemoveDialog = ({
   const [remote, setRemote] = useState(false);
   const checkboxId = useId();
   const hasHub = useAppStore((s) =>
-    s.sources.some((source) => source.hub === true)
+    sourcesOf(s).some((source) => source.hub === true)
   );
   const agents = seenBy(row, configurations);
   // Whether this close is the confirmation, for `onCloseAutoFocus`.

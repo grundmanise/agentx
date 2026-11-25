@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -20,20 +23,10 @@ import (
 // holds of it.
 type sourceEvent struct {
 	event
-	ID            string `json:"id"`
-	URL           string `json:"url"`
-	Alias         string `json:"alias,omitempty"`
-	Hub           bool   `json:"hub,omitempty"` // the hub
-	Pin           string `json:"pin,omitempty"`
-	Access        string `json:"access,omitempty"`         // writable, read-only or unknown; absent on a removal's event, which says only what went
-	AccessChecked string `json:"access_checked,omitempty"` // when access was last checked
-	AccessReason  string `json:"access_reason,omitempty"`  // why access is not writable, in the run that checked it only
-	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
-	Subpath       string `json:"subpath,omitempty"`        // the scope of this listing, not stored
-	LastFetched   string `json:"last_fetched,omitempty"`
-	Commit        string `json:"commit,omitempty"`          // the fetched commit; absent when the store holds no ref
-	Previous      string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
-	Skills        *int   `json:"skills,omitempty"`          // how many skills the listing found, only after a listing; for the hub, its skill branches as its last fetch found them, absent before a fetch
+	scan.Source
+	AccessReason string `json:"access_reason,omitempty"`   // why access is not writable, in the run that checked it only
+	Subpath      string `json:"subpath,omitempty"`         // the scope of this listing, not stored
+	Previous     string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
 }
 
 // sourceSkillEvent is one installable skill of a source.
@@ -446,25 +439,18 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	commits := map[string]string{}
-	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
+	sources, err := inv.sourcesOf(ctx, s)
 	if err != nil {
-		return storeFailure(err)
-	} else if exists {
-		if commits, err = source.Commits(ctx, inv.git, gitDir); err != nil {
-			return storeFailure(err) // a local git failure in a source command is exit code 8, hint and all
-		}
+		return storeFailure(err) // a local git failure in a source command is exit code 8, hint and all
 	}
 	out := inv.out
-	if len(s.Sources) == 0 {
+	if len(sources) == 0 {
 		out.print("No sources. Add one with ", out.paint(label, "agentx source add <url>"), ".")
 		return nil
 	}
-	out.print(out.paint(heading, plural(len(s.Sources), "source")))
+	out.print(out.paint(heading, plural(len(sources), "source")))
 	t := &table{}
-	for _, src := range s.Sources {
-		id := source.ID(src.URL)
-		ev := entryEvent(src)
+	for _, src := range sources {
 		name := "  " + src.URL
 		if src.Hub {
 			name += " (hub)"
@@ -484,26 +470,68 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 		}
 		commit := c("not fetched", warnStyle)
 		switch {
-		case src.Hub:
-			n, fetched := 0, false
-			if exists {
-				if n, fetched, err = inv.forkCount(ctx, gitDir, src, source.RemoteName(id)); err != nil {
-					return storeFailure(err)
-				}
-			}
-			if fetched {
-				ev.Skills = &n
-			}
-			commit = forksCell(n, fetched)
-		case commits[id] != "":
-			ev.Commit = commits[id]
-			commit = c(short(commits[id]), muted)
+		case src.Hub && src.Skills != nil:
+			commit = forksCell(*src.Skills, true)
+		case src.Commit != "":
+			commit = c(short(src.Commit), muted)
 		}
-		out.emit(ev)
-		t.add(c(name, heading), accessWord(src.Access), branch, commit, c(src.LastFetched, muted), c(id, label))
+		out.emit(sourceEvent{event: newEvent("source"), Source: src})
+		t.add(c(name, heading), accessWord(src.Access), branch, commit, c(src.LastFetched, muted), c(src.ID, label))
 	}
 	out.render(t, "")
 	return nil
+}
+
+// sourcesOf is every source of the settings s, as the inventory and source
+// list report them: what each entry records, with the commit the store
+// holds for a shared source and, for the hub, the skill branches its
+// last fetch found. It reads the store in one for-each-ref, whatever the
+// number of sources, and runs no git when there is no store or no source.
+func (inv *invocation) sourcesOf(ctx context.Context, s home.Settings) ([]scan.Source, error) {
+	sources := make([]scan.Source, 0, len(s.Sources))
+	hub := -1
+	patterns := []string{source.RefPrefix}
+	for i, entry := range s.Sources {
+		sources = append(sources, entrySource(entry))
+		if entry.Hub {
+			hub = i
+			patterns = append(patterns, lineage.RemoteForkPrefix(source.RemoteName(sources[i].ID)))
+		}
+	}
+	gitDir := gitx.StorePath(inv.dirs.Home)
+	if _, err := os.Stat(gitDir); errors.Is(err, fs.ErrNotExist) || len(sources) == 0 {
+		return sources, nil
+	} else if err != nil {
+		return sources, fmt.Errorf("store %s: %w", gitDir, err)
+	}
+	out, err := inv.git.Isolated(ctx, gitDir, append([]string{"for-each-ref", "--format=%(refname)%00%(*objectname)%00%(objectname)"}, patterns...)...)
+	if err != nil {
+		return sources, fmt.Errorf("store %s: %w", gitDir, err)
+	}
+	commits, forks := map[string]string{}, 0
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Split(line, "\x00")
+		if len(fields) != 3 {
+			continue
+		}
+		commit := fields[2]
+		if fields[1] != "" { // an annotated tag: the peeled id is the commit
+			commit = fields[1]
+		}
+		if id, ok := strings.CutPrefix(fields[0], source.RefPrefix); ok {
+			commits[id] = commit
+		} else {
+			forks++
+		}
+	}
+	for i := range sources {
+		if i != hub {
+			sources[i].Commit = commits[sources[i].ID]
+		} else if forks > 0 || sources[i].LastFetched != "" {
+			sources[i].Skills = &forks
+		}
+	}
+	return sources, nil
 }
 
 // sourceSkills lists the skills of a fetched source under the subpath of
@@ -573,7 +601,7 @@ func (inv *invocation) listUnadded(ctx context.Context, src source.Source) error
 		// A failure of the run's own repository, never of the store.
 		return err
 	}
-	inv.printSourceSkills(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL}, src, listing)
+	inv.printSourceSkills(sourceEvent{event: newEvent("source"), Source: scan.Source{ID: src.ID(), URL: src.URL}}, src, listing)
 	return nil
 }
 
@@ -693,7 +721,7 @@ func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	if err != nil {
 		return err
 	}
-	inv.out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: url})
+	inv.out.emit(sourceEvent{event: newEvent("source"), Source: scan.Source{ID: id, URL: url}})
 	what := url
 	if what == "" {
 		what = id

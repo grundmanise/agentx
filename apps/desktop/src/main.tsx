@@ -8,6 +8,7 @@ import { TooltipProvider } from "#/components/ui/tooltip.tsx";
 import { followTelemetry, reportError } from "#/lib/telemetry.ts";
 import { showKept, useStartup } from "#/startup/startup.ts";
 import { useAppStore } from "#/store/store.ts";
+import { liveSettings } from "#/store/telemetry.ts";
 
 import "#/styles/index.css";
 
@@ -16,15 +17,16 @@ if (!root) {
   throw new Error("index.html has no #root element");
 }
 
-// Usage data follows the `telemetry` setting as the CLI reports it: on, and with the anonymous id,
-// which the CLI leaves out while DO_NOT_TRACK is set. The CLI's version, which the startup checks
-// find before any setting is read, says whether this is a release build, and its channel.
+// Usage data follows the `telemetry` setting as this launch's inventory carries it: on, and with
+// the anonymous id, which the CLI leaves out while DO_NOT_TRACK is set. The CLI's version, which
+// the startup checks find before the first inventory, says whether this is a release build, and
+// its channel.
 const follow = () => {
-  const { settings, anonymousId } = useAppStore.getState();
+  const settings = liveSettings(useAppStore.getState());
   const { version } = useStartup.getState().findings;
   followTelemetry(
     settings?.telemetry === "on",
-    anonymousId,
+    settings?.anonymous_id,
     version !== undefined && "cliVersion" in version
       ? version.cliVersion
       : undefined

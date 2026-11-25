@@ -46,6 +46,14 @@ export const afterSettled = (then: () => void) => {
   });
 };
 
+/** Resolves once the inventory that follows the commands run so far has arrived, as `afterSettled`. */
+export const settled = async (): Promise<void> => {
+  // oxlint-disable-next-line promise/avoid-new -- afterSettled takes a callback; this awaits it
+  await new Promise<void>((resolve) => {
+    afterSettled(resolve);
+  });
+};
+
 /** Clears the control's mark once the serve child has answered every refresh request sent so far. */
 const clearWhenSettled = (label: string) => {
   afterSettled(() => {

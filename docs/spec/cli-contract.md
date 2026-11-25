@@ -81,7 +81,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | Field | Type | Meaning |
 |---|---|---|
 | `settings` | object | the machine settings as they now are, in the shape of the settings file below, with `label` filled in from the hostname when it is not set |
-| `anonymous_id` | string | the [anonymous id](#telemetry), present exactly when `telemetry` is `on` and `DO_NOT_TRACK` is unset, so the desktop app sends under the same id, and only then |
+| `anonymous_id` | string | the [anonymous id](#telemetry), present exactly when `telemetry` is `on` and `DO_NOT_TRACK` is unset, as the `settings` field of the [inventory](#inventory) carries it |
 
 `config_removal`, emitted by `agentx config remove`, one per configuration it removed, sorted by `id`, before the `settings` event:
 
@@ -91,7 +91,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `name` | string | the client's display name |
 | `path` | string | the configuration directory of that client |
 
-`machine`, emitted by every `agentx machine` command:
+`machine`, emitted by every `agentx machine` command, and the `machine` field of the [inventory](#inventory):
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -104,7 +104,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `store` | string | the store, `store.git` in agentx home; absent until it is created (see [Store](#store)) |
 | `store_bytes` | integer | the size on disk of the store: the sizes of the regular files under `store.git` added up, read without a git process, a symlink counting nothing and never followed. A fork's worktree lies under `worktrees/` in agentx home, outside the repository, so what it holds is not counted. Absent with `store` |
 
-`source`, emitted by every `agentx source` command, one per source (see [Sources](#sources)), the hub included (see [Hub](#hub)), by `agentx skill add` for the source it installs from, by `agentx skill add` with no source for the upstream source of a skill it installs from the hub, when it adds one (see **Installing from the hub** under [Hub](#hub)), and by `agentx snapshot apply`, one per source of the settings it adds, the hub included (see **Applying** under [Snapshots](#snapshots)):
+`source`, emitted by every `agentx source` command, one per source (see [Sources](#sources)), the hub included (see [Hub](#hub)), by `agentx skill add` for the source it installs from, by `agentx skill add` with no source for the upstream source of a skill it installs from the hub, when it adds one (see **Installing from the hub** under [Hub](#hub)), and by `agentx snapshot apply`, one per source of the settings it adds, the hub included (see **Applying** under [Snapshots](#snapshots)). The `sources` field of the [inventory](#inventory) holds one per source, as `source list` emits it:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -490,7 +490,7 @@ The machine id names one computer across reinstalls. It is derived, in this orde
 
 Usage data is opt-in and anonymous, and goes to PostHog through its Go SDK (`posthog-go`). It is **offered** when a host is known, which a stable or nightly build has (`https://eu.i.posthog.com`, with the project's public client token in the code) and `AGENTX_TELEMETRY_ENDPOINT` replaces, and `DO_NOT_TRACK` is unset; a source build, whose version is `dev`, has no host and never offers or sends. It is **sent** when it is offered and the `telemetry` setting is `on`. Nothing is sent while the setting is absent or `off`.
 
-**Consent.** While telemetry is offered and the setting is absent, `agentx scan` without `--json` asks after it printed the inventory, when a person is there to answer (stdin and stdout are terminals, or `AGENTX_INTERACTIVE` is `1`): it prints what is sent and `Send anonymous usage data? [y/N] `, reads one line, and stores `on` for `y` or `yes`, in any case, and `off` for anything else, as a mutation. A run with no one to answer asks nothing and stores nothing, so a later run asks. `agentx scan --json` and `agentx serve` never ask: the desktop app reads the setting from the `settings` event, asks itself while `telemetry` is absent, and answers with `config set telemetry`. The setting is this machine's own: `snapshot save` leaves it out and `snapshot apply` keeps the machine's value.
+**Consent.** While telemetry is offered and the setting is absent, `agentx scan` without `--json` asks after it printed the inventory, when a person is there to answer (stdin and stdout are terminals, or `AGENTX_INTERACTIVE` is `1`): it prints what is sent and `Send anonymous usage data? [y/N] `, reads one line, and stores `on` for `y` or `yes`, in any case, and `off` for anything else, as a mutation. A run with no one to answer asks nothing and stores nothing, so a later run asks. `agentx scan --json` and `agentx serve` never ask: the desktop app reads the setting and the anonymous id from the `settings` field of the [inventory](#inventory), asks itself while `telemetry` is absent, and answers with `config set telemetry`. The setting is this machine's own: `snapshot save` leaves it out and `snapshot apply` keeps the machine's value.
 
 **The anonymous id** is HMAC-SHA256 with the key `agentx-anonymous-id/v1` over the machine id, rendered as the first 32 lowercase hex characters. It is the PostHog `distinct_id` of every event. It differs from the machine id, cannot be turned back into it, and changes with `agentx machine reset-id`. Events are personless (`process_person_profile: false`); the CLI never identifies.
 
@@ -583,7 +583,9 @@ The event:
 |---|---|---|
 | `instance_id` | string | fresh per process, or `AGENTX_INSTANCE_ID` |
 | `scan_counter` | integer | `1` for a one-shot scan |
-| `machine` | object | `id`, the machine id, and `label` |
+| `machine` | object | this machine: the [`machine`](#event-types) event `agentx machine` emits, without `type` and `schema_version`, and without `store` and `store_bytes`: every git write changes the size, and a scan reports no change of it |
+| `settings` | object | the machine settings no other field carries: `ignore_system_files`, and `telemetry`, absent until answered (see [Machine settings](#machine-settings)), with `anonymous_id`, the [anonymous id](#telemetry), present exactly when `telemetry` is `on` and `DO_NOT_TRACK` is unset, as the `settings` event carries it. The label is in `machine`, the sources in `sources`, the disabled and copy configurations in each configuration's `enabled` and `placement`, and `copy_mode` in each library placement's `mode` |
+| `sources` | array | one object per source of the settings, in their order, the hub included: the [`source`](#event-types) event `agentx source list` emits for it, every field and nothing else, without `type` and `schema_version`; `[]` when the settings hold none. Its `commit` and `skills` are left out when git cannot read the store, which a warning then says, unless the `library` warning already names the store |
 | `configurations` | array | the detected configurations, sorted by `id` |
 | `skills` | array | the skill nodes, sorted by `physical_id` |
 | `library` | array | one object per skill directory of the library, sorted by `name`: the [`library_skill`](#event-types) event `agentx skill list` emits for it, every field and nothing else, without `type` and `schema_version`, so its `kind` is `managed` or `unmanaged` and where a skill is published to and came from are its `source` and `upstream` fields; `[]` when the library holds no skill, or when git cannot read the store, which a warning then says (see below). A managed skill whose import branch the store holds but whose library directory is gone is not listed, and so has no `state` and no `drift`: it is named in `warnings` instead, one per skill, as `agentx skill list` names it (see **Listing** under [Skills](#skills)) |

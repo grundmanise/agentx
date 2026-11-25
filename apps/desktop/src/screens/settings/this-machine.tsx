@@ -1,6 +1,6 @@
 // This machine: the machine's label, which `config set label <value>` changes on Enter or when the
-// field loses focus with a changed value, and the machine id. Both come from the `machine` event,
-// which the store reads again after the label changes (src/store/loaders.ts). A refusal shows
+// field loses focus with a changed value, and the machine id. Both come from the inventory's
+// `machine`, and the field stays pending until the inventory after the change arrives. A refusal shows
 // under the field as one sentence-cased paragraph (`ProblemText`), the label sent keeping its case.
 import { useState } from "react";
 
@@ -8,8 +8,8 @@ import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
-import { agentx, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
+import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
@@ -37,7 +37,7 @@ const LabelField = ({ label }: { label: string }) => {
   const [problem, setProblem] = useState<Problem | undefined>();
   // The value last sent: losing focus does not send it again.
   const [sent, setSent] = useState<string | undefined>();
-  const pending = usePending(LABEL_LABEL);
+  const pending = useSettling(LABEL_LABEL);
 
   // A new label from the CLI replaces what the field holds.
   if (shown !== label) {
@@ -53,7 +53,7 @@ const LabelField = ({ label }: { label: string }) => {
     }
     setSent(value);
     setProblem(undefined);
-    const outcome = await agentx(["config", "set", "label", value], {
+    const outcome = await runUntilSettled(["config", "set", "label", value], {
       label: LABEL_LABEL,
       ownFailure: true,
       success: "Label saved",
@@ -102,8 +102,8 @@ const LabelField = ({ label }: { label: string }) => {
 };
 
 export const ThisMachineSection = () => {
-  const label = useAppStore((s) => s.machine?.label);
-  const id = useAppStore((s) => s.machine?.id);
+  const label = useAppStore((s) => s.inventory?.machine.label);
+  const id = useAppStore((s) => s.inventory?.machine.id);
   return (
     <SettingsSection
       title="This machine"

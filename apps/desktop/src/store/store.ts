@@ -13,9 +13,8 @@ import type {
   InstallableSkillEvent,
   InventoryEvent,
   MachineEvent,
-  Settings,
   SkillFileEvent,
-  SourceEvent,
+  Source,
   SourceSkillEvent,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
@@ -81,17 +80,13 @@ export interface AppState {
    * until one did this session.
    */
   lastChecked: string | undefined;
-  settings: Settings | undefined;
   /**
-   * The anonymous id usage data is sent under, from the `settings` event: there only while the
-   * `telemetry` setting is on.
+   * The store and its size on disk, from `machine`, read when Settings shows Storage: the
+   * inventory leaves them out, since every git write changes the size. Undefined before a read.
    */
-  anonymousId: string | undefined;
+  store: Pick<MachineEvent, "store" | "store_bytes"> | undefined;
   /** Whether the telemetry question was answered this session: it is not asked again. */
   telemetryAnswered: boolean;
-  /** This machine and where agentx keeps its files, from `machine`. */
-  machine: MachineEvent | undefined;
-  sources: SourceEvent[];
   /** What `skill import` would take over, from its preview. */
   adoption: AdoptionEvent[];
   /** The controls whose command runs: label → run id. */
@@ -181,7 +176,6 @@ export type UpdateDiffRead =
 
 export const useAppStore = create<AppState>()(() => ({
   adoption: [],
-  anonymousId: undefined,
   applied: undefined,
   conflicts: {},
   files: {},
@@ -192,15 +186,19 @@ export const useAppStore = create<AppState>()(() => ({
   inventory: undefined,
   lastChecked: undefined,
   listings: {},
-  machine: undefined,
   pending: {},
   refreshes: {},
   serveEnd: undefined,
   serveError: undefined,
-  settings: undefined,
   skillMds: {},
-  sources: [],
+  store: undefined,
   telemetryAnswered: false,
   updateDiffs: {},
   updates: {},
 }));
+
+const noSources: Source[] = [];
+
+/** The sources of the settings, as the inventory lists them; none before the first inventory. */
+export const sourcesOf = (s: AppState): Source[] =>
+  s.inventory?.sources ?? noSources;

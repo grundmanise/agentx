@@ -1,6 +1,10 @@
-// Storage: where the library is and how much disk the store takes, as the `machine` event
-// reports them. The app computes nothing about the machine.
+// Storage: where the library is, as the inventory's machine says, and how much disk the store
+// takes, as the `machine` event reports it each time Settings shows. The app computes nothing
+// about the machine.
+import { useEffect } from "react";
+
 import { SettingsSection } from "#/screens/settings/section.tsx";
+import { loadStore } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
 
 const UNITS = ["KiB", "MiB", "GiB", "TiB"] as const;
@@ -29,21 +33,28 @@ const Place = ({ name, value }: { name: string; value: string }) => (
 );
 
 export const StorageSection = () => {
-  const machine = useAppStore((s) => s.machine);
-  if (machine === undefined) {
+  const library = useAppStore((s) => s.inventory?.machine.library);
+  const store = useAppStore((s) => s.store);
+  // Read each time Settings shows: an effect runs again when a kept screen shows again.
+  useEffect(() => {
+    void loadStore();
+  }, []);
+  if (library === undefined) {
     return null;
   }
   let repo = "Not created yet";
-  if (machine.store !== undefined) {
+  if (store === undefined) {
+    repo = "Size unknown";
+  } else if (store.store !== undefined) {
     repo =
-      machine.store_bytes === undefined
+      store.store_bytes === undefined
         ? "Size unknown"
-        : sizeText(machine.store_bytes);
+        : sizeText(store.store_bytes);
   }
   return (
     <SettingsSection title="Storage">
       <dl className="gap-settings-section m-0 flex flex-col">
-        <Place name="Library" value={machine.library} />
+        <Place name="Library" value={library} />
         <Place name="Store" value={repo} />
       </dl>
     </SettingsSection>

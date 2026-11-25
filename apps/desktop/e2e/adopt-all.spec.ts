@@ -45,11 +45,14 @@ const progress = (where: Locator) => where.getByRole("status");
 const refused = (where: Locator) =>
   where.getByRole("region", { name: "Can't be imported" });
 
-/** The command lines the screens ran: everything but the launch, the store's and the pane's reads. */
+/**
+ * The command lines the screens ran: everything but the launch, the store's and the pane's reads,
+ * and the read of the store's size Settings runs as it shows.
+ */
 const ran = (cli: MockCli) =>
   cli.commands.filter(
     (l) =>
-      !["version", "doctor"].includes(l[0] ?? "") &&
+      !["version", "doctor", "machine"].includes(l[0] ?? "") &&
       !loadLines.some((known) => known.join(" ") === l.join(" ")) &&
       !["skill files", "skill diff", "skill history"].includes(
         l.slice(0, 2).join(" ")

@@ -191,7 +191,7 @@ let told = "";
 
 /**
  * Follows the `telemetry` setting: starts the SDK the first time it is on in this launch of a
- * release build, under the anonymous id of the `settings` event, and stops sending while it is
+ * release build, under the anonymous id the inventory carries, and stops sending while it is
  * off. In the app, it tells the Tauri shell each change.
  */
 export const followTelemetry = (

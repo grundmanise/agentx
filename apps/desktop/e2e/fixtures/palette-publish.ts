@@ -1,10 +1,14 @@
 // The machine the title bar's sync status and the palette tests run against: two hub
 // skills edited since they were published, one never published, and two skills of a source, one
-// with an update serve found. `source list` answers with the hub and the source, or
+// with an update serve found. The inventory lists the hub and the source, or the source
 // without the hub. Variants: nothing to publish, and no hub; serve can also
 // find what another of your machines published. Inline events with only the fields the tests
 // check.
-import type { LibraryEntry, LibraryPlacement } from "#/cli/events.gen.ts";
+import type {
+  LibraryEntry,
+  LibraryPlacement,
+  Source,
+} from "#/cli/events.gen.ts";
 
 import type { InlineEvent, MockCli } from "../harness/cli.ts";
 import { HUB, ACME, configurations, filesOf } from "./skills.ts";
@@ -71,11 +75,12 @@ export const syncedLibrary: LibraryEntry[] = library.map((entry) => ({
   state: "current",
 }));
 
-const inventoryOf = (entries: LibraryEntry[]) =>
+const inventoryOf = (entries: LibraryEntry[], listed: Source[]) =>
   ({
     configurations,
     library: entries,
     scan_counter: 1,
+    sources: listed,
     type: "inventory",
   }) satisfies InlineEvent;
 
@@ -106,16 +111,13 @@ export const notesFromAnotherMachine: InlineEvent = {
   upstream_commit: "",
 };
 
-/** What `source list` answers: the hub and the source. */
-export const sources: InlineEvent[] = [
-  { hub: true, id: "2222222222222222", type: "source", url: HUB },
-  { access: "read-only", id: "1111111111111111", type: "source", url: ACME },
-];
+/** The hub, as the inventory lists it. */
+export const hub: Source = { hub: true, id: "2222222222222222", url: HUB };
 
-/** What `source list` answers on a machine with no hub. */
-export const sourcesWithoutHub: InlineEvent[] = sources.filter(
-  (s) => s.type === "source" && s.hub !== true
-);
+const acme: Source = { access: "read-only", id: "1111111111111111", url: ACME };
+
+/** The sources the inventory lists: the hub and the source. */
+export const sources: Source[] = [hub, acme];
 
 export type Variant = "edited" | "synced" | "no-hub";
 
@@ -124,6 +126,8 @@ export interface LaunchOptions {
   update?: boolean;
   /** Whether serve found what another of your machines published to notes; it does not by default. */
   incoming?: boolean;
+  /** The hub the inventory lists in place of the variant's. */
+  hub?: Source;
 }
 
 /**
@@ -133,18 +137,16 @@ export interface LaunchOptions {
 export const launch = (
   cli: MockCli,
   variant: Variant = "edited",
-  { update = true, incoming = false }: LaunchOptions = {}
+  { update = true, incoming = false, ...options }: LaunchOptions = {}
 ) => {
   const entries = variant === "synced" ? syncedLibrary : library;
+  const listed = variant === "no-hub" ? [acme] : [options.hub ?? hub, acme];
   cli.onServeStart({
     events: [
-      inventoryOf(entries),
+      inventoryOf(entries, listed),
       ...(update ? [pdfUpdate] : []),
       ...(incoming ? [notesFromAnotherMachine] : []),
     ],
-  });
-  cli.register(["source", "list"], {
-    events: variant === "no-hub" ? sourcesWithoutHub : sources,
   });
   for (const entry of entries) {
     cli.register(["skill", "history", entry.name], { events: [] });

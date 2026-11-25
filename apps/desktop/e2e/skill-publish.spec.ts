@@ -3,12 +3,13 @@
 // Every button's command line is asserted as the mocked CLI recorded it.
 import type { Locator, Page } from "@playwright/test";
 
-import type { PublishOutcome } from "#/cli/events.gen.ts";
+import type { PublishOutcome, Source } from "#/cli/events.gen.ts";
 
 import {
   diffs,
   fileReads,
   inventory,
+  inventoryWith,
   sources,
   sourcesWithoutHub,
 } from "./fixtures/publish.ts";
@@ -55,12 +56,11 @@ const openSkill = async (
   cli: MockCli,
   page: Page,
   name: string,
-  listed: InlineEvent[] = sources,
+  listed: Source[] = sources,
   /** The skills whose `skill diff` holds its answer back. */
   held: string[] = []
 ) => {
-  cli.onServeStart({ events: [inventory] });
-  cli.register(["source", "list"], { events: listed });
+  cli.onServeStart({ events: [inventoryWith(listed)] });
   for (const entry of inventory.library) {
     cli.register(["skill", "history", entry.name], { events: [] });
   }
