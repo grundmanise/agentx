@@ -1,12 +1,14 @@
 // The Create skill dialog: a name and a one-line description, which `skill new` turns into a
 // hub skill, placed in every enabled agent (docs/help-center/cli/fork.mdx). The Skills and
-// Add skills headers open it. Its Create and edit selects the new skill once the inventory that
-// follows lists it, and opens its SKILL.md in the editor the user chose (Settings, Editor); a name
-// the CLI refuses (exit 6: taken, or outside the grammar) shows its message under Name.
-import { useId, useRef, useState } from "react";
+// Add skills headers open it. Its Create selects the new skill once the inventory that follows
+// lists it. With Open editor after creating a skill on (Settings, Editor), it then opens its
+// SKILL.md in the editor the user chose; off, the Created toast offers Open editor. A name the CLI
+// refuses (exit 6: taken, or outside the grammar) shows its message under Name.
+import { useEffect, useId, useRef, useState } from "react";
 import type { RefObject } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
+import type { CliEvent } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -21,7 +23,7 @@ import {
 import { Input } from "#/components/ui/input.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { doctorRule, rewriteHint } from "#/lib/app-hint.ts";
-import { openInEditor } from "#/lib/editor.ts";
+import { openInEditor, readOpenAfterCreate } from "#/lib/editor.ts";
 import {
   breaksSkillNameRule,
   isSkillName,
@@ -93,6 +95,18 @@ const refusalOf = (outcome: Outcome, name: string): Refusal => {
   };
 };
 
+/** The name of the skill `skill new` created, as its events say, else the name typed. */
+const createdName = (events: CliEvent[], typed: string) =>
+  events.find((e) => e.type === "library_skill")?.name ?? typed;
+
+/** Opens the skill's SKILL.md in the editor the user chose, where the library says it is. */
+const editSkill = (name: string) => {
+  const library = useAppStore.getState().inventory?.machine.library;
+  if (library !== undefined) {
+    void openInEditor(skillFile(library, name));
+  }
+};
+
 /** The fields, what went wrong under them, and the buttons. Mounted while the dialog is open. */
 const CreateSkillForm = ({
   nameField,
@@ -104,6 +118,19 @@ const CreateSkillForm = ({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [refusal, setRefusal] = useState<Refusal | undefined>();
+  const [opens, setOpens] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void (async () => {
+      const on = await readOpenAfterCreate();
+      if (current) {
+        setOpens(on);
+      }
+    })();
+    return () => {
+      current = false;
+    };
+  }, []);
   // Create is pending while `skill new` runs and, once it created the skill, until the inventory
   // that follows lists it. A refusal changed nothing, so it waits for no inventory.
   const running = usePending(CREATE_SKILL_LABEL);
@@ -128,10 +155,18 @@ const CreateSkillForm = ({
     }
     setRefusal(undefined);
     const outcome = await agentx(createArgs(name, description.trim()), {
+      action: opens
+        ? undefined
+        : (events) => ({
+            label: "Open editor",
+            onClick: () => {
+              editSkill(createdName(events, name));
+            },
+            track: "toast.open-editor",
+          }),
       label: CREATE_SKILL_LABEL,
       ownFailure: true,
-      success: (events) =>
-        `Created ${events.find((e) => e.type === "library_skill")?.name ?? name} skill`,
+      success: (events) => `Created ${createdName(events, name)} skill`,
     });
     if (outcome.exitCode !== EXIT_CODES.ok) {
       // Another command holding the lock is the runner's toast, with its Retry.
@@ -140,17 +175,15 @@ const CreateSkillForm = ({
       }
       return;
     }
-    const created =
-      outcome.events.find((e) => e.type === "library_skill")?.name ?? name;
+    const created = createdName(outcome.events, name);
     // The skill is selected from the inventory that follows, never from the command's result, and
-    // its SKILL.md opens then, where the library says it is.
+    // with the setting on its SKILL.md opens then, where the library says it is.
     setSelecting(true);
     afterSettled(() => {
       onClose();
       openSkill(created);
-      const library = useAppStore.getState().inventory?.machine.library;
-      if (library !== undefined) {
-        void openInEditor(skillFile(library, created));
+      if (opens) {
+        editSkill(created);
       }
     });
   };
