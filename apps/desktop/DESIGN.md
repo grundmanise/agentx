@@ -323,8 +323,8 @@ Tone triples `{ fg, bg, border }` for banners, notices and icon tiles:
 | `add-card.status-forked` | `accent.yours` | Skill status: forked |
 | `add-card.status-taken` | `gray-400` | Skill status: name taken |
 | `add-card.status-remove` | `accent.danger` | Remove, in place of Added while hovered |
-| `agent-card.hover-border` | `gray-700` | Border of an Agents page card while hovered |
-| `agent-card.selected-bg` | `lime-400/6` | A selected Agents page card |
+| `agent-card.hover-border` | `gray-700` | Border of an Agents page card, or a Universal column, while hovered |
+| `agent-card.selected-bg` | `lime-400/6` | A selected Agents page card or Universal column |
 | `agent-card.selected-border` | `lime-400/50` |  |
 | `round-check.bg` | `accent.primary` | Fill of a selected round check (check `on-accent`), §6 "Round check" |
 | `round-check.ring` | `gray-700` | Ring of a round check that is not selected |
@@ -788,6 +788,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `file-card.radius` | 16 | File tree card |
 | `banner.radius` | 18 |  |
 | `agent-card.radius` | 20 | Agents page cards |
+| `agent-column.radius` | 12 | A Universal column's hover and selected surface |
 | `add-card.radius` | 16 | A skill's card on the Sources list, and its row's focus outline |
 | `round-check.radius` | 50% | Hit area and focus outline of a round check |
 | `source-card.radius` | 18 | Card of the open source on Sources |
@@ -1060,13 +1061,13 @@ One card per agent configuration whose client does not read the library, in a 4-
 
 ### Selecting agents (Agents page)
 
-- Every card, and every column of the Universal card, has a round check (§6 "Round check", `Toggle` `kind="card-check"`) before its controls: before the switch on a card, before the menu button in a column. It shows while the card or column is hovered or holds the focus, and on every card and column once any agent is selected.
-- The check's hit area covers the whole card or column, under its controls and its path, so a click anywhere else on it selects it. A selected card takes `agent-card.selected-bg` and a `agent-card.selected-border` border; a card's border is `agent-card.hover-border` while hovered.
+- A click on a card, or on a column of the Universal card, selects it, anywhere but its controls and its path. Each holds a `Toggle` with no mark of its own that covers it under its controls (`kind="agent-card"`, `kind="agent-column"`), so the keyboard reaches it and a screen reader hears "Select <name>"; its focus outline rings the card or column.
+- A card's border is `agent-card.hover-border` while hovered; a selected card takes `agent-card.selected-bg` and a `agent-card.selected-border` border. A column has no surface of its own, so the toggle draws one a little past it (`agent-column.radius`), with the same hover border and the same selected fill and border.
 - While any agent is selected, the floating bar (§4 "Overlays") counts them, then holds Enable, Disable, a danger Remove and a ghost icon button that clears the selection. Enable and Disable run one `config enable|disable <id>...` for the selected agents that take a placement and would change, and are disabled when none would. Remove opens the confirm dialog of removing an agent, which lists every directory it deletes, and runs one `config remove <id>... --yes`. Each clears the selection. The bar's buttons are disabled, with a spinner before the count, until the inventory after its command arrives.
 
 ### Round check
 
-A 20px ring in `round-check.ring`, filled with `round-check.bg` and an `on-accent` check when selected (`src/components/round-check.tsx`), in a 32px `Toggle` hit area (`round-check.radius`) that draws its focus outline inside. It selects a skill card on Sources (`kind="check"`) and an agent on the Agents page (`kind="card-check"`).
+A 20px ring in `round-check.ring`, filled with `round-check.bg` and an `on-accent` check when selected (`src/components/round-check.tsx`), in a 32px `Toggle` hit area (`round-check.radius`) that draws its focus outline inside. It selects a skill card on Sources (`kind="check"`).
 
 ### Universal card (Agents page)
 

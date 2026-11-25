@@ -16,7 +16,6 @@ import type { Configuration, InventoryEvent } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { Segmented } from "#/components/filter-controls.tsx";
 import { MoreIcon } from "#/components/icons/more.tsx";
-import { RoundCheck } from "#/components/round-check.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -28,7 +27,6 @@ import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import { plural } from "#/lib/plural.ts";
-import { cn } from "#/lib/utils.ts";
 import { BulkBar } from "#/screens/agents/bulk-bar.tsx";
 import {
   countsOf,
@@ -211,39 +209,11 @@ const AgentMenu = ({ c }: { c: Configuration }) => {
   );
 };
 
-/** How an agent is selected: by its round check, whose hit area covers its card. */
+/** How an agent is selected: by a click on its card, the hit area of a toggle with no mark. */
 interface Selectable {
   selected: boolean;
-  /** Some agent is selected, so every round check shows. */
-  selecting: boolean;
   onToggleSelect: () => void;
 }
-
-/** The round check that selects an agent; hidden until the card is hovered or any is selected. */
-const SelectCheck = ({
-  c,
-  selected,
-  selecting,
-  onToggleSelect,
-}: Selectable & { c: Configuration }) => (
-  <span
-    className={cn(
-      "flex",
-      !selecting &&
-        "opacity-0 group-hover/agent:opacity-100 focus-within:opacity-100"
-    )}
-  >
-    <Toggle
-      kind="card-check"
-      track="agents.card-select"
-      pressed={selected}
-      onPressedChange={onToggleSelect}
-      aria-label={`Select ${c.name}`}
-    >
-      <RoundCheck checked={selected} />
-    </Toggle>
-  </span>
-);
 
 const AgentCard = ({
   c,
@@ -283,12 +253,20 @@ const AgentCard = ({
     <article
       aria-label={c.name}
       data-selected={selection.selected ? "" : undefined}
-      className="group/agent rounded-agent-card border-card-border bg-card-bg p-agent-card hover:border-agent-card-hover-border data-selected:border-agent-card-selected-border data-selected:bg-agent-card-selected-bg relative flex min-w-0 flex-col gap-4 border"
+      className="rounded-agent-card border-card-border bg-card-bg p-agent-card hover:border-agent-card-hover-border data-selected:border-agent-card-selected-border data-selected:bg-agent-card-selected-bg relative flex min-w-0 flex-col gap-4 border"
     >
+      <Toggle
+        kind="agent-card"
+        track="agents.card-select"
+        pressed={selection.selected}
+        onPressedChange={() => {
+          selection.onToggleSelect();
+        }}
+        aria-label={`Select ${c.name}`}
+      />
       <div className="flex items-start justify-between gap-3">
         <AgentLogo client={c} size={44} decorative />
         <span className="flex items-center gap-2">
-          <SelectCheck c={c} {...selection} />
           <span className="relative flex items-center gap-2">
             {pending && (
               <span className="text-text-hint flex">
@@ -386,24 +364,23 @@ const UniversalCard = ({
             <section
               key={c.id}
               aria-label={c.name}
-              className="group/agent border-shell-divider relative ml-5 flex min-w-0 flex-col gap-1 border-l pl-5"
+              className="border-shell-divider relative ml-5 flex min-w-0 flex-col gap-1 border-l pl-5"
             >
+              <Toggle
+                kind="agent-column"
+                track="agents.card-select"
+                pressed={selected.has(c.id)}
+                onPressedChange={() => {
+                  onToggleSelect(c);
+                }}
+                aria-label={`Select ${c.name}`}
+              />
               <div className="flex items-center justify-between gap-3">
                 <h3 className="type-agent-card-name text-card-title m-0">
                   {c.name}
                 </h3>
-                <span className="flex items-center gap-1">
-                  <SelectCheck
-                    c={c}
-                    selected={selected.has(c.id)}
-                    selecting={selected.size > 0}
-                    onToggleSelect={() => {
-                      onToggleSelect(c);
-                    }}
-                  />
-                  <span className="relative flex">
-                    <AgentMenu c={c} />
-                  </span>
+                <span className="relative flex">
+                  <AgentMenu c={c} />
                 </span>
               </div>
               <span
@@ -471,7 +448,6 @@ export const AgentsScreen = () => {
                     c={c}
                     inventory={inventory}
                     selected={selected.has(c.id)}
-                    selecting={selected.size > 0}
                     onToggleSelect={() => {
                       toggle(c);
                     }}

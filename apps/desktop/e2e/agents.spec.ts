@@ -408,7 +408,7 @@ test("a removal that fails shows the CLI's error, with a hint in the app's words
 
 /** A click on the card, or the Universal column, `within`, clear of its controls and text. */
 const select = async (within: Locator) => {
-  await within.click({ position: { x: 8, y: 8 } });
+  await within.click({ position: { x: 100, y: 10 } });
 };
 
 test("a click on cards selects them, and the bar enables, disables or removes them in one command", async ({
@@ -456,7 +456,7 @@ test("a click on cards selects them, and the bar enables, disables or removes th
   await cli.serveEmit(answered(cli, inventory.configurations));
 
   await select(card(page, "GitHub Copilot"));
-  await universal.getByRole("button", { name: "Select Codex" }).click();
+  await select(universal.getByRole("region", { name: "Codex" }));
   await bar.getByRole("button", { name: "Remove" }).click();
   await expect(page.getByRole("alertdialog")).toMatchAriaSnapshot(`
     - alertdialog "Remove 2 agents?":
