@@ -58,8 +58,9 @@ test("Rename renames your skill and selects it under its new name", async ({
     events: [{ name: "my-commit-helper", type: "library_skill" }],
   });
 
-  // The name is selected, so typing replaces it.
-  await field.pressSequentially("my-commit-helper");
+  // The name is selected, so typing replaces it, and a space becomes a hyphen.
+  await field.pressSequentially("my commit helper");
+  await expect(field).toHaveValue("my-commit-helper");
   await submit.click();
   await expect(dialog).toHaveCount(0);
   await expect(

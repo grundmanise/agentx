@@ -542,7 +542,6 @@ test("the name is checked as the CLI checks it", async ({ cli, page }) => {
 
   const refused = [
     "My-Skill",
-    "my skill",
     "my_skill",
     "-my-skill",
     "my--skill",
@@ -569,6 +568,27 @@ test("the name is checked as the CLI checks it", async ({ cli, page }) => {
     .getByRole("button", { exact: true, name: "Cancel" })
     .click();
   await expect(dialog(page)).toBeHidden();
+});
+
+test("a space typed or pasted in Name becomes a hyphen, and the caret stays where it was", async ({
+  cli,
+  page,
+}) => {
+  await openDialog(cli, page);
+  const field = nameField(page);
+
+  await field.pressSequentially("release notes");
+  await expect(field).toHaveValue("release-notes");
+  await expect(createButton(page)).toBeEnabled();
+
+  await field.evaluate((input: HTMLInputElement) => {
+    input.setSelectionRange("release-".length, "release-".length);
+  });
+  await field.pressSequentially("pdf big ");
+  await expect(field).toHaveValue("release-pdf-big-notes");
+
+  await field.fill("weekly report\tdraft");
+  await expect(field).toHaveValue("weekly-report-draft");
 });
 
 test("the description is invalid and Create is disabled past 1024 characters", async ({
