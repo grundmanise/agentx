@@ -133,7 +133,7 @@ func TestSkillFilesReadsAPluginSkillAndAConfigurationSkill(t *testing.T) {
 		says string
 	}{
 		{[]string{"commit"}, exitNotFound, `neither the library nor any plugin holds a skill called "commit"`},
-		{[]string{"commit", "--configuration", "windsurf"}, exitNotFound, `configuration "windsurf" is not detected`},
+		{[]string{"commit", "--configuration", "devin"}, exitNotFound, `configuration "devin" is not detected`},
 		{[]string{"format", "--configuration", "claude-code"}, exitNotFound, `claude-code holds no skill called "format"`},
 		{[]string{"commit", "--configuration", ""}, exitUsage, "--configuration needs a configuration"},
 	} {

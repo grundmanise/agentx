@@ -84,13 +84,13 @@ export const acmeSkills: SourceSkillEvent[] = [
   sourceSkill(ACME_ID, "skills/xlsx", "xlsx", "Read and write spreadsheets"),
 ];
 
-/** Three configurations that take a placement, windsurf disabled, and two that read the library. */
+/** Three configurations that take a placement, devin disabled, and two that read the library. */
 export const configurations: Configuration[] = [
   configuration("claude-code", { name: "Claude Code" }),
   configuration("codex", { name: "Codex", reads_library: true }),
   configuration("cursor", { name: "Cursor" }),
+  configuration("devin", { enabled: false, name: "Devin" }),
   configuration("gemini-cli", { name: "Gemini CLI", reads_library: true }),
-  configuration("windsurf", { enabled: false, name: "Windsurf" }),
 ];
 
 const universal = ["codex", "gemini-cli"];

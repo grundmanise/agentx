@@ -28,11 +28,11 @@ type expander func(value string, env map[string]string, f field) string
 
 // expanders are the placeholder syntaxes by format; Codex expands nothing.
 var expanders = map[Format]expander{
-	JSON:         claudeExpand,
-	CursorJSON:   cursorExpand,
-	GeminiJSON:   geminiExpand,
-	WindsurfJSON: windsurfExpand,
-	CopilotJSON:  copilotExpand,
+	JSON:        claudeExpand,
+	CursorJSON:  cursorExpand,
+	GeminiJSON:  geminiExpand,
+	DevinJSON:   devinExpand,
+	CopilotJSON: copilotExpand,
 }
 
 // expanded is s with its command, arguments, environment, working
@@ -167,15 +167,15 @@ func cursorExpand(value string, env map[string]string, _ field) string {
 	})
 }
 
-// windsurfVar is Windsurf's `${env:NAME}` and `${file:/path}`.
-var windsurfVar = regexp.MustCompile(`\$\{(env|file):([^}]+)\}`)
+// devinVar is Devin's `${env:NAME}` and `${file:/path}`.
+var devinVar = regexp.MustCompile(`\$\{(env|file):([^}]+)\}`)
 
-// windsurfExpand is Windsurf's expansion: an unset variable is empty, and a
+// devinExpand is Devin's expansion: an unset variable is empty, and a
 // file gives its contents trimmed, or stays as written when it cannot be
 // read.
-func windsurfExpand(value string, env map[string]string, _ field) string {
-	return windsurfVar.ReplaceAllStringFunc(value, func(m string) string {
-		sub := windsurfVar.FindStringSubmatch(m)
+func devinExpand(value string, env map[string]string, _ field) string {
+	return devinVar.ReplaceAllStringFunc(value, func(m string) string {
+		sub := devinVar.FindStringSubmatch(m)
 		if sub[1] == "env" {
 			return env[sub[2]]
 		}

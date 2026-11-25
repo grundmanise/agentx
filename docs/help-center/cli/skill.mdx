@@ -138,7 +138,7 @@ The line is left out when no universal client is installed. To take a skill away
 By default a skill is placed in every enabled configuration. To choose, name the configurations with `--to`:
 
 ```sh
-agentx skill add anthropics/skills --name pdf --to claude-code --to windsurf
+agentx skill add anthropics/skills --name pdf --to claude-code --to kiro-cli
 ```
 
 `--to` names the configurations for this install, in place of every enabled one. You can name a configuration you disabled. Universal clients see the skill whatever `--to` names.
@@ -172,8 +172,8 @@ agentx installs only regular files and directories. It leaves out a symlink or a
 A copy agentx placed stops matching the library when you edit the copy or when the skill in the library changes. `agentx skill place` and `agentx config enable --place-all` keep that copy exactly as it is and skip it, with a warning:
 
 ```text
-warning: windsurf's copy of pdf is different from the library, so it was left unchanged (/home/me/.codeium/windsurf/skills/pdf)
-  to replace it with the library version: agentx skill remove pdf --from windsurf && agentx skill place pdf --to windsurf --copy
+warning: kiro-cli's copy of pdf is different from the library, so it was left unchanged (/home/me/.kiro/skills/pdf)
+  to replace it with the library version: agentx skill remove pdf --from kiro-cli && agentx skill place pdf --to kiro-cli --copy
 ```
 
 To replace the copy with the library version, run the command on the second line of the warning. This deletes what the copy holds, so save what you want to keep first.
@@ -236,18 +236,18 @@ agentx skill add --all --except standup
 Put a skill the library already holds into another client:
 
 ```sh
-agentx skill place pdf --to windsurf
+agentx skill place pdf --to kiro-cli
 ```
 
 ```text
 ✓ placed pdf in 1 configuration
-  windsurf  symlink  /home/me/.codeium/windsurf/skills/pdf -> /home/me/.agents/skills/pdf
+  kiro-cli  symlink  /home/me/.kiro/skills/pdf -> /home/me/.agents/skills/pdf
   always available to universal clients: codex, cursor, gemini-cli
 ```
 
 The first line counts the configurations you placed the skill in, and any placements agentx skipped. Each client you named gets one row. A client whose placement was skipped gets a row only if it sees the skill through another client's skills directory.
 
-Name each client with `--to`, once for each. Without `--to`, agentx places the skill into every enabled client and puts back what `agentx skill list` flags there; see [Put back placements](#put-back-placements). Add `--copy` for a client that cannot follow a symlink; agentx remembers the choice, as it does for `agentx skill add --copy`. To turn a recorded copy back into a symlink, take it away with `agentx skill remove pdf --from windsurf`, then place the skill again with `agentx skill place pdf --to windsurf`.
+Name each client with `--to`, once for each. Without `--to`, agentx places the skill into every enabled client and puts back what `agentx skill list` flags there; see [Put back placements](#put-back-placements). Add `--copy` for a client that cannot follow a symlink; agentx remembers the choice, as it does for `agentx skill add --copy`. To turn a recorded copy back into a symlink, take it away with `agentx skill remove pdf --from kiro-cli`, then place the skill again with `agentx skill place pdf --to kiro-cli`.
 
 What is already at the path decides what happens, as for an install (see [If something is already there](#if-something-is-already-there)), with one difference: a directory that holds other content stops the command, unless you add `--force`. See [When the directory differs from the library](#when-the-directory-differs-from-the-library).
 
@@ -324,7 +324,7 @@ A hub skill is placed as `skill add` places it. `skill place` also puts back its
 `skill place` stops with exit code 6 and changes nothing when symlinks join the paths it would change, for example a client's skills directory that links into the library or into another client's directory. The error names the paths. Remove the symlink that joins them, then run the command again.
 
 ```text
-error: /home/me/.codeium/windsurf/skills/pdf lies inside /home/me/.claude/skills/pdf, and placing one would change the other, so nothing was placed
+error: /home/me/.kiro/skills/pdf lies inside /home/me/.claude/skills/pdf, and placing one would change the other, so nothing was placed
 hint: replace the symlink that joins them with the files it leads to, or move one of them elsewhere, then run 'agentx skill place pdf' again
 ```
 
@@ -869,12 +869,12 @@ hint: rename yours with 'agentx skill rename release-notes <new>', then publish 
 From one client:
 
 ```sh
-agentx skill remove pdf --from windsurf
+agentx skill remove pdf --from kiro-cli
 ```
 
 ```text
-✓ removed pdf from windsurf: 1 placement
-  windsurf  symlink  /home/me/.codeium/windsurf/skills/pdf
+✓ removed pdf from kiro-cli: 1 placement
+  kiro-cli  symlink  /home/me/.kiro/skills/pdf
 ```
 
 From the machine altogether:
@@ -926,7 +926,7 @@ agentx deletes only a link that points straight at the library entry. A link of 
 
 ```text
 warning: /home/me/.claude/skills/pdf points at /home/me/mylinks/pdf, not at /home/me/.agents/skills/pdf and was left as it is; it no longer leads to pdf
-warning: /home/me/.codeium/windsurf/skills/pdf is a directory agentx did not place there and was left as it is; windsurf still sees it
+warning: /home/me/.kiro/skills/pdf is a directory agentx did not place there and was left as it is; kiro-cli still sees it
 ✓ removed pdf from the library: 2 placements, 2 placements left in place
   ...
 ```
@@ -936,7 +936,7 @@ Here `~/mylinks/pdf` points at the library entry. The removal deletes that entry
 agentx removes a copy it placed even if you changed it, and warns you:
 
 ```text
-warning: windsurf's copy of pdf was different from the library; removing it deleted those changes (/home/me/.codeium/windsurf/skills/pdf)
+warning: kiro-cli's copy of pdf was different from the library; removing it deleted those changes (/home/me/.kiro/skills/pdf)
 ```
 
 Take a copy of anything you want to keep before removing it.
@@ -1003,7 +1003,7 @@ agentx skill place pdf --machine cloud --to claude-code
 Add `--copy` to give those configurations a copy instead of a symlink, as on this machine. The snapshot's settings remember the choice. When you remove the skill from a configuration with `--from`, that configuration no longer gets a copy:
 
 ```sh
-agentx skill place pdf --machine cloud --to windsurf --copy
+agentx skill place pdf --machine cloud --to kiro-cli --copy
 ```
 
 The cloud machine always takes the latest version of the skill: the hub's for a hub skill, and the source's for a skill of a source. Publish your hub skills first. If the hub does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine. [Import it](/cli/skill-import#skills-imported-as-they-are) and publish it first.

@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"path/filepath"
 	"slices"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -12,6 +13,10 @@ const library = "library"
 // projectLibrary is the project-scope counterpart of the library, relative
 // to a project root.
 const projectLibrary = ".agents/skills"
+
+// windsurf names, in reads, the skills directories Devin still reads where
+// Windsurf kept them.
+const windsurf = "windsurf"
 
 // read is one skills directory a client reads besides its own: another
 // client's own directory, named by that client's slug, or the library.
@@ -29,11 +34,16 @@ type read struct {
 //
 // Cursor reads Claude Code's and Codex's directories. OpenCode reads Claude
 // Code's. Copilot CLI reads the library since 1.0.11, except when
-// COPILOT_HOME is set (since 1.0.66).
+// COPILOT_HOME is set (since 1.0.66). Devin reads Codex's, Copilot's and
+// Kiro's, Claude Code's at project scope only, and Windsurf's.
 var reads = map[string][]read{
-	"cline":          {{from: library}},
-	"codex":          {{from: library}},
-	"cursor":         {{from: "claude-code"}, {from: "codex"}, {from: library}},
+	"cline":  {{from: library}},
+	"codex":  {{from: library}},
+	"cursor": {{from: "claude-code"}, {from: "codex"}, {from: library}},
+	"devin": {
+		{from: library}, {from: windsurf}, {from: "codex"}, {from: "github-copilot"}, {from: "kiro-cli"},
+		{from: "claude-code", when: func(home.Dirs) bool { return false }},
+	},
 	"gemini-cli":     {{from: library}},
 	"github-copilot": {{from: library, when: func(d home.Dirs) bool { return d.CopilotHome == "" }}},
 	"opencode":       {{from: "claude-code"}, {from: library}},
@@ -49,11 +59,7 @@ func SkillsDirs(c Client, d home.Dirs) []string {
 		if r.when != nil && !r.when(d) {
 			continue
 		}
-		dir := d.Library
-		if r.from != library {
-			other, _ := Lookup(r.from)
-			dir = other.SkillsDir(d)
-		}
+		dir := userDir(r.from, d)
 		if !slices.Contains(dirs, dir) {
 			dirs = append(dirs, dir)
 		}
@@ -67,16 +73,37 @@ func SkillsDirs(c Client, d home.Dirs) []string {
 func ProjectSkillsDirs(c Client) []string {
 	dirs := []string{c.ProjectSkillsDir()}
 	for _, r := range reads[c.Slug()] {
-		dir := projectLibrary
-		if r.from != library {
-			other, _ := Lookup(r.from)
-			dir = other.ProjectSkillsDir()
-		}
+		dir := projectDir(r.from)
 		if !slices.Contains(dirs, dir) {
 			dirs = append(dirs, dir)
 		}
 	}
 	return dirs
+}
+
+// userDir is the user-scope skills directory a read names.
+func userDir(from string, d home.Dirs) string {
+	switch from {
+	case library:
+		return d.Library
+	case windsurf:
+		return filepath.Join(windsurfDir(d), "skills")
+	}
+	other, _ := Lookup(from)
+	return other.SkillsDir(d)
+}
+
+// projectDir is the project-scope skills directory a read names, relative
+// to a project root.
+func projectDir(from string) string {
+	switch from {
+	case library:
+		return projectLibrary
+	case windsurf:
+		return ".windsurf/skills"
+	}
+	other, _ := Lookup(from)
+	return other.ProjectSkillsDir()
 }
 
 // loaded is one skill directory a client loads, at the path it is

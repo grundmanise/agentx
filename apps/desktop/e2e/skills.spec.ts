@@ -536,7 +536,7 @@ test.describe("filters", () => {
         - checkbox "Cursor"
         - checkbox /^Universal Cline, Codex/
         - checkbox "GitHub Copilot"
-        - checkbox "Windsurf"
+        - checkbox "Devin"
         - checkbox "OpenCode"
         - button "Show 20 more"
     `);

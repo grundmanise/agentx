@@ -597,10 +597,7 @@ test("names and targets: two cards and one enabled agent turned off", async ({
     "true"
   );
   await expect(target(page, "Cursor")).toHaveAttribute("aria-pressed", "true");
-  await expect(target(page, "Windsurf")).toHaveAttribute(
-    "aria-pressed",
-    "false"
-  );
+  await expect(target(page, "Devin")).toHaveAttribute("aria-pressed", "false");
   await target(page, "Cursor").click();
   await expect(target(page, "Cursor")).toHaveAttribute("aria-pressed", "false");
 
@@ -768,7 +765,7 @@ test("many agents: five logos and +n, the agent picker toggles a target, two-let
   await check(page, "docx").click();
   // The chosen agents first, then the rest, five in all; the other three behind +3, last.
   expect(await names(bar(page).getByRole("group", { name: "Add to" }))).toEqual(
-    ["Claude Code", "Cursor", "Windsurf", "Kilo Code", "Aider", "3 more agents"]
+    ["Claude Code", "Cursor", "Devin", "Kilo Code", "Aider", "3 more agents"]
   );
   // A client with no bundled logo draws two letters: its initials, or a one-word name's first two.
   await expect(target(page, "Kilo Code").locator("img")).toHaveAttribute(
@@ -801,9 +798,9 @@ test("many agents: five logos and +n, the agent picker toggles a target, two-let
     /^Cline/u,
     "CodexUniversal/home/me/.codexAlways on",
     /^Cursor/u,
+    /^Devin/u,
     "Gemini CLIUniversal/home/me/.gemini-cliAlways on",
     /^Kilo Code/u,
-    /^Windsurf/u,
     /^Zed/u,
   ]);
   // The Universal pill says the same, from the keyboard too.
@@ -822,8 +819,8 @@ test("many agents: five logos and +n, the agent picker toggles a target, two-let
     "Claude Code",
     "Cline",
     "Cursor",
+    "Devin",
     "Kilo Code",
-    "Windsurf",
     "Zed",
   ]);
   const search = picker.getByRole("searchbox", { name: "Search agents" });
