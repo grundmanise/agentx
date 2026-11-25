@@ -37,6 +37,7 @@ import {
   breaksSkillNameRule,
   isSkillName,
   SKILL_NAME_RULE,
+  typedSkillName,
 } from "#/lib/skill-name.ts";
 import {
   firstName,
@@ -255,7 +256,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
               value={name}
               disabled={pending}
               onChange={(e) => {
-                setName(e.target.value);
+                setName(typedSkillName(e.currentTarget));
                 setRefusal(undefined);
               }}
             />
