@@ -185,7 +185,10 @@ test.describe("the question", () => {
     await expect(page.locator("main")).toHaveAttribute("aria-busy", "false");
 
     await expect(dialog(page)).toContainText(
-      "Allow agentx to send anonymous usage data and crash reports to PostHog? This helps us fix bugs and improve agentx for you. They never include paths, names or anything you type. You can change this any time in Settings."
+      "Allow agentx to send anonymous usage data and crash reports to PostHog? This helps us fix bugs and improve agentx for you."
+    );
+    await expect(dialog(page)).toContainText(
+      "Data never includes paths, names or anything you type. You can change this any time in Settings."
     );
     // No button has the focus when it opens.
     await expect(dialog(page).locator(":focus")).toHaveCount(0);
