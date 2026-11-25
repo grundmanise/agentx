@@ -27,8 +27,8 @@ export const Confirm = ({
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  /** A path, in `type.technical`. */
-  detail?: string;
+  /** A path, or one path per line, in `type.technical`. */
+  detail?: string | readonly string[];
   action: string;
   onConfirm: () => void;
   /** The name a click on the button that runs the command is sent under. */
@@ -42,10 +42,17 @@ export const Confirm = ({
         <AlertDialogTitle>{title}</AlertDialogTitle>
         <AlertDialogDescription>{description}</AlertDialogDescription>
       </AlertDialogHeader>
-      {detail !== undefined && (
+      {typeof detail === "string" && (
         <p className="type-technical text-text-caption m-0 break-all">
           {detail}
         </p>
+      )}
+      {typeof detail === "object" && (
+        <ul className="type-technical text-text-caption max-h-confirm-list m-0 flex list-none flex-col gap-1 overflow-auto p-0 break-all">
+          {detail.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
       )}
       <AlertDialogFooter>
         <AlertDialogCancel asChild>

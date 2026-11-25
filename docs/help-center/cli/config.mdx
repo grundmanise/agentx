@@ -96,6 +96,8 @@ agentx config enable windsurf
 ✓ windsurf is now enabled
 ```
 
+Name several ids to change them all at once, such as `agentx config disable windsurf cursor`.
+
 Every configuration `agentx scan` detects starts enabled. When you install or place a skill without `--to`, agentx places it only in enabled configurations. Disable a configuration to skip it. Enable it to include it again.
 
 Use the id that `agentx scan` shows in parentheses. For an id that scan does not detect, agentx exits with code 5 and lists the detected ids.
@@ -104,7 +106,7 @@ A client that reads the library directly, such as Codex, still sees every skill 
 
 ### Place the skills you already have
 
-Enabling a client changes only where later installs go. To also place every skill in your library in that client, add `--place-all`:
+Enabling a client changes only where later installs go. To also place every skill in your library in that client, add `--place-all` and name one client:
 
 ```sh
 agentx config enable windsurf --place-all

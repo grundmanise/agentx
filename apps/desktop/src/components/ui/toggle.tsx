@@ -14,10 +14,16 @@ const toggleVariants = cva("inline-flex shrink-0 outline-none", {
   defaultVariants: { kind: "source-pill" },
   variants: {
     kind: {
-      // The round check of a skill on the Sources list (DESIGN.md §6 "Sources screen"): a hit area
-      // round the check its child draws, which draws its focus outline inside.
+      // The round check of an agent on the Agents page: the check, whose hit area also covers
+      // the whole of the nearest positioned card, under the card's controls, so a click on the
+      // card selects it.
+      "card-check":
+        "rounded-round-check focus-visible:outline-shell-focus-ring size-8 items-center justify-center after:absolute after:inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-solid",
+      // The round check of a skill on the Sources list and of an agent on the Agents page
+      // (DESIGN.md §6 "Round check"): a hit area round the check its child draws, which draws its
+      // focus outline inside.
       check:
-        "rounded-add-card-check focus-visible:outline-shell-focus-ring size-8 items-center justify-center focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-solid",
+        "rounded-round-check focus-visible:outline-shell-focus-ring size-8 items-center justify-center focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-solid",
       // An agent client logo as an install target: a 28px logo, or the Universal stack of them, at
       // 55% when off, with an `accent.primary` ring when on. The ring takes `pill.radius`, not
       // `logo.radius`: a 50% radius on the stack's 48x28 box is an ellipse that cuts into the

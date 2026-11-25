@@ -273,20 +273,29 @@ test("choosing Copy on a card runs config placement, the control follows the nex
   ]);
 });
 
+/** The inventory with `configurations`, with the answer to the last refresh. */
+const answered = (
+  cli: MockCli,
+  configurations: typeof inventory.configurations
+) => {
+  const scan = cli.requestIds.length + 1;
+  return [
+    { ...inventory, configurations, scan_counter: scan },
+    {
+      ok: true,
+      request_id: cli.requestIds.at(-1) ?? "",
+      scan_counter: scan,
+      type: "refresh_complete" as const,
+    },
+  ];
+};
+
 /** The inventory once the configuration `id` is gone, with the answer to the last refresh. */
-const without = (cli: MockCli, id: string) => [
-  {
-    ...inventory,
-    configurations: inventory.configurations.filter((c) => c.id !== id),
-    scan_counter: 2,
-  },
-  {
-    ok: true,
-    request_id: cli.requestIds.at(-1) ?? "",
-    scan_counter: 2,
-    type: "refresh_complete" as const,
-  },
-];
+const without = (cli: MockCli, id: string) =>
+  answered(
+    cli,
+    inventory.configurations.filter((c) => c.id !== id)
+  );
 
 /** What `config remove <id> --yes` answers once it has deleted the configuration's directory. */
 const removed = (id: string) => {
@@ -395,4 +404,86 @@ test("a removal that fails shows the CLI's error, with a hint in the app's words
   await expect(toasts(page).getByRole("listitem")).toContainText(
     "A ref moved before the mutation changed anything, so nothing was changed. Remove it again."
   );
+});
+
+/** A click on the card, or the Universal column, `within`, clear of its controls and text. */
+const select = async (within: Locator) => {
+  await within.click({ position: { x: 8, y: 8 } });
+};
+
+test("a click on cards selects them, and the bar enables, disables or removes them in one command", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  const bar = page.getByRole("toolbar", { name: "Selected agents" });
+  const universal = card(page, "Universal");
+
+  await select(card(page, "Windsurf"));
+  await select(card(page, "Cursor"));
+  await expect(
+    card(page, "Cursor").getByRole("button", { name: "Select Cursor" })
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(bar).toContainText("2 selected");
+  cli.register(["config", "enable", "windsurf"], {
+    events: [{ type: "settings" }],
+  });
+  await bar.getByRole("button", { name: "Enable" }).click();
+  await expect(toasts(page).getByText("Windsurf enabled")).toBeVisible();
+  await expect(bar).toBeHidden();
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit(
+    answered(
+      cli,
+      inventory.configurations.map((c) =>
+        c.id === "windsurf" ? { ...c, enabled: true } : c
+      )
+    )
+  );
+
+  await select(card(page, "Cursor"));
+  await select(universal.getByRole("region", { name: "Codex" }));
+  cli.register(["config", "disable", "cursor"], {
+    events: [{ type: "settings" }],
+  });
+  await bar.getByRole("button", { name: "Disable" }).click();
+  await expect(
+    toasts(page).getByText(
+      "Cursor disabled. New skills won't go there by default."
+    )
+  ).toBeVisible();
+  await expect.poll(() => cli.serveRequests.length).toBe(2);
+  await cli.serveEmit(answered(cli, inventory.configurations));
+
+  await select(card(page, "GitHub Copilot"));
+  await universal.getByRole("button", { name: "Select Codex" }).click();
+  await bar.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("alertdialog")).toMatchAriaSnapshot(`
+    - alertdialog "Remove 2 agents?":
+      - heading "Remove 2 agents?" [level=2]
+      - paragraph: Their configuration directories are deleted from this machine, with everything in them.
+      - list:
+        - listitem: /home/me/.codex
+        - listitem: /home/me/.github-copilot
+      - button "Cancel"
+      - button "Remove"
+  `);
+  cli.register(["config", "remove", "codex", "github-copilot", "--yes"], {
+    events: [
+      ...removed("codex").events.filter((e) => e.type === "config_removal"),
+      ...removed("github-copilot").events,
+    ],
+  });
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Remove" })
+    .click();
+  await expect(
+    toasts(page).getByText("Removed Codex and GitHub Copilot")
+  ).toBeVisible();
+  expect(later(cli)).toEqual([
+    ["config", "enable", "windsurf", "--json"],
+    ["config", "disable", "cursor", "--json"],
+    ["config", "remove", "codex", "github-copilot", "--yes", "--json"],
+  ]);
 });

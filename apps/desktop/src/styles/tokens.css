@@ -306,12 +306,15 @@
   --color-add-card-hover-border: var(--gray-700);
   --color-add-card-selected-bg: rgb(212 255 79 / 0.06);
   --color-add-card-selected-border: rgb(212 255 79 / 0.5);
-  --color-add-card-check-bg: var(--color-accent-primary);
   --color-add-card-status-added: var(--color-accent-primary);
   --color-add-card-status-forked: var(--color-accent-yours);
   --color-add-card-status-taken: var(--gray-400);
   --color-add-card-status-remove: var(--color-accent-danger);
-  --color-add-card-check-ring: var(--gray-700);
+  --color-agent-card-hover-border: var(--gray-700);
+  --color-agent-card-selected-bg: rgb(212 255 79 / 0.06);
+  --color-agent-card-selected-border: rgb(212 255 79 / 0.5);
+  --color-round-check-bg: var(--color-accent-primary);
+  --color-round-check-ring: var(--gray-700);
   --color-source-card-bg: var(--gray-950);
   --color-source-card-border: var(--gray-870);
   --color-source-card-divider: var(--gray-870);
@@ -498,7 +501,7 @@
   --radius-tabs-list: 10px;
   --radius-tabs-trigger: 8px;
   --radius-add-card: 16px;
-  --radius-add-card-check: 50%;
+  --radius-round-check: 50%;
   --radius-source-card: 18px;
   --radius-source-card-tile: 10px;
   --radius-hunk: 14px;
@@ -728,6 +731,7 @@
   --inset-palette: 112px;
   --max-height-palette-list: 420px;
   --max-height-adopt-list: 280px;
+  --max-height-confirm-list: 200px;
   --max-height-agent-picker-list: 320px;
   --max-height-add-skill-list: 264px;
   --max-height-update-skills-list: 400px;
