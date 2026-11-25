@@ -881,10 +881,10 @@ func (inv *invocation) printAdoptions(adoptions []string) {
 
 // ownPlacements are the placements the text of a command that placed a
 // skill shows: one per configuration it covered, the one at that
-// configuration's own place. The rescan finds more than that. A client that
-// reads another client's skills directory sees the skill through that
-// client's placement as well as its own, and printing both under it would
-// give one client two rows for one placement.
+// configuration's own place. The rescan finds more than that. A client whose
+// skills directory is a symlink to another client's sees the skill through
+// that client's placement as well as its own, and printing both under it
+// would give one client two rows for one placement.
 // That path is the other client's placement and is shown as that client's
 // row. The library_skill event is left as the rescan found it, every path
 // included, for whoever wants each way a client sees the skill.

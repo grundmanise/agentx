@@ -6,8 +6,8 @@
 //
 // The chips that are on come first, then the rest by the popularity of the agent client. The
 // order is fixed when the pane opens, so a chip stays where it is when it is toggled. Collapsed,
-// the section shows the chips that fit in two rows, and every chip that is on. A displaced or
-// inherited chip runs nothing: its switch is disabled, and its Tooltip says why.
+// the section shows the chips that fit in two rows, and every chip that is on. A displaced chip
+// runs nothing: its switch is disabled, and its Tooltip says why.
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -26,7 +26,6 @@ import {
   inertReason,
   lockOf,
   placedNowhere,
-  removedFrom,
   universalTitle,
 } from "#/screens/skills/placements.ts";
 import type { Lock } from "#/screens/skills/placements.ts";
@@ -69,21 +68,14 @@ const shortWarning = (message: string, id: string): string => {
 
 /**
  * Adds or removes the skill's placement in `c`, with an Undo that does the opposite. Off: `skill
- * place <name> --to <id>`; on: `skill remove <name> --from <id>`. `removed` names every agent the
- * removal takes the skill from: `c` and those that see it only through `c`'s directory. A placement
- * that was skipped, or a removal that left `c` seeing the skill, says so, with the CLI's warning
+ * place <name> --to <id>`; on: `skill remove <name> --from <id>`. A placement that was skipped, or a removal that left `c` seeing the skill, says so, with the CLI's warning
  * under it, and has no Undo: there is nothing to undo.
  */
-const toggle = (
-  row: SkillRow,
-  c: Configuration,
-  add: boolean,
-  removed: string
-) => {
+const toggle = (row: SkillRow, c: Configuration, add: boolean) => {
   const undo: ToastAction = {
     label: "Undo",
     onClick: () => {
-      toggle(row, c, !add, removed);
+      toggle(row, c, !add);
     },
     track: "skill-agents.undo",
   };
@@ -105,7 +97,7 @@ const toggle = (
         }
         return stillSees(logs, c.id)
           ? `${row.name} skill wasn't removed from ${c.name}`
-          : `Removed ${row.name} from ${removed}`;
+          : `Removed ${row.name} from ${c.name}`;
       },
       warnings: (logs) => logs.map((log) => shortWarning(log.message, c.id)),
     }
@@ -129,16 +121,8 @@ const notifyLocked = (row: SkillRow, lock: Lock) => {
   notify(lock.reason, unlockAction(row, lock));
 };
 
-const DirectChip = ({
-  row,
-  c,
-  configurations,
-}: {
-  row: SkillRow;
-  c: Configuration;
-  configurations: Configuration[];
-}) => {
-  const state = chipStateOf(row, c, configurations);
+const DirectChip = ({ row, c }: { row: SkillRow; c: Configuration }) => {
+  const state = chipStateOf(row, c);
   const locked = lockOf(row);
   const pending = useSettling(chipLabel(row, c));
   return (
@@ -147,15 +131,15 @@ const DirectChip = ({
       logo={<AgentLogo client={c} size={28} tooltip={false} />}
       name={c.name}
       state={state}
-      title={chipTitle(row, c, state, configurations)}
-      inert={inertReason(row, c, state, configurations)}
+      title={chipTitle(row, c, state)}
+      inert={inertReason(row, c, state)}
       locked={locked !== undefined}
       pending={pending}
       onClick={() => {
         if (locked !== undefined) {
           notifyLocked(row, locked);
         } else if (!pending) {
-          toggle(row, c, state === "off", removedFrom(row, c, configurations));
+          toggle(row, c, state === "off");
         }
       }}
     />
@@ -267,10 +251,10 @@ export const AgentsSection = ({
   const locked = lockOf(row);
 
   const entries: Entry[] = direct.map((c) => ({
-    chip: <DirectChip row={row} c={c} configurations={configurations} />,
+    chip: <DirectChip row={row} c={c} />,
     id: c.id,
     name: c.name,
-    on: chipStateOf(row, c, configurations) !== "off",
+    on: chipStateOf(row, c) !== "off",
     rank: popularityOf(c.id),
   }));
   if (universal.length > 0) {
