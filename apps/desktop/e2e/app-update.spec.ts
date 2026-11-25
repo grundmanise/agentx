@@ -101,7 +101,7 @@ test("Check for updates off: the app does not check, and Check now still does", 
   expect(cli.appUpdateChecks).toBe(0);
 
   await section(page).getByRole("button", { name: "Check now" }).click();
-  await expect(toasts(page)).toContainText("agentx is up to date");
+  await expect(toasts(page)).toContainText("You're running the latest version");
   expect(cli.appUpdateChecks).toBe(1);
 
   cli.offerAppUpdate("0.4.0");
@@ -141,7 +141,7 @@ test("the app menu's Check for Updates… checks at once and says when there is 
   await expect.poll(() => cli.appUpdateChecks).toBe(1);
 
   await cli.clickAppMenu("check-updates");
-  await expect(toasts(page)).toContainText("agentx is up to date");
+  await expect(toasts(page)).toContainText("You're running the latest version");
   expect(cli.appUpdateChecks).toBe(2);
 });
 
