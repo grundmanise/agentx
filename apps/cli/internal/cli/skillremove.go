@@ -32,9 +32,14 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"directly and sees the skill through the library entry, so it cannot lose the\n" +
 			"skill on its own: --from naming one is refused, and --from universal removes the\n" +
 			"skill from every client.\n\n" +
-			"A placement is deleted only when it is a symlink into the library or a copy this\n" +
-			"machine recorded. Anything else at a placement path is left where it is and\n" +
-			"named in the output: agentx never removes what it did not create.\n\n" +
+			"A placement is deleted when it is a symlink into the library or a copy this\n" +
+			"machine recorded. Taking the skill off the machine also deletes every folder of\n" +
+			"it in a client's own skills directory that holds the library's files. Anything\n" +
+			"else, such as a folder that holds other files, is left where it is and named in\n" +
+			"the output.\n\n" +
+			"A skill the library does not hold, only folders of it in the clients' own\n" +
+			"skills directories, is taken off the machine with every one of those folders,\n" +
+			"when they all hold the same files.\n\n" +
 			"A client that reads another client's skills directory keeps seeing the skill\n" +
 			"through that client's placement after --from removes its own, and the removal\n" +
 			"warns: remove the skill from that client too to take it from both. Two clients\n" +
@@ -104,6 +109,7 @@ type removalPlan struct {
 	managed string   // the commit the import branch held; empty when there was none
 	dropped []string // the configurations taken out of copy_mode
 	absent  bool     // the library held no directory for the skill, only its import branch was left
+	folders bool     // the skill was only in the clients' own skills directories, see removeFolders
 	// A fork's removal: the commit its branch held, whether its worktree
 	// was there to delete, and whether the hub's branch was
 	// deleted too.
@@ -122,12 +128,13 @@ type removalPlan struct {
 // fork taken off the machine is removed by removeFork, which with remote
 // deletes its branch on the hub too.
 //
-// The rule the whole command turns on: a placement is deleted only when it
-// is a symlink into the library or a copy this machine recorded in
-// copy_mode. A directory the user made by hand, a symlink they pointed
-// somewhere else, a copy nothing recorded and a file are left exactly where
-// they are and named in the output. agentx removes what it created and
-// nothing else.
+// The rule the whole command turns on: a placement is deleted when it is a
+// symlink into the library or a copy this machine recorded in copy_mode,
+// and a removal that takes the skill off the machine deletes too the
+// folders of it in the clients' own skills directories that hold the
+// library's files, see tracedCopies. A directory that holds other files, a
+// symlink pointed somewhere else and a file are left exactly where they
+// are and named in the output.
 func (inv *invocation) skillRemove(ctx context.Context, name string, from []string, remote bool) error {
 	named := namedConfigurations(from)
 	if len(named) > 0 && remote {
@@ -194,7 +201,14 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 		// warning for a link it leaves can say whether that link still leads
 		// anywhere, whichever target the link leads through.
 		gone := removalDeletes(targets, name, libPath, edit.copiesOf(name), whole)
-		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, edit.copiesOf(name), gone); err != nil {
+		var traced map[string]adoptPlace
+		if whole {
+			traced = inv.tracedCopies(name, libPath)
+			for path := range traced {
+				gone[path] = true
+			}
+		}
+		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, edit.copiesOf(name), gone, traced); err != nil {
 			m.Discard()
 			return err
 		}
@@ -249,12 +263,29 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 // from that client too, which is why --from refused this configuration.
 // When the library holds no entry for the skill, such a client saw nothing
 // and is not named.
-func (inv *invocation) stageRemovals(m *home.Mutation, plan *removalPlan, targets []placeTarget, libPath string, judge copyJudge, copies []string, gone map[string]bool) error {
+//
+// traced are the copies of the skill a whole removal deletes too, see
+// tracedCopies, keyed as canonicalPath writes their paths: one at a
+// target's placement path goes as that target's, and every other one after
+// the targets, as the first configuration whose own skills directory holds
+// it.
+func (inv *invocation) stageRemovals(m *home.Mutation, plan *removalPlan, targets []placeTarget, libPath string, judge copyJudge, copies []string, gone map[string]bool, traced map[string]adoptPlace) error {
+	staged := map[string]bool{}
 	for _, t := range targets {
 		if t.readsLibrary {
 			if !plan.absent {
 				plan.library = append(plan.library, t.id)
 			}
+			continue
+		}
+		if c, ok := traced[canonicalPath(filepath.Join(t.dir, plan.name))]; ok {
+			key := canonicalPath(c.path)
+			if !staged[key] {
+				staged[key] = true
+				plan.deleted = append(plan.deleted, removalStep{id: t.id, path: c.path, mode: modeCopy, state: c.state})
+				m.Remove(c.path, c.state)
+			}
+			plan.dropped = append(plan.dropped, t.id)
 			continue
 		}
 		step, err := inv.planRemoval(t, plan.name, libPath, judge, copies, gone)
@@ -273,7 +304,114 @@ func (inv *invocation) stageRemovals(m *home.Mutation, plan *removalPlan, target
 			m.Remove(step.path, step.state)
 		}
 	}
+	keys := make([]string, 0, len(traced))
+	for key := range traced {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if staged[key] {
+			continue
+		}
+		c := traced[key]
+		plan.deleted = append(plan.deleted, removalStep{id: c.targets[0].id, path: c.path, mode: modeCopy, state: c.state})
+		m.Remove(c.path, c.state)
+	}
 	return nil
+}
+
+// tracedCopies are the copies of the library skill name at libPath that
+// the clients' own skills directories hold under its name, see adoptSites:
+// the real directories that hold its files, as an import judges a copy,
+// see copyOf. A whole removal deletes them with the library entry, so the
+// skill leaves every place it can be traced to. A directory that holds
+// other files, or cannot be read, is no copy and stays. They are keyed as
+// canonicalPath writes their paths.
+func (inv *invocation) tracedCopies(name, libPath string) map[string]adoptPlace {
+	dirs, _ := inv.adoptSites(name)
+	if len(dirs) == 0 {
+		return nil
+	}
+	real, err := filepath.EvalSymlinks(libPath)
+	if err != nil {
+		return nil
+	}
+	lib, err := readAdoptPlace(adoptPlace{path: real})
+	if err != nil {
+		return nil
+	}
+	ignoreSystem := inv.systemFilesIgnored()
+	traced := map[string]adoptPlace{}
+	for _, p := range dirs {
+		if read, err := readAdoptPlace(p); err == nil && read.copyOf(lib, ignoreSystem) {
+			traced[canonicalPath(read.path)] = read
+		}
+	}
+	return traced
+}
+
+// removeFolders takes off the machine an unmanaged skill that only the
+// clients' own skills directories hold, under name, see adoptSites: every
+// such directory goes. They must hold the same files, as an import judges
+// a copy, see copyOf, since each one is then the same skill; folders that
+// differ are two skills under one name, and the removal refuses rather
+// than pick. A folder that cannot be read refuses it too. A symlink there
+// is no folder of the skill and stays.
+//
+// --from naming a configuration is refused, as removeAbsent refuses it:
+// with no library entry, the removal is the skill's, whole.
+func (inv *invocation) removeFolders(ctx context.Context, name string, from []string) error {
+	if dirs, _ := inv.adoptSites(name); len(dirs) == 0 {
+		return inv.noLibrarySkill(name)
+	}
+	for _, id := range from {
+		if id != fromUniversal {
+			return fail(exitRefused, fmt.Sprintf("the library holds no skill directory for %s, so it cannot be removed from %s alone", name, id),
+				"take it off the machine with '"+skillCommand("remove", name)+"'")
+		}
+	}
+	targets := inv.detectedTargets()
+	plan := removalPlan{name: name, whole: true, absent: true, folders: true, from: targetIDs(targets)}
+	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
+		if _, ok := librarySkill(inv.dirs.Library, name); ok {
+			return fail(exitRefused, "the library came to hold "+name+" while it was being removed, so nothing was removed",
+				"run '"+skillCommand("remove", name)+"' again to remove the skill it holds now")
+		}
+		dirs, _ := inv.adoptSites(name)
+		if len(dirs) == 0 {
+			return inv.noLibrarySkill(name)
+		}
+		read := make([]adoptPlace, 0, len(dirs))
+		for _, p := range dirs {
+			r, err := readAdoptPlace(p)
+			if err != nil {
+				return fail(exitRefused, quotedPath(p.path)+" cannot be read, so nothing was removed", "")
+			}
+			read = append(read, r)
+		}
+		ignoreSystem := inv.systemFilesIgnored()
+		for _, r := range read[1:] {
+			if !r.copyOf(read[0], ignoreSystem) {
+				paths := make([]string, len(read))
+				for i, each := range read {
+					paths[i] = quotedPath(each.path)
+				}
+				return fail(exitRefused, "the folders of "+sanitised(name)+" hold different files, so nothing was removed: "+andList(paths),
+					"delete the folder you no longer want yourself")
+			}
+		}
+		m := home.NewMutation(inv.dirs.Home)
+		plan.deleted = nil
+		for _, r := range read {
+			plan.deleted = append(plan.deleted, removalStep{id: r.targets[0].id, path: r.path, mode: modeCopy, state: r.state})
+			m.Remove(r.path, r.state)
+		}
+		return m.Apply(inv.refs(ctx))
+	})
+	if err != nil {
+		return mutationFailure(err)
+	}
+	return inv.reportRemoved(ctx, plan, targets)
 }
 
 // removeAbsent takes off the machine a managed skill the library no longer
@@ -308,15 +446,18 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 		return storeFailure(err)
 	}
 	if !hasRepo {
-		return inv.noLibrarySkill(name)
+		return inv.removeFolders(ctx, name, from)
 	}
 	refs, err := inv.lineageRefs(ctx, gitDir, name)
 	if err != nil {
 		return err
 	}
 	commit := refs[lineage.ManagedRef(name)]
-	if commit == "" || refs[lineage.ForkRef(name)] != "" {
+	if refs[lineage.ForkRef(name)] != "" {
 		return inv.noLibrarySkill(name)
+	}
+	if commit == "" {
+		return inv.removeFolders(ctx, name, from)
 	}
 	for _, id := range from {
 		if id != fromUniversal {
@@ -380,7 +521,7 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 		m := home.NewMutation(inv.dirs.Home)
 		plan.deleted, plan.kept, plan.library, plan.dropped = nil, nil, nil, nil
 		gone := removalDeletes(targets, name, libPath, edit.copiesOf(name), false)
-		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, edit.copiesOf(name), gone); err != nil {
+		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, edit.copiesOf(name), gone, nil); err != nil {
 			m.Discard()
 			return err
 		}
@@ -922,6 +1063,8 @@ func (inv *invocation) printRemoved(plan removalPlan) {
 	switch {
 	case plan.keptLibrary():
 		where = ""
+	case plan.folders:
+		where = " from the clients' skills directories"
 	case plan.absent:
 		where = ", which the library no longer held"
 	case !plan.whole:
@@ -955,7 +1098,9 @@ func (inv *invocation) printRemoved(plan removalPlan) {
 		if plan.managed != "" {
 			gone = append(gone, sanitised(lineage.ManagedRef(plan.name)))
 		}
-		out.print("  ", out.paint(muted, "deleted "+andList(gone)))
+		if len(gone) > 0 {
+			out.print("  ", out.paint(muted, "deleted "+andList(gone)))
+		}
 	}
 	if plan.remote {
 		out.done("deleted " + out.paint(heading, forkBranch(plan.name)) + " from the hub")
@@ -988,6 +1133,8 @@ func removeSummary(plan removalPlan) string {
 		} else if plan.absent {
 			summary = "removed " + plan.name + ", which the library no longer held: " + andList(parts)
 		}
+	case plan.folders:
+		summary = "removed " + plan.name + " from the clients' skills directories: " + n
 	case plan.absent:
 		summary = "removed " + plan.name + ", which the library no longer held: its import branch and " + n
 	case plan.whole && plan.managed != "":

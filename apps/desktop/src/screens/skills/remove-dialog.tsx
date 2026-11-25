@@ -1,10 +1,10 @@
 // The Remove dialog (DESIGN.md §6 "Banner actions and dialogs"): what leaves the machine with the
-// skill, the agents that still see it in folders agentx did not place, and for a hub skill,
+// skill, the agents that still see it somewhere Remove leaves, and for a hub skill,
 // whether its branch leaves the hub too. Opened from the
 // Universal chip, it says why the skill leaves every agent: those agents read the library. Remove runs
 // `skill remove <name>`, with --remote when that is checked, and never offers an Undo: unpublished
-// edits of a hub skill are gone. Its toast leaves out the CLI's warnings for the folders the
-// dialog named.
+// edits of a hub skill are gone. A skill only agents' own folders hold is removed by its folder's
+// name, every folder of it at once.
 import { useId, useRef, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -21,19 +21,20 @@ import {
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import { andList } from "#/lib/plural.ts";
-import { removalOf } from "#/screens/skills/placements.ts";
+import {
+  removalOf,
+  removeArgs,
+  removeName,
+} from "#/screens/skills/placements.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import type { CommandOptions } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
-/** How the CLI ends its warning for a folder agentx did not place, which the dialog already named. */
-const LEFT_FOLDER = "agentx did not place there";
-
 /** The label of the Remove control for `row`: the runner's name for it. */
 export const removeLabel = (row: SkillRow) => `remove ${row.key}`;
 
-/** The agents that still see the skill after Remove, in the folders agentx did not place it in. */
+/** The agents that still see the skill after Remove, through a link or a folder it leaves. */
 const Kept = ({ keeping }: { keeping: Configuration[] }) => {
   if (keeping.length === 0) {
     return null;
@@ -41,7 +42,7 @@ const Kept = ({ keeping }: { keeping: Configuration[] }) => {
   const see = keeping.length === 1 ? "sees" : "see";
   return (
     <p className="type-body text-text-secondary m-0">
-      {`${andList(keeping.map((c) => c.name))} still ${see} it: agentx leaves the folders it didn't place.`}
+      {`${andList(keeping.map((c) => c.name))} still ${see} it: Remove leaves links and folders under another name.`}
     </p>
   );
 };
@@ -102,7 +103,7 @@ export const RemoveDialog = ({
     onClose();
   };
   const remove = () => {
-    const base = ["skill", "remove", row.name];
+    const base = removeArgs(removeName(row) ?? row.name);
     const args = offersRemote && remote ? [...base, "--remote"] : base;
     // Retry, after another command held the lock, also keeps Remove pending until the inventory
     // after it arrives.
@@ -112,8 +113,6 @@ export const RemoveDialog = ({
         void runUntilSettled(args, options);
       },
       success: `Removed ${row.name} skill`,
-      warnings: (logs) =>
-        logs.map((l) => l.message).filter((m) => !m.includes(LEFT_FOLDER)),
     };
     void runUntilSettled(args, options);
     removed.current = true;

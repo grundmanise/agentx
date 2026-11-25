@@ -326,7 +326,7 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 		plan.absent = !inLibrary || !ours
 		copies := edit.copiesOf(r.name)
 		gone := removalDeletes(targets, r.name, libPath, copies, ours)
-		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, copies, gone); err != nil {
+		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, copies, gone, nil); err != nil {
 			m.Discard()
 			return err
 		}

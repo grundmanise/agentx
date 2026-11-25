@@ -908,17 +908,19 @@ agentx skill remove pdf --from universal
 
 ### What agentx deletes
 
-agentx deletes a placement only when it made it:
+agentx deletes:
 
-- a symlink pointing at the library directory, and
-- a copy agentx placed and recorded.
+- a symlink pointing at the library directory,
+- a copy agentx placed and recorded, and
+- without `--from`, every folder of the skill in a client's own skills folder that holds the same files as the library directory, whoever put it there.
 
 Everything else is left exactly where it is and named in the output:
 
-- a directory you made by hand,
+- a folder that holds other files, such as an older version or your own edits,
 - a link of yours pointing somewhere else, even when following it ends up in the library,
-- a directory holding the same version that agentx never recorded as a copy,
 - a file.
+
+A skill only in clients' own skills folders, with no library directory, is removed the same way: `agentx skill remove <folder name>` deletes every folder of that name in the clients' skills folders. If those folders hold different files, it stops with exit code 6 and removes nothing.
 
 agentx deletes only a link that points straight at the library entry. A link of yours stays, even if it leads to the library through another link:
 

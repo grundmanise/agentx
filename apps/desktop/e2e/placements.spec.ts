@@ -837,11 +837,11 @@ test.describe("Remove", () => {
     expect(later(cli)).toEqual([["skill", "remove", "draft", "--json"]]);
   });
 
-  test("an unmanaged skill: the dialog names the agents that keep a folder agentx didn't place, and the toast does not repeat it", async ({
+  test("an unmanaged skill: the dialog names the agents that keep a link Remove leaves", async ({
     cli,
     page,
   }) => {
-    const cursorCopy = "/home/me/.cursor/skills/scratch";
+    const cursorLink = "/home/me/.cursor/skills/scratch";
     const machine = {
       ...inventory,
       skills: inventory.skills.map((n) =>
@@ -852,10 +852,10 @@ test.describe("Remove", () => {
                 ...n.occurrences,
                 {
                   configuration: "cursor",
-                  id: `cursor:${cursorCopy}`,
-                  kind: "directory" as const,
-                  path: cursorCopy,
-                  resolved_path: cursorCopy,
+                  id: `cursor:${cursorLink}`,
+                  kind: "symlink" as const,
+                  path: cursorLink,
+                  resolved_path: "/home/me/notes/scratch",
                   scope: "user" as const,
                 },
               ],
@@ -874,22 +874,33 @@ test.describe("Remove", () => {
         .getByRole("listitem")
     ).toHaveText(["Codex", "Gemini CLI"]);
     await expect(dialog).toContainText(
-      "Cursor still sees it: agentx leaves the folders it didn't place."
+      "Cursor still sees it: Remove leaves links and folders under another name."
     );
-    cli.register(["skill", "remove", "scratch"], {
-      logs: [
-        {
-          level: "warn",
-          message: `cursor still sees scratch at ${cursorCopy}, which agentx did not place there`,
-        },
-      ],
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  });
+
+  test("a skill only in an agent's own folder: Remove runs skill remove with its folder's name", async ({
+    cli,
+    page,
+  }) => {
+    cli.register(["skill", "files", "notes", "--configuration", "cursor"], {
+      events: filesOf("notes"),
     });
+    await openSkill(cli, page, "notes", "skill:h-notes");
+    cli.register(["skill", "remove", "notes"]);
+    await pane(page, "notes").getByRole("button", { name: "Remove" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove notes from this machine?",
+    });
+    await expect(
+      dialog
+        .getByRole("list", { name: "Agents that see it" })
+        .getByRole("listitem")
+    ).toHaveText(["Cursor"]);
     await dialog.getByRole("button", { name: "Remove" }).click();
-    const toast = toasts(page)
-      .getByRole("listitem")
-      .filter({ hasText: "Removed scratch skill" });
-    await expect(toast).toBeVisible();
-    await expect(toast).not.toContainText(cursorCopy);
+    await expect(toasts(page).getByText("Removed notes skill")).toBeVisible();
+    expect(later(cli)).toEqual([["skill", "remove", "notes", "--json"]]);
   });
 
   test("a skill of a source: the dialog lists the agents that see it", async ({

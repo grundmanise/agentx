@@ -7,6 +7,7 @@ import type {
   CliEvent,
   Configuration,
   LibraryPlacement,
+  Occurrence,
 } from "#/cli/events.gen.ts";
 import type { AgentChipState } from "#/components/agent-chip.tsx";
 import { andList, plural } from "#/lib/plural.ts";
@@ -292,41 +293,64 @@ export const displacedPlacement = (
 ): LibraryPlacement | undefined =>
   row.entry?.placements.find((p) => p.kind !== p.mode);
 
-/** The configurations that see the skill now, in inventory order. */
-export const seenBy = (
-  row: SkillRow,
-  configurations: Configuration[]
-): Configuration[] =>
-  row.agents
-    .map((id) => configurations.find((c) => c.id === id))
-    .filter((c) => c !== undefined);
+/**
+ * The name `skill remove` takes a skill by: a library skill's, or, for a skill only agents' own
+ * skills folders hold, the name of its folder, unless the library holds another skill under it.
+ * Undefined for a skill no removal takes: a plugin's, a project's, or a link in an agent's folder.
+ */
+export const removeName = (row: SkillRow): string | undefined => {
+  if (row.entry !== undefined) {
+    return row.name;
+  }
+  if (row.kind !== "disk" || row.nameInLibrary === true) {
+    return undefined;
+  }
+  const occurrence = occurrenceOf(row);
+  return occurrence?.kind === "directory"
+    ? directoryName(occurrence.path)
+    : undefined;
+};
+
+/** `skill remove <name>`, with a name that starts with a dash after `--`. */
+export const removeArgs = (name: string): string[] =>
+  name.startsWith("-")
+    ? ["skill", "remove", "--", name]
+    : ["skill", "remove", name];
 
 /**
- * What `skill remove <name>` does to the agents that see a library skill: the paths it deletes
- * are the library entry and each placement agentx keeps as it made it, and every other folder
- * of the skill stays as it is. `losing` are the agents that see the skill now and see it nowhere
- * else, in inventory order; `keeping` those that still see it in a folder that stays.
+ * What `skill remove <name>` does to the agents that see a skill: it deletes the library entry,
+ * each placement agentx keeps as it made it, and every folder of the skill under its name in an
+ * agent's own skills folder, the folders holding the skill's files. A link of the user's and a
+ * folder under another name stay. `losing` are the agents that see the skill now and nowhere
+ * else, in inventory order; `keeping` those that still see it in a place that stays.
  */
 export const removalOf = (
   row: SkillRow,
   configurations: Configuration[]
 ): { losing: Configuration[]; keeping: Configuration[] } => {
+  const name = removeName(row);
   const deleted = new Set(
     (row.entry?.placements ?? [])
       .filter((p) => p.mode === "library" || p.kind === p.mode)
       .map((p) => p.path)
   );
+  const stays = (o: Occurrence) =>
+    !deleted.has(o.path) &&
+    !(o.kind === "directory" && directoryName(o.path) === name);
   const keeps = new Set(
     row.occurrences
-      .filter(
-        (o) =>
-          o.scope === "user" && o.plugin === undefined && !deleted.has(o.path)
-      )
+      .filter((o) => o.scope === "user" && o.plugin === undefined && stays(o))
       .map((o) => o.configuration)
   );
+  const sees = new Set([
+    ...row.agents,
+    ...row.occurrences
+      .filter((o) => o.scope === "user" && o.plugin === undefined)
+      .map((o) => o.configuration),
+  ]);
   return {
     keeping: configurations.filter((c) => keeps.has(c.id)),
-    losing: seenBy(row, configurations).filter((c) => !keeps.has(c.id)),
+    losing: configurations.filter((c) => sees.has(c.id) && !keeps.has(c.id)),
   };
 };
 
