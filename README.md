@@ -80,12 +80,35 @@ Supports 75 agents:
 
 ## Goals and non-goals
 
-Goals:
-- one person multi-machine and multi-agent workflows
+Goal: one person sees, manages and improves the skills, MCP servers and memories of all their agents, on all their machines and in the cloud.
+
+V1, global only ([#401](https://github.com/grundmanise/agentx/issues/401)):
+
+- Manage skills across agents and machines
+- Create custom skills
+- Show MCP servers and plugins, read-only
+- Cloud agents: Claude Code, Codex and Cursor
+
+V2 ([#402](https://github.com/grundmanise/agentx/issues/402)):
+
+- Project scope for all of the above, with no automatic repo scanning
+- Manage MCP servers and plugins
+- Manage memories
+- Stats for skills, tools and MCP servers, from your own machines
+
+Later:
+
+- Unified memory across agents and machines
+- Agents manage their own skills and MCP servers
+- Learn which skills bring value
+- Recommended skills and MCP servers
 
 Not goals:
 
-- company-wide skill distribution and sharing
+- Distributing skills to a team or a company
+- A hosted marketplace or registry
+- Running agents, or acting as an agent runtime
+- Windows
 
 See [ADR 0020](docs/adr/0020-agentx-is-for-one-person-and-their-one-hub.md).
 
