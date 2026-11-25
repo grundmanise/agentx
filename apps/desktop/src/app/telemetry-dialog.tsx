@@ -63,10 +63,14 @@ export const TelemetryDialog = () => {
         <AlertDialogHeader>
           <AlertDialogTitle>Analytics and crash reporting</AlertDialogTitle>
           <AlertDialogDescription>
-            Allow agentx to send anonymous usage data and crash reports to
-            PostHog? This helps us fix bugs and improve agentx for you. They
-            never include paths, names or anything you type. You can change this
-            any time in Settings.
+            <span className="block">
+              Allow agentx to send anonymous usage data and crash reports to
+              PostHog? This helps us fix bugs and improve agentx for you.
+            </span>
+            <span className="mt-3 block">
+              Data never includes paths, names or anything you type. You can
+              change this any time in Settings.
+            </span>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
