@@ -671,14 +671,22 @@ func TestConfigEnableDisable(t *testing.T) {
 	}
 	equal(t, "version", readVersion(t, h), 3)
 
-	for _, args := range [][]string{{"config", "enable", "codex"}, {"config", "disable", "codex"}} {
+	equal(t, "disable both", h.run("config", "disable", "cursor", "claude-code").exit, 0)
+	if got, want := readSettingsFile(t, h)["disabled_configurations"], []any{"claude-code", "cursor"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("disabled_configurations = %v, want %v", got, want)
+	}
+	out = h.run("config", "enable", "claude-code", "cursor")
+	equal(t, "stdout", out.stdout, "✓ claude-code is now enabled\n✓ cursor is now enabled\n")
+	equal(t, "version", readVersion(t, h), 5)
+
+	for _, args := range [][]string{{"config", "enable", "codex"}, {"config", "disable", "cursor", "codex"}} {
 		out = h.run(append([]string{"--json"}, args...)...)
 		equal(t, "exit", out.exit, 5)
 		events = h.events(out.stdout)
 		equal(t, "error.code", events[0]["code"], "not_found")
 		equal(t, "error.hint", events[0]["hint"], "detected configurations: claude-code, cursor")
 	}
-	for _, args := range [][]string{{"config", "enable"}, {"config", "disable", "a", "b"}} {
+	for _, args := range [][]string{{"config", "enable"}, {"config", "enable", "claude-code", "cursor", "--place-all"}} {
 		equal(t, "exit", h.run(args...).exit, 1)
 	}
 }

@@ -7,14 +7,12 @@
 // symlink to the library or as a copy (`config placement <id> symlink|copy`); skills already placed
 // keep their kind, unless Convert on the toast converts them (`--convert`). Remove, in the menu of a card and of a Universal column, deletes the
 // configuration's directory after one confirm dialog (`config remove <id> --yes`): the user
-// decides what goes, and the cards follow the inventory that comes after the command.
+// decides what goes, and the cards follow the inventory that comes after the command. A click on a
+// card, or a Universal column, selects it; the floating bar then enables, disables or removes
+// every selected agent at once.
 import { useId, useState } from "react";
 
-import type {
-  CliEvent,
-  Configuration,
-  InventoryEvent,
-} from "#/cli/events.gen.ts";
+import type { Configuration, InventoryEvent } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { Segmented } from "#/components/filter-controls.tsx";
 import { MoreIcon } from "#/components/icons/more.tsx";
@@ -27,17 +25,18 @@ import {
 } from "#/components/ui/dropdown-menu.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
-import { againRule, withAppHint } from "#/lib/app-hint.ts";
+import { Toggle } from "#/components/ui/toggle.tsx";
 import { plural } from "#/lib/plural.ts";
+import { BulkBar } from "#/screens/agents/bulk-bar.tsx";
 import {
   countsOf,
   libraryPathOf,
   placedAsCount,
   unplacedCount,
 } from "#/screens/agents/counts.ts";
+import { removedText, removeFailure } from "#/screens/agents/remove.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
 import { convertedText, placedAllText } from "#/screens/skills/placements.ts";
-import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -123,7 +122,7 @@ const PlacementControl = ({
     });
   };
   return (
-    <div className="mt-auto flex flex-col gap-2">
+    <div className="relative mt-auto flex flex-col gap-2">
       <span className="flex items-center justify-between gap-2">
         <span id={id} className="type-caption text-text-caption">
           Placement
@@ -151,30 +150,6 @@ const PlacementControl = ({
 
 /** The label of a configuration's Remove: the runner's name for it. */
 const removeLabel = (c: Configuration) => `remove ${c.id}`;
-
-/**
- * "Removed Antigravity", or "Removed Antigravity and Antigravity CLI" when the deleted directory
- * held another configuration: the names the CLI says it removed.
- */
-const removedText = (events: CliEvent[]) => {
-  const names = events
-    .filter((e) => e.type === "config_removal")
-    .map((e) => e.name);
-  return `Removed ${names.join(", ").replace(/, (?=[^,]*$)/u, " and ")}`;
-};
-
-/** A failed removal in the app's words: the CLI's message, and a hint that names Remove. */
-const removeFailure = ({ events }: Outcome) => {
-  const error = events.find((e) => e.type === "error");
-  return error === undefined
-    ? undefined
-    : withAppHint(
-        error.hint === undefined
-          ? { message: error.message }
-          : { hint: error.hint, message: error.message },
-        [againRule("remove it again")]
-      );
-};
 
 const remove = (c: Configuration) => {
   void runUntilSettled(["config", "remove", c.id, "--yes"], {
@@ -234,10 +209,17 @@ const AgentMenu = ({ c }: { c: Configuration }) => {
   );
 };
 
+/** How an agent is selected: by a click on its card, the hit area of a toggle with no mark. */
+interface Selectable {
+  selected: boolean;
+  onToggleSelect: () => void;
+}
+
 const AgentCard = ({
   c,
   inventory,
-}: {
+  ...selection
+}: Selectable & {
   c: Configuration;
   inventory: InventoryEvent;
 }) => {
@@ -270,36 +252,48 @@ const AgentCard = ({
   return (
     <article
       aria-label={c.name}
-      className="rounded-agent-card border-card-border bg-card-bg p-agent-card flex min-w-0 flex-col gap-4 border"
+      data-selected={selection.selected ? "" : undefined}
+      className="rounded-agent-card border-card-border bg-card-bg p-agent-card hover:border-agent-card-hover-border data-selected:border-agent-card-selected-border data-selected:bg-agent-card-selected-bg relative flex min-w-0 flex-col gap-4 border"
     >
+      <Toggle
+        kind="agent-card"
+        track="agents.card-select"
+        pressed={selection.selected}
+        onPressedChange={() => {
+          selection.onToggleSelect();
+        }}
+        aria-label={`Select ${c.name}`}
+      />
       <div className="flex items-start justify-between gap-3">
         <AgentLogo client={c} size={44} decorative />
         <span className="flex items-center gap-2">
-          {pending && (
-            <span className="text-text-hint flex">
-              <Spinner />
-            </span>
-          )}
-          <Switch
-            track="agents.card-enable"
-            aria-label="Enabled"
-            title={
-              c.enabled
-                ? "Enabled · new skills go here by default"
-                : "Disabled · skipped by default"
-            }
-            checked={c.enabled}
-            disabled={pending}
-            aria-busy={pending ? true : undefined}
-            onCheckedChange={onToggle}
-          />
-          <AgentMenu c={c} />
+          <span className="relative flex items-center gap-2">
+            {pending && (
+              <span className="text-text-hint flex">
+                <Spinner />
+              </span>
+            )}
+            <Switch
+              track="agents.card-enable"
+              aria-label="Enabled"
+              title={
+                c.enabled
+                  ? "Enabled · new skills go here by default"
+                  : "Disabled · skipped by default"
+              }
+              checked={c.enabled}
+              disabled={pending}
+              aria-busy={pending ? true : undefined}
+              onCheckedChange={onToggle}
+            />
+            <AgentMenu c={c} />
+          </span>
         </span>
       </div>
       <div className="flex min-w-0 flex-col gap-1">
         <h2 className="type-agent-card-name text-card-title m-0">{c.name}</h2>
         <span
-          className="type-technical text-text-caption truncate"
+          className="type-technical text-text-caption relative truncate"
           title={c.path}
         >
           {c.path}
@@ -323,9 +317,14 @@ const STACK_MAX = 5;
 const UniversalCard = ({
   universal,
   inventory,
+  selected,
+  onToggleSelect,
 }: {
   universal: Configuration[];
   inventory: InventoryEvent;
+  /** The ids of the selected agents. */
+  selected: ReadonlySet<string>;
+  onToggleSelect: (c: Configuration) => void;
 }) => {
   const library = libraryPathOf(inventory);
   return (
@@ -365,16 +364,27 @@ const UniversalCard = ({
             <section
               key={c.id}
               aria-label={c.name}
-              className="border-shell-divider ml-5 flex min-w-0 flex-col gap-1 border-l pl-5"
+              className="border-shell-divider relative ml-5 flex min-w-0 flex-col gap-1 border-l pl-5"
             >
+              <Toggle
+                kind="agent-column"
+                track="agents.card-select"
+                pressed={selected.has(c.id)}
+                onPressedChange={() => {
+                  onToggleSelect(c);
+                }}
+                aria-label={`Select ${c.name}`}
+              />
               <div className="flex items-center justify-between gap-3">
                 <h3 className="type-agent-card-name text-card-title m-0">
                   {c.name}
                 </h3>
-                <AgentMenu c={c} />
+                <span className="relative flex">
+                  <AgentMenu c={c} />
+                </span>
               </div>
               <span
-                className="type-technical text-text-caption truncate"
+                className="type-technical text-text-caption relative truncate"
                 title={c.path}
               >
                 {c.path}
@@ -392,36 +402,70 @@ const UniversalCard = ({
   );
 };
 
+const noIds: ReadonlySet<string> = new Set();
+
 export const AgentsScreen = () => {
   const inventory = useAppStore((s) => s.inventory);
+  const [ids, setIds] = useState(noIds);
   const configurations = inventory?.configurations ?? [];
   const direct = configurations.filter((c) => !c.reads_library);
   const universal = configurations.filter((c) => c.reads_library);
+  // An agent the inventory no longer holds, once removed, is no longer selected.
+  const chosen = configurations.filter((c) => ids.has(c.id));
+  const selected = new Set(chosen.map((c) => c.id));
+  const toggle = (c: Configuration) => {
+    const next = new Set(selected);
+    if (!next.delete(c.id)) {
+      next.add(c.id);
+    }
+    setIds(next);
+  };
+  const clear = () => {
+    setIds(noIds);
+  };
   return (
-    <div className="pt-page-top px-page pb-page gap-page-title flex h-full flex-col overflow-auto">
-      <h1 className="type-page-title text-text-primary m-0">Agents</h1>
-      {inventory !== undefined && (
-        <div className="flex flex-col gap-7">
-          {universal.length > 0 && (
-            <UniversalCard universal={universal} inventory={inventory} />
-          )}
-          {direct.length > 0 && (
-            <section
-              aria-label="Direct agents"
-              className="gap-agent-card grid grid-cols-4"
-            >
-              {direct.map((c) => (
-                <AgentCard key={c.id} c={c} inventory={inventory} />
-              ))}
-            </section>
-          )}
-          {configurations.length === 0 && (
-            <p className="type-secondary text-text-hint m-0">
-              No agent configurations detected on this machine
-            </p>
-          )}
-        </div>
-      )}
+    <div className="relative flex h-full min-h-0 flex-col">
+      <div className="pt-page-top px-page pb-page gap-page-title flex min-h-0 flex-1 flex-col overflow-auto">
+        <h1 className="type-page-title text-text-primary m-0">Agents</h1>
+        {inventory !== undefined && (
+          <div className="flex flex-col gap-7">
+            {universal.length > 0 && (
+              <UniversalCard
+                universal={universal}
+                inventory={inventory}
+                selected={selected}
+                onToggleSelect={toggle}
+              />
+            )}
+            {direct.length > 0 && (
+              <section
+                aria-label="Direct agents"
+                className="gap-agent-card grid grid-cols-4"
+              >
+                {direct.map((c) => (
+                  <AgentCard
+                    key={c.id}
+                    c={c}
+                    inventory={inventory}
+                    selected={selected.has(c.id)}
+                    onToggleSelect={() => {
+                      toggle(c);
+                    }}
+                  />
+                ))}
+              </section>
+            )}
+            {configurations.length === 0 && (
+              <p className="type-secondary text-text-hint m-0">
+                No agent configurations detected on this machine
+              </p>
+            )}
+          </div>
+        )}
+        {/* Room for the floating bar over the last row of cards. */}
+        {chosen.length > 0 && <div className="h-floating-bar flex-none" />}
+      </div>
+      <BulkBar chosen={chosen} onClear={clear} />
     </div>
   );
 };

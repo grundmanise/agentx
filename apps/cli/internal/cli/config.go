@@ -132,29 +132,38 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 }
 
 // newEnableCommand builds config enable or config disable: both edit the
-// disabled_configurations list, and the configuration must be detected.
-// Enabling takes --place-all, which also places every skill the library
-// holds into the configuration; without it, enabling only decides where
-// future installs go.
+// disabled_configurations list in one write for every configuration named,
+// and each must be detected. Enabling takes --place-all for one
+// configuration, which also places every skill the library holds into it;
+// without it, enabling only decides where future installs go.
 func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
 	disable := use == "disable"
 	var placeAll bool
 	example := examples(
 		"agentx config enable cursor", "new installs also go to Cursor",
+		"agentx config enable cursor windsurf", "new installs also go to Cursor and Windsurf",
 		"agentx config enable cursor --place-all", "and place every skill the library holds in it now",
 	)
 	if disable {
-		example = examples("agentx config disable cursor", "new installs skip Cursor")
+		example = examples(
+			"agentx config disable cursor", "new installs skip Cursor",
+			"agentx config disable cursor windsurf", "new installs skip Cursor and Windsurf",
+		)
 	}
 	cmd := &cobra.Command{
-		Use:         use + " <configuration>",
+		Use:         use + " <configuration>...",
 		Short:       short,
-		Annotations: map[string]string{annotationSection: "settings"},
-		Args:        cobra.ExactArgs(1),
+		Annotations: map[string]string{annotationSection: "settings", annotationSynopsis: "<id>..."},
+		Args:        cobra.MinimumNArgs(1),
 		Example:     example,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := inv.detectedConfiguration(args[0]); err != nil {
-				return err
+			if placeAll && len(args) > 1 {
+				return fail(exitUsage, "--place-all takes one configuration", "")
+			}
+			for _, id := range args {
+				if err := inv.detectedConfiguration(id); err != nil {
+					return err
+				}
 			}
 			if placeAll {
 				return inv.enableAndPlaceAll(cmd.Context(), args[0])
@@ -165,10 +174,11 @@ func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
 				if s, err = inv.loadSettings(); err != nil {
 					return err
 				}
-				s.DisabledConfigurations = slices.DeleteFunc(s.DisabledConfigurations, func(id string) bool { return id == args[0] })
+				s.DisabledConfigurations = slices.DeleteFunc(s.DisabledConfigurations, func(id string) bool { return slices.Contains(args, id) })
 				if disable {
-					s.DisabledConfigurations = append(s.DisabledConfigurations, args[0])
+					s.DisabledConfigurations = append(s.DisabledConfigurations, args...)
 					slices.Sort(s.DisabledConfigurations)
+					s.DisabledConfigurations = slices.Compact(s.DisabledConfigurations)
 				}
 				return home.SaveSettings(inv.dirs.Home, s)
 			})
@@ -176,7 +186,9 @@ func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
 				return err
 			}
 			inv.emitSettings(s)
-			inv.printEnabled(args[0], !disable)
+			for _, id := range args {
+				inv.printEnabled(id, !disable)
+			}
 			return nil
 		},
 	}

@@ -8,6 +8,7 @@ import { CodePane } from "#/components/code-pane.tsx";
 import { ExternalLinkIcon } from "#/components/icons/external-link.tsx";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
 import { RemoveSwap } from "#/components/remove-swap.tsx";
+import { RoundCheck } from "#/components/round-check.tsx";
 import {
   Accordion,
   AccordionContent,
@@ -92,39 +93,6 @@ const SourcesRemoveDialog = ({
     />
   );
 };
-
-/** The round check at the end of a selectable skill's row: a ring, filled with the check when selected. */
-const CheckMark = ({ checked }: { checked: boolean }) => (
-  <svg
-    viewBox="0 0 20 20"
-    aria-hidden
-    focusable="false"
-    className="block size-5 flex-none"
-  >
-    {checked ? (
-      <>
-        <circle cx="10" cy="10" r="10" className="fill-add-card-check-bg" />
-        <path
-          d="M6 10.25l2.75 2.75 5.25-6"
-          fill="none"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="stroke-on-accent"
-        />
-      </>
-    ) : (
-      <circle
-        cx="10"
-        cy="10"
-        r="9.25"
-        fill="none"
-        strokeWidth="1.5"
-        className="stroke-add-card-check-ring"
-      />
-    )}
-  </svg>
-);
 
 export const statusVariants = cva("type-secondary flex-none font-medium", {
   variants: {
@@ -432,7 +400,7 @@ const SkillItemView = ({
         }}
         aria-label={`Select ${card.name}`}
       >
-        <CheckMark checked={selected} />
+        <RoundCheck checked={selected} />
       </Toggle>
     );
   } else if (card.status === "added") {
