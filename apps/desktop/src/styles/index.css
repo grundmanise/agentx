@@ -72,7 +72,11 @@
   --border-radius: var(--radius-toast);
   font-family: var(--font-sans);
 }
-:root [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+/* A toast is as wide as its message, but a running command's toast keeps Sonner's width, so it
+   does not move as its progress count changes. */
+:root
+  [data-sonner-toaster]
+  [data-sonner-toast][data-styled="true"]:not([data-type="loading"]) {
   width: fit-content;
   max-width: var(--width);
 }
