@@ -1,60 +1,46 @@
-// The Settings page (DESIGN.md §6 "Settings"): every machine setting on one page. Each row reads
-// a store slice and writes only through the CLI command named beside it; the app writes no file
-// of the CLI's. The settings the app keeps itself are Editor and App updates, app preferences
+// The Settings page (DESIGN.md §6 "Settings"): every machine setting on one page, in cards. Each
+// row reads a store slice and writes only through the CLI command named beside it; the app writes
+// no file of the CLI's. The settings the app keeps itself are Editor and Updates, app preferences
 // (ADR 0013).
 //
-// The page is the title and the list of sections below. A section is a component that renders
-// `SettingsSection` (`section.tsx`) with its label, the line under it and its content, or nothing
-// when it has nothing to show; the page draws the hairlines between them. To add a section, write
-// it in its own file in this folder and add it to `sections` at its slot below, in this order:
-// This machine, Hub, Adopt skills, Comparing edits, Editor, App updates, Storage, Command line,
-// Activity log, Usage data, Save snapshot, Apply snapshot. Insert the new entry under its slot's
-// comment and keep the comment.
+// The page is the title and the cards below it. A card is a component that renders
+// `SettingsCard` (`section.tsx`) with its title and its rows, or nothing when it has nothing to
+// show. To add a card, write it in its own file in this folder and add it to `cards` at its slot
+// below, in this order: This machine, Hub, Editor, Updates, Analytics and crash reporting,
+// Troubleshooting, Snapshot. A new row goes into the card it belongs to.
 import type { ComponentType } from "react";
 
-import { ActivityLogSection } from "#/screens/settings/activity-log.tsx";
-import { AdoptSkillsSection } from "#/screens/settings/adopt-skills.tsx";
-import { AppUpdatesSection } from "#/screens/settings/app-updates.tsx";
-import { ApplySnapshotSection } from "#/screens/settings/apply-snapshot.tsx";
-import { CommandLineSection } from "#/screens/settings/command-line.tsx";
-import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
-import { EditorSection } from "#/screens/settings/editor.tsx";
-import { HubSection } from "#/screens/settings/hub.tsx";
-import { SaveSnapshotSection } from "#/screens/settings/save-snapshot.tsx";
-import { StorageSection } from "#/screens/settings/storage.tsx";
-import { ThisMachineSection } from "#/screens/settings/this-machine.tsx";
-import { UsageDataSection } from "#/screens/settings/usage-data.tsx";
+import { AppUpdatesCard } from "#/screens/settings/app-updates.tsx";
+import { EditorCard } from "#/screens/settings/editor.tsx";
+import { HubCard } from "#/screens/settings/hub.tsx";
+import { SnapshotCard } from "#/screens/settings/snapshot.tsx";
+import { ThisMachineCard } from "#/screens/settings/this-machine.tsx";
+import { TroubleshootingCard } from "#/screens/settings/troubleshooting.tsx";
+import { UsageDataCard } from "#/screens/settings/usage-data.tsx";
 
-interface Section {
-  /** Names the section, as React's key. */
+interface Card {
+  /** Names the card, as React's key. */
   id: string;
-  Section: ComponentType;
+  Card: ComponentType;
 }
 
-/** The sections, top to bottom. */
-const sections: Section[] = [
-  { Section: ThisMachineSection, id: "this-machine" },
-  // Slot: Hub.
-  { Section: HubSection, id: "hub" },
-  { Section: AdoptSkillsSection, id: "adopt-skills" },
-  { Section: ComparingEditsSection, id: "comparing-edits" },
-  { Section: EditorSection, id: "editor" },
-  { Section: AppUpdatesSection, id: "app-updates" },
-  { Section: StorageSection, id: "storage" },
-  { Section: CommandLineSection, id: "command-line" },
-  { Section: ActivityLogSection, id: "activity-log" },
-  { Section: UsageDataSection, id: "usage-data" },
-  // Slot: Save snapshot, Apply snapshot.
-  { Section: SaveSnapshotSection, id: "save-snapshot" },
-  { Section: ApplySnapshotSection, id: "apply-snapshot" },
+/** The cards, top to bottom. */
+const cards: Card[] = [
+  { Card: ThisMachineCard, id: "this-machine" },
+  { Card: HubCard, id: "hub" },
+  { Card: EditorCard, id: "editor" },
+  { Card: AppUpdatesCard, id: "updates" },
+  { Card: UsageDataCard, id: "usage-data" },
+  { Card: TroubleshootingCard, id: "troubleshooting" },
+  { Card: SnapshotCard, id: "snapshot" },
 ];
 
 export const SettingsScreen = () => (
   <div className="pt-page-top px-page pb-page gap-page-title flex h-full flex-col overflow-auto">
     <h1 className="type-page-title text-text-primary m-0">Settings</h1>
-    <div className="flex flex-col">
-      {sections.map(({ id, Section }) => (
-        <Section key={id} />
+    <div className="max-w-settings gap-settings-cards flex flex-col">
+      {cards.map(({ id, Card }) => (
+        <Card key={id} />
       ))}
     </div>
   </div>

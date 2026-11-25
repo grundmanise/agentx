@@ -1,4 +1,4 @@
-// The Apply snapshot section of Settings: replaces this machine's settings, skills and placements
+// Apply snapshot, in the Snapshot card of Settings: replaces this machine's settings, skills and placements
 // with the ones in a snapshot that Save snapshot wrote (docs/help-center/cli/snapshot.mdx). The
 // user picks the file in the native open dialog and confirms, then the section runs
 // `snapshot apply <file> --yes`, reads `source list`, and runs `source add` for each source of the
@@ -16,7 +16,7 @@ import { Button } from "#/components/ui/button.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { pickSnapshot } from "#/lib/file-dialog.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
-import { SettingsSection } from "#/screens/settings/section.tsx";
+import { SettingsRow } from "#/screens/settings/section.tsx";
 import {
   fileName,
   notFetched,
@@ -127,7 +127,7 @@ const Result = ({ result }: { result: ApplyResult }) => {
 };
 
 /** Apply…: the open dialog, the confirm, `snapshot apply <file> --yes`, the sources, and the result. */
-const ApplyFile = () => {
+export const ApplySnapshotRow = () => {
   const library = useAppStore((s) => s.inventory?.machine.library);
   // The file picked last. It stays while its confirm closes, so the confirm's text does not change.
   const [picked, setPicked] = useState<string>();
@@ -178,10 +178,13 @@ const ApplyFile = () => {
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <span>
+    <SettingsRow
+      name="Apply snapshot"
+      line="Load settings and skills from a snapshot."
+      control={
         <Button
           variant="secondary"
+          size="sm"
           track="settings.snapshot-apply"
           disabled={pending}
           aria-busy={pending ? true : undefined}
@@ -192,7 +195,8 @@ const ApplyFile = () => {
           {pending && <Spinner />}
           Apply…
         </Button>
-      </span>
+      }
+    >
       <Confirm
         open={confirming}
         onOpenChange={(open) => {
@@ -213,15 +217,6 @@ const ApplyFile = () => {
         }}
       />
       {result !== undefined && <Result result={result} />}
-    </div>
+    </SettingsRow>
   );
 };
-
-export const ApplySnapshotSection = () => (
-  <SettingsSection
-    title="Apply snapshot"
-    description="Load settings and skills from a snapshot."
-  >
-    <ApplyFile />
-  </SettingsSection>
-);

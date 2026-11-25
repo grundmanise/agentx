@@ -62,22 +62,17 @@ const openSettings = async (cli: MockCli, page: Page, ignore = true) => {
   await expect(ignoreSwitch(page)).toBeVisible();
 };
 
-test("each section shows what the store holds", async ({ cli, page }) => {
+test("each card shows what the store holds", async ({ cli, page }) => {
   await openSettings(cli, page);
-  const sections = page.getByRole("main").getByRole("region");
-  await expect(sections).toHaveText([
+  const cards = page.getByRole("main").getByRole("region");
+  await expect(cards).toHaveText([
     /^This machine/u,
     /^Hub/u,
-    /^Import skills/u,
-    /^Comparing edits/u,
     /^Editor/u,
-    /^App updates/u,
-    /^Storage/u,
-    /^Command line/u,
-    /^Activity log/u,
+    /^Updates/u,
     /^Analytics and crash reporting/u,
-    /^Save snapshot/u,
-    /^Apply snapshot/u,
+    /^Troubleshooting/u,
+    /^Snapshot/u,
   ]);
 
   const thisMachine = section(page, "This machine");
@@ -85,33 +80,24 @@ test("each section shows what the store holds", async ({ cli, page }) => {
     "Shown on skills you publish from here."
   );
   await expect(thisMachine).toContainText(MACHINE_ID);
+  await expect(thisMachine).toContainText(`Library${libraryPath}`);
+  await expect(thisMachine).toContainText("Store1.5 MiB");
 
-  const comparing = section(page, "Comparing edits");
-  await expect(comparing).toContainText(
-    "How agentx decides a skill was edited."
-  );
-  await expect(comparing).toContainText(
+  await expect(section(page, "Hub")).toContainText(
     ".DS_Store, Thumbs.db and editor backups never count as edits. A skill's own .gitignore always applies."
   );
   await expect(ignoreSwitch(page)).toBeChecked();
 
   // The inventory carries no `telemetry` value: nothing is sent, so the switch is off.
+  const analytics = section(page, "Analytics and crash reporting");
+  await expect(analytics).toContainText(
+    "Help improve agentx with anonymous usage data. What is sent"
+  );
   await expect(
-    section(page, "Analytics and crash reporting").getByRole("switch", {
-      name: "Allow anonymous usage data",
-    })
+    analytics.getByRole("switch", { name: "Allow anonymous usage data" })
   ).not.toBeChecked();
 
-  await expect(section(page, "Storage")).toMatchAriaSnapshot(`
-    - region "Storage":
-      - heading "Storage" [level=2]
-      - term: Library
-      - definition: ${libraryPath}
-      - term: Store
-      - definition: 1.5 MiB
-  `);
-
-  await expect(section(page, "Command line")).toContainText(
+  await expect(section(page, "Troubleshooting")).toContainText(
     `agentx ${cliVersion} · git 2.43.0`
   );
 });
@@ -120,7 +106,9 @@ test("a store not created yet says so", async ({ cli, page }) => {
   const { store: _, store_bytes: __, ...fresh } = machine();
   cli.register(["machine"], { events: [fresh] });
   await page.goto("/#/settings");
-  await expect(section(page, "Storage")).toContainText("StoreNot created yet");
+  await expect(section(page, "This machine")).toContainText(
+    "StoreNot created yet"
+  );
 });
 
 test("Enter with a new label runs config set label and toasts; the field shows the label of the next inventory", async ({
@@ -249,7 +237,7 @@ test("the switch runs config set ignore_system_files true, then false, each with
     events: [{ type: "settings" }],
   });
   // The whole row is the hit target.
-  await section(page, "Comparing edits")
+  await section(page, "Hub")
     .getByText("Ignore system files", { exact: true })
     .click();
   await expect(
@@ -268,7 +256,7 @@ test("Run checks opens the startup checks in manual mode, and Open agentx comes 
   page,
 }) => {
   await openSettings(cli, page);
-  await section(page, "Command line")
+  await section(page, "Troubleshooting")
     .getByRole("button", { name: "Run checks" })
     .click();
   const layer = page.getByRole("region", { name: "Startup checks" });

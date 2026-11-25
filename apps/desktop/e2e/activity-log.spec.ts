@@ -111,7 +111,7 @@ test("Settings opens the log, and Debug output runs later commands and serve wit
 }) => {
   await page.goto("/#/settings");
   await page
-    .getByRole("region", { exact: true, name: "Activity log" })
+    .getByRole("region", { exact: true, name: "Troubleshooting" })
     .getByRole("button", { name: "Show activity log" })
     .click();
   await expect(log(page)).toBeVisible();

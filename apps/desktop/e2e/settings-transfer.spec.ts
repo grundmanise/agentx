@@ -43,9 +43,9 @@ const later = (cli: MockCli) =>
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 const saveSnapshot = (page: Page) =>
-  page.getByRole("region", { name: "Save snapshot" });
+  page.getByRole("form", { name: "Save snapshot" });
 const applySnapshot = (page: Page) =>
-  page.getByRole("region", { name: "Apply snapshot" });
+  page.getByRole("region", { exact: true, name: "Snapshot" });
 
 const openSettings = async (cli: MockCli, page: Page) => {
   cli.onServeStart({
@@ -66,8 +66,10 @@ test("saves under the name given and toasts the path the CLI wrote", async ({
   cli.register(["snapshot", "save", "agentx-snapshot"], { events: exported });
   await openSettings(cli, page);
   const section = saveSnapshot(page);
-  await expect(section).toContainText(
-    "Save your settings and library to back up or move to another device."
+  await expect(
+    page.getByRole("region", { exact: true, name: "Snapshot" })
+  ).toContainText(
+    "Save your settings and library to back up or move to another machine."
   );
   const name = section.getByRole("textbox", { name: "File name" });
   await expect(name).toHaveValue("agentx-snapshot");

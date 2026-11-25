@@ -1,4 +1,4 @@
-// The Save snapshot section of Settings: saves this machine's settings and the list of its skills
+// Save snapshot, in the Snapshot card of Settings: saves this machine's settings and the list of its skills
 // to `<name>.json` in the library, a snapshot (docs/help-center/cli/snapshot.mdx). It runs
 // `snapshot save <name>`, and `snapshot save <name> --force` once the user confirms an overwrite.
 // The app writes no file: the CLI writes the snapshot.
@@ -11,7 +11,7 @@ import { Input } from "#/components/ui/input.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { revealInFinder } from "#/lib/reveal.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
-import { SettingsSection } from "#/screens/settings/section.tsx";
+import { SettingsRow } from "#/screens/settings/section.tsx";
 import {
   DEFAULT_SNAPSHOT_NAME,
   isSnapshotName,
@@ -133,11 +133,11 @@ const SaveForm = () => {
   );
 };
 
-export const SaveSnapshotSection = () => (
-  <SettingsSection
-    title="Save snapshot"
-    description="Save your settings and library to back up or move to another device."
+export const SaveSnapshotRow = () => (
+  <SettingsRow
+    name="Save snapshot"
+    line="Save your settings and library to back up or move to another machine."
   >
     <SaveForm />
-  </SettingsSection>
+  </SettingsRow>
 );

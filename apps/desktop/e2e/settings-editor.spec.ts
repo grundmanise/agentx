@@ -57,9 +57,6 @@ test("Editor lists System default, the editors found and Custom command", async 
 }) => {
   cli.answerEditors(FOUND);
   await openSettings(page);
-  await expect(section(page)).toContainText(
-    "The application that opens a skill when you edit it."
-  );
   await expectChoices(page, [
     "System default",
     "VS Code",
