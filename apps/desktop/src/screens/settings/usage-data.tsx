@@ -21,24 +21,10 @@ const SendUsageData = ({ checked }: { checked: boolean }) => {
   const id = useId();
   const pending = useSettling(TELEMETRY_LABEL);
   return (
-    <div className="flex items-start justify-between gap-6">
-      <span className="flex min-w-0 flex-col gap-1">
-        <label htmlFor={id} className="type-body text-text-primary">
-          Send anonymous usage data
-        </label>
-        <span className="type-secondary text-text-muted">
-          <Button
-            track="settings.usage-data-help"
-            variant="link"
-            size="inline"
-            onClick={() => {
-              void openInBrowser(TELEMETRY_PAGE);
-            }}
-          >
-            What is sent
-          </Button>
-        </span>
-      </span>
+    <div className="flex items-center justify-between gap-6">
+      <label htmlFor={id} className="type-body text-text-primary min-w-0">
+        Send anonymous usage data
+      </label>
       <span className="flex flex-none items-center gap-2">
         {pending && (
           <span className="text-text-hint flex">
@@ -66,7 +52,21 @@ export const UsageDataSection = () => {
   return (
     <SettingsSection
       title="Usage data"
-      description="Anonymous usage data and crash reports, from the CLI and the app."
+      description={
+        <>
+          Anonymous usage data and crash reports.{" "}
+          <Button
+            track="settings.usage-data-help"
+            variant="link"
+            size="inline"
+            onClick={() => {
+              void openInBrowser(TELEMETRY_PAGE);
+            }}
+          >
+            What is sent
+          </Button>
+        </>
+      }
     >
       {settings !== undefined && (
         <SendUsageData checked={settings.telemetry === "on"} />

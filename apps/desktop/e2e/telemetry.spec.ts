@@ -292,21 +292,23 @@ test.describe("the question", () => {
       events: [{ type: "settings" }],
       holdAfter: 0,
     });
+    const first = refreshes(cli);
     await usageSwitch(page).click();
     await on.started;
     await expect(usageSwitch(page)).toHaveAttribute("aria-busy", "true");
     on.release();
-    await expect(
-      page
-        .getByRole("region", { name: /^Notifications/u })
-        .getByText("Sending anonymous usage data")
-    ).toBeVisible();
+    await expect.poll(() => refreshes(cli)).toBe(first + 1);
     // The switch shows the setting as the inventory lists it until the next inventory.
     await expect(usageSwitch(page)).toHaveAttribute("aria-busy", "true");
     await expect(usageSwitch(page)).not.toBeChecked();
     await scanned(cli, inventoryOf("on", { scanCounter: 2 }));
     await expect(usageSwitch(page)).toBeChecked();
     await expect(usageSwitch(page)).not.toHaveAttribute("aria-busy");
+    await expect(
+      page
+        .getByRole("region", { name: /^Notifications/u })
+        .getByText(/usage data/u)
+    ).toHaveCount(0);
 
     const before = refreshes(cli);
     await usageSwitch(page).click();
