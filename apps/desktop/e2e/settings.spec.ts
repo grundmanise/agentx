@@ -75,7 +75,7 @@ test("each section shows what the store holds", async ({ cli, page }) => {
     /^Storage/u,
     /^Command line/u,
     /^Activity log/u,
-    /^Usage data/u,
+    /^Analytics and crash reporting/u,
     /^Save snapshot/u,
     /^Apply snapshot/u,
   ]);
@@ -97,8 +97,8 @@ test("each section shows what the store holds", async ({ cli, page }) => {
 
   // The inventory carries no `telemetry` value: nothing is sent, so the switch is off.
   await expect(
-    section(page, "Usage data").getByRole("switch", {
-      name: "Send anonymous usage data",
+    section(page, "Analytics and crash reporting").getByRole("switch", {
+      name: "Allow anonymous usage data",
     })
   ).not.toBeChecked();
 

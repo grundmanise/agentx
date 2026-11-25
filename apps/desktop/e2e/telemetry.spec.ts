@@ -53,10 +53,10 @@ const unanswered = (cli: MockCli) => {
 };
 
 const dialog = (page: Page) =>
-  page.getByRole("alertdialog", { name: "Help improve agentx" });
+  page.getByRole("alertdialog", { name: "Analytics and crash reporting" });
 
 const usageSwitch = (page: Page) =>
-  page.getByRole("switch", { name: "Send anonymous usage data" });
+  page.getByRole("switch", { name: "Allow anonymous usage data" });
 
 /** Registers `config set telemetry <value>`. */
 const answers = (cli: MockCli, value: "on" | "off") =>
@@ -185,25 +185,12 @@ test.describe("the question", () => {
     await expect(page.locator("main")).toHaveAttribute("aria-busy", "false");
 
     await expect(dialog(page)).toContainText(
-      "Send anonymous usage data to PostHog? We use it to find what breaks and to make agentx better for you."
+      "Allow agentx to send anonymous usage data and crash reports to PostHog? This helps us fix bugs and improve agentx for you. They never include paths, names or anything you type. You can change this any time in Settings."
     );
-    const sent = dialog(page).getByRole("list", { name: "What may be sent" });
-    await expect(sent.getByRole("listitem")).toHaveText([
-      "the commands the app runs, as in the terminal",
-      "the screens you open and the buttons you click, by name only",
-      "errors and crashes, with every path removed",
-      "the app version, release channel, OS, screen size, language and time zone",
-      "a non-reversible, hashed anonymous id",
-    ]);
-    await expect(dialog(page)).toContainText(
-      "It never sends paths, skill or server names, URLs, on-screen text or anything you type. Your IP address is not stored."
-    );
-    // "Don't allow" is the default: it has the focus.
-    await expect(
-      dialog(page).getByRole("button", { name: "Don't allow" })
-    ).toBeFocused();
+    // No button has the focus when it opens.
+    await expect(dialog(page).locator(":focus")).toHaveCount(0);
 
-    await dialog(page).getByRole("button", { name: "Details" }).click();
+    await dialog(page).getByRole("button", { name: "What is sent" }).click();
     expect(cli.openedUrls).toEqual(["https://docs.agentx.wtf/telemetry"]);
   });
 
@@ -219,7 +206,7 @@ test.describe("the question", () => {
     await expect(dialog(page)).toHaveCount(0);
   });
 
-  test("Allow anonymous data runs config set telemetry on, then a refresh, and asks no more", async ({
+  test("Allow runs config set telemetry on, then a refresh, and asks no more", async ({
     cli,
     page,
   }) => {
@@ -232,7 +219,8 @@ test.describe("the question", () => {
 
     await dialog(page)
       .getByRole("button", {
-        name: "Allow anonymous data",
+        exact: true,
+        name: "Allow",
       })
       .click();
     await expect(dialog(page)).toHaveCount(0);
@@ -246,7 +234,7 @@ test.describe("the question", () => {
     await expect(dialog(page)).toHaveCount(0);
   });
 
-  test("Don't allow, and Escape, run config set telemetry off", async ({
+  test("No thanks, and Escape, run config set telemetry off", async ({
     cli,
     page,
   }) => {
@@ -254,7 +242,7 @@ test.describe("the question", () => {
     unanswered(cli);
     answers(cli, "off");
     await page.goto("/");
-    await dialog(page).getByRole("button", { name: "Don't allow" }).click();
+    await dialog(page).getByRole("button", { name: "No thanks" }).click();
     await expect
       .poll(() => telemetrySets(cli))
       .toEqual(["config set telemetry off --json"]);
@@ -282,7 +270,7 @@ test.describe("the question", () => {
     await page.goto("/#/settings");
     const region = page.getByRole("region", {
       exact: true,
-      name: "Usage data",
+      name: "Analytics and crash reporting",
     });
     await expect(region).toBeVisible();
     // No value yet: nothing is sent, so the switch is off.
@@ -292,21 +280,23 @@ test.describe("the question", () => {
       events: [{ type: "settings" }],
       holdAfter: 0,
     });
+    const first = refreshes(cli);
     await usageSwitch(page).click();
     await on.started;
     await expect(usageSwitch(page)).toHaveAttribute("aria-busy", "true");
     on.release();
-    await expect(
-      page
-        .getByRole("region", { name: /^Notifications/u })
-        .getByText("Sending anonymous usage data")
-    ).toBeVisible();
+    await expect.poll(() => refreshes(cli)).toBe(first + 1);
     // The switch shows the setting as the inventory lists it until the next inventory.
     await expect(usageSwitch(page)).toHaveAttribute("aria-busy", "true");
     await expect(usageSwitch(page)).not.toBeChecked();
     await scanned(cli, inventoryOf("on", { scanCounter: 2 }));
     await expect(usageSwitch(page)).toBeChecked();
     await expect(usageSwitch(page)).not.toHaveAttribute("aria-busy");
+    await expect(
+      page
+        .getByRole("region", { name: /^Notifications/u })
+        .getByText(/usage data/u)
+    ).toHaveCount(0);
 
     const before = refreshes(cli);
     await usageSwitch(page).click();
@@ -375,7 +365,10 @@ test.describe("what the app sends", () => {
 
     // A click carries its name, and neither the element's text nor its attributes.
     await page
-      .getByRole("region", { exact: true, name: "Usage data" })
+      .getByRole("region", {
+        exact: true,
+        name: "Analytics and crash reporting",
+      })
       .getByRole("button", { name: "What is sent" })
       .click();
     await expect

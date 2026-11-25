@@ -27,6 +27,5 @@ export const liveSettings = (s: AppState): InventorySettings | undefined =>
 export const setTelemetry = async (on: boolean) => {
   await runUntilSettled(["config", "set", "telemetry", on ? "on" : "off"], {
     label: TELEMETRY_LABEL,
-    success: on ? "Sending anonymous usage data" : "Not sending usage data",
   });
 };

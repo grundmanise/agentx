@@ -1,4 +1,4 @@
-// Usage data: the Send anonymous usage data switch, bound to the `telemetry` setting
+// Analytics and crash reporting: the Allow anonymous usage data switch, bound to the `telemetry` setting
 // (src/store/telemetry.ts). It runs `config set telemetry on|off` and shows the setting as the
 // inventory carries it, off while the setting has no value: pending while the command runs and
 // until the inventory that follows it arrives.
@@ -24,7 +24,7 @@ const SendUsageData = ({ checked }: { checked: boolean }) => {
     <div className="flex items-start justify-between gap-6">
       <span className="flex min-w-0 flex-col gap-1">
         <label htmlFor={id} className="type-body text-text-primary">
-          Send anonymous usage data
+          Allow anonymous usage data
         </label>
         <span className="type-secondary text-text-muted">
           <Button
@@ -65,8 +65,8 @@ export const UsageDataSection = () => {
   const settings = useAppStore((s) => s.inventory?.settings);
   return (
     <SettingsSection
-      title="Usage data"
-      description="Anonymous usage data and crash reports, from the CLI and the app."
+      title="Analytics and crash reporting"
+      description="Help improve agentx with anonymous usage data."
     >
       {settings !== undefined && (
         <SendUsageData checked={settings.telemetry === "on"} />
