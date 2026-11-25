@@ -3,8 +3,9 @@
 // (`skill update <name>`, from its banner) and the run of that dialog, which the sidebar's update
 // pill opens too: one `skill update <name>...` for every skill selected, each row following what
 // the CLI emits about its skill. Each runs through the runner and says what happened by what the
-// CLI emitted; the list redraws from the inventory and the update check that follow, never from a
-// result predicted here.
+// CLI emitted. The updates offered are the inventory's (`offerOf`): the list redraws from the
+// inventory that follows a check or an update, never from a result predicted here.
+import { useMemo } from "react";
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -13,18 +14,16 @@ import type {
   ErrorEvent,
   LibraryEntry,
   LogEvent,
-  UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
 import { dismissToast, notify } from "#/components/toast.tsx";
 import type { ToastAction } from "#/components/toast.tsx";
-import { andList } from "#/lib/plural.ts";
 import { checkingText } from "#/screens/skills/checking-text.tsx";
-import { shortSource } from "#/screens/skills/projection.ts";
-import type { SkillRow } from "#/screens/skills/projection.ts";
-import { cancelCommand, agentx, usePending } from "#/store/runner.ts";
+import { offerOf, shortSource } from "#/screens/skills/projection.ts";
+import type { SkillRow, UpdateOffer } from "#/screens/skills/projection.ts";
+import { cancelCommand, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { runUntilSettled } from "#/store/settle.ts";
-import { addActivity, useAppStore } from "#/store/store.ts";
+import { afterSettled, runUntilSettled } from "#/store/settle.ts";
+import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** The label of Check updates, which the runner shows as pending while the check runs. */
@@ -61,6 +60,7 @@ export const addSource = (source: string): ToastAction => ({
       success: `Added ${shortSource(source)} source`,
     });
   },
+  track: "source-toast.add-source",
 });
 
 /** What an Update that exited 0 did, in the words of the results table. */
@@ -83,7 +83,7 @@ const updatedText = (row: SkillRow, events: CliEvent[]) => {
  * Add source brings back. Any other failure is the runner's error toast.
  */
 export const updateSkill = async (row: SkillRow) => {
-  const source = row.entry?.source ?? row.update?.source;
+  const source = row.entry?.source;
   const outcome = await runUntilSettled(["skill", "update", row.name], {
     // Exit 5: the CLI's message, with the way out in place of the command its hint names.
     failure: ({ exitCode, events }) => {
@@ -137,42 +137,46 @@ export const settleMerge = async (
 };
 
 /**
- * The updates the app offers, by name: every update candidate of the last check but those of a
- * skill with a pending merge, which the skill's banner finishes first.
+ * The updates the app offers, by name: every update the inventory's library entries say, but
+ * those of a skill with a pending merge, which the skill's banner finishes first.
  */
-export const offeredUpdates = (
-  updates: Iterable<UpdateAvailableEvent>,
-  library: readonly LibraryEntry[]
-) => {
-  const offers = [...updates].filter(
-    (u) =>
-      library.find((entry) => entry.name === u.name)?.pending_merge !== true
-  );
+export const offeredUpdates = (library: readonly LibraryEntry[]) => {
+  const offers = library
+    .filter((entry) => entry.pending_merge !== true)
+    .flatMap((entry) => {
+      const offer = offerOf(entry);
+      return offer === undefined ? [] : [offer];
+    });
   offers.sort((a, b) => a.name.localeCompare(b.name));
   return offers;
 };
 
-/** The updates the app offers, from the store as it is now; a new list only when one changes. */
+const noLibrary: LibraryEntry[] = [];
+
+/** The updates the app offers, from the inventory as it is now; a new list only when it changes. */
 export const useOfferedUpdates = () => {
-  const updates = useAppStore((s) => s.updates);
-  const library = useAppStore((s) => s.inventory?.library);
-  return offeredUpdates(Object.values(updates), library ?? []);
+  const library = useAppStore((s) => s.inventory?.library) ?? noLibrary;
+  return useMemo(() => offeredUpdates(library), [library]);
 };
 
-/** How many skills the check offers an update for: a skill with a pending merge is not offered one. */
-const offered = (events: CliEvent[]) =>
-  offeredUpdates(
-    events.flatMap((e) => (e.type === "update_available" ? [e] : [])),
-    useAppStore.getState().inventory?.library ?? []
-  ).length;
+/**
+ * How many skills a check found an update for, by its `update_available` events: a skill with a
+ * pending merge is not offered one.
+ */
+const offered = (events: CliEvent[]) => {
+  const library = useAppStore.getState().inventory?.library ?? [];
+  const names = events.flatMap((e) =>
+    e.type === "update_available" &&
+    library.find((entry) => entry.name === e.name)?.pending_merge !== true
+      ? [e.name]
+      : []
+  );
+  return new Set(names).size;
+};
 
 /** Whether the app offers an update now, as the sidebar's update pill counts them. */
-const offersUpdates = () => {
-  const { inventory, updates } = useAppStore.getState();
-  return (
-    offeredUpdates(Object.values(updates), inventory?.library ?? []).length > 0
-  );
-};
+const offersUpdates = () =>
+  offeredUpdates(useAppStore.getState().inventory?.library ?? []).length > 0;
 
 /** The sources a check could not reach: those of its fetches that its error names. */
 const unreachable = (events: CliEvent[], message: string) => {
@@ -227,10 +231,12 @@ export const openUpdateDialog = () => {
 /**
  * Check updates: `skill check-updates`, which fetches each source and lists every update it finds.
  * Its toast says "Checking for updates…", then how far it got, "0/10" before the first fetch and
- * then one source fetched at a time, in room it keeps from the start. When the app then offers an update, the toast goes and the Update skills
- * dialog opens; else the toast says that all skills are up to date. A source it could not reach
- * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere
- * are listed all the same (src/store/loaders.ts), in the dialog.
+ * then one source fetched at a time, in room it keeps from the start. When it found an update, the
+ * toast goes and the Update skills dialog opens once the inventory that follows the check offers
+ * it; else the toast says that all skills are up to date. A source it could not reach (exit 3) is
+ * named in the toast, with a line of the app's own, and the updates the inventory offers are listed
+ * all the same, in the dialog: those it found elsewhere and those found before for the skills of
+ * that source.
  */
 export const checkUpdates = async () => {
   if (checkRunning()) {
@@ -241,34 +247,45 @@ export const checkUpdates = async () => {
     onClick: () => {
       void cancelCommand(CHECK_UPDATES);
     },
+    track: "check-updates-toast.cancel",
   };
   notify(checkingText(), cancel, { kind: "progress", lasting: true });
-  const { exitCode } = await agentx(["skill", "check-updates"], {
-    failure: unreachableFailure,
-    label: CHECK_UPDATES,
-    onProgress: (event) => {
-      if (event.phase === "fetch") {
-        notify(checkingText(event.current, event.total), cancel, {
-          inPlace: true,
-          kind: "progress",
-          lasting: true,
-        });
-      }
-    },
-    // An update found: the dialog says so, in place of a toast.
-    success: (events) =>
-      offered(events) === 0 ? "All skills are up to date" : undefined,
-  });
-  if (
-    (exitCode === EXIT_CODES.ok || exitCode === EXIT_CODES.source) &&
-    offersUpdates()
-  ) {
-    // Exit 3 keeps its toast, which names the source the check could not reach.
-    if (exitCode === EXIT_CODES.ok) {
-      dismissToast();
+  const { events, exitCode } = await runUntilSettled(
+    ["skill", "check-updates"],
+    {
+      failure: unreachableFailure,
+      label: CHECK_UPDATES,
+      onProgress: (event) => {
+        if (event.phase === "fetch") {
+          notify(checkingText(event.current, event.total), cancel, {
+            inPlace: true,
+            kind: "progress",
+            lasting: true,
+          });
+        }
+      },
+      // An update found: the dialog says so, in place of a toast.
+      success: (found) =>
+        offered(found) === 0 ? "All skills are up to date" : undefined,
     }
-    openUpdateDialog();
+  );
+  if (exitCode !== EXIT_CODES.ok && exitCode !== EXIT_CODES.source) {
+    return;
   }
+  // A source it could not reach (exit 3) gave no event for its skills, so their updates found
+  // before count only in the inventory: it decides below.
+  if (exitCode === EXIT_CODES.ok && offered(events) === 0) {
+    return;
+  }
+  // Exit 3 keeps its toast, which names the source the check could not reach.
+  if (exitCode === EXIT_CODES.ok) {
+    dismissToast();
+  }
+  afterSettled(() => {
+    if (offersUpdates()) {
+      openUpdateDialog();
+    }
+  });
 };
 
 /**
@@ -290,7 +307,7 @@ export type UpdateStatus =
 
 /** One skill of the run, as the dialog listed it when Update was pressed. */
 export interface UpdateRunRow {
-  update: UpdateAvailableEvent;
+  update: UpdateOffer;
   /** The library holds edits the update merges with. */
   edited: boolean;
   status: UpdateStatus;
@@ -438,12 +455,6 @@ const rowChange = (
   ...(warnings.length > 0 ? { warnings } : {}),
 });
 
-/** The activity entry of merges that wait for the user: "review skill has conflicts. …". */
-const conflictsText = (names: string[]) =>
-  names.length === 1
-    ? `${names[0]} skill has conflicts. Resolve them to finish the update`
-    : `${andList(names)} skills have conflicts. Resolve them to finish the updates`;
-
 /** Whether a command ended in a way the runner answers itself: the lock, the store, a cancel. */
 const answeredByRunner = (outcome: Outcome) =>
   outcome.exitCode === EXIT_CODES.locked ||
@@ -457,15 +468,6 @@ const stoppedProblem = (outcome: Outcome): Problem => ({
       ? "agentx skill update did not finish"
       : `agentx could not start: ${outcome.startError}`,
 });
-
-/** The activity entry the run adds once it ended: what it did, in the words of its summary. */
-const logRun = (run: UpdateRun) => {
-  const rows = selectedRows(run);
-  const clean = rows.every(
-    (r) => UPDATED.has(r.status) && (r.warnings ?? []).length === 0
-  );
-  addActivity(clean ? "success" : "attention", runSummaryText(run));
-};
 
 /**
  * Updates the skills of `rows` that are selected in one `skill update <name>...`, the names in the
@@ -517,14 +519,6 @@ export const updateSkills = async (rows: UpdateRunRow[]) => {
         }
       }
     },
-    ownActivity: (ended) => {
-      const conflicts = names.filter((name) =>
-        ended.events.some((e) => e.type === "conflict" && e.name === name)
-      );
-      return ended.exitCode === EXIT_CODES.pending_merge && conflicts.length > 0
-        ? { message: conflictsText(conflicts), tone: "attention" }
-        : undefined;
-    },
     ownFailure: true,
     retry: () => {
       openUpdateDialog();
@@ -555,7 +549,5 @@ export const updateSkills = async (rows: UpdateRunRow[]) => {
     });
     return;
   }
-  const ended: UpdateRun = { ...run, phase: "ended" };
-  useUpdateRun.setState({ run: ended });
-  logRun(ended);
+  useUpdateRun.setState({ run: { ...run, phase: "ended" } });
 };

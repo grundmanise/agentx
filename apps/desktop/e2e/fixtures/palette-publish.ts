@@ -1,10 +1,14 @@
 // The machine the title bar's sync status and the palette tests run against: two hub
 // skills edited since they were published, one never published, and two skills of a source, one
-// with an update serve found. `source list` answers with the hub and the source, or
-// without the hub. Variants: nothing to publish, and no hub; serve can also
-// find what another of your machines published. Inline events with only the fields the tests
+// with an update the inventory offers. The inventory lists the hub and the source, or the
+// source without the hub. Variants: nothing to publish, and no hub; the inventory can also
+// say what another of your machines published. Inline events with only the fields the tests
 // check.
-import type { LibraryEntry, LibraryPlacement } from "#/cli/events.gen.ts";
+import type {
+  LibraryEntry,
+  LibraryPlacement,
+  Source,
+} from "#/cli/events.gen.ts";
 
 import type { InlineEvent, MockCli } from "../harness/cli.ts";
 import { HUB, ACME, configurations, filesOf } from "./skills.ts";
@@ -71,87 +75,69 @@ export const syncedLibrary: LibraryEntry[] = library.map((entry) => ({
   state: "current",
 }));
 
-const inventoryOf = (entries: LibraryEntry[]) =>
+const inventoryOf = (entries: LibraryEntry[], listed: Source[]) =>
   ({
     configurations,
     library: entries,
     scan_counter: 1,
+    sources: listed,
     type: "inventory",
   }) satisfies InlineEvent;
 
-/** A newer version of pdf from its source. */
-export const pdfUpdate: InlineEvent = {
-  base_hash: "h-pdf",
-  candidate: "c0ffeepdf",
-  files: [{ path: "SKILL.md", status: "modified" }],
-  kind: "managed",
-  name: "pdf",
-  source: ACME,
-  subpath: "pdf",
-  type: "update_available",
-  upstream_commit: "1a2b3c4d5e6f7",
+/** A newer version of pdf from its source, as pdf's library entry carries it. */
+const pdfUpdate: Partial<LibraryEntry> = {
+  candidate: { content_hash: "h-pdf-next", upstream_commit: "9b8c7d6e5f4a3" },
 };
 
-/** What another of your machines published to notes: an update with no base. */
-export const notesFromAnotherMachine: InlineEvent = {
-  base_hash: "",
-  candidate: "c0ffeenotes",
-  candidate_hash: "",
-  candidate_upstream_commit: "",
-  files: [{ path: "SKILL.md", status: "modified" }],
-  kind: "managed",
-  name: "notes",
-  source: HUB,
-  type: "update_available",
-  upstream_commit: "",
+/** What another of your machines published to a hub skill, as its library entry carries it. */
+export const fromAnotherMachine: Partial<LibraryEntry> = {
+  hub_ahead: { commit: "c0ffee0123456" },
 };
 
-/** What `source list` answers: the hub and the source. */
-export const sources: InlineEvent[] = [
-  { hub: true, id: "2222222222222222", type: "source", url: HUB },
-  { access: "read-only", id: "1111111111111111", type: "source", url: ACME },
-];
+/** The hub, as the inventory lists it. */
+export const hub: Source = { hub: true, id: "2222222222222222", url: HUB };
 
-/** What `source list` answers on a machine with no hub. */
-export const sourcesWithoutHub: InlineEvent[] = sources.filter(
-  (s) => s.type === "source" && s.hub !== true
-);
+const acme: Source = { access: "read-only", id: "1111111111111111", url: ACME };
+
+/** The sources the inventory lists: the hub and the source. */
+export const sources: Source[] = [hub, acme];
 
 export type Variant = "edited" | "synced" | "no-hub";
 
 export interface LaunchOptions {
-  /** Whether serve found the update of pdf; it does unless a test says otherwise. */
+  /** Whether the inventory offers the update of pdf; it does unless a test says otherwise. */
   update?: boolean;
-  /** Whether serve found what another of your machines published to notes; it does not by default. */
+  /** Whether the inventory says another of your machines published to notes; it does not by default. */
   incoming?: boolean;
+  /** The hub the inventory lists in place of the variant's. */
+  hub?: Source;
 }
 
 /**
- * Starts the app on the fixture machine: serve writes the inventory of `variant`, then the updates
- * it found, and every read the Skills screen runs for a selected skill is registered.
+ * Starts the app on the fixture machine: serve writes the inventory of `variant`, with the updates
+ * it offers, and every read the Skills screen runs for a selected skill is registered.
  */
 export const launch = (
   cli: MockCli,
   variant: Variant = "edited",
-  { update = true, incoming = false }: LaunchOptions = {}
+  { update = true, incoming = false, ...options }: LaunchOptions = {}
 ) => {
-  const entries = variant === "synced" ? syncedLibrary : library;
-  cli.onServeStart({
-    events: [
-      inventoryOf(entries),
-      ...(update ? [pdfUpdate] : []),
-      ...(incoming ? [notesFromAnotherMachine] : []),
-    ],
-  });
-  cli.register(["source", "list"], {
-    events: variant === "no-hub" ? sourcesWithoutHub : sources,
-  });
+  const entries = (variant === "synced" ? syncedLibrary : library).map(
+    (entry) => ({
+      ...entry,
+      ...(update && entry.name === "pdf" ? pdfUpdate : {}),
+      ...(incoming && entry.name === "notes" ? fromAnotherMachine : {}),
+    })
+  );
+  const listed = variant === "no-hub" ? [acme] : [options.hub ?? hub, acme];
+  cli.onServeStart({ events: [inventoryOf(entries, listed)] });
   for (const entry of entries) {
     cli.register(["skill", "history", entry.name], { events: [] });
     cli.register(["skill", "files", entry.name], {
       events: filesOf(entry.name),
     });
     cli.register(["skill", "diff", entry.name], { events: [] });
+    cli.register(["skill", "diff", entry.name, "--update"], { events: [] });
   }
   // What the Add skills screen reads when it opens: your skills on the hub and the source's.
   cli.register(["skill", "list", "--remote"], { events: [] });

@@ -86,13 +86,16 @@ func (h *harness) build(t *testing.T, f fixture) {
 	h.env["AGENTX_INSTANCE_ID"] = "instance-test"
 }
 
-// portable replaces HOME with ~ so output compares across temporary directories.
+// portable replaces HOME with ~, and agentx home with $AGENTX_HOME, so
+// output compares across temporary directories.
 func (h *harness) portable(text string) string {
-	real, err := filepath.EvalSymlinks(h.home)
-	if err == nil && real != h.home {
-		text = strings.ReplaceAll(text, real, "~")
+	for dir, name := range map[string]string{h.home: "~", h.agentx: "$AGENTX_HOME"} {
+		if real, err := filepath.EvalSymlinks(dir); err == nil && real != dir {
+			text = strings.ReplaceAll(text, real, name)
+		}
+		text = strings.ReplaceAll(text, dir, name)
 	}
-	return strings.ReplaceAll(text, h.home, "~")
+	return text
 }
 
 var fixtures = map[string]fixture{
@@ -728,7 +731,7 @@ func TestScanSpawnBudget(t *testing.T) {
 // inventory is what the desktop app shows and a one-shot listing may not
 // tell a script anything else. The lineage costs the scan one for-each-ref
 // after the check of the store, however many skills the library
-// holds.
+// holds, and the sources one more, however many the settings hold.
 func TestScanListsTheLibrary(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -745,10 +748,29 @@ func TestScanListsTheLibrary(t *testing.T) {
 		listed = append(listed, map[string]any(e))
 	}
 
+	// The sources and the machine are what source list and machine
+	// emit, the store and its size aside, which every git write changes.
+	var sources []any
+	for _, e := range h.eventsOfType(h.mustRun("--json", "source", "list").stdout, "source") {
+		delete(e, "type")
+		delete(e, "schema_version")
+		sources = append(sources, map[string]any(e))
+	}
+	machine := h.eventsOfType(h.mustRun("--json", "machine").stdout, "machine")[0]
+	for _, field := range []string{"type", "schema_version", "store", "store_bytes"} {
+		delete(machine, field)
+	}
+
 	calls := countingGit(t, h)
 	inventory := h.inventory(t)
 	if got := inventory["library"].([]any); !reflect.DeepEqual(got, listed) {
 		t.Errorf("the inventory's library differs from skill list:\ninventory:   %v\nskill list: %v", got, listed)
+	}
+	if got := inventory["sources"].([]any); len(got) != 1 || !reflect.DeepEqual(got, sources) {
+		t.Errorf("the inventory's sources differ from source list:\ninventory:   %v\nsource list: %v", got, sources)
+	}
+	if got := inventory["machine"].(map[string]any); !reflect.DeepEqual(got, map[string]any(machine)) {
+		t.Errorf("the inventory's machine differs from machine:\ninventory: %v\nmachine:   %v", got, machine)
 	}
 	refs := 0
 	for _, call := range calls() {
@@ -760,7 +782,7 @@ func TestScanListsTheLibrary(t *testing.T) {
 			t.Errorf("scan ran git %s", call)
 		}
 	}
-	equal(t, "for-each-ref calls", refs, 1)
+	equal(t, "for-each-ref calls", refs, 2)
 
 	// Without --json nothing prints the library, so a text scan and a text
 	// serve read none of its lineage: the startup gate's --version is the

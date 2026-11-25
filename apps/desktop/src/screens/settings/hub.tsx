@@ -27,7 +27,7 @@ import type { HintRule } from "#/lib/app-hint.ts";
 import { SettingsSection } from "#/screens/settings/section.tsx";
 import { hubSource } from "#/screens/settings/source-rows.ts";
 import { agentx, usePending } from "#/store/runner.ts";
-import { useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** The pending label of `source add <url> --hub` from this section. */
@@ -45,6 +45,8 @@ const Confirm = ({
   action,
   danger = false,
   onConfirm,
+  track,
+  cancelTrack,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -53,6 +55,10 @@ const Confirm = ({
   action: string;
   danger?: boolean;
   onConfirm: () => void;
+  /** The name a click on the button that goes ahead is sent under. */
+  track: string;
+  /** The name a click on Cancel is sent under. */
+  cancelTrack: string;
 }) => (
   <AlertDialog open={open} onOpenChange={onOpenChange}>
     <AlertDialogContent>
@@ -62,10 +68,13 @@ const Confirm = ({
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel asChild>
-          <Button variant="ghost">Cancel</Button>
+          <Button variant="ghost" track={cancelTrack}>
+            Cancel
+          </Button>
         </AlertDialogCancel>
         <Button
           variant={danger ? "danger" : "primary"}
+          track={track}
           onClick={() => {
             onOpenChange(false);
             onConfirm();
@@ -178,13 +187,18 @@ const RemoteForm = ({
             }}
           />
           {current !== undefined && (
-            <Button variant="ghost" onClick={onDone}>
+            <Button
+              variant="ghost"
+              track="settings.hub-change-cancel"
+              onClick={onDone}
+            >
               Cancel
             </Button>
           )}
           <Button
             type="submit"
             variant="primary"
+            track="settings.hub-save"
             disabled={unchanged || saving}
           >
             {saving && <Spinner />}
@@ -201,6 +215,8 @@ const RemoteForm = ({
         title="Change your hub?"
         warning="Skills from the previous hub will stay but show as not published."
         action="Change"
+        track="change-hub-dialog.confirm"
+        cancelTrack="change-hub-dialog.cancel"
         onConfirm={() => {
           void save();
         }}
@@ -244,6 +260,7 @@ const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
           <Button
             variant="ghost"
             size="sm"
+            track="settings.hub-change"
             disabled={busy}
             onClick={() => {
               setChanging(true);
@@ -254,6 +271,7 @@ const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
           <Button
             variant="danger"
             size="sm"
+            track="settings.hub-unlink"
             disabled={busy}
             onClick={() => {
               setDetaching(true);
@@ -279,6 +297,8 @@ const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
           </>
         }
         action="Unlink"
+        track="unlink-hub-dialog.confirm"
+        cancelTrack="unlink-hub-dialog.cancel"
         danger
         onConfirm={detach}
       />
@@ -288,7 +308,7 @@ const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
 
 /** The Hub section, from the Sources slice. */
 export const HubSection = () => {
-  const hub = useAppStore((s) => hubSource(s.sources));
+  const hub = useAppStore((s) => hubSource(sourcesOf(s)));
   return (
     <SettingsSection
       title="Hub"

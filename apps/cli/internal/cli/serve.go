@@ -9,10 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"time"
 
+	"github.com/posthog/posthog-go/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/crash"
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
@@ -22,24 +25,15 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// updateCheckEvent ends the report of one update check of the serve child,
-// after its update_available events: which check it was, when it ended,
-// whether it reached what it set out to check, and whether it fetched.
+// updateCheckEvent ends the report of one update check of the serve child:
+// when it ended, and whether it reached what it set out to check. What
+// the check found reaches the next inventory instead: the candidates it
+// pinned, and what the hub holds that a fork lacks, see LibraryEntry.
 type updateCheckEvent struct {
 	event
-	InstanceID string `json:"instance_id"`
-	Scope      string `json:"scope"`      // checkScopeAll or checkScopeHub
-	CheckedAt  string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
-	OK         bool   `json:"ok"`         // false when the check failed as a whole or could not reach the hub
-	Fetched    bool   `json:"fetched"`    // whether the check fetched anything
+	CheckedAt string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
+	OK        bool   `json:"ok"`         // false when the check failed as a whole or could not reach the hub
 }
-
-// The scopes of an update_check event: the full check serve runs at start,
-// and the check of the hub alone it repeats while it runs.
-const (
-	checkScopeAll = "all"
-	checkScopeHub = "hub"
-)
 
 // hubCheckInterval is how long the serve child waits, once the report
 // of one check is made, before it checks the hub again, see
@@ -48,66 +42,6 @@ const (
 const hubCheckInterval = 10 * time.Minute
 
 var hubCheckEvery = hubCheckInterval
-
-// driftEvent says that one skill of the library is no longer in the state
-// the last inventory showed it in: its state, its drift, or both changed
-// between two inventories of one serve process. It is a notification and
-// nothing more: the inventory before it carries the skill as it now is, and
-// is what a consumer applies. It names the inventory it follows by instance
-// and counter, so that a consumer that ignores an inventory ignores its drift
-// events with it.
-type driftEvent struct {
-	event
-	InstanceID    string   `json:"instance_id"`
-	ScanCounter   int      `json:"scan_counter"`
-	Name          string   `json:"name"`
-	Kind          string   `json:"kind"` // managed or unmanaged, as the inventory's library entry has it
-	State         string   `json:"state,omitempty"`
-	Drift         []string `json:"drift"` // [] when none
-	PreviousState string   `json:"previous_state,omitempty"`
-	PreviousDrift []string `json:"previous_drift"` // [] when none
-}
-
-// driftTransitions are the drift events of one inventory against the library
-// of the inventory before it, one per skill in both whose state or drift
-// changed, in the library's order, which is by name. Nothing is a
-// transition against no inventory at all: the first inventory of a serve is
-// where every state starts, not a change of one. A skill that arrives or
-// leaves the library is not one either: the inventory says so itself.
-func driftTransitions(prev map[string]scan.LibraryEntry, inventory scan.Inventory) []driftEvent {
-	if prev == nil {
-		return nil
-	}
-	var events []driftEvent
-	for _, e := range inventory.Library {
-		p, ok := prev[e.Name]
-		if !ok || p.State == e.State && slices.Equal(p.Drift, e.Drift) {
-			continue
-		}
-		events = append(events, driftEvent{
-			event: newEvent("drift"), InstanceID: inventory.InstanceID, ScanCounter: inventory.ScanCounter,
-			Name: e.Name, Kind: e.Kind, State: e.State, Drift: nonNil(e.Drift),
-			PreviousState: p.State, PreviousDrift: nonNil(p.Drift),
-		})
-	}
-	return events
-}
-
-// libraryByName indexes an inventory's library for the next comparison.
-func libraryByName(entries []scan.LibraryEntry) map[string]scan.LibraryEntry {
-	byName := make(map[string]scan.LibraryEntry, len(entries))
-	for _, e := range entries {
-		byName[e.Name] = e
-	}
-	return byName
-}
-
-func nonNil(words []string) []string {
-	if words == nil {
-		return []string{}
-	}
-	return words
-}
 
 func newServeCommand(inv *invocation) *cobra.Command {
 	var (
@@ -178,7 +112,7 @@ func (inv *invocation) prepareServe() {
 	inv.instanceID() // fixed here, before the goroutines that report it
 	inv.verdicts = map[string]keptVerdict{}
 	inv.forkWalks = lineage.NewWalkCache()
-	inv.forksWarned = true // reconciliation and every inventory name them
+	inv.forksWarned = true // every inventory names them
 }
 
 // serveScan is one scan of serve. It checks git first: serve starts
@@ -191,21 +125,12 @@ func (inv *invocation) serveScan(ctx context.Context) (scan.Inventory, error) {
 	return inv.inventory(ctx, 0, "", false)
 }
 
-// inventoryReporter reports each inventory serve emits, with the drift
-// events against the inventory before it. It keeps the library of the last
-// inventory emitted, which the next one's drift is told against;
-// inventories are reported from the loop's goroutine alone, so nothing else
-// touches it.
+// inventoryReporter reports each inventory serve emits.
 func (inv *invocation) inventoryReporter() func(scan.Inventory) {
-	var library map[string]scan.LibraryEntry
 	return func(inventory scan.Inventory) {
 		inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
 		inv.out.print(inv.out.paint(heading, fmt.Sprintf("inventory %d", inventory.ScanCounter)), ": ",
 			plural(len(inventory.Configurations), "configuration"), ", ", plural(len(inventory.Skills), "skill"))
-		for _, ev := range driftTransitions(library, inventory) {
-			inv.out.emit(ev)
-		}
-		library = libraryByName(inventory.Library)
 	}
 }
 
@@ -232,15 +157,30 @@ func (inv *invocation) serveOnce(ctx context.Context) error {
 // serving is an error event of its own rather than its end: another serve
 // holding the lock, a scan that fails, as one does without git, and
 // watching that fails.
-func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Writer, address string, origins []string) error {
+//
+// A panic in a request's method ends serve as a panic in serve itself
+// would: the request is answered with it, and serve returns it once the
+// runs in flight have stopped.
+func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Writer, address string, origins []string) (err error) {
 	inv.prepareServe()
+	inv.capture(ctx, eventServeStart, posthog.Properties{"duration_ms": time.Since(inv.started).Milliseconds()})
 	methods, err := inv.newServeMethods()
 	if err != nil {
 		return err
 	}
 	ctx, stop := context.WithCancel(ctx)
+	var panicked atomic.Pointer[crash.Panic] // the first panic of a method, see guardMethods
+	defer func() {
+		if p := panicked.Load(); p != nil {
+			err = p
+		}
+	}()
 	defer stop()
-	stdio := rpc.ServeStdio(ctx, stdin, lockedWriter{w: inv.out, out: stdout}, methods.table())
+	table := guardMethods(methods.table(), func(p *crash.Panic) {
+		panicked.CompareAndSwap(nil, p)
+		stop()
+	})
+	stdio := rpc.ServeStdio(ctx, stdin, lockedWriter{w: inv.out, out: stdout}, table)
 	// The end of stdin ends serve once the runs it asked for have stopped,
 	// and serve ending for another reason stops them and waits for them
 	// too, so that no command it started outlives it.
@@ -256,7 +196,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 	// so that whoever started serve learns at once where it is; a client
 	// that connects meanwhile is answered as stdin is.
 	if address != "" {
-		door, err := inv.openDoor(address, origins, methods.table())
+		door, err := inv.openDoor(address, origins, table)
 		if err != nil {
 			return err
 		}
@@ -279,7 +219,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		return err
 	}
 	defer home.Unlock(lock)
-	// Reconciliation reports and repairs before the first scan, so the
+	// Reconciliation repairs before the first scan, so the
 	// inventory shows what it put back. One that cannot run leaves serve
 	// to report what the scan finds, and without git the scan says so.
 	if _, err := inv.gitVersion(ctx); err == nil {
@@ -291,7 +231,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		}
 	}
 	dirs, trees := inv.watchedDirs()
-	checks := &serveChecks{inv: inv}
+	checks := &serveChecks{inv: inv, requests: methods.requests}
 	return serve.Run(ctx, serve.Options{
 		Scan:         inv.serveScan,
 		Index:        inv.sourceIndex,
@@ -330,7 +270,8 @@ func (inv *invocation) serveFailed(err error) {
 // serve runs one at a time and makes each report on its loop's goroutine,
 // so failing needs no lock.
 type serveChecks struct {
-	inv *invocation
+	inv      *invocation
+	requests *serve.Requests // what asks the loop for the rescan after a check that wrote, see rescan
 	// failing is set while the checks fail to reach the hub, or
 	// fail as a whole: the check that starts failing warns, and those after
 	// it stay quiet until one succeeds again.
@@ -345,18 +286,19 @@ type serveChecks struct {
 // waits for the lock rather than giving up on it, since it runs in the
 // background and a command holding the lock for a moment is no reason to
 // drop what it fetched. It reports nothing as it goes and never ends serve:
-// the report it returns is made on the loop's goroutine and carries one
-// update_available per update, with this process's instance id, a warning
-// for each thing the check could not check, and its update_check. A
+// the report it returns is made on the loop's goroutine and carries a
+// warning for each thing the check could not check, and its update_check. A
 // machine with no source runs no git at all, and neither does one with no
 // store; a source an import wrote stays a source not fetched,
-// store or not, until source add adds it. The rescan its write of
-// the version file sets off brings the candidates and markers it wrote
-// into the next inventory, and every source ref it moved into the source
-// index.
+// store or not, until source add adds it. The rescan it asks for once it
+// fetched, see rescan, brings the candidates and markers it wrote
+// into the next inventory, with what the hub holds that a fork lacks, and
+// every source ref it moved into the source index.
 func (c *serveChecks) startup(ctx context.Context) func() {
 	rep, err := c.inv.checkUpdates(ctx, true, "")
 	at := time.Now()
+	fetched := err == nil && len(rep.refreshed) > 0
+	c.rescan(ctx, fetched)
 	return func() {
 		if err == nil && rep.idle {
 			return // nothing to check, and nothing was
@@ -364,7 +306,17 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 		c.inv.reportServeCheck(rep, err)
 		ok := err == nil && !rep.hubFailed
 		c.failing = !ok
-		c.inv.reportUpdateCheck(checkScopeAll, at, ok, err == nil && len(rep.refreshed) > 0)
+		c.inv.reportUpdateCheck(at, ok)
+	}
+}
+
+// rescan asks the loop for a scan once a check that fetched has written,
+// and waits for it, so that the inventory that carries what the check wrote
+// goes out before its update_check, also when serve cannot watch for
+// changes. A scan that fails is reported as every rescan's is.
+func (c *serveChecks) rescan(ctx context.Context, fetched bool) {
+	if fetched && c.requests != nil {
+		_, _ = c.requests.Refresh(ctx)
 	}
 }
 
@@ -379,8 +331,10 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 // update check of the hub alone, see checkUpdates: one fetch of
 // it, outside the lock, the comparison of hub skills placed here with
 // what it holds, and one write of its last_fetched, under the lock, waited
-// for as the check at start waits. Its report is that check's: one
-// update_available per update, then its update_check. A failure is a
+// for as the check at start waits. Its report is that check's: its
+// warnings, then its update_check, and the rescan it asks for once it
+// fetched, see rescan, brings what the hub holds that a fork lacks into the
+// next inventory. A failure is a
 // warning prefixed "update check: " when the checks start failing, and
 // none while they go on failing, see serveChecks.failing.
 func (c *serveChecks) hub(ctx context.Context) func() {
@@ -399,6 +353,8 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 		rep, err = inv.checkHubRemote(ctx, entry.URL, remote)
 	}
 	at := time.Now()
+	fetched := err == nil && len(rep.refreshed) > 0 // a check of the hub alone fetches only the hub
+	c.rescan(ctx, fetched)
 	return func() {
 		if err == nil && rep.idle {
 			return
@@ -408,7 +364,7 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 			inv.reportServeCheck(rep, err)
 		}
 		c.failing = !ok
-		inv.reportUpdateCheck(checkScopeHub, at, ok, err == nil && rep.hubFetched)
+		inv.reportUpdateCheck(at, ok)
 	}
 }
 
@@ -437,8 +393,8 @@ func (inv *invocation) checkHubRemote(ctx context.Context, url, remote string) (
 
 // reportServeCheck reports what an update check of the serve child found,
 // every warning prefixed "update check: ": the failure that ended the whole
-// check, or each source or skill it could not check, each note, and then
-// one update_available per update.
+// check, or each source or skill it could not check, and each note. The
+// updates it found are not reported: the next inventory carries them.
 func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 	if err != nil {
 		inv.out.warn("update check: " + err.Error())
@@ -450,31 +406,17 @@ func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 	for _, note := range rep.notes {
 		inv.out.warn("update check: " + note)
 	}
-	for _, ev := range rep.updates {
-		ev.InstanceID = inv.instanceID()
-		inv.out.emit(ev)
-		from, to := ev.versions()
-		inv.out.print(inv.out.paint(heading, "update "+sanitised(ev.Name)), ": ",
-			short(from), " -> ", short(to), ", ", plural(len(ev.Files), "file"))
-	}
 }
 
 // reportUpdateCheck emits the update_check event that ends the report of
-// a check of scope that ended at at, and its line without --json.
-func (inv *invocation) reportUpdateCheck(scope string, at time.Time, ok, fetched bool) {
-	inv.out.emit(updateCheckEvent{
-		event: newEvent("update_check"), InstanceID: inv.instanceID(), Scope: scope,
-		CheckedAt: at.UTC().Format(time.RFC3339), OK: ok, Fetched: fetched,
-	})
+// a check that ended at at, and its line without --json.
+func (inv *invocation) reportUpdateCheck(at time.Time, ok bool) {
+	inv.out.emit(updateCheckEvent{event: newEvent("update_check"), CheckedAt: at.UTC().Format(time.RFC3339), OK: ok})
 	status, style := "ok", okStyle
 	if !ok {
 		status, style = "failed", failStyle
 	}
-	line := []string{inv.out.paint(heading, "check "+scope), ": ", inv.out.paint(style, status)}
-	if fetched {
-		line = append(line, ", fetched")
-	}
-	inv.out.print(line...)
+	inv.out.print(inv.out.paint(heading, "check"), ": ", inv.out.paint(style, status))
 }
 
 // watchedDirs are the directories a change signal can come from, most
@@ -542,4 +484,23 @@ func plural(n int, noun string) string {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// guardMethods wraps each method so that a panic in it answers its request
+// with the panic and is handed to crashed, instead of ending the process
+// on the request's goroutine.
+func guardMethods(methods map[string]rpc.Method, crashed func(*crash.Panic)) map[string]rpc.Method {
+	guarded := make(map[string]rpc.Method, len(methods))
+	for name, method := range methods {
+		guarded[name] = func(ctx context.Context, c rpc.Call) (result any, rpcErr *rpc.Error) {
+			defer func() {
+				if p := crash.Recovered(recover()); p != nil {
+					crashed(p)
+					result, rpcErr = nil, &rpc.Error{Code: rpc.CodeFailed, Message: p.Error()}
+				}
+			}()
+			return method(ctx, c)
+		}
+	}
+	return guarded
 }

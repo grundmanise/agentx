@@ -9,7 +9,8 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
-import { allUpdates, updatesInventory } from "./fixtures/updates.ts";
+import { pdfUpdateDiffs } from "./fixtures/update-diffs.ts";
+import { updatesInventory } from "./fixtures/updates.ts";
 import { expect, test } from "./harness/cli.ts";
 import { moreAddActions, skillsHeader } from "./harness/skills-header.ts";
 
@@ -47,7 +48,10 @@ test("ghost and danger buttons have a resting fill; a button group makes one sha
   cli,
   page,
 }) => {
-  cli.onServeStart({ events: [updatesInventory, ...allUpdates] });
+  cli.onServeStart({ events: [updatesInventory] });
+  cli.register(["skill", "diff", "pdf", "--update"], {
+    events: pdfUpdateDiffs,
+  });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   for (const read of fileReads) {
     cli.register(["skill", "files", ...read.args], { events: read.events });

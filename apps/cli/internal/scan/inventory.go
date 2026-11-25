@@ -27,7 +27,9 @@ type Options struct {
 type Inventory struct {
 	InstanceID     string          `json:"instance_id"`
 	ScanCounter    int             `json:"scan_counter"`
-	Machine        Machine         `json:"machine"`
+	Machine        Machine         `json:"machine"`  // id and label from the scan; the rest filled in by the caller
+	Settings       Settings        `json:"settings"` // filled in by the caller, from the machine settings
+	Sources        []Source        `json:"sources"`  // filled in by the caller, from the machine settings and the store
 	Configurations []Configuration `json:"configurations"`
 	Skills         []Skill         `json:"skills"`
 	Library        []LibraryEntry  `json:"library"`  // filled in by the caller, which reads the lineage
@@ -38,9 +40,41 @@ type Inventory struct {
 	Warnings       []string        `json:"warnings"`
 }
 
+// Machine is this machine: its id and label, and where agentx keeps its
+// files on it, as AGENTX_HOME and AGENTX_LIBRARY resolved them.
 type Machine struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
+	ID           string `json:"id"`
+	Label        string `json:"label"`
+	Derivation   string `json:"derivation"`
+	Home         string `json:"home"`
+	SettingsFile string `json:"settings_file"`
+	Library      string `json:"library"`
+}
+
+// Settings are the machine settings no other field of the inventory
+// carries: the label is the machine's, the sources are the inventory's
+// own, the configuration lists are each configuration's enabled and
+// placement, and copy_mode is each library placement's mode.
+type Settings struct {
+	IgnoreSystemFiles bool   `json:"ignore_system_files"`
+	Telemetry         string `json:"telemetry,omitempty"`    // on or off; empty until answered
+	AnonymousID       string `json:"anonymous_id,omitempty"` // the id usage data is sent under, while telemetry is on
+}
+
+// Source is one source of the machine settings, as source list reports it:
+// what its settings entry records and what the store holds of it.
+type Source struct {
+	ID            string `json:"id"`
+	URL           string `json:"url"`
+	Alias         string `json:"alias,omitempty"`
+	Hub           bool   `json:"hub,omitempty"` // the hub
+	Pin           string `json:"pin,omitempty"`
+	Access        string `json:"access,omitempty"`         // writable, read-only or unknown; absent on a removal's event, which says only what went
+	AccessChecked string `json:"access_checked,omitempty"` // when access was last checked
+	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
+	LastFetched   string `json:"last_fetched,omitempty"`
+	Commit        string `json:"commit,omitempty"` // the fetched commit; absent when the store holds no ref
+	Skills        *int   `json:"skills,omitempty"` // how many skills the listing found, only after a listing; for the hub, its skill branches as its last fetch found them, absent before a fetch
 }
 
 type Configuration struct {
@@ -121,6 +155,7 @@ type LibraryEntry struct {
 	State           string             `json:"state,omitempty"`         // current or modified, for a managed skill whose directory is its checkout
 	Drift           []string           `json:"drift,omitempty"`         // the drift states beside state, for a managed skill
 	Candidate       *LibraryCandidate  `json:"candidate,omitempty"`     // the update the last check found, from its source or its upstream
+	HubAhead        *LibraryHubAhead   `json:"hub_ahead,omitempty"`     // what another machine published to the hub that a fork's branch lacks
 	PendingMerge    bool               `json:"pending_merge,omitempty"` // an update left a merge pending, read from <agentx home>/merges/<name>
 	Placements      []LibraryPlacement `json:"placements"`
 	Universal       []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
@@ -135,6 +170,16 @@ type LibraryCandidate struct {
 	UpstreamCommit string `json:"upstream_commit"`
 	UpstreamTime   string `json:"upstream_time,omitempty"` // when the upstream commit was made, RFC 3339 in UTC
 	ContentHash    string `json:"content_hash"`
+}
+
+// LibraryHubAhead is what the hub holds of a fork that its branch here
+// lacks, as the last fetch of the hub left its remote-tracking branch: the
+// commits another machine published, which the hub step of the fork's
+// update takes in. Commit is that branch's tip, and Time its committer
+// time, when the other machine recorded it.
+type LibraryHubAhead struct {
+	Commit string `json:"commit"`
+	Time   string `json:"time,omitempty"` // RFC 3339 in UTC
 }
 
 // LibraryPlacement is one way a configuration sees a library skill: mode is
@@ -229,6 +274,7 @@ func Read(o Options) *Scan {
 			InstanceID:     o.InstanceID,
 			ScanCounter:    1,
 			Machine:        Machine{ID: o.MachineID, Label: o.Label},
+			Sources:        []Source{},
 			Configurations: []Configuration{},
 			Skills:         []Skill{},
 			Library:        []LibraryEntry{},

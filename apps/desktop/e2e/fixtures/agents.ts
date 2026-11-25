@@ -8,6 +8,7 @@ import type {
   InventoryEvent,
   McpServer,
   ServerOccurrence,
+  Source,
 } from "#/cli/events.gen.ts";
 
 import { configuration } from "../harness/cli.ts";
@@ -111,12 +112,19 @@ const nodes: Nodes = {
   skills: skillsInventory.skills,
 };
 
+/** The sources the inventory lists: one shared source and the hub. */
+const sources: Source[] = [
+  { id: "1111111111111111", url: "https://github.com/acme/skills" },
+  { hub: true, id: "2222222222222222", url: HUB },
+];
+
 /** The serve child's first inventory on this machine. */
 export const inventory = {
   ...skillsInventory,
   configurations,
   edges: edgesOf(nodes),
   mcp_servers: servers,
+  sources,
 } satisfies InlineEvent;
 
 const many: [id: string, name: string, readsLibrary?: boolean][] = [
@@ -186,13 +194,3 @@ export const manyAgentsInventory = (pdfIn: string[] = []) =>
 
 /** The library's path on this machine, as its occurrences show it. */
 export const LIBRARY = "/home/me/.agents/skills";
-
-/** What `source list` answers: one shared source and the hub. */
-export const sources: InlineEvent[] = [
-  {
-    id: "1111111111111111",
-    type: "source",
-    url: "https://github.com/acme/skills",
-  },
-  { hub: true, id: "2222222222222222", type: "source", url: HUB },
-];

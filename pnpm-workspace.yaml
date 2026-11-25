@@ -21,9 +21,12 @@ minimumReleaseAge: 1440
 trustPolicy: no-downgrade
 
 # Install scripts run only for the packages listed here; any other package with one fails the
-# install (strictDepBuilds is on by default). No dependency needs one today: esbuild is not in the
-# tree, and Tailwind's oxide engine and the other native tools ship prebuilt per-platform packages.
-allowBuilds: {}
+# install (strictDepBuilds is on by default), unless it is listed as false, which skips its script.
+# No dependency needs one today: esbuild is not in the tree, and Tailwind's oxide engine and the
+# other native tools ship prebuilt per-platform packages. core-js, which the app's telemetry SDK
+# pulls in, has a postinstall that only prints a banner.
+allowBuilds:
+  core-js: false
 
 # When the running pnpm is not the version pinned in the root packageManager field, download and
 # run the pinned one (the default, set here so the choice is explicit). pnpm 11 replaced

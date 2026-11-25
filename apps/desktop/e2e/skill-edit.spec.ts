@@ -5,6 +5,7 @@
 import type { Page } from "@playwright/test";
 
 import { adoption, fileReads, inventory } from "./fixtures/skills.ts";
+import { reviewUpdateDiffs } from "./fixtures/update-diffs.ts";
 import { expect, libraryPath, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -45,6 +46,10 @@ const openSkill = async (
   for (const read of fileReads) {
     cli.register(["skill", "files", ...read.args], { events: read.events });
   }
+  // review has an update: its pane reads what the update changes.
+  cli.register(["skill", "diff", "review", "--update"], {
+    events: reviewUpdateDiffs,
+  });
   await page.goto(`/#/skills/${encodeURIComponent(key)}`);
   await expect(pane(page, name)).toBeVisible();
 };

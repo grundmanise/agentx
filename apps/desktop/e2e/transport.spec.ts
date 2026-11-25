@@ -45,7 +45,7 @@ test("a run streams its events as they arrive", async ({ cli, page }) => {
   expect(await items(page)).toEqual([
     {
       value: {
-        event: { cli_version: "1.2.0", schema_version: 4, type: "version" },
+        event: { cli_version: "1.2.0", schema_version: 5, type: "version" },
         kind: "event",
       },
       what: "line",
@@ -126,7 +126,9 @@ test("serve's own lines arrive in order, with their child id", async ({
   expect(
     await page.evaluate(async () => await window.transport.serveStart())
   ).toBe(1);
-  await cli.serveEmit([{ drift: [], name: "pdf", type: "drift" }]);
+  await cli.serveEmit([
+    { checked_at: "2026-11-24T09:00:00Z", ok: true, type: "update_check" },
+  ]);
   await cli.serveLog([{ level: "warn", message: "careful" }]);
   await cli.serveEmit([{ checked_at: "now", type: "update_check" }]);
 
@@ -135,7 +137,12 @@ test("serve's own lines arrive in order, with their child id", async ({
     {
       value: {
         childId: 1,
-        event: { drift: [], name: "pdf", schema_version: 4, type: "drift" },
+        event: {
+          checked_at: "2026-11-24T09:00:00Z",
+          ok: true,
+          schema_version: 5,
+          type: "update_check",
+        },
         kind: "event",
       },
       what: "serve",
@@ -146,7 +153,7 @@ test("serve's own lines arrive in order, with their child id", async ({
         event: {
           level: "warn",
           message: "careful",
-          schema_version: 4,
+          schema_version: 5,
           type: "log",
         },
         kind: "log",
@@ -156,7 +163,7 @@ test("serve's own lines arrive in order, with their child id", async ({
     {
       value: {
         childId: 1,
-        event: { checked_at: "now", schema_version: 4, type: "update_check" },
+        event: { checked_at: "now", schema_version: 5, type: "update_check" },
         kind: "event",
       },
       what: "serve",
@@ -185,7 +192,9 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
   await expect(received(page)).toHaveCount(2);
   expect(cli.serveStarts).toBe(2);
   await cli.serveLog([{ level: "warn", message: "cannot fetch a source" }]);
-  await cli.serveEmit([{ drift: [], name: "pdf", type: "drift" }]);
+  await cli.serveEmit([
+    { checked_at: "2026-11-24T09:00:00Z", ok: true, type: "update_check" },
+  ]);
   // Serve is not started yet: its lines wait.
   await expect(received(page)).toHaveCount(2);
 
@@ -209,7 +218,7 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
         event: {
           level: "warn",
           message: "cannot fetch a source",
-          schema_version: 4,
+          schema_version: 5,
           type: "log",
         },
         kind: "log",
@@ -219,7 +228,12 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
     {
       value: {
         childId: 2,
-        event: { drift: [], name: "pdf", schema_version: 4, type: "drift" },
+        event: {
+          checked_at: "2026-11-24T09:00:00Z",
+          ok: true,
+          schema_version: 5,
+          type: "update_check",
+        },
         kind: "event",
       },
       what: "serve",
@@ -258,7 +272,7 @@ test("a refresh is a JSON-RPC request, whose answer arrives as a refresh_complet
           ok: true,
           request_id: "r1",
           scan_counter: 3,
-          schema_version: 4,
+          schema_version: 5,
           type: "refresh_complete",
         },
         kind: "event",

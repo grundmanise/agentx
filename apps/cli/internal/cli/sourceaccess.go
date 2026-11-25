@@ -6,6 +6,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -85,10 +86,15 @@ func (c sourceCheck) report(inv *invocation, url string) {
 	}
 }
 
-// entryEvent is the source event of a settings entry: everything the entry
-// records, the access by its reported name.
+// entryEvent is the source event of a settings entry, see entrySource.
 func entryEvent(entry home.Source) sourceEvent {
-	return sourceEvent{event: newEvent("source"), ID: source.ID(entry.URL), URL: entry.URL, Alias: entry.Alias,
+	return sourceEvent{event: newEvent("source"), Source: entrySource(entry)}
+}
+
+// entrySource is a settings entry as a source: everything the entry
+// records, the access by its reported name.
+func entrySource(entry home.Source) scan.Source {
+	return scan.Source{ID: source.ID(entry.URL), URL: entry.URL, Alias: entry.Alias,
 		Hub: entry.Hub, Pin: entry.Pin, Access: entry.AccessName(), AccessChecked: entry.AccessChecked,
 		DefaultBranch: entry.DefaultBranch, LastFetched: entry.LastFetched}
 }

@@ -256,6 +256,7 @@ const Reveal = ({
   if (others.length === 0) {
     return (
       <Button
+        track="skill-files.reveal"
         variant="ghost"
         size="icon"
         aria-label={showInLabel(path)}
@@ -268,6 +269,7 @@ const Reveal = ({
   }
   return (
     <SplitButton
+      track="skill-files.reveal"
       size="icon"
       label={showInLabel(path)}
       title={showInLabel()}
@@ -277,6 +279,7 @@ const Reveal = ({
       onOpenChange={onOpenChange}
       menu={others.map((location) => (
         <DropdownMenuItem
+          track="skill-files.reveal-elsewhere"
           key={location.key}
           aria-label={
             location.clients.length > 1
@@ -411,7 +414,11 @@ const Reading = ({
 }) => (
   <Accordion label="Files" value={open} onValueChange={onOpenChange}>
     <AccordionItem value={SKILL_MD}>
-      <AccordionTrigger label={SKILL_MD} open={open.includes(SKILL_MD)}>
+      <AccordionTrigger
+        track="skill-files.toggle-file"
+        label={SKILL_MD}
+        open={open.includes(SKILL_MD)}
+      >
         <span className={pathClass(open.includes(SKILL_MD))}>{SKILL_MD}</span>
       </AccordionTrigger>
       <AccordionContent>
@@ -439,7 +446,7 @@ export const FilesSection = ({
 }) => {
   const request = filesRequestOf(row);
   const version = filesVersionOf(row);
-  const library = useAppStore((s) => s.machine?.library);
+  const library = useAppStore((s) => s.inventory?.machine.library);
   const locations = locationsOf(row, configurations, library);
   const read = useAppStore((s) => s.files[row.key]);
   const [open, setOpen] = useState<string[]>([SKILL_MD]);
@@ -482,6 +489,7 @@ export const FilesSection = ({
             return (
               <AccordionItem key={file.path} value={file.path}>
                 <AccordionTrigger
+                  track="skill-files.toggle-file"
                   label={file.path}
                   open={isOpen}
                   meta={

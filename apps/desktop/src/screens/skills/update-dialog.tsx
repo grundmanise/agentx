@@ -11,7 +11,6 @@ import { cva } from "class-variance-authority";
 import { useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import type { UpdateAvailableEvent } from "#/cli/events.gen.ts";
 import { AlertIcon } from "#/components/icons/alert.tsx";
 import { CheckIcon } from "#/components/icons/check.tsx";
 import { CloseIcon } from "#/components/icons/close.tsx";
@@ -39,7 +38,12 @@ import { useNow } from "#/lib/now.ts";
 import { plural } from "#/lib/plural.ts";
 import { problemSentence } from "#/lib/problem-text.ts";
 import { cn } from "#/lib/utils.ts";
-import { shortSource, updateVersions } from "#/screens/skills/projection.ts";
+import {
+  newerTime,
+  shortSource,
+  updateVersions,
+} from "#/screens/skills/projection.ts";
+import type { UpdateOffer } from "#/screens/skills/projection.ts";
 import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
 import {
   dismissUpdateRun,
@@ -66,8 +70,8 @@ const DAY = 24 * 60 * 60 * 1000;
  * When the newer version was published, as the update check dates it: how long ago within a
  * month, else its date. Undefined when the CLI dates it not.
  */
-const publishedText = (update: UpdateAvailableEvent, now: number) => {
-  const time = update.candidate_upstream_time;
+const publishedText = (update: UpdateOffer, now: number) => {
+  const time = newerTime(update);
   const at = time === undefined ? Number.NaN : Date.parse(time);
   let when: string | undefined;
   if (time !== undefined && !Number.isNaN(at)) {
@@ -83,9 +87,15 @@ const publishedTitle = (time: string) =>
     timeStyle: "short",
   });
 
-/** Where the update comes from: the upstream of a fork, else the skill's source. */
-const sourceOf = (update: UpdateAvailableEvent) => {
-  const url = update.upstream ?? update.source;
+/**
+ * Where the update comes from: the upstream of a hub skill, else the skill's source, which is the
+ * hub for what another machine published.
+ */
+const sourceOf = (update: UpdateOffer) => {
+  const url =
+    update.upstream === undefined
+      ? update.entry.source
+      : (update.entry.upstream ?? update.entry.source);
   return url === undefined || url === "" ? undefined : url;
 };
 
@@ -346,6 +356,7 @@ const Row = ({
           <span className="relative z-10 flex flex-none self-center">
             {idle ? (
               <Checkbox
+                track="update-dialog.toggle-skill"
                 id={id}
                 aria-label={update.name}
                 checked={selected}
@@ -374,7 +385,7 @@ const Row = ({
               <Dot />
               <Published
                 text={published}
-                title={publishedTitle(update.candidate_upstream_time ?? "")}
+                title={publishedTitle(newerTime(update) ?? "")}
                 checkbox={idle ? id : undefined}
               />
             </>
@@ -384,6 +395,7 @@ const Row = ({
               <Dot />
               <span className="relative flex">
                 <Button
+                  track="update-dialog.see-changes"
                   variant="link"
                   size="inline"
                   onClick={(e) => {
@@ -440,7 +452,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   // The update whose What's new sheet is open, and the See changes that opened it.
   const [seeing, setSeeing] = useState<
-    { update: UpdateAvailableEvent; opener: HTMLElement } | undefined
+    { update: UpdateOffer; opener: HTMLElement } | undefined
   >();
 
   // Once Update is pressed, the dialog shows the run: its rows as they were then. The run goes
@@ -561,6 +573,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
         </DialogHeader>
         {idle && total > 1 && (
           <SelectAllRow
+            track="update-dialog.select-all"
             selected={selected}
             total={total}
             onSelectAll={() => {
@@ -592,7 +605,11 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
                   aria-label={group.label}
                   className="flex flex-col gap-0.5"
                 >
-                  <SectionToggle label={group.label} title={group.url} />
+                  <SectionToggle
+                    track="update-dialog.toggle-group"
+                    label={group.label}
+                    title={group.url}
+                  />
                   <CollapsibleContent asChild>
                     <ul className="pl-subgroup-indent m-0 flex list-none flex-col gap-0.5 py-0 pr-0">
                       {group.rows.map((row) => (
@@ -622,11 +639,16 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
           {run === undefined || running ? (
             <>
               <DialogClose asChild>
-                <Button variant="ghost" disabled={running}>
+                <Button
+                  track="update-dialog.cancel"
+                  variant="ghost"
+                  disabled={running}
+                >
                   Cancel
                 </Button>
               </DialogClose>
               <Button
+                track="update-dialog.confirm"
                 ref={confirm}
                 variant="primary"
                 disabled={running || selected === 0}
@@ -638,7 +660,11 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
               </Button>
             </>
           ) : (
-            <Button variant="primary" onClick={close}>
+            <Button
+              track="update-dialog.done"
+              variant="primary"
+              onClick={close}
+            >
               Done
             </Button>
           )}

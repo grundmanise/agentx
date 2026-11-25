@@ -83,7 +83,7 @@ test("an event keeps no file content and no patch, only their length", () => {
     content: "API_KEY=sk-live-123\nmore",
     name: "pdf",
     path: ".env",
-    schema_version: 4,
+    schema_version: 5,
     size: 24,
     type: "skill_file",
   } satisfies CliEvent;
@@ -94,7 +94,7 @@ test("an event keeps no file content and no patch, only their length", () => {
     name: "pdf",
     patch: "@@ -1 +1 @@\n-token: old\n+token: new\n",
     path: "SKILL.md",
-    schema_version: 4,
+    schema_version: 5,
     status: "modified",
     type: "diff",
   } satisfies CliEvent;
@@ -106,7 +106,7 @@ test("an event keeps no file content and no patch, only their length", () => {
 const log = (level: LogEvent["level"], message: string): LogEvent => ({
   level,
   message,
-  schema_version: 4,
+  schema_version: 5,
   type: "log",
 });
 
@@ -141,14 +141,14 @@ test("a command that failed keeps its last 5 lines, which say how the run ended"
   const progress: CliEvent[] = Array.from({ length: 260 }, (_, i) => ({
     current: i + 1,
     phase: "fetch",
-    schema_version: 4,
+    schema_version: 5,
     total: 260,
     type: "progress",
   }));
   const error = {
     code: "source",
     message: "cannot fetch acme/skills",
-    schema_version: 4,
+    schema_version: 5,
     type: "error",
   } satisfies CliEvent;
   const failed = record(3, [...progress, error], []);
@@ -168,8 +168,9 @@ test("a command that succeeded keeps its line only, and its debug lines when it 
   const verbose = record(0, [], debug);
   // Its last 50.
   expect(verbose.output).toHaveLength(50);
-  expect(verbose.output[0]).toBe("debug: git 10");
-  expect(verbose.output.at(-1)).toBe("debug: git 59");
+  // Each as the CLI wrote it: its message, with no level before it.
+  expect(verbose.output[0]).toBe("git 10");
+  expect(verbose.output.at(-1)).toBe("git 59");
 });
 
 test("a line is cut after its credentials are replaced", () => {

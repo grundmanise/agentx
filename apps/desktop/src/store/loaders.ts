@@ -1,8 +1,8 @@
-// The slices that one-shot reads fill: settings, sources and the adoption preview. Each loads
-// once the startup checks pass, and again after the commands that change it. The adoption preview
-// also loads when Settings opens and on Check updates. The update check of
-// `skill check-updates` replaces the update candidates serve found and sets when the last check
-// ended, and `skill update` takes away those of the skills it updated.
+// The slices that one-shot reads fill: the adoption preview, the store and what screens
+// read on demand. This machine, its settings and its sources come with the inventory instead
+// (src/store/feed.ts). The adoption preview loads once the startup checks pass, after an import,
+// when Settings opens and on Check updates. A `skill check-updates` run sets when the last
+// check ended; what it found reaches the inventory that follows it.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
   CliEvent,
@@ -16,8 +16,12 @@ import { checksPass } from "#/startup/startup.ts";
 import { cachedRead, keepRead } from "#/store/read-cache.ts";
 import { agentx, onFinished } from "#/store/runner.ts";
 import type { CommandOptions, Finished } from "#/store/runner.ts";
-import { useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 import type { AppState, FilesRead } from "#/store/store.ts";
+
+/** The URL of the hub, as the inventory lists the sources; undefined when none is set. */
+const hubUrl = () =>
+  sourcesOf(useAppStore.getState()).find((s) => s.hub === true)?.url;
 
 /**
  * Whether a skill's version names its content: it starts with the content hash. A read of a
@@ -76,27 +80,17 @@ const load = async (
 /** The label of the control that loads `args`, for `usePending`. */
 export const loadLabel = (args: string[]) => `load ${args.join(" ")}`;
 
-/** Loads the machine settings: `config list`. */
-export const loadSettings = async () => {
-  await load(["config", "list"], (events) => {
-    const event = events.find((e) => e.type === "settings");
-    return event === undefined ? {} : { settings: event.settings };
-  });
-};
-
-/** Loads this machine and where agentx keeps its files: `machine`. */
-export const loadMachine = async () => {
+/**
+ * Loads the store and its size: `machine`, whose `store` and `store_bytes` the inventory leaves
+ * out. Settings calls it each time Storage shows.
+ */
+export const loadStore = async () => {
   await load(["machine"], (events) => {
     const event = events.find((e) => e.type === "machine");
-    return event === undefined ? {} : { machine: event };
+    return event === undefined
+      ? {}
+      : { store: { store: event.store, store_bytes: event.store_bytes } };
   });
-};
-
-/** Loads the added sources: `source list`. The Add screen calls it when it opens. */
-export const loadSources = async () => {
-  await load(["source", "list"], (events) => ({
-    sources: events.filter((e) => e.type === "source"),
-  }));
 };
 
 /**
@@ -134,9 +128,7 @@ export const loadListing = async (id: string) => {
  * it runs.
  */
 export const loadInstallable = async () => {
-  const remote = useAppStore
-    .getState()
-    .settings?.sources.find((s) => s.hub === true)?.url;
+  const remote = hubUrl();
   if (
     remote !== undefined &&
     useAppStore.getState().installable === undefined
@@ -160,9 +152,7 @@ export const loadInstallable = async () => {
     return { installable: read };
   });
   // The list belongs to the remote set when the command ran: kept only if that is still this one.
-  const now = useAppStore
-    .getState()
-    .settings?.sources.find((s) => s.hub === true)?.url;
+  const now = hubUrl();
   if (remote !== undefined && read !== undefined && now === remote) {
     void keepRead("installable", remote, "", read);
   }
@@ -416,23 +406,20 @@ export const loadSkillMd = async (key: string, request: SkillMdRequest) => {
   }
 };
 
-// The candidate of each update whose changes were read, or are being read: name → candidate.
+// The versions of each update whose changes were read, or are being read: name → updateKey.
 const updateDiffCandidates = new Map<string, string>();
 
 /** The label of the read of what the update of `name` changes, for `usePending`. */
 export const updateDiffLabel = (name: string) => `update diff ${name}`;
 
 /**
- * Loads what the update of `name` changes: `skill diff <name> --update`, a read of the two
- * versions the last update check pinned. `candidate` names the update: the same one is read once,
- * however often its changes are opened, and a newer one reads again. A failed read is kept with
- * the CLI's message, and tried again the next time the changes are opened.
+ * Loads what the update of `name` changes: `skill diff <name> --update`, what `skill update <name>`
+ * would apply, for a hub skill what the hub holds, else its upstream's update. `candidate` names
+ * the versions the inventory offers, the base among them (`updateKey`): the same update is read
+ * once, however often its changes are shown, and one of other versions reads again. A failed read
+ * is kept with the CLI's message, and tried again the next time the changes are shown.
  */
-export const loadUpdateDiff = async (
-  name: string,
-  candidate: string,
-  base: string
-) => {
+export const loadUpdateDiff = async (name: string, candidate: string) => {
   if (updateDiffCandidates.get(name) === candidate) {
     return;
   }
@@ -443,12 +430,8 @@ export const loadUpdateDiff = async (
       ? s
       : { updateDiffs: rest };
   });
-  // The changes kept from an earlier launch from this base to this candidate are this update's.
-  const kept = await cachedRead<DiffEvent[]>(
-    "update-diff",
-    name,
-    `${base}:${candidate}`
-  );
+  // The changes kept from an earlier launch of these versions are this update's.
+  const kept = await cachedRead<DiffEvent[]>("update-diff", name, candidate);
   if (updateDiffCandidates.get(name) !== candidate) {
     return;
   }
@@ -471,7 +454,7 @@ export const loadUpdateDiff = async (
     useAppStore.setState((s) => ({
       updateDiffs: { ...s.updateDiffs, [name]: { candidate, diffs } },
     }));
-    void keepRead("update-diff", name, `${base}:${candidate}`, diffs);
+    void keepRead("update-diff", name, candidate, diffs);
     return;
   }
   const error = outcome.events.find((e) => e.type === "error");
@@ -491,27 +474,12 @@ export const loadUpdateDiff = async (
   updateDiffCandidates.delete(name);
 };
 
-/** Loads again the one-shot reads a command that writes may have changed. */
-const reloadReads = (command: string, args: readonly string[]) => {
-  if (command.startsWith("config ") || command === "snapshot apply") {
-    void loadSettings();
-  }
-  if (command.startsWith("machine ")) {
-    void loadMachine();
-  }
-  // The label is the machine's: Settings shows it from `machine`, which reads it again.
-  if (command === "config set" && args[2] === "label") {
-    void loadMachine();
-  }
-  if (
-    command.startsWith("source ") ||
-    command === "skill add" ||
-    (command === "skill import" && args.length > 2)
-  ) {
-    void loadSources();
-  }
-  // The preview is read on demand, not on each scan: what another tool installed seldom changes.
-  // An import changes it, and Check updates is the Skills screen's refresh.
+/**
+ * Loads the adoption preview again after a command that may have changed it. The preview is read
+ * on demand, not on each scan: what another tool installed seldom changes. An import changes it,
+ * and Check updates is the Skills screen's refresh.
+ */
+const reloadAdoption = (command: string, args: readonly string[]) => {
   if (command === "skill import" && args.length > 2) {
     void loadAdoption({ afterWrite: true });
   }
@@ -521,47 +489,17 @@ const reloadReads = (command: string, args: readonly string[]) => {
 };
 
 /** What to load again after a command that may have changed something. */
-const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
+const afterCommand = ({ args, command, exitCode, read }: Finished) => {
   if (read) {
     return;
   }
-  reloadReads(command, args);
-  // A check that could not reach a source (exit 3) still lists what it found elsewhere.
+  reloadAdoption(command, args);
+  // A check that could not reach a source (exit 3) still checked the others.
   if (
     command === "skill check-updates" &&
     (exitCode === EXIT_CODES.ok || exitCode === EXIT_CODES.source)
   ) {
-    useAppStore.setState({
-      lastChecked: new Date().toISOString(),
-      updates: Object.fromEntries(
-        events
-          .filter((e) => e.type === "update_available")
-          .map((e) => [e.name, e])
-      ),
-    });
-  }
-  // The skills an update applied to, which its `library_skill` events name, have no update left,
-  // and neither has the one skill an update of one name left current, which it names in none.
-  // An aborted merge emits `library_skill` too, but its update is still offered.
-  if (command === "skill update" && !args.includes("--abort")) {
-    const updated = new Set(
-      events.filter((e) => e.type === "library_skill").map((e) => e.name)
-    );
-    const one = args.at(2);
-    if (
-      exitCode === EXIT_CODES.ok &&
-      one !== undefined &&
-      !one.startsWith("-")
-    ) {
-      updated.add(one);
-    }
-    if (updated.size > 0) {
-      useAppStore.setState((s) => ({
-        updates: Object.fromEntries(
-          Object.entries(s.updates).filter(([name]) => !updated.has(name))
-        ),
-      }));
-    }
+    useAppStore.setState({ lastChecked: new Date().toISOString() });
   }
 };
 
@@ -574,8 +512,5 @@ export const startLoaders = () => {
   }
   started = true;
   onFinished(afterCommand);
-  void loadSettings();
-  void loadSources();
   void loadAdoption();
-  void loadMachine();
 };

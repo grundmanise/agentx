@@ -207,7 +207,12 @@ const SheetHeader = ({ children }: { children: ReactNode }) => (
   <div data-slot="sheet-header" className="flex items-start gap-3">
     <div className="flex min-w-0 flex-1 flex-col gap-1">{children}</div>
     <SheetClose asChild>
-      <Button variant="ghost" size="icon" aria-label="Close">
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Close"
+        track="sheet.close"
+      >
         <CloseIcon />
       </Button>
     </SheetClose>

@@ -1032,6 +1032,7 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 		"Settings.Label":                  "badLabel (validLabel, as config set label is)",
 		"Settings.AcceptOperations":       "a bool: the JSON type is the whole domain",
 		"Settings.IgnoreSystemFiles":      "a bool: the JSON type is the whole domain",
+		"Settings.Telemetry":              "never imported: snapshot apply keeps this machine's own value",
 		"Settings.DisabledConfigurations": "badDisabledConfigurations",
 		"Settings.CopyConfigurations":     "badCopyConfigurations",
 		"Settings.Sources":                "badSources",

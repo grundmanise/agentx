@@ -25,7 +25,7 @@ import { currentRows } from "#/screens/skills/rows.ts";
 import { addSource, updateSkill } from "#/screens/skills/updates.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { afterSettled, runUntilSettled } from "#/store/settle.ts";
-import { addActivity, useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The label of Publish all, which shows as pending while its publish runs. */
 export const PUBLISH_ALL = "publish all";
@@ -153,6 +153,7 @@ export const notifyNoHub = () => {
       onClick: () => {
         navigateTo("/settings");
       },
+      track: "publish-toast.open-settings",
     },
     { kind: "warning" }
   );
@@ -213,6 +214,7 @@ const updateAction = (name: string): ToastAction | undefined => {
         onClick: () => {
           void updateSkill(row);
         },
+        track: "publish-toast.update",
       };
 };
 
@@ -238,12 +240,9 @@ const reportPublishAll = (outcome: Outcome) => {
     return;
   }
   if (moved !== undefined) {
-    const text = changedElsewhere(moved.name);
-    notify(text, updateAction(moved.name), { kind: "warning" });
-    // A refused publish is in the activity list already, in the CLI's words.
-    if (ok) {
-      addActivity("attention", text);
-    }
+    notify(changedElsewhere(moved.name), updateAction(moved.name), {
+      kind: "warning",
+    });
     return;
   }
   const pushed = results.filter((e) => e.outcome === "pushed").length;
@@ -257,7 +256,6 @@ const reportPublishAll = (outcome: Outcome) => {
   } else {
     notifySuccess(text);
   }
-  addActivity(pushed === 0 ? "attention" : "success", text);
 };
 
 /**
@@ -306,7 +304,7 @@ export const publishAll = async (names: readonly string[]) => {
       useProgressStore.setState({ progress: undefined });
     }
   });
-  const hubSet = hubOf(useAppStore.getState().sources) !== undefined;
+  const hubSet = hubOf(sourcesOf(useAppStore.getState())) !== undefined;
   if (refusedForHub(outcome, hubSet)) {
     notifyNoHub();
     return;

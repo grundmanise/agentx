@@ -47,6 +47,9 @@ type observation struct {
 	placed       []string // the drift states of the placements, sorted
 	pending      bool     // an update left a merge pending for the skill, see pendingMerges
 	notPublished bool     // a hub skill the hub holds no branch of, see driftNotPublished
+	// hubAhead is what the hub holds of a fork that its branch lacks, see
+	// hubAhead; nil when it holds nothing the branch lacks.
+	hubAhead *scan.LibraryHubAhead
 }
 
 // observe reads what a skill's drift is judged from: a managed skill's
@@ -76,7 +79,13 @@ func (sc skillContext) observe(ctx context.Context, inv *invocation, lib scan.Li
 		remoteTip := sc.published[publishedName(lib.Name, renamed, sc.published)]
 		modified := !inv.holdsTip(ctx, lib, rec, dir) || !inv.tipPublished(ctx, rec, remoteTip)
 		notPublished := remoteTip == "" && sc.publishedRead
-		return observation{judged: true, modified: modified, placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name], notPublished: notPublished}
+		obs := observation{judged: true, modified: modified, placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name], notPublished: notPublished}
+		// The hub step of an update takes in the hub's branch of the
+		// fork's own name alone, see judgePull.
+		if tip := sc.published[lib.Name]; inv.hubAhead(ctx, rec, tip) {
+			obs.hubAhead = &scan.LibraryHubAhead{Commit: tip, Time: sc.publishedAt[lib.Name]}
+		}
+		return obs
 	}
 	return observation{}
 }
@@ -101,32 +110,54 @@ func publishedName(name string, renamed []string, tips map[string]string) string
 // published, remoteTip being the tip of its branch on the hub,
 // see publishedName: it is the version skill diff compares with, see
 // unpublished.
-// The merge base git reads for it is kept by skill name, with the pair of
-// commits it was read for, and read again when either moves, so serve
-// keeps one per skill however long it runs.
 func (inv *invocation) tipPublished(ctx context.Context, rec lineage.Record, remoteTip string) bool {
 	created := ""
 	if rec.Fork != nil {
 		created = rec.Fork.Created
 	}
 	return !unpublished(true, rec.Commit, remoteTip, created, func() string {
-		if kept, ok := inv.published.Load(rec.Name); ok {
-			if b := kept.(publishedBase); b.tip == rec.Commit && b.remoteTip == remoteTip {
-				return b.base
-			}
-		}
-		out, status, err := inv.git.IsolatedStatus(ctx, gitx.StorePath(inv.dirs.Home), 1, "merge-base", rec.Commit, remoteTip)
-		if err != nil {
-			inv.out.debugf("cannot tell whether the hub holds %s: %v", rec.Name, err)
+		base, ok := inv.hubMergeBase(ctx, rec, remoteTip)
+		if !ok {
 			return remoteTip // unknown, which reads as unpublished
 		}
-		base := ""
-		if status == 0 {
-			base = strings.TrimSpace(out)
-		}
-		inv.published.Store(rec.Name, publishedBase{tip: rec.Commit, remoteTip: remoteTip, base: base})
 		return base
 	})
+}
+
+// hubAhead reports whether remoteTip, the hub's branch of the fork rec as
+// last fetched, holds commits the fork's branch lacks: what another machine
+// published, which the hub step of the fork's update takes in, see
+// judgePull. It asks git only when the two tips differ, and then for the
+// merge base tipPublished reads too, which is kept for both.
+func (inv *invocation) hubAhead(ctx context.Context, rec lineage.Record, remoteTip string) bool {
+	if remoteTip == "" || remoteTip == rec.Commit {
+		return false
+	}
+	base, ok := inv.hubMergeBase(ctx, rec, remoteTip)
+	return ok && base != "" && base != remoteTip
+}
+
+// hubMergeBase is the merge base of the fork rec's tip and remoteTip,
+// "" when they share no commit, and ok false when git could not tell, said
+// at debug level. It is kept by skill name, with the pair of commits it was
+// read for, and read again when either moves, so serve keeps one per skill
+// however long it runs.
+func (inv *invocation) hubMergeBase(ctx context.Context, rec lineage.Record, remoteTip string) (base string, ok bool) {
+	if kept, ok := inv.published.Load(rec.Name); ok {
+		if b := kept.(publishedBase); b.tip == rec.Commit && b.remoteTip == remoteTip {
+			return b.base, true
+		}
+	}
+	out, status, err := inv.git.IsolatedStatus(ctx, gitx.StorePath(inv.dirs.Home), 1, "merge-base", rec.Commit, remoteTip)
+	if err != nil {
+		inv.out.debugf("cannot tell whether the hub holds %s: %v", rec.Name, err)
+		return "", false
+	}
+	if status == 0 {
+		base = strings.TrimSpace(out)
+	}
+	inv.published.Store(rec.Name, publishedBase{tip: rec.Commit, remoteTip: remoteTip, base: base})
+	return base, true
 }
 
 // publishedBase is the merge base of a fork's tip and the hub's
@@ -435,7 +466,7 @@ func newSkillContext(ctx context.Context, inv *invocation, records map[string]li
 		inv.out.debugf("cannot read the pending merges: %v", err)
 	}
 	hub, _ := hubEntry(s)
-	published, read := inv.publishedTips(ctx, records, s)
+	published, at, read := inv.publishedTips(ctx, records, s)
 	return skillContext{
 		records:       records,
 		modes:         modes,
@@ -445,30 +476,35 @@ func newSkillContext(ctx context.Context, inv *invocation, records map[string]li
 		targets:       withCopies(inv.detectedTargets(), s.CopyConfigurations),
 		merges:        merges,
 		published:     published,
+		publishedAt:   at,
 		publishedRead: read,
 	}
 }
 
 // publishedTips is what the hub held of hub skills at its
-// last fetch, the tip of each one's branch there by name, read in one
-// for-each-ref of its remote-tracking branches, and nothing when records
-// holds none of hub skills or no hub is set. read is false
-// only when that read fails, said at debug level: the skills then compare
-// with the commits that created them, and none is judged not published, as
-// a failed read says nothing of what the hub holds.
-func (inv *invocation) publishedTips(ctx context.Context, records map[string]lineage.Record, s home.Settings) (tips map[string]string, read bool) {
+// last fetch, the tip of each one's branch there by name, and when it was
+// recorded, read in one for-each-ref of its remote-tracking branches, and
+// nothing when records holds none of hub skills or no hub is set. read is
+// false only when that read fails, said at debug level: the skills then
+// compare with the commits that created them, and none is judged not
+// published, as a failed read says nothing of what the hub holds.
+func (inv *invocation) publishedTips(ctx context.Context, records map[string]lineage.Record, s home.Settings) (tips, at map[string]string, read bool) {
 	hubSkill := false
 	for _, rec := range records {
 		hubSkill = hubSkill || rec.Kind == lineage.KindFork
 	}
 	entry, ok := hubEntry(s)
 	if !hubSkill || !ok {
-		return nil, true
+		return nil, nil, true
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitx.StorePath(inv.dirs.Home), source.RemoteName(source.ID(entry.URL)))
+	remote, err := lineage.ListRemoteTips(ctx, inv.git, gitx.StorePath(inv.dirs.Home), source.RemoteName(source.ID(entry.URL)))
 	if err != nil {
 		inv.out.debugf("cannot read what the hub holds: %v", err)
-		return nil, false
+		return nil, nil, false
 	}
-	return tips, true
+	tips, at = make(map[string]string, len(remote)), make(map[string]string, len(remote))
+	for name, tip := range remote {
+		tips[name], at[name] = tip.Commit, tip.Time
+	}
+	return tips, at, true
 }

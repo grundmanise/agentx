@@ -1,13 +1,12 @@
 // Comparing edits: the Ignore system files switch, bound to the `ignore_system_files` setting. It
-// runs `config set ignore_system_files true|false` and shows the setting as the CLI reports it:
-// pending while the command runs and while the settings are read again after it.
+// runs `config set ignore_system_files true|false` and shows the setting as the inventory carries
+// it: pending while the command runs and until the inventory that follows it arrives.
 import { useId } from "react";
 
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { SettingsSection } from "#/screens/settings/section.tsx";
-import { loadLabel } from "#/store/loaders.ts";
-import { agentx, usePending } from "#/store/runner.ts";
+import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /** The pending label of `config set ignore_system_files`. */
@@ -15,9 +14,7 @@ export const IGNORE_LABEL = "set ignore_system_files";
 
 const IgnoreSystemFiles = ({ checked }: { checked: boolean }) => {
   const id = useId();
-  const running = usePending(IGNORE_LABEL);
-  const reading = usePending(loadLabel(["config", "list"]));
-  const pending = running || reading;
+  const pending = useSettling(IGNORE_LABEL);
   return (
     <label
       htmlFor={id}
@@ -38,6 +35,7 @@ const IgnoreSystemFiles = ({ checked }: { checked: boolean }) => {
         )}
         <Switch
           id={id}
+          track="settings.ignore-system-files"
           aria-label="Ignore system files"
           aria-describedby={`${id}-line`}
           title={
@@ -49,12 +47,15 @@ const IgnoreSystemFiles = ({ checked }: { checked: boolean }) => {
           disabled={pending}
           aria-busy={pending ? true : undefined}
           onCheckedChange={(on) => {
-            void agentx(["config", "set", "ignore_system_files", String(on)], {
-              label: IGNORE_LABEL,
-              success: on
-                ? "System files are ignored"
-                : "System files count as edits now",
-            });
+            void runUntilSettled(
+              ["config", "set", "ignore_system_files", String(on)],
+              {
+                label: IGNORE_LABEL,
+                success: on
+                  ? "System files are ignored"
+                  : "System files count as edits now",
+              }
+            );
           }}
         />
       </span>
@@ -63,7 +64,7 @@ const IgnoreSystemFiles = ({ checked }: { checked: boolean }) => {
 };
 
 export const ComparingEditsSection = () => {
-  const checked = useAppStore((s) => s.settings?.ignore_system_files);
+  const checked = useAppStore((s) => s.inventory?.settings.ignore_system_files);
   return (
     <SettingsSection
       title="Comparing edits"

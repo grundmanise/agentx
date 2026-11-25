@@ -15,12 +15,14 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
+import { reviewUpdateDiffs } from "./fixtures/update-diffs.ts";
 import {
   expect,
   keptReads,
   libraryPath,
   loadLines,
   test,
+  thisMachine,
 } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -34,9 +36,14 @@ const isLaunchOrLoad = (line: string[]) =>
     (known) => known.join(" ") === line.join(" ")
   );
 
-/** The command lines the Skills screen ran, but the history reads, which e2e/skills.spec.ts covers. */
+/**
+ * The command lines the Skills screen ran, but the history reads, which e2e/skills.spec.ts covers,
+ * and the reads of what an update changes, which e2e/updates.spec.ts covers.
+ */
 const later = (cli: MockCli) =>
-  cli.commands.filter((l) => !isLaunchOrLoad(l) && l[1] !== "history");
+  cli.commands.filter(
+    (l) => !isLaunchOrLoad(l) && l[1] !== "history" && !l.includes("--update")
+  );
 
 /** `later`, in a fixed order: the two reads of a modified skill run at once. */
 const sortedLater = (cli: MockCli) => {
@@ -97,6 +104,10 @@ const openSkills = async (
   cli.register(["skill", "diff", "review"], { events: reviewDiffs });
   cli.register(["skill", "diff", "release-notes"], {
     events: releaseNotesDiffs,
+  });
+  // review has an update: its pane reads what the update changes.
+  cli.register(["skill", "diff", "review", "--update"], {
+    events: reviewUpdateDiffs,
   });
   await page.goto(path);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
@@ -467,13 +478,15 @@ test("the places of a skill come from the inventory, the library first", () => {
     edges: [],
     installs: [],
     instance_id: "instance-1",
-    machine: { id: "machine-1", label: "studio-mac" },
+    machine: thisMachine,
     mcp_servers: [],
-    schema_version: 4,
+    schema_version: 5,
+    settings: { ignore_system_files: true },
+    sources: [],
     warnings: [],
     ...inventory,
   };
-  const rows = projectRows({ adoption, inventory: whole, updates: {} });
+  const rows = projectRows({ adoption, inventory: whole });
   // `library` is where agentx keeps the library, or null while that is not known.
   const places = (name: string, library: string | null) =>
     locationsOf(

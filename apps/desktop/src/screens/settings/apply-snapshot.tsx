@@ -10,7 +10,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { ImportSkillEvent, SourceEvent } from "#/cli/events.gen.ts";
+import type { ImportSkillEvent, Source } from "#/cli/events.gen.ts";
 import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
@@ -22,10 +22,9 @@ import {
   notFetched,
   sourceAddArgs,
 } from "#/screens/settings/transfer.ts";
-import { loadSources } from "#/store/loaders.ts";
 import { agentx } from "#/store/runner.ts";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
-import { useAppStore } from "#/store/store.ts";
+import { runUntilSettled, settled, useSettling } from "#/store/settle.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 const APPLY_LABEL = "apply snapshot";
 const ADD_SOURCES_LABEL = "add snapshot sources";
@@ -41,7 +40,7 @@ interface ApplyResult {
  * hold it, one after another, and returns the URLs of the ones that failed. A failure is the
  * result's to show, so no error toast shows for it.
  */
-const addMissingSources = async (sources: readonly SourceEvent[]) => {
+const addMissingSources = async (sources: readonly Source[]) => {
   const unreachable: string[] = [];
   for (const source of notFetched(sources)) {
     // One after another: each source add takes the lock, so a second would wait or fail.
@@ -129,7 +128,7 @@ const Result = ({ result }: { result: ApplyResult }) => {
 
 /** Apply…: the open dialog, the confirm, `snapshot apply <file> --yes`, the sources, and the result. */
 const ApplyFile = () => {
-  const library = useAppStore((s) => s.machine?.library);
+  const library = useAppStore((s) => s.inventory?.machine.library);
   // The file picked last. It stays while its confirm closes, so the confirm's text does not change.
   const [picked, setPicked] = useState<string>();
   const [confirming, setConfirming] = useState(false);
@@ -157,10 +156,12 @@ const ApplyFile = () => {
     if (outcome.exitCode !== EXIT_CODES.ok) {
       return undefined;
     }
-    // The settings name the sources now; which of them this machine has downloaded is what
-    // `source list` reports.
-    await loadSources();
-    const unreachable = await addMissingSources(useAppStore.getState().sources);
+    // The settings name the sources now; which of them this machine has downloaded is what the
+    // inventory after the apply lists.
+    await settled();
+    const unreachable = await addMissingSources(
+      sourcesOf(useAppStore.getState())
+    );
     return {
       skills: outcome.events.filter((e) => e.type === "import_skill"),
       unreachable,
@@ -181,6 +182,7 @@ const ApplyFile = () => {
       <span>
         <Button
           variant="secondary"
+          track="settings.snapshot-apply"
           disabled={pending}
           aria-busy={pending ? true : undefined}
           onClick={() => {
@@ -202,6 +204,8 @@ const ApplyFile = () => {
         description="This will replace your current settings, install missing skills and may update existing skills."
         detail={picked}
         action="Apply"
+        track="apply-snapshot-dialog.confirm"
+        cancelTrack="apply-snapshot-dialog.cancel"
         onConfirm={() => {
           if (picked !== undefined) {
             void applyFile(picked);

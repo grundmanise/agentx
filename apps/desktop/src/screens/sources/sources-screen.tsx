@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   LibraryEntry,
   SearchResult,
-  SourceEvent,
+  Source,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
@@ -47,14 +47,9 @@ import { SkillList } from "#/screens/sources/skill-list.tsx";
 import { SourceRow } from "#/screens/sources/source-row.tsx";
 import { useFetchedListings } from "#/screens/sources/use-fetched-listings.ts";
 import { search } from "#/store/feed.ts";
-import {
-  loadInstallable,
-  loadLabel,
-  loadListing,
-  loadSources,
-} from "#/store/loaders.ts";
+import { loadInstallable, loadLabel, loadListing } from "#/store/loaders.ts";
 import { cancelCommand, agentx, usePending } from "#/store/runner.ts";
-import { useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The pending label of the install the action bar runs. */
 export const ADD_LABEL = "add skills";
@@ -133,19 +128,19 @@ const refreshAll = async () => {
   const outcome = await agentx(["source", "fetch", "--all"], {
     label: REFRESH_ALL_LABEL,
   });
-  const { sources } = useAppStore.getState();
+  const sources = sourcesOf(useAppStore.getState());
   if (outcome.exitCode !== null && sources.some((s) => s.hub === true)) {
     await loadInstallable();
   }
 };
 
-/** The pills, with the source Add source just added until the Sources slice lists it. */
+/** The pills, with the source Add source just added until the inventory lists it. */
 const usePills = (
-  sources: SourceEvent[],
+  sources: Source[],
   listings: Record<string, SourceSkillEvent[]>
 ) => {
-  const [justAdded, setJustAdded] = useState<SourceEvent | undefined>();
-  // Once the slice lists it, the slice alone says whether it is there.
+  const [justAdded, setJustAdded] = useState<Source | undefined>();
+  // Once the inventory lists it, the inventory alone says whether it is there.
   if (justAdded !== undefined && sources.some((s) => s.id === justAdded.id)) {
     setJustAdded(undefined);
   }
@@ -174,7 +169,7 @@ const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
  * CLI: the app never filters a listing itself.
  */
 export const SourcesScreen = () => {
-  const sources = useAppStore((s) => s.sources);
+  const sources = useAppStore(sourcesOf);
   const listings = useAppStore((s) => s.listings);
   const installable = useAppStore((s) => s.installable);
   const library = useAppStore((s) => s.inventory?.library) ?? noEntries;
@@ -200,10 +195,7 @@ export const SourcesScreen = () => {
   // The screen's scroll container, which the skill list scrolls in.
   const scroller = useRef<HTMLDivElement>(null);
 
-  // The sources are read again when the screen opens, and the fetch labels keep time.
-  useEffect(() => {
-    void loadSources();
-  }, []);
+  // The fetch labels keep time.
   useInterval(
     () => {
       setNow(Date.now());
@@ -490,7 +482,7 @@ export const SourcesScreen = () => {
   };
 
   /** A source just added opens with every selectable card selected, once its listing arrives. */
-  const onSourceAdded = async (source: SourceEvent) => {
+  const onSourceAdded = async (source: Source) => {
     setJustAdded(source);
     select(source.id);
     await loadPill(source.id);
@@ -539,6 +531,7 @@ export const SourcesScreen = () => {
           <div className="gap-button flex items-center">
             <Button
               variant="secondary"
+              track="sources.refresh-all"
               aria-busy={refreshing}
               disabled={refreshing || pills.length === 0}
               onClick={() => {
@@ -550,6 +543,7 @@ export const SourcesScreen = () => {
             </Button>
             <Button
               variant="secondary"
+              track="sources.add"
               onClick={() => {
                 setDialogOpen(true);
               }}
@@ -589,6 +583,7 @@ export const SourcesScreen = () => {
         {allCards.length > 0 && (
           <SelectAllRow
             align="end"
+            track="sources.select-all"
             selected={selectedCount}
             total={selectable.length}
             onSelectAll={selectAll}

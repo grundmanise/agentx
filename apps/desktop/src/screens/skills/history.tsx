@@ -18,6 +18,7 @@ import {
 import { formatDate } from "#/lib/dates.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { isMac } from "#/lib/platform.ts";
+import { trackAttribute } from "#/lib/track.ts";
 import { useKeptRead } from "#/screens/skills/kept-read.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
@@ -176,6 +177,7 @@ const Subject = ({ entry }: { entry: HistoryEvent }) => (
           key={i}
           href={page}
           title={page}
+          {...trackAttribute("history.open-link")}
           className="underline underline-offset-2"
           onClick={(ev) => {
             ev.preventDefault();
@@ -229,8 +231,9 @@ const Entry = ({
       {expandable && linked && (
         // A link cannot sit inside the button, so the button holds the chevron alone.
         <div className="flex items-start gap-2">
-          <CollapsibleTrigger asChild>
+          <CollapsibleTrigger track="history.show-commit" asChild>
             <Button
+              track="history.show-commit"
               variant="plain"
               size="inline"
               aria-label={`Show the files of ${entry.subject}`}
@@ -244,8 +247,8 @@ const Entry = ({
       {expandable && !linked && (
         // A block, so the button shrinks to fit the list and its subject wraps inside it.
         <div>
-          <CollapsibleTrigger asChild>
-            <Button variant="plain" size="inline">
+          <CollapsibleTrigger track="history.show-commit" asChild>
+            <Button track="history.show-commit" variant="plain" size="inline">
               <Chevron open={open} />
               <Subject entry={entry} />
             </Button>
@@ -382,6 +385,7 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
         {more && (
           <li className="-ml-3.5 flex">
             <Button
+              track="history.show-all"
               variant="ghost"
               size="sm-wrap"
               onClick={() => {

@@ -366,7 +366,7 @@ The state column shows:
 | `source removed` | The source the skill came from is no longer added on this machine. The skill keeps working. | Add the source again. See [Bring back a removed source](#bring-back-a-removed-source). |
 | `upstream removed` | The last [update check](#check-for-updates) found the skill gone from its source. The skill stays as it is, and agentx does not update it. | Nothing. The next check that finds it in the source clears the state. |
 | `not published` | A hub skill that is not on your hub. | Publish it with `agentx skill publish <name>`. If another machine removed it, you can remove it here too with `agentx skill remove <name>`. |
-| `update available` | The last update check found a newer version in the source. Your library is unchanged. | Read it with `agentx skill diff <name> --update`, then apply it with [`agentx skill update <name>`](#update-a-skill). |
+| `update available` | The last update check found a newer version in the source, or another machine published changes to the skill on your hub. Your library is unchanged. | Read it with `agentx skill diff <name> --update`, then apply it with [`agentx skill update <name>`](#update-a-skill). |
 | `merge pending` | Your edits conflict with an update. Your library directory is unchanged. | Resolve the merge and update again, or give it up. See [When your edits conflict](#when-your-edits-conflict). |
 
 A skill can be in more than one state at once, so the row names each of them: `modified, source removed` is a skill you edited whose source you then removed. `displaced` and `missing` are information only, so they do not make a command fail.
@@ -516,7 +516,7 @@ With a hub set, the check also fetches it and lists each of your hub skills plac
     modified  notes.md
 ```
 
-What another machine published is not recorded, so `agentx skill list` does not show it and `agentx skill diff --update` cannot read it: run the check again to see it, or `agentx skill update <name>` to take it in. If the hub cannot be reached, the check warns, still checks your other sources, and exits with code 3.
+`agentx skill list` then shows `update available` for the skill, and `agentx skill diff <name> --update` shows what the update takes in. If the hub cannot be reached, the check warns, still checks your other sources, and exits with code 3.
 
 The desktop app runs this check once when it starts. See [Update checks](/cli/serve#update-checks).
 
@@ -534,7 +534,16 @@ diff --git a/SKILL.md b/SKILL.md
 ...
 ```
 
-The diff compares the version you installed with the version the last check found. It leaves out your own edits, which `agentx skill diff pdf` shows, and it needs no network. If no check has found an update for the skill, the command stops with exit code 6 and tells you to run `agentx skill check-updates`.
+The diff shows exactly what [`agentx skill update pdf`](#update-a-skill) would apply: the version you installed against the version the last check found. It leaves out your own edits, which `agentx skill diff pdf` shows, and it needs no network. If no check has found an update for the skill, the command stops with exit code 6 and tells you to run `agentx skill check-updates`.
+
+A hub skill takes one update at a time. If another machine published changes to it, the diff shows those changes alone, because the update takes them in first:
+
+```text
+what the hub holds of notes at 7a0b3f2 differs from the version both share at 4c2d1e9 in 1 file
+...
+```
+
+When the hub holds nothing new, the diff shows the new upstream version. It shows the hub as the last check or update fetched it. The update fetches the hub again first, so it can also take in changes published since then.
 
 ### A skill its source no longer holds
 
@@ -650,12 +659,12 @@ no skill was updated from upstream
 - `agentx skill check-updates` lists what the hub holds that this machine lacks as `published from another machine`. Checking first is optional: `agentx skill update <name>` fetches the hub itself.
 - `agentx skill update <name>` updates one skill to the latest published version and shows the message it was published with. `agentx skill update --all` does so for every hub skill on this machine.
 - If both machines changed the skill, agentx merges the two and prints `✓ merged the latest published version of notes with your local edits`. The skill then shows as `modified` until you publish it.
-- A skill you forked from a source is first updated to the latest published version, then to its new upstream version, as two commits.
+- A skill you forked from a source takes one update at a time. If the hub holds changes for it, the update takes in only those. Run `agentx skill update <name>` again to take its new upstream version.
 - Edits you have not published are recorded on the skill first, and what the hub holds is merged with them. They stay unpublished until you [publish](#publish-a-skill) them. Publish with `-m` to publish them under your own message.
 - Update before you publish: [`agentx skill publish`](#publish-a-skill) never merges, and stops with exit code 6 when another machine published changes and this machine has changes of its own.
 - When both machines changed the same lines, the merge waits for you: see [Resolve a conflict](/cli/fork#resolve-a-conflict). Resolve it, then run `agentx skill update <name>` again.
 - A skill with no upstream (one you created with `agentx skill new`, imported as it was with `agentx skill import`, or forked from a plugin's skill) that has nothing new on the hub is `up to date with the hub`. One you never published, or one another machine removed, has no branch there, and the update tells you to run `agentx skill publish <name>`.
-- If Git cannot reach the hub, the update of a skill with no upstream stops with exit code 3. A skill you forked from a source gets a warning and still takes its new upstream version.
+- If Git cannot reach the hub, the update of a skill with no upstream stops with exit code 3. So does the update of a skill the hub held changes for when this machine last fetched it. Any other skill you forked from a source gets a warning and still takes its new upstream version.
 
 ### A skill you edited
 

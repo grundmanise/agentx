@@ -59,8 +59,6 @@ var eventTypes = []struct {
 	{"inventory", inventoryEvent{}},
 	{"doctor", doctorEvent{}},
 	{"adoption", adoptionEvent{}},
-	{"reconcile", reconcileEvent{}},
-	{"drift", driftEvent{}},
 	{"update_check", updateCheckEvent{}},
 	{"listening", listeningEvent{}},
 }
@@ -116,16 +114,16 @@ func errorCodes() []string {
 // CLI writes.
 var valueLists = []valueList{
 	{name: "SkillKind", values: []string{lineage.KindManaged, lineage.KindUnmanaged}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "Kind"}, {reconcileEvent{}, "Kind"}, {driftEvent{}, "Kind"},
+		{scan.LibraryEntry{}, "Kind"},
 		{updateAvailableEvent{}, "Kind"}, {conflictEvent{}, "Kind"}, {snapshotSkill{}, "Kind"},
 	}},
 	{name: "SkillState", values: []string{stateCurrent, stateModified}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "State"}, {driftEvent{}, "State"}, {driftEvent{}, "PreviousState"},
+		{scan.LibraryEntry{}, "State"},
 	}},
 	{name: "DriftState", open: true, values: []string{
 		driftDisplaced, driftMissing, driftSourceRemoved, driftUpstreamRemoved, driftNotPublished,
 	}, fields: []fieldRef{
-		{scan.LibraryEntry{}, "Drift"}, {driftEvent{}, "Drift"}, {driftEvent{}, "PreviousDrift"},
+		{scan.LibraryEntry{}, "Drift"},
 	}},
 	{name: "PlacementMode", values: []string{modeSymlink, modeCopy, modeLibrary}, fields: []fieldRef{
 		{scan.LibraryPlacement{}, "Mode"},
@@ -159,6 +157,9 @@ var valueLists = []valueList{
 	{name: "FileStatus", values: []string{diffAdded, diffModified, diffDeleted}, fields: []fieldRef{
 		{diffEvent{}, "Status"}, {changedFile{}, "Status"},
 	}},
+	{name: "DiffStep", values: []string{diffStepHub, diffStepUpstream}, fields: []fieldRef{
+		{diffEvent{}, "Step"},
+	}},
 	{name: "DoctorStatus", values: []string{rowOK, rowWarn, rowFail, rowInfo}, fields: []fieldRef{
 		{doctorEvent{}, "Status"},
 	}},
@@ -182,12 +183,6 @@ var valueLists = []valueList{
 	{name: "PullOutcome", values: []string{pullFastForward, pullMerged, pullConflict, pullRefused}, fields: []fieldRef{
 		{pullEvent{}, "Outcome"},
 	}},
-	{name: "ReconcileOutcome", values: []string{
-		outcomeRestored, outcomeRepaired, outcomeWorktreeMissing, outcomeAdoptCandidate,
-		outcomeModified, outcomeInstallable, outcomeUnmanaged,
-	}, fields: []fieldRef{
-		{reconcileEvent{}, "Outcome"},
-	}},
 	{name: "AdoptionState", values: []string{adoptCandidate, adoptAdopted, adoptManaged, adoptRefused}, fields: []fieldRef{
 		{adoptionEvent{}, "State"},
 	}},
@@ -198,13 +193,10 @@ var valueLists = []valueList{
 		{importSkillEvent{}, "Action"},
 	}},
 	{name: "MachineDerivation", values: []string{home.DerivedPlatform, home.DerivedRandom}, fields: []fieldRef{
-		{machineEvent{}, "Derivation"},
-	}},
-	{name: "UpdateCheckScope", values: []string{checkScopeAll, checkScopeHub}, fields: []fieldRef{
-		{updateCheckEvent{}, "Scope"},
+		{scan.Machine{}, "Derivation"},
 	}},
 	{name: "SourceAccess", values: []string{home.AccessWritable, home.AccessReadOnly, home.AccessUnknown}, fields: []fieldRef{
-		{sourceEvent{}, "Access"}, {home.Source{}, "Access"},
+		{scan.Source{}, "Access"}, {home.Source{}, "Access"},
 	}},
 	{name: "ProgressPhase", values: []string{
 		phaseFetch, phasePublish, phaseBlobs, phaseImport, phaseInstall, phasePlace, phaseRescan, phaseUpdate,
@@ -224,11 +216,12 @@ var typeOverrides = []typeOverride{
 // typeNames names the structs whose Go name would read wrongly in the app or
 // collide with another.
 var typeNames = map[reflect.Type]string{
-	reflect.TypeFor[scan.Skill]():   "SkillNode",
-	reflect.TypeFor[scan.Server]():  "McpServer",
-	reflect.TypeFor[home.Tool]():    "McpTool",
-	reflect.TypeFor[home.Source]():  "SettingsSource",
-	reflect.TypeFor[source.Match](): "SearchResult",
+	reflect.TypeFor[scan.Skill]():    "SkillNode",
+	reflect.TypeFor[scan.Server]():   "McpServer",
+	reflect.TypeFor[home.Tool]():     "McpTool",
+	reflect.TypeFor[home.Source]():   "SettingsSource",
+	reflect.TypeFor[scan.Settings](): "InventorySettings",
+	reflect.TypeFor[source.Match]():  "SearchResult",
 }
 
 // tsGen writes TypeScript declarations for Go structs by the rules

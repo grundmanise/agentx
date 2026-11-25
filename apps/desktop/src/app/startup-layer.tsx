@@ -20,12 +20,12 @@ export const StartupLayer = () => {
   const { checks, failure } = readChecks(findings, running);
 
   let title = "You're all set";
-  let primary: { label: string; act: () => void } | undefined;
+  let primary: { label: string; track: string; act: () => void } | undefined;
   if (running) {
     title = "Checking this machine";
   } else if (failure !== undefined) {
     title = failure;
-    primary = { act: retry, label: "Retry" };
+    primary = { act: retry, label: "Retry", track: "startup.retry" };
   } else if (mode === "manual") {
     primary = {
       act: () => {
@@ -33,6 +33,7 @@ export const StartupLayer = () => {
         void navigate("/settings");
       },
       label: "Open agentx",
+      track: "startup.open-app",
     };
   }
   const showReport = !running && (failure !== undefined || mode === "manual");
@@ -66,7 +67,7 @@ export const StartupLayer = () => {
         </ul>
         <div className="flex items-center gap-2">
           {running && (
-            <Button variant="primary" disabled>
+            <Button variant="primary" disabled track="startup.checking">
               <Spinner />
               {retrying ? "Retry" : "Checking"}
             </Button>
@@ -74,6 +75,7 @@ export const StartupLayer = () => {
           {primary !== undefined && (
             <Button
               variant="primary"
+              track={primary.track}
               onClick={() => {
                 primary.act();
               }}
@@ -82,7 +84,11 @@ export const StartupLayer = () => {
             </Button>
           )}
           {showReport && (
-            <CopyButton label="Copy report" text={() => report(findings)} />
+            <CopyButton
+              label="Copy report"
+              track="startup.copy-report"
+              text={() => report(findings)}
+            />
           )}
         </div>
       </div>

@@ -40,6 +40,7 @@ func newScanCommand(inv *invocation) *cobra.Command {
 			"agentx scan --json", "the inventory as JSON events, for a script",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			inv.testPanic()
 			if configuration != "" {
 				if err := inv.detectedConfiguration(configuration); err != nil {
 					return err
@@ -50,10 +51,11 @@ func newScanCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
-			if !inv.out.json {
-				inv.printInventory(inventory)
+			if inv.out.json {
+				return nil
 			}
-			return nil
+			inv.printInventory(inventory)
+			return inv.offerTelemetry(cmd.Context(), cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "also inventory the project-scope skills under this directory, read-only")
@@ -139,7 +141,7 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 		}
 		project = abs
 	}
-	machineID, _, err := home.MachineID(inv.dirs.Home, inv.env, inv.refs(ctx))
+	machineID, derivation, err := home.MachineID(inv.dirs.Home, inv.env, inv.refs(ctx))
 	if err != nil {
 		return scan.Inventory{}, err
 	}
@@ -153,6 +155,9 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 	var sc *scan.Scan
 	var listing *skillContext // what the library entries are built from, read with the rest; nil lists none
 	var installs []home.Install
+	var machine scan.Machine   // this machine and where agentx keeps its files, when listed
+	var settings scan.Settings // the settings nothing else in the inventory carries, when listed
+	var sources []scan.Source  // the sources of the settings, when listed
 	for sc == nil {
 		var journals []string
 		err = home.ReadLocked(lockCtx, inv.dirs.Home, func() error {
@@ -182,6 +187,15 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 			if !listed {
 				return nil
 			}
+			// The settings and the machine, from the settings this scan
+			// read; the sources below are read under this lock too, so
+			// that a source being added or removed is never seen half
+			// written.
+			settings = scan.Settings{IgnoreSystemFiles: s.IgnoreSystemFiles, Telemetry: s.Telemetry}
+			if inv.carriesAnonymousID(s) {
+				settings.AnonymousID = anonymousID(machineID)
+			}
+			machine = inv.machineOf(machineID, derivation, s)
 			// When each skill last entered and left the library, as the
 			// commands that did it recorded, read under the lock they write
 			// it under and listed as it is stored.
@@ -218,6 +232,12 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 			default:
 				return err
 			}
+			// A store the library could not be read from says so in the
+			// library's warning, and the sources go without its facts.
+			var sourcesErr error
+			if sources, sourcesErr = inv.sourcesOf(ctx, s); sourcesErr != nil && f == nil {
+				sc.Warn(sourcesErr.Error() + "; the sources are listed without what the store holds of them")
+			}
 			return nil
 		})
 		if err == nil && len(journals) > 0 {
@@ -234,6 +254,9 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 	inventory, fresh := sc.Inventory()
 	if installs != nil {
 		inventory.Installs = installs
+	}
+	if listed {
+		inventory.Machine, inventory.Settings, inventory.Sources = machine, settings, sources
 	}
 	if listing != nil {
 		for _, lib := range sc.Library() {

@@ -61,6 +61,7 @@ const PluginRowView = ({
         .filter((part) => part !== "")
         .join(". ")}
       selected={selected}
+      track="plugins.row-open"
       onSelect={onSelect}
     >
       <PluginTile name={row.name} icon={row.icon} size="row" />
@@ -227,11 +228,13 @@ export const PluginList = ({
         )}
         <span className="flex-1" />
         <ExpandToggle
+          track="plugins.expand-all"
           open={anyOpen}
           disabled={groups.length === 0}
           onToggle={onToggleAll}
         />
         <SortToggle
+          track="plugins.sort"
           order={order}
           onToggle={() => {
             onOrder(nextOrder(order));
@@ -268,6 +271,7 @@ export const PluginList = ({
               <h2 className="bg-shell-content-bg sticky top-0 z-10 m-0">
                 <SectionToggle
                   level="group"
+                  track="plugins.toggle-group"
                   label={group.configuration.name}
                   icon={
                     <AgentLogo

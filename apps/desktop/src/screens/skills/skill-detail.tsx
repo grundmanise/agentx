@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { InlineMarkdown } from "#/components/inline-markdown.tsx";
@@ -26,6 +26,7 @@ import {
   glyphOf,
   glyphTitle,
   originOf,
+  updateKey,
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
@@ -33,8 +34,9 @@ import { RenameButton } from "#/screens/skills/rename-dialog.tsx";
 import { canRename } from "#/screens/skills/rename.ts";
 import { SightsNotice } from "#/screens/skills/sights-view.tsx";
 import { sightsOf } from "#/screens/skills/sights.ts";
+import { loadUpdateDiff } from "#/store/loaders.ts";
 import { useSettling } from "#/store/settle.ts";
-import { useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 const Caption = ({ children }: { children: string }) => (
   <h2 className="type-caption text-text-caption m-0">{children}</h2>
@@ -52,6 +54,7 @@ const DetailValue = ({ detail }: { detail: Detail }) => {
   const page = link.kind === "page";
   return (
     <SelectableLink
+      track="skill-detail.open-detail-link"
       href={page ? link.url : `file://${link.path}`}
       title={page ? link.url : showInLabel()}
       tone="secondary"
@@ -77,6 +80,7 @@ const Origin = ({ row }: { row: SkillRow }) => {
   }
   return (
     <SelectableLink
+      track="skill-detail.open-origin"
       href={page}
       title={page}
       tone="caption"
@@ -100,6 +104,7 @@ const RemoveButton = ({
   const pending = useSettling(removeLabel(row));
   return (
     <Button
+      track="skill-detail.remove"
       variant="danger"
       size="sm"
       disabled={pending}
@@ -118,12 +123,13 @@ const RemoveButton = ({
  * says where the library is.
  */
 const EditButton = ({ row }: { row: SkillRow }) => {
-  const library = useAppStore((s) => s.machine?.library);
+  const library = useAppStore((s) => s.inventory?.machine.library);
   if (library === undefined) {
     return null;
   }
   return (
     <Button
+      track="skill-detail.edit"
       variant="secondary"
       size="sm"
       onClick={() => {
@@ -163,7 +169,7 @@ export const SkillDetail = ({
   // What opened the Remove dialog. It stays while the dialog closes, so its text does not change.
   const [removing, setRemoving] = useState<"button" | "universal">("button");
   const [removeOpen, setRemoveOpen] = useState(false);
-  const sources = useAppStore((s) => s.sources);
+  const sources = useAppStore(sourcesOf);
   // How many files `skill diff` found changed, from the FILES read of this version of the skill.
   const changedFiles = useAppStore((s) => {
     const read = s.files[row.key];
@@ -172,10 +178,25 @@ export const SkillDetail = ({
       : undefined;
   });
   const conflicts = useAppStore((s) => s.conflicts);
+  // The files the update changes, from `skill diff <name> --update` of this update.
+  const update = row.update === undefined ? undefined : updateKey(row.update);
+  const updateDiffs = useAppStore((s) => {
+    const read = s.updateDiffs[row.name];
+    return read?.candidate === update ? read?.diffs : undefined;
+  });
+  useEffect(() => {
+    if (update !== undefined) {
+      void loadUpdateDiff(row.name, update);
+    }
+  }, [row.name, update]);
   const banner = bannerFor(row, configurations, {
     changedFiles,
     conflicts,
     sources,
+    updateFiles:
+      updateDiffs === undefined
+        ? undefined
+        : [...new Set(updateDiffs.map((d) => d.path))],
   });
   const details = detailsOf(row, configurations);
   const sights = sightsOf(row, sameName, configurations);

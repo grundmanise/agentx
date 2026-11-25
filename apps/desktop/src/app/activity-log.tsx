@@ -1,6 +1,6 @@
-// The activity log's sheet (DESIGN.md §6 "Sheet (Activity log)"): the last lines of what the app
-// ran and what the background scan reported, as a terminal shows them, from
-// src/store/activity-log.ts. A failure is red. Settings and the palette open it.
+// The activity log's sheet (DESIGN.md §6 "Sheet (Activity log)"): the last lines of the commands
+// the app ran and how each ended, and what went wrong with the background scan, in the CLI's own
+// words, from src/store/activity-log.ts. A failure is red. Settings and the palette open it.
 import { cva } from "class-variance-authority";
 import { useId, useLayoutEffect, useRef } from "react";
 
@@ -141,6 +141,7 @@ const DebugOutput = () => {
         id={id}
         aria-describedby={`${id}-line`}
         checked={debug}
+        track="activity-log.debug-output"
         onCheckedChange={(on) => {
           setDebugOutput(on);
           void setServeDebug(on);
@@ -189,11 +190,13 @@ export const ActivityLogSheet = () => {
               label="Copy"
               size="sm"
               disabled={lines.length === 0}
+              track="activity-log.copy"
               text={() => logText(lines)}
             />
             <Button
               variant="ghost"
               size="sm"
+              track="activity-log.open-serve-log"
               onClick={() => {
                 void showServeLog();
               }}

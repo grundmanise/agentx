@@ -46,7 +46,7 @@ import {
 import { agentx } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
-import { addActivity, useAppStore } from "#/store/store.ts";
+import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The label of the publish of `name`, for its pending state. */
 export const publishLabel = (name: string) => `publish ${name}`;
@@ -114,37 +114,29 @@ const reportPublish = (row: SkillRow, outcome: Outcome, hubSet: boolean) => {
   const result = event?.type === "publish" ? event.outcome : undefined;
   if (result === "behind" || result === "moved") {
     // A skill of a source is published to its source, which holds the newer version.
-    const text = changedElsewhere(
-      name,
-      row.kind === "source" ? row.entry?.source : undefined
-    );
     notify(
-      text,
+      changedElsewhere(
+        name,
+        row.kind === "source" ? row.entry?.source : undefined
+      ),
       {
         label: "Update",
         onClick: () => {
           update(name);
         },
+        track: "publish-toast.update",
       },
       { kind: "warning" }
     );
-    // A refused publish is in the activity list already, in the CLI's words.
-    if (outcome.exitCode === EXIT_CODES.ok) {
-      addActivity("attention", text);
-    }
     return;
   }
   // Nothing was sent: the skill already matches the published version, which is not a success.
   if (outcome.exitCode === EXIT_CODES.ok && result === "up to date") {
-    const text = alreadyPublished(name);
-    notify(text);
-    addActivity("attention", text);
+    notify(alreadyPublished(name));
     return;
   }
   if (outcome.exitCode === EXIT_CODES.ok) {
-    const text = `Published ${name} skill`;
-    notifySuccess(text);
-    addActivity("success", text);
+    notifySuccess(`Published ${name} skill`);
     return;
   }
   if (refusedForHub(outcome, hubSet)) {
@@ -282,7 +274,7 @@ const PublishForm = ({
     reportPublish(
       row,
       outcome,
-      hubOf(useAppStore.getState().sources) !== undefined
+      hubOf(sourcesOf(useAppStore.getState())) !== undefined
     );
     onClose();
   };
@@ -317,9 +309,12 @@ const PublishForm = ({
       <DialogFooter>
         {running && <DialogStatus>{progressText(name, progress)}</DialogStatus>}
         <DialogClose asChild>
-          <Button variant="ghost">Cancel</Button>
+          <Button track="publish-dialog.cancel" variant="ghost">
+            Cancel
+          </Button>
         </DialogClose>
         <Button
+          track="publish-dialog.confirm"
           type="submit"
           variant="primary"
           disabled={running}
@@ -394,7 +389,7 @@ export const PublishButton = ({
   // A hub skill cannot be published while the hub is read-only; a source's skill shows
   // Publish only while its source is writable.
   const readOnly = useAppStore((s) =>
-    row.kind === "hub" ? readOnlyHubReason(s.sources) : undefined
+    row.kind === "hub" ? readOnlyHubReason(sourcesOf(s)) : undefined
   );
   const openDialog = async () => {
     opening.current += 1;
@@ -410,6 +405,7 @@ export const PublishButton = ({
     <>
       <WithReason reason={readOnly}>
         <Button
+          track="skill-banner.publish"
           variant="ghost"
           size="sm"
           disabled={pending}
@@ -440,6 +436,7 @@ export const PublishButton = ({
 /** Open Settings, where a hub is set. */
 export const OpenSettingsButton = () => (
   <Button
+    track="skill-banner.open-settings"
     variant="ghost"
     size="sm"
     onClick={() => {

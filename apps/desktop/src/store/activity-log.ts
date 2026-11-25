@@ -1,13 +1,15 @@
-// The activity log: the last lines of what the app ran and what the background scan (`agentx
-// serve`) reported, oldest first, kept in memory only. It holds at most LINE_LIMIT lines, and a
-// line beyond that removes the oldest one, so it takes the same memory after a week as after an
-// hour. The transport (src/cli/transport.ts) records each one-shot run, whoever started it: a
-// control, the startup checks or a loader. The feed (src/store/feed.ts) records what serve
-// reported. A command is one line. Only a command that failed keeps output, its last
-// FAILURE_LINES lines. A line holds text made ready to show when it is recorded: credentials in a
-// URL are replaced, its user and password as the CLI replaces them and the values of its query
-// parameters that name a credential, an inventory is counted rather than kept, a file's content
-// and a patch are left out, and long values and long lines are cut, so the log never holds a secret.
+// The activity log: the commands the app ran and how each ended, and what went wrong with the
+// background scan (`agentx serve`), oldest first, kept in memory only. It holds at most LINE_LIMIT
+// lines, and a line beyond that removes the oldest one, so it takes the same memory after a week
+// as after an hour. The transport (src/cli/transport.ts) records each one-shot run, whoever
+// started it: a control, the startup checks or a loader. The feed (src/store/feed.ts) records
+// each start and exit of serve, and its failures and warnings. A command is one line. Only a
+// command that failed keeps output, its last FAILURE_LINES lines. What the CLI wrote shows in its
+// own words, a log event's or an error's message and hint as they are, and an event with no words
+// as its JSON. A line is made safe to show when it is recorded: credentials in a URL are
+// replaced, its user and password as the CLI replaces them and the values of its query parameters
+// that name a credential, an inventory is counted rather than kept, a file's content and a patch
+// are left out, and long values and long lines are cut, so the log never holds a secret.
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -145,7 +147,7 @@ const kept = (value: unknown, countLists: boolean): unknown => {
 };
 
 /** One event as a line: its type, then its other fields as JSON. */
-export const eventLine = (event: CliEvent): string => {
+export const eventLine = (event: { type: string }): string => {
   const {
     type,
     schema_version: _,
@@ -156,10 +158,6 @@ export const eventLine = (event: CliEvent): string => {
   const body = JSON.stringify(kept(fields, type === "inventory"));
   return body === "{}" ? String(type) : `${String(type)} ${body}`;
 };
-
-/** One log event as a line: "warn: the message". */
-export const logLine = (event: { level: string; message: string }) =>
-  `${event.level}: ${redact(event.message)}`;
 
 /** A stderr line as JSON, when it is a log event. */
 const logEventOf = (
@@ -183,13 +181,11 @@ const logEventOf = (
 };
 
 /**
- * One line of the serve log file as the log shows it: a log event as "level: message", anything
- * else as it was written, credentials replaced either way and a long line cut.
+ * One line of the serve log file as the log shows it: a log event's message, anything else as it
+ * was written, credentials replaced either way and a long line cut.
  */
-export const serveLogLine = (line: string) => {
-  const event = logEventOf(line);
-  return clip(event === undefined ? redact(line) : logLine(event));
-};
+export const serveLogLine = (line: string) =>
+  clip(redact(logEventOf(line)?.message ?? line));
 
 /**
  * Why serve stopped, from its last stderr lines: the last one that is no debug line, a log
@@ -294,8 +290,7 @@ const failureOf = (ended: Ended): string | undefined => {
 
 /**
  * An event of a failed command as the lines that say why it failed: an error as its message, and
- * its hint when it has one, as a terminal shows them. The result, which only repeats that the
- * command failed, gives no line.
+ * its hint when it has one. The result, which only repeats that the command failed, gives no line.
  */
 const failureEvent = (event: CliEvent): string[] => {
   if (event.type === "result") {
@@ -305,10 +300,13 @@ const failureEvent = (event: CliEvent): string[] => {
     return [eventLine(event)];
   }
   return [
-    `error: ${redact(event.message)}`,
-    ...(event.hint === undefined ? [] : [`hint: ${redact(event.hint)}`]),
+    redact(event.message),
+    ...(event.hint === undefined ? [] : [redact(event.hint)]),
   ];
 };
+
+/** A log event's message, credentials replaced. */
+const messageOf = (event: LogEvent) => redact(event.message);
 
 /**
  * The last lines a failed command wrote, which say why: its warnings and whatever else it wrote
@@ -322,7 +320,7 @@ const failureLines = (ended: Ended): string[] => {
   const invalid = (stream: "stdout" | "stderr") =>
     ended.invalid.filter((l) => l.stream === stream).map((l) => redact(l.line));
   return [
-    ...ended.logs.filter((l) => l.level !== "debug").map(logLine),
+    ...ended.logs.filter((l) => l.level !== "debug").map(messageOf),
     ...invalid("stderr"),
     ...ended.events.flatMap(failureEvent),
     ...invalid("stdout"),
@@ -357,7 +355,7 @@ export const logCommandEnd = (id: number, ended: Ended) => {
         ].join(" · ");
   const debug = ended.logs
     .filter((l) => l.level === "debug")
-    .map(logLine)
+    .map(messageOf)
     .slice(-DEBUG_LINES);
   put(
     [

@@ -7,6 +7,8 @@ import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { Tabs as TabsPrimitive } from "radix-ui";
 
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 import type { OwnProps } from "#/lib/utils.ts";
 
 const tabsVariants = cva("gap-tabs flex flex-col", {
@@ -33,8 +35,12 @@ const TabsList = ({ ...props }: OwnProps<typeof TabsPrimitive.List>) => (
   />
 );
 
-const TabsTrigger = ({ ...props }: OwnProps<typeof TabsPrimitive.Trigger>) => (
+const TabsTrigger = ({
+  track,
+  ...props
+}: OwnProps<typeof TabsPrimitive.Trigger> & Tracked) => (
   <TabsPrimitive.Trigger
+    {...trackAttribute(track)}
     data-slot="tabs-trigger"
     className="rounded-tabs-trigger type-tab text-tabs-text hover:text-text-primary data-[state=active]:bg-tabs-active-bg data-[state=active]:border-tabs-active-border data-[state=active]:text-tabs-active-text focus-visible:outline-shell-focus-ring inline-flex h-full flex-1 items-center justify-center gap-1.5 border border-transparent px-2.5 py-1 whitespace-nowrap focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-50"
     {...props}

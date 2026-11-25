@@ -1,16 +1,11 @@
 // The What's new sheet: what an update changes, file by file, before the user takes it in. It
 // reads `skill diff <name> --update` when it opens and shows one collapsible block per file, its
-// status, its path and the patch in the Code pane with the diff tints. An update another of your
-// machines published has no base version here, so the CLI cannot diff it: the sheet lists its
-// files from the update check and says when the changes can be read.
+// status, its path and the patch in the Code pane with the diff tints. A hub skill takes one update
+// at a time: what another of your machines published, else a newer version from its upstream.
 import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
 
-import type {
-  ChangedFile,
-  FileStatus,
-  UpdateAvailableEvent,
-} from "#/cli/events.gen.ts";
+import type { FileStatus } from "#/cli/events.gen.ts";
 import { CodePane, codeLines, parsePatch } from "#/components/code-pane.tsx";
 import {
   Accordion,
@@ -27,15 +22,12 @@ import {
 } from "#/components/ui/sheet.tsx";
 import { cn } from "#/lib/utils.ts";
 import { LoadingPane } from "#/screens/skills/files.tsx";
-import { fromAnotherMachine } from "#/screens/skills/projection.ts";
+import { updateKey } from "#/screens/skills/projection.ts";
+import type { UpdateOffer } from "#/screens/skills/projection.ts";
 import { loadUpdateDiff } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
 
 const TITLE = "What's new";
-
-/** The note of an update from another machine, whose changes the CLI cannot diff. */
-export const FILES_ONLY_NOTE =
-  "Changes from another machine can't be shown before you update.";
 
 const statusVariants = cva("type-technical-sm flex-none", {
   variants: {
@@ -94,79 +86,16 @@ const Patch = ({ path, patch }: { path: string; patch: string }) => {
   );
 };
 
-/** The files of an update from another machine, as the update check lists them, with the note. */
-const FilesOnly = ({ update }: { update: UpdateAvailableEvent }) => (
-  <div className="flex flex-col gap-3">
-    <Hint>{FILES_ONLY_NOTE}</Hint>
-    <ul
-      aria-label="Changed files"
-      className="rounded-file-card border-card-border bg-card-bg m-0 flex list-none flex-col overflow-hidden border p-0"
-    >
-      {update.files.map((file) => (
-        <li
-          key={file.path}
-          className="h-file-row px-file-row border-file-row-divider flex items-center gap-3 border-b last:border-b-0"
-        >
-          <Status status={file.status} />
-          <Path path={file.path} />
-        </li>
-      ))}
-    </ul>
-  </div>
-);
-
-/**
- * The changes while they are read: the block of every file the update check lists, open unless
- * the user closed it, over the loading pane, so the blocks keep their place when the patches come
- * in. The first block's pane has the spinner.
- */
-const Reading = ({
-  files,
-  closed,
-  onClosedChange,
-}: {
-  files: ChangedFile[];
-  closed: string[];
-  onClosedChange: (closed: string[]) => void;
-}) => {
-  if (files.length === 0) {
-    return <LoadingPane label={READING} />;
-  }
-  const paths = files.map((f) => f.path);
-  const open = paths.filter((p) => !closed.includes(p));
-  return (
-    <Accordion
-      label="Changes"
-      fill
-      value={open}
-      onValueChange={(value) => {
-        onClosedChange(paths.filter((p) => !value.includes(p)));
-      }}
-    >
-      {files.map((file, i) => (
-        <AccordionItem key={file.path} value={file.path} fill="scroll">
-          <AccordionTrigger label={file.path} open={open.includes(file.path)}>
-            <Status status={file.status} />
-            <Path path={file.path} />
-          </AccordionTrigger>
-          <AccordionContent fill>
-            <LoadingPane label={READING} height="fill" spinner={i === 0} />
-          </AccordionContent>
-        </AccordionItem>
-      ))}
-    </Accordion>
-  );
-};
-
 /**
  * What the update changes, from `skill diff <name> --update`, one block per file, all open. A
  * block is as high as its lines. When the blocks overflow the sheet, a long patch's block gives up
  * height, down to `file.open-min-height`, and the sheet scrolls past that.
  */
-const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
+const Changes = ({ update }: { update: UpdateOffer }) => {
+  const key = updateKey(update);
   const stored = useAppStore((s) => s.updateDiffs[update.name]);
-  // A read of another candidate is not what this update changes.
-  const read = stored?.candidate === update.candidate ? stored : undefined;
+  // A read of other versions is not what this update changes.
+  const read = stored?.candidate === key ? stored : undefined;
   // Every block starts open; these are the ones the user closed.
   const [closed, setClosed] = useState<string[]>([]);
   // Patches that come in while the loading panes show cross-fade into them, as in the skill's
@@ -181,17 +110,11 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
   }
 
   useEffect(() => {
-    void loadUpdateDiff(update.name, update.candidate, update.base_hash);
-  }, [update.name, update.candidate, update.base_hash]);
+    void loadUpdateDiff(update.name, key);
+  }, [update.name, key]);
 
   if (read === undefined) {
-    return (
-      <Reading
-        files={update.files}
-        closed={closed}
-        onClosedChange={setClosed}
-      />
-    );
+    return <LoadingPane label={READING} />;
   }
   if (read.failed === true) {
     return (
@@ -224,7 +147,11 @@ const Changes = ({ update }: { update: UpdateAvailableEvent }) => {
           value={diff.path}
           fill={fillOf(diff.patch)}
         >
-          <AccordionTrigger label={diff.path} open={open.includes(diff.path)}>
+          <AccordionTrigger
+            track="update-sheet.toggle-diff"
+            label={diff.path}
+            open={open.includes(diff.path)}
+          >
             <Status status={diff.status} />
             <Path path={diff.path} />
           </AccordionTrigger>
@@ -271,7 +198,7 @@ export const UpdateSheet = ({
   onCloseAutoFocus,
   over,
 }: {
-  update: UpdateAvailableEvent;
+  update: UpdateOffer;
   versions: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -291,11 +218,7 @@ export const UpdateSheet = ({
       </SheetHeader>
       {/* The blocks scroll down only; the Code pane wraps a long line. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-        {fromAnotherMachine(update) ? (
-          <FilesOnly update={update} />
-        ) : (
-          <Changes update={update} />
-        )}
+        <Changes update={update} />
       </div>
     </SheetContent>
   </Sheet>

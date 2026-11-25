@@ -43,6 +43,11 @@ permissions:
 env:
   GIT_CLIFF_VERSION: 2.14.2
   GIT_CLIFF_SHA512: 26d1f7c8ea2400f2ccb0b2e7f321635f600b583bf4cd1f7afaa5e8c24068ad1088a2504e0a4d9f4333d4bb20a80329327d9462634343ee3af91e1a7fbdc6f18a
+  # The PostHog project the apps send to (docs/help-center/telemetry.mdx), and the posthog-cli that
+  # uploads the app's source maps and debug symbols to it.
+  POSTHOG_PROJECT_ID: "366960"
+  POSTHOG_HOST: https://eu.posthog.com
+  POSTHOG_CLI_VERSION: 0.20.1
 
 jobs:
   plan:
@@ -250,6 +255,24 @@ jobs:
         run: |
           "dist/$NAME/agentx" version --json | tee /dev/stderr | grep -F "\"cli_version\":\"$VERSION\""
 
+      # -trimpath keeps the build machine's paths out of a crash's stack: the
+      # frames name module-relative files, which a crash report then carries.
+      - name: Check a crash names no build path
+        if: matrix.goarch == (runner.arch == 'ARM64' && 'arm64' || 'amd64')
+        run: |
+          # A commit older than the test panic cannot crash on purpose.
+          if ! grep -qF AGENTX_TEST_PANIC apps/cli/internal/cli/crashreport.go 2> /dev/null; then
+            echo "this commit has no test panic, nothing to check"
+            exit 0
+          fi
+          home=$(mktemp -d)
+          status=0
+          AGENTX_TEST_PANIC=1 HOME="$home" "dist/$NAME/agentx" scan --verbose 2> stack.txt || status=$?
+          cat stack.txt
+          test "$status" -eq 10
+          grep -F "(github.com/grundmanise/agentx/apps/cli/internal/cli/" stack.txt
+          if grep -F "$GITHUB_WORKSPACE" stack.txt; then exit 1; fi
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.NAME }}
@@ -305,7 +328,32 @@ jobs:
       # pnpm check: the plan job releases only a commit whose CI passed, and CI runs it.
       - name: Build the frontend
         working-directory: apps/desktop
-        run: pnpm build
+        env:
+          SOURCEMAPS: ${{ secrets.POSTHOG_CLI_API_KEY != '' && 'true' || '' }}
+        run: pnpm build ${SOURCEMAPS:+--sourcemap}
+
+      # With the PostHog key, the frontend is built with source maps, and posthog-cli injects a
+      # chunk id and the release into each chunk, uploads the maps to PostHog Error Tracking and
+      # deletes them, so a crash of the app or the web UI shows in its own source and the app ships
+      # no map. The key stays out of the frontend build. A run without it builds as before.
+      - name: Upload the source maps
+        continue-on-error: true
+        working-directory: apps/desktop
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ env.POSTHOG_PROJECT_ID }}
+          POSTHOG_CLI_HOST: ${{ env.POSTHOG_HOST }}
+        run: |
+          if [ -z "$POSTHOG_CLI_API_KEY" ]; then
+            echo "::warning title=No source maps::add the POSTHOG_CLI_API_KEY secret, see RELEASING.md"
+            exit 0
+          fi
+          # The maps never ship, even when the upload fails.
+          status=0
+          npx --yes "@posthog/cli@$POSTHOG_CLI_VERSION" sourcemap process --directory dist \
+            --release-name agentx-desktop --release-version "$VERSION" --delete-after || status=$?
+          find dist -name '*.map' -delete
+          exit "$status"
 
       # With the secrets, Tauri imports the certificate into a temporary keychain, signs the app
       # and the CLI inside it, and notarizes the app. Without them the app is signed ad hoc: it
@@ -324,6 +372,9 @@ jobs:
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Line tables for the Rust side's debug symbols. On macOS they go to a separate
+          # agentx-desktop.dSYM, so the app itself does not grow.
+          CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
         run: |
           if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_CERTIFICATE_PASSWORD" ]; then
             echo "::warning title=App not signed::add the APPLE_CERTIFICATE secrets, see RELEASING.md"
@@ -377,6 +428,25 @@ jobs:
             mv macos/agentx.app.tar.gz "$RUNNER_TEMP/app/agentx_desktop_darwin_arm64.app.tar.gz"
             mv macos/agentx.app.tar.gz.sig "$RUNNER_TEMP/app/agentx_desktop_darwin_arm64.app.tar.gz.sig"
           fi
+
+      # The Rust side's debug symbols, so PostHog resolves a panic of the released app to file and
+      # line (panic_reports.rs). The Linux packages carry no line tables, so a panic there shows
+      # function names only.
+      - name: Upload the debug symbols
+        continue-on-error: true
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ env.POSTHOG_PROJECT_ID }}
+          POSTHOG_CLI_HOST: ${{ env.POSTHOG_HOST }}
+        run: |
+          if [ -z "$POSTHOG_CLI_API_KEY" ]; then
+            echo "::warning title=No debug symbols::add the POSTHOG_CLI_API_KEY secret, see RELEASING.md"
+            exit 0
+          fi
+          mkdir "$RUNNER_TEMP/symbols"
+          cp -R "apps/desktop/src-tauri/target/$TARGET/release/agentx-desktop.dSYM" "$RUNNER_TEMP/symbols/"
+          npx --yes "@posthog/cli@$POSTHOG_CLI_VERSION" symbol-sets upload --directory "$RUNNER_TEMP/symbols" \
+            --release-name agentx-desktop --release-version "$VERSION"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -442,7 +512,29 @@ jobs:
       # No pnpm check, as for the macOS app.
       - name: Build the frontend
         working-directory: apps/desktop
-        run: pnpm build
+        env:
+          SOURCEMAPS: ${{ secrets.POSTHOG_CLI_API_KEY != '' && 'true' || '' }}
+        run: pnpm build ${SOURCEMAPS:+--sourcemap}
+
+      # As for the macOS app: each build of the frontend has its own chunks.
+      - name: Upload the source maps
+        continue-on-error: true
+        working-directory: apps/desktop
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ env.POSTHOG_PROJECT_ID }}
+          POSTHOG_CLI_HOST: ${{ env.POSTHOG_HOST }}
+        run: |
+          if [ -z "$POSTHOG_CLI_API_KEY" ]; then
+            echo "::warning title=No source maps::add the POSTHOG_CLI_API_KEY secret, see RELEASING.md"
+            exit 0
+          fi
+          # The maps never ship, even when the upload fails.
+          status=0
+          npx --yes "@posthog/cli@$POSTHOG_CLI_VERSION" sourcemap process --directory dist \
+            --release-name agentx-desktop --release-version "$VERSION" --delete-after || status=$?
+          find dist -name '*.map' -delete
+          exit "$status"
 
       # With the updater key, Tauri signs the .deb and the AppImage, which the updater installs
       # as they are, as for the macOS app.
@@ -575,7 +667,8 @@ jobs:
             gh release upload "$TAG" latest.json --clobber
             exit 0
           fi
-          if current=$(gh release download "$NIGHTLY_UPDATES" --pattern latest.json --output - 2> /dev/null | jq -r .version); then
+          if manifest=$(gh release download "$NIGHTLY_UPDATES" --pattern latest.json --output - 2> /dev/null); then
+            current=$(jq -r .version <<< "$manifest" 2> /dev/null || true)
             # A re-run of an older nightly must not take the nightlies back to it.
             if [ "$(printf '%s\n' "$current" "$VERSION" | sort -V | tail -n1)" != "$VERSION" ]; then
               echo "::notice title=Update manifest kept::$NIGHTLY_UPDATES already offers $current"

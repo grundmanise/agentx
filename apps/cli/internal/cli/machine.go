@@ -11,21 +11,18 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
+// machineEvent is the machine as the inventory's machine field has it,
+// with the store and its size, which the inventory leaves out: every git
+// write changes the size, and a scan reports no change of it. The store
+// and its size are absent until the repo is created.
 type machineEvent struct {
 	event
-	ID         string `json:"id"`
-	Label      string `json:"label"`
-	Derivation string `json:"derivation"`
-	// Where agentx keeps its files on this machine, as AGENTX_HOME and
-	// AGENTX_LIBRARY resolved them. The store and its size are
-	// absent until the repo is created.
-	Home         string `json:"home"`
-	SettingsFile string `json:"settings_file"`
-	Library      string `json:"library"`
-	Store        string `json:"store,omitempty"`
-	StoreBytes   int64  `json:"store_bytes,omitempty"`
+	scan.Machine
+	Store      string `json:"store,omitempty"`
+	StoreBytes int64  `json:"store_bytes,omitempty"`
 }
 
 func newMachineCommand(inv *invocation) *cobra.Command {
@@ -132,10 +129,9 @@ func (inv *invocation) machine(ctx context.Context) (machineEvent, error) {
 	if err != nil {
 		return machineEvent{}, err
 	}
-	m := machineEvent{event: newEvent("machine"), ID: id, Label: inv.label(s), Derivation: derivation,
-		Home: inv.dirs.Home, SettingsFile: home.SettingsPath(inv.dirs.Home), Library: inv.dirs.Library}
-	// The store is reported from files alone, without a git process:
-	// a present directory is the repo whether or not git can read it, which
+	m := machineEvent{event: newEvent("machine"), Machine: inv.machineOf(id, derivation, s)}
+	// The store is reported from files alone, without a git process: a
+	// present directory is the repo whether or not git can read it, which
 	// is doctor's question, and its size is the one the user asks about.
 	repo := gitx.StorePath(inv.dirs.Home)
 	size, err := dirSize(repo)
@@ -147,6 +143,13 @@ func (inv *invocation) machine(ctx context.Context) (machineEvent, error) {
 		m.Store, m.StoreBytes = repo, size
 	}
 	return m, nil
+}
+
+// machineOf is this machine, with id and derivation, as the settings s
+// label it.
+func (inv *invocation) machineOf(id, derivation string, s home.Settings) scan.Machine {
+	return scan.Machine{ID: id, Label: inv.label(s), Derivation: derivation,
+		Home: inv.dirs.Home, SettingsFile: home.SettingsPath(inv.dirs.Home), Library: inv.dirs.Library}
 }
 
 // dirSize is the size on disk of the tree under root: the sizes of the

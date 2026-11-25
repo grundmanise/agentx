@@ -5,6 +5,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { trackAttribute } from "#/lib/track.ts";
+import type { Tracked } from "#/lib/track.ts";
 
 /**
  * A term in running text that explains itself (DESIGN.md §6 "Tooltip"): the words keep the
@@ -17,14 +19,15 @@ export const HelpTerm = ({
   tip,
   trailing,
   children,
-}: {
+  track,
+}: Tracked & {
   tip: ReactNode;
   trailing?: string;
   children: string;
 }) => (
   <Tooltip>
     <TooltipTrigger asChild>
-      <button type="button" className="cursor-help">
+      <button type="button" {...trackAttribute(track)} className="cursor-help">
         <span className="underline decoration-dotted underline-offset-2">
           {children}
         </span>

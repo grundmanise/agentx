@@ -4,7 +4,7 @@
 // the skills removed are gone, and the source is added again with Add source.
 import { useId, useRef, useState } from "react";
 
-import type { LibraryEntry, SourceEvent } from "#/cli/events.gen.ts";
+import type { LibraryEntry, Source } from "#/cli/events.gen.ts";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -31,7 +31,7 @@ export const removeSourceLabel = (id: string) => `remove source ${id}`;
  * another agentx command holds the lock, Retry resumes from the step that met it.
  */
 const removeSource = async (
-  source: SourceEvent,
+  source: Source,
   skills: string[],
   total = skills.length
 ) => {
@@ -61,7 +61,7 @@ export const RemoveSourceDialog = ({
   onOpenChange,
   onCloseAutoFocus,
 }: {
-  source: SourceEvent;
+  source: Source;
   library: LibraryEntry[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -108,6 +108,7 @@ export const RemoveSourceDialog = ({
           <label htmlFor={checkboxId} className="flex items-start gap-2.5">
             <Checkbox
               id={checkboxId}
+              track="remove-source-dialog.with-skills"
               checked={withSkills}
               onCheckedChange={(checked) => {
                 setWithSkills(checked === true);
@@ -125,9 +126,15 @@ export const RemoveSourceDialog = ({
         )}
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
-            <Button variant="ghost">Cancel</Button>
+            <Button variant="ghost" track="remove-source-dialog.cancel">
+              Cancel
+            </Button>
           </AlertDialogCancel>
-          <Button variant="danger" onClick={remove}>
+          <Button
+            variant="danger"
+            track="remove-source-dialog.remove"
+            onClick={remove}
+          >
             Remove
           </Button>
         </AlertDialogFooter>
