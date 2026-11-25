@@ -26,23 +26,13 @@ import (
 )
 
 // updateCheckEvent ends the report of one update check of the serve child,
-// after its update_available events: which check it was, when it ended,
-// whether it reached what it set out to check, and whether it fetched.
+// after its update_available events: when it ended, and whether it reached
+// what it set out to check.
 type updateCheckEvent struct {
 	event
-	InstanceID string `json:"instance_id"`
-	Scope      string `json:"scope"`      // checkScopeAll or checkScopeHub
-	CheckedAt  string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
-	OK         bool   `json:"ok"`         // false when the check failed as a whole or could not reach the hub
-	Fetched    bool   `json:"fetched"`    // whether the check fetched anything
+	CheckedAt string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
+	OK        bool   `json:"ok"`         // false when the check failed as a whole or could not reach the hub
 }
-
-// The scopes of an update_check event: the full check serve runs at start,
-// and the check of the hub alone it repeats while it runs.
-const (
-	checkScopeAll = "all"
-	checkScopeHub = "hub"
-)
 
 // hubCheckInterval is how long the serve child waits, once the report
 // of one check is made, before it checks the hub again, see
@@ -51,66 +41,6 @@ const (
 const hubCheckInterval = 10 * time.Minute
 
 var hubCheckEvery = hubCheckInterval
-
-// driftEvent says that one skill of the library is no longer in the state
-// the last inventory showed it in: its state, its drift, or both changed
-// between two inventories of one serve process. It is a notification and
-// nothing more: the inventory before it carries the skill as it now is, and
-// is what a consumer applies. It names the inventory it follows by instance
-// and counter, so that a consumer that ignores an inventory ignores its drift
-// events with it.
-type driftEvent struct {
-	event
-	InstanceID    string   `json:"instance_id"`
-	ScanCounter   int      `json:"scan_counter"`
-	Name          string   `json:"name"`
-	Kind          string   `json:"kind"` // managed or unmanaged, as the inventory's library entry has it
-	State         string   `json:"state,omitempty"`
-	Drift         []string `json:"drift"` // [] when none
-	PreviousState string   `json:"previous_state,omitempty"`
-	PreviousDrift []string `json:"previous_drift"` // [] when none
-}
-
-// driftTransitions are the drift events of one inventory against the library
-// of the inventory before it, one per skill in both whose state or drift
-// changed, in the library's order, which is by name. Nothing is a
-// transition against no inventory at all: the first inventory of a serve is
-// where every state starts, not a change of one. A skill that arrives or
-// leaves the library is not one either: the inventory says so itself.
-func driftTransitions(prev map[string]scan.LibraryEntry, inventory scan.Inventory) []driftEvent {
-	if prev == nil {
-		return nil
-	}
-	var events []driftEvent
-	for _, e := range inventory.Library {
-		p, ok := prev[e.Name]
-		if !ok || p.State == e.State && slices.Equal(p.Drift, e.Drift) {
-			continue
-		}
-		events = append(events, driftEvent{
-			event: newEvent("drift"), InstanceID: inventory.InstanceID, ScanCounter: inventory.ScanCounter,
-			Name: e.Name, Kind: e.Kind, State: e.State, Drift: nonNil(e.Drift),
-			PreviousState: p.State, PreviousDrift: nonNil(p.Drift),
-		})
-	}
-	return events
-}
-
-// libraryByName indexes an inventory's library for the next comparison.
-func libraryByName(entries []scan.LibraryEntry) map[string]scan.LibraryEntry {
-	byName := make(map[string]scan.LibraryEntry, len(entries))
-	for _, e := range entries {
-		byName[e.Name] = e
-	}
-	return byName
-}
-
-func nonNil(words []string) []string {
-	if words == nil {
-		return []string{}
-	}
-	return words
-}
 
 func newServeCommand(inv *invocation) *cobra.Command {
 	var (
@@ -181,7 +111,7 @@ func (inv *invocation) prepareServe() {
 	inv.instanceID() // fixed here, before the goroutines that report it
 	inv.verdicts = map[string]keptVerdict{}
 	inv.forkWalks = lineage.NewWalkCache()
-	inv.forksWarned = true // reconciliation and every inventory name them
+	inv.forksWarned = true // every inventory names them
 }
 
 // serveScan is one scan of serve. It checks git first: serve starts
@@ -194,21 +124,12 @@ func (inv *invocation) serveScan(ctx context.Context) (scan.Inventory, error) {
 	return inv.inventory(ctx, 0, "", false)
 }
 
-// inventoryReporter reports each inventory serve emits, with the drift
-// events against the inventory before it. It keeps the library of the last
-// inventory emitted, which the next one's drift is told against;
-// inventories are reported from the loop's goroutine alone, so nothing else
-// touches it.
+// inventoryReporter reports each inventory serve emits.
 func (inv *invocation) inventoryReporter() func(scan.Inventory) {
-	var library map[string]scan.LibraryEntry
 	return func(inventory scan.Inventory) {
 		inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
 		inv.out.print(inv.out.paint(heading, fmt.Sprintf("inventory %d", inventory.ScanCounter)), ": ",
 			plural(len(inventory.Configurations), "configuration"), ", ", plural(len(inventory.Skills), "skill"))
-		for _, ev := range driftTransitions(library, inventory) {
-			inv.out.emit(ev)
-		}
-		library = libraryByName(inventory.Library)
 	}
 }
 
@@ -297,7 +218,7 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 		return err
 	}
 	defer home.Unlock(lock)
-	// Reconciliation reports and repairs before the first scan, so the
+	// Reconciliation repairs before the first scan, so the
 	// inventory shows what it put back. One that cannot run leaves serve
 	// to report what the scan finds, and without git the scan says so.
 	if _, err := inv.gitVersion(ctx); err == nil {
@@ -382,7 +303,7 @@ func (c *serveChecks) startup(ctx context.Context) func() {
 		c.inv.reportServeCheck(rep, err)
 		ok := err == nil && !rep.hubFailed
 		c.failing = !ok
-		c.inv.reportUpdateCheck(checkScopeAll, at, ok, err == nil && len(rep.refreshed) > 0)
+		c.inv.reportUpdateCheck(at, ok)
 	}
 }
 
@@ -426,7 +347,7 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 			inv.reportServeCheck(rep, err)
 		}
 		c.failing = !ok
-		inv.reportUpdateCheck(checkScopeHub, at, ok, err == nil && rep.hubFetched)
+		inv.reportUpdateCheck(at, ok)
 	}
 }
 
@@ -478,21 +399,14 @@ func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 }
 
 // reportUpdateCheck emits the update_check event that ends the report of
-// a check of scope that ended at at, and its line without --json.
-func (inv *invocation) reportUpdateCheck(scope string, at time.Time, ok, fetched bool) {
-	inv.out.emit(updateCheckEvent{
-		event: newEvent("update_check"), InstanceID: inv.instanceID(), Scope: scope,
-		CheckedAt: at.UTC().Format(time.RFC3339), OK: ok, Fetched: fetched,
-	})
+// a check that ended at at, and its line without --json.
+func (inv *invocation) reportUpdateCheck(at time.Time, ok bool) {
+	inv.out.emit(updateCheckEvent{event: newEvent("update_check"), CheckedAt: at.UTC().Format(time.RFC3339), OK: ok})
 	status, style := "ok", okStyle
 	if !ok {
 		status, style = "failed", failStyle
 	}
-	line := []string{inv.out.paint(heading, "check "+scope), ": ", inv.out.paint(style, status)}
-	if fetched {
-		line = append(line, ", fetched")
-	}
-	inv.out.print(line...)
+	inv.out.print(inv.out.paint(heading, "check"), ": ", inv.out.paint(style, status))
 }
 
 // watchedDirs are the directories a change signal can come from, most

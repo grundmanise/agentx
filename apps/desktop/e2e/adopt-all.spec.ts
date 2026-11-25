@@ -56,19 +56,6 @@ const ran = (cli: MockCli) =>
       )
   );
 
-/** The activity list's entries, tone and message, read through the store harness. */
-const activity = async (page: Page) => {
-  if (!(await page.evaluate(() => "store" in window))) {
-    await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
-    await page.waitForFunction(() => "store" in window);
-  }
-  return await page.evaluate(() =>
-    window.store
-      .state()
-      .activity.map(({ message, tone }) => ({ message, tone }))
-  );
-};
-
 /** Registers the reads the Skills screen runs for the skills it may select. */
 const registerReads = (cli: MockCli) => {
   cli.register(["skill", "history", "pdf-letters"], { events: history });
@@ -272,10 +259,6 @@ test.describe("the Import skills section of Settings", () => {
       /^Manage the 3 skills/u,
       "https://github.com/vercel/skills holds no skill at commit-style now.",
     ]);
-    // The activity list logs the result.
-    expect(await activity(page)).toEqual([
-      { message: "Imported 2 of 3 skills", tone: "attention" },
-    ]);
     await open.getByRole("button", { name: "Done" }).click();
     await expect(open).toHaveCount(0);
     expect(ran(cli)).toEqual([
@@ -302,9 +285,6 @@ test.describe("the Import skills section of Settings", () => {
       "Imported: api-docs",
       "Imported: frontend__ui",
     ]);
-    expect(await activity(page)).toEqual([
-      { message: "Imported 2 skills", tone: "success" },
-    ]);
     await open.getByRole("button", { name: "Done" }).click();
     await expect(settingsSection(page).getByRole("button")).toHaveText([
       "Import skills from Skills CLI",
@@ -329,9 +309,6 @@ test.describe("the Import skills section of Settings", () => {
     await expect(rows(open, "Skills CLI").first()).toHaveText(
       "Not imported: commit-stylehttps://github.com/vercel/skills holds no skill at commit-style now."
     );
-    expect(await activity(page)).toEqual([
-      { message: "No skills were imported", tone: "attention" },
-    ]);
   });
 
   test("a run that fails before any skill says why in the dialog and keeps the rows", async ({
@@ -360,9 +337,6 @@ test.describe("the Import skills section of Settings", () => {
     await expect(rows(open, "Skillshare")).toHaveText([
       "Waiting: api-docs",
       "Waiting: frontend__ui",
-    ]);
-    expect(await activity(page)).toEqual([
-      { message: "the store of Skillshare is not JSON", tone: "danger" },
     ]);
     await open.getByRole("button", { name: "Done" }).click();
     await expect(open).toHaveCount(0);
@@ -436,12 +410,6 @@ test.describe("Import all in the Unmanaged header", () => {
     await expect(
       refused(open).getByRole("button", { name: "1 skill can't be imported" })
     ).toBeVisible();
-    // The Skills CLI's run exits 0 and warns of the record the preview refused, whose row says why
-    // already: a success.
-    expect(await activity(page)).toEqual([
-      { message: "Imported 2 skills", tone: "success" },
-      { message: "Imported 3 skills", tone: "success" },
-    ]);
     await open.getByRole("button", { name: "Done" }).click();
     await afterRun(cli, [...skillsCliNames, ...skillshareNames]);
     await expect(page.getByRole("button", { name: "Import all" })).toHaveCount(

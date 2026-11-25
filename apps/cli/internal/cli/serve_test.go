@@ -446,9 +446,7 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 // repo under a running serve and repairs it. The scan in between still
 // succeeds, with the library listed empty and a warning saying why, so the
 // desktop app keeps the rest of its inventory; the first scan after the
-// repair gives the library back. A skill edited meanwhile comes back
-// modified with no drift event: the inventory before it held no library, so
-// the skill arrives in the library, which the inventory says itself.
+// repair gives the library back, with a skill edited meanwhile modified.
 func TestServeKeepsServingWhenTheStoreCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -488,11 +486,8 @@ func TestServeKeepsServingWhenTheStoreCannotBeRead(t *testing.T) {
 	events := p.until("repaired")
 	var repaired jsonEvent
 	for _, e := range events {
-		switch e["type"] {
-		case "inventory":
+		if e["type"] == "inventory" {
 			repaired = e
-		case "drift":
-			t.Errorf("a drift event for a skill the inventory before did not list: %v", e)
 		}
 	}
 	if repaired == nil {

@@ -1,7 +1,8 @@
-// Renders the app store's applied inventory, freshness, pending refreshes and activity into the
-// page, and puts the command runner on window. No screen shows the inventory yet, so the tests
+// Renders the app store's applied inventory, freshness and pending refreshes, and the activity
+// log's lines, into the page, and puts the command runner on window. No screen shows the inventory yet, so the tests
 // read the store and run commands through this module. The dev server serves the app's own store
 // module at the URL the app uses, so this is the app's store.
+import { useActivityLog } from "#/store/activity-log.ts";
 import { refresh } from "#/store/feed.ts";
 import { cancelCommand, agentx } from "#/store/runner.ts";
 import type { CommandOptions } from "#/store/runner.ts";
@@ -23,7 +24,8 @@ declare global {
 }
 
 const StoreView = () => {
-  const { activity, applied, freshness, inventory, refreshes } = useAppStore();
+  const { applied, freshness, inventory, refreshes } = useAppStore();
+  const { lines } = useActivityLog();
   const rows: [string, string][] = [
     ["Instance", applied?.instanceId ?? ""],
     ["Counter", String(applied?.counter ?? "")],
@@ -41,10 +43,10 @@ const StoreView = () => {
           </div>
         ))}
       </dl>
-      <ol aria-label="Activity">
-        {activity.map((entry) => (
-          <li key={entry.id} data-tone={entry.tone}>
-            {entry.message}
+      <ol aria-label="Activity log">
+        {lines.map((line) => (
+          <li key={line.id} data-tone={line.tone}>
+            {line.text}
           </li>
         ))}
       </ol>

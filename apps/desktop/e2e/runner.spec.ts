@@ -17,8 +17,6 @@ const launchLines = [
 
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
-const activity = (page: Page) =>
-  page.getByRole("list", { name: "Activity" }).getByRole("listitem");
 
 /** Launches the app, waits for the store's reads, and loads the store harness. */
 const launch = async (cli: MockCli, page: Page) => {
@@ -53,7 +51,7 @@ test("loads settings, sources and the adoption preview once the checks pass", as
   await expect(page.getByRole("complementary")).toContainText(machineLabel);
 });
 
-test("a command that exits 0 shows its toast, logs it and asks serve to scan again", async ({
+test("a command that exits 0 shows its toast and asks serve to scan again", async ({
   cli,
   page,
 }) => {
@@ -62,7 +60,6 @@ test("a command that exits 0 shows its toast, logs it and asks serve to scan aga
 
   await run(page, ["skill", "remove", "pdf"], "Removed pdf");
   await expect(toasts(page).getByText("Removed pdf")).toBeVisible();
-  await expect(activity(page)).toHaveText(["Removed pdf"]);
   await expect.poll(() => cli.serveRequests.length).toBe(1);
   const [line = ""] = cli.serveRequests;
   expect(JSON.parse(line)).toEqual({
@@ -95,9 +92,6 @@ test("exit 0 with warnings shows an attention toast with the success text and th
     .getByRole("listitem")
     .filter({ hasText: "Added pdf to 1 agent" });
   await expect(toast).toContainText(warning);
-  // The command succeeded, with something to look at: attention, not success.
-  await expect(activity(page)).toHaveText(["Added pdf to 1 agent"]);
-  await expect(activity(page)).toHaveAttribute("data-tone", "attention");
   await toast.getByRole("button", { name: "Dismiss" }).click();
   await expect(toast).toHaveCount(0);
   await expect.poll(() => cli.serveRequests.length).toBe(1);
@@ -123,10 +117,6 @@ test("exit 7 says another command runs, and Retry runs it again", async ({
   await expect(
     toasts(page).getByText("Another agentx command is running")
   ).toBeVisible();
-  await expect(activity(page)).toHaveText([
-    "Another agentx command is running",
-  ]);
-  await expect(activity(page)).toHaveAttribute("data-tone", "attention");
 
   cli.register(["skill", "update", "pdf"]);
   await page.getByRole("button", { name: "Retry" }).click();
@@ -241,8 +231,6 @@ test("another failure shows the CLI's message, hint and warnings until dismissed
     )
   ).toBeVisible();
   await expect(toast).toContainText(warning);
-  await expect(activity(page)).toHaveText([error.message]);
-  await expect(activity(page)).toHaveAttribute("data-tone", "danger");
 
   // A toast with a hint does not go on its own.
   await page.clock.fastForward(60_000);

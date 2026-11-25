@@ -4,7 +4,7 @@ Status: accepted, 2026-09-18. Implements the local snapshot contract in ADR 0001
 
 ## One desktop inventory stream
 
-The desktop applies inventories only from its active `agentx serve` child. One-shot commands remain independently usable and may emit inventories for terminal consumers. The desktop consumes their outcomes, progress and conflicts, but does not apply their inventories to the one it displays. Inventory rows and drift state come from the authoritative inventory; individual `skill` or `drift` events may supply details or notifications but cannot overwrite those rows independently.
+The desktop applies inventories only from its active `agentx serve` child. One-shot commands remain independently usable and may emit inventories for terminal consumers. The desktop consumes their outcomes, progress and conflicts, but does not apply their inventories to the one it displays. Inventory rows and drift state come from the authoritative inventory; individual events may supply details or notifications but cannot overwrite those rows independently.
 
 Each serve process creates a new `instance_id`. Its `scan_counter` starts at 1 for the initial inventory and increases for each changed inventory it emits. The supervisor associates events with the child that produced them. Apply inventories only from that active child's instance and with increasing counters within it; never compare counters across instances or with one-shot commands. On restart, keep the displayed inventory marked stale until the new child's initial inventory arrives. Ignore queued events from old children, including refresh acknowledgements.
 

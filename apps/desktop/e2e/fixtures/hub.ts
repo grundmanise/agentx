@@ -20,7 +20,7 @@ export const hub: SourceEvent = {
   hub: true,
   id: HUB_ID,
   last_fetched: ago(2 * HOUR),
-  schema_version: 4,
+  schema_version: 5,
   skills: 3,
   type: "source",
   url: HUB,
@@ -32,14 +32,14 @@ const acme: SourceEvent = {
   id: ACME_ID,
   last_fetched: ago(3 * DAY + 2 * HOUR),
   pin: "v2",
-  schema_version: 4,
+  schema_version: 5,
   type: "source",
   url: ACME,
 };
 
 const zeta: SourceEvent = {
   id: ZETA_ID,
-  schema_version: 4,
+  schema_version: 5,
   type: "source",
   url: ZETA,
 };
