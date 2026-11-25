@@ -1,5 +1,6 @@
 // Updates: the app's version and when it last checked, Check for updates and Release notes, then
-// the Automatic update checks switch, an app preference (ADR 0013, ADR 0019). Check for updates
+// the Automatic update checks and Include nightly builds switches, app preferences (ADR 0013,
+// ADR 0019). Check for updates
 // checks at once; once a check finds an update, the button follows it as the title bar does
 // (`src/app/app-update-status.tsx`): Update to, Installing, Restart to update. Release notes opens
 // this version's release on GitHub; a build that is no release, version 0.0.0, has none. A
@@ -11,12 +12,15 @@ import {
   checkAppUpdateNow,
   installAppUpdate,
   readCheckUpdates,
+  readIncludeNightlies,
   restartApp,
   setCheckUpdates,
+  setIncludeNightlies,
   useAppUpdate,
   useAppUpdateCheckedAt,
   useAppUpdateChecking,
   useCheckUpdates,
+  useIncludeNightlies,
 } from "#/app/app-update.ts";
 import { Button } from "#/components/ui/button.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
@@ -173,14 +177,44 @@ const AutomaticChecks = ({ checked }: { checked: boolean }) => {
   );
 };
 
+const IncludeNightlies = ({ checked }: { checked: boolean }) => {
+  const id = useId();
+  return (
+    <SettingsRow
+      name="Include nightly builds"
+      line="Builds of main, published daily. They may be less stable."
+      lineId={`${id}-line`}
+      htmlFor={id}
+      control={
+        <Switch
+          id={id}
+          track="settings.include-nightlies-toggle"
+          aria-label="Include nightly builds"
+          aria-describedby={`${id}-line`}
+          checked={checked}
+          onCheckedChange={(on) => {
+            void setIncludeNightlies(on);
+          }}
+        />
+      }
+    />
+  );
+};
+
 export const AppUpdatesCard = () => {
   const checked = useCheckUpdates();
-  // The preference, before the first background check reads it.
+  const nightlies = useIncludeNightlies();
+  // The preferences, before the first background check reads them.
   useEffect(() => {
     if (inApp && checked === undefined) {
       void readCheckUpdates();
     }
   }, [checked]);
+  useEffect(() => {
+    if (inApp && nightlies === undefined) {
+      void readIncludeNightlies();
+    }
+  }, [nightlies]);
   if (!inApp) {
     return null;
   }
@@ -188,6 +222,7 @@ export const AppUpdatesCard = () => {
     <SettingsCard title="Updates">
       <VersionRow />
       {checked !== undefined && <AutomaticChecks checked={checked} />}
+      {nightlies !== undefined && <IncludeNightlies checked={nightlies} />}
     </SettingsCard>
   );
 };

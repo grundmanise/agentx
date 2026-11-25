@@ -226,3 +226,49 @@ test("an update a check finds installs from Updates, as from the title bar", asy
     .click();
   await expect.poll(() => cli.restarts).toBe(1);
 });
+
+test("a release leaves nightly builds out until Include nightly builds is on, which checks again", async ({
+  cli,
+  page,
+}) => {
+  launch(cli, "synced");
+  await page.goto("/#/settings");
+  const nightlies = section(page).getByRole("switch", {
+    name: "Include nightly builds",
+  });
+
+  await expect(nightlies).not.toBeChecked();
+  await expect.poll(() => cli.appUpdateNightlies).toEqual([false]);
+
+  cli.offerAppUpdate("0.4.0-nightly.20261126.7");
+  await nightlies.click();
+  await expect(nightlies).toBeChecked();
+  await expect
+    .poll(() => cli.savedPreferences)
+    .toMatchObject({
+      include_nightlies: true,
+    });
+  await expect.poll(() => cli.appUpdateNightlies).toEqual([false, true]);
+  await expect(updateButton(page)).toHaveAccessibleName(
+    "Update to 0.4.0-nightly.20261126.7"
+  );
+
+  cli.offerAppUpdate(null);
+  await nightlies.click();
+  await expect.poll(() => cli.appUpdateNightlies).toEqual([false, true, false]);
+  await expect(updateButton(page)).toHaveCount(0);
+});
+
+test("a nightly build takes nightly builds unless the preference says otherwise", async ({
+  cli,
+  page,
+}) => {
+  launch(cli, "synced");
+  cli.appVersion = "0.3.0-nightly.20261125.100";
+  await page.goto("/#/settings");
+
+  await expect(
+    section(page).getByRole("switch", { name: "Include nightly builds" })
+  ).toBeChecked();
+  await expect.poll(() => cli.appUpdateNightlies).toEqual([true]);
+});
