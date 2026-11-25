@@ -1,8 +1,10 @@
 // The Remove dialog (DESIGN.md §6 "Banner actions and dialogs"): what leaves the machine with the
-// skill, and for a hub skill, whether its branch leaves the hub too. Opened from the
+// skill, the agents that still see it in folders agentx did not place, and for a hub skill,
+// whether its branch leaves the hub too. Opened from the
 // Universal chip, it says why the skill leaves every agent: those agents read the library. Remove runs
 // `skill remove <name>`, with --remote when that is checked, and never offers an Undo: unpublished
-// edits of a hub skill are gone.
+// edits of a hub skill are gone. Its toast leaves out the CLI's warnings for the folders the
+// dialog named.
 import { useId, useRef, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -18,14 +20,31 @@ import {
 } from "#/components/ui/alert-dialog.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
-import { seenBy } from "#/screens/skills/placements.ts";
+import { andList } from "#/lib/plural.ts";
+import { removalOf } from "#/screens/skills/placements.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import type { CommandOptions } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
+/** How the CLI ends its warning for a folder agentx did not place, which the dialog already named. */
+const LEFT_FOLDER = "agentx did not place there";
+
 /** The label of the Remove control for `row`: the runner's name for it. */
 export const removeLabel = (row: SkillRow) => `remove ${row.key}`;
+
+/** The agents that still see the skill after Remove, in the folders agentx did not place it in. */
+const Kept = ({ keeping }: { keeping: Configuration[] }) => {
+  if (keeping.length === 0) {
+    return null;
+  }
+  const see = keeping.length === 1 ? "sees" : "see";
+  return (
+    <p className="type-body text-text-secondary m-0">
+      {`${andList(keeping.map((c) => c.name))} still ${see} it: agentx leaves the folders it didn't place.`}
+    </p>
+  );
+};
 
 /** What is lost with the skill: the unpublished edits of a hub skill. */
 const Consequence = ({ row }: { row: SkillRow }) => {
@@ -37,6 +56,16 @@ const Consequence = ({ row }: { row: SkillRow }) => {
     );
   }
   return null;
+};
+
+/** The line under the title: why every agent loses the skill when the Universal chip opened the dialog, and what comes next. */
+const descriptionOf = (fromUniversal: boolean, losing: boolean) => {
+  if (!losing) {
+    return "Removes it from your library.";
+  }
+  return fromUniversal
+    ? "Removing it from universal agents will also remove it from your library. It will be removed from:"
+    : "Removes it from:";
 };
 
 export const RemoveDialog = ({
@@ -61,7 +90,7 @@ export const RemoveDialog = ({
   const hasHub = useAppStore((s) =>
     sourcesOf(s).some((source) => source.hub === true)
   );
-  const agents = seenBy(row, configurations);
+  const { losing, keeping } = removalOf(row, configurations);
   // Whether this close is the confirmation, for `onCloseAutoFocus`.
   const removed = useRef(false);
   // A published hub skill, when a hub is set, can leave that too.
@@ -83,6 +112,8 @@ export const RemoveDialog = ({
         void runUntilSettled(args, options);
       },
       success: `Removed ${row.name} skill`,
+      warnings: (logs) =>
+        logs.map((l) => l.message).filter((m) => !m.includes(LEFT_FOLDER)),
     };
     void runUntilSettled(args, options);
     removed.current = true;
@@ -106,24 +137,25 @@ export const RemoveDialog = ({
         <AlertDialogHeader>
           <AlertDialogTitle>{`Remove ${row.name} from this machine?`}</AlertDialogTitle>
           <AlertDialogDescription>
-            {fromUniversal
-              ? "Removing it from universal agents will also remove it from your library. It will be removed from:"
-              : "Removes it from:"}
+            {descriptionOf(fromUniversal, losing.length > 0)}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {/* The one block that scrolls: past the dialog's height, the header, the consequence and
             the buttons stay, and the agents scroll between them. */}
-        <ul
-          aria-label="Agents that see it"
-          className="type-body text-text-secondary m-0 flex min-h-0 list-none flex-col gap-2 overflow-y-auto p-0"
-        >
-          {agents.map((c) => (
-            <li key={c.id} className="flex items-center gap-2.5">
-              <AgentLogo client={c} size={20} decorative />
-              {c.name}
-            </li>
-          ))}
-        </ul>
+        {losing.length > 0 && (
+          <ul
+            aria-label="Agents that see it"
+            className="type-body text-text-secondary m-0 flex min-h-0 list-none flex-col gap-2 overflow-y-auto p-0"
+          >
+            {losing.map((c) => (
+              <li key={c.id} className="flex items-center gap-2.5">
+                <AgentLogo client={c} size={20} decorative />
+                {c.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        <Kept keeping={keeping} />
         <Consequence row={row} />
         {offersRemote && (
           <label htmlFor={checkboxId} className="flex items-start gap-2.5">

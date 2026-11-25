@@ -154,6 +154,54 @@ const adoptLine = (name: string): string[] =>
     : ["skill", "import", name];
 
 /**
+ * What Import does for an unmanaged skill: the command line of `adoptArgs`, or why `skill import`
+ * cannot take it, with the library skill in the way when that is why. Undefined for a skill agentx
+ * manages and for a plugin's skill.
+ */
+export type Importability =
+  | { args: string[] }
+  | { why: string; inTheWay?: string };
+
+/** The CLI's reason, a clause about the skill, as a sentence of the app's. */
+const asSentence = (reason: string | undefined, fallback: string) =>
+  reason === undefined || reason === ""
+    ? fallback
+    : `${reason.charAt(0).toUpperCase()}${reason.slice(1)}`;
+
+export const importOf = (row: SkillRow): Importability | undefined => {
+  if (row.kind !== "disk") {
+    return undefined;
+  }
+  const state = row.adoption?.state;
+  if (state === "candidate") {
+    return { args: adoptLine(row.name) };
+  }
+  if (state === "refused") {
+    return { why: asSentence(row.adoption?.reason, "It can't be imported") };
+  }
+  if (row.entry !== undefined) {
+    return state === undefined
+      ? { args: adoptLine(row.name) }
+      : { why: asSentence(row.adoption?.reason, "agentx already manages it") };
+  }
+  const occurrence = occurrenceOf(row);
+  if (occurrence === undefined) {
+    return { why: "It's in a project's folder, so it can't be imported" };
+  }
+  if (occurrence.kind !== "directory") {
+    return { why: "It's a link, so it can't be imported" };
+  }
+  const folder = directoryName(occurrence.path);
+  if (row.nameInLibrary === true) {
+    return {
+      inTheWay: folder,
+      why: `Your library already has a skill named ${folder}, this folder's name. Import or remove that skill first`,
+    };
+  }
+  return { args: adoptLine(folder) };
+};
+
+/**
  * The `skill import` command line that takes over an unmanaged skill, or undefined when
  * `skill import` has no way to take it:
  *
@@ -169,24 +217,8 @@ const adoptLine = (name: string): string[] =>
  * either.
  */
 export const adoptArgs = (row: SkillRow): string[] | undefined => {
-  if (row.kind !== "disk") {
-    return undefined;
-  }
-  const state = row.adoption?.state;
-  if (state === "candidate") {
-    return adoptLine(row.name);
-  }
-  if (state === "refused") {
-    return undefined;
-  }
-  if (row.entry !== undefined) {
-    return state === undefined ? adoptLine(row.name) : undefined;
-  }
-  const occurrence = occurrenceOf(row);
-  if (occurrence?.kind !== "directory" || row.nameInLibrary === true) {
-    return undefined;
-  }
-  return adoptLine(directoryName(occurrence.path));
+  const result = importOf(row);
+  return result !== undefined && "args" in result ? result.args : undefined;
 };
 
 /** Why no chip of a skill can be changed, and the control that unlocks them when there is one. */
@@ -268,6 +300,35 @@ export const seenBy = (
   row.agents
     .map((id) => configurations.find((c) => c.id === id))
     .filter((c) => c !== undefined);
+
+/**
+ * What `skill remove <name>` does to the agents that see a library skill: the paths it deletes
+ * are the library entry and each placement agentx keeps as it made it, and every other folder
+ * of the skill stays as it is. `losing` are the agents that see the skill now and see it nowhere
+ * else, in inventory order; `keeping` those that still see it in a folder that stays.
+ */
+export const removalOf = (
+  row: SkillRow,
+  configurations: Configuration[]
+): { losing: Configuration[]; keeping: Configuration[] } => {
+  const deleted = new Set(
+    (row.entry?.placements ?? [])
+      .filter((p) => p.mode === "library" || p.kind === p.mode)
+      .map((p) => p.path)
+  );
+  const keeps = new Set(
+    row.occurrences
+      .filter(
+        (o) =>
+          o.scope === "user" && o.plugin === undefined && !deleted.has(o.path)
+      )
+      .map((o) => o.configuration)
+  );
+  return {
+    keeping: configurations.filter((c) => keeps.has(c.id)),
+    losing: seenBy(row, configurations).filter((c) => !keeps.has(c.id)),
+  };
+};
 
 /** The label of the chip of `c` for `row`: the control's name in the runner. */
 export const chipLabel = (row: SkillRow, c: Configuration) =>

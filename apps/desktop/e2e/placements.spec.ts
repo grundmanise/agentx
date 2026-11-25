@@ -577,6 +577,45 @@ test.describe("many agents", () => {
 });
 
 test.describe("banners", () => {
+  test("a folder named as a library skill: the banner says why it can't be imported, and Open selects that skill", async ({
+    cli,
+    page,
+  }) => {
+    const folder = "/home/me/.cursor/skills/pdf";
+    const ownPdf = {
+      content_hash: "h-own-pdf",
+      description: "",
+      logical_id: "skill:h-own-pdf",
+      name: "pdf",
+      occurrences: [
+        {
+          configuration: "cursor",
+          id: `cursor:${folder}`,
+          kind: "directory" as const,
+          path: folder,
+          resolved_path: folder,
+          scope: "user" as const,
+        },
+      ],
+      physical_id: "skill:h-own-pdf",
+    };
+    cli.register(["skill", "files", "pdf", "--configuration", "cursor"], {
+      events: filesOf("pdf"),
+    });
+    await openSkill(cli, page, "pdf", "skill:h-own-pdf", {
+      ...inventory,
+      skills: [...inventory.skills, ownPdf],
+    });
+    const banner = pane(page, "pdf").getByRole("note", {
+      name: "Not managed by agentx",
+    });
+    await expect(banner).toContainText(
+      "Your library already has a skill named pdf, this folder's name."
+    );
+    await banner.getByRole("button", { name: "Open pdf" }).click();
+    await expect(page).toHaveURL(/#\/skills\/pdf$/u);
+  });
+
   test("Not in any agent: Add to agents places the skill in every enabled agent", async ({
     cli,
     page,
@@ -796,6 +835,61 @@ test.describe("Remove", () => {
     await dialog.getByRole("button", { name: "Remove" }).click();
     await expect(toasts(page).getByText("Removed draft skill")).toBeVisible();
     expect(later(cli)).toEqual([["skill", "remove", "draft", "--json"]]);
+  });
+
+  test("an unmanaged skill: the dialog names the agents that keep a folder agentx didn't place, and the toast does not repeat it", async ({
+    cli,
+    page,
+  }) => {
+    const cursorCopy = "/home/me/.cursor/skills/scratch";
+    const machine = {
+      ...inventory,
+      skills: inventory.skills.map((n) =>
+        n.name === "scratch"
+          ? {
+              ...n,
+              occurrences: [
+                ...n.occurrences,
+                {
+                  configuration: "cursor",
+                  id: `cursor:${cursorCopy}`,
+                  kind: "directory" as const,
+                  path: cursorCopy,
+                  resolved_path: cursorCopy,
+                  scope: "user" as const,
+                },
+              ],
+            }
+          : n
+      ),
+    } satisfies InlineEvent;
+    await openSkill(cli, page, "scratch", "scratch", machine);
+    await pane(page, "scratch").getByRole("button", { name: "Remove" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Remove scratch from this machine?",
+    });
+    await expect(
+      dialog
+        .getByRole("list", { name: "Agents that see it" })
+        .getByRole("listitem")
+    ).toHaveText(["Codex", "Gemini CLI"]);
+    await expect(dialog).toContainText(
+      "Cursor still sees it: agentx leaves the folders it didn't place."
+    );
+    cli.register(["skill", "remove", "scratch"], {
+      logs: [
+        {
+          level: "warn",
+          message: `cursor still sees scratch at ${cursorCopy}, which agentx did not place there`,
+        },
+      ],
+    });
+    await dialog.getByRole("button", { name: "Remove" }).click();
+    const toast = toasts(page)
+      .getByRole("listitem")
+      .filter({ hasText: "Removed scratch skill" });
+    await expect(toast).toBeVisible();
+    await expect(toast).not.toContainText(cursorCopy);
   });
 
   test("a skill of a source: the dialog lists the agents that see it", async ({

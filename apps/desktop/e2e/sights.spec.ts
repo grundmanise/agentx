@@ -17,16 +17,10 @@ const gemini = configuration("gemini-cli", { name: "Gemini CLI" });
 const opencode = configuration("opencode", { name: "OpenCode" });
 const cline = configuration("cline", { name: "Cline" });
 
-const place = (
-  kind: PlaceKind,
-  agents: Configuration[],
-  label = ""
-): Place => ({
-  agents,
-  key: kind === "library" ? "library" : `${kind}:${label}`,
-  kind,
-  label,
-});
+const place = (kind: PlaceKind, agents: Configuration[], label = ""): Place => {
+  const key = kind === "library" ? "library" : `${kind}:${label}`;
+  return { agents, content: key, key, kind, label };
+};
 
 const readers = [cursor, codex, copilot, gemini, opencode, cline];
 const hubSkill = place("library", [claude, ...readers]);
@@ -257,6 +251,33 @@ test("sightsOf: an agent with only the plugin's copy does not see the library's"
   expect(
     s.places.map((p) => `${p.key}: ${p.agents.map((a) => a.id).join(",")}`)
   ).toEqual(["library: codex", "plugin:acme: claude-code"]);
+  expect(clashText(s)).toBeUndefined();
+});
+
+test("sightsOf: copies with the same content in several folders are one skill", () => {
+  const cursorAt = configuration("cursor", {
+    name: "Cursor",
+    path: "/home/me/.cursor/skills",
+  });
+  const copies = row(
+    [
+      at("claude-code", "/home/me/.claude/skills/review"),
+      at("cursor", "/home/me/.claude/skills/review"),
+      at("cursor", "/home/me/.cursor/skills/review"),
+    ],
+    {
+      node: {
+        content_hash: "h-review",
+        description: "",
+        logical_id: "skill:h-review",
+        name: "review",
+        occurrences: [],
+        physical_id: "skill:h-review",
+      },
+    }
+  );
+  const s = sightsOf(copies, [], [claudeAt, cursorAt]);
+  expect(s.places).toHaveLength(2);
   expect(clashText(s)).toBeUndefined();
 });
 
