@@ -326,7 +326,14 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 		plan.absent = !inLibrary || !ours
 		copies := edit.copiesOf(r.name)
 		gone := removalDeletes(targets, r.name, libPath, copies, ours)
-		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, copies, gone, nil); err != nil {
+		var traced map[string]adoptPlace
+		if ours && inLibrary {
+			traced = inv.tracedCopies(r.name, libPath)
+			for path := range traced {
+				gone[path] = true
+			}
+		}
+		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, copies, gone, traced); err != nil {
 			m.Discard()
 			return err
 		}

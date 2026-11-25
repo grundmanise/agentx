@@ -122,17 +122,20 @@ export const sightsOf = (
     agent: Configuration,
     mine: boolean
   ) => {
-    const kept = places.get(place.key) ?? {
+    const key =
+      place.kind === "project" ? `${place.key}:${content}` : place.key;
+    const kept = places.get(key) ?? {
       ...place,
       agents: [],
       content: place.kind === "plugin" ? place.key : content,
+      key,
     };
     if (!kept.agents.some((a) => a.id === agent.id)) {
       kept.agents.push(agent);
     }
-    places.set(place.key, kept);
+    places.set(key, kept);
     if (mine) {
-      own.add(place.key);
+      own.add(key);
     }
   };
   const byId = new Map(configurations.map((c) => [c.id, c]));

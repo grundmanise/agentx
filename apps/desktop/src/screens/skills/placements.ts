@@ -321,7 +321,7 @@ export const removeArgs = (name: string): string[] =>
  * What `skill remove <name>` does to the agents that see a skill: it deletes the library entry,
  * each placement agentx keeps as it made it, and every folder of the skill under its name in an
  * agent's own skills folder, the folders holding the skill's files. A link of the user's and a
- * folder under another name stay. `losing` are the agents that see the skill now and nowhere
+ * folder under another name stay; a link into what goes no longer reaches the skill. `losing` are the agents that see the skill now and nowhere
  * else, in inventory order; `keeping` those that still see it in a place that stays.
  */
 export const removalOf = (
@@ -334,9 +334,14 @@ export const removalOf = (
       .filter((p) => p.mode === "library" || p.kind === p.mode)
       .map((p) => p.path)
   );
+  const goes = (o: Occurrence) =>
+    deleted.has(o.path) ||
+    (o.kind === "directory" && directoryName(o.path) === name);
+  const gone = new Set(
+    row.occurrences.filter(goes).map((o) => o.resolved_path)
+  );
   const stays = (o: Occurrence) =>
-    !deleted.has(o.path) &&
-    !(o.kind === "directory" && directoryName(o.path) === name);
+    !goes(o) && !(o.kind === "symlink" && gone.has(o.resolved_path));
   const keeps = new Set(
     row.occurrences
       .filter((o) => o.scope === "user" && o.plugin === undefined && stays(o))

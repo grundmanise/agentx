@@ -400,11 +400,20 @@ func (inv *invocation) removeFolders(ctx context.Context, name string, from []st
 					"delete the folder you no longer want yourself")
 			}
 		}
+		edit, err := inv.beginSettings()
+		if err != nil {
+			return err
+		}
 		m := home.NewMutation(inv.dirs.Home)
 		plan.deleted = nil
 		for _, r := range read {
 			plan.deleted = append(plan.deleted, removalStep{id: r.targets[0].id, path: r.path, mode: modeCopy, state: r.state})
 			m.Remove(r.path, r.state)
+		}
+		edit.dropSkill(name)
+		if err := edit.stage(m, inv.dirs.Home); err != nil {
+			m.Discard()
+			return err
 		}
 		return m.Apply(inv.refs(ctx))
 	})
