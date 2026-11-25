@@ -136,7 +136,8 @@ test("Use a different name: Fork runs skill fork <name> --name <new> and selects
   await expect(submit).toBeDisabled();
   await field.fill("my--pdf");
   await expect(submit).toBeDisabled();
-  await field.fill("my-pdf");
+  await field.fill("my pdf");
+  await expect(field).toHaveValue("my-pdf");
   await expect(submit).toBeEnabled();
   cli.register(["skill", "fork", "pdf", "--name", "my-pdf"], {
     events: [forked("my-pdf"), forked("pdf")],

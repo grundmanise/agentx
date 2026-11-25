@@ -25,3 +25,17 @@ export const breaksSkillNameRule = (name: string) =>
   name !== "" &&
   !isSkillName(name) &&
   !(name.endsWith("-") && isSkillName(name.slice(0, -1)));
+
+/**
+ * The name in `field` with each space typed or pasted turned into a hyphen, the caret kept where
+ * it was.
+ */
+export const typedSkillName = (field: HTMLInputElement) => {
+  const name = field.value.replaceAll(/\s/gu, "-");
+  if (name !== field.value) {
+    const { selectionEnd, selectionStart } = field;
+    field.value = name;
+    field.setSelectionRange(selectionStart, selectionEnd);
+  }
+  return name;
+};

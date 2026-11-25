@@ -16,7 +16,7 @@ Optionally, link the issue it resolves, like "Closes #123". Skip all preambles a
 
 ## Evidence
 
-<!-- Concrete evidence that the change works. Show it before and after with screenshots, a recording, or—for an execution-based change—the console output. -->
+<!-- Concrete evidence that the change works. Show it before and after with screenshots, a recording, or—for an execution-based change—the console output. Never describe a visual change in words: show it with screenshots or a recording. -->
 
 - **Before:** <!-- screenshot/output -->
 - **After:** <!-- screenshot/output -->
