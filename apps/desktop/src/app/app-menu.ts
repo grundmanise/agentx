@@ -1,5 +1,5 @@
 // The app menu's own items on macOS (`src-tauri/src/app_menu.rs`): Settings… (⌘,) opens Settings,
-// and Check for Updates… checks at once, as Check now in Settings does. A browser has no app menu.
+// and Check for Updates… checks at once, as Check for updates in Settings does. A browser has no app menu.
 import { listen } from "@tauri-apps/api/event";
 
 import { checkAppUpdateNow } from "#/app/app-update.ts";

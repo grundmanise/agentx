@@ -1,40 +1,87 @@
-// One section of the Settings page (DESIGN.md §6 "Settings"): the label column with the section's
-// label and the line under it, then its content. Sections stack in the order
-// `settings-screen.tsx` lists them, with a hairline between two of them; a section that has
-// nothing to show renders nothing, and no hairline is left for it.
+// One card of the Settings page (DESIGN.md §6 "Settings"), on shadcn's Card: its title, then its
+// rows, a hairline between two of them. Cards stack in the order `settings-screen.tsx` lists them;
+// a card that has nothing to show renders nothing.
+//
+// A row (`SettingsRow`), on shadcn's Item, is the setting's name over its line at the left and its
+// control at the right; what shows under the row, such as a field or a result, comes on a line of
+// its own. A row with no name is only what it holds, such as the Editor's radio group. With
+// `htmlFor`, the whole row labels that control, so a click anywhere on it toggles a switch.
 import { useId } from "react";
 import type { ReactNode } from "react";
 
-export interface SettingsSectionProps {
-  /** The section label, such as "This machine". */
+import { Card, CardContent, CardTitle } from "#/components/ui/card.tsx";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemFooter,
+  ItemTitle,
+} from "#/components/ui/item.tsx";
+
+export interface SettingsCardProps {
+  /** The card's title, such as "This machine". */
   title: string;
-  /** The line under the label, in `text.muted`; absent for a section that needs none. */
-  description?: string;
   children: ReactNode;
 }
 
-export const SettingsSection = ({
-  title,
-  description,
-  children,
-}: SettingsSectionProps) => {
+export const SettingsCard = ({ title, children }: SettingsCardProps) => {
   const id = useId();
   return (
-    <section
-      aria-labelledby={id}
-      className="grid-cols-settings gap-x-settings-columns py-settings-section border-shell-divider grid border-t first:border-t-0"
-    >
-      <div className="flex min-w-0 flex-col gap-1">
-        <h2 id={id} className="type-settings-label text-text-primary m-0">
-          {title}
-        </h2>
-        {description !== undefined && (
-          <p className="type-secondary text-text-muted m-0">{description}</p>
+    <Card aria-labelledby={id}>
+      <CardTitle id={id}>{title}</CardTitle>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+};
+
+export interface SettingsRowProps {
+  /** The setting's name. */
+  name?: ReactNode;
+  /** The line under the name. */
+  line?: ReactNode;
+  /** The line's id, for the control's `aria-describedby`. */
+  lineId?: string;
+  /** The control at the right: a switch, buttons, a value. */
+  control?: ReactNode;
+  /** The id of the control the row labels. */
+  htmlFor?: string;
+  /** What shows under the row. */
+  children?: ReactNode;
+}
+
+export const SettingsRow = ({
+  name,
+  line,
+  lineId,
+  control,
+  htmlFor,
+  children,
+}: SettingsRowProps) => {
+  if (name === undefined) {
+    return <Item>{children}</Item>;
+  }
+  const parts = (
+    <>
+      <ItemContent>
+        <ItemTitle>{name}</ItemTitle>
+        {line !== undefined && (
+          <ItemDescription id={lineId}>{line}</ItemDescription>
         )}
-      </div>
-      <div className="gap-settings-section flex min-w-0 flex-col">
-        {children}
-      </div>
-    </section>
+      </ItemContent>
+      {control !== undefined && <ItemActions>{control}</ItemActions>}
+      {children !== undefined && children !== false && (
+        <ItemFooter>{children}</ItemFooter>
+      )}
+    </>
+  );
+  return htmlFor === undefined ? (
+    <Item>{parts}</Item>
+  ) : (
+    <Item asChild>
+      <label htmlFor={htmlFor} className="cursor-pointer">
+        {parts}
+      </label>
+    </Item>
   );
 };

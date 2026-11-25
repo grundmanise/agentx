@@ -1,7 +1,8 @@
 // The app's own updates: the check after the startup checks pass, the title bar's Update to,
-// Installing with the download's percent, Restart to update, App updates in Settings with its
-// Check for updates switch and Check now, and the macOS app menu's Settings… and Check for
-// Updates…. The Rust side's updater is the mocked CLI's.
+// Installing with the download's percent, Restart to update, the Updates card in Settings with the
+// version, when the app last checked, Check for updates, Release notes and the Automatic update
+// checks switch, and the macOS app menu's Settings… and Check for Updates…. The Rust side's
+// updater is the mocked CLI's.
 import type { Page } from "@playwright/test";
 
 import { launch } from "./fixtures/palette-publish.ts";
@@ -14,9 +15,9 @@ const updateButton = (page: Page) =>
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 const section = (page: Page) =>
-  page.getByRole("region", { exact: true, name: "App updates" });
+  page.getByRole("region", { exact: true, name: "Updates" });
 const checkSwitch = (page: Page) =>
-  section(page).getByRole("switch", { name: "Check for updates" });
+  section(page).getByRole("switch", { name: "Automatic update checks" });
 
 test("an update the check finds installs from the title bar, then restarts the app", async ({
   cli,
@@ -89,7 +90,7 @@ test("with no update, the title bar shows nothing for it", async ({
   await expect(updateButton(page)).toHaveCount(0);
 });
 
-test("Check for updates off: the app does not check, and Check now still does", async ({
+test("Automatic update checks off: the app does not check, and Check for updates still does", async ({
   cli,
   page,
 }) => {
@@ -100,16 +101,20 @@ test("Check for updates off: the app does not check, and Check now still does", 
   await expect(checkSwitch(page)).not.toBeChecked();
   expect(cli.appUpdateChecks).toBe(0);
 
-  await section(page).getByRole("button", { name: "Check now" }).click();
+  await section(page)
+    .getByRole("button", { name: "Check for updates" })
+    .click();
   await expect(toasts(page)).toContainText("You're running the latest version");
   expect(cli.appUpdateChecks).toBe(1);
 
   cli.offerAppUpdate("0.4.0");
-  await section(page).getByRole("button", { name: "Check now" }).click();
+  await section(page)
+    .getByRole("button", { name: "Check for updates" })
+    .click();
   await expect(updateButton(page)).toHaveAccessibleName("Update to 0.4.0");
 });
 
-test("the switch saves Check for updates and keeps the editor", async ({
+test("the switch saves Automatic update checks and keeps the editor", async ({
   cli,
   page,
 }) => {
@@ -157,4 +162,67 @@ test("the app menu's Settings… and ⌘, open Settings", async ({ cli, page }) 
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+Comma");
   await expect(page).toHaveURL(/#\/settings$/u);
+});
+
+test("Updates shows the version and when the app last checked, and Release notes opens its release", async ({
+  cli,
+  page,
+}) => {
+  launch(cli, "synced");
+  await page.goto("/#/settings");
+
+  await expect(section(page)).toContainText("agentx 0.3.0");
+  await expect(section(page)).toContainText("Checked just now");
+
+  await section(page).getByRole("button", { name: "Release notes" }).click();
+  await expect
+    .poll(() => cli.openedUrls)
+    .toEqual(["https://github.com/grundmanise/agentx/releases/tag/v0.3.0"]);
+});
+
+test("with Automatic update checks off, Updates says it has not checked yet", async ({
+  cli,
+  page,
+}) => {
+  launch(cli, "synced");
+  cli.savePreferences({ check_updates: false, editor: { kind: "system" } });
+  await page.goto("/#/settings");
+
+  await expect(section(page)).toContainText("Not checked yet");
+});
+
+test("a build that is no release has no Release notes", async ({
+  cli,
+  page,
+}) => {
+  launch(cli, "synced");
+  cli.appVersion = "0.0.0";
+  await page.goto("/#/settings");
+
+  await expect(section(page)).toContainText("agentx 0.0.0");
+  await expect(
+    section(page).getByRole("button", { name: "Release notes" })
+  ).toHaveCount(0);
+});
+
+test("an update a check finds installs from Updates, as from the title bar", async ({
+  cli,
+  page,
+}) => {
+  launch(cli, "synced");
+  cli.offerAppUpdate("0.4.0");
+  cli.holdAppUpdateInstall();
+  await page.goto("/#/settings");
+
+  await expect(section(page)).toContainText("agentx 0.4.0 is available");
+  await section(page).getByRole("button", { name: "Update to 0.4.0" }).click();
+  await expect(
+    section(page).getByRole("button", { name: "Installing…" })
+  ).toBeDisabled();
+
+  cli.endAppUpdateInstall();
+  await section(page)
+    .getByRole("button", { name: "Restart to update" })
+    .click();
+  await expect.poll(() => cli.restarts).toBe(1);
 });

@@ -778,10 +778,14 @@
   --gap-check-row: 22px;
   --size-check-mark: 20px;
   --gap-check-mark: 14px;
-  --grid-template-columns-settings: 240px minmax(0, 560px);
-  --gap-settings-columns: 24px;
-  --padding-settings-section: 28px;
-  --gap-settings-section: 16px;
+  --max-width-settings: 760px;
+  --gap-settings-cards: 16px;
+  --padding-settings-card-x: 24px;
+  --padding-settings-card-top: 20px;
+  --padding-settings-card-bottom: 4px;
+  --padding-settings-row: 16px;
+  --gap-settings-row: 12px;
+  --width-settings-control: 224px;
 }
 
 /* 5. Type roles (DESIGN.md §3): the only way to set a face, size, weight, line height and

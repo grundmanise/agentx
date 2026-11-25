@@ -389,6 +389,8 @@ export class MockCli {
   private preferences: unknown = { editor: { kind: "system" } };
   // The app update the next checks find, and how an install of it ends.
   private appUpdate: { version: string; current_version: string } | null = null;
+  /** The version the app reports for itself. */
+  appVersion = "0.3.0";
   private holdingInstall = false;
   /** How the held install ended, once the test ended it: failed or not. */
   private installEnded: boolean | undefined;
@@ -847,6 +849,9 @@ export class MockCli {
       case "preferences_write": {
         this.preferences = field(args, "preferences");
         return null;
+      }
+      case "plugin:app|version": {
+        return this.appVersion;
       }
       case "app_update_check": {
         this.appUpdateChecks += 1;

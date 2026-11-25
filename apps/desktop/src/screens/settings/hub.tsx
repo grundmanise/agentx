@@ -1,6 +1,8 @@
-// The Hub section of Settings: the Git repository your hub skills publish to. With none
-// set, a URL field and Save, which runs `source add <url> --hub`. With one set, its URL, a
-// Read-only tag when access is limited, and Change… (a new URL, after the replace warning) and Unlink (`source remove <url>`, after its warning).
+// The Hub card of Settings: the Git repository your hub skills publish to, then Import skills
+// (`adopt-skills.tsx`) and Ignore system files (`comparing-edits.tsx`). With no hub set, a URL
+// field and Save, which runs `source add <url> --hub`. With one set, its URL, a Read-only tag when
+// access is limited, and Change… (a new URL, after the replace warning) and Unlink
+// (`source remove <url>`, after its warning).
 // What it shows is the Sources slice, which `source list` fills again after each command; a
 // failure of Save shows under the field, in the CLI's words as one sentence-cased paragraph, a
 // hint that names a command put in the app's words (docs/help-center/cli/source.mdx).
@@ -24,7 +26,9 @@ import { Input } from "#/components/ui/input.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { rewriteHint } from "#/lib/app-hint.ts";
 import type { HintRule } from "#/lib/app-hint.ts";
-import { SettingsSection } from "#/screens/settings/section.tsx";
+import { AdoptSkillsRow } from "#/screens/settings/adopt-skills.tsx";
+import { IgnoreSystemFilesRow } from "#/screens/settings/comparing-edits.tsx";
+import { SettingsCard, SettingsRow } from "#/screens/settings/section.tsx";
 import { hubSource } from "#/screens/settings/source-rows.ts";
 import { agentx, usePending } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
@@ -37,6 +41,8 @@ export const SAVE_HUB_LABEL = "save hub";
 export const DETACH_HUB_LABEL = "detach hub";
 
 /** A confirmation: its title, its warning, Cancel and the button that goes ahead. */
+
+const LINE = "The Git repository skills publish to.";
 const Confirm = ({
   open,
   onOpenChange,
@@ -242,45 +248,53 @@ const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Baseline, not center: the mono URL then sits on the middle of the pill. */}
-      <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-        <p className="type-technical text-text-primary m-0 break-all">{url}</p>
-        {readOnly && <Badge tone="neutral">Read-only</Badge>}
-      </div>
-      {changing ? (
+    <SettingsRow
+      name={
+        <span className="flex min-w-0 flex-wrap items-baseline gap-2">
+          <span className="type-technical text-text-primary break-all">
+            {url}
+          </span>
+          {readOnly && <Badge tone="neutral">Read-only</Badge>}
+        </span>
+      }
+      line={LINE}
+      control={
+        changing ? undefined : (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              track="settings.hub-change"
+              disabled={busy}
+              onClick={() => {
+                setChanging(true);
+              }}
+            >
+              Change…
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              track="settings.hub-unlink"
+              disabled={busy}
+              onClick={() => {
+                setDetaching(true);
+              }}
+            >
+              {busy && <Spinner />}
+              Unlink
+            </Button>
+          </>
+        )
+      }
+    >
+      {changing && (
         <RemoteForm
           current={url}
           onDone={() => {
             setChanging(false);
           }}
         />
-      ) : (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            track="settings.hub-change"
-            disabled={busy}
-            onClick={() => {
-              setChanging(true);
-            }}
-          >
-            Change…
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            track="settings.hub-unlink"
-            disabled={busy}
-            onClick={() => {
-              setDetaching(true);
-            }}
-          >
-            {busy && <Spinner />}
-            Unlink
-          </Button>
-        </div>
       )}
       <Confirm
         open={detaching}
@@ -302,20 +316,19 @@ const HubRow = ({ url, readOnly }: { url: string; readOnly: boolean }) => {
         danger
         onConfirm={detach}
       />
-    </div>
+    </SettingsRow>
   );
 };
 
-/** The Hub section, from the Sources slice. */
-export const HubSection = () => {
+/** The Hub card: the hub from the Sources slice, Import skills and Ignore system files. */
+export const HubCard = () => {
   const hub = useAppStore((s) => hubSource(sourcesOf(s)));
   return (
-    <SettingsSection
-      title="Hub"
-      description="The Git repository your skills publish to."
-    >
+    <SettingsCard title="Hub">
       {hub === undefined ? (
-        <RemoteForm />
+        <SettingsRow name="Repository" line={LINE}>
+          <RemoteForm />
+        </SettingsRow>
       ) : (
         <HubRow
           // A new hub starts with its field closed.
@@ -324,6 +337,8 @@ export const HubSection = () => {
           readOnly={hub.access === "read-only"}
         />
       )}
-    </SettingsSection>
+      <AdoptSkillsRow />
+      <IgnoreSystemFilesRow />
+    </SettingsCard>
   );
 };

@@ -32,7 +32,7 @@ const pane = (page: Page, name: string) =>
     .getByRole("region", { name: "Skill details" })
     .getByRole("article", { name });
 const settingsSection = (page: Page) =>
-  page.getByRole("region", { exact: true, name: "Import skills" });
+  page.getByRole("region", { exact: true, name: "Hub" });
 const dialog = (page: Page) => page.getByRole("dialog");
 /** The rows of the dialog's list of `tool`, each read as "{state}: {name}" then any reason. */
 const rows = (where: Locator, tool: string) =>
@@ -116,16 +116,15 @@ const afterRun = async (cli: MockCli, managed: string[]) => {
   ]);
 };
 
-test.describe("the Import skills section of Settings", () => {
+test.describe("Import skills in the Hub card of Settings", () => {
   test("has a button for each tool that has skills to adopt", async ({
     cli,
     page,
   }) => {
     await openSettings(cli, page);
-    await expect(settingsSection(page).getByRole("button")).toHaveText([
-      "Import skills from Skills CLI",
-      "Import skills from Skillshare",
-    ]);
+    await expect(
+      settingsSection(page).getByRole("button", { name: /^Import from/u })
+    ).toHaveText(["Import from Skills CLI", "Import from Skillshare"]);
   });
 
   test("shows only the tool that has skills to adopt", async ({
@@ -133,9 +132,9 @@ test.describe("the Import skills section of Settings", () => {
     page,
   }) => {
     await openSettings(cli, page, previewWith(skillshareNames));
-    await expect(settingsSection(page).getByRole("button")).toHaveText([
-      "Import skills from Skills CLI",
-    ]);
+    await expect(
+      settingsSection(page).getByRole("button", { name: /^Import from/u })
+    ).toHaveText(["Import from Skills CLI"]);
   });
 
   test("keeps its line when no tool has skills to adopt", async ({
@@ -158,7 +157,7 @@ test.describe("the Import skills section of Settings", () => {
   }) => {
     await openSettings(cli, page);
     await settingsSection(page)
-      .getByRole("button", { name: "Import skills from Skills CLI" })
+      .getByRole("button", { name: "Import from Skills CLI" })
       .click();
     const open = dialog(page);
     await expect(open).toHaveAccessibleName("Import skills from Skills CLI");
@@ -187,7 +186,7 @@ test.describe("the Import skills section of Settings", () => {
   test("the dialog for one skill says so", async ({ cli, page }) => {
     await openSettings(cli, page, previewWith(["api-docs"]));
     await settingsSection(page)
-      .getByRole("button", { name: "Import skills from Skillshare" })
+      .getByRole("button", { name: "Import from Skillshare" })
       .click();
     const open = dialog(page);
     await expect(open).toHaveAccessibleDescription(
@@ -214,7 +213,7 @@ test.describe("the Import skills section of Settings", () => {
       }
     );
     await settingsSection(page)
-      .getByRole("button", { name: "Import skills from Skills CLI" })
+      .getByRole("button", { name: "Import from Skills CLI" })
       .click();
     const open = dialog(page);
     await open.getByRole("button", { exact: true, name: "Import" }).click();
@@ -238,11 +237,11 @@ test.describe("the Import skills section of Settings", () => {
         .getByRole("region", {
           exact: true,
           includeHidden: true,
-          name: "Import skills",
+          name: "Hub",
         })
         .getByRole("button", {
           includeHidden: true,
-          name: "Import skills from Skillshare",
+          name: "Import from Skillshare",
         })
     ).toBeDisabled();
 
@@ -279,7 +278,7 @@ test.describe("the Import skills section of Settings", () => {
     });
     cli.register(["skill", "import"], { events: previewWith(skillshareNames) });
     await settingsSection(page)
-      .getByRole("button", { name: "Import skills from Skillshare" })
+      .getByRole("button", { name: "Import from Skillshare" })
       .click();
     const open = dialog(page);
     await open.getByRole("button", { exact: true, name: "Import" }).click();
@@ -289,9 +288,9 @@ test.describe("the Import skills section of Settings", () => {
       "Imported: frontend__ui",
     ]);
     await open.getByRole("button", { name: "Done" }).click();
-    await expect(settingsSection(page).getByRole("button")).toHaveText([
-      "Import skills from Skills CLI",
-    ]);
+    await expect(
+      settingsSection(page).getByRole("button", { name: /^Import from/u })
+    ).toHaveText(["Import from Skills CLI"]);
   });
 
   test("a run that adopts none says so in the dialog", async ({
@@ -304,7 +303,7 @@ test.describe("the Import skills section of Settings", () => {
       exitCode: 5,
     });
     await settingsSection(page)
-      .getByRole("button", { name: "Import skills from Skills CLI" })
+      .getByRole("button", { name: "Import from Skills CLI" })
       .click();
     const open = dialog(page);
     await open.getByRole("button", { exact: true, name: "Import" }).click();
@@ -330,7 +329,7 @@ test.describe("the Import skills section of Settings", () => {
       exitCode: 10,
     });
     await settingsSection(page)
-      .getByRole("button", { name: "Import skills from Skillshare" })
+      .getByRole("button", { name: "Import from Skillshare" })
       .click();
     const open = dialog(page);
     await open.getByRole("button", { exact: true, name: "Import" }).click();

@@ -17,7 +17,7 @@ import {
   saveOpenAfterCreate,
 } from "#/lib/editor.ts";
 import type { DetectedEditor, EditorChoice } from "#/lib/editor.ts";
-import { SettingsSection } from "#/screens/settings/section.tsx";
+import { SettingsCard, SettingsRow } from "#/screens/settings/section.tsx";
 
 /** The placeholder of the Custom command field. */
 export const COMMAND_PLACEHOLDER = "code --wait";
@@ -152,32 +152,30 @@ const OpenAfterCreate = ({ initial }: { initial: boolean }) => {
   const [checked, setChecked] = useState(initial);
   const id = useId();
   return (
-    <label
+    <SettingsRow
+      name="Open editor after creating a skill"
       htmlFor={id}
-      className="flex cursor-pointer items-start justify-between gap-6"
-    >
-      <span className="type-body text-text-primary">
-        Open editor after creating a skill
-      </span>
-      <Switch
-        id={id}
-        track="settings.open-after-create-toggle"
-        aria-label="Open editor after creating a skill"
-        checked={checked}
-        onCheckedChange={(on) => {
-          setChecked(on);
-          void (async () => {
-            if (!(await saveOpenAfterCreate(on))) {
-              setChecked(!on);
-            }
-          })();
-        }}
-      />
-    </label>
+      control={
+        <Switch
+          id={id}
+          track="settings.open-after-create-toggle"
+          aria-label="Open editor after creating a skill"
+          checked={checked}
+          onCheckedChange={(on) => {
+            setChecked(on);
+            void (async () => {
+              if (!(await saveOpenAfterCreate(on))) {
+                setChecked(!on);
+              }
+            })();
+          }}
+        />
+      }
+    />
   );
 };
 
-export const EditorSection = () => {
+export const EditorCard = () => {
   const [read, setRead] = useState<
     | {
         editor: EditorChoice;
@@ -203,16 +201,15 @@ export const EditorSection = () => {
     };
   }, []);
   return (
-    <SettingsSection
-      title="Editor"
-      description="The application that opens a skill when you edit it."
-    >
+    <SettingsCard title="Editor">
       {read !== undefined && (
         <>
-          <EditorChoices initial={read.editor} found={read.found} />
+          <SettingsRow>
+            <EditorChoices initial={read.editor} found={read.found} />
+          </SettingsRow>
           <OpenAfterCreate initial={read.openAfterCreate} />
         </>
       )}
-    </SettingsSection>
+    </SettingsCard>
   );
 };

@@ -1,7 +1,7 @@
 // The app's own updates (ADR 0019), which the Rust side's updater finds and installs: it reads
 // the update manifest of the app's channel. After the startup checks pass, and then once a day,
-// the app checks for an update unless the Check for updates preference is off; Check now in
-// Settings checks at once. An update the check finds shows in the title bar
+// the app checks for an update unless Automatic update checks is off in Settings, whose Check for
+// updates checks at once. An update the check finds shows in the title bar
 // (`app-update-status.tsx`), whose click installs it: the download's progress runs on its rim,
 // and once it is installed a click restarts the app into the new version. A browser has no app to
 // update, so none of this runs there.
@@ -39,8 +39,10 @@ interface AppUpdateState {
   update?: AppUpdate;
   /** The install the rim shows: while it runs, then until the rim has faded. */
   rim?: RimRun;
-  /** Whether Check now runs. */
+  /** Whether Check for updates in Settings runs. */
   checking: boolean;
+  /** When the last check that reached the manifest ended (Date.now()); undefined before one. */
+  checkedAt?: number;
   /** The Check for updates preference; undefined until it is read. */
   checkUpdates?: boolean;
 }
@@ -60,7 +62,11 @@ export const settleAppUpdateRim = () => {
   useAppUpdateStore.setState({ rim: undefined });
 };
 
-/** Whether Check now runs. */
+/** When the last check that reached the manifest ended; undefined before one. */
+export const useAppUpdateCheckedAt = () =>
+  useAppUpdateStore((s) => s.checkedAt);
+
+/** Whether Check for updates in Settings runs. */
 export const useAppUpdateChecking = () => useAppUpdateStore((s) => s.checking);
 
 /** The Check for updates preference; undefined until it is read. */
@@ -78,6 +84,7 @@ const check = async (manual: boolean) => {
   }
   try {
     const found = await invoke<Available | null>("app_update_check");
+    useAppUpdateStore.setState({ checkedAt: Date.now() });
     // An install that started meanwhile keeps its state.
     const now = useAppUpdateStore.getState().update;
     if (now !== undefined && now.phase !== "available") {
@@ -99,7 +106,7 @@ const check = async (manual: boolean) => {
   }
 };
 
-/** Check now, in Settings: checks at once, whatever the preference says. */
+/** Check for updates, in Settings: checks at once, whatever the preference says. */
 export const checkAppUpdateNow = async () => {
   if (useAppUpdateStore.getState().checking) {
     return;

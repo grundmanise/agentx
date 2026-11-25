@@ -1,13 +1,15 @@
 // This machine: the machine's label, which `config set label <value>` changes on Enter or when the
-// field loses focus with a changed value, and the machine id. Both come from the inventory's
-// `machine`, and the field stays pending until the inventory after the change arrives. A refusal shows
-// under the field as one sentence-cased paragraph (`ProblemText`), the label sent keeping its case.
-import { useState } from "react";
+// field loses focus with a changed value, the machine id, and where the library and the store are
+// (`storage.tsx`). The label and id come from the inventory's `machine`, and the field stays pending
+// until the inventory after the change arrives. A refusal shows under the row as one
+// sentence-cased paragraph (`ProblemText`), the label sent keeping its case.
+import { useId, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Input } from "#/components/ui/input.tsx";
-import { SettingsSection } from "#/screens/settings/section.tsx";
+import { SettingsCard, SettingsRow } from "#/screens/settings/section.tsx";
+import { StorageRows } from "#/screens/settings/storage.tsx";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -38,6 +40,7 @@ const LabelField = ({ label }: { label: string }) => {
   // The value last sent: losing focus does not send it again.
   const [sent, setSent] = useState<string | undefined>();
   const pending = useSettling(LABEL_LABEL);
+  const id = useId();
 
   // A new label from the CLI replaces what the field holds.
   if (shown !== label) {
@@ -69,52 +72,64 @@ const LabelField = ({ label }: { label: string }) => {
   };
 
   return (
-    <div className="gap-input-label flex flex-col">
-      <Input
-        aria-label="Machine label"
-        aria-busy={pending ? true : undefined}
-        aria-invalid={problem === undefined ? undefined : true}
-        readOnly={pending}
-        value={draft}
-        onChange={(e) => {
-          setDraft(e.target.value);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void save(draft);
-          }
-        }}
-        onBlur={() => {
-          if (draft !== sent) {
-            void save(draft);
-          }
-        }}
-      />
+    <SettingsRow
+      name="Label"
+      line="Shown on skills you publish from here."
+      htmlFor={id}
+      control={
+        <span className="w-settings-control flex">
+          <Input
+            id={id}
+            aria-label="Machine label"
+            aria-busy={pending ? true : undefined}
+            aria-invalid={problem === undefined ? undefined : true}
+            readOnly={pending}
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void save(draft);
+              }
+            }}
+            onBlur={() => {
+              if (draft !== sent) {
+                void save(draft);
+              }
+            }}
+          />
+        </span>
+      }
+    >
       {problem !== undefined && (
         <ProblemText
           problem={problem}
           keep={sent === undefined ? [] : [sent]}
         />
       )}
-    </div>
+    </SettingsRow>
   );
 };
 
-export const ThisMachineSection = () => {
+export const ThisMachineCard = () => {
   const label = useAppStore((s) => s.inventory?.machine.label);
   const id = useAppStore((s) => s.inventory?.machine.id);
   return (
-    <SettingsSection
-      title="This machine"
-      description="Shown on skills you publish from here."
-    >
+    <SettingsCard title="This machine">
       {label !== undefined && <LabelField label={label} />}
       {id !== undefined && (
-        <p className="type-technical text-text-hint m-0" title="Machine id">
-          {id}
-        </p>
+        <SettingsRow
+          name="Machine id"
+          control={
+            <span className="type-technical text-text-hint select-text">
+              {id}
+            </span>
+          }
+        />
       )}
-    </SettingsSection>
+      <StorageRows />
+    </SettingsCard>
   );
 };

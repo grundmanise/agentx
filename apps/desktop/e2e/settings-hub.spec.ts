@@ -53,9 +53,7 @@ const openSettings = async (cli: MockCli, page: Page, listed = sources) => {
 test("the hub with what the inventory lists", async ({ cli, page }) => {
   await openSettings(cli, page);
   const remote = hubSection(page);
-  await expect(remote).toContainText(
-    "The Git repository your skills publish to."
-  );
+  await expect(remote).toContainText("The Git repository skills publish to.");
   await expect(remote.getByText(HUB, { exact: true })).toBeVisible();
   // No line under the URL: the count was skills published there, not skills installed.
   await expect(remote.getByText(/hub skills? on it|fetched/u)).toHaveCount(0);

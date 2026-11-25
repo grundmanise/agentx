@@ -561,10 +561,12 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `detail.columns-gap` | 40 | `gap-detail-columns` | Details ↔ History |
 | `detail.kv-gap` | 12 12 | `gap-detail-kv` | Details key/value grid (row, column) |
 | `detail.kv-key-width` | 96 | `w-detail-key` |  |
-| `settings.columns` | 240 · up to 560 | `grid-cols-settings` | Settings section: the label column, then the content |
-| `settings.column-gap` | 24 | `gap-x-settings-columns` | Settings label column → content |
-| `settings.section-padding` | 28 | `py-settings-section` | Above and below each Settings section, between its hairlines |
-| `settings.section-gap` | 16 | `gap-settings-section` | Between the rows of a Settings section's content |
+| `settings.max-width` | 760 | `max-w-settings` | Settings cards |
+| `settings.card-gap` | 16 | `gap-settings-cards` | Between two Settings cards |
+| `settings.card-padding` | 20 24 4 | `pt-settings-card-top px-settings-card-x pb-settings-card-bottom` | Settings card: its title, then its rows |
+| `settings.row-padding` | 16 | `py-settings-row` | Above and below each row of a Settings card, between its hairlines |
+| `settings.row-gap` | 12 | `gap-settings-row` | A Settings row → what shows under it (a field, a result) |
+| `settings.control-width` | 224 | `w-settings-control` | A field at the right of a Settings row, such as the machine label |
 
 ### Lists and rows
 
@@ -783,7 +785,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `popover.row-radius` | 10 | Popover rows, Reset button |
 | `menu.radius` | 12 | Menu |
 | `menu.row-radius` | 8 | Menu rows |
-| `card.radius` | 18 | Inbox cards, review file cards |
+| `card.radius` | 18 | Inbox cards, review file cards, Settings cards |
 | `card.tile-radius` | 10 | Icon tile |
 | `file-card.radius` | 16 | File tree card |
 | `banner.radius` | 18 |  |
@@ -1229,16 +1231,18 @@ A key or key combination such as `esc` or `⌘K` (`KbdGroup` and `Kbd`, `src/com
 
 ### Settings
 
-The Settings page (`src/screens/settings`): the serif page title, then one section per area, a `shell.divider` hairline between sections and none above the first.
+The Settings page (`src/screens/settings`): the serif page title, then one card per area, `settings.card-gap` apart and at most `settings.max-width` wide: This machine, Hub, Editor, Updates, Analytics and crash reporting, Troubleshooting, Snapshot.
 
-- A section is a `settings.columns` grid with `settings.column-gap` and `settings.section-padding` above and below. The label column holds the label in `type.settings-label` `text.primary` and one line under it in `type.secondary` `text.muted`; the content column holds the rows, `settings.section-gap` apart.
-- Inputs are `input.height`. Paths and ids are `type.technical`, ids in `text.hint`.
-- A switch row is the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted`, the switch on the right (§6 "Switch").
+- A card is shadcn's Card (`src/components/ui/card.tsx`, `SettingsCard` in `src/screens/settings/section.tsx`): `card.bg` with a 1px `card.border` and `card.radius`, padded `settings.card-padding`: its title in `type.settings-label` `text.primary`, then its rows, a 1px `card.border` hairline between two of them. A card with nothing to show is left out.
+- A row is shadcn's Item (`src/components/ui/item.tsx`, `SettingsRow`), `settings.row-padding` above and below: the setting's name in `type.body` `text.primary` over its line in `type.secondary` `text.muted` at the left, its control at the right (a switch, small buttons, a value), up to three fifths of the row. What shows under the row, such as a field, a hint or a result, comes `settings.row-gap` below it. A switch row is a label, so a click anywhere on it toggles the switch (§6 "Switch").
+- Inputs are `input.height`; a field at the right of a row is `settings.control-width` wide. Paths and ids are `type.technical`, ids in `text.hint`.
 - A failure under a field is a refusal under a field (§6 "Refusal under a field").
+- This machine: the label field, the machine id, then where the library is and how much the store takes.
 - Editor holds an app preference, not a machine setting (ADR 0013): it runs no command and saves the moment it changes. A radio group (§6 "Radio group") lists the editors found on this machine, and one chosen before that is gone since, so the choice still shows. A custom command is a mono input under the group, saved on Enter or when it loses focus, with a hint under it in `type.secondary` `text.hint`. Under them, the Open editor after creating a skill switch, off by default, another app preference.
-- App updates holds an app preference too (ADR 0013, ADR 0019): a switch row that turns the background check off, on by default, and a secondary button that checks at once, pending (§6) while it runs. With no update, a plain toast says so; an update it finds shows in the title bar (§6 "App update (title bar)"). A browser has no app to update, so there the section is left out. The wording is in `src/screens/settings/app-updates.tsx`.
+- Updates holds an app preference too (ADR 0013, ADR 0019). Its first row is the app's version, with when the app last checked under it (a relative time that keeps time while Settings is open; Not checked yet before a check), and at the right Check for updates, secondary and pending (§6) while it runs, then Release notes, ghost, which opens this version's GitHub release (none for a build that is no release, 0.0.0). With no update, a plain toast says so. Once a check finds an update, the line says it is available and the button follows the title bar (§6 "App update (title bar)"): Update to, primary; Installing, pending; Restart to update, primary. Then the Automatic update checks switch row, on by default. A browser has no app to update, so there the card is left out. The wording is in `src/screens/settings/app-updates.tsx`.
 - Hub, once set, shows its URL in `type.technical` with a neutral Read-only pill beside it when access is limited, as a source card does (§6 "Source card"); a remote you can write to has no tag.
-- Import skills sits after Hub: one secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, one line in `text.muted` keeps the section in place.
+- Import skills is the Hub card's second row: one small secondary button per tool with skills to adopt, each opening the adopt dialog (§6 "Adopt dialog") for that tool. With none, a line in `text.hint` under the row says so. Ignore system files is its last row.
+- Troubleshooting holds Command line (the CLI's version and git's in `type.technical`, with Run checks) and Activity log (Show activity log).
 - A choice that replaces something (an existing snapshot file on Save snapshot, the machine's settings on Apply snapshot) opens a confirm dialog with a danger confirm; a picked file's path shows in `type.technical` `text.caption`.
 - The result of Apply snapshot is one `type.secondary` line per outcome: what it installed or updated in `text.secondary`, then the warnings in `tone.attention.fg` after an `AlertTriangleIcon` (`xs`). A skipped skill's name has a dotted underline and the CLI's reason as its tooltip. When nothing changed, the one line is `text.muted`.
 
@@ -1263,8 +1267,8 @@ Left of the sync status, `button.gap` apart (`src/app/app-update-status.tsx`, wh
 - Installing, with the download's percent once the server gives a size: `aria-busy`, no tooltip, and the download on the pill's rim, the `sm` progress rim (§8 "Progress rim"). A failed install says so in a failure toast and the pill goes back to available. When a check found a newer update meanwhile, nothing is installed: the pill offers the newer version, and the failure toast names it with an action that installs it.
 - Installed: a click restarts the app into the new version. The app never restarts on its own.
 - A visually hidden polite live region beside the pill (`StatusAnnouncement`) holds the phase, never the percent.
-- The app checks after the startup checks pass, never during them, and once a day while it runs, unless Check for updates is off in Settings (§6 "Settings").
-- On macOS the app menu holds Settings… (⌘,) and Check for Updates… under About, as Mac apps place them (`src-tauri/src/app_menu.rs`, `src/app/app-menu.ts`). Check for Updates… checks at once, as Check now does. ⌘, (Ctrl+, on Linux) opens Settings from the app too, once the startup checks pass.
+- The app checks after the startup checks pass, never during them, and once a day while it runs, unless Automatic update checks is off in Settings (§6 "Settings").
+- On macOS the app menu holds Settings… (⌘,) and Check for Updates… under About, as Mac apps place them (`src-tauri/src/app_menu.rs`, `src/app/app-menu.ts`). Check for Updates… checks at once, as Check for updates in Settings does. ⌘, (Ctrl+, on Linux) opens Settings from the app too, once the startup checks pass.
 
 ### Sidebar
 
