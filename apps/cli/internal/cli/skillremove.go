@@ -269,7 +269,7 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 func (inv *invocation) stageRemovals(m *home.Mutation, plan *removalPlan, targets []placeTarget, libPath string, judge copyJudge, copies []string, gone map[string]bool, traced map[string]adoptPlace) error {
 	staged := map[string]bool{}
 	for _, t := range targets {
-		if t.readsLibrary {
+		if t.atLibrary {
 			if !plan.absent {
 				plan.library = append(plan.library, t.id)
 			}
@@ -596,10 +596,10 @@ func (inv *invocation) removalTargets(ctx context.Context, name string, from []s
 	if err != nil {
 		return nil, false, err
 	}
-	var universal []string
+	var universal []placeTarget
 	for _, t := range targets {
-		if t.readsLibrary {
-			universal = append(universal, t.id)
+		if t.atLibrary {
+			universal = append(universal, t)
 		}
 	}
 	if len(universal) > 0 {
@@ -612,16 +612,17 @@ func (inv *invocation) removalTargets(ctx context.Context, name string, from []s
 	return targets, false, nil
 }
 
-// refuseUniversal answers a --from naming the universal clients in named.
-// What it offers instead is the removal --from universal asks for, with
-// every configuration that removal would take the skill from, a fork's
-// included.
-func (inv *invocation) refuseUniversal(named []string, name string) error {
+// refuseUniversal answers a --from naming configurations whose placement is
+// the library entry, the universal clients and those whose skills
+// directory links to the library. What it offers instead is the removal
+// --from universal asks for, with every configuration that removal would
+// take the skill from, a fork's included.
+func (inv *invocation) refuseUniversal(named []placeTarget, name string) error {
 	reach, err := inv.wholeRemovalReach(name)
 	if err != nil {
 		return err
 	}
-	return universalLibrary(named, name, reach, lexists(inv.worktreeRoot(name)))
+	return universalLibrary(libraryRefusal(named, name), name, reach, lexists(inv.worktreeRoot(name)))
 }
 
 // wholeRemovalReach names every configuration the whole removal would take
@@ -685,7 +686,7 @@ func removalDeletes(targets []placeTarget, name, libPath string, copies []string
 		gone[canonicalPath(libPath)] = true
 	}
 	for _, t := range targets {
-		if t.readsLibrary {
+		if t.atLibrary {
 			continue // the library entry is its placement, and it goes only when the removal is whole
 		}
 		path := filepath.Join(t.dir, name)
@@ -889,23 +890,63 @@ func (inv *invocation) whyKept(path, state, libPath, id, name string, gone map[s
 // the request that can be done costs before making it. For a fork, worktree
 // set when it has one here, that removal deletes the worktree too, with
 // any unpublished edits, and the fork's branch, which the hint says.
-func universalLibrary(named []string, name string, reach []string, worktree bool) error {
+func universalLibrary(refusal, name string, reach []string, worktree bool) error {
 	hint := "take " + name + " off the machine with 'agentx skill remove " + name + " --from " + fromUniversal + "', which removes it from " +
 		strings.Join(reach, ", ")
 	if worktree {
 		hint += " and deletes its worktree, with any unpublished edits, and its branch"
 	}
-	return fail(exitRefused, universalRefusal(named, name), hint)
+	return fail(exitRefused, refusal, hint)
 }
 
 // universalRefusal is what a --from naming universal clients is refused
 // with, the universal clients it named in id order.
 func universalRefusal(named []string, name string) string {
-	who, reads, them := named[0], "reads", "it"
-	if len(named) > 1 {
-		who, reads, them = strings.Join(named, ", "), "read", "them"
+	return libraryReason(named, nil) + " so " + name + " cannot be removed from " + itOrThem(len(named)) + " alone"
+}
+
+// libraryRefusal is what a --from naming configurations whose placement is
+// the library entry is refused with: the universal clients it named, then
+// those whose skills directory links to the library, each in id order.
+func libraryRefusal(named []placeTarget, name string) string {
+	var reads, linked []string
+	for _, t := range named {
+		if t.linked {
+			linked = append(linked, t.id)
+		} else {
+			reads = append(reads, t.id)
+		}
 	}
-	return fmt.Sprintf("%s %s the library directly, so %s cannot be removed from %s alone", who, reads, name, them)
+	return libraryReason(reads, linked) + " so " + name + " cannot be removed from " + itOrThem(len(named)) + " alone"
+}
+
+// libraryReason says why the library entry is the placement of reads, the
+// universal clients, and of linked, those whose skills directory links to
+// the library, ending in a comma.
+func libraryReason(reads, linked []string) string {
+	var parts []string
+	switch len(reads) {
+	case 0:
+	case 1:
+		parts = append(parts, reads[0]+" reads the library directly")
+	default:
+		parts = append(parts, strings.Join(reads, ", ")+" read the library directly")
+	}
+	switch len(linked) {
+	case 0:
+	case 1:
+		parts = append(parts, linked[0]+"'s skills directory links to the library")
+	default:
+		parts = append(parts, "the skills directories of "+strings.Join(linked, ", ")+" link to the library")
+	}
+	return strings.Join(parts, " and ") + ","
+}
+
+func itOrThem(n int) string {
+	if n > 1 {
+		return "them"
+	}
+	return "it"
 }
 
 // reportRemoved reads the configurations this command covered again and
@@ -1000,7 +1041,7 @@ func (inv *invocation) warnStillSeen(inventory scan.Inventory, plan removalPlan,
 // --from leaves.
 func placementOwner(targets []placeTarget, id, path, name string) string {
 	for _, t := range targets {
-		if t.id == id || t.readsLibrary || t.dir == "" {
+		if t.id == id || t.atLibrary || t.dir == "" {
 			continue
 		}
 		if own := filepath.Join(t.dir, name); own == filepath.Clean(path) || canonicalPath(own) == canonicalPath(path) {
@@ -1024,7 +1065,7 @@ func (inv *invocation) warnSharedPlaces(plan removalPlan, covered []string) {
 	}
 	var left []string
 	for _, t := range inv.detectedTargets() {
-		if t.readsLibrary || t.dir == "" || containsString(covered, t.id) {
+		if t.atLibrary || t.dir == "" || containsString(covered, t.id) {
 			continue
 		}
 		own := canonicalPath(filepath.Join(t.dir, plan.name))

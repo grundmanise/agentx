@@ -369,7 +369,7 @@ func TestCloudUniversal(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, _ := scan.Lookup("claude-code")
-	equal(t, "claude-code linked to the library here", scan.ReadsLibrary(c, here), true)
+	equal(t, "claude-code linked to the library here", scan.LinksToLibrary(c, here), true)
 	equal(t, "claude-code on the cloud machine", cloudUniversal("claude-code"), false)
 }
 

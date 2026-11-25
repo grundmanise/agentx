@@ -37,7 +37,7 @@ func (inv *invocation) enableAndPlaceAll(ctx context.Context, id string) error {
 			inv.out.warn(w)
 		}
 		for _, t := range targets {
-			if !t.readsLibrary {
+			if !t.atLibrary {
 				sweepStaged(t.dir)
 			}
 		}
@@ -101,7 +101,10 @@ func (inv *invocation) addOwnRows(t *table, name string, targets []placeTarget, 
 func (inv *invocation) reportPlacedAll(ctx context.Context, id string, targets []placeTarget, names []string, done placements) error {
 	// placementTargets refuses an id it cannot place into, so the run has
 	// exactly the one configuration it named by the time it reports.
-	readsLibrary := len(targets) > 0 && targets[0].readsLibrary
+	var at placeTarget
+	if len(targets) > 0 {
+		at = targets[0]
+	}
 	total := len(names) + 1
 	for i, name := range names {
 		inv.progress(phasePlace, name, i+1, total)
@@ -139,12 +142,18 @@ func (inv *invocation) reportPlacedAll(ctx context.Context, id string, targets [
 		// skill list and scan print them.
 		inv.addOwnRows(t, lib.Name, targets, ev.Placements)
 	}
-	// A client that reads the library already sees every library skill, so
+	// A client whose placement is the library entry, as one that reads the
+	// library or whose skills directory links to it, already sees every
+	// library skill, so
 	// the run made no entry for it and may not say it placed anything. The
 	// rows below are still what that configuration sees, each of mode
 	// library, which is the answer to what enabling it got the user.
 	line := "placed " + inv.out.paint(noteStyle, plural(placed, "skill")) + " in " + inv.out.paint(heading, id)
-	if readsLibrary {
+	switch {
+	case at.linked:
+		line = inv.out.paint(heading, id) + "'s skills directory links to the library, so it already sees " +
+			inv.out.paint(noteStyle, plural(placed, "skill")) + "; nothing was placed"
+	case at.atLibrary:
 		line = inv.out.paint(heading, id) + " reads the library and already sees " +
 			inv.out.paint(noteStyle, plural(placed, "skill")) + "; nothing was placed"
 	}
@@ -154,7 +163,7 @@ func (inv *invocation) reportPlacedAll(ctx context.Context, id string, targets [
 	inv.out.done(line)
 	inv.out.render(t, "")
 	inv.summary = id + " is now enabled, " + plural(placed, "skill") + " placed"
-	if readsLibrary {
+	if at.atLibrary {
 		inv.summary = id + " is now enabled and already sees " + plural(placed, "skill") + " through the library"
 	}
 	if n := len(done.skipped); n > 0 {

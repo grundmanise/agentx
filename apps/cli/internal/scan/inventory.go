@@ -83,7 +83,7 @@ type Configuration struct {
 	Name         string `json:"name"`
 	Path         string `json:"path"`
 	Enabled      bool   `json:"enabled"`
-	Placement    string `json:"placement"` // what agentx places there: symlink, copy, or library for a client that reads the library
+	Placement    string `json:"placement"` // what agentx places there: symlink, copy, or library for a client that reads the library or whose skills directory links to it
 	ReadsLibrary bool   `json:"reads_library"`
 	PhysicalID   string `json:"physical_id"`
 	LogicalID    string `json:"logical_id"`
@@ -297,10 +297,10 @@ func Read(o Options) *Scan {
 			Path:         c.ConfigDir(o.Dirs),
 			Enabled:      !slices.Contains(o.Disabled, c.Slug()),
 			Placement:    PlacementSymlink,
-			ReadsLibrary: readsLibrary(dirs, o.Dirs.Library),
+			ReadsLibrary: ReadsLibrary(c, o.Dirs),
 		}
 		switch {
-		case conf.ReadsLibrary:
+		case conf.ReadsLibrary, LinksToLibrary(c, o.Dirs):
 			conf.Placement = PlacementLibrary
 		case slices.Contains(o.Copies, conf.ID):
 			conf.Placement = PlacementCopy

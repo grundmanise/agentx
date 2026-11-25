@@ -70,7 +70,9 @@ const placements: { value: Placement; label: string }[] = [
 
 /** What a card's Placement control decides, on hover. */
 const placementTitle = (c: Configuration) =>
-  `How new skills reach ${c.name}. Symlink: ${c.name} reads them from your shared library, so updates show at once. Copy: ${c.name} gets its own copy, for an agent client that doesn't follow symlinks. Skills already there stay as they are until you convert them.`;
+  c.placement === "library"
+    ? `${c.name}'s skills folder links to your library, so it sees every library skill.`
+    : `How new skills reach ${c.name}. Symlink: ${c.name} reads them from your shared library, so updates show at once. Copy: ${c.name} gets its own copy, for an agent client that doesn't follow symlinks. Skills already there stay as they are until you convert them.`;
 
 /**
  * Converts the skills already in `c` to `mode`: `config placement <id> <mode> --convert`. The CLI
@@ -141,7 +143,7 @@ const PlacementControl = ({
         labelledBy={id}
         title={placementTitle(c)}
         surface="card"
-        disabled={disabled}
+        disabled={disabled || c.placement === "library"}
         busy={pending}
       />
     </div>

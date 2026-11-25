@@ -181,7 +181,7 @@ func (inv *invocation) createFork(ctx context.Context, gitDir, name, dir, commit
 	sweepStaged(inv.worktreesDir())
 	sweepStaged(inv.dirs.Library)
 	for _, t := range targets {
-		if !t.readsLibrary {
+		if !t.atLibrary {
 			sweepStaged(t.dir)
 		}
 	}

@@ -254,7 +254,7 @@ func placementKind(o scan.Occurrence, entry bool) string {
 // library entry itself, which is the placement of every client that reads
 // the library directly: an entry of the library directory, named by its
 // path or by a skills directory that leads to the library through a
-// symlink, either way round, as scan.ReadsLibrary counts such a client, or
+// symlink, either way round, see scan.LinksToLibrary, or
 // the real directory the library entry, itself a symlink into a client's
 // skills directory, leads to, see isLibraryDirectory. A symlink elsewhere
 // that leads to the library entry is a placement of its own, agentx's or

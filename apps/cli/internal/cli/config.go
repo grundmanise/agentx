@@ -243,9 +243,8 @@ func newPlacementCommand(inv *invocation) *cobra.Command {
 			if err := inv.detectedConfiguration(id); err != nil {
 				return err
 			}
-			if inv.configurationReadsLibrary(id) {
-				return fail(exitUsage, id+" reads the library, so its placement is the library entry",
-					"it sees every library skill there; choose symlink or copy for a configuration that does not read the library")
+			if err := inv.placementIsLibrary(id); err != nil {
+				return err
 			}
 			if convert {
 				return inv.setPlacementAndConvert(cmd.Context(), id, mode == scan.PlacementCopy)
@@ -291,15 +290,22 @@ func placedWord(copies bool) string {
 	return "symlinks"
 }
 
-// configurationReadsLibrary reports whether the detected configuration id
-// is one whose client reads the library.
-func (inv *invocation) configurationReadsLibrary(id string) bool {
-	for _, c := range scan.Detect(inv.dirs) {
-		if c.Slug() == id {
-			return scan.ReadsLibrary(c, inv.dirs)
+// placementIsLibrary refuses a placement mode for the detected
+// configuration id when its placement is the library entry: its client
+// reads the library, or its skills directory links to the library.
+func (inv *invocation) placementIsLibrary(id string) error {
+	for _, t := range inv.detectedTargets() {
+		switch {
+		case t.id != id || !t.atLibrary:
+		case t.linked:
+			return fail(exitUsage, id+"'s skills directory links to the library, so its placement is the library entry",
+				"it sees every library skill there; choose symlink or copy for a configuration whose skills directory is its own")
+		default:
+			return fail(exitUsage, id+" reads the library, so its placement is the library entry",
+				"it sees every library skill there; choose symlink or copy for a configuration that does not read the library")
 		}
 	}
-	return false
+	return nil
 }
 
 // settingSetter validates value for key before any lock is taken and returns

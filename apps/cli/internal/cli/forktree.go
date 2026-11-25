@@ -428,7 +428,7 @@ func (inv *invocation) layTipJournal(ctx context.Context, f forkSite, t tipLayin
 	recorded := edit.copiesOf(f.name)
 	sweepStaged(inv.worktreesDir())
 	for _, target := range inv.detectedTargets() {
-		if !target.readsLibrary && slices.Contains(recorded, target.id) {
+		if !target.atLibrary && slices.Contains(recorded, target.id) {
 			sweepStaged(target.dir)
 		}
 	}

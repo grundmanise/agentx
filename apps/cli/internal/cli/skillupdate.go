@@ -1068,7 +1068,7 @@ func (r *updateRun) apply(ctx context.Context) error {
 		swept := map[string]bool{}
 		for _, u := range live {
 			for _, t := range targets {
-				if !t.readsLibrary && !swept[t.dir] && slices.Contains(edit.copiesOf(u.name), t.id) {
+				if !t.atLibrary && !swept[t.dir] && slices.Contains(edit.copiesOf(u.name), t.id) {
 					swept[t.dir] = true
 					sweepStaged(t.dir)
 				}

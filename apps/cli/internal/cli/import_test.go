@@ -355,7 +355,7 @@ exec %GIT% "$@"
 func TestPlaceInto(t *testing.T) {
 	t.Parallel()
 	claude, cursor := placeTarget{id: "claude-code", dir: "/h/.claude/skills"}, placeTarget{id: "cursor", dir: "/h/.cursor/skills"}
-	codex := placeTarget{id: "codex", dir: "/h/.agents/skills", readsLibrary: true}
+	codex := placeTarget{id: "codex", dir: "/h/.agents/skills", atLibrary: true}
 	r := &applyRun{
 		targets: []placeTarget{claude, codex, cursor},
 		reads:   map[string][]string{"cursor": {cursor.dir, claude.dir}, "claude-code": {claude.dir}, "codex": {codex.dir}},

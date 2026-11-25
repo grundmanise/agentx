@@ -72,8 +72,8 @@ type placePlan struct {
 // entry, itself a symlink into a client's skills directory, leads to. The
 // client reads the library there, and replacing that directory with the
 // symlink would replace the skill's only content with a link to itself.
-// Detection counts a client of the first two as reading the library, see
-// scan.ReadsLibrary, and drift finds nothing at the third, see
+// Detection counts the library entry as the placement of a client of the
+// first two, see scan.LinksToLibrary, and drift finds nothing at the third, see
 // isLibraryDirectory, so placing it counts it as placed and writes nothing.
 // Every other overlap of the library and the places is planned as it is
 // and refused, see overlap.
@@ -90,7 +90,7 @@ func (inv *invocation) planPlace(lib scan.LibrarySkill, detected []placeTarget, 
 	for _, t := range detected {
 		if !slices.Contains(asked, t.id) {
 			notAsked = append(notAsked, t.id)
-		} else if t.readsLibrary {
+		} else if t.atLibrary {
 			plan.universal = append(plan.universal, t)
 		}
 	}
@@ -107,7 +107,7 @@ func (inv *invocation) planPlace(lib scan.LibrarySkill, detected []placeTarget, 
 		plan.places = append(plan.places, place)
 	}
 	for _, t := range detected {
-		if !t.readsLibrary {
+		if !t.atLibrary {
 			plan.sites = append(plan.sites, t.ownPlace(inv.dirs.Library, lib.Name))
 		}
 	}

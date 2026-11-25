@@ -1044,7 +1044,7 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 		}
 		sweepStaged(inv.dirs.Library)
 		for _, t := range targets {
-			if !t.readsLibrary {
+			if !t.atLibrary {
 				sweepStaged(t.dir)
 			}
 		}
