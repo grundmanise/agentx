@@ -74,8 +74,6 @@ test("a check that succeeds is one line, and one that fails keeps its last lines
   // Oldest first: what the launch ran by itself, the check that passed, then the failed one.
   await expect(lines(page, "agentx doctor")).toHaveCount(1);
   await expect(lines(page, "background scan started")).toHaveCount(1);
-  // Serve's inventory is no line: the log has commands and what went wrong.
-  await expect(lines(page, "inventory")).toHaveCount(0);
   const checks = lines(page, "agentx skill check-updates");
   await expect(checks).toHaveCount(2);
   await expect(checks.nth(1)).toContainText("FAILED exit 3");

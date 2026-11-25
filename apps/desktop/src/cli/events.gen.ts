@@ -5,7 +5,7 @@
 
 // The output schema version this app reads. An event of another version is
 // refused.
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 // What every event starts with.
 export interface Envelope {

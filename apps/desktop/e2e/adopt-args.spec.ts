@@ -20,7 +20,7 @@ const record = (
 ): AdoptionEvent => ({
   file: "/home/me/.agents/.skill-lock.json",
   name,
-  schema_version: 4,
+  schema_version: 5,
   state,
   tool: "vercel",
   type: "adoption",
@@ -77,7 +77,7 @@ const rowOf = (
     machine: { id: "machine-1", label: "studio-mac" },
     mcp_servers: [],
     scan_counter: 1,
-    schema_version: 4,
+    schema_version: 5,
     type: "inventory",
     warnings: [],
     ...machine,

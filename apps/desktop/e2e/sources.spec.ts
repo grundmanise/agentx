@@ -1470,7 +1470,7 @@ test("Select all in a source whose skills share a name: --all keeps the selected
   ].map(([subpath = "", name = ""]) => ({
     description: name,
     name,
-    schema_version: 4,
+    schema_version: 5,
     source: ACME_ID,
     subpath,
     tree: `t-${subpath}`,
