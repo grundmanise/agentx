@@ -86,13 +86,13 @@ V1, global only ([#401](https://github.com/grundmanise/agentx/issues/401)):
 
 - Manage skills across agents and machines
 - Create custom skills
-- Show MCP servers, read-only
+- Show MCP servers and plugins, read-only
 - Cloud agents: Claude Code, Codex and Cursor
 
 V2 ([#402](https://github.com/grundmanise/agentx/issues/402)):
 
 - Project scope for all of the above, with no automatic repo scanning
-- Manage MCP servers
+- Manage MCP servers and plugins
 - Manage memories
 - Stats for skills, tools and MCP servers, from your own machines
 
