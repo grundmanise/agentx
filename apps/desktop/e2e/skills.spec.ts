@@ -17,6 +17,7 @@ import {
   reviewDiffs,
   ACME,
 } from "./fixtures/skills.ts";
+import { reviewUpdateDiffs } from "./fixtures/update-diffs.ts";
 import {
   configuration,
   expect,
@@ -90,6 +91,10 @@ const openSkills = async (
   cli.register(["skill", "diff", "review"], { events: reviewDiffs });
   cli.register(["skill", "diff", "release-notes"], {
     events: releaseNotesDiffs,
+  });
+  // review has an update: its pane reads what the update changes.
+  cli.register(["skill", "diff", "review", "--update"], {
+    events: reviewUpdateDiffs,
   });
   cli.register(["skill", "diff", "pdf-letters"], { events: [] });
   await page.goto(path);

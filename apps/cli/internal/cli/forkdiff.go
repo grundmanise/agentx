@@ -120,7 +120,7 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 	}
 	subject := diffSubject{plain: f.name, painted: inv.out.paint(heading, sanitised(f.name))}
 	if fastHolds(t, inv.systemFilesIgnored(), v) {
-		inv.reportDiff(subject, f.name, against, nil, 0)
+		inv.reportDiff(subject, f.name, "", against, nil, 0)
 		return nil
 	}
 	files, left, err := inv.diffForkDir(ctx, f, t, v)
@@ -130,7 +130,7 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 	for _, p := range left {
 		inv.out.warn(quotedPath(filepath.Join(f.skillDir, filepath.FromSlash(p))) + " cannot be recorded by git and is left out of the diff")
 	}
-	inv.reportDiff(subject, f.name, against, files, len(left))
+	inv.reportDiff(subject, f.name, "", against, files, len(left))
 	return nil
 }
 

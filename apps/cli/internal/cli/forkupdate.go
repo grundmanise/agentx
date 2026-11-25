@@ -113,23 +113,6 @@ func forkBaseRecord(rec lineage.Record) (lineage.Record, *failure) {
 		"a skill created with 'agentx skill new', imported with 'agentx skill import', or forked from a plugin's skill, has no upstream version; its versions are its own commits")
 }
 
-// forkBaseOf is forkBaseRecord for a fork whose lineage was not read yet:
-// its history is walked first, in one git log.
-func (inv *invocation) forkBaseOf(ctx context.Context, gitDir string, rec lineage.Record) (lineage.Record, error) {
-	if rec.Fork == nil {
-		recs := map[string]lineage.Record{rec.Name: rec}
-		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
-			return lineage.Record{}, storeFailure(err)
-		}
-		rec = recs[rec.Name]
-	}
-	base, f := forkBaseRecord(rec)
-	if f != nil {
-		return lineage.Record{}, f
-	}
-	return base, nil
-}
-
 // judgeForkUpdate decides, before the lock, whether the fork whose branch
 // is rec can be updated, and merges its update. A fork with a merge
 // pending is judged by its checkout instead, see judgeForkCompletion. It

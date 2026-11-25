@@ -171,7 +171,6 @@ const activate = (childId: number) => {
     refreshes: Object.fromEntries(
       Object.entries(refreshes).filter(([id]) => !unanswered.includes(id))
     ),
-    updates: {},
   });
   void Promise.all(unanswered.map(resend));
 };
@@ -243,11 +242,7 @@ const apply = (childId: number, event: ServeEvent) => {
     acknowledge(event);
   } else if (event.type === "search") {
     answerSearch(event);
-  } else if (event.type === "update_available") {
-    set((s) => ({ updates: { ...s.updates, [event.name]: event } }));
   } else if (event.type === "update_check") {
-    // The check's update_available events came before it, and stay: a check of the hub
-    // alone adds to what the last full check found.
     // It carries no words of its own: a check that failed shows as the event.
     if (event.ok) {
       set({ lastChecked: event.checked_at });
