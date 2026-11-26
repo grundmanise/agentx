@@ -1,5 +1,5 @@
 // The Agents page: every configuration the scan detected, with its counts from the inventory's
-// edges, the Enabled switch, which runs `config enable|disable <id>` and offers Place all, the
+// edges, the Enabled switch, which runs `config enable|disable <id>`, the
 // Placement control, which runs `config placement <id> symlink|copy` and offers Convert, and Remove in the menu of a card and of a Universal column, which confirms and runs
 // `config remove <id> --yes`.
 import type { Locator, Page } from "@playwright/test";
@@ -52,7 +52,7 @@ test("lists the Universal card first, then the direct agents, with their counts"
     - article "Claude Code":
       - switch "Enabled" [checked]
       - heading "Claude Code" [level=2]
-      - text: /home/me/.claude-code
+      - link "/home/me/.claude-code"
       - paragraph: 5 skills · 1 server · 1 plugin
       - radiogroup "Placement":
         - radio "Symlink" [checked]
@@ -115,7 +115,7 @@ test("the Universal card wraps many agents into rows and stacks five logos", asy
   expect(last?.y).toBeGreaterThan(first?.y ?? 0);
 });
 
-test("turning an agent on runs config enable, and Place all places the library there", async ({
+test("turning an agent on runs config enable, with no action on the toast", async ({
   cli,
   page,
 }) => {
@@ -135,7 +135,11 @@ test("turning an agent on runs config enable, and Place all places the library t
   // The switch shows the inventory's state until the next inventory arrives.
   await expect(toggle).not.toBeChecked();
   enable.release();
-  await expect(toasts(page).getByText("Devin enabled")).toBeVisible();
+  const toast = toasts(page)
+    .getByRole("listitem")
+    .filter({ hasText: "Devin enabled" });
+  await expect(toast).toBeVisible();
+  await expect(toast.getByRole("button")).toHaveCount(0);
   await expect.poll(() => cli.serveRequests.length).toBe(1);
   await expect(toggle).toHaveAttribute("aria-busy", "true");
   await cli.serveEmit([
@@ -156,30 +160,7 @@ test("turning an agent on runs config enable, and Place all places the library t
   await expect(toggle).toBeChecked();
   await expect(toggle).not.toHaveAttribute("aria-busy");
 
-  // Seven library skills, none placed in Devin.
-  const warning =
-    "devin: /home/me/.config/devin/skills/scratch is not a placement agentx made and was left as it is";
-  cli.register(["config", "enable", "devin", "--place-all"], {
-    events: [
-      { type: "settings" },
-      {
-        ok: true,
-        summary: "devin is now enabled, 6 skills placed, 1 placement skipped",
-        type: "result",
-      },
-    ],
-    logs: [{ level: "warn", message: warning }],
-  });
-  await toasts(page).getByRole("button", { name: "Place all 7" }).click();
-  const toast = toasts(page)
-    .getByRole("listitem")
-    .filter({ hasText: "Placed 6 skills in Devin, 1 skipped" });
-  await expect(toast).toBeVisible();
-  await expect(toast).toContainText(warning);
-  expect(later(cli)).toEqual([
-    ["config", "enable", "devin", "--json"],
-    ["config", "enable", "devin", "--place-all", "--json"],
-  ]);
+  expect(later(cli)).toEqual([["config", "enable", "devin", "--json"]]);
 });
 
 test("turning an agent off runs config disable", async ({ cli, page }) => {
@@ -485,6 +466,30 @@ test("a click on cards selects them, and the bar enables, disables or removes th
     ["config", "disable", "cursor", "--json"],
     ["config", "remove", "codex", "github-copilot", "--yes", "--json"],
   ]);
+});
+
+test("an agent's path shows it in Finder without selecting it, and a column's divider is outside its selection", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  const cursor = card(page, "Cursor");
+  await cursor.getByRole("link", { name: "/home/me/.cursor" }).click();
+  await expect.poll(() => cli.reveals).toEqual([["/home/me/.cursor"]]);
+  await expect(
+    cursor.getByRole("button", { name: "Select Cursor" })
+  ).toHaveAttribute("aria-pressed", "false");
+
+  const codex = card(page, "Universal").getByRole("region", { name: "Codex" });
+  const toggle = codex.getByRole("button", { name: "Select Codex" });
+  const box = await codex.boundingBox();
+  if (box === null) {
+    throw new Error("not visible");
+  }
+  await page.mouse.click(box.x, box.y + box.height / 2);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
 });
 
 test("an agent whose skills folder links to the library: a direct agent whose placement is fixed", async ({
