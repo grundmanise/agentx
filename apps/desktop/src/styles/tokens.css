@@ -778,9 +778,12 @@
   --gap-diff-segment: 4px;
   --height-timeline-line: 20px;
   --spacing-timeline-indent: 22px;
-  --width-check-column: 480px;
+  --width-check-column: 392px;
   --gap-check-block: 36px;
   --gap-check-row: 22px;
+  /* One or two `type.check-detail` lines, each 2px below the one above. */
+  --min-height-check-details-1: calc(12.5px * 1.5 + 2px);
+  --min-height-check-details-2: calc((12.5px * 1.5 + 2px) * 2);
   --size-check-mark: 20px;
   --gap-check-mark: 14px;
   --max-width-settings: 760px;

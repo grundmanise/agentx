@@ -1,7 +1,7 @@
 // Troubleshooting: Command line, the CLI's version and git's as the startup checks found them
-// (`version` and doctor's `git` row), with Run checks, which opens the startup layer in manual
-// mode, whose Open agentx comes back here (src/app/startup-layer.tsx); and Activity log, which
-// opens the log of the last commands the app ran (src/app/activity-log.tsx).
+// (`version` and doctor's `git` row), with Run checks, which runs the startup checks again in a
+// dialog (src/app/checks-dialog.tsx); and Activity log, which opens the log of the last commands
+// the app ran (src/app/activity-log.tsx).
 import { Button } from "#/components/ui/button.tsx";
 import { SettingsCard, SettingsRow } from "#/screens/settings/section.tsx";
 import { runChecks, useStartup } from "#/startup/startup.ts";
