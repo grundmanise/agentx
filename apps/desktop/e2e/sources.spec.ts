@@ -1199,6 +1199,7 @@ test("Add source closes at once and shows the source loading, then opens it full
   await page.getByRole("button", { name: "Add source" }).click();
   await expect(dialog(page)).toBeVisible();
   await expect(dialog(page)).toContainText("Add #branch or #tag to pin it");
+  await expect(urlField(page)).toBeFocused();
   await urlField(page).fill("acme/more");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   await expect(dialog(page)).toHaveCount(0);

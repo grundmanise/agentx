@@ -27,6 +27,7 @@ const AddSourceForm = ({ onAdd }: { onAdd: (typed: string) => void }) => {
     >
       <div className="gap-input-label flex flex-col">
         <Input
+          autoFocus
           kind="mono"
           aria-label="Git URL or owner/name"
           placeholder="Git URL or owner/name"

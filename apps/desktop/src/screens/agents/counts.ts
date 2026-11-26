@@ -75,9 +75,3 @@ export const placedAsCount = (
   inventory.library.filter((e) =>
     e.placements.some((p) => p.configuration === id && p.mode === mode)
   ).length;
-
-/** How many library skills have no placement in the configuration: what Place all would place. */
-export const unplacedCount = (inventory: InventoryEvent, id: string) =>
-  inventory.library.filter(
-    (e) => !e.placements.some((p) => p.configuration === id)
-  ).length;
