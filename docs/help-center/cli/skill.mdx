@@ -119,6 +119,12 @@ If a source has two skills with the same name, agentx installs the first and ski
 warning: pdf under skills/pdf-v2 was skipped: the source has another skill named pdf under skills/pdf
 ```
 
+To install the other one, name it by its folder in the source:
+
+```sh
+agentx skill add owner/repo --name skills/pdf-v2
+```
+
 ### Clients that see every skill
 
 Some clients read the library directly: Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode and Cline, among others. These are universal clients. They see every skill in the library, so they get no link of their own. GitHub Copilot reads the library only while `COPILOT_HOME` is not set; with `COPILOT_HOME` set, it gets a link in `$COPILOT_HOME/skills`. A client also becomes universal when its skills directory and the library are one directory through a symlink. For example, if `~/.claude/skills` is a symlink to the library, Claude Code reads the library.

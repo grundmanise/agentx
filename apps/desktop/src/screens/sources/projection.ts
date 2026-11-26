@@ -286,11 +286,8 @@ export interface SkillCard {
   skillMd?: SkillMdRef;
   /** The skill's directory on its source's web page, when agentx knows the host's pages. */
   page?: string;
-  /**
-   * The subpath of the skill at an earlier subpath of the same source that has this card's name,
-   * which `skill add` installs instead: the card is in use by name, not added.
-   */
-  sharedWith?: string;
+  /** Whether another skill of the card's source has its name, in any case. */
+  twin?: boolean;
   /** The fork id of a hub skill. */
   forkId?: string;
 }
@@ -393,40 +390,51 @@ const sourceSkillStatus = (
     : { holder: named, status: "name-taken" };
 };
 
-/** Where a skill sits in its source, for a reason that names it. */
-const placeOf = (subpath: string) => (subpath === "" ? "the root" : subpath);
+/** A card's source and name in any case: the cards of one source that share a name share it. */
+const nameKey = (c: SkillCard) => `${c.source}\u0000${c.name.toLowerCase()}`;
 
-/**
- * The cards with each skill a source holds under the name of a skill at an earlier subpath, in
- * any case, as not selectable: the library holds one skill per name, and `skill add` installs
- * the first of a name and skips the rest. A card that cannot be selected already keeps its reason.
- */
-const withSharedNames = (cards: SkillCard[]): SkillCard[] => {
-  const nameOf = (c: SkillCard) => `${c.source}\u0000${c.name.toLowerCase()}`;
-  const first = new Map<string, string>();
+/** The cards with `twin` on each skill whose source holds another skill of its name. */
+const withTwins = (cards: SkillCard[]): SkillCard[] => {
+  const named = new Map<string, number>();
   for (const c of cards) {
-    const subpath = c.skillMd?.subpath;
-    const earlier = first.get(nameOf(c));
-    if (subpath !== undefined && (earlier === undefined || subpath < earlier)) {
-      first.set(nameOf(c), subpath);
+    if (c.skillMd !== undefined) {
+      named.set(nameKey(c), (named.get(nameKey(c)) ?? 0) + 1);
     }
   }
-  return cards.map((c) => {
-    const earlier = first.get(nameOf(c));
-    if (
-      c.status !== undefined ||
-      earlier === undefined ||
-      earlier === c.skillMd?.subpath
-    ) {
-      return c;
+  return cards.map((c) =>
+    (named.get(nameKey(c)) ?? 0) > 1 ? { ...c, twin: true } : c
+  );
+};
+
+/** Whether two cards are skills of one source with one name, of which the library holds one. */
+export const sameName = (a: SkillCard, b: SkillCard) =>
+  a.key !== b.key && nameKey(a) === nameKey(b);
+
+/** The cards, keeping only the first of each name of a source: what Select all selects. */
+export const oneOfEachName = (
+  cards: SkillCard[],
+  taken: Iterable<SkillCard> = []
+): SkillCard[] => {
+  const seen = new Set([...taken].map(nameKey));
+  return cards.filter((c) => {
+    if (seen.has(nameKey(c))) {
+      return false;
     }
-    return {
-      ...c,
-      sharedWith: earlier,
-      status: "name-taken",
-      title: `The skill at ${placeOf(earlier)} in this source is named ${c.name} too, and only the first of a name can be added.`,
-    };
+    seen.add(nameKey(c));
+    return true;
   });
+};
+
+/**
+ * How `skill add` names a card: by its name, or for a twin by its directory in the source, with a
+ * slash so that the CLI reads it as one.
+ */
+const selector = (c: SkillCard): string => {
+  const subpath = c.skillMd?.subpath ?? "";
+  if (c.twin !== true || subpath === "") {
+    return c.name;
+  }
+  return subpath.includes("/") ? subpath : `${subpath}/`;
 };
 
 /** The cards of a source's listing, as `source skills <id>` gave it. */
@@ -437,7 +445,7 @@ export const listingCards = (
   /** The ref the skills' pages are at: `pageRef` of the source. */
   ref = "HEAD"
 ): SkillCard[] =>
-  withSharedNames(
+  withTwins(
     listing.map((s) =>
       card(
         url,
@@ -497,7 +505,7 @@ export const resultCards = (
   /** The ref a source's pages are at, by its URL: `pageRef` of the source. */
   refOf: (url: string) => string = () => "HEAD"
 ): SkillCard[] =>
-  withSharedNames(
+  withTwins(
     results.map((r) =>
       card(
         r.source,
@@ -632,13 +640,14 @@ export const linkAdd = ({
   targets: string[];
   enabled: string[];
 }): AddPlan => {
-  const names = orderCards(selected).map((c) => c.name);
+  const cards = orderCards(selected);
+  const names = cards.map((c) => c.name);
   return {
     args: [
       "skill",
       "add",
       link,
-      ...nameFlags(names),
+      ...nameFlags(cards.map(selector)),
       ...toFlags(targets, enabled),
     ],
     names,
@@ -686,19 +695,13 @@ export const planAdds = ({
     const all = allOf?.get(source);
     const selection =
       all === undefined
-        ? nameFlags(names)
+        ? nameFlags(cards.map(selector))
         : [
             "--all",
-            // --except leaves out every skill of a name, so a name with a selected card stays in:
-            // the CLI installs the first of it, which is the one that can be selected.
             ...all.flatMap((c) =>
-              cards.some(
-                (s) =>
-                  s.key === c.key ||
-                  s.name.toLowerCase() === c.name.toLowerCase()
-              )
+              cards.some((s) => s.key === c.key)
                 ? []
-                : ["--except", c.name]
+                : ["--except", selector(c)]
             ),
           ];
     return {
