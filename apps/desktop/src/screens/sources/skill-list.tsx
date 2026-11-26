@@ -166,7 +166,7 @@ const SkillPath = ({ page, path }: { page: string; path: string }) => (
     href={page}
     title={page}
     {...trackAttribute("sources.skill-see-full")}
-    className="type-secondary text-text-primary pointer-events-auto inline-flex min-w-0 items-center gap-1 font-medium underline underline-offset-2"
+    className="type-secondary text-text-secondary hover:text-text-primary pointer-events-auto inline-flex min-w-0 items-center gap-1 underline-offset-2 hover:underline"
     onClick={(e) => {
       e.preventDefault();
       void openInBrowser(page);
