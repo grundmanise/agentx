@@ -1,5 +1,6 @@
 import { useInterval } from "@mantine/hooks";
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import type {
   LibraryEntry,
@@ -187,6 +188,37 @@ const matchedCards = (
         )
       );
 
+/**
+ * The card of the open source, which a search's results replace: folded, it fades out whole, then
+ * its room closes, so the results move up into its place and the card is never seen cut; unfolded,
+ * its room opens, then it fades in.
+ */
+const FoldingCard = ({
+  folded,
+  children,
+}: {
+  folded: boolean;
+  children: ReactNode;
+}) => (
+  <div
+    className={cn(
+      "grid transition-all duration-300 ease-in-out motion-reduce:transition-none",
+      folded
+        ? "grid-rows-source-card-folded -mt-page-title invisible delay-200"
+        : "grid-rows-source-card"
+    )}
+  >
+    <div
+      className={cn(
+        "min-h-0 overflow-hidden transition-opacity duration-200 ease-in-out motion-reduce:transition-none",
+        folded ? "opacity-0" : "delay-300"
+      )}
+    >
+      {children}
+    </div>
+  </div>
+);
+
 /** The selection without the cards `drop` names. */
 const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
   const next = new Map(selection);
@@ -352,6 +384,7 @@ export const SourcesScreen = () => {
   }, [query]);
 
   const onRefreshAll = async () => {
+    changeQuery("");
     setRefreshing(true);
     // The command and the read never reject: a failure is an outcome.
     await refreshAll();
@@ -604,27 +637,17 @@ export const SourcesScreen = () => {
           now={now}
           onOpen={open}
         />
-        {/* The card of the open source folds away while a search shows, and the results take its place. */}
         {activePill !== undefined && (
-          <div
-            className={cn(
-              "grid transition-all duration-300 ease-in-out motion-reduce:transition-none",
-              results === undefined
-                ? "grid-rows-source-card"
-                : "grid-rows-source-card-folded -mt-page-title invisible opacity-0"
-            )}
-          >
-            <div className="min-h-0 overflow-hidden">
-              <OpenSource
-                // A new source gets a new card, so a Remove dialog open on the old one closes.
-                key={activePill.key}
-                pill={activePill}
-                library={library}
-                now={now}
-                fallbackFocus={searchField}
-              />
-            </div>
-          </div>
+          <FoldingCard folded={results !== undefined}>
+            <OpenSource
+              // A new source gets a new card, so a Remove dialog open on the old one closes.
+              key={activePill.key}
+              pill={activePill}
+              library={library}
+              now={now}
+              fallbackFocus={searchField}
+            />
+          </FoldingCard>
         )}
         {allCards.length > 0 && (
           <SelectAllRow

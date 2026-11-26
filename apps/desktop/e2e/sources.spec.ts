@@ -1236,13 +1236,24 @@ test("Add source runs source add, then opens the new source fully preselected", 
       },
     ],
   });
+  // A search stays while the dialog is open, and ends once the source is added.
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
+  await field.fill("doc");
   await page.getByRole("button", { name: "Add source" }).click();
   await expect(dialog(page)).toBeVisible();
   await expect(dialog(page)).toContainText("Add #branch or #tag to pin it");
   await expect(urlField(page)).toBeFocused();
+  // The dialog hides the page from the accessibility tree.
+  await expect(
+    page.getByRole("searchbox", {
+      includeHidden: true,
+      name: "Search all sources",
+    })
+  ).toHaveValue("doc");
   await urlField(page).fill("acme/more");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   await expect(dialog(page)).toHaveCount(0);
+  await expect(field).toHaveValue("");
   await expect(
     toasts(page).getByText(`Added ${newUrl}: 2 skills`)
   ).toBeVisible();
@@ -1399,7 +1410,11 @@ test("Refresh all fetches every source in one run, then reads your skills, pendi
     holdAfter: 0,
   });
   const refreshAll = page.getByRole("button", { name: "Refresh all" });
+  // Refresh all ends a search.
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
+  await field.fill("doc");
   await refreshAll.click();
+  await expect(field).toHaveValue("");
   await fetch.started;
   await expect(refreshAll).toHaveAttribute("aria-busy", "true");
   await expect(refreshAll).toBeDisabled();
