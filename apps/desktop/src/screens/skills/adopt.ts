@@ -148,7 +148,6 @@ const update = (change: (run: AdoptRun) => AdoptRun) => {
   }));
 };
 
-/** Forgets the run once its dialog closes. A run still going is never forgotten. */
 /** The label of the run of `skill import --from <tool> --all`. */
 const adoptAllLabel = (tool: ToolArg) => `adopt all ${tool}`;
 
@@ -160,6 +159,7 @@ export const stopAdoptRun = () => {
   }
 };
 
+/** Forgets the run once its dialog closes. A run still going is never forgotten. */
 export const dismissAdoptRun = () => {
   if (useAdoptRun.getState().run?.phase !== "running") {
     useAdoptRun.setState({ run: undefined });
@@ -272,7 +272,7 @@ const answeredByRunner = (outcome: Outcome) =>
 
 /**
  * Runs one tool's `skill import --from <tool> --all` and settles its rows. Returns false when the
- * run did not report its skills, and the runs after it should not start.
+ * run did not report its skills or was stopped, and the runs after it should not start.
  */
 const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
   const offered = new Set(
@@ -306,7 +306,7 @@ const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
       rows: run.rows.map((row) => settled(row, tool, adoption)),
       warnings: [...run.warnings, ...otherWarnings(outcome)],
     }));
-    return true;
+    return !outcome.cancelled;
   }
   if (outcome.exitCode === EXIT_CODES.ok) {
     return true;

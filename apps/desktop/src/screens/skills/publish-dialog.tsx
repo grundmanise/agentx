@@ -358,29 +358,29 @@ const PublishDialog = ({
   files: FilesState;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) => (
-  <Dialog
-    open={open}
-    onOpenChange={stopOnClose(
-      [publishLabel(row.name), filesLabel(row.name), diffLabel(row.name)],
-      onOpenChange
-    )}
-  >
-    <DialogContent>
-      <DialogHeader showCloseButton={false}>
-        <DialogTitle>Publish changes</DialogTitle>
-        <Subtitle row={row} />
-      </DialogHeader>
-      <PublishForm
-        row={row}
-        files={files}
-        onClose={() => {
-          onOpenChange(false);
-        }}
-      />
-    </DialogContent>
-  </Dialog>
-);
+}) => {
+  const close = stopOnClose(
+    [publishLabel(row.name), filesLabel(row.name), diffLabel(row.name)],
+    onOpenChange
+  );
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent>
+        <DialogHeader showCloseButton={false}>
+          <DialogTitle>Publish changes</DialogTitle>
+          <Subtitle row={row} />
+        </DialogHeader>
+        <PublishForm
+          row={row}
+          files={files}
+          onClose={() => {
+            close(false);
+          }}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 /** A banner's button that opens the Publish dialog: Publish, or Publish to {source}. */
 export const PublishButton = ({
