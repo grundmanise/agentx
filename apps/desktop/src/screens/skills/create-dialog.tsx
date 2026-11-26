@@ -4,8 +4,7 @@
 // lists it. With Open editor after creating a skill on (Settings, Editor), it then opens its
 // SKILL.md in the editor the user chose; off, the Created toast offers Open editor. A name the CLI
 // refuses (exit 6: taken, or outside the grammar) shows its message under Name.
-import { useEffect, useId, useRef, useState } from "react";
-import type { RefObject } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent } from "#/cli/events.gen.ts";
@@ -109,13 +108,7 @@ const editSkill = (name: string) => {
 };
 
 /** The fields, what went wrong under them, and the buttons. Mounted while the dialog is open. */
-const CreateSkillForm = ({
-  nameField,
-  onClose,
-}: {
-  nameField: RefObject<HTMLInputElement | null>;
-  onClose: () => void;
-}) => {
+const CreateSkillForm = ({ onClose }: { onClose: () => void }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [refusal, setRefusal] = useState<Refusal | undefined>();
@@ -202,8 +195,8 @@ const CreateSkillForm = ({
           Name
         </label>
         <Input
-          ref={nameField}
           id={nameId}
+          autoFocus
           kind="mono"
           placeholder="my-skill"
           aria-describedby={nameHintId}
@@ -295,27 +288,18 @@ export const CreateSkillDialog = ({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) => {
-  const nameField = useRef<HTMLInputElement>(null);
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        onOpenAutoFocus={(e) => {
-          e.preventDefault();
-          nameField.current?.focus();
+}) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Create skill</DialogTitle>
+        <DialogDescription>Add a new skill to your agents.</DialogDescription>
+      </DialogHeader>
+      <CreateSkillForm
+        onClose={() => {
+          onOpenChange(false);
         }}
-      >
-        <DialogHeader>
-          <DialogTitle>Create skill</DialogTitle>
-          <DialogDescription>Add a new skill to your agents.</DialogDescription>
-        </DialogHeader>
-        <CreateSkillForm
-          nameField={nameField}
-          onClose={() => {
-            onOpenChange(false);
-          }}
-        />
-      </DialogContent>
-    </Dialog>
-  );
-};
+      />
+    </DialogContent>
+  </Dialog>
+);
