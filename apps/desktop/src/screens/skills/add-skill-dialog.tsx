@@ -170,7 +170,7 @@ const UniversalAgents = ({ universal }: { universal: Configuration[] }) => (
     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
       <span className="type-body text-text-primary">Universal agents</span>
       <span className="type-secondary text-text-muted">
-        Always get every skill
+        Always included
       </span>
     </span>
     <LockMark />
