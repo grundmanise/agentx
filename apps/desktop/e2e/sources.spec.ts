@@ -435,7 +435,7 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   });
   await row(page, "skill-89").last().click();
   await expect(opened(page, "skill-89")).toContainText(
-    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added."
+    "This source has another skill-89 skill at alpha/skills/skill-89. Only that one can be added."
   );
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,

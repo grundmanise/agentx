@@ -402,7 +402,7 @@ const withSharedNames = (cards: SkillCard[]): SkillCard[] => {
       ...c,
       sharedWith: earlier,
       status: "name-taken",
-      title: `The skill at ${placeOf(earlier)} in this source is named ${c.name} too, and only the first of a name can be added.`,
+      title: `This source has another ${c.name} skill at ${placeOf(earlier)}. Only that one can be added.`,
     };
   });
 };
