@@ -21,6 +21,12 @@ const launchLines = [
 const layer = (page: Page) =>
   page.getByRole("region", { name: "Startup checks" });
 const title = (page: Page) => layer(page).getByRole("heading", { level: 1 });
+/** The Run checks dialog, which manual mode shows over the screens. */
+const dialog = (page: Page) =>
+  page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("list", { name: "Checks" }) });
+const dialogTitle = (page: Page) => dialog(page).getByRole("heading");
 const rows = (page: Page) =>
   page.getByRole("list", { name: "Checks" }).getByRole("listitem");
 const row = (page: Page, label: string) =>
@@ -52,7 +58,7 @@ const oldGit = {
   type: "doctor",
 } as const;
 
-/** Opens manual mode, as Settings › Run checks will; until it exists, a harness module does. */
+/** Opens the Run checks dialog, as Settings › Run checks does, through a harness module. */
 const runChecks = async (page: Page) => {
   await page.addScriptTag({
     type: "module",
@@ -273,7 +279,7 @@ test("a machine with no skills and no agents passes", async ({ cli, page }) => {
   await launched(cli);
 
   await runChecks(page);
-  await expect(title(page)).toHaveText("You're all set");
+  await expect(dialogTitle(page)).toHaveText("You're all set");
   await expect(row(page, "Store opens")).toContainText("No skills yet");
   await expect(row(page, "Watching this machine")).toContainText(
     "No agents found"
@@ -319,7 +325,7 @@ test("an unusable store blocks at check 4", async ({ cli, page }) => {
   expect(cli.commands).toEqual(launchLines);
 });
 
-test("a warning does not block, and manual mode shows it", async ({
+test("a warning does not block, and Run checks shows it", async ({
   cli,
   page,
 }) => {
@@ -337,7 +343,7 @@ test("a warning does not block, and manual mode shows it", async ({
   await launched(cli);
 
   await runChecks(page);
-  await expect(title(page)).toHaveText("You're all set");
+  await expect(dialogTitle(page)).toHaveText("You're all set");
   const store = row(page, "Store opens");
   await expect(
     store.getByText("Passed with a warning:", { exact: true })
@@ -472,7 +478,7 @@ test("Copy report copies doctor's output in the CLI's layout", async ({
   );
 });
 
-test("manual mode shows every check and waits for Open agentx, which goes to Settings", async ({
+test("Run checks shows every check in a dialog over the screen, until Done", async ({
   cli,
   page,
 }) => {
@@ -499,7 +505,8 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   await launched(cli);
 
   await runChecks(page);
-  await expect(title(page)).toHaveText("You're all set");
+  await expect(dialogTitle(page)).toHaveText("You're all set");
+  await expect(layer(page)).toHaveCount(0);
   await expect(rows(page).getByText("Passed:", { exact: true })).toHaveCount(5);
   await expect(row(page, "agentx command line")).toContainText(
     `${cliVersion} at ${bundled}`
@@ -511,25 +518,23 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   await expect(row(page, "Watching this machine")).toContainText(
     "Found 3 agents"
   );
-  // It stays until Open agentx.
+  // It stays until Done, which has the focus, so Enter closes it.
   await page.waitForTimeout(800);
-  await expect(layer(page)).toBeVisible();
-
-  await page.getByRole("button", { name: "Open agentx" }).click();
+  await expect(dialog(page)).toBeVisible();
   await expect(
-    page.getByRole("heading", { level: 1, name: "Settings" })
-  ).toBeVisible();
-  // The serve child already running answered check 5; none was started again. Settings reads the
-  // import preview again, and the store's size.
+    dialog(page).getByRole("button", { name: "Done" })
+  ).toBeFocused();
+  await expect(
+    dialog(page).getByRole("button", { name: "Open agentx" })
+  ).toHaveCount(0);
+
+  await page.keyboard.press("Enter");
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(skills(page)).toBeVisible();
+  // The serve child already running answered check 5; none was started again.
   await expect
-    .poll(() => launchCommands(cli).filter((l) => l[0] !== "machine"))
-    .toEqual([
-      ...launchLines,
-      ...loadLines,
-      ...launchLines,
-      ["skill", "import", "--json"],
-    ]);
-  expect(launchCommands(cli)).toContainEqual(["machine", "--json"]);
+    .poll(() => launchCommands(cli))
+    .toEqual([...launchLines, ...loadLines, ...launchLines]);
   expect(cli.serveStarts).toBe(1);
 });
 

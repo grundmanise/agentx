@@ -6,6 +6,7 @@ import { Navigate, useLocation, useNavigate } from "react-router";
 import { ActivityLogSheet } from "#/app/activity-log.tsx";
 import { listenAppMenu } from "#/app/app-menu.ts";
 import { startAppUpdateChecks } from "#/app/app-update.ts";
+import { ChecksDialog } from "#/app/checks-dialog.tsx";
 import { CommandPalette } from "#/app/command-palette.tsx";
 import { KeptScreens, screenOf } from "#/app/kept-screens.tsx";
 import { LaunchProgress } from "#/app/launch-progress.tsx";
@@ -99,7 +100,9 @@ const LaunchVeil = ({ ready, step }: { ready: boolean; step?: Step }) => {
 export const App = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const startup = useStartup();
-  // The layer closes the palette: it does not come back when the layer goes.
+  // The layer covers the screens; the Run checks dialog shows over them.
+  const layer = startup.open && startup.mode === "launch";
+  // The layer and the dialog close the palette: it does not come back when they go.
   if (startup.open && paletteOpen) {
     setPaletteOpen(false);
   }
@@ -162,16 +165,16 @@ export const App = () => {
   return (
     <div className="bg-shell-bg text-text-primary flex h-full flex-col">
       <TopBar
-        commandField={!startup.open}
+        commandField={!layer}
         locked={!startup.ready}
         onOpenPalette={() => {
           setPaletteOpen(true);
         }}
       />
       {!known && <Navigate to="/skills" replace />}
-      {startup.open && <StartupLayer />}
+      {layer && <StartupLayer />}
       {/* Hidden, not unmounted, while the startup layer shows: the screens stay as they were. */}
-      <Activity mode={startup.open ? "hidden" : "visible"}>
+      <Activity mode={layer ? "hidden" : "visible"}>
         <div className="flex min-h-0 flex-1">
           {/* Until the checks pass, nothing in the window but the frosted pane can be reached. */}
           <div inert={!startup.ready} className="contents">
@@ -194,6 +197,7 @@ export const App = () => {
         </div>
       </Activity>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <ChecksDialog />
       <ActivityLogSheet />
       {startup.ready && <TelemetryDialog />}
       <Toaster />
