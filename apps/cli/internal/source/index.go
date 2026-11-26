@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -119,7 +120,7 @@ func (h Hub) key() string {
 // the whole of each source rather than a subpath, since a subpath scopes one
 // listing and is never stored. It lists the hub's forks too, one skill per
 // branch, named after it, as `skill add --name` takes it, with the
-// description of the SKILL.md at its tip.
+// description of the SKILL.md in its tip's skill directory.
 //
 // prev is the index of the previous build. The sources and their commits are
 // read in one for-each-ref, and a source still at the commit prev read it at
@@ -207,12 +208,14 @@ func readSource(ctx context.Context, r *gitx.Runner, gitDir, url, commit string)
 }
 
 // readHub lists the hub's forks from the store: one skill per branch,
-// named after it, at the root of its tree, with the description of the
-// SKILL.md at its tip. One cat-file --batch-check names each tip's tree and
-// SKILL.md, and one cat-file --batch reads those files. A branch whose tip
-// holds no SKILL.md the store can read is listed with no description. It
-// returns the reading to remember, or, when the store could not answer for
-// the hub at all, the warning that says so and no reading.
+// named after it, with the description of the SKILL.md of its skill
+// directory, the one entry of the tip's root a fork commit holds, under
+// the upstream's name or the fork's. One cat-file --batch-check names each
+// tip's root tree, one cat-file --batch reads those trees, one more reads
+// the trees of their directories, and one reads the SKILL.md files found.
+// A branch whose tip holds no SKILL.md the store can read is listed with no
+// description. It returns the reading to remember, or, when the store could
+// not answer for the hub at all, the warning that says so and no reading.
 func readHub(ctx context.Context, r *gitx.Runner, gitDir string, hub Hub) (reading, string) {
 	if len(hub.Tips) == 0 {
 		return reading{skills: []Skill{}}, ""
@@ -222,32 +225,61 @@ func readHub(ctx context.Context, r *gitx.Runner, gitDir string, hub Hub) (readi
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	var in strings.Builder
-	for _, name := range names {
-		in.WriteString(hub.Tips[name] + "^{tree}\n" + hub.Tips[name] + ":SKILL.md\n")
-	}
 	failed := func(err error) (reading, string) {
 		return reading{}, "the hub " + hub.URL + ": " + err.Error() + ", its skills cannot be searched"
+	}
+	var in strings.Builder
+	for _, name := range names {
+		in.WriteString(hub.Tips[name] + "^{tree}\n")
 	}
 	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(in.String()), "cat-file", "--batch-check=%(objectname) %(objecttype)")
 	if err != nil {
 		return failed(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
-	if len(lines) != 2*len(names) {
-		return failed(fmt.Errorf("%w: cat-file named %d objects for %d forks", ErrIncomplete, len(lines), len(names)))
+	if len(lines) != len(names) {
+		return failed(fmt.Errorf("%w: cat-file named %d trees for %d forks", ErrIncomplete, len(lines), len(names)))
 	}
-	object := func(line, want string) string {
-		id, typ, _ := strings.Cut(line, " ")
-		if typ != want || !objectID(id) {
-			return ""
+	roots := make([]string, len(names))
+	for i, line := range lines {
+		if id, typ, _ := strings.Cut(line, " "); typ == "tree" && objectID(id) {
+			roots[i] = id
 		}
-		return id
+	}
+	rootTrees, err := ReadBlobs(ctx, r, gitDir, nonEmpty(roots))
+	if err != nil {
+		return failed(err)
+	}
+	// An object id takes half as many bytes in a tree as in hex.
+	size := 0
+	for _, root := range roots {
+		if root != "" {
+			size = len(root) / 2
+			break
+		}
+	}
+	// A fork's root holds its skill directory; SKILL.md at the root itself
+	// is read too, for a branch written by hand.
+	var dirs []string
+	for _, root := range roots {
+		for _, e := range rawTree(rootTrees[root], size) {
+			if e.tree {
+				dirs = append(dirs, e.id)
+			}
+		}
+	}
+	dirTrees, err := ReadBlobs(ctx, r, gitDir, dirs)
+	if err != nil {
+		return failed(err)
+	}
+	found := make([]skillEntry, len(names))
+	for i, root := range roots {
+		found[i] = skillOfFork(root, size, rootTrees, dirTrees)
 	}
 	var blobs []string
-	for i := range names {
-		if blob := object(lines[2*i+1], "blob"); blob != "" {
-			blobs = append(blobs, blob)
+	for _, f := range found {
+		if f.blob != "" {
+			blobs = append(blobs, f.blob)
 		}
 	}
 	files, err := ReadBlobs(ctx, r, gitDir, blobs)
@@ -256,10 +288,79 @@ func readHub(ctx context.Context, r *gitx.Runner, gitDir string, hub Hub) (readi
 	}
 	skills := make([]Skill, 0, len(names))
 	for i, name := range names {
-		_, description, _ := scan.SkillFrontmatter(files[object(lines[2*i+1], "blob")])
-		skills = append(skills, Skill{Name: name, Description: description, Tree: object(lines[2*i], "tree")})
+		_, description, _ := scan.SkillFrontmatter(files[found[i].blob])
+		skills = append(skills, Skill{Name: name, Description: description, Tree: found[i].tree})
 	}
 	return reading{skills: skills}, ""
+}
+
+// skillOfFork is the skill directory of a fork's root tree, root, and its
+// SKILL.md: the root itself when it holds a SKILL.md, otherwise the first
+// directory entry that does, by git's order. With neither, it is the root
+// with no SKILL.md.
+func skillOfFork(root string, size int, rootTrees, dirTrees map[string]string) skillEntry {
+	entries := rawTree(rootTrees[root], size)
+	if blob := skillMdIn(entries); blob != "" {
+		return skillEntry{blob: blob, tree: root}
+	}
+	for _, e := range entries {
+		if !e.tree {
+			continue
+		}
+		if blob := skillMdIn(rawTree(dirTrees[e.id], size)); blob != "" {
+			return skillEntry{dir: e.name, blob: blob, tree: e.id}
+		}
+	}
+	return skillEntry{tree: root}
+}
+
+// skillMdIn is the blob id of the SKILL.md file among entries, "" when they
+// hold none.
+func skillMdIn(entries []rawEntry) string {
+	for _, e := range entries {
+		if !e.tree && e.name == "SKILL.md" {
+			return e.id
+		}
+	}
+	return ""
+}
+
+// rawEntry is one entry of a tree as cat-file --batch prints it.
+type rawEntry struct {
+	name string
+	id   string
+	tree bool
+}
+
+// rawTree reads a tree object's content: one entry after the other, its
+// mode, a space, its name, a NUL and its object id in size bytes. A
+// content it cannot read whole yields no entries.
+func rawTree(content string, size int) []rawEntry {
+	var entries []rawEntry
+	for content != "" {
+		mode, rest, ok := strings.Cut(content, " ")
+		if !ok {
+			return nil
+		}
+		name, rest, ok := strings.Cut(rest, "\x00")
+		if !ok || len(rest) < size {
+			return nil
+		}
+		entries = append(entries, rawEntry{name: name, id: hex.EncodeToString([]byte(rest[:size])), tree: mode == "40000"})
+		content = rest[size:]
+	}
+	return entries
+}
+
+// nonEmpty is ids without the empty ones.
+func nonEmpty(ids []string) []string {
+	kept := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != "" {
+			kept = append(kept, id)
+		}
+	}
+	return kept
 }
 
 // commitsOf is Commits over a store that may not exist yet, which

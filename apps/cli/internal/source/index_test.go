@@ -405,16 +405,17 @@ func TestBuildIndexWithoutSourcesRunsNoGit(t *testing.T) {
 	}
 }
 
-// fork commits a hub fork's branch, skills/<name>, holding one skill at
-// the root of its tree, and returns its tip.
-func (r *repo) fork(name, description string) string {
+// fork commits a hub fork's branch, skills/<name>, holding one skill
+// directory, dir, as the one entry of its root, as a fork commit does, and
+// returns its tip.
+func (r *repo) fork(name, dir, description string) string {
 	r.t.Helper()
 	r.run("symbolic-ref", "HEAD", "refs/heads/skills/"+name)
 	r.run("read-tree", "--empty")
 	if err := os.RemoveAll(r.work); err != nil {
 		r.t.Fatal(err)
 	}
-	r.skill("", name, description)
+	r.skill(dir, name, description)
 	return r.commit()
 }
 
@@ -425,12 +426,12 @@ func TestBuildIndexListsTheHubsForksByBranch(t *testing.T) {
 	ctx := context.Background()
 
 	hub := newRepo(t, root, "hub")
-	pdf := hub.fork("pdf-tools", "Fill PDF forms")
-	notes := hub.fork("notes", "Keep meeting notes")
+	pdf := hub.fork("pdf-tools", "pdf", "Fill PDF forms")
+	notes := hub.fork("notes", "notes", "Keep meeting notes")
 	if _, err := git.Isolated(ctx, gitDir, "fetch", "--quiet", hub.url, "+refs/heads/skills/*:refs/remotes/hub/skills/*"); err != nil {
 		t.Fatal(err)
 	}
-	tree := func(tip string) string { return hub.run("rev-parse", tip+"^{tree}") }
+	tree := func(tip, dir string) string { return hub.run("rev-parse", tip+":"+dir) }
 	h := source.Hub{URL: hub.url, Tips: map[string]string{"pdf-tools": pdf, "notes": notes}}
 
 	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, nil, h, nil)
@@ -438,8 +439,8 @@ func TestBuildIndexListsTheHubsForksByBranch(t *testing.T) {
 		t.Fatalf("BuildIndex() = %v, %q", err, warnings)
 	}
 	want := []source.Indexed{{URL: hub.url, Skills: []source.Skill{
-		{Name: "notes", Description: "Keep meeting notes", Tree: tree(notes)},
-		{Name: "pdf-tools", Description: "Fill PDF forms", Tree: tree(pdf)},
+		{Name: "notes", Description: "Keep meeting notes", Tree: tree(notes, "notes")},
+		{Name: "pdf-tools", Description: "Fill PDF forms", Tree: tree(pdf, "pdf")},
 	}}}
 	if !reflect.DeepEqual(idx.Sources, want) {
 		t.Errorf("index = %#v\nwant %#v", idx.Sources, want)
@@ -462,7 +463,7 @@ func TestBuildIndexListsTheHubsForksByBranch(t *testing.T) {
 	}
 
 	// A fork published again is read again.
-	newer := hub.fork("notes", "Keep and search meeting notes")
+	newer := hub.fork("notes", "notes", "Keep and search meeting notes")
 	if _, err := git.Isolated(ctx, gitDir, "fetch", "--quiet", hub.url, "+refs/heads/skills/*:refs/remotes/hub/skills/*"); err != nil {
 		t.Fatal(err)
 	}
@@ -470,7 +471,7 @@ func TestBuildIndexListsTheHubsForksByBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := next.Search("search meeting"); len(got) != 1 || got[0].Tree != tree(newer) {
+	if got := next.Search("search meeting"); len(got) != 1 || got[0].Tree != tree(newer, "notes") {
 		t.Errorf("Search(search meeting) after the publish = %#v", got)
 	}
 }
