@@ -18,6 +18,7 @@ import {
   ACME,
 } from "./fixtures/skills.ts";
 import { reviewUpdateDiffs } from "./fixtures/update-diffs.ts";
+import { settled } from "./harness/animations.ts";
 import {
   configuration,
   expect,
@@ -837,6 +838,7 @@ test.describe("the detail pane", () => {
     // The upstream version agentx stored is left out: the fork's creation comes last.
     await expect(entries).toHaveCount(4);
     await expect(entries.last()).toContainText("Fork pdf-letters from");
+    await settled(sheet);
     // Dragged to its narrowest, a long subject wraps inside the sheet; the sheet never scrolls
     // sideways.
     const handle = sheet.getByRole("separator", { name: "Resize" });

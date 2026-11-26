@@ -19,10 +19,10 @@ const toggleVariants = cva("inline-flex shrink-0 outline-none", {
       // card.
       "agent-card":
         "rounded-agent-card focus-visible:outline-shell-focus-ring absolute inset-0 focus-visible:outline-2 focus-visible:outline-solid",
-      // Selects a column of the Universal card the same way, its hit area a little past the
-      // column, which it fills and rings while selected.
+      // Selects a column of the Universal card the same way, its hit area the column right of its
+      // divider and clear of the next one, which it fills and rings while selected.
       "agent-column":
-        "rounded-agent-column hover:border-agent-card-hover-border aria-pressed:border-agent-card-selected-border aria-pressed:bg-agent-card-selected-bg focus-visible:outline-shell-focus-ring absolute -inset-3 border border-transparent focus-visible:outline-2 focus-visible:outline-solid",
+        "rounded-agent-column hover:border-agent-card-hover-border aria-pressed:border-agent-card-selected-border aria-pressed:bg-agent-card-selected-bg focus-visible:outline-shell-focus-ring absolute -inset-y-1.5 -right-3 left-2 border border-transparent focus-visible:outline-2 focus-visible:outline-solid",
       // The round check of a skill on the Sources list (DESIGN.md §6 "Round check"): a hit area
       // round the check its child draws, which draws its focus outline inside.
       check:
