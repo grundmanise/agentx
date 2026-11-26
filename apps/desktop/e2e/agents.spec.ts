@@ -52,7 +52,7 @@ test("lists the Universal card first, then the direct agents, with their counts"
     - article "Claude Code":
       - switch "Enabled" [checked]
       - heading "Claude Code" [level=2]
-      - text: /home/me/.claude-code
+      - link "/home/me/.claude-code"
       - paragraph: 5 skills · 1 server · 1 plugin
       - radiogroup "Placement":
         - radio "Symlink" [checked]
@@ -487,29 +487,27 @@ test("a click on cards selects them, and the bar enables, disables or removes th
   ]);
 });
 
-test("a click on an agent's path selects it, and a column's divider is outside its selection", async ({
+test("an agent's path shows it in Finder without selecting it, and a column's divider is outside its selection", async ({
   cli,
   page,
 }) => {
   await openAgents(cli, page);
-  const clickAt = async (target: Locator, x = 0.5) => {
-    const box = await target.boundingBox();
-    if (box === null) {
-      throw new Error("not visible");
-    }
-    await page.mouse.click(box.x + box.width * x, box.y + box.height / 2);
-  };
   const cursor = card(page, "Cursor");
-  await clickAt(cursor.getByText("/home/me/.cursor"));
+  await cursor.getByRole("link", { name: "/home/me/.cursor" }).click();
+  await expect.poll(() => cli.reveals).toEqual([["/home/me/.cursor"]]);
   await expect(
     cursor.getByRole("button", { name: "Select Cursor" })
-  ).toHaveAttribute("aria-pressed", "true");
+  ).toHaveAttribute("aria-pressed", "false");
 
   const codex = card(page, "Universal").getByRole("region", { name: "Codex" });
   const toggle = codex.getByRole("button", { name: "Select Codex" });
-  await clickAt(codex, 0);
+  const box = await codex.boundingBox();
+  if (box === null) {
+    throw new Error("not visible");
+  }
+  await page.mouse.click(box.x, box.y + box.height / 2);
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
-  await clickAt(codex.getByText("/home/me/.codex"));
+  await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
 });
 
