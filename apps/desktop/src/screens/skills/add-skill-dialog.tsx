@@ -169,9 +169,7 @@ const UniversalAgents = ({ universal }: { universal: Configuration[] }) => (
     />
     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
       <span className="type-body text-text-primary">Universal agents</span>
-      <span className="type-secondary text-text-muted">
-        Always included
-      </span>
+      <span className="type-secondary text-text-muted">Always included</span>
     </span>
     <LockMark />
     <span className="sr-only">Always on</span>
@@ -546,7 +544,7 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
         <DialogDescription>
           {step === "skills"
             ? "Find skills and install into your agents."
-            : `Choose agents for the ${one ? "skill" : "skills"} you picked.`}
+            : `Choose the agents that get ${one ? "this skill" : "these skills"}.`}
         </DialogDescription>
       </DialogHeader>
       {step === "skills" ? (
