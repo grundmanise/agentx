@@ -545,7 +545,7 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
         </DialogTitle>
         <DialogDescription>
           {step === "skills"
-            ? "Install skills from a repository into your agents."
+            ? "Find skills and install into your agents."
             : `Choose agents for the ${one ? "skill" : "skills"} you picked.`}
         </DialogDescription>
       </DialogHeader>
