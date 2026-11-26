@@ -178,6 +178,34 @@ func (r *Requests) Search(ctx context.Context, query string) ([]source.Match, er
 	return idx.Search(query), nil
 }
 
+// Listing answers with one source as the index in memory holds it, and
+// whether the index holds a listing of it. It waits for the first scan of
+// Run to end, as Search does, and for the index of an inventory already
+// emitted, so that a listing asked for on an inventory is the one of the
+// commit that inventory names. It takes no lock and runs no git. The error
+// is ctx's when ctx is done first.
+func (r *Requests) Listing(ctx context.Context, url string) (source.Indexed, bool, error) {
+	select {
+	case <-r.scanned:
+	case <-r.refused:
+	case <-ctx.Done():
+		return source.Indexed{}, false, ctx.Err()
+	}
+	l := r.loop.Load()
+	if l == nil {
+		return source.Indexed{}, false, nil
+	}
+	if indexed := l.indexed.Load(); indexed != nil {
+		select {
+		case <-*indexed:
+		case <-ctx.Done():
+			return source.Indexed{}, false, ctx.Err()
+		}
+	}
+	listing, ok := l.index.Load().Listing(url)
+	return listing, ok, nil
+}
+
 // Job is one job serve runs off the loop's goroutine, once the first
 // inventory is out: each of Jobs once, beside each other, and the checks,
 // see Check and Recheck. The report a run returns, nil
@@ -357,7 +385,11 @@ type loop struct {
 	// as what acknowledges it.
 	pending []func(counter int, err error)
 
-	index atomic.Pointer[source.Index] // what searches are answered from; replaced whole after a scan
+	index atomic.Pointer[source.Index] // what searches and listings are answered from; replaced whole after a scan
+	// indexed is closed once the index of the scan that last emitted or
+	// kept an inventory is built, so a listing waits for the index of the
+	// inventory its client holds.
+	indexed atomic.Pointer[chan struct{}]
 }
 
 // initial is the one scan of Once, whose failure ends serve unless serve
@@ -386,6 +418,8 @@ func (l *loop) scan(ctx context.Context) error {
 		}
 		return err
 	}
+	indexed := make(chan struct{})
+	l.indexed.Store(&indexed)
 	b := canonical(inventory)
 	if l.counter == 0 || !bytes.Equal(b, l.last) {
 		l.counter++
@@ -394,6 +428,7 @@ func (l *loop) scan(ctx context.Context) error {
 		l.Inventory(inventory)
 	}
 	l.reindex(ctx)
+	close(indexed)
 	for _, acknowledge := range pending {
 		acknowledge(l.counter, nil)
 	}

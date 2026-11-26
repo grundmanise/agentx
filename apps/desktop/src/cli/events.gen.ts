@@ -220,6 +220,13 @@ export interface SearchResult {
   tree: string;
 }
 
+export interface ListedSkill {
+  subpath: string;
+  name: string;
+  description: string;
+  tree: string;
+}
+
 export interface SettingsSource {
   url: string;
   alias?: string;
@@ -697,4 +704,11 @@ export interface SearchMethodResult {
   instance_id: string;
   query: string;
   results: SearchResult[];
+}
+
+export interface ListingMethodResult {
+  instance_id: string;
+  source: string;
+  commit?: string;
+  skills: ListedSkill[];
 }

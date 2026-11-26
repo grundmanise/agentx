@@ -41,7 +41,7 @@ func (inv *invocation) newServeMethods() (*serveMethods, error) {
 
 // table is the methods by name.
 func (m *serveMethods) table() map[string]rpc.Method {
-	return map[string]rpc.Method{"run": m.run, "refresh": m.refresh, "search": m.search}
+	return map[string]rpc.Method{"run": m.run, "refresh": m.refresh, "search": m.search, "listing": m.listing}
 }
 
 // eventParams are the params of an event notification: one event, or one
@@ -200,4 +200,44 @@ func (m *serveMethods) search(ctx context.Context, c rpc.Call) (any, *rpc.Error)
 		return nil, &rpc.Error{Code: rpc.CodeCancelled, Message: "the request was cancelled"}
 	}
 	return searchResult{InstanceID: m.inv.instanceID(), Query: p.Query, Results: results}, nil
+}
+
+// listingResult is the result of listing: every skill of one source at the
+// commit the store holds for it, as source skills lists them.
+type listingResult struct {
+	InstanceID string        `json:"instance_id"`
+	Source     string        `json:"source"`           // the canonical URL
+	Commit     string        `json:"commit,omitempty"` // absent for a source not fetched
+	Skills     []listedSkill `json:"skills"`           // sorted by subpath; empty, never absent
+}
+
+// listedSkill is one skill of a listing.
+type listedSkill struct {
+	Subpath     string `json:"subpath"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Tree        string `json:"tree"`
+}
+
+// listing is the method listing, answered from the index in memory once
+// it holds the source at the commit of the inventory serve last emitted.
+func (m *serveMethods) listing(ctx context.Context, c rpc.Call) (any, *rpc.Error) {
+	var p struct {
+		Source string `json:"source"`
+	}
+	if err := json.Unmarshal(c.Params, &p); err != nil || p.Source == "" {
+		return nil, &rpc.Error{Code: rpc.CodeInvalidParams, Message: `listing takes {"source": "<url>"}`}
+	}
+	listed, ok, err := m.requests.Listing(ctx, p.Source)
+	switch {
+	case err != nil:
+		return nil, &rpc.Error{Code: rpc.CodeCancelled, Message: "the request was cancelled"}
+	case !ok:
+		return nil, &rpc.Error{Code: rpc.CodeFailed, Message: "no listing of " + p.Source}
+	}
+	skills := make([]listedSkill, 0, len(listed.Skills))
+	for _, s := range listed.Skills {
+		skills = append(skills, listedSkill{Subpath: s.Subpath, Name: s.Name, Description: s.Description, Tree: s.Tree})
+	}
+	return listingResult{InstanceID: m.inv.instanceID(), Source: listed.URL, Commit: listed.Commit, Skills: skills}, nil
 }

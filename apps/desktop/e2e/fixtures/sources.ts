@@ -8,10 +8,10 @@ import type {
   Configuration,
   InstallableSkillEvent,
   LibraryEntry,
+  ListedSkill,
   SearchResult,
   SkillFileEvent,
   Source,
-  SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 
 import { configuration } from "../harness/cli.ts";
@@ -58,31 +58,22 @@ export const sources: Source[] = [
   },
 ];
 
-const sourceSkill = (
-  source: string,
+const listed = (
   subpath: string,
   name: string,
   description: string
-): SourceSkillEvent => ({
-  description,
-  name,
-  schema_version: 5,
-  source,
-  subpath,
-  tree: `t-${name}`,
-  type: "source_skill",
-});
+): ListedSkill => ({ description, name, subpath, tree: `t-${name}` });
 
-/** acme's listing, sorted by subpath as the CLI gives it: four to install, four this machine holds. */
-export const acmeSkills: SourceSkillEvent[] = [
-  sourceSkill(ACME_ID, "skills/artifacts", "artifacts", "Build web artifacts"),
-  sourceSkill(ACME_ID, "skills/docx", "docx", "Create and edit Word documents"),
-  sourceSkill(ACME_ID, "skills/forms", "forms", "Fill in forms"),
-  sourceSkill(ACME_ID, "skills/letters", "letters", "Write formal letters"),
-  sourceSkill(ACME_ID, "skills/pdf", "pdf", "Read, merge and fill PDF files"),
-  sourceSkill(ACME_ID, "skills/scratch", "scratch", "Scratch notes"),
-  sourceSkill(ACME_ID, "skills/slides", "slides", "Build slide decks"),
-  sourceSkill(ACME_ID, "skills/xlsx", "xlsx", "Read and write spreadsheets"),
+/** acme's listing, sorted by subpath as serve gives it: four to install, four this machine holds. */
+export const acmeSkills: ListedSkill[] = [
+  listed("skills/artifacts", "artifacts", "Build web artifacts"),
+  listed("skills/docx", "docx", "Create and edit Word documents"),
+  listed("skills/forms", "forms", "Fill in forms"),
+  listed("skills/letters", "letters", "Write formal letters"),
+  listed("skills/pdf", "pdf", "Read, merge and fill PDF files"),
+  listed("skills/scratch", "scratch", "Scratch notes"),
+  listed("skills/slides", "slides", "Build slide decks"),
+  listed("skills/xlsx", "xlsx", "Read and write spreadsheets"),
 ];
 
 /** Three configurations that take a placement, devin disabled, and two that read the library. */

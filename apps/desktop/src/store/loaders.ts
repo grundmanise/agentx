@@ -10,9 +10,9 @@ import type {
   HistoryEvent,
   InstallableSkillEvent,
   SkillFileEvent,
-  SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { checksPass } from "#/startup/startup.ts";
+import { listing } from "#/store/feed.ts";
 import { cachedRead, keepRead } from "#/store/read-cache.ts";
 import { agentx, onFinished } from "#/store/runner.ts";
 import type { CommandOptions, Finished } from "#/store/runner.ts";
@@ -93,53 +93,44 @@ export const loadStore = async () => {
   });
 };
 
-/** The commit the listing in the store was read at, by source id. */
-const listedAt = new Map<string, string>();
 /** The reads of a listing going on, by source id and the commit they read for. */
 const listingReads = new Map<string, Promise<void>>();
 
-const readListing = async (id: string, commit: string | undefined) => {
-  if (commit !== undefined && listedAt.get(id) === commit) {
+const readListing = async (id: string, url: string) => {
+  const answer = await listing(url);
+  if (answer?.skills === undefined) {
     return;
   }
-  if (commit !== undefined) {
-    const kept = await cachedRead<SourceSkillEvent[]>("listing", id, commit);
-    if (kept !== undefined) {
-      listedAt.set(id, commit);
-      useAppStore.setState((s) => ({
-        listings: { ...s.listings, [id]: kept },
-      }));
-      return;
-    }
-  }
-  // Only what this run read is kept: a failed run leaves the listing as it was.
-  let read: SourceSkillEvent[] | undefined;
-  let at: string | undefined;
-  await load(["source", "skills", id], (events, state) => {
-    read = events.filter((e) => e.type === "source_skill");
-    at = events.find((e) => e.type === "source")?.commit;
-    return { listings: { ...state.listings, [id]: read } };
-  });
-  if (read !== undefined && at !== undefined) {
-    listedAt.set(id, at);
-    void keepRead("listing", id, at, read);
-  }
+  const read = {
+    commit: answer.commit,
+    skills: answer.skills.map((skill) => ({ ...skill, source: id })),
+  };
+  useAppStore.setState((s) => ({ listings: { ...s.listings, [id]: read } }));
 };
 
 /**
- * Loads the skills of a source, for its open pill: the listing kept for `commit`, the one the
- * inventory gives the source, else `source skills <id>`, a read of the last fetch. A listing the
- * store holds at that commit is read no more, so the list changes once per fetch that moves the
- * source.
+ * Loads the skills of a source the inventory lists, for its open pill: one `listing` request,
+ * which serve answers from memory for the commit its last inventory gave the source. A listing
+ * the store holds at that commit is read no more, so the list changes once per fetch that moves
+ * the source.
  */
-export const loadListing = async (id: string, commit?: string) => {
-  const key = `${id}\u0000${commit ?? ""}`;
+export const loadListing = async (id: string) => {
+  const state = useAppStore.getState();
+  const source = sourcesOf(state).find((s) => s.id === id);
+  const held = state.listings[id];
+  if (
+    source === undefined ||
+    (held !== undefined && held.commit === source.commit)
+  ) {
+    return;
+  }
+  const key = `${id}\u0000${source.commit ?? ""}`;
   const going = listingReads.get(key);
   if (going !== undefined) {
     await going;
     return;
   }
-  const read = readListing(id, commit);
+  const read = readListing(id, source.url);
   listingReads.set(key, read);
   try {
     await read;

@@ -201,7 +201,7 @@ test("cancel sends $/cancelRequest with the run's id", async ({ page }) => {
   ).toBe(false);
 });
 
-test("serve's start passes on its inventory, and refresh and search answer as events", async ({
+test("serve's start passes on its inventory, and refresh, search and listing answer as events", async ({
   page,
 }) => {
   const serve = await startServe(page, (ws) => {
@@ -222,12 +222,34 @@ test("serve's start passes on its inventory, and refresh and search answer as ev
       request_id: "s1",
       type: "search",
     });
+    await window.transport.serveRequest({
+      request_id: "l1",
+      source: "https://github.com/acme/skills",
+      type: "listing",
+    });
+    await window.transport.serveRequest({
+      request_id: "l2",
+      source: "https://github.com/acme/none",
+      type: "listing",
+    });
   });
   await expect
     .poll(() => serve.received)
     .toEqual([
       { id: "r1", jsonrpc: "2.0", method: "refresh" },
       { id: "s1", jsonrpc: "2.0", method: "search", params: { query: "pdf" } },
+      {
+        id: "l1",
+        jsonrpc: "2.0",
+        method: "listing",
+        params: { source: "https://github.com/acme/skills" },
+      },
+      {
+        id: "l2",
+        jsonrpc: "2.0",
+        method: "listing",
+        params: { source: "https://github.com/acme/none" },
+      },
     ]);
   const [ws] = serve.connections;
   if (ws === undefined) {
@@ -237,6 +259,20 @@ test("serve's start passes on its inventory, and refresh and search answer as ev
   sendEvent(ws, { event: inventory(4), stream: "stdout" });
   answer(ws, "r1", { instance_id: "i1", scan_counter: 4 });
   answer(ws, "s1", { instance_id: "i1", query: "pdf", results: [] });
+  answer(ws, "l1", {
+    commit: "3f2a9c1",
+    instance_id: "i1",
+    skills: [],
+    source: "https://github.com/acme/skills",
+  });
+  // Serve holds no listing of a URL that is no source: the event carries no skills.
+  ws.send(
+    JSON.stringify({
+      error: { code: -32_000, message: "no listing" },
+      id: "l2",
+      jsonrpc: "2.0",
+    })
+  );
   sendEvent(ws, {
     event: {
       level: "warn",
@@ -247,7 +283,7 @@ test("serve's start passes on its inventory, and refresh and search answer as ev
     stream: "stderr",
   });
 
-  await expect(received(page)).toHaveCount(5);
+  await expect(received(page)).toHaveCount(7);
   expect(await items(page)).toEqual([
     {
       value: { childId: 1, event: inventory(3), kind: "event" },
@@ -282,6 +318,36 @@ test("serve's start passes on its inventory, and refresh and search answer as ev
           results: [],
           schema_version: 5,
           type: "search",
+        },
+        kind: "event",
+      },
+      what: "serve",
+    },
+    {
+      value: {
+        childId: 1,
+        event: {
+          commit: "3f2a9c1",
+          instance_id: "i1",
+          request_id: "l1",
+          schema_version: 5,
+          skills: [],
+          source: "https://github.com/acme/skills",
+          type: "listing",
+        },
+        kind: "event",
+      },
+      what: "serve",
+    },
+    {
+      value: {
+        childId: 1,
+        event: {
+          instance_id: "i1",
+          request_id: "l2",
+          schema_version: 5,
+          source: "https://github.com/acme/none",
+          type: "listing",
         },
         kind: "event",
       },
