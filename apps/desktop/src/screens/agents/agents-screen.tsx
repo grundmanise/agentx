@@ -27,6 +27,7 @@ import {
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
+import { openForAgent } from "#/lib/agent-route.ts";
 import { plural } from "#/lib/plural.ts";
 import { revealInFinder } from "#/lib/reveal.ts";
 import { BulkBar } from "#/screens/agents/bulk-bar.tsx";
@@ -38,16 +39,50 @@ import {
 import { removedText, removeFailure } from "#/screens/agents/remove.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
 import { convertedText } from "#/screens/skills/placements.ts";
+import { UNIVERSAL } from "#/screens/skills/projection.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
-/** "{n} skills", the number in `text.primary`; the whole reads as one text. */
-const Count = ({ n, noun }: { n: number; noun: string }) => (
-  <span>
-    <span className="text-text-primary font-medium">{n}</span>
-    {plural(n, noun).slice(String(n).length)}
-  </span>
-);
+/**
+ * "{n} skills", the number in `text.primary`; the whole reads as one text. Unless it is 0, it is a
+ * link to the screen at `path` filtered to `agent`.
+ */
+const Count = ({
+  n,
+  noun,
+  path,
+  agent,
+}: {
+  n: number;
+  noun: string;
+  path: string;
+  /** A configuration id, or the Skills screen's Universal. */
+  agent: string;
+}) => {
+  const text = (
+    <>
+      <span className="text-text-primary font-medium">{n}</span>
+      {plural(n, noun).slice(String(n).length)}
+    </>
+  );
+  if (n === 0) {
+    return <span>{text}</span>;
+  }
+  return (
+    <span className="relative">
+      <SelectableLink
+        track={`agents.open-${noun}s`}
+        href={`#${path}`}
+        tone="inherit"
+        onOpen={() => {
+          openForAgent(path, agent);
+        }}
+      >
+        {text}
+      </SelectableLink>
+    </span>
+  );
+};
 
 /** The label of a configuration's switch: the runner's name for it. */
 const switchLabel = (c: Configuration) => `enable ${c.id}`;
@@ -297,11 +332,11 @@ const AgentCard = ({
         <AgentPath path={c.path} />
       </div>
       <p className="type-secondary text-card-text m-0">
-        <Count n={counts.skills} noun="skill" />
+        <Count n={counts.skills} noun="skill" path="/skills" agent={c.id} />
         {" · "}
-        <Count n={counts.servers} noun="server" />
+        <Count n={counts.servers} noun="server" path="/servers" agent={c.id} />
         {" · "}
-        <Count n={counts.plugins} noun="plugin" />
+        <Count n={counts.plugins} noun="plugin" path="/plugins" agent={c.id} />
       </p>
       <PlacementControl c={c} inventory={inventory} disabled={pending} />
     </article>
@@ -382,9 +417,19 @@ const UniversalCard = ({
               </div>
               <AgentPath path={c.path} />
               <p className="type-secondary text-card-text m-0 pt-1">
-                <Count n={inventory.library.length} noun="skill" />
+                <Count
+                  n={inventory.library.length}
+                  noun="skill"
+                  path="/skills"
+                  agent={UNIVERSAL}
+                />
                 {" · "}
-                <Count n={counts.servers} noun="server" />
+                <Count
+                  n={counts.servers}
+                  noun="server"
+                  path="/servers"
+                  agent={c.id}
+                />
               </p>
             </section>
           );
