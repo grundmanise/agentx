@@ -19,6 +19,7 @@ import {
   acmeSkills,
   configurations,
   docResults,
+  HUB,
   installable,
   inventory,
   library,
@@ -243,12 +244,6 @@ test("the open source's card: its name, its full URL linking to the repository, 
   ).toBeVisible();
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
-
-  // A search answers across every source: the card stays.
-  await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
-  await expect(
-    details(page).getByRole("heading", { name: "me/hub" })
-  ).toBeVisible();
 });
 
 /** acme's skills A to Z, the order the list keeps whatever their state. */
@@ -1132,7 +1127,8 @@ test("search asks serve once per settled query and shows only the latest answer"
   ]);
   await expect(row(page, "artifacts")).toBeVisible();
 
-  // The matching answer replaces the listing, grouped by source.
+  // The matching answer takes the place of the source's card and listing: the open source's
+  // matches, each source counting its own, Hub once your skills on the hub are read.
   await cli.serveEmit([
     {
       query: "pdf",
@@ -1141,9 +1137,18 @@ test("search asks serve once per settled query and shows only the latest answer"
       type: "search",
     },
   ]);
-  await expect(grid(page, "zeta/tools")).toBeVisible();
+  await expect(details(page)).toBeHidden();
   expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
+  await expect(pill(page, "acme/skills")).toHaveText("acme/skills1");
+  await expect(pill(page, "zeta/tools")).toHaveText("zeta/tools1");
+  await expect(pill(page, "Hub")).toHaveText("Hub0");
+
+  // Another source shows its matches, and the search stays.
+  await pill(page, "zeta/tools").click();
   expect(await skillNames(grid(page, "zeta/tools"))).toEqual(["docgen"]);
+  await expect(field).toHaveValue("pdf");
+  await expect(grid(page, "acme/skills")).toHaveCount(0);
+  await pill(page, "acme/skills").click();
 
   // While the next query waits, the last answer stays: the listing does not come back between.
   await field.fill("pdfz");
@@ -1160,13 +1165,60 @@ test("search asks serve once per settled query and shows only the latest answer"
   ]);
   await expect(page.getByText("No skills match")).toBeVisible();
 
-  // Clearing the query shows the listing again, and the next query starts from it.
+  // Clearing the query shows the card and the listing again, and the next query starts from them.
   await field.fill("");
   await expect(row(page, "artifacts")).toBeVisible();
+  await expect(details(page)).toBeVisible();
+  await expect(pill(page, "acme/skills")).toHaveText("acme/skills8");
   await field.fill("x");
   await expect.poll(() => cli.serveRequests.length).toBe(4);
   await expect(row(page, "artifacts")).toBeVisible();
   await expect(page.getByText("No skills match")).toHaveCount(0);
+});
+
+/** A fork on the hub as a search answers it: under the hub's URL, by its branch's name. */
+const hubFork = (name: string) => ({
+  description: `The ${name} skill`,
+  name,
+  source: HUB,
+  subpath: "",
+  tree: `t-${name}`,
+});
+
+test("a search covers your skills on the hub: Hub counts and lists the ones to install that match", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await pill(page, "Hub").click();
+  await expect(
+    details(page).getByRole("heading", { name: "me/hub" })
+  ).toBeVisible();
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
+  await field.fill("pdf");
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit([
+    {
+      query: "pdf",
+      request_id: lastSearch(cli).request_id,
+      // A fork this machine holds already is not one the hub lists to install.
+      results: [...docResults, hubFork("held-pdf"), hubFork("my-pdf")],
+      type: "search",
+    },
+  ]);
+  await expect(details(page)).toBeHidden();
+  await expect(pill(page, "Hub")).toHaveAttribute("aria-pressed", "true");
+  await expect(pill(page, "Hub")).toHaveText("Hub1");
+  expect(await skillNames(grid(page, "Hub"))).toEqual(["my-pdf"]);
+
+  await field.fill("");
+  await expect(
+    details(page).getByRole("heading", { name: "me/hub" })
+  ).toBeVisible();
+  expect(await skillNames(grid(page, "Hub"))).toEqual([
+    "my-pdf",
+    "release-notes",
+  ]);
 });
 
 test("Add source closes at once and shows the source loading, then opens it fully preselected", async ({
@@ -1209,10 +1261,20 @@ test("Add source closes at once and shows the source loading, then opens it full
       },
     ],
   });
+  // A search stays while the dialog is open, and ends once the source is added.
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
+  await field.fill("doc");
   await page.getByRole("button", { name: "Add source" }).click();
   await expect(dialog(page)).toBeVisible();
   await expect(dialog(page)).toContainText("Add #branch or #tag to pin it");
   await expect(urlField(page)).toBeFocused();
+  // The dialog hides the page from the accessibility tree.
+  await expect(
+    page.getByRole("searchbox", {
+      includeHidden: true,
+      name: "Search all sources",
+    })
+  ).toHaveValue("doc");
   await urlField(page).fill("acme/more");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   await expect(dialog(page)).toHaveCount(0);
@@ -1233,6 +1295,7 @@ test("Add source closes at once and shows the source loading, then opens it full
   ).toBeVisible();
   await expect(loading).toHaveCount(0);
   await expect(pill(page, "acme/more")).toHaveAttribute("aria-pressed", "true");
+  await expect(field).toHaveValue("");
   expect(await names(sourcesRow(page))).toEqual([
     "Hub",
     "acme/skills",
@@ -1417,7 +1480,11 @@ test("Refresh all fetches every source in one run, then reads your skills, pendi
     holdAfter: 0,
   });
   const refreshAll = page.getByRole("button", { name: "Refresh all" });
+  // Refresh all ends a search.
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
+  await field.fill("doc");
   await refreshAll.click();
+  await expect(field).toHaveValue("");
   await fetch.started;
   await expect(refreshAll).toHaveAttribute("aria-busy", "true");
   await expect(refreshAll).toBeDisabled();
