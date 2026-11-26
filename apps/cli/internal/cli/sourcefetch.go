@@ -69,24 +69,9 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 		inv.out.print("No sources. Add one with ", inv.out.paint(label, "agentx source add <url>"), ".")
 		return nil
 	}
-	gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
+	gitDir, _, err := gitx.OpenStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return storeFailure(err)
-	}
-	if !exists {
-		// Settings that name sources the store has nothing of, as an
-		// import leaves them: a shared source is refused as not fetched, with
-		// the add that fetches it as the hint, and the hub, which
-		// this command writes the remote of when it is missing, is fetched
-		// into a store created for it.
-		for _, t := range targets {
-			if !t.entry.Hub {
-				return sourceFailure(source.NotFetched(t.src.URL), t.src)
-			}
-		}
-		if gitDir, _, err = gitx.OpenStore(ctx, inv.git, inv.dirs.Home); err != nil {
-			return storeFailure(err)
-		}
 	}
 	// Each source that fetched is checked again in the worker that fetched
 	// it: a fetch the user asked for is the moment to find out whether
@@ -137,7 +122,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // settings hold the pin and the remote is derived from them, so a run
 // interrupted between the two leaves a remote recording a ref the settings
 // do not name. The remotes are read in one git process and only one that
-// disagrees is written, which changes no pin: that is what the settings
+// disagrees or is missing is written, which changes no pin: that is what the settings
 // say, and only source add sets it.
 func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool, then func(i int)) ([]source.Result, error) {
 	if err := inv.holdLock(ctx, wait, false, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
@@ -187,21 +172,6 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 			done(t.src, len(srcs)+k+1)
 		}
 	}
-	// A source whose remote the store no longer holds, which an
-	// interrupted removal leaves behind, cannot be fetched at all. git
-	// reports that as a repository it cannot find and names the remote,
-	// which is agentx's internal name for the source rather than anything
-	// the user wrote; the truth is that the source is not on this machine,
-	// which is what source skills says of the same state. Only a shared
-	// source that failed is checked, so a run that works spawns nothing for
-	// it: the hub's remote is always written before its fetch,
-	// and one a failed first fetch took out again, see fetchForks, was
-	// still unreachable.
-	for i, res := range results {
-		if res.Err != nil && !targets[i].entry.Hub && !source.Configured(ctx, inv.git, gitDir, res.Source.ID()) {
-			results[i].Err = source.NotFetched(res.Source.URL)
-		}
-	}
 	return results, nil
 }
 
@@ -230,19 +200,16 @@ func (inv *invocation) holdLock(ctx context.Context, wait, signal bool, fn func(
 // and reads every remote in one git process, so a run whose remotes are
 // right costs one.
 //
-// A shared source with no remote at all, which an interrupted removal
-// leaves, is left alone: writing one for it would build a remote out of an
-// entry nothing can fetch. The fetch that follows fails, and the run says
-// what it is: a source this machine does not hold. The hub's
-// remote is written whenever it is missing, as settings an import wrote leave it:
-// its forks are fetched whole from the repository and need nothing else.
-// One written over a remote never fetched whole is fetched with --refetch
-// the first time, see awaitWholeFetch.
+// A source the settings name and the store has no remote for, as settings
+// written on another machine or by hand leave it, gets its remote here, so
+// the fetch that follows brings it onto this machine. The hub's forks are
+// fetched whole from the repository; one written over a remote never
+// fetched whole is fetched with --refetch the first time, see
+// awaitWholeFetch.
 func (inv *invocation) alignRemotes(ctx context.Context, gitDir string, targets []fetchTarget) error {
 	remotes := source.Remotes(ctx, inv.git, gitDir)
 	for _, t := range targets {
-		remote, ok := remotes[t.src.ID()]
-		if (!ok || remote.URL == "") && !t.entry.Hub || remote == source.RemoteOf(t.entry) {
+		if remote := remotes[t.src.ID()]; remote == source.RemoteOf(t.entry) {
 			continue
 		}
 		if err := source.Configure(ctx, inv.git, gitDir, t.entry); err != nil {

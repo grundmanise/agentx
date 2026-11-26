@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -42,45 +41,6 @@ func awaitTrue(t *testing.T, what string, done func() bool) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-}
-
-// logged is every log line serve has written to stderr so far at level
-// whose message starts with prefix, in order. Serve writes each line whole,
-// so what it has written so far is whole lines.
-func (p *serveProc) logged(level, prefix string) []string {
-	p.t.Helper()
-	var messages []string
-	for _, line := range strings.Split(p.stderr.String(), "\n") {
-		if line == "" {
-			continue
-		}
-		var e jsonEvent
-		if err := json.Unmarshal([]byte(line), &e); err != nil {
-			p.t.Fatalf("not a JSON event: %q: %v", line, err)
-		}
-		if msg, _ := e["message"].(string); e["type"] == "log" && e["level"] == level && strings.HasPrefix(msg, prefix) {
-			messages = append(messages, msg)
-		}
-	}
-	return messages
-}
-
-// awaitLogged waits until serve has written at least n log lines at level
-// whose message starts with prefix, and returns every one written by then.
-// A wait that fails logs what serve wrote instead.
-func (p *serveProc) awaitLogged(level, prefix string, n int) []string {
-	p.t.Helper()
-	var got []string
-	defer func() {
-		if len(got) < n { // awaitTrue failed the test, and this runs as it ends
-			p.t.Logf("stderr:\n%s", p.stderr.String())
-		}
-	}()
-	awaitTrue(p.t, fmt.Sprintf("%d %s lines starting %q", n, level, prefix), func() bool {
-		got = p.logged(level, prefix)
-		return len(got) >= n
-	})
-	return got
 }
 
 // TestServeRefreshesEverySource runs serve on a machine with three
@@ -171,17 +131,14 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	equal(t, "epsilon's drift", drift(h.listed("epsilon")), "source removed")
 }
 
-// TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves runs serve on a
+// TestServeFetchesASourceTheStoreLostWhileAnotherMoves runs serve on a
 // machine with two sources, the second left as a removal cut short leaves
 // it, its remote and ref gone, while a commit lands in the first and source
-// fetch takes it in. The check's write and the fetch's each set off a
-// rescan that rebuilds the source index, twice after the initial build,
-// but the second source is no different from one rebuild to the next: the
-// index warns once that it has not been fetched, and the check at launch
-// warns that it could not fetch it and leaves its last_fetched as it was.
-// The hub, which is never fetched as a shared source, is warned
+// fetch takes it in. The check at launch writes the second's remote again
+// and fetches it, so its skills can be searched, and nothing is warned
+// about. The hub, which is never fetched as a shared source, is warned
 // about by neither.
-func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
+func TestServeFetchesASourceTheStoreLostWhileAnotherMoves(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
@@ -205,29 +162,24 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	p := h.serve(t, "--json")
 	p.passInventories = true // the adds and fetches change the sources the inventory lists
 	p.next("inventory")
-	h.awaitWrite(t, before) // the check at launch, which fetched one
+	h.awaitWrite(t, before) // the check at launch, which fetched both
 	one.skill("skills/delta", "delta", "A skill added upstream", nil)
 	one.commit("delta")
 	h.runBesideServe("source", "fetch", one.url)
-	// The rebuild that finds the skill logs its warnings before a search
-	// can be answered from it.
 	found := []string{one.url + " skills/delta delta"}
 	searches := 0
 	awaitTrue(t, fmt.Sprintf("a search after one moved finds %q", found), func() bool {
 		searches++
 		return reflect.DeepEqual(p.search(fmt.Sprintf("s%d", searches), "delta"), found)
 	})
+	searches++
+	equal(t, "a search for two's skill", strings.Join(p.search(fmt.Sprintf("s%d", searches), "gamma"), "\n"), two.url+" gamma gamma")
 	equal(t, "exit", p.close(), 0)
-	equal(t, "two's last_fetched", lastFetched(t, h, two.url), backdated)
-
-	warned := warnings(h, p.stderr.String())
-	slices.Sort(warned)
-	want := []string{
-		"source " + two.url + " has not been fetched, its skills cannot be searched",
-		"update check: source not fetched: " + two.url,
+	if lastFetched(t, h, two.url) == backdated {
+		t.Errorf("two's last_fetched stayed %s, want the check at launch", backdated)
 	}
-	if !slices.Equal(warned, want) {
-		t.Errorf("the warnings = %q, want one from the index and one from the check: %q", warned, want)
+	if warned := warnings(h, p.stderr.String()); len(warned) != 0 {
+		t.Errorf("the warnings = %q, want none", warned)
 	}
 }
 
@@ -323,15 +275,12 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 	}
 }
 
-// TestServeWarnsAboutSourcesAnImportBrought runs serve on a machine whose
-// settings name two sources it never fetched, as an import stopped before
-// it added them leaves them, written here as such an import writes them, so
-// that it has no store to fetch into until source add creates one.
-// The check at launch fetches nothing, creates no store and writes
-// nothing, but warns about each source as not fetched, as source fetch
-// refuses it. skill check-updates, which checks only the sources a managed
-// skill came from, still has nothing to check there.
-func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
+// TestServeFetchesSourcesSettingsNameWithoutAStore runs serve on a machine
+// whose settings name two sources it never fetched, as settings written on
+// another machine leave them, with no store. The check at launch creates
+// the store, fetches both and warns about neither, so their skills can be
+// searched.
+func TestServeFetchesSourcesSettingsNameWithoutAStore(t *testing.T) {
 	t.Parallel()
 	from := newHarness(t)
 	from.build(t, fixture{dirs: []string{".claude"}})
@@ -349,35 +298,26 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 	if _, err := os.Stat(store); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("the settings write left %s behind, or it cannot be told: %v", store, err)
 	}
-	version := mutationVersion(t, h)
-	calls := countingGit(t, h)
+	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
+	p.passInventories = true
 	p.next("inventory")
-	var want []string
-	for _, s := range []*sourceRepo{one, two} {
-		line := "update check: source not fetched: " + s.url
-		p.awaitLogged("warn", line, 1)
-		want = append(want, line)
-	}
+	h.awaitWrite(t, before)
+	want := []string{two.url + " gamma gamma"}
+	searches := 0
+	awaitTrue(t, fmt.Sprintf("a search finds %q", want), func() bool {
+		searches++
+		return reflect.DeepEqual(p.search(fmt.Sprintf("s%d", searches), "gamma"), want)
+	})
+	searches++
+	equal(t, "a search for one's skill", strings.Join(p.search(fmt.Sprintf("s%d", searches), "alpha"), "\n"), one.url+" skills/alpha alpha")
 	equal(t, "exit", p.close(), 0)
-
-	warned := p.logged("warn", "update check: ")
-	slices.Sort(warned)
-	slices.Sort(want)
-	if !slices.Equal(warned, want) {
-		t.Errorf("the check warnings = %q, want one per source: %q", warned, want)
+	if warned := warnings(h, p.stderr.String()); len(warned) != 0 {
+		t.Errorf("the warnings = %q, want none", warned)
 	}
-	for _, call := range calls() {
-		if slices.Contains(strings.Fields(call), "fetch") {
-			t.Errorf("serve fetched on a machine with no store: %s", call)
-		}
+	for _, s := range []*sourceRepo{one, two} {
+		equal(t, s.url+": the source ref", h.sourceRef(s.url), s.query("rev-parse", "HEAD"))
 	}
-	if _, err := os.Stat(store); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("serve created %s: %v", store, err)
-	}
-	equal(t, "the version file", mutationVersion(t, h), version)
-	equal(t, "skill check-updates", h.mustRun("skill", "check-updates").stdout,
-		"Nothing to check: no managed skill comes from a source added on this machine.\n")
 }
 
 // TestServeChecksTheHubRemoteWhileItRuns runs serve on machine b of
