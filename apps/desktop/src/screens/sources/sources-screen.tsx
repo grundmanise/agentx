@@ -34,7 +34,7 @@ import {
   oneOfEachName,
   planAdds,
   resultCards,
-  withSelectedTwins,
+  sameName,
   sourcePills,
   HUB_SKILLS,
 } from "#/screens/sources/projection.ts";
@@ -284,7 +284,7 @@ export const SourcesScreen = () => {
             )
           )
         );
-  const groups: CardGroup[] = (
+  const groups: CardGroup[] =
     resultGroups ??
     (activePill === undefined
       ? []
@@ -294,8 +294,7 @@ export const SourcesScreen = () => {
             label: activePill.label,
             source: activePill.url ?? HUB_SKILLS,
           },
-        ])
-  ).map((g) => ({ ...g, cards: withSelectedTwins(g.cards, selection) }));
+        ]);
   const allCards = groups.flatMap((g) => g.cards);
   const selectable = allCards.filter((c) => c.status === undefined);
   const selectedCount = selectable.filter((c) => selection.has(c.key)).length;
@@ -340,6 +339,12 @@ export const SourcesScreen = () => {
       if (next.has(card.key)) {
         next.delete(card.key);
       } else {
+        // The library holds one skill of a name: selecting one deselects the other.
+        for (const other of next.values()) {
+          if (sameName(other, card)) {
+            next.delete(other.key);
+          }
+        }
         next.set(card.key, card);
       }
       return next;

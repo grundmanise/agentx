@@ -45,7 +45,7 @@ import {
   listingCards,
   oneOfEachName,
   orderCards,
-  withSelectedTwins,
+  sameName,
 } from "#/screens/sources/projection.ts";
 import type { SkillCard } from "#/screens/sources/projection.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
@@ -149,10 +149,7 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
   const cards =
     found === undefined
       ? []
-      : withSelectedTwins(
-          orderCards(listingCards(found.listing, found.url, library)),
-          selection
-        );
+      : orderCards(listingCards(found.listing, found.url, library));
   const selectable = cards.filter((c) => c.status === undefined);
   const oneEach = oneOfEachName(selectable);
   const selected = selectable.filter((c) => selection.has(c.key));
@@ -249,13 +246,19 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
     });
   };
 
-  const toggle = (key: string) => {
+  const toggle = (card: SkillCard) => {
     setSelection((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
+      if (next.has(card.key)) {
+        next.delete(card.key);
       } else {
-        next.add(key);
+        // The library holds one skill of a name: selecting one deselects the other.
+        for (const other of cards) {
+          if (sameName(other, card)) {
+            next.delete(other.key);
+          }
+        }
+        next.add(card.key);
       }
       return next;
     });
@@ -340,7 +343,7 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
                 cards={cards}
                 selected={selection}
                 onToggle={(card) => {
-                  toggle(card.key);
+                  toggle(card);
                 }}
               />
             )}

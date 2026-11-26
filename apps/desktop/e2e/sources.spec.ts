@@ -7,9 +7,9 @@ import {
   listingCards,
   oneOfEachName,
   planAdds,
+  sameName,
   skillPage,
   webUrl,
-  withSelectedTwins,
 } from "#/screens/sources/projection.ts";
 
 import { filesOf } from "./fixtures/skills.ts";
@@ -426,25 +426,29 @@ test("a source of plugins whose skills share names: a row each, drawn once, eith
   drawnNames.sort((a, b) => a.localeCompare(b));
   expect(drawnNames).toEqual(shared.flatMap((name) => [name, name]));
 
-  // Either skill of a name can be selected; selecting one leaves the other out, which says why
-  // once open.
-  const first = rowLine(page, "skill-89").first();
-  const second = rowLine(page, "skill-89").last();
-  await second.getByRole("button", { name: "Select skill-89" }).click();
-  await expect(first.getByText("Name taken", { exact: true })).toBeVisible();
+  // Either skill of a name can be selected, and selecting one deselects the other.
+  const first = check(page, "skill-89").first();
+  const second = check(page, "skill-89").last();
+  await second.click();
+  await expect(second).toHaveAttribute("aria-pressed", "true");
+  await first.click();
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  await expect(second).toHaveAttribute("aria-pressed", "false");
   await expect(
-    first.getByRole("button", { name: "Select skill-89" })
-  ).toHaveCount(0);
-  cli.register(["source", "read", ACME_ID, "alpha/skills/skill-89"], {
+    bar(page).getByRole("button", { exact: true, name: "Add 1" })
+  ).toBeVisible();
+
+  // The open row links to the skill's folder in the source.
+  cli.register(["source", "read", ACME_ID, "beta/skills/skill-89"], {
     events: [skillMd("skill-89", "# skill-89\n")],
   });
-  await row(page, "skill-89").first().click();
-  await expect(opened(page, "skill-89")).toContainText(
-    'Only one "skill-89" skill can be added, and the one at beta/skills/skill-89 is selected.'
-  );
+  await row(page, "skill-89").last().click();
+  await expect(
+    page.getByRole("link", { exact: true, name: "beta/skills/skill-89" })
+  ).toBeVisible();
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
-    `source read ${ACME_ID} alpha/skills/skill-89`,
+    `source read ${ACME_ID} beta/skills/skill-89`,
   ]);
 });
 
@@ -526,7 +530,7 @@ test("opening a row reads its SKILL.md once, then opens, and links to the skill"
   await expect(
     opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
   ).toContainText("# Word documents");
-  await page.getByRole("link", { name: "See full skill" }).click();
+  await page.getByRole("link", { exact: true, name: "skills/docx" }).click();
   expect(cli.openedUrls).toEqual([`${ACME}/tree/3f2a9c1e8d7b6a/skills/docx`]);
   // The row opens and closes on a click; the check alone selects.
   await expect(bar(page)).toHaveCount(0);
@@ -1543,15 +1547,8 @@ test("a source whose skills share a name: either can be selected, the other left
     "alpha/pdf",
     "format",
   ]);
-  const blocked = withSelectedTwins(cards, new Set([beta.key]));
-  expect(blocked.map((c) => c.status)).toEqual([
-    "name-taken",
-    undefined,
-    undefined,
-  ]);
-  expect(blocked[0]?.title).toBe(
-    'Only one "pdf" skill can be added, and the one at beta/pdf is selected.'
-  );
+  expect(sameName(alpha, beta)).toBe(true);
+  expect(sameName(alpha, format)).toBe(false);
   const plan = (selected: typeof cards) =>
     planAdds({
       allOf: { cards, source: ACME },

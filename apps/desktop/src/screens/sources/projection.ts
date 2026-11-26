@@ -368,9 +368,6 @@ const sourceSkillStatus = (
     : { holder: named, status: "name-taken" };
 };
 
-/** Where a skill sits in its source, for a reason that names it. */
-const placeOf = (subpath: string) => (subpath === "" ? "the root" : subpath);
-
 /** A card's source and name in any case: the cards of one source that share a name share it. */
 const nameKey = (c: SkillCard) => `${c.source}\u0000${c.name.toLowerCase()}`;
 
@@ -387,37 +384,9 @@ const withTwins = (cards: SkillCard[]): SkillCard[] => {
   );
 };
 
-/**
- * The cards with each twin of a selected card as not selectable: the library holds one skill per
- * name, so either skill of a name can be added, not both.
- */
-export const withSelectedTwins = (
-  cards: SkillCard[],
-  selection: { has: (key: string) => boolean }
-): SkillCard[] => {
-  const chosen = new Map<string, SkillCard>();
-  for (const c of cards) {
-    if (
-      c.twin === true &&
-      c.status === undefined &&
-      selection.has(c.key) &&
-      !chosen.has(nameKey(c))
-    ) {
-      chosen.set(nameKey(c), c);
-    }
-  }
-  return cards.map((c) => {
-    const pick = c.status === undefined ? chosen.get(nameKey(c)) : undefined;
-    if (pick === undefined || pick.key === c.key) {
-      return c;
-    }
-    return {
-      ...c,
-      status: "name-taken",
-      title: `Only one "${c.name}" skill can be added, and the one at ${placeOf(pick.skillMd?.subpath ?? "")} is selected.`,
-    };
-  });
-};
+/** Whether two cards are skills of one source with one name, of which the library holds one. */
+export const sameName = (a: SkillCard, b: SkillCard) =>
+  a.key !== b.key && nameKey(a) === nameKey(b);
 
 /** The cards, keeping only the first of each name of a source: what Select all selects. */
 export const oneOfEachName = (

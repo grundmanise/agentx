@@ -26,8 +26,10 @@ import { formatDate } from "#/lib/dates.ts";
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { trackAttribute } from "#/lib/track.ts";
+import { cn } from "#/lib/utils.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
 import { openSkill, skillPath } from "#/screens/skills/open.ts";
+import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
 import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
@@ -154,25 +156,34 @@ const SkillMd = ({
 };
 
 /**
- * "See full skill": the skill's directory on its source's web page, opened in the browser, with
- * the external-link icon after it. It sits beside the name in the open row, over the row's
- * trigger, and takes its own clicks.
+ * The skill's directory in its source, a link to it on the source's web page, opened in the
+ * browser, with the external-link icon after it. A long path loses its start, so its folder
+ * stays in view. It sits beside the name in the open row, over the row's trigger, and takes its
+ * own clicks.
  */
-const SeeFullSkill = ({ page }: { page: string }) => (
+const SkillPath = ({ page, path }: { page: string; path: string }) => (
   <a
     href={page}
     title={page}
     {...trackAttribute("sources.skill-see-full")}
-    className="type-secondary text-text-primary pointer-events-auto inline-flex flex-none items-center gap-1 font-medium underline underline-offset-2"
+    className="type-secondary text-text-primary pointer-events-auto inline-flex min-w-0 items-center gap-1 font-medium underline underline-offset-2"
     onClick={(e) => {
       e.preventDefault();
       void openInBrowser(page);
     }}
   >
-    See full skill
+    <span dir="rtl" className="min-w-0 truncate">
+      <bdi dir="ltr">{path}</bdi>
+    </span>
     <ExternalLinkIcon size="2xs" />
   </a>
 );
+
+/** Where a card's skill sits: its directory in the source, or the source for a skill at its root. */
+const pathOf = (card: SkillCard) => {
+  const subpath = card.skillMd?.subpath ?? "";
+  return subpath === "" ? shortSource(card.source) : subpath;
+};
 
 /** Why a card's name is taken, the skill that holds it a link that opens it in Skills. */
 const TakenText = ({ taken }: { taken: TakenReason }) => (
@@ -331,7 +342,7 @@ const AddedRemove = ({
 
 /**
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its
- * description while closed, See full skill beside the name while open) and, at its end, the round
+ * description while closed, the skill's path beside the name while open) and, at its end, the round
  * check that selects it, or for a skill this machine holds already its status, which for an Added
  * skill turns into Remove on hover. Added carries the date of the last add, and the check of a
  * skill this machine removed has the date of the last removal before it, when this machine
@@ -420,15 +431,21 @@ const SkillItemView = ({
         meta={rowMeta(card, date)}
         action={action}
       >
-        {/* The name and See full skill share a baseline, as their sizes differ. */}
+        {/* The name and the path share a baseline, as their sizes differ. */}
         <span className="flex min-w-0 flex-initial items-baseline gap-3">
           <span
             aria-hidden
-            className="type-row-name text-text-primary min-w-0 flex-initial truncate"
+            className={cn(
+              "type-row-name text-text-primary min-w-0 flex-initial truncate",
+              // The path gives way first.
+              open && "shrink-0"
+            )}
           >
             {card.name}
           </span>
-          {open && card.page !== undefined && <SeeFullSkill page={card.page} />}
+          {open && card.page !== undefined && (
+            <SkillPath page={card.page} path={pathOf(card)} />
+          )}
         </span>
         {loading ? (
           <Loading />
