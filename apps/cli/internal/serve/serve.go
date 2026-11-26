@@ -74,8 +74,11 @@ type Requests struct {
 	refreshes chan func(counter int, err error)
 	loop      atomic.Pointer[loop]
 	scanned   chan struct{} // closed by Run once its first scan has ended, with the index it built
-	refused   chan struct{} // closed by Refuse, once refusal is set
-	refusal   error
+
+	mu      sync.Mutex
+	refused chan struct{} // closed by Refuse, once refusal is set; replaced when again succeeds
+	refusal error
+	again   func() error
 }
 
 // NewRequests makes the Requests of one Run, to be passed in its Options.
@@ -83,18 +86,45 @@ func NewRequests() *Requests {
 	return &Requests{refreshes: make(chan func(int, error)), scanned: make(chan struct{}), refused: make(chan struct{})}
 }
 
-// Refuse says that no Run will answer: every Refresh waiting, and every
-// later one, returns err at once. It is called at most once, by a serve
-// that cannot serve, such as one that found another serve holding its lock.
-func (r *Requests) Refuse(err error) {
-	r.refusal = err
+// Refuse says that no Run answers yet: every Refresh waiting returns err at
+// once. A later Refresh calls again first and returns what it returns, until
+// again returns nil: Refuse is then over, and that Refresh and every one
+// after it waits for Run. It is called at most once, by a serve that cannot
+// serve, such as one that found another serve holding its lock, before its
+// Run.
+func (r *Requests) Refuse(err error, again func() error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.refusal, r.again = err, again
 	close(r.refused)
+}
+
+// tryAgain is the error of a refusal that again does not end, or nil.
+func (r *Requests) tryAgain() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.refusal == nil {
+		return nil
+	}
+	if err := r.again(); err != nil {
+		return err
+	}
+	r.refusal, r.again = nil, nil
+	r.refused = make(chan struct{})
+	return nil
+}
+
+// refusedNow is the refused channel and the refusal of the moment.
+func (r *Requests) refusedNow() (<-chan struct{}, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.refused, r.refusal
 }
 
 // Refresh asks for a scan and waits for it: the counter it returns is that
 // of the current inventory, changed or not, after a scan that began once
-// Refresh was called. The error is the scan's, the one Refuse was given, or
-// ctx's when ctx is done first. Run answers no request once it has
+// Refresh was called. The error is the scan's, the one Refuse or its again
+// gave, or ctx's when ctx is done first. Run answers no request once it has
 // returned, so ctx must be done by then.
 func (r *Requests) Refresh(ctx context.Context) (counter int, err error) {
 	type outcome struct {
@@ -102,12 +132,22 @@ func (r *Requests) Refresh(ctx context.Context) (counter int, err error) {
 		err     error
 	}
 	done := make(chan outcome, 1)
-	select {
-	case r.refreshes <- func(counter int, err error) { done <- outcome{counter, err} }:
-	case <-r.refused:
-		return 0, r.refusal
-	case <-ctx.Done():
-		return 0, ctx.Err()
+	answer := func(counter int, err error) { done <- outcome{counter, err} }
+	for sent := false; !sent; {
+		if err := r.tryAgain(); err != nil {
+			return 0, err
+		}
+		refused, _ := r.refusedNow()
+		select {
+		case r.refreshes <- answer:
+			sent = true
+		case <-refused:
+			if _, refusal := r.refusedNow(); refusal != nil {
+				return 0, refusal
+			}
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		}
 	}
 	select {
 	case o := <-done:
@@ -124,9 +164,10 @@ func (r *Requests) Refresh(ctx context.Context) (counter int, err error) {
 // that Refuse answers, or that came before a first scan that failed, finds
 // nothing. The error is ctx's when ctx is done first.
 func (r *Requests) Search(ctx context.Context, query string) ([]source.Match, error) {
+	refused, _ := r.refusedNow()
 	select {
 	case <-r.scanned:
-	case <-r.refused:
+	case <-refused:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
