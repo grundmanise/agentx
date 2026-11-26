@@ -322,6 +322,7 @@ func (inv *invocation) addHub(ctx context.Context, arg string) error {
 	}
 	entry := want
 	entry.LastFetched = time.Now().UTC().Format(time.RFC3339)
+	entry.Added = entry.LastFetched
 	check.apply(&entry)
 	var replaced home.Source
 	settled := false

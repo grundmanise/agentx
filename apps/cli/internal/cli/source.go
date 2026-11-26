@@ -251,6 +251,7 @@ func (inv *invocation) sshHosts(ctx context.Context) func(host string) string {
 // install reads the listing that fetch built. The hub naming the
 // source's repository refuses it, exit 6, before anything is written.
 func (inv *invocation) addSource(ctx context.Context, src source.Source) (listing source.Listing, entry home.Source, err error) {
+	started := time.Now().UTC().Format(time.RFC3339) // a source is added when its add starts, so that adds run together keep the order they were started in
 	before, err := inv.loadSettings()
 	if err != nil {
 		return listing, entry, err
@@ -349,7 +350,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	if err := ctx.Err(); err != nil {
 		return listing, entry, takeBack(err)
 	}
-	entry = home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339)}
+	entry = home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339), Added: started}
 	check.apply(&entry)
 	// The remote went in under an earlier hold of the lock. Left behind by
 	// a run that gets no further, it is a remote for a source the machine

@@ -216,6 +216,33 @@ const openAddDialog = async (cli: MockCli, page: Page) => {
   await expect(linkField(page)).toBeFocused();
 };
 
+test("Cancel and Escape stop what the Add skill dialog runs, then close it", async ({
+  cli,
+  page,
+}) => {
+  await openAddDialog(cli, page);
+  const lookup = cli.register(["source", "skills", ADD_LINK], {
+    events: sourceSkillEvents,
+    holdAfter: 0,
+  });
+  await linkField(page).fill(ADD_LINK);
+  await linkField(page).press("Enter");
+  await lookup.started;
+  await addDialog(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(addDialog(page)).toHaveCount(0);
+  expect(cli.cancels).toHaveLength(1);
+
+  await skillsHeader(page)
+    .getByRole("button", { exact: true, name: "Add" })
+    .click();
+  await linkField(page).fill(ADD_LINK);
+  await linkField(page).press("Enter");
+  await expect(findButton(page)).toHaveAttribute("aria-busy", "true");
+  await page.keyboard.press("Escape");
+  await expect(addDialog(page)).toHaveCount(0);
+  await expect.poll(() => cli.cancels.length).toBe(2);
+});
+
 test("Add skill finds the skills under a link, and installs the two picked in the agents chosen with one skill add", async ({
   cli,
   page,

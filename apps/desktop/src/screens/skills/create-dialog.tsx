@@ -32,7 +32,7 @@ import {
 import { skillFile } from "#/screens/skills/edit.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { agentx, usePending } from "#/store/runner.ts";
+import { agentx, stopOnClose, usePending } from "#/store/runner.ts";
 import { afterSettled } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -289,7 +289,10 @@ export const CreateSkillDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
+  <Dialog
+    open={open}
+    onOpenChange={stopOnClose([CREATE_SKILL_LABEL], onOpenChange)}
+  >
     <DialogContent>
       <DialogHeader>
         <DialogTitle>Create skill</DialogTitle>

@@ -42,6 +42,7 @@ type Source struct {
 	AccessChecked string `json:"access_checked,omitempty"` // RFC 3339, when access was last checked, whatever the answer
 	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
 	LastFetched   string `json:"last_fetched,omitempty"`   // RFC 3339
+	Added         string `json:"added,omitempty"`          // RFC 3339, when the source was first added; a repeat add keeps it
 }
 
 // The access of a source: what git lets this machine do there. Writable
@@ -82,6 +83,9 @@ func (s Source) Merge(prev Source) Source {
 	}
 	if s.DefaultBranch == "" {
 		s.DefaultBranch = prev.DefaultBranch
+	}
+	if prev.Added != "" {
+		s.Added = prev.Added
 	}
 	return s
 }
