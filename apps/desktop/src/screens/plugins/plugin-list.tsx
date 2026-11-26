@@ -19,7 +19,7 @@ import {
 } from "#/components/ui/input-group.tsx";
 import { useOnNewKey } from "#/lib/new-key.ts";
 import { plural } from "#/lib/plural.ts";
-import { PluginFilterPopover } from "#/screens/plugins/filter-popover.tsx";
+import { AgentFilterPopover } from "#/screens/plugins/filter-popover.tsx";
 import { PluginTile } from "#/screens/plugins/plugin-tile.tsx";
 import type {
   PluginFilters,
@@ -206,10 +206,13 @@ export const PluginList = ({
         />
       </InputGroup>
       <div className="gap-split-filter flex min-w-0 items-center">
-        <PluginFilterPopover
+        <AgentFilterPopover
           configurations={configurations}
-          filters={filters}
-          onChange={onFilters}
+          agents={filters.agents}
+          onChange={(agents) => {
+            onFilters({ ...filters, agents });
+          }}
+          track="plugins"
         />
         {filters.agents.length > 0 && (
           <AgentFilterChip
