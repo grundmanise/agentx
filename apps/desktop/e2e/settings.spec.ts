@@ -251,20 +251,32 @@ test("the switch runs config set ignore_system_files true, then false, each with
   ]);
 });
 
-test("Run checks opens the startup checks in manual mode, and Open agentx comes back", async ({
+test("Run checks shows the checks in a dialog over Settings, with Copy report and Done", async ({
   cli,
   page,
 }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await openSettings(cli, page);
   await section(page, "Troubleshooting")
     .getByRole("button", { name: "Run checks" })
     .click();
-  const layer = page.getByRole("region", { name: "Startup checks" });
-  await expect(layer.getByRole("heading", { level: 1 })).toHaveText(
-    "You're all set"
-  );
-  await layer.getByRole("button", { name: "Open agentx" }).click();
-  await expect(layer).toHaveCount(0);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading")).toHaveText("You're all set");
+  await expect(
+    page.getByRole("region", { name: "Startup checks" })
+  ).toHaveCount(0);
+  await expect(
+    dialog.getByRole("list", { name: "Checks" }).getByRole("listitem")
+  ).toHaveCount(5);
+  await dialog.getByRole("button", { name: "Copy report" }).click();
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(async () => await navigator.clipboard.readText())
+    )
+    .toContain("✓ git");
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(dialog).toHaveCount(0);
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })
   ).toBeVisible();

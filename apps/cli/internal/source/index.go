@@ -21,14 +21,13 @@ type Index struct {
 }
 
 // reading is what one build made of one source at one commit: the skills
-// the store held for it and the warning that says why it holds none.
+// the store held for it, none for a source not fetched yet.
 // A source whose listing failed has no reading at all, so the next build
 // reads it again instead of serving an empty listing for as long as the ref
 // stands still: the failure is the store's answer now, not a
 // property of the commit.
 type reading struct {
-	skills  []Skill
-	warning string
+	skills []Skill
 }
 
 // readingAt is what the build that produced idx made of the source that key
@@ -102,12 +101,10 @@ func (idx *Index) Search(query string) []Match {
 // no source costs none. A source prev could not list is listed again
 // whatever its commit, so an index built while the store could not
 // answer for one source recovers on the next build rather than holding that
-// source empty until its ref moves. warnings, sorted, name the sources whose
-// skills are not in the index: one that was never fetched, by the build
-// that first finds it so and not by the builds that keep that reading, so
-// that a rebuild that follows another source's ref does not warn about it
-// again; and one the store cannot list whole, by every build, since
-// each lists it again.
+// source empty until its ref moves. warnings, sorted, name the sources the
+// store cannot list whole, by every build, since each lists them again. A
+// source never fetched is no warning: it is in the index with no skills,
+// and the update check that fetches it says when it cannot.
 func BuildIndex(ctx context.Context, r *gitx.Runner, gitDir string, urls []string, prev *Index) (idx *Index, warnings []string, err error) {
 	idx = &Index{Sources: []Indexed{}, read: map[string]reading{}}
 	if len(urls) == 0 {
@@ -144,12 +141,6 @@ func BuildIndex(ctx context.Context, r *gitx.Runner, gitDir string, urls []strin
 				warnings = append(warnings, failed)
 				continue
 			}
-			// Only a reading made here warns: one prev made has warned
-			// already, and a rebuild that follows another source's ref is
-			// no news about this one.
-			if got.warning != "" {
-				warnings = append(warnings, got.warning)
-			}
 		}
 		idx.read[key] = got
 		src.Skills = got.skills
@@ -168,7 +159,7 @@ func readSource(ctx context.Context, r *gitx.Runner, gitDir, url, commit string)
 	if commit == "" {
 		// Not a failure to try again: nothing but a fetch gives an unfetched
 		// source a ref, and a fetch moves it, which is a reading of its own.
-		return reading{skills: []Skill{}, warning: "source " + url + " has not been fetched, its skills cannot be searched"}, ""
+		return reading{skills: []Skill{}}, ""
 	}
 	listing, err := List(ctx, r, gitDir, Source{URL: url})
 	if err != nil {

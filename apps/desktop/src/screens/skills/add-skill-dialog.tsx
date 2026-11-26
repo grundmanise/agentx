@@ -7,7 +7,6 @@
 // runs nothing. The first skill installed is selected once the inventory that follows lists it; a
 // refusal of either step shows under the field.
 import { useId, useRef, useState } from "react";
-import type { RefObject } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
@@ -118,13 +117,7 @@ const showsUnderField = (outcome: Outcome) =>
  * The field, Find skills, the skills found and the agents, and the buttons. Mounted while the
  * dialog is open.
  */
-const AddSkillForm = ({
-  linkField,
-  onClose,
-}: {
-  linkField: RefObject<HTMLInputElement | null>;
-  onClose: () => void;
-}) => {
+const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
   const library = useAppStore((s) => s.inventory?.library) ?? noEntries;
   const {
     chosen,
@@ -273,7 +266,7 @@ const AddSkillForm = ({
       <div className="gap-input-label flex flex-col">
         <div className="flex items-center gap-2">
           <Input
-            ref={linkField}
+            autoFocus
             kind="mono"
             aria-label="Link to skills"
             placeholder="Link to skills"
@@ -387,29 +380,20 @@ export const AddSkillDialog = ({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) => {
-  const linkField = useRef<HTMLInputElement>(null);
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        onOpenAutoFocus={(e) => {
-          e.preventDefault();
-          linkField.current?.focus();
+}) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Add skill</DialogTitle>
+        <DialogDescription>
+          Installs the skills you pick in your agents, and adds their source.
+        </DialogDescription>
+      </DialogHeader>
+      <AddSkillForm
+        onClose={() => {
+          onOpenChange(false);
         }}
-      >
-        <DialogHeader>
-          <DialogTitle>Add skill</DialogTitle>
-          <DialogDescription>
-            Installs the skills you pick in your agents, and adds their source.
-          </DialogDescription>
-        </DialogHeader>
-        <AddSkillForm
-          linkField={linkField}
-          onClose={() => {
-            onOpenChange(false);
-          }}
-        />
-      </DialogContent>
-    </Dialog>
-  );
-};
+      />
+    </DialogContent>
+  </Dialog>
+);

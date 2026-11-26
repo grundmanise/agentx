@@ -417,6 +417,9 @@
   --color-server-tools-none: var(--gray-500);
   --color-server-versions: var(--color-accent-attention);
 
+  /* Easing (DESIGN.md §8): `ease-in-out`, the sheet's slide. */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
   /* Animations (DESIGN.md §8): `animate-check-spin`. */
   --animate-check-spin: check-spin 1s linear infinite;
   @keyframes check-spin {
@@ -725,6 +728,8 @@
   --width-sheet-handle: 8px;
   --width-log-time: 8ch;
   --inset-sheet: 10px;
+  /* sheet.slide: how far a sheet slides in and out, from past the window's right edge. */
+  --translate-sheet: calc(100% + var(--inset-sheet));
   --padding-sheet: 32px;
   --padding-sheet-y: 28px;
   --width-palette: 640px;
@@ -773,9 +778,12 @@
   --gap-diff-segment: 4px;
   --height-timeline-line: 20px;
   --spacing-timeline-indent: 22px;
-  --width-check-column: 480px;
+  --width-check-column: 392px;
   --gap-check-block: 36px;
   --gap-check-row: 22px;
+  /* One or two `type.check-detail` lines, each 2px below the one above. */
+  --min-height-check-details-1: calc(12.5px * 1.5 + 2px);
+  --min-height-check-details-2: calc((12.5px * 1.5 + 2px) * 2);
   --size-check-mark: 20px;
   --gap-check-mark: 14px;
   --max-width-settings: 760px;

@@ -1260,8 +1260,8 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 
 // TestCommandsNameThePinOfASourceNeverFetched: settings can name a source
 // this machine never fetched, as an import stopped before it added it
-// leaves them, with no store yet. skill add, source fetch and source
-// skills of it answer that it was never fetched, with a source add to run
+// leaves them, with no store yet. skill add and source skills of it answer
+// that it was never fetched, with a source add to run
 // that names the pin the settings hold: source add writes the pin its
 // argument names, so a bare URL would unpin the very source the settings
 // hold. This is the one test of that hint's text. Running it keeps the pin,
@@ -1278,7 +1278,6 @@ func TestCommandsNameThePinOfASourceNeverFetched(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"skill", "add", other.url, "--all"},
-		{"source", "fetch", other.url},
 		{"source", "skills", other.url},
 	} {
 		out := h.run(append([]string{"--json"}, args...)...)

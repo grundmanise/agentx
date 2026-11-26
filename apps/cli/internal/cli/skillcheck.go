@@ -362,17 +362,9 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 		return rep, nil
 	}
 	if !exists {
-		// Settings that name sources on a machine that has fetched none,
-		// as an import leaves them: nothing can be fetched into a home
-		// repo that source add has not created yet, and each source is the
-		// failure a fetch of it gives there, which the serve child warns
-		// about. Nothing is fetched or written, and no git is run.
-		for _, entry := range sharedSources(s.Sources) {
-			t := target(entry)
-			res := source.Result{Source: t.src, Err: source.NotFetched(t.src.URL)}
-			rep.failures = append(rep.failures, checkFailure{source: entry.URL, fetch: true, f: fetchRefused(res)})
+		if gitDir, _, err = gitx.OpenStoreWaiting(ctx, inv.git, inv.dirs.Home); err != nil {
+			return rep, storeFailure(err)
 		}
-		return rep, nil
 	}
 	records, hubSkills, err := inv.checkLineage(ctx, gitDir)
 	if err != nil {

@@ -66,6 +66,12 @@ const labels = [
   "Watching this machine",
 ] as const;
 
+/**
+ * How many detail lines each check keeps room for, whatever its state, so the list keeps its height
+ * while the checks run: the CLI's version and path wrap to two lines.
+ */
+export const reservedLines = [2, 1, 1, 1, 1] as const;
+
 const titles = [
   "Reinstall agentx",
   "Update git to continue",
@@ -125,10 +131,10 @@ const doctorCheck = (
   };
 };
 
-/** A check not settled yet. Check 5 says what it waits for. */
+/** A check not settled yet: its label alone. */
 const pending = (index: number): Check => ({
   label: labels[index] ?? "",
-  lines: index === 4 ? [{ text: "Waiting for checks" }] : [],
+  lines: [],
   status: "waiting",
 });
 
@@ -241,6 +247,14 @@ export const readChecks = (found: Findings, running: boolean): Checks => {
     failure,
     passed: checks.every((c) => c.status === "pass" || c.status === "warn"),
   };
+};
+
+/** The title over the checks: what runs, the first failure, or that every check passed. */
+export const checksTitle = ({ failure }: Checks, running: boolean): string => {
+  if (running) {
+    return "Checking this machine";
+  }
+  return failure ?? "You're all set";
 };
 
 const glyphs: Record<DoctorStatus, string> = {

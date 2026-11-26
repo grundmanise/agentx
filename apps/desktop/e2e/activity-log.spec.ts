@@ -3,6 +3,7 @@
 // words. The palette and Settings open it.
 import type { Page } from "@playwright/test";
 
+import { settled } from "./harness/animations.ts";
 import { expect, serveLogPath, test } from "./harness/cli.ts";
 
 const log = (page: Page) => page.getByRole("dialog", { name: "Activity log" });
@@ -27,6 +28,7 @@ const openFromPalette = async (page: Page) => {
     .filter({ hasText: "Show activity log" })
     .click();
   await expect(log(page)).toBeVisible();
+  await settled(log(page));
 };
 
 test("a check that succeeds is one line, and one that fails keeps its last lines, which Copy copies", async ({
@@ -140,6 +142,30 @@ test("Settings opens the log, and Debug output runs later commands and serve wit
   await expect(
     lines(page, "git fetch --quiet src-1: exit status 0")
   ).toHaveText(["git fetch --quiet src-1: exit status 0"]);
+});
+
+test("a drag selects the text of the lines, so any part of the log can be copied", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await openFromPalette(page);
+  const text = lines(page, "agentx version").first().locator("span").nth(1);
+  const box = await text.boundingBox();
+  if (box === null) {
+    throw new Error("the line has no box");
+  }
+  await page.mouse.move(box.x + 1, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, {
+    steps: 5,
+  });
+  await page.mouse.up();
+  await expect
+    .poll(
+      async () => await page.evaluate(() => window.getSelection()?.toString())
+    )
+    .toContain("agentx version");
 });
 
 test("Open serve.log shows the serve log file in the file manager", async ({

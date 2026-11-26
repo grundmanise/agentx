@@ -111,7 +111,7 @@ const Stream = ({ lines }: { lines: LogLine[] }) => {
     <ol
       ref={list}
       aria-label="Activity log lines"
-      className="rounded-log-output border-code-border bg-code-bg m-0 flex min-h-0 flex-1 list-none flex-col gap-0.5 overflow-auto border px-3 py-2.5"
+      className="rounded-log-output border-code-border bg-code-bg m-0 flex min-h-0 flex-1 list-none flex-col gap-0.5 overflow-auto border px-3 py-2.5 select-text"
       onScroll={({ currentTarget: el }) => {
         atEnd.current =
           el.scrollHeight - el.scrollTop - el.clientHeight < END_SLACK;

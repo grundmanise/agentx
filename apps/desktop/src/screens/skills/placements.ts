@@ -287,22 +287,6 @@ export const placedNowhere = (events: CliEvent[]): boolean =>
   ) === 0;
 
 /**
- * The toast after `config enable <id> --place-all`, from its result: `<id> is now enabled, <k>
- * skills placed[, <s> placements skipped]`; failing that, k counts the library_skill events with
- * a placement.
- */
-export const placedAllText = (events: CliEvent[], agent: string): string => {
-  const summary = summaryOf(events);
-  const placed =
-    firstNumber(summary, /(?<n>\d+) skills? placed/u) ??
-    events.filter((e) => e.type === "library_skill" && e.placements.length > 0)
-      .length;
-  const skipped = firstNumber(summary, /(?<n>\d+) placements? skipped/u) ?? 0;
-  const text = `Placed ${plural(placed, "skill")} in ${agent}`;
-  return skipped > 0 ? `${text}, ${skipped} skipped` : text;
-};
-
-/**
  * The toast after `config placement <id> <mode> --convert`, from its result: `<id> now places
  * <mode>s, <k> skills converted[, <s> skipped]`. A skipped skill is a copy edited in place, which
  * the CLI keeps.
