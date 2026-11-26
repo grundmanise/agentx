@@ -14,6 +14,7 @@ import {
   syncedLibrary,
 } from "./fixtures/palette-publish.ts";
 import { HUB, configurations } from "./fixtures/skills.ts";
+import { settled } from "./harness/animations.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
@@ -243,13 +244,7 @@ test.describe("popover", () => {
     );
     expect(clipped).toBe(false);
     // Once its open animation ends, so the sizes are its own.
-    await popover(page).evaluate(async (el) => {
-      await Promise.all(
-        el.getAnimations().map(async (a) => {
-          await a.finished;
-        })
-      );
-    });
+    await settled(popover(page));
     const button = await popover(page)
       .getByRole("button", { name: "Publish all" })
       .boundingBox();
