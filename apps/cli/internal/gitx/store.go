@@ -41,6 +41,18 @@ func CheckStore(ctx context.Context, r *Runner, homeDir string) (gitDir string, 
 // present repo that git cannot read is an error; so is one that cannot be
 // created. created reports whether this call made it.
 func OpenStore(ctx context.Context, r *Runner, homeDir string) (gitDir string, created bool, err error) {
+	return openStore(ctx, r, homeDir, func(u home.RefUpdater, fn func() error) error { return home.Mutate(homeDir, u, fn) })
+}
+
+// OpenStoreWaiting is OpenStore for the serve child, which waits for the
+// lock until ctx is done rather than giving up on it.
+func OpenStoreWaiting(ctx context.Context, r *Runner, homeDir string) (gitDir string, created bool, err error) {
+	return openStore(ctx, r, homeDir, func(u home.RefUpdater, fn func() error) error {
+		return home.MutateWaiting(ctx, homeDir, u, fn)
+	})
+}
+
+func openStore(ctx context.Context, r *Runner, homeDir string, mutate func(home.RefUpdater, func() error) error) (gitDir string, created bool, err error) {
 	gitDir, exists, err := CheckStore(ctx, r, homeDir)
 	if err != nil || exists {
 		return gitDir, false, err
@@ -49,7 +61,7 @@ func OpenStore(ctx context.Context, r *Runner, homeDir string) (gitDir string, c
 	// of an earlier command, whose ref steps a stop may not cut in half; the
 	// creation itself keeps the command's context and gives up on a stop
 	// like anything else, leaving the temporary directory behind it.
-	err = home.Mutate(homeDir, r.Refs(interrupt.Uninterruptible(ctx)), func() error {
+	err = mutate(r.Refs(interrupt.Uninterruptible(ctx)), func() error {
 		if _, err := os.Stat(gitDir); err == nil {
 			return nil // created meanwhile by another command
 		}

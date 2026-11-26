@@ -297,8 +297,8 @@ func TestBuildIndexListsEverySkillOfEverySource(t *testing.T) {
 	if !reflect.DeepEqual(idx.Sources, want) {
 		t.Errorf("index = %#v\nwant %#v", idx.Sources, want)
 	}
-	if got, want := warnings, []string{"source " + never + " has not been fetched, its skills cannot be searched"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("warnings = %q, want %q", got, want)
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %q, want none: a source not fetched is no warning", warnings)
 	}
 	if got := idx.Search("lint"); len(got) != 1 || got[0].Source != alpha.url || got[0].Subpath != "tools/lint" {
 		t.Errorf("Search(lint) = %#v", got)
@@ -327,14 +327,12 @@ func TestBuildIndexListsEverySkillOfEverySource(t *testing.T) {
 	}
 }
 
-// TestBuildIndexWarnsOnceAboutAnUnfetchedSource covers the rebuilds that
+// TestBuildIndexNeverWarnsAboutAnUnfetchedSource covers the rebuilds that
 // follow a source never fetched while another source's ref moves, as the
-// serve child's update checks move it. The build that first finds the
-// source unfetched warns about it; the builds that keep that reading, which
-// is news about the other source alone, do not. A source that leaves the
-// settings and comes back unfetched is found so again, and warned about
-// again.
-func TestBuildIndexWarnsOnceAboutAnUnfetchedSource(t *testing.T) {
+// serve child's update checks move it. No build warns about the source
+// not fetched, also when it leaves the settings and comes back: the update
+// check that fetches it is what says when it cannot.
+func TestBuildIndexNeverWarnsAboutAnUnfetchedSource(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	git, gitDir := store(t)
@@ -346,14 +344,13 @@ func TestBuildIndexWarnsOnceAboutAnUnfetchedSource(t *testing.T) {
 	alpha.fetch(gitDir)
 	never := "file://" + filepath.Join(root, "never-fetched")
 	urls := []string{alpha.url, never}
-	warned := []string{"source " + never + " has not been fetched, its skills cannot be searched"}
 
 	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(warnings, warned) {
-		t.Fatalf("warnings of the first build = %q, want %q", warnings, warned)
+	if len(warnings) != 0 {
+		t.Fatalf("warnings of the first build = %q, want none", warnings)
 	}
 
 	// alpha moves twice; each rebuild is a new index, and neither warns.
@@ -377,7 +374,7 @@ func TestBuildIndexWarnsOnceAboutAnUnfetchedSource(t *testing.T) {
 		idx = next
 	}
 
-	// Gone from the settings and back, unfetched still: found so again.
+	// Gone from the settings and back, unfetched still: no warning either.
 	idx, warnings, err = source.BuildIndex(ctx, git, gitDir, []string{alpha.url}, idx)
 	if err != nil || len(warnings) != 0 {
 		t.Fatalf("the build without the unfetched source = %v, %q; want no warnings", err, warnings)
@@ -386,8 +383,8 @@ func TestBuildIndexWarnsOnceAboutAnUnfetchedSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(warnings, warned) {
-		t.Errorf("warnings of the build it came back in = %q, want %q", warnings, warned)
+	if len(warnings) != 0 {
+		t.Errorf("warnings of the build it came back in = %q, want none", warnings)
 	}
 }
 
@@ -403,7 +400,7 @@ func TestBuildIndexWithoutSourcesRunsNoGit(t *testing.T) {
 
 	// A source recorded before the store exists is one not fetched.
 	idx, warnings, err = source.BuildIndex(context.Background(), git, gitDir, []string{"https://example.com/a"}, nil)
-	if err != nil || len(warnings) != 1 || len(idx.Sources) != 1 || len(idx.Search("a")) != 0 {
+	if err != nil || len(warnings) != 0 || len(idx.Sources) != 1 || len(idx.Search("a")) != 0 {
 		t.Errorf("BuildIndex() = %#v, %v, %v; want one unfetched source", idx, warnings, err)
 	}
 }
