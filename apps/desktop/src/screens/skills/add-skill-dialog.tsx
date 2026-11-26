@@ -52,7 +52,9 @@ import {
   count,
   linkAdd,
   listingCards,
+  oneOfEachName,
   orderCards,
+  sameName,
 } from "#/screens/sources/projection.ts";
 import type { SkillCard } from "#/screens/sources/projection.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
@@ -200,12 +202,18 @@ const FoundSkills = ({
   const shownSelectable = shown.filter((c) => c.status === undefined);
   const nothing = nothingToInstall(cards);
   const pickable = cards.filter((c) => c.status === undefined).length;
-  const toggle = (key: string) => {
+  const toggle = (card: SkillCard) => {
     const next = new Set(selection);
-    if (next.has(key)) {
-      next.delete(key);
+    if (next.has(card.key)) {
+      next.delete(card.key);
     } else {
-      next.add(key);
+      // The library holds one skill of a name: selecting one deselects the other.
+      for (const other of cards) {
+        if (sameName(other, card)) {
+          next.delete(other.key);
+        }
+      }
+      next.add(card.key);
     }
     onSelectionChange(next);
   };
@@ -219,10 +227,14 @@ const FoundSkills = ({
             selected={
               shownSelectable.filter((c) => selection.has(c.key)).length
             }
-            total={shownSelectable.length}
+            total={oneOfEachName(shownSelectable).length}
             onSelectAll={() => {
+              const taken = cards.filter((c) => selection.has(c.key));
               onSelectionChange(
-                new Set([...selection, ...shownSelectable.map((c) => c.key)])
+                new Set([
+                  ...selection,
+                  ...oneOfEachName(shownSelectable, taken).map((c) => c.key),
+                ])
               );
             }}
             onClear={() => {
@@ -258,7 +270,7 @@ const FoundSkills = ({
           cards={shown}
           selected={selection}
           onToggle={(card) => {
-            toggle(card.key);
+            toggle(card);
           }}
         />
       )}
