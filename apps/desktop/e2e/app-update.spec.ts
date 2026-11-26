@@ -86,6 +86,7 @@ test("the rim stays drawn while the pill changes size", async ({
       element.dataset.lit = counts.join(" ");
     }).observe(pill);
   });
+  await expect(canvas).toHaveAttribute("data-lit", /^[1-9]\d*$/u);
 
   await cli.appUpdateProgress(42, 100);
   await expect(updateButton(page)).toHaveAccessibleName("Installing 42%");
