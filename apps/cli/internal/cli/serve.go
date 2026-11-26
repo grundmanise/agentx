@@ -288,9 +288,9 @@ type serveChecks struct {
 // drop what it fetched. It reports nothing as it goes and never ends serve:
 // the report it returns is made on the loop's goroutine and carries a
 // warning for each thing the check could not check, and its update_check. A
-// machine with no source runs no git at all, and neither does one with no
-// store; a source an import wrote stays a source not fetched,
-// store or not, until source add adds it. The rescan it asks for once it
+// machine with no source runs no git at all. A source the settings name
+// and this machine never fetched is fetched too, into a store created for
+// it when there is none. The rescan it asks for once it
 // fetched, see rescan, brings the candidates and markers it wrote
 // into the next inventory, with what the hub holds that a fork lacks, and
 // every source ref it moved into the source index.

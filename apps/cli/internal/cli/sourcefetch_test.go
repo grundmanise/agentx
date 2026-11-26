@@ -320,13 +320,15 @@ func TestSourceFetchErrors(t *testing.T) {
 		t.Errorf("event types = %v, want %v", got, want)
 	}
 
-	// A store that is gone takes every source with it.
+	// A store that is gone is created again, and the sources the settings
+	// name are fetched into it.
 	if err := os.RemoveAll(filepath.Join(h.agentx, "store.git")); err != nil {
 		t.Fatal(err)
 	}
 	out = h.run("--json", "source", "fetch", "--all")
-	equal(t, "exit", out.exit, 5)
-	equal(t, "error.code", h.events(out.stdout)[0]["code"], "not_found")
+	equal(t, "exit", out.exit, 0)
+	src, _ = sourceEvents(t, h.events(out.stdout))
+	equal(t, "source.commit", src["commit"], v1)
 }
 
 // TestSourceFetchAllWithoutSources: nothing to do is not a failure.
@@ -614,45 +616,28 @@ func TestSourceFetchAnswersWithTheCauseItFound(t *testing.T) {
 	equal(t, "code", lastError(t, h.events(out.stdout))["code"], "source")
 }
 
-// TestSourceFetchNamesASourceItHasNothingOf covers the state an interrupted
-// removal leaves: the settings entry stays, the remote and the ref are
-// gone. git answers a fetch through a remote that is not there by naming
-// the remote, which is agentx's internal name for the source; the run must
-// say what `source skills` says of the same state instead, and say nothing
-// about credentials.
-func TestSourceFetchNamesASourceItHasNothingOf(t *testing.T) {
+// TestSourceFetchBringsBackASourceItHasNothingOf covers the state an
+// interrupted removal leaves, and settings written on another machine: the
+// settings entry stays, the remote and the ref are gone. The settings are
+// what this machine holds, so the fetch writes the remote again and
+// fetches the source.
+func TestSourceFetchBringsBackASourceItHasNothingOf(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	requireGit(t)
 	s := h.newSourceRepo("skills", true)
 	s.skill("alpha", "alpha", "The first skill", nil)
-	s.commit("first version")
+	head := s.commit("first version")
 	equal(t, "add", h.run("source", "add", s.url).exit, 0)
 	id := source.ID(s.url)
 	h.storeGit("remote", "remove", source.RemoteName(id))
 	h.storeGit("update-ref", "-d", source.Ref(id))
 
 	out := h.run("--json", "source", "fetch", s.url)
-	equal(t, "exit", out.exit, 5)
-	e := lastError(t, h.events(out.stdout))
-	equal(t, "code", e["code"], "not_found")
-	contains(t, "hint", e["hint"].(string), "agentx source add")
-	contains(t, "warning", out.stderr, s.url)
-	for _, leak := range []string{source.RemoteName(id), "credential"} {
-		if strings.Contains(out.stderr+out.stdout, leak) {
-			t.Errorf("the refusal leaks %q:\n%s%s", leak, out.stdout, out.stderr)
-		}
-	}
-	// Nor does the run build half a remote out of the entry on its way past:
-	// the refspec is not written for a source that has no remote to fetch
-	// from. (git's own --filter bookkeeping writes promisor and
-	// partialclonefilter for the remote name before it resolves it, which
-	// is git's and not agentx's; url and fetch are what make a remote one.)
-	for _, key := range []string{"url", "fetch"} {
-		if out, err := h.storeGitErr("config", "--get", "remote."+source.RemoteName(id)+"."+key); err == nil {
-			t.Errorf("a fetch of a source with no remote wrote %s = %q", key, out)
-		}
-	}
+	equal(t, "exit", out.exit, 0)
+	src, _ := sourceEvents(t, h.events(out.stdout))
+	equal(t, "source.skills", src["skills"], float64(1))
+	equal(t, "the source ref", h.sourceRef(s.url), head)
 }
 
 // TestSourceFetchDropsASourceRemovedMidRun: the settings write skips a

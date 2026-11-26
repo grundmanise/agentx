@@ -61,7 +61,7 @@ warning: update check: https://github.com/me/skills: git fetch: fatal: unable to
 
 Serve keeps running. Other `update check:` warnings name a skill or source the check could not check, and say what to do next.
 
-Serve does not fetch a source that your settings name and this machine never added, for example because an [`agentx snapshot apply`](/cli/snapshot#apply-a-snapshot) stopped before it added it. Its warning says `source not fetched`. Run `agentx source add <url>`, or apply the snapshot again. For a [pinned](/cli/source#pin-a-source) source, run `agentx source add <url>#<ref>` so it keeps its pin.
+Serve also fetches a source that your settings name and this machine never fetched, for example because an [`agentx snapshot apply`](/cli/snapshot#apply-a-snapshot) stopped before it added it, or because you copied your settings from another machine. It keeps the source's [pin](/cli/source#pin-a-source).
 
 ## Maintenance
 
