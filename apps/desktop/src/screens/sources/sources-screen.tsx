@@ -245,27 +245,17 @@ const FoldingCard = ({
   </div>
 );
 
-/**
- * Reads your skills on the hub once a search starts, so that Hub can count its matches. Until that
- * read ends, it says to hold the search's answer, so every count shows at once.
- */
-const useInstallableForSearch = (
+/** Reads your skills on the hub once a search shows, so that Hub can count its matches. */
+const useInstallableWhileSearching = (
   searching: boolean,
   hub: boolean,
   read: boolean
 ) => {
-  const [tried, setTried] = useState(false);
-  const wanted = searching && hub && !read && !tried;
   useEffect(() => {
-    const readHub = async () => {
-      await loadInstallable();
-      setTried(true);
-    };
-    if (wanted) {
-      void readHub();
+    if (searching && hub && !read) {
+      void loadInstallable();
     }
-  }, [wanted]);
-  return wanted;
+  }, [searching, hub, read]);
 };
 
 /** The selection without the cards `drop` names. */
@@ -358,13 +348,13 @@ export const SourcesScreen = () => {
 
   // A search answer replaces the listing. While the latest query waits for its answer, the last
   // answer stays, so the list and its Select all count change once, not back to the listing between.
-  const holdForHub = useInstallableForSearch(
-    query.trim() !== "",
+  const results = query.trim() === "" ? undefined : found;
+  const activeKey = activePill?.key;
+  useInstallableWhileSearching(
+    results !== undefined,
     pills.some((p) => p.key === HUB_SKILLS),
     installable !== undefined
   );
-  const results = query.trim() === "" || holdForHub ? undefined : found;
-  const activeKey = activePill?.key;
   const matches =
     results === undefined
       ? undefined
