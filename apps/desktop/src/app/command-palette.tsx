@@ -209,7 +209,6 @@ export const CommandPalette = ({
         loop
       >
         <CommandInput
-          autoFocus
           placeholder="Search skills or run a command"
           escapeHint
           value={search}

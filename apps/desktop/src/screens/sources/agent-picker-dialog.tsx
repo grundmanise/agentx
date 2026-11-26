@@ -2,7 +2,7 @@
 // search over the names, then every configuration that takes a placement and every universal one,
 // by name. A row has its logo, name and path; a direct one has a checkbox that toggles the same
 // targets as the bar's logos, a universal one the Universal pill and the lock. Then Clear · Done.
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
@@ -139,7 +139,6 @@ export const AgentPickerDialog = ({
   onClearTargets: () => void;
 }) => {
   const [query, setQuery] = useState("");
-  const search = useRef<HTMLInputElement>(null);
   const one = skills === 1;
   const text = query.trim().toLowerCase();
   const universalIds = new Set(universal.map((c) => c.id));
@@ -157,12 +156,7 @@ export const AgentPickerDialog = ({
         onOpenChange(next);
       }}
     >
-      <DialogContent
-        onOpenAutoFocus={(e) => {
-          e.preventDefault();
-          search.current?.focus();
-        }}
-      >
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Where to install</DialogTitle>
           <DialogDescription>
@@ -186,7 +180,6 @@ export const AgentPickerDialog = ({
             <SearchIcon size="xs" />
           </InputGroupAddon>
           <InputGroupInput
-            ref={search}
             kind="list-search"
             type="search"
             aria-label="Search agents"

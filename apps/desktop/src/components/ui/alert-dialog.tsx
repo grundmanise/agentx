@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import {
   DIALOG_OVERLAY,
   dialogContentVariants,
+  focusFirstField,
 } from "#/components/ui/dialog.tsx";
 import type { OwnProps } from "#/lib/utils.ts";
 
@@ -44,6 +45,7 @@ const AlertDialogOverlay = ({
 
 /** Centred, like a Dialog's content. */
 const AlertDialogContent = ({
+  onOpenAutoFocus,
   children,
   ...props
 }: OwnProps<typeof AlertDialogPrimitive.Content>) => (
@@ -52,6 +54,9 @@ const AlertDialogContent = ({
     <AlertDialogPrimitive.Content
       data-slot="alert-dialog-content"
       className={dialogContentVariants({ kind: "dialog" })}
+      onOpenAutoFocus={(event) => {
+        focusFirstField(event, onOpenAutoFocus);
+      }}
       {...props}
     >
       {children}

@@ -293,7 +293,6 @@ const PublishForm = ({
         </label>
         <Input
           id={fieldId}
-          autoFocus
           placeholder="Describe your changes"
           value={message}
           disabled={running}
