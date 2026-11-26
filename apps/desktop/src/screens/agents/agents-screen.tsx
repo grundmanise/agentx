@@ -294,10 +294,7 @@ const AgentCard = ({
       </div>
       <div className="flex min-w-0 flex-col gap-1">
         <h2 className="type-agent-card-name text-card-title m-0">{c.name}</h2>
-        <span
-          className="type-technical text-text-caption relative truncate"
-          title={c.path}
-        >
+        <span className="type-technical text-text-caption truncate">
           {c.path}
         </span>
       </div>
@@ -385,10 +382,7 @@ const UniversalCard = ({
                   <AgentMenu c={c} />
                 </span>
               </div>
-              <span
-                className="type-technical text-text-caption relative truncate"
-                title={c.path}
-              >
+              <span className="type-technical text-text-caption truncate">
                 {c.path}
               </span>
               <p className="type-secondary text-card-text m-0 pt-1">

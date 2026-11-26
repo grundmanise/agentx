@@ -487,6 +487,32 @@ test("a click on cards selects them, and the bar enables, disables or removes th
   ]);
 });
 
+test("a click on an agent's path selects it, and a column's divider is outside its selection", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  const clickAt = async (target: Locator, x = 0.5) => {
+    const box = await target.boundingBox();
+    if (box === null) {
+      throw new Error("not visible");
+    }
+    await page.mouse.click(box.x + box.width * x, box.y + box.height / 2);
+  };
+  const cursor = card(page, "Cursor");
+  await clickAt(cursor.getByText("/home/me/.cursor"));
+  await expect(
+    cursor.getByRole("button", { name: "Select Cursor" })
+  ).toHaveAttribute("aria-pressed", "true");
+
+  const codex = card(page, "Universal").getByRole("region", { name: "Codex" });
+  const toggle = codex.getByRole("button", { name: "Select Codex" });
+  await clickAt(codex, 0);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await clickAt(codex.getByText("/home/me/.codex"));
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+});
+
 test("an agent whose skills folder links to the library: a direct agent whose placement is fixed", async ({
   cli,
   page,
