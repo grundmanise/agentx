@@ -43,13 +43,16 @@ import {
   publishFailure,
   refusedForHub,
 } from "#/screens/skills/publish.ts";
-import { agentx } from "#/store/runner.ts";
+import { agentx, stopOnClose } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The label of the publish of `name`, for its pending state. */
 export const publishLabel = (name: string) => `publish ${name}`;
+/** The labels of the reads of the files a publish of `name` would send. */
+const filesLabel = (name: string) => `publish files ${name}`;
+const diffLabel = (name: string) => `publish diff ${name}`;
 
 const updateLabel = (name: string) => `update ${name}`;
 
@@ -207,7 +210,7 @@ const readChanged = async (row: SkillRow): Promise<FilesState> => {
   const { name } = row;
   if (notPublished(row)) {
     const outcome = await agentx(["skill", "files", name], {
-      label: `publish files ${name}`,
+      label: filesLabel(name),
       sideEffect: false,
     });
     if (outcome.exitCode !== EXIT_CODES.ok) {
@@ -231,7 +234,7 @@ const readChanged = async (row: SkillRow): Promise<FilesState> => {
     return { diffs, fresh: true, kind: "read" };
   }
   const outcome = await agentx(["skill", "diff", name], {
-    label: `publish diff ${name}`,
+    label: diffLabel(name),
     sideEffect: false,
   });
   return outcome.exitCode === EXIT_CODES.ok
@@ -355,23 +358,29 @@ const PublishDialog = ({
   files: FilesState;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent>
-      <DialogHeader showCloseButton={false}>
-        <DialogTitle>Publish changes</DialogTitle>
-        <Subtitle row={row} />
-      </DialogHeader>
-      <PublishForm
-        row={row}
-        files={files}
-        onClose={() => {
-          onOpenChange(false);
-        }}
-      />
-    </DialogContent>
-  </Dialog>
-);
+}) => {
+  const close = stopOnClose(
+    [publishLabel(row.name), filesLabel(row.name), diffLabel(row.name)],
+    onOpenChange
+  );
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent>
+        <DialogHeader showCloseButton={false}>
+          <DialogTitle>Publish changes</DialogTitle>
+          <Subtitle row={row} />
+        </DialogHeader>
+        <PublishForm
+          row={row}
+          files={files}
+          onClose={() => {
+            close(false);
+          }}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 /** A banner's button that opens the Publish dialog: Publish, or Publish to {source}. */
 export const PublishButton = ({

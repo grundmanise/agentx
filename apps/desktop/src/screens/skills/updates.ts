@@ -321,6 +321,8 @@ export interface UpdateRunRow {
 export interface UpdateRun {
   /** `running` until its command ends; `failed` when it ended with no word from the CLI. */
   phase: "running" | "ended" | "failed";
+  /** The label of its command. */
+  label: string;
   rows: UpdateRunRow[];
   /** Why the run stopped, as the CLI or the app says it. */
   failure?: Problem;
@@ -346,6 +348,14 @@ const setRow = (name: string, change: Partial<UpdateRunRow>) => {
 };
 
 /** Forgets the run once its dialog closes. A run still going is never forgotten. */
+/** Stops the command of the dialog's run, if one runs. */
+export const stopUpdateRun = () => {
+  const { run } = useUpdateRun.getState();
+  if (run?.phase === "running") {
+    void cancelCommand(run.label);
+  }
+};
+
 export const dismissUpdateRun = () => {
   if (useUpdateRun.getState().run?.phase !== "running") {
     useUpdateRun.setState({ run: undefined });
@@ -489,8 +499,10 @@ export const updateSkills = async (rows: UpdateRunRow[]) => {
   if (names.length === 0) {
     return;
   }
+  const label = updateLabel(names.join(" "));
   useUpdateRun.setState({
     run: {
+      label,
       phase: "running",
       rows: rows.map((r) =>
         r.status === "waiting" ? { ...r, status: "running" } : r
@@ -501,7 +513,7 @@ export const updateSkills = async (rows: UpdateRunRow[]) => {
   const logs: LogEvent[] = [];
   const outcome = await runUntilSettled(["skill", "update", ...names], {
     keep: names,
-    label: updateLabel(names.join(" ")),
+    label,
     onEvent: (event) => {
       events.push(event);
       const name = names.find((n) => doneWith(event, n));

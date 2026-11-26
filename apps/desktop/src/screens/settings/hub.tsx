@@ -30,7 +30,7 @@ import { AdoptSkillsRow } from "#/screens/settings/adopt-skills.tsx";
 import { IgnoreSystemFilesRow } from "#/screens/settings/comparing-edits.tsx";
 import { SettingsCard, SettingsRow } from "#/screens/settings/section.tsx";
 import { hubSource } from "#/screens/settings/source-rows.ts";
-import { agentx, usePending } from "#/store/runner.ts";
+import { agentx, cancelCommand, usePending } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
@@ -127,7 +127,7 @@ const saveProblem = (
 
 /**
  * The URL field and Save. With `current`, the URL of the hub set now, Save asks first
- * whether to replace it, and Cancel closes the field.
+ * whether to replace it, and Cancel stops the save and closes the field.
  */
 const RemoteForm = ({
   current,
@@ -196,7 +196,10 @@ const RemoteForm = ({
             <Button
               variant="ghost"
               track="settings.hub-change-cancel"
-              onClick={onDone}
+              onClick={() => {
+                void cancelCommand(SAVE_HUB_LABEL);
+                onDone?.();
+              }}
             >
               Cancel
             </Button>

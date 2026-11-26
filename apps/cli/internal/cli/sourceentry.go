@@ -40,6 +40,8 @@ func sourceRefusal(src home.Source) string {
 		return src.URL + " has the default branch " + clipped(src.DefaultBranch) + ", which is not a ref git accepts"
 	case src.LastFetched != "" && !fetchTime(src.LastFetched):
 		return src.URL + " was last fetched at " + clipped(src.LastFetched) + ", which is not RFC 3339 in UTC"
+	case src.Added != "" && !fetchTime(src.Added):
+		return src.URL + " was added at " + clipped(src.Added) + ", which is not RFC 3339 in UTC"
 	}
 	return ""
 }
