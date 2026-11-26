@@ -477,50 +477,26 @@ const SkillItemView = ({
  */
 const SkillItem = memo(SkillItemView);
 
-/** One thing the list places at its own offset: a source's caption, or one of its skills. */
-type Item =
-  | { kind: "caption"; key: string; group: CardGroup; first: boolean }
-  | {
-      kind: "card";
-      key: string;
-      group: CardGroup;
-      card: SkillCard;
-      at: number;
-    };
+/** One skill the list places at its own offset, `at` its place in its group. */
+interface Item {
+  key: string;
+  group: CardGroup;
+  card: SkillCard;
+  at: number;
+}
 
-/** The captions, when shown, and the cards in the order the list shows them. */
-const itemsOf = (groups: CardGroup[], captions: boolean): Item[] =>
-  groups.flatMap((group, i) => [
-    ...(captions
-      ? [
-          {
-            first: i === 0,
-            group,
-            key: `caption:${group.source}`,
-            kind: "caption" as const,
-          },
-        ]
-      : []),
-    ...group.cards.map((card, at): Item => ({
-      at,
-      card,
-      group,
-      key: card.key,
-      kind: "card",
-    })),
-  ]);
+/** The cards in the order the list shows them. */
+const itemsOf = (groups: CardGroup[]): Item[] =>
+  groups.flatMap((group) =>
+    group.cards.map((card, at): Item => ({ at, card, group, key: card.key }))
+  );
 
 /**
  * The height the list assumes for an item it has not drawn yet, in px, close to what the tokens
- * give: a caption, and a closed row with `add-card.spacing` above it unless it opens its group.
+ * give: a closed row with `add-card.spacing` above it unless it opens its group.
  * Each item takes its measured height once it is drawn, an open one included.
  */
-const estimatedHeight = (item: Item | undefined) => {
-  if (item?.kind === "caption") {
-    return item.first ? 28 : 56;
-  }
-  return item?.at === 0 ? 46 : 52;
-};
+const estimatedHeight = (item: Item | undefined) => (item?.at === 0 ? 46 : 52);
 
 /**
  * The height a drawn item takes in the list: the height the browser lays it out at, up to the
@@ -535,8 +511,6 @@ const measuredHeight = (element: Element, entry?: ResizeObserverEntry) =>
 const OVERSCAN = 8;
 
 /** A drawn item: the list sets its offset from the top. */
-const PLACED_CAPTION_FIRST = "absolute top-0 left-0 w-full pb-3";
-const PLACED_CAPTION = "absolute top-0 left-0 w-full pt-7 pb-3";
 const PLACED_CARD_FIRST = "absolute top-0 left-0 w-full";
 /** A card after the first of its group, `add-card.spacing` below the one before it. */
 const PLACED_CARD = "pt-add-card absolute top-0 left-0 w-full";
@@ -568,21 +542,32 @@ const useOffsetIn = (
       setOffset((previous) => (previous === next ? previous : next));
     };
     const sizes = new ResizeObserver(measure);
-    // Only what comes before the list moves where it starts.
-    const observeSiblings = () => {
+    // Only what comes before the list, in the scroller, moves where it starts.
+    const ancestors: Element[] = [];
+    for (
+      let node = element?.parentElement ?? null;
+      node !== null && parent?.contains(node) === true;
+      node = node.parentElement
+    ) {
+      ancestors.push(node);
+    }
+    const observeBefore = () => {
       sizes.disconnect();
-      for (const child of parent?.children ?? []) {
-        if (child === element) {
-          break;
+      for (const node of [element, ...ancestors]) {
+        for (
+          let before = node?.previousElementSibling ?? null;
+          before !== null;
+          before = before.previousElementSibling
+        ) {
+          sizes.observe(before);
         }
-        sizes.observe(child);
       }
       measure();
     };
-    observeSiblings();
-    const children = new MutationObserver(observeSiblings);
-    if (parent !== null) {
-      children.observe(parent, { childList: true });
+    observeBefore();
+    const children = new MutationObserver(observeBefore);
+    for (const node of ancestors) {
+      children.observe(node, { childList: true });
     }
     return () => {
       sizes.disconnect();
@@ -593,21 +578,18 @@ const useOffsetIn = (
 };
 
 /**
- * The skills to add as one list, a card per skill, one section per source. With `captions`, each
- * section opens with the source's mono caption, as a search answer does. A row opens and closes on
+ * The skills to add as one list, a card per skill, one section per source. A row opens and closes on
  * a click anywhere but its check, several at once; only the check selects. The list scrolls in
  * `scroller`, the screen's own scroll container, and only the rows near the part that shows are in
  * the document, so a source of thousands of skills stays quick.
  */
 export const SkillList = ({
   groups,
-  captions,
   selected,
   onToggle,
   scroller,
 }: {
   groups: CardGroup[];
-  captions: boolean;
   /** The keys of the selected cards. */
   selected: ReadonlySet<string>;
   onToggle: (card: SkillCard) => void;
@@ -619,12 +601,8 @@ export const SkillList = ({
   const skillMds = useAppStore((s) => s.skillMds);
   const list = useRef<HTMLDivElement>(null);
   const offset = useOffsetIn(list, scroller);
-  const items = itemsOf(groups, captions);
-  const cards = new Map(
-    items.flatMap((item) =>
-      item.kind === "card" ? [[item.key, item.card] as const] : []
-    )
-  );
+  const items = itemsOf(groups);
+  const cards = new Map(items.map((item) => [item.key, item.card] as const));
   const ready = (key: string) => {
     const card = cards.get(key);
     return card === undefined || isReady(card, skillMds[key]);
@@ -696,36 +674,23 @@ export const SkillList = ({
       sections.push(last);
     }
     last.nodes.push(
-      item.kind === "caption" ? (
-        <div
-          key={item.key}
-          ref={virtualizer.measureElement}
-          data-index={index}
-          className={item.first ? PLACED_CAPTION_FIRST : PLACED_CAPTION}
-        >
-          <h2 className="type-caption text-group-label m-0">
-            {item.group.label}
-          </h2>
-        </div>
-      ) : (
-        <div
-          key={item.key}
-          ref={virtualizer.measureElement}
-          data-index={index}
-          className={item.at === 0 ? PLACED_CARD_FIRST : PLACED_CARD}
-        >
-          <SkillItem
-            card={item.card}
-            open={open.includes(item.card.key)}
-            loading={
-              wanted.includes(item.card.key) && !open.includes(item.card.key)
-            }
-            selected={selected.has(item.card.key)}
-            onToggle={toggle}
-            onRemove={remove}
-          />
-        </div>
-      )
+      <div
+        key={item.key}
+        ref={virtualizer.measureElement}
+        data-index={index}
+        className={item.at === 0 ? PLACED_CARD_FIRST : PLACED_CARD}
+      >
+        <SkillItem
+          card={item.card}
+          open={open.includes(item.card.key)}
+          loading={
+            wanted.includes(item.card.key) && !open.includes(item.card.key)
+          }
+          selected={selected.has(item.card.key)}
+          onToggle={toggle}
+          onRemove={remove}
+        />
+      </div>
     );
   }
 

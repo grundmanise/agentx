@@ -294,3 +294,24 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 	equal(t, "stderr", p.stderr.String(), "")
 }
+
+// TestServeSearchesTheHubsForks covers the hub in the index: a machine
+// that read the hub's forks finds them by name or description, under
+// the hub's URL, each named as `skill add --name` takes it.
+func TestServeSearchesTheHubsForks(t *testing.T) {
+	t.Parallel()
+	_, b, _, remote := hubHomes(t)
+	b.mustRun("skill", "list", "--remote")
+	p := b.serve(t, "--json")
+	p.next("inventory")
+
+	hub := "file://" + remote
+	if got, want := p.search("s1", "alpha"), []string{hub + "  alpha"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("results = %q, want %q", got, want)
+	}
+	// By its description too, read from the SKILL.md in the fork's skill directory.
+	if got, want := p.search("s2", "first skill"), []string{hub + "  alpha"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("results = %q, want %q", got, want)
+	}
+	equal(t, "exit", p.close(), 0)
+}

@@ -1,7 +1,13 @@
 import { useInterval } from "@mantine/hooks";
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
-import type { LibraryEntry, SearchResult, Source } from "#/cli/events.gen.ts";
+import type {
+  InstallableSkillEvent,
+  LibraryEntry,
+  SearchResult,
+  Source,
+} from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
 import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
@@ -14,6 +20,7 @@ import {
 } from "#/components/ui/input-group.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { problemSentence, skillNamesOf } from "#/lib/problem-text.ts";
+import { cn } from "#/lib/utils.ts";
 import { FloatingActionBar } from "#/screens/sources/action-bar.tsx";
 import { addProblem } from "#/screens/sources/add-problem.ts";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
@@ -26,7 +33,6 @@ import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
 import {
   count,
-  groupCards,
   installableCards,
   listingCards,
   pageRef,
@@ -158,6 +164,111 @@ const usePills = (sources: Source[]) => {
   return { pills, setJustAdded };
 };
 
+/**
+ * Your skills on the hub a search matched: of those the hub lists to install, the ones whose
+ * name a match under the hub's URL carries.
+ */
+const hubMatches = (
+  installable: InstallableSkillEvent[],
+  results: SearchResult[],
+  hub: string
+) => {
+  const names = new Set(
+    results.filter((r) => r.source === hub).map((r) => r.name)
+  );
+  return installable.filter((s) => names.has(s.name));
+};
+
+/**
+ * Each pill's count of matches, by its key, in place of its skill count: Hub's once your skills
+ * on the hub are read.
+ */
+const matchCounts = (
+  pills: SourcePill[],
+  results: SearchResult[],
+  installable: InstallableSkillEvent[] | undefined
+) =>
+  new Map(
+    pills.flatMap((p) => {
+      if (p.key !== HUB_SKILLS) {
+        return [[p.key, results.filter((r) => r.source === p.url).length]];
+      }
+      return installable === undefined
+        ? []
+        : [[p.key, hubMatches(installable, results, p.source.url).length]];
+    })
+  );
+
+/** The cards of a search's matches in the pill's source, or of your skills on the hub, A to Z. */
+const matchedCards = (
+  pill: SourcePill,
+  results: SearchResult[],
+  library: LibraryEntry[],
+  installable: InstallableSkillEvent[] | undefined
+): SkillCard[] => {
+  if (pill.key === HUB_SKILLS) {
+    return installable === undefined
+      ? noCards
+      : nameOrder(
+          installableCards(
+            hubMatches(installable, results, pill.source.url),
+            library
+          )
+        );
+  }
+  return nameOrder(
+    resultCards(
+      results.filter((r) => r.source === pill.url),
+      library,
+      () => pageRef(pill.source)
+    )
+  );
+};
+
+/**
+ * The card of the open source, which a search's results replace: folded, it fades out while its
+ * room closes, and the results move up over it, so the card is never seen cut; unfolded, its room
+ * opens while it fades in.
+ */
+const FoldingCard = ({
+  folded,
+  children,
+}: {
+  folded: boolean;
+  children: ReactNode;
+}) => (
+  <div
+    className={cn(
+      "grid transition-all duration-300 ease-in-out motion-reduce:transition-none",
+      folded
+        ? "grid-rows-source-card-folded -mt-page-title invisible"
+        : "grid-rows-source-card"
+    )}
+  >
+    <div
+      className={cn(
+        "min-h-0 transition-opacity motion-reduce:transition-none",
+        folded ? "opacity-0 duration-150" : "duration-300"
+      )}
+    >
+      {children}
+    </div>
+  </div>
+);
+
+/** Reads your skills on the hub once a search shows, so that Hub can count its matches. */
+const useInstallableWhileSearching = (
+  searching: boolean,
+  hub: boolean,
+  read: boolean
+) => {
+  useEffect(() => {
+    if (searching && hub && !read) {
+      void loadInstallable();
+    }
+  }, [searching, hub, read]);
+};
+
 /** The selection without the cards `drop` names. */
 const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
   const next = new Map(selection);
@@ -171,8 +282,8 @@ const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
 
 /**
  * The Sources screen, under Skills: Refresh all and Add source, the sources as pills, the card of the open one with its facts,
- * Refresh and Remove, its skills as a list to open and select, search across every source through serve,
- * and the floating bar that installs the selection with `skill add`. Every list comes from the
+ * Refresh and Remove, its skills as a list to open and select, search across every shared source through
+ * serve, whose matches the pills count and the list shows source by source, and the floating bar that installs the selection with `skill add`. Every list comes from the
  * CLI: the app never filters a listing itself.
  */
 export const SourcesScreen = () => {
@@ -221,7 +332,6 @@ export const SourcesScreen = () => {
     setSelection(noSelection);
     setAllMode(false);
   });
-  const activeKey = activePill?.key;
 
   useOpenListing(activePill, active);
 
@@ -233,19 +343,32 @@ export const SourcesScreen = () => {
     }
   };
 
-  /** Makes `key` the open pill, with nothing selected and no search. */
+  /** Makes `key` the open pill, with nothing selected; a search stays. */
   const select = (key: string) => {
     opened.current = key;
     setActive(key);
     setSelection(noSelection);
     setAllMode(false);
-    changeQuery("");
     setNow(Date.now());
   };
   const open = (key: string) => {
     select(key);
     void loadPill(key);
   };
+
+  // A search answer replaces the listing. While the latest query waits for its answer, the last
+  // answer stays, so the list and its Select all count change once, not back to the listing between.
+  const results = query.trim() === "" ? undefined : found;
+  const activeKey = activePill?.key;
+  useInstallableWhileSearching(
+    results !== undefined,
+    pills.some((p) => p.key === HUB_SKILLS),
+    installable !== undefined
+  );
+  const matches =
+    results === undefined
+      ? undefined
+      : matchCounts(pills, results, installable);
 
   const listing =
     activePill === undefined || activePill.key === HUB_SKILLS
@@ -254,6 +377,9 @@ export const SourcesScreen = () => {
   const shownCards = (): SkillCard[] => {
     if (activePill === undefined) {
       return noCards;
+    }
+    if (results !== undefined) {
+      return matchedCards(activePill, results, library, installable);
     }
     if (activePill.key === HUB_SKILLS) {
       return installable === undefined
@@ -272,25 +398,8 @@ export const SourcesScreen = () => {
         );
   };
   const shown = shownCards();
-  // A search answer replaces the listing. While the latest query waits for its answer, the last
-  // answer stays, so the list and its Select all count change once, not back to the listing between.
-  const results = query.trim() === "" ? undefined : found;
-  const resultGroups =
-    results === undefined
-      ? undefined
-      : groupCards(
-          nameOrder(
-            resultCards(
-              // A source removed while the answer is shown takes its results with it.
-              results.filter((r) => sources.some((s) => s.url === r.source)),
-              library,
-              (url) => pageRef(sources.find((s) => s.url === url))
-            )
-          )
-        );
   const groups: CardGroup[] =
-    resultGroups ??
-    (activePill === undefined
+    activePill === undefined
       ? []
       : [
           {
@@ -298,7 +407,7 @@ export const SourcesScreen = () => {
             label: activePill.label,
             source: activePill.url ?? HUB_SKILLS,
           },
-        ]);
+        ];
   const allCards = groups.flatMap((g) => g.cards);
   const selectable = allCards.filter((c) => c.status === undefined);
   const selectedCount = selectable.filter((c) => selection.has(c.key)).length;
@@ -331,6 +440,7 @@ export const SourcesScreen = () => {
   }, [query]);
 
   const onRefreshAll = async () => {
+    changeQuery("");
     setRefreshing(true);
     // The command and the read never reject: a failure is an outcome.
     await refreshAll();
@@ -509,6 +619,7 @@ export const SourcesScreen = () => {
       return;
     }
     select(source.id);
+    changeQuery("");
     await loadPill(source.id);
     if (opened.current !== source.id) {
       return;
@@ -527,8 +638,8 @@ export const SourcesScreen = () => {
     if (pills.length === 0) {
       return "Add a source to see its skills";
     }
-    if (resultGroups !== undefined) {
-      return resultGroups.length === 0 ? "No skills match" : undefined;
+    if (results !== undefined) {
+      return shown.length === 0 ? "No skills match" : undefined;
     }
     if (loading || activePill === undefined) {
       return undefined;
@@ -596,44 +707,48 @@ export const SourcesScreen = () => {
           pills={pills}
           adding={addingLinks}
           active={activeKey}
+          matches={matches}
           now={now}
           onOpen={open}
           onStop={stopAddingSource}
         />
-        {/* The card of the open source; it stays while a search looks across every source. */}
         {activePill !== undefined && (
-          <OpenSource
-            // A new source gets a new card, so a Remove dialog open on the old one closes.
-            key={activePill.key}
-            pill={activePill}
-            library={library}
-            now={now}
-            fallbackFocus={searchField}
-          />
+          <FoldingCard folded={results !== undefined}>
+            <OpenSource
+              // A new source gets a new card, so a Remove dialog open on the old one closes.
+              key={activePill.key}
+              pill={activePill}
+              library={library}
+              now={now}
+              fallbackFocus={searchField}
+            />
+          </FoldingCard>
         )}
-        {allCards.length > 0 && (
-          <SelectAllRow
-            align="end"
-            track="sources.select-all"
-            selected={selectedCount}
-            total={selectableCount}
-            onSelectAll={selectAll}
-            onClear={clear}
-          />
-        )}
-        {emptyText === undefined ? (
-          <SkillList
-            groups={groups.filter((g) => g.cards.length > 0)}
-            captions={resultGroups !== undefined}
-            selected={new Set(selection.keys())}
-            onToggle={toggleCard}
-            scroller={scroller}
-          />
-        ) : (
-          <p className="type-secondary text-text-hint m-0 py-10 text-center">
-            {emptyText}
-          </p>
-        )}
+        {/* Over the card, so the results cover it as they move up into its place. */}
+        <div className="bg-shell-content-bg gap-page-title relative z-10 flex flex-none flex-col">
+          {allCards.length > 0 && (
+            <SelectAllRow
+              align="end"
+              track="sources.select-all"
+              selected={selectedCount}
+              total={selectableCount}
+              onSelectAll={selectAll}
+              onClear={clear}
+            />
+          )}
+          {emptyText === undefined ? (
+            <SkillList
+              groups={groups.filter((g) => g.cards.length > 0)}
+              selected={new Set(selection.keys())}
+              onToggle={toggleCard}
+              scroller={scroller}
+            />
+          ) : (
+            <p className="type-secondary text-text-hint m-0 py-10 text-center">
+              {emptyText}
+            </p>
+          )}
+        </div>
         {/* Room for the floating bar over the last skill of the list. */}
         {selection.size > 0 && <div className="h-floating-bar flex-none" />}
       </div>
