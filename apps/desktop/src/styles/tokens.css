@@ -598,6 +598,7 @@
   --padding-page: 48px;
   --padding-page-top: 40px;
   --gap-page-title: 28px;
+  --margin-page-title: var(--gap-page-title);
   --max-width-page: 1200px;
   --width-split-list: 420px;
   --padding-split-header: 28px;
@@ -710,6 +711,8 @@
   --gap-plugin-details-y: 12px;
   --width-plugin-name-col: 200px;
   --padding-add-card: 6px;
+  --grid-template-rows-source-card: 1fr;
+  --grid-template-rows-source-card-folded: 0fr;
 
   /* Overlays */
   --width-dialog: 480px;
