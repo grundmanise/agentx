@@ -204,18 +204,29 @@ func (inv *invocation) serve(ctx context.Context, stdin io.Reader, stdout io.Wri
 	}
 	lock, err := home.TakeServeLock(inv.dirs.Home)
 	if errors.Is(err, home.ErrServing) {
-		// Without the lock serve scans, watches and checks nothing, and
-		// answers a refresh with the refusal, until stdin ends: the
-		// client that started it reads why from the error event, and
-		// can still run commands through it.
+		// Without the lock serve scans, watches and checks nothing until
+		// stdin ends: the client that started it reads why from the error
+		// event, and can still run commands through it. Each refresh tries
+		// the lock again and, once it is free, serve goes on as it would
+		// have.
 		f := serveLockRefusal(inv.dirs.Home, err)
 		inv.out.fail(f)
-		methods.requests.Refuse(err)
-		<-ctx.Done()
-		f.reported = true
-		return f
-	}
-	if err != nil {
+		taken := make(chan *os.File, 1)
+		methods.requests.Refuse(err, func() error {
+			l, err := home.TakeServeLock(inv.dirs.Home)
+			if err != nil {
+				return err
+			}
+			taken <- l
+			return nil
+		})
+		select {
+		case <-ctx.Done():
+			f.reported = true
+			return f
+		case lock = <-taken:
+		}
+	} else if err != nil {
 		return err
 	}
 	defer home.Unlock(lock)

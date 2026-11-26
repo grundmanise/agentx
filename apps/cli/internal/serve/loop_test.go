@@ -161,20 +161,77 @@ func TestServeGoesOnWithoutWatching(t *testing.T) {
 }
 
 // TestRefuseAnswersEveryRefresh refuses the requests of a serve that runs
-// no loop: a refresh waiting is answered with the refusal, and so is one
-// after it.
+// no loop: a refresh waiting is answered with the refusal, and one after it
+// with what trying again gave.
 func TestRefuseAnswersEveryRefresh(t *testing.T) {
 	t.Parallel()
 	r := NewRequests()
 	refused := errors.New("another serve is running")
 	waiting := make(chan error, 1)
 	go func() { _, err := r.Refresh(context.Background()); waiting <- err }()
-	r.Refuse(refused)
+	tries := 0
+	r.Refuse(refused, func() error { tries++; return refused })
 	if err := <-waiting; !errors.Is(err, refused) {
 		t.Errorf("the refresh waiting got %v", err)
 	}
+	before := tries
 	if _, err := r.Refresh(context.Background()); !errors.Is(err, refused) {
 		t.Errorf("a later refresh got %v", err)
+	}
+	if tries != before+1 {
+		t.Errorf("a later refresh tried again %d times, want 1", tries-before)
+	}
+	if got, err := r.Search(context.Background(), "x"); err != nil || len(got) != 0 {
+		t.Errorf("a search found %v, %v", got, err)
+	}
+}
+
+// TestRefusalEndsWhenTryingAgainWorks ends a refusal: the refresh whose
+// try worked, and every one after it, is answered by the Run that starts
+// then, and tries nothing again.
+func TestRefusalEndsWhenTryingAgainWorks(t *testing.T) {
+	t.Parallel()
+	r := NewRequests()
+	refused := errors.New("another serve is running")
+	free := false
+	tries := 0
+	r.Refuse(refused, func() error {
+		tries++
+		if !free {
+			return refused
+		}
+		return nil
+	})
+	if _, err := r.Refresh(context.Background()); !errors.Is(err, refused) {
+		t.Fatalf("a refresh while refused got %v", err)
+	}
+	free = true
+	refreshed := make(chan error, 1)
+	go func() { _, err := r.Refresh(context.Background()); refreshed <- err }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ran := make(chan error, 1)
+	go func() {
+		ran <- Run(ctx, Options{
+			Scan:      func(context.Context) (scan.Inventory, error) { return scan.Inventory{}, nil },
+			Requests:  r,
+			Inventory: func(scan.Inventory) {},
+			Fail:      func(err error) { t.Errorf("Fail(%v)", err) },
+			Warn:      func(string) {},
+		})
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-ran
+	})
+	if err := <-refreshed; err != nil {
+		t.Fatalf("the refresh that found it free got %v", err)
+	}
+	if _, err := r.Refresh(context.Background()); err != nil {
+		t.Fatalf("a refresh after it got %v", err)
+	}
+	if tries != 2 {
+		t.Errorf("tried again %d times, want 2", tries)
 	}
 	if got, err := r.Search(context.Background(), "x"); err != nil || len(got) != 0 {
 		t.Errorf("a search found %v, %v", got, err)
