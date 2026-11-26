@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -453,6 +454,27 @@ func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	return append([]string{h, gitx.StorePath(h), logs, refs}, trees...), trees
 }
 
+// indexedHub is the hub as the source index reads it: its URL and the
+// tips of its forks' branches the store holds, from the last fetch of it.
+// No hub is the zero Hub, and so is a store that does not exist yet, which
+// holds no branch of it.
+func (inv *invocation) indexedHub(ctx context.Context, gitDir string, sources []home.Source) (source.Hub, error) {
+	for _, entry := range sources {
+		if !entry.Hub {
+			continue
+		}
+		if _, err := os.Stat(gitDir); errors.Is(err, fs.ErrNotExist) {
+			return source.Hub{URL: entry.URL}, nil
+		}
+		tips, err := lineage.ListRemote(ctx, inv.git, gitDir, source.RemoteName(source.ID(entry.URL)))
+		if err != nil {
+			return source.Hub{}, err
+		}
+		return source.Hub{URL: entry.URL, Tips: tips}, nil
+	}
+	return source.Hub{}, nil
+}
+
 // sourceIndex builds the index serve answers searches from: the sources of
 // the machine settings, each listed from its ref in the store. The
 // settings are read under the shared lock, as a scan reads them, so a
@@ -465,15 +487,17 @@ func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx
 		if err != nil {
 			return err
 		}
-		// The hub holds forks rather than skills on one branch,
-		// and is never fetched as a shared source, so it has nothing to
-		// search.
 		shared := sharedSources(s.Sources)
 		urls := make([]string, 0, len(shared))
 		for _, src := range shared {
 			urls = append(urls, src.URL)
 		}
-		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.StorePath(inv.dirs.Home), urls, prev)
+		gitDir := gitx.StorePath(inv.dirs.Home)
+		hub, err := inv.indexedHub(ctx, gitDir, s.Sources)
+		if err != nil {
+			return err
+		}
+		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitDir, urls, hub, prev)
 		return err
 	})
 	return idx, warnings, err

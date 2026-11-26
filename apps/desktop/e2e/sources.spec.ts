@@ -17,6 +17,7 @@ import {
   acmeSkills,
   configurations,
   docResults,
+  HUB,
   installable,
   inventory,
   library,
@@ -1115,7 +1116,7 @@ test("search asks serve once per settled query and shows only the latest answer"
   await expect(row(page, "artifacts")).toBeVisible();
 
   // The matching answer takes the place of the source's card and listing: the open source's
-  // matches, each shared source counting its own. Hub, which a search does not cover, has none.
+  // matches, each source counting its own, Hub once your skills on the hub are read.
   await cli.serveEmit([
     {
       query: "pdf",
@@ -1128,8 +1129,7 @@ test("search asks serve once per settled query and shows only the latest answer"
   expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
   await expect(pill(page, "acme/skills")).toHaveText("acme/skills1");
   await expect(pill(page, "zeta/tools")).toHaveText("zeta/tools1");
-  await expect(pill(page, "Hub")).toHaveText("Hub");
-  await expect(pill(page, "Hub")).toBeDisabled();
+  await expect(pill(page, "Hub")).toHaveText("Hub0");
 
   // Another source shows its matches, and the search stays.
   await pill(page, "zeta/tools").click();
@@ -1164,7 +1164,16 @@ test("search asks serve once per settled query and shows only the latest answer"
   await expect(page.getByText("No skills match")).toHaveCount(0);
 });
 
-test("a search while Hub is open shows the first source's matches, and Hub once it is cleared", async ({
+/** A fork on the hub as a search answers it: under the hub's URL, by its branch's name. */
+const hubFork = (name: string) => ({
+  description: `The ${name} skill`,
+  name,
+  source: HUB,
+  subpath: "",
+  tree: `t-${name}`,
+});
+
+test("a search covers your skills on the hub: Hub counts and lists the ones to install that match", async ({
   cli,
   page,
 }) => {
@@ -1174,28 +1183,30 @@ test("a search while Hub is open shows the first source's matches, and Hub once 
     details(page).getByRole("heading", { name: "me/hub" })
   ).toBeVisible();
   const field = page.getByRole("searchbox", { name: "Search all sources" });
-  await field.fill("doc");
+  await field.fill("pdf");
   await expect.poll(() => cli.serveRequests.length).toBe(1);
   await cli.serveEmit([
     {
-      query: "doc",
+      query: "pdf",
       request_id: lastSearch(cli).request_id,
-      results: docResults,
+      // A fork this machine holds already is not one the hub lists to install.
+      results: [...docResults, hubFork("held-pdf"), hubFork("my-pdf")],
       type: "search",
     },
   ]);
-  await expect(pill(page, "acme/skills")).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
-  expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
   await expect(details(page)).toBeHidden();
+  await expect(pill(page, "Hub")).toHaveAttribute("aria-pressed", "true");
+  await expect(pill(page, "Hub")).toHaveText("Hub1");
+  expect(await skillNames(grid(page, "Hub"))).toEqual(["my-pdf"]);
 
   await field.fill("");
-  await expect(pill(page, "Hub")).toHaveAttribute("aria-pressed", "true");
   await expect(
     details(page).getByRole("heading", { name: "me/hub" })
   ).toBeVisible();
+  expect(await skillNames(grid(page, "Hub"))).toEqual([
+    "my-pdf",
+    "release-notes",
+  ]);
 });
 
 test("Add source runs source add, then opens the new source fully preselected", async ({

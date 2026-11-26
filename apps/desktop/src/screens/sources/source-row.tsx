@@ -20,8 +20,7 @@ const StaleDot = ({ title }: { title: string }) => (
 /**
  * The sources row of the Sources screen: one pill per shared source and Hub, the active one
  * lit, each with its skill count once it is known and the attention dot when it is stale. While
- * a search shows, each shared source counts its matches instead, and Hub, which a search does not
- * cover, has no count and cannot be opened.
+ * a search shows, each counts its matches instead.
  */
 export const SourceRow = ({
   pills,
@@ -33,7 +32,7 @@ export const SourceRow = ({
   pills: SourcePill[];
   /** The key of the active pill. */
   active: string | undefined;
-  /** Each shared source's count of matches, by its key, while a search shows. */
+  /** Each pill's count of matches, by its key, while a search shows. */
   matches?: ReadonlyMap<string, number>;
   /** Date.now(), for the stale dots. */
   now: number;
@@ -51,7 +50,6 @@ export const SourceRow = ({
           kind="source-pill"
           track="sources.pill-open"
           pressed={pressed}
-          disabled={matches !== undefined && !matches.has(pill.key)}
           onPressedChange={() => {
             onOpen(pill.key);
           }}

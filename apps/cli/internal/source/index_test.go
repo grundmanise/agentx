@@ -211,7 +211,7 @@ func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, nil)
+	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, source.Hub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +233,7 @@ func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
 	if got, err := git.Isolated(ctx, gitDir, "rev-parse", source.Ref(src.ID())); err != nil || got != commit {
 		t.Fatalf("the source ref = %q, %v; want the commit %q it already held", got, err, commit)
 	}
-	next, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, idx)
+	next, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, source.Hub{}, idx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
 	// Everything listed, so the build is remembered whole: the rebuild that
 	// follows reads the refs and stops there.
 	before := started()
-	again, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, next)
+	again, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, source.Hub{}, next)
 	if err != nil || again != next || warnings != nil {
 		t.Errorf("BuildIndex with an unchanged prev = %p, %v, %v; want prev %p and no warnings", again, warnings, err, next)
 	}
@@ -280,7 +280,7 @@ func TestBuildIndexListsEverySkillOfEverySource(t *testing.T) {
 	// The URLs arrive as the settings hold them, in any order and with a
 	// repeat; the index is by canonical URL, once each.
 	urls := []string{never, beta.url, alpha.url, alpha.url}
-	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, nil)
+	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, source.Hub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestBuildIndexListsEverySkillOfEverySource(t *testing.T) {
 	}
 
 	// Nothing changed: the index that was built stands, and no listing runs.
-	again, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, idx)
+	again, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, source.Hub{}, idx)
 	if err != nil || again != idx || warnings != nil {
 		t.Errorf("BuildIndex with an unchanged prev = %p, %v, %v; want prev %p and no warnings", again, warnings, err, idx)
 	}
@@ -315,7 +315,7 @@ func TestBuildIndexListsEverySkillOfEverySource(t *testing.T) {
 	alpha.skill("commit", "commit", "Write a better commit message")
 	alpha.commit()
 	alpha.fetch(gitDir)
-	idx2, _, err := source.BuildIndex(ctx, git, gitDir, []string{alpha.url}, idx)
+	idx2, _, err := source.BuildIndex(ctx, git, gitDir, []string{alpha.url}, source.Hub{}, idx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +345,7 @@ func TestBuildIndexNeverWarnsAboutAnUnfetchedSource(t *testing.T) {
 	never := "file://" + filepath.Join(root, "never-fetched")
 	urls := []string{alpha.url, never}
 
-	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, nil)
+	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, source.Hub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +358,7 @@ func TestBuildIndexNeverWarnsAboutAnUnfetchedSource(t *testing.T) {
 		alpha.skill(name, name, "Added upstream")
 		alpha.commit()
 		alpha.fetch(gitDir)
-		next, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, idx)
+		next, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, source.Hub{}, idx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -375,11 +375,11 @@ func TestBuildIndexNeverWarnsAboutAnUnfetchedSource(t *testing.T) {
 	}
 
 	// Gone from the settings and back, unfetched still: no warning either.
-	idx, warnings, err = source.BuildIndex(ctx, git, gitDir, []string{alpha.url}, idx)
+	idx, warnings, err = source.BuildIndex(ctx, git, gitDir, []string{alpha.url}, source.Hub{}, idx)
 	if err != nil || len(warnings) != 0 {
 		t.Fatalf("the build without the unfetched source = %v, %q; want no warnings", err, warnings)
 	}
-	_, warnings, err = source.BuildIndex(ctx, git, gitDir, urls, idx)
+	_, warnings, err = source.BuildIndex(ctx, git, gitDir, urls, source.Hub{}, idx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,14 +393,84 @@ func TestBuildIndexWithoutSourcesRunsNoGit(t *testing.T) {
 	// No git on PATH at all: a machine with no source never reaches one.
 	git := gitx.New(map[string]string{"PATH": t.TempDir()}, false, func(string, ...any) {})
 	gitDir := filepath.Join(t.TempDir(), "store.git")
-	idx, warnings, err := source.BuildIndex(context.Background(), git, gitDir, nil, nil)
+	idx, warnings, err := source.BuildIndex(context.Background(), git, gitDir, nil, source.Hub{}, nil)
 	if err != nil || len(warnings) != 0 || len(idx.Sources) != 0 || len(idx.Search("anything")) != 0 {
 		t.Errorf("BuildIndex() = %#v, %v, %v; want an empty index", idx, warnings, err)
 	}
 
 	// A source recorded before the store exists is one not fetched.
-	idx, warnings, err = source.BuildIndex(context.Background(), git, gitDir, []string{"https://example.com/a"}, nil)
+	idx, warnings, err = source.BuildIndex(context.Background(), git, gitDir, []string{"https://example.com/a"}, source.Hub{}, nil)
 	if err != nil || len(warnings) != 0 || len(idx.Sources) != 1 || len(idx.Search("a")) != 0 {
 		t.Errorf("BuildIndex() = %#v, %v, %v; want one unfetched source", idx, warnings, err)
+	}
+}
+
+// fork commits a hub fork's branch, skills/<name>, holding one skill at
+// the root of its tree, and returns its tip.
+func (r *repo) fork(name, description string) string {
+	r.t.Helper()
+	r.run("symbolic-ref", "HEAD", "refs/heads/skills/"+name)
+	r.run("read-tree", "--empty")
+	if err := os.RemoveAll(r.work); err != nil {
+		r.t.Fatal(err)
+	}
+	r.skill("", name, description)
+	return r.commit()
+}
+
+func TestBuildIndexListsTheHubsForksByBranch(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	git, gitDir, started := countingStore(t)
+	ctx := context.Background()
+
+	hub := newRepo(t, root, "hub")
+	pdf := hub.fork("pdf-tools", "Fill PDF forms")
+	notes := hub.fork("notes", "Keep meeting notes")
+	if _, err := git.Isolated(ctx, gitDir, "fetch", "--quiet", hub.url, "+refs/heads/skills/*:refs/remotes/hub/skills/*"); err != nil {
+		t.Fatal(err)
+	}
+	tree := func(tip string) string { return hub.run("rev-parse", tip+"^{tree}") }
+	h := source.Hub{URL: hub.url, Tips: map[string]string{"pdf-tools": pdf, "notes": notes}}
+
+	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, nil, h, nil)
+	if err != nil || len(warnings) != 0 {
+		t.Fatalf("BuildIndex() = %v, %q", err, warnings)
+	}
+	want := []source.Indexed{{URL: hub.url, Skills: []source.Skill{
+		{Name: "notes", Description: "Keep meeting notes", Tree: tree(notes)},
+		{Name: "pdf-tools", Description: "Fill PDF forms", Tree: tree(pdf)},
+	}}}
+	if !reflect.DeepEqual(idx.Sources, want) {
+		t.Errorf("index = %#v\nwant %#v", idx.Sources, want)
+	}
+	if got := idx.Search("forms pdf"); len(got) != 0 {
+		t.Errorf("Search(forms pdf) = %#v, want none", got)
+	}
+	if got := idx.Search("FORMS"); len(got) != 1 || got[0].Source != hub.url || got[0].Name != "pdf-tools" {
+		t.Errorf("Search(FORMS) = %#v, want pdf-tools on the hub", got)
+	}
+
+	// The same tips: the index stands, and no git runs.
+	before := started()
+	again, _, err := source.BuildIndex(ctx, git, gitDir, nil, source.Hub{URL: hub.url, Tips: map[string]string{"notes": notes, "pdf-tools": pdf}}, idx)
+	if err != nil || again != idx {
+		t.Errorf("BuildIndex with the same tips = %p, %v; want prev %p", again, err, idx)
+	}
+	if got := started() - before; got != 0 {
+		t.Errorf("a rebuild with the same tips started %d git processes, want 0", got)
+	}
+
+	// A fork published again is read again.
+	newer := hub.fork("notes", "Keep and search meeting notes")
+	if _, err := git.Isolated(ctx, gitDir, "fetch", "--quiet", hub.url, "+refs/heads/skills/*:refs/remotes/hub/skills/*"); err != nil {
+		t.Fatal(err)
+	}
+	next, _, err := source.BuildIndex(ctx, git, gitDir, nil, source.Hub{URL: hub.url, Tips: map[string]string{"notes": newer, "pdf-tools": pdf}}, idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := next.Search("search meeting"); len(got) != 1 || got[0].Tree != tree(newer) {
+		t.Errorf("Search(search meeting) after the publish = %#v", got)
 	}
 }

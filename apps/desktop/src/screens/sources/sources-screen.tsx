@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type {
+  InstallableSkillEvent,
   LibraryEntry,
   SearchResult,
   Source,
@@ -152,41 +153,66 @@ const usePills = (
   return { pills, setJustAdded };
 };
 
-/** The pill a search shows the matches of: Hub, which a search does not cover, gives way to the first source. */
-const shownPillOf = (
-  pills: SourcePill[],
-  active: SourcePill | undefined,
-  searching: boolean
-) =>
-  searching && active?.key === HUB_SKILLS
-    ? pills.find((p) => p.key !== HUB_SKILLS)
-    : active;
+/**
+ * Your skills on the hub a search matched: of those the hub lists to install, the ones whose
+ * name a match under the hub's URL carries.
+ */
+const hubMatches = (
+  installable: InstallableSkillEvent[],
+  results: SearchResult[],
+  hub: string
+) => {
+  const names = new Set(
+    results.filter((r) => r.source === hub).map((r) => r.name)
+  );
+  return installable.filter((s) => names.has(s.name));
+};
 
-/** Each shared source's count of matches, by its key, for its pill in place of its skill count. */
-const matchCounts = (pills: SourcePill[], results: SearchResult[]) =>
+/**
+ * Each pill's count of matches, by its key, in place of its skill count: Hub's once your skills
+ * on the hub are read.
+ */
+const matchCounts = (
+  pills: SourcePill[],
+  results: SearchResult[],
+  installable: InstallableSkillEvent[] | undefined
+) =>
   new Map(
-    pills.flatMap((p) =>
-      p.url === undefined
+    pills.flatMap((p) => {
+      if (p.key !== HUB_SKILLS) {
+        return [[p.key, results.filter((r) => r.source === p.url).length]];
+      }
+      return installable === undefined
         ? []
-        : [[p.key, results.filter((r) => r.source === p.url).length] as const]
-    )
+        : [[p.key, hubMatches(installable, results, p.source.url).length]];
+    })
   );
 
-/** The cards of a search's matches in the pill's source, A to Z. */
+/** The cards of a search's matches in the pill's source, or of your skills on the hub, A to Z. */
 const matchedCards = (
   pill: SourcePill,
   results: SearchResult[],
-  library: LibraryEntry[]
-): SkillCard[] =>
-  pill.url === undefined
-    ? noCards
-    : nameOrder(
-        resultCards(
-          results.filter((r) => r.source === pill.url),
-          library,
-          () => pageRef(pill.source)
-        )
-      );
+  library: LibraryEntry[],
+  installable: InstallableSkillEvent[] | undefined
+): SkillCard[] => {
+  if (pill.key === HUB_SKILLS) {
+    return installable === undefined
+      ? noCards
+      : nameOrder(
+          installableCards(
+            hubMatches(installable, results, pill.source.url),
+            library
+          )
+        );
+  }
+  return nameOrder(
+    resultCards(
+      results.filter((r) => r.source === pill.url),
+      library,
+      () => pageRef(pill.source)
+    )
+  );
+};
 
 /**
  * The card of the open source, which a search's results replace: folded, it fades out whole, then
@@ -218,6 +244,19 @@ const FoldingCard = ({
     </div>
   </div>
 );
+
+/** Reads your skills on the hub once a search shows, so that Hub can count its matches. */
+const useInstallableWhileSearching = (
+  searching: boolean,
+  hub: boolean,
+  read: boolean
+) => {
+  useEffect(() => {
+    if (searching && hub && !read) {
+      void loadInstallable();
+    }
+  }, [searching, hub, read]);
+};
 
 /** The selection without the cards `drop` names. */
 const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
@@ -310,54 +349,60 @@ export const SourcesScreen = () => {
   // A search answer replaces the listing. While the latest query waits for its answer, the last
   // answer stays, so the list and its Select all count change once, not back to the listing between.
   const results = query.trim() === "" ? undefined : found;
-  const shownPill = shownPillOf(pills, activePill, results !== undefined);
-  const shownKey = shownPill?.key;
+  const activeKey = activePill?.key;
+  useInstallableWhileSearching(
+    results !== undefined,
+    pills.some((p) => p.key === HUB_SKILLS),
+    installable !== undefined
+  );
   const matches =
-    results === undefined ? undefined : matchCounts(pills, results);
+    results === undefined
+      ? undefined
+      : matchCounts(pills, results, installable);
 
   const listing =
-    shownPill === undefined || shownPill.key === HUB_SKILLS
+    activePill === undefined || activePill.key === HUB_SKILLS
       ? undefined
-      : listings[shownPill.key];
+      : listings[activePill.key];
   const shownCards = (): SkillCard[] => {
-    if (shownPill === undefined) {
+    if (activePill === undefined) {
       return noCards;
     }
     if (results !== undefined) {
-      return matchedCards(shownPill, results, library);
+      return matchedCards(activePill, results, library, installable);
     }
-    if (shownPill.key === HUB_SKILLS) {
+    if (activePill.key === HUB_SKILLS) {
       return installable === undefined
         ? noCards
         : nameOrder(installableCards(installable, library));
     }
-    return listing === undefined || shownPill.url === undefined
+    return listing === undefined || activePill.url === undefined
       ? noCards
       : nameOrder(
           listingCards(
             listing,
-            shownPill.url,
+            activePill.url,
             library,
-            pageRef(sources.find((s) => s.id === shownPill.key))
+            pageRef(sources.find((s) => s.id === activePill.key))
           )
         );
   };
   const shown = shownCards();
   const groups: CardGroup[] =
-    shownPill === undefined
+    activePill === undefined
       ? []
       : [
           {
             cards: shown,
-            label: shownPill.label,
-            source: shownPill.url ?? HUB_SKILLS,
+            label: activePill.label,
+            source: activePill.url ?? HUB_SKILLS,
           },
         ];
   const allCards = groups.flatMap((g) => g.cards);
   const selectable = allCards.filter((c) => c.status === undefined);
   const selectedCount = selectable.filter((c) => selection.has(c.key)).length;
   const loading = usePending(
-    shownKey === undefined ? "" : loadingLabel(shownKey)
+    activeKey === undefined ? "" : loadingLabel(activeKey)
   );
 
   // Each settled query asks serve once; the answer to the latest request replaces the listing.
@@ -532,8 +577,8 @@ export const SourcesScreen = () => {
   const add = async () => {
     const plans = planAdds({
       allOf:
-        allMode && shownPill !== undefined && results === undefined
-          ? { cards: shown, source: shownPill.url ?? HUB_SKILLS }
+        allMode && activePill !== undefined && results === undefined
+          ? { cards: shown, source: activePill.url ?? HUB_SKILLS }
           : undefined,
       enabled,
       selected: [...selection.values()],
@@ -568,10 +613,10 @@ export const SourcesScreen = () => {
     if (results !== undefined) {
       return shown.length === 0 ? "No skills match" : undefined;
     }
-    if (loading || shownPill === undefined) {
+    if (loading || activePill === undefined) {
       return undefined;
     }
-    if (shownPill.key === HUB_SKILLS) {
+    if (activePill.key === HUB_SKILLS) {
       return installable !== undefined && shown.length === 0
         ? "Every skill on your hub is on this machine"
         : undefined;
@@ -632,7 +677,7 @@ export const SourcesScreen = () => {
         </InputGroup>
         <SourceRow
           pills={pills}
-          active={shownKey}
+          active={activeKey}
           matches={matches}
           now={now}
           onOpen={open}
