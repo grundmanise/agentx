@@ -10,8 +10,7 @@ import { retry, useStartup } from "#/startup/startup.ts";
 
 /**
  * The startup layer: shows when a check that this machine can run agentx fails. It names the
- * first failure, shows the CLI's fix for it, and offers Retry. The mark, the title and the buttons
- * are centred over the checks, which keep their left edge.
+ * first failure, shows the CLI's fix for it, and offers Retry.
  */
 export const StartupLayer = () => {
   const { findings, retrying, running } = useStartup();
@@ -33,14 +32,12 @@ export const StartupLayer = () => {
       aria-label="Startup checks"
       className="bg-shell-bg flex min-h-0 flex-1 justify-center overflow-auto pb-11"
     >
-      <div className="w-check-column gap-check-block my-auto flex flex-none flex-col items-center py-6">
+      <div className="w-check-column gap-check-block my-auto flex flex-none flex-col py-6">
         <AgentxMark size={40} />
-        <h1 className="type-startup-title text-text-primary m-0 text-center">
+        <h1 className="type-startup-title text-text-primary m-0">
           {checksTitle(read, running)}
         </h1>
-        <div className="self-stretch">
-          <CheckList checks={read.checks} />
-        </div>
+        <CheckList checks={read.checks} />
         <div className="flex items-center gap-2">
           {running && (
             <Button variant="primary" disabled track="startup.checking">

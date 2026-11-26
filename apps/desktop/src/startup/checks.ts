@@ -66,6 +66,12 @@ const labels = [
   "Watching this machine",
 ] as const;
 
+/**
+ * How many detail lines each check keeps room for, whatever its state, so the list keeps its height
+ * while the checks run: the CLI's version and path wrap to two lines.
+ */
+export const reservedLines = [2, 1, 1, 1, 1] as const;
+
 const titles = [
   "Reinstall agentx",
   "Update git to continue",
