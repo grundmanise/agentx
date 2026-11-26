@@ -205,7 +205,7 @@ test("a build that is no release has no Release notes", async ({
   ).toHaveCount(0);
 });
 
-test("an update a check finds installs from Updates, as from the title bar", async ({
+test("an update a check finds opens its release from What's new and installs from Updates, as from the title bar", async ({
   cli,
   page,
 }) => {
@@ -215,6 +215,10 @@ test("an update a check finds installs from Updates, as from the title bar", asy
   await page.goto("/#/settings");
 
   await expect(section(page)).toContainText("agentx 0.4.0 is available");
+  await section(page).getByRole("button", { name: "What's new" }).click();
+  await expect
+    .poll(() => cli.openedUrls)
+    .toEqual(["https://github.com/grundmanise/agentx/releases/tag/v0.4.0"]);
   await section(page).getByRole("button", { name: "Update to 0.4.0" }).click();
   await expect(
     section(page).getByRole("button", { name: "Installing…" })
