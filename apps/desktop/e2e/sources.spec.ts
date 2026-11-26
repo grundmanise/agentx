@@ -132,10 +132,11 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
   page,
 }) => {
   await openSources(cli, page);
+  // Hub first, then the shared sources.
   expect(await names(sourcesRow(page))).toEqual([
+    "Hub",
     "acme/skills",
     "zeta/tools",
-    "Hub",
   ]);
   await expect(pill(page, "acme/skills")).toHaveAttribute(
     "aria-pressed",
@@ -175,6 +176,7 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
       sources: [
         ...sources,
         {
+          added: new Date().toISOString(),
           id: moreId,
           last_fetched: new Date().toISOString(),
           url: "https://github.com/acme/more",
@@ -183,11 +185,12 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
     },
   ]);
   await expect(pill(page, "acme/more")).toHaveText("acme/more1");
+  // The shared sources in the order they were added.
   expect(await names(sourcesRow(page))).toEqual([
-    "acme/more",
+    "Hub",
     "acme/skills",
     "zeta/tools",
-    "Hub",
+    "acme/more",
   ]);
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
@@ -1167,6 +1170,7 @@ test("Add source closes at once and shows the source loading, then opens it full
   const adding = cli.register(["source", "add", "acme/more"], {
     events: [
       {
+        added: new Date().toISOString(),
         id: newId,
         last_fetched: new Date().toISOString(),
         skills: 2,
@@ -1207,12 +1211,25 @@ test("Add source closes at once and shows the source loading, then opens it full
   const loading = pill(page, "Stop adding acme/more");
   await expect(loading).toHaveAttribute("aria-busy", "true");
   await expect(loading).toHaveText("acme/more");
+  // It takes the place the source's own pill will take, so nothing moves once it is added.
+  expect(await names(sourcesRow(page))).toEqual([
+    "Hub",
+    "acme/skills",
+    "zeta/tools",
+    "Stop adding acme/more",
+  ]);
   adding.release();
   await expect(
     toasts(page).getByText(`Added ${newUrl}: 2 skills`)
   ).toBeVisible();
   await expect(loading).toHaveCount(0);
   await expect(pill(page, "acme/more")).toHaveAttribute("aria-pressed", "true");
+  expect(await names(sourcesRow(page))).toEqual([
+    "Hub",
+    "acme/skills",
+    "zeta/tools",
+    "acme/more",
+  ]);
   await expect(check(page, "review")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "triage")).toHaveAttribute("aria-pressed", "true");
   await expect(

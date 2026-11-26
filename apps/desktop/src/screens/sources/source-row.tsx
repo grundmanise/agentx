@@ -1,8 +1,7 @@
 import { StopPill } from "#/components/stop-pill.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import { cn } from "#/lib/utils.ts";
-import { shortSource } from "#/screens/skills/projection.ts";
-import { staleTitle } from "#/screens/sources/projection.ts";
+import { rowPills, staleTitle } from "#/screens/sources/projection.ts";
 import type { SourcePill } from "#/screens/sources/projection.ts";
 
 /** The `tone.attention.fg` dot on a pill whose source was not fetched for two days, or never. */
@@ -21,8 +20,8 @@ const StaleDot = ({ title }: { title: string }) => (
 
 /**
  * The sources row of the Sources screen: one pill per shared source and Hub, the active one
- * lit, each with its skill count once it is known and the attention dot when it is stale, then a
- * pill for each source being added.
+ * lit, each with its skill count once it is known and the attention dot when it is stale, and a
+ * Stop pill for each source being added, in the place its own pill will take.
  */
 export const SourceRow = ({
   pills,
@@ -45,7 +44,21 @@ export const SourceRow = ({
 }) => (
   <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">
     <legend className="sr-only">Sources</legend>
-    {pills.map((pill) => {
+    {rowPills(pills, adding).map((entry) => {
+      if (entry.kind === "adding") {
+        return (
+          <StopPill
+            key={`adding ${entry.link}`}
+            label={entry.label}
+            stopLabel={`Stop adding ${entry.label}`}
+            track="sources.adding-stop"
+            onStop={() => {
+              onStop(entry.link);
+            }}
+          />
+        );
+      }
+      const { pill } = entry;
       const stale = staleTitle(pill.lastFetched, now);
       const pressed = pill.key === active;
       return (
@@ -76,16 +89,5 @@ export const SourceRow = ({
         </Toggle>
       );
     })}
-    {adding.map((link) => (
-      <StopPill
-        key={link}
-        label={shortSource(link)}
-        stopLabel={`Stop adding ${shortSource(link)}`}
-        track="sources.adding-stop"
-        onStop={() => {
-          onStop(link);
-        }}
-      />
-    ))}
   </fieldset>
 );

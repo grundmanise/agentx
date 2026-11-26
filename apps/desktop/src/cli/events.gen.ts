@@ -133,6 +133,7 @@ export interface Source {
   access_checked?: string;
   default_branch?: string;
   last_fetched?: string;
+  added?: string;
   commit?: string;
   skills?: number;
 }
@@ -228,6 +229,7 @@ export interface SettingsSource {
   access_checked?: string;
   default_branch?: string;
   last_fetched?: string;
+  added?: string;
 }
 
 export interface LibraryCandidate {

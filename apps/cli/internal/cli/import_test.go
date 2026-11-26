@@ -1045,6 +1045,7 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 		"Source.AccessChecked":            "sourceRefusal, through fetchTime; an import then forgets it",
 		"Source.DefaultBranch":            "sourceRefusal, through source.ValidRef",
 		"Source.LastFetched":              "sourceRefusal, through fetchTime",
+		"Source.Added":                    "sourceRefusal, through fetchTime",
 	}
 	for _, spec := range []struct {
 		kind string

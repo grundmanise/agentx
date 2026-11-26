@@ -87,7 +87,8 @@ const isGone = (open: string | undefined, pills: SourcePill[]) =>
   open !== undefined && !pills.some((p) => p.key === open);
 
 /**
- * The open pill: the one the user opened, or the first one, also once the one opened was removed.
+ * The open pill: the one the user opened, or else the first shared source, Hub when there is none,
+ * also once the one opened was removed.
  * `onGone` runs when the pill open at the last render is gone, its source removed.
  */
 const useOpenPill = (
@@ -96,7 +97,10 @@ const useOpenPill = (
   onGone: () => void
 ) => {
   const [lastOpen, setLastOpen] = useState<string | undefined>();
-  const pill = pills.find((p) => p.key === active) ?? pills[0];
+  const pill =
+    pills.find((p) => p.key === active) ??
+    pills.find((p) => p.key !== HUB_SKILLS) ??
+    pills[0];
   if (isGone(lastOpen, pills)) {
     onGone();
   }
