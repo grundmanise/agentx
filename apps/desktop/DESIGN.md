@@ -646,7 +646,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `input.search-padding` | 0 14 0 34 | `py-0 pr-input-search-right pl-input-search-left` | Room for the icon |
 | `input.label-gap` | 8 | `gap-input-label` | Label → field |
 | `input.textarea-height` | 88 | `h-textarea` | Create dialog description |
-| `add-search.height` | 40 | `h-add-search` | Search field of the Sources screen, a pill across the page |
+| `add-search.height` | 40 | `h-add-search` | Search field of the Sources screen, across the page |
 
 ### Cards, banners, tiles
 
@@ -780,8 +780,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `shell.status-dot-radius` | 50% | The publish status dot (`rounded-shell-status-dot`) |
 | `shell.command-radius` | 9999 | Command field |
 | `shell.panel-radius` | 14 | Main panel |
-| `input.radius` | 12 | Inputs, textareas |
-| `input.search-radius` | 9999 | Search field |
+| `input.radius` | 9999 | Inputs and search fields |
 | `row.radius` | 12 | Split list rows |
 | `table.row-radius` | 14 | Server rows |
 | `popover.row-radius` | 10 | Popover rows, Reset button |
@@ -1233,7 +1232,7 @@ A key or key combination such as `esc` or `⌘K` (`KbdGroup` and `Kbd`, `src/com
 
 ### Inputs
 
-`input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, `type.input`; focus `input.border-focus`. `type.input-mono` for URLs and commands. Search fields are shadcn's Input Group (`src/components/ui/input-group.tsx`): the magnifier on the left, in `input.placeholder` like the placeholder. List search field (Input `list-search`): `input.search-height`, `input.search-radius`, `input.search-padding`, `type.secondary`, the `xs` magnifier. Sources search (Input `search`): `add-search.height`, the same radius and padding, `type.input`, the `sm` magnifier.
+`input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, `type.input`; focus `input.border-focus`. `type.input-mono` for URLs and commands. Search fields are shadcn's Input Group (`src/components/ui/input-group.tsx`): the magnifier on the left, in `input.placeholder` like the placeholder. List search field (Input `list-search`): `input.search-height`, `input.radius`, `input.search-padding`, `type.secondary`, the `xs` magnifier. Sources search (Input `search`): `add-search.height`, the same radius and padding, `type.input`, the `sm` magnifier.
 
 ### Settings
 
