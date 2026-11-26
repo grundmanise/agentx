@@ -933,6 +933,12 @@ func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath s
 	if err != nil {
 		return nil, err
 	}
+	return entriesOf(listed, root, subpath, skip), nil
+}
+
+// entriesOf is every directory holding a SKILL.md among listed, the tree
+// root read whole, each under subpath, sorted by directory.
+func entriesOf(listed []TreeEntry, root, subpath string, skip bool) []skillEntry {
 	trees := map[string]string{"": root}
 	var entries []skillEntry
 	for _, e := range listed {
@@ -955,7 +961,18 @@ func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath s
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].dir < entries[j].dir })
-	return entries, nil
+	return entries
+}
+
+// Count is how many skills a listing of the whole source finds at commit:
+// the directories holding a SKILL.md that List lists, from one ls-tree of
+// the store, with no SKILL.md read.
+func Count(ctx context.Context, r *gitx.Runner, gitDir, commit string) (int, error) {
+	listed, err := ReadTree(ctx, r, gitDir, commit)
+	if err != nil {
+		return 0, err
+	}
+	return len(entriesOf(listed, "", "", true)), nil
 }
 
 // subtree is the id of the tree at subpath in commit, the whole of its tree

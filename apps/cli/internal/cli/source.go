@@ -485,9 +485,11 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 
 // sourcesOf is every source of the settings s, as the inventory and source
 // list report them: what each entry records, with the commit the store
-// holds for a shared source and, for the hub, the skill branches its
-// last fetch found. It reads the store in one for-each-ref, whatever the
-// number of sources, and runs no git when there is no store or no source.
+// holds for a shared source and how many skills it holds there, and, for
+// the hub, the skill branches its last fetch found. It reads the store in
+// one for-each-ref, whatever the number of sources, and one ls-tree per
+// shared source whose commit it has not counted, and runs no git when there
+// is no store or no source.
 func (inv *invocation) sourcesOf(ctx context.Context, s home.Settings) ([]scan.Source, error) {
 	sources := make([]scan.Source, 0, len(s.Sources))
 	hub := -1
@@ -528,11 +530,31 @@ func (inv *invocation) sourcesOf(ctx context.Context, s home.Settings) ([]scan.S
 	for i := range sources {
 		if i != hub {
 			sources[i].Commit = commits[sources[i].ID]
+			sources[i].Skills = inv.skillCount(ctx, gitDir, sources[i].Commit)
 		} else if forks > 0 || sources[i].LastFetched != "" {
 			sources[i].Skills = &forks
 		}
 	}
 	return sources, nil
+}
+
+// skillCount is how many skills a shared source holds at commit, nil for a
+// source not fetched or one the store cannot list. A commit's count never
+// changes, so serve counts each commit once.
+func (inv *invocation) skillCount(ctx context.Context, gitDir, commit string) *int {
+	if commit == "" {
+		return nil
+	}
+	if counted, ok := inv.skillCounts.Load(commit); ok {
+		n := counted.(int)
+		return &n
+	}
+	n, err := source.Count(ctx, inv.git, gitDir, commit)
+	if err != nil {
+		return nil
+	}
+	inv.skillCounts.Store(commit, n)
+	return &n
 }
 
 // sourceSkills lists the skills of a fetched source under the subpath of

@@ -48,6 +48,7 @@ type invocation struct {
 	hosts        func(host string) string // the host names of the user's SSH configuration, read once per host; see sshHosts
 	unfetched    sync.Map                 // remote name -> URL of a hub whose remote was just written over one never fetched whole; see fetchForks
 	published    sync.Map                 // skill name -> the publishedBase last read for it; see tipPublished
+	skillCounts  sync.Map                 // source commit -> how many skills the source holds there; see skillCount
 	posthogMu    sync.Mutex
 	posthog      posthog.Client // made by telemetryClient, closed by closeTelemetry; nil until then
 }

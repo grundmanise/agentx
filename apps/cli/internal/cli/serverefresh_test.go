@@ -201,7 +201,7 @@ func TestServeRefreshSpawnsBoundedGit(t *testing.T) {
 	for i := range skills {
 		s.skill(fmt.Sprintf("skills/s%03d", i), fmt.Sprintf("s%03d", i), "Skill number "+fmt.Sprint(i), nil)
 	}
-	s.commit("thirty skills")
+	head := s.commit("thirty skills")
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--all")
 	other := h.newSourceRepo("other", true)
@@ -229,6 +229,9 @@ func TestServeRefreshSpawnsBoundedGit(t *testing.T) {
 	if n > 60 {
 		t.Errorf("a serve run over two sources and %d skills spawned %d git processes:\n%s", skills, n, strings.Join(calls(), "\n"))
 	}
+	// The skills of a source are counted once per commit, however many
+	// scans the run makes.
+	equal(t, "counts of the source's skills", strings.Count(strings.Join(calls(), "\n"), " ls-tree -r -t -z "+head), 1)
 }
 
 // TestServeRefreshesNothingWithoutASource: on a machine whose settings hold

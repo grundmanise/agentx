@@ -14,6 +14,7 @@ import { filesOf } from "./fixtures/skills.ts";
 import {
   ACME,
   ACME_ID,
+  acme,
   acmeSkills,
   configurations,
   docResults,
@@ -113,7 +114,9 @@ const openSources = async (
   first: InlineEvent = inventory
 ) => {
   cli.onServeStart({ events: [first] });
-  cli.register(["source", "skills", ACME_ID], { events: acmeSkills });
+  cli.register(["source", "skills", ACME_ID], {
+    events: [{ ...acme, type: "source" }, ...acmeSkills],
+  });
   cli.register(["source", "skills", ZETA_ID], { events: [] });
   cli.register(["skill", "list", "--remote"], { events: installable });
   await page.goto("/#/sources");
@@ -142,7 +145,7 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
     "aria-pressed",
     "true"
   );
-  // A count once the listing is read; Hub's from the inventory.
+  // The counts come with the inventory.
   await expect(pill(page, "acme/skills")).toHaveText("acme/skills8");
   await expect(pill(page, "zeta/tools")).toHaveText("zeta/tools");
   await expect(pill(page, "Hub")).toHaveText("Hub2");
@@ -152,23 +155,7 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
   await expect(
     pill(page, "zeta/tools").getByTitle("Not fetched yet")
   ).toBeAttached();
-  // Opening the screen reads the listing of each fetched source.
-  expect(commandLines(cli)).toEqual([`source skills ${ACME_ID}`]);
-
   // A source added elsewhere, as in a terminal, comes with the next inventory alone.
-  const moreId = "9f8e7d6c5b4a3210";
-  cli.register(["source", "skills", moreId], {
-    events: [
-      {
-        description: "Review a change",
-        name: "review",
-        source: moreId,
-        subpath: "review",
-        tree: "t-review",
-        type: "source_skill",
-      },
-    ],
-  });
   await cli.serveEmit([
     {
       ...inventory,
@@ -177,8 +164,10 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
         ...sources,
         {
           added: new Date().toISOString(),
-          id: moreId,
+          commit: "5b4a3c2d1e0f9a",
+          id: "9f8e7d6c5b4a3210",
           last_fetched: new Date().toISOString(),
+          skills: 1,
           url: "https://github.com/acme/more",
         },
       ],
@@ -192,9 +181,14 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
     "zeta/tools",
     "acme/more",
   ]);
+  // Only the open source's listing is read, once for the commit the source is at.
+  expect(commandLines(cli)).toEqual([`source skills ${ACME_ID}`]);
+  await pill(page, "zeta/tools").click();
+  await pill(page, "acme/skills").click();
+  await expect(row(page, "artifacts")).toBeVisible();
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
-    `source skills ${moreId}`,
+    `source skills ${ZETA_ID}`,
   ]);
 });
 
@@ -1360,7 +1354,7 @@ test("Hub lists the hub's installable skills and adds by name", async ({
   ]);
 });
 
-test("Refresh fetches the source, then reads the listing of the new fetch", async ({
+test("Refresh fetches the source, then reads the listing of the commit it moved to", async ({
   cli,
   page,
 }) => {
@@ -1372,7 +1366,7 @@ test("Refresh fetches the source, then reads the listing of the new fetch", asyn
   const fetch = cli.register(["source", "fetch", ACME_ID], { events: fetched });
   await details(page).getByRole("button", { name: "Refresh" }).click();
   await fetch.started;
-  // The new fetch comes with the inventory that follows it.
+  // The new fetch comes with the inventory that follows it: its commit and its count.
   await expect.poll(() => cli.serveRequests.length).toBe(1);
   const now = new Date().toISOString();
   await cli.serveEmit([
@@ -1380,11 +1374,14 @@ test("Refresh fetches the source, then reads the listing of the new fetch", asyn
       ...inventory,
       scan_counter: 2,
       sources: sources.map((s) =>
-        s.id === ACME_ID ? { ...s, last_fetched: now } : s
+        s.id === ACME_ID
+          ? { ...s, commit: "9d8c7b6a5f4e3d", last_fetched: now, skills: 9 }
+          : s
       ),
     },
   ]);
   await expect(fact(page, "Fetched")).toHaveText("just now");
+  await expect(pill(page, "acme/skills")).toHaveText("acme/skills9");
   await expect
     .poll(() => commandLines(cli))
     .toEqual([
@@ -1430,16 +1427,12 @@ test("Refresh all fetches every source in one run, then reads your skills, pendi
     },
   ]);
   await expect(fact(page, "Fetched")).toHaveText("just now");
-  // After the fetch, the listing and your skills are read in either order.
-  await expect.poll(() => commandLines(cli).length).toBe(4);
-  const lines = commandLines(cli);
-  expect(lines.slice(0, 2)).toEqual([
+  // The fetch moved no source to another commit, so no listing is read again.
+  expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
     "source fetch --all",
+    "skill list --remote",
   ]);
-  expect(lines.slice(2)).toEqual(
-    expect.arrayContaining([`source skills ${ACME_ID}`, "skill list --remote"])
-  );
 });
 
 test("Remove with its installed skills removes each skill, then the source", async ({

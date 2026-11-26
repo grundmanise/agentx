@@ -36,6 +36,7 @@ export const acme: Source = {
   id: ACME_ID,
   last_fetched: ago(3 * DAY + 2 * HOUR),
   pin: "v2",
+  skills: 8,
   url: ACME,
 };
 

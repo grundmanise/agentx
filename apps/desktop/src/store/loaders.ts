@@ -93,31 +93,58 @@ export const loadStore = async () => {
   });
 };
 
-/**
- * Loads the skills of a source: `source skills <id>`, a read of the last fetch. The Add screen
- * calls it when a source's pill opens, and again after it fetches the source. The listing kept
- * from an earlier launch shows while it runs.
- */
-export const loadListing = async (id: string) => {
-  if (useAppStore.getState().listings[id] === undefined) {
-    const kept = await cachedRead<SourceSkillEvent[]>("listing", id, "");
-    if (
-      kept !== undefined &&
-      useAppStore.getState().listings[id] === undefined
-    ) {
+/** The commit the listing in the store was read at, by source id. */
+const listedAt = new Map<string, string>();
+/** The reads of a listing going on, by source id and the commit they read for. */
+const listingReads = new Map<string, Promise<void>>();
+
+const readListing = async (id: string, commit: string | undefined) => {
+  if (commit !== undefined && listedAt.get(id) === commit) {
+    return;
+  }
+  if (commit !== undefined) {
+    const kept = await cachedRead<SourceSkillEvent[]>("listing", id, commit);
+    if (kept !== undefined) {
+      listedAt.set(id, commit);
       useAppStore.setState((s) => ({
         listings: { ...s.listings, [id]: kept },
       }));
+      return;
     }
   }
   // Only what this run read is kept: a failed run leaves the listing as it was.
   let read: SourceSkillEvent[] | undefined;
+  let at: string | undefined;
   await load(["source", "skills", id], (events, state) => {
     read = events.filter((e) => e.type === "source_skill");
+    at = events.find((e) => e.type === "source")?.commit;
     return { listings: { ...state.listings, [id]: read } };
   });
-  if (read !== undefined) {
-    void keepRead("listing", id, "", read);
+  if (read !== undefined && at !== undefined) {
+    listedAt.set(id, at);
+    void keepRead("listing", id, at, read);
+  }
+};
+
+/**
+ * Loads the skills of a source, for its open pill: the listing kept for `commit`, the one the
+ * inventory gives the source, else `source skills <id>`, a read of the last fetch. A listing the
+ * store holds at that commit is read no more, so the list changes once per fetch that moves the
+ * source.
+ */
+export const loadListing = async (id: string, commit?: string) => {
+  const key = `${id}\u0000${commit ?? ""}`;
+  const going = listingReads.get(key);
+  if (going !== undefined) {
+    await going;
+    return;
+  }
+  const read = readListing(id, commit);
+  listingReads.set(key, read);
+  try {
+    await read;
+  } finally {
+    listingReads.delete(key);
   }
 };
 

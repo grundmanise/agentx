@@ -75,7 +75,7 @@ type Source struct {
 	LastFetched   string `json:"last_fetched,omitempty"`
 	Added         string `json:"added,omitempty"`  // when the source was first added
 	Commit        string `json:"commit,omitempty"` // the fetched commit; absent when the store holds no ref
-	Skills        *int   `json:"skills,omitempty"` // how many skills the listing found, only after a listing; for the hub, its skill branches as its last fetch found them, absent before a fetch
+	Skills        *int   `json:"skills,omitempty"` // how many skills it holds at its commit, absent before a fetch; under the subpath of a listing, how many the listing found; for the hub, its skill branches as its last fetch found them
 }
 
 type Configuration struct {
