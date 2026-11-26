@@ -659,10 +659,10 @@ export interface PlanInput {
   /** The selected cards. */
   selected: SkillCard[];
   /**
-   * The listing the user started from with Select all or the preselection: that source's command
-   * takes `--all` and one `--except` per card of the listing not selected.
+   * The listings the user started from with Select all or the preselection, by source: each such
+   * source's command takes `--all` and one `--except` per card of its listing not selected.
    */
-  allOf?: { source: string; cards: SkillCard[] };
+  allOf?: ReadonlyMap<string, SkillCard[]>;
   /** The chosen install targets, in inventory order. */
   targets: string[];
   /** The enabled configurations among the targets: `--to` is given only when the two differ. */
@@ -683,13 +683,15 @@ export const planAdds = ({
   return groupCards(selected).map(({ source, cards: chosen }) => {
     const cards = orderCards(chosen);
     const names = cards.map((c) => c.name);
+    const all = allOf?.get(source);
     const selection =
-      allOf !== undefined && allOf.source === source
-        ? [
+      all === undefined
+        ? nameFlags(names)
+        : [
             "--all",
             // --except leaves out every skill of a name, so a name with a selected card stays in:
             // the CLI installs the first of it, which is the one that can be selected.
-            ...allOf.cards.flatMap((c) =>
+            ...all.flatMap((c) =>
               cards.some(
                 (s) =>
                   s.key === c.key ||
@@ -698,8 +700,7 @@ export const planAdds = ({
                 ? []
                 : ["--except", c.name]
             ),
-          ]
-        : nameFlags(names);
+          ];
     return {
       args: [
         "skill",

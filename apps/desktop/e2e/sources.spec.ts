@@ -1423,6 +1423,55 @@ test("Hub lists the hub's installable skills and adds by name", async ({
   ]);
 });
 
+test("the selection stays across sources, and Add adds each source's part", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await selectAll(page).click();
+  await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
+  await pill(page, "Hub").click();
+  await expect(row(page, "release-notes")).toBeVisible();
+  await check(page, "release-notes").click();
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 5" })
+  ).toBeVisible();
+  await pill(page, "acme/skills").click();
+  await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
+
+  const all = [
+    "skill",
+    "add",
+    ACME,
+    "--all",
+    "--except",
+    "letters",
+    "--except",
+    "pdf",
+    "--except",
+    "scratch",
+    "--except",
+    "xlsx",
+  ];
+  const hub = ["skill", "add", "--name", "release-notes"];
+  cli.register(all, {
+    events: [
+      { name: "artifacts", type: "library_skill" },
+      { name: "docx", type: "library_skill" },
+      { name: "forms", type: "library_skill" },
+      { name: "slides", type: "library_skill" },
+    ],
+  });
+  cli.register(hub, {
+    events: [{ name: "release-notes", type: "library_skill" }],
+  });
+  await bar(page).getByRole("button", { name: "Add 5" }).click();
+  await expect(bar(page)).toBeHidden();
+  expect(commandLines(cli)).toEqual(
+    expect.arrayContaining([all.join(" "), hub.join(" ")])
+  );
+});
+
 test("Refresh fetches the source, then reads the listing of the new fetch", async ({
   cli,
   page,
@@ -1653,7 +1702,7 @@ test("Select all in a source whose skills share a name: --all keeps the selected
   ]);
   const plan = (selected: typeof cards) =>
     planAdds({
-      allOf: { cards, source: ACME },
+      allOf: new Map([[ACME, cards]]),
       enabled: [],
       selected,
       targets: [],
