@@ -1,7 +1,7 @@
 // The Agents page (DESIGN.md §6 "Agent client card" and "Universal card"): every agent
 // configuration the scan detected, with its counts. A card's switch decides only where later
 // installs and creations go when no agent is named: `config enable <id>` and `config disable
-// <id>`, with Place all (`config enable <id> --place-all`) offered on the toast. The clients that
+// <id>`. The clients that
 // read the library share the Universal card and have no switch: they see the library whatever
 // their setting. A card's Placement control decides how later placements there are made, as a
 // symlink to the library or as a copy (`config placement <id> symlink|copy`); skills already placed
@@ -34,11 +34,10 @@ import {
   countsOf,
   libraryPathOf,
   placedAsCount,
-  unplacedCount,
 } from "#/screens/agents/counts.ts";
 import { removedText, removeFailure } from "#/screens/agents/remove.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
-import { convertedText, placedAllText } from "#/screens/skills/placements.ts";
+import { convertedText } from "#/screens/skills/placements.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -52,13 +51,6 @@ const Count = ({ n, noun }: { n: number; noun: string }) => (
 
 /** The label of a configuration's switch: the runner's name for it. */
 const switchLabel = (c: Configuration) => `enable ${c.id}`;
-
-const placeAll = (c: Configuration) => {
-  void runUntilSettled(["config", "enable", c.id, "--place-all"], {
-    label: switchLabel(c),
-    success: (events) => placedAllText(events, c.name),
-  });
-};
 
 /** The label of a configuration's Placement control: the runner's name for it. */
 const placementLabel = (c: Configuration) => `placement ${c.id}`;
@@ -248,18 +240,7 @@ const AgentCard = ({
   const pending = useSettling(switchLabel(c));
   const onToggle = (checked: boolean) => {
     if (checked) {
-      const n = unplacedCount(inventory, c.id);
       void runUntilSettled(["config", "enable", c.id], {
-        action:
-          n > 0
-            ? {
-                label: `Place all ${n}`,
-                onClick: () => {
-                  placeAll(c);
-                },
-                track: "enable-toast.place-all",
-              }
-            : undefined,
         label: switchLabel(c),
         success: `${c.name} enabled`,
       });

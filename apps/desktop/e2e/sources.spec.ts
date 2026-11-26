@@ -1198,6 +1198,7 @@ test("Add source runs source add, then opens the new source fully preselected", 
   await page.getByRole("button", { name: "Add source" }).click();
   await expect(dialog(page)).toBeVisible();
   await expect(dialog(page)).toContainText("Add #branch or #tag to pin it");
+  await expect(urlField(page)).toBeFocused();
   await urlField(page).fill("acme/more");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   await expect(dialog(page)).toHaveCount(0);
