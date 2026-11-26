@@ -238,12 +238,6 @@ test("the open source's card: its name, its full URL linking to the repository, 
   ).toBeVisible();
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
-
-  // A search answers across every source: the card stays.
-  await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
-  await expect(
-    details(page).getByRole("heading", { name: "me/hub" })
-  ).toBeVisible();
 });
 
 /** acme's skills A to Z, the order the list keeps whatever their state. */
@@ -1120,7 +1114,8 @@ test("search asks serve once per settled query and shows only the latest answer"
   ]);
   await expect(row(page, "artifacts")).toBeVisible();
 
-  // The matching answer replaces the listing, grouped by source.
+  // The matching answer takes the place of the source's card and listing: the open source's
+  // matches, each shared source counting its own. Hub, which a search does not cover, has none.
   await cli.serveEmit([
     {
       query: "pdf",
@@ -1129,9 +1124,19 @@ test("search asks serve once per settled query and shows only the latest answer"
       type: "search",
     },
   ]);
-  await expect(grid(page, "zeta/tools")).toBeVisible();
+  await expect(details(page)).toBeHidden();
   expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
+  await expect(pill(page, "acme/skills")).toHaveText("acme/skills1");
+  await expect(pill(page, "zeta/tools")).toHaveText("zeta/tools1");
+  await expect(pill(page, "Hub")).toHaveText("Hub");
+  await expect(pill(page, "Hub")).toBeDisabled();
+
+  // Another source shows its matches, and the search stays.
+  await pill(page, "zeta/tools").click();
   expect(await skillNames(grid(page, "zeta/tools"))).toEqual(["docgen"]);
+  await expect(field).toHaveValue("pdf");
+  await expect(grid(page, "acme/skills")).toHaveCount(0);
+  await pill(page, "acme/skills").click();
 
   // While the next query waits, the last answer stays: the listing does not come back between.
   await field.fill("pdfz");
@@ -1148,13 +1153,49 @@ test("search asks serve once per settled query and shows only the latest answer"
   ]);
   await expect(page.getByText("No skills match")).toBeVisible();
 
-  // Clearing the query shows the listing again, and the next query starts from it.
+  // Clearing the query shows the card and the listing again, and the next query starts from them.
   await field.fill("");
   await expect(row(page, "artifacts")).toBeVisible();
+  await expect(details(page)).toBeVisible();
+  await expect(pill(page, "acme/skills")).toHaveText("acme/skills8");
   await field.fill("x");
   await expect.poll(() => cli.serveRequests.length).toBe(4);
   await expect(row(page, "artifacts")).toBeVisible();
   await expect(page.getByText("No skills match")).toHaveCount(0);
+});
+
+test("a search while Hub is open shows the first source's matches, and Hub once it is cleared", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await pill(page, "Hub").click();
+  await expect(
+    details(page).getByRole("heading", { name: "me/hub" })
+  ).toBeVisible();
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
+  await field.fill("doc");
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit([
+    {
+      query: "doc",
+      request_id: lastSearch(cli).request_id,
+      results: docResults,
+      type: "search",
+    },
+  ]);
+  await expect(pill(page, "acme/skills")).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
+  await expect(details(page)).toBeHidden();
+
+  await field.fill("");
+  await expect(pill(page, "Hub")).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    details(page).getByRole("heading", { name: "me/hub" })
+  ).toBeVisible();
 });
 
 test("Add source runs source add, then opens the new source fully preselected", async ({

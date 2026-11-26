@@ -33,9 +33,10 @@ const toggleVariants = cva("inline-flex shrink-0 outline-none", {
       // logos, while the pill is a circle around one logo and a stadium clear of the stack.
       logo: "rounded-pill ring-offset-overlay-bg aria-pressed:ring-accent-primary items-center justify-center opacity-55 ring-offset-2 aria-pressed:opacity-100 aria-pressed:ring-2",
       // A source pill (DESIGN.md §2.2 "Buttons", `source-pill.*`): `source-pill.bg` with its label
-      // in `text.secondary`; the active one `source-pill.active-bg` and `source-pill.active-text`.
+      // in `text.secondary`; the active one `source-pill.active-bg` and `source-pill.active-text`;
+      // disabled, 30% opacity, as a button.
       "source-pill":
-        "rounded-pill type-button-sm bg-source-pill-bg text-text-secondary hover:text-text-primary aria-pressed:bg-source-pill-active-bg aria-pressed:text-source-pill-active-text aria-pressed:hover:text-source-pill-active-text h-8 items-center gap-2 px-3.5 font-medium whitespace-nowrap",
+        "rounded-pill type-button-sm bg-source-pill-bg text-text-secondary hover:text-text-primary aria-pressed:bg-source-pill-active-bg aria-pressed:text-source-pill-active-text aria-pressed:hover:text-source-pill-active-text h-8 items-center gap-2 px-3.5 font-medium whitespace-nowrap transition-opacity duration-200 disabled:pointer-events-none disabled:opacity-30",
     },
   },
 });

@@ -19,6 +19,7 @@ import {
 } from "#/components/ui/input-group.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { problemSentence, skillNamesOf } from "#/lib/problem-text.ts";
+import { cn } from "#/lib/utils.ts";
 import { FloatingActionBar } from "#/screens/sources/action-bar.tsx";
 import { addProblem } from "#/screens/sources/add-problem.ts";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
@@ -26,7 +27,6 @@ import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
 import {
   count,
-  groupCards,
   installableCards,
   listingCards,
   pageRef,
@@ -151,6 +151,42 @@ const usePills = (
   return { pills, setJustAdded };
 };
 
+/** The pill a search shows the matches of: Hub, which a search does not cover, gives way to the first source. */
+const shownPillOf = (
+  pills: SourcePill[],
+  active: SourcePill | undefined,
+  searching: boolean
+) =>
+  searching && active?.key === HUB_SKILLS
+    ? pills.find((p) => p.key !== HUB_SKILLS)
+    : active;
+
+/** Each shared source's count of matches, by its key, for its pill in place of its skill count. */
+const matchCounts = (pills: SourcePill[], results: SearchResult[]) =>
+  new Map(
+    pills.flatMap((p) =>
+      p.url === undefined
+        ? []
+        : [[p.key, results.filter((r) => r.source === p.url).length] as const]
+    )
+  );
+
+/** The cards of a search's matches in the pill's source, A to Z. */
+const matchedCards = (
+  pill: SourcePill,
+  results: SearchResult[],
+  library: LibraryEntry[]
+): SkillCard[] =>
+  pill.url === undefined
+    ? noCards
+    : nameOrder(
+        resultCards(
+          results.filter((r) => r.source === pill.url),
+          library,
+          () => pageRef(pill.source)
+        )
+      );
+
 /** The selection without the cards `drop` names. */
 const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
   const next = new Map(selection);
@@ -164,8 +200,8 @@ const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
 
 /**
  * The Sources screen, under Skills: Refresh all and Add source, the sources as pills, the card of the open one with its facts,
- * Refresh and Remove, its skills as a list to open and select, search across every source through serve,
- * and the floating bar that installs the selection with `skill add`. Every list comes from the
+ * Refresh and Remove, its skills as a list to open and select, search across every shared source through
+ * serve, whose matches the pills count and the list shows source by source, and the floating bar that installs the selection with `skill add`. Every list comes from the
  * CLI: the app never filters a listing itself.
  */
 export const SourcesScreen = () => {
@@ -215,7 +251,6 @@ export const SourcesScreen = () => {
     setSelection(noSelection);
     setAllMode(false);
   });
-  const activeKey = activePill?.key;
 
   useLoadUnopened(activePill, active);
 
@@ -227,13 +262,12 @@ export const SourcesScreen = () => {
     }
   };
 
-  /** Makes `key` the open pill, with nothing selected and no search. */
+  /** Makes `key` the open pill, with nothing selected; a search stays. */
   const select = (key: string) => {
     opened.current = key;
     setActive(key);
     setSelection(noSelection);
     setAllMode(false);
-    changeQuery("");
     setNow(Date.now());
   };
   const open = (key: string) => {
@@ -241,63 +275,57 @@ export const SourcesScreen = () => {
     void loadPill(key);
   };
 
+  // A search answer replaces the listing. While the latest query waits for its answer, the last
+  // answer stays, so the list and its Select all count change once, not back to the listing between.
+  const results = query.trim() === "" ? undefined : found;
+  const shownPill = shownPillOf(pills, activePill, results !== undefined);
+  const shownKey = shownPill?.key;
+  const matches =
+    results === undefined ? undefined : matchCounts(pills, results);
+
   const listing =
-    activePill === undefined || activePill.key === HUB_SKILLS
+    shownPill === undefined || shownPill.key === HUB_SKILLS
       ? undefined
-      : listings[activePill.key];
+      : listings[shownPill.key];
   const shownCards = (): SkillCard[] => {
-    if (activePill === undefined) {
+    if (shownPill === undefined) {
       return noCards;
     }
-    if (activePill.key === HUB_SKILLS) {
+    if (results !== undefined) {
+      return matchedCards(shownPill, results, library);
+    }
+    if (shownPill.key === HUB_SKILLS) {
       return installable === undefined
         ? noCards
         : nameOrder(installableCards(installable, library));
     }
-    return listing === undefined || activePill.url === undefined
+    return listing === undefined || shownPill.url === undefined
       ? noCards
       : nameOrder(
           listingCards(
             listing,
-            activePill.url,
+            shownPill.url,
             library,
-            pageRef(sources.find((s) => s.id === activePill.key))
+            pageRef(sources.find((s) => s.id === shownPill.key))
           )
         );
   };
   const shown = shownCards();
-  // A search answer replaces the listing. While the latest query waits for its answer, the last
-  // answer stays, so the list and its Select all count change once, not back to the listing between.
-  const results = query.trim() === "" ? undefined : found;
-  const resultGroups =
-    results === undefined
-      ? undefined
-      : groupCards(
-          nameOrder(
-            resultCards(
-              // A source removed while the answer is shown takes its results with it.
-              results.filter((r) => sources.some((s) => s.url === r.source)),
-              library,
-              (url) => pageRef(sources.find((s) => s.url === url))
-            )
-          )
-        );
   const groups: CardGroup[] =
-    resultGroups ??
-    (activePill === undefined
+    shownPill === undefined
       ? []
       : [
           {
             cards: shown,
-            label: activePill.label,
-            source: activePill.url ?? HUB_SKILLS,
+            label: shownPill.label,
+            source: shownPill.url ?? HUB_SKILLS,
           },
-        ]);
+        ];
   const allCards = groups.flatMap((g) => g.cards);
   const selectable = allCards.filter((c) => c.status === undefined);
   const selectedCount = selectable.filter((c) => selection.has(c.key)).length;
   const loading = usePending(
-    activeKey === undefined ? "" : loadingLabel(activeKey)
+    shownKey === undefined ? "" : loadingLabel(shownKey)
   );
 
   // Each settled query asks serve once; the answer to the latest request replaces the listing.
@@ -471,8 +499,8 @@ export const SourcesScreen = () => {
   const add = async () => {
     const plans = planAdds({
       allOf:
-        allMode && activePill !== undefined && results === undefined
-          ? { cards: shown, source: activePill.url ?? HUB_SKILLS }
+        allMode && shownPill !== undefined && results === undefined
+          ? { cards: shown, source: shownPill.url ?? HUB_SKILLS }
           : undefined,
       enabled,
       selected: [...selection.values()],
@@ -485,6 +513,7 @@ export const SourcesScreen = () => {
   const onSourceAdded = async (source: Source) => {
     setJustAdded(source);
     select(source.id);
+    changeQuery("");
     await loadPill(source.id);
     if (opened.current !== source.id) {
       return;
@@ -503,13 +532,13 @@ export const SourcesScreen = () => {
     if (pills.length === 0) {
       return "Add a source to see its skills";
     }
-    if (resultGroups !== undefined) {
-      return resultGroups.length === 0 ? "No skills match" : undefined;
+    if (results !== undefined) {
+      return shown.length === 0 ? "No skills match" : undefined;
     }
-    if (loading || activePill === undefined) {
+    if (loading || shownPill === undefined) {
       return undefined;
     }
-    if (activePill.key === HUB_SKILLS) {
+    if (shownPill.key === HUB_SKILLS) {
       return installable !== undefined && shown.length === 0
         ? "Every skill on your hub is on this machine"
         : undefined;
@@ -568,17 +597,34 @@ export const SourcesScreen = () => {
             }}
           />
         </InputGroup>
-        <SourceRow pills={pills} active={activeKey} now={now} onOpen={open} />
-        {/* The card of the open source; it stays while a search looks across every source. */}
+        <SourceRow
+          pills={pills}
+          active={shownKey}
+          matches={matches}
+          now={now}
+          onOpen={open}
+        />
+        {/* The card of the open source folds away while a search shows, and the results take its place. */}
         {activePill !== undefined && (
-          <OpenSource
-            // A new source gets a new card, so a Remove dialog open on the old one closes.
-            key={activePill.key}
-            pill={activePill}
-            library={library}
-            now={now}
-            fallbackFocus={searchField}
-          />
+          <div
+            className={cn(
+              "grid transition-all duration-300 ease-in-out motion-reduce:transition-none",
+              results === undefined
+                ? "grid-rows-source-card"
+                : "grid-rows-source-card-folded -mt-page-title invisible opacity-0"
+            )}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <OpenSource
+                // A new source gets a new card, so a Remove dialog open on the old one closes.
+                key={activePill.key}
+                pill={activePill}
+                library={library}
+                now={now}
+                fallbackFocus={searchField}
+              />
+            </div>
+          </div>
         )}
         {allCards.length > 0 && (
           <SelectAllRow
@@ -590,19 +636,24 @@ export const SourcesScreen = () => {
             onClear={clear}
           />
         )}
-        {emptyText === undefined ? (
-          <SkillList
-            groups={groups.filter((g) => g.cards.length > 0)}
-            captions={resultGroups !== undefined}
-            selected={new Set(selection.keys())}
-            onToggle={toggleCard}
-            scroller={scroller}
-          />
-        ) : (
-          <p className="type-secondary text-text-hint m-0 py-10 text-center">
-            {emptyText}
-          </p>
-        )}
+        {/* The results and the listing fade in as they take each other's place. */}
+        <div
+          key={results === undefined ? "listing" : "results"}
+          className="animate-fade-in flex-none motion-reduce:animate-none"
+        >
+          {emptyText === undefined ? (
+            <SkillList
+              groups={groups.filter((g) => g.cards.length > 0)}
+              selected={new Set(selection.keys())}
+              onToggle={toggleCard}
+              scroller={scroller}
+            />
+          ) : (
+            <p className="type-secondary text-text-hint m-0 py-10 text-center">
+              {emptyText}
+            </p>
+          )}
+        </div>
         {/* Room for the floating bar over the last skill of the list. */}
         {selection.size > 0 && <div className="h-floating-bar flex-none" />}
       </div>

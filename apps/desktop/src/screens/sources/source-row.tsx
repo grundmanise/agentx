@@ -19,17 +19,22 @@ const StaleDot = ({ title }: { title: string }) => (
 
 /**
  * The sources row of the Sources screen: one pill per shared source and Hub, the active one
- * lit, each with its skill count once it is known and the attention dot when it is stale.
+ * lit, each with its skill count once it is known and the attention dot when it is stale. While
+ * a search shows, each shared source counts its matches instead, and Hub, which a search does not
+ * cover, has no count and cannot be opened.
  */
 export const SourceRow = ({
   pills,
   active,
+  matches,
   now,
   onOpen,
 }: {
   pills: SourcePill[];
   /** The key of the active pill. */
   active: string | undefined;
+  /** Each shared source's count of matches, by its key, while a search shows. */
+  matches?: ReadonlyMap<string, number>;
   /** Date.now(), for the stale dots. */
   now: number;
   onOpen: (key: string) => void;
@@ -39,12 +44,14 @@ export const SourceRow = ({
     {pills.map((pill) => {
       const stale = staleTitle(pill.lastFetched, now);
       const pressed = pill.key === active;
+      const shown = matches === undefined ? pill.skills : matches.get(pill.key);
       return (
         <Toggle
           key={pill.key}
           kind="source-pill"
           track="sources.pill-open"
           pressed={pressed}
+          disabled={matches !== undefined && !matches.has(pill.key)}
           onPressedChange={() => {
             onOpen(pill.key);
           }}
@@ -52,7 +59,7 @@ export const SourceRow = ({
         >
           {stale !== undefined && <StaleDot title={stale} />}
           {pill.label}
-          {pill.skills !== undefined && (
+          {shown !== undefined && (
             <span
               className={cn(
                 "type-technical-sm",
@@ -61,7 +68,7 @@ export const SourceRow = ({
                   : "text-source-pill-count"
               )}
             >
-              {pill.skills}
+              {shown}
             </span>
           )}
         </Toggle>
