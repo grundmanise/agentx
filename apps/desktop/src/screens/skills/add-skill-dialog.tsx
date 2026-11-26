@@ -43,7 +43,9 @@ import {
   count,
   linkAdd,
   listingCards,
+  oneOfEachName,
   orderCards,
+  withSelectedTwins,
 } from "#/screens/sources/projection.ts";
 import type { SkillCard } from "#/screens/sources/projection.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
@@ -147,8 +149,12 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
   const cards =
     found === undefined
       ? []
-      : orderCards(listingCards(found.listing, found.url, library));
+      : withSelectedTwins(
+          orderCards(listingCards(found.listing, found.url, library)),
+          selection
+        );
   const selectable = cards.filter((c) => c.status === undefined);
+  const oneEach = oneOfEachName(selectable);
   const selected = selectable.filter((c) => selection.has(c.key));
   const nothing = nothingToInstall(cards);
 
@@ -309,9 +315,16 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
                 <SelectAllRow
                   track="add-skill-dialog.select-all"
                   selected={selected.length}
-                  total={selectable.length}
+                  total={oneEach.length}
                   onSelectAll={() => {
-                    setSelection(new Set(selectable.map((c) => c.key)));
+                    setSelection(
+                      new Set(
+                        [
+                          ...selected,
+                          ...oneOfEachName(selectable, selected),
+                        ].map((c) => c.key)
+                      )
+                    );
                   }}
                   onClear={() => {
                     setSelection(new Set());

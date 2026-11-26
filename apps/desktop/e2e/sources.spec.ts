@@ -5,9 +5,11 @@ import {
   installableCards,
   installOf,
   listingCards,
+  oneOfEachName,
   planAdds,
   skillPage,
   webUrl,
+  withSelectedTwins,
 } from "#/screens/sources/projection.ts";
 
 import { filesOf } from "./fixtures/skills.ts";
@@ -356,7 +358,7 @@ const drawnRows = async (page: Page) =>
     return rows;
   });
 
-test("a source of plugins whose skills share names: a row each, drawn once, the later of a name in use", async ({
+test("a source of plugins whose skills share names: a row each, drawn once, either of a name selectable", async ({
   cli,
   page,
 }) => {
@@ -385,7 +387,7 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   // A to Z, so the two skills of a name sit side by side, the first of the listing first.
   await expect(row(page, "skill-00").first()).toBeVisible();
   await expect(row(page, "skill-00")).toHaveCount(2);
-  // The later skill of each name is not on this machine, so none counts as added.
+  // Select all takes one skill of each name, and none counts as added.
   await expect(page.getByText("Select all 90")).toBeVisible();
   await expect(page.getByText(/already added/u)).toHaveCount(0);
 
@@ -424,22 +426,25 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   drawnNames.sort((a, b) => a.localeCompare(b));
   expect(drawnNames).toEqual(shared.flatMap((name) => [name, name]));
 
-  // The later skill of a name cannot be selected, and says why once open.
+  // Either skill of a name can be selected; selecting one leaves the other out, which says why
+  // once open.
+  const first = rowLine(page, "skill-89").first();
   const second = rowLine(page, "skill-89").last();
-  await expect(second.getByText("Name taken", { exact: true })).toBeVisible();
+  await second.getByRole("button", { name: "Select skill-89" }).click();
+  await expect(first.getByText("Name taken", { exact: true })).toBeVisible();
   await expect(
-    second.getByRole("button", { name: "Select skill-89" })
+    first.getByRole("button", { name: "Select skill-89" })
   ).toHaveCount(0);
-  cli.register(["source", "read", ACME_ID, "beta/skills/skill-89"], {
+  cli.register(["source", "read", ACME_ID, "alpha/skills/skill-89"], {
     events: [skillMd("skill-89", "# skill-89\n")],
   });
-  await row(page, "skill-89").last().click();
+  await row(page, "skill-89").first().click();
   await expect(opened(page, "skill-89")).toContainText(
-    "This source has another skill-89 skill at alpha/skills/skill-89. Only that one can be added."
+    'Only one "skill-89" skill can be added, and the one at beta/skills/skill-89 is selected.'
   );
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
-    `source read ${ACME_ID} beta/skills/skill-89`,
+    `source read ${ACME_ID} alpha/skills/skill-89`,
   ]);
 });
 
@@ -1514,7 +1519,7 @@ test("Remove alone removes the source and keeps its skills", async ({
   ]);
 });
 
-test("Select all in a source whose skills share a name: --all keeps the selected one of the name", () => {
+test("a source whose skills share a name: either can be selected, the other left out by its folder", () => {
   const listing: SourceSkillEvent[] = [
     ["alpha/pdf", "pdf"],
     ["beta/pdf", "pdf"],
@@ -1529,11 +1534,24 @@ test("Select all in a source whose skills share a name: --all keeps the selected
     type: "source_skill",
   }));
   const cards = listingCards(listing, ACME, []);
-  const selectable = cards.filter((c) => c.status === undefined);
-  expect(selectable.map((c) => c.skillMd?.subpath)).toEqual([
+  const [alpha, beta, format] = cards;
+  if (alpha === undefined || beta === undefined || format === undefined) {
+    throw new Error("three cards");
+  }
+  expect(cards.every((c) => c.status === undefined)).toBe(true);
+  expect(oneOfEachName(cards).map((c) => c.skillMd?.subpath)).toEqual([
     "alpha/pdf",
     "format",
   ]);
+  const blocked = withSelectedTwins(cards, new Set([beta.key]));
+  expect(blocked.map((c) => c.status)).toEqual([
+    "name-taken",
+    undefined,
+    undefined,
+  ]);
+  expect(blocked[0]?.title).toBe(
+    'Only one "pdf" skill can be added, and the one at beta/pdf is selected.'
+  );
   const plan = (selected: typeof cards) =>
     planAdds({
       allOf: { cards, source: ACME },
@@ -1541,10 +1559,29 @@ test("Select all in a source whose skills share a name: --all keeps the selected
       selected,
       targets: [],
     }).map((p) => p.args);
-  expect(plan(selectable)).toEqual([["skill", "add", ACME, "--all"]]);
-  expect(plan(selectable.filter((c) => c.name !== "pdf"))).toEqual([
-    ["skill", "add", ACME, "--all", "--except", "pdf", "--except", "pdf"],
+  expect(plan([alpha, format])).toEqual([
+    ["skill", "add", ACME, "--all", "--except", "beta/pdf"],
   ]);
+  expect(plan([beta, format])).toEqual([
+    ["skill", "add", ACME, "--all", "--except", "alpha/pdf"],
+  ]);
+  expect(plan([format])).toEqual([
+    [
+      "skill",
+      "add",
+      ACME,
+      "--all",
+      "--except",
+      "alpha/pdf",
+      "--except",
+      "beta/pdf",
+    ],
+  ]);
+  expect(
+    planAdds({ enabled: [], selected: [beta, format], targets: [] }).map(
+      (p) => p.args
+    )
+  ).toEqual([["skill", "add", ACME, "--name", "format", "--name", "beta/pdf"]]);
 });
 
 test("the repository link of a source URL", () => {

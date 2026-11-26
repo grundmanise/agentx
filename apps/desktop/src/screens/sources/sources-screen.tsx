@@ -31,8 +31,10 @@ import {
   listingCards,
   pageRef,
   nameOrder,
+  oneOfEachName,
   planAdds,
   resultCards,
+  withSelectedTwins,
   sourcePills,
   HUB_SKILLS,
 } from "#/screens/sources/projection.ts";
@@ -282,7 +284,7 @@ export const SourcesScreen = () => {
             )
           )
         );
-  const groups: CardGroup[] =
+  const groups: CardGroup[] = (
     resultGroups ??
     (activePill === undefined
       ? []
@@ -292,10 +294,12 @@ export const SourcesScreen = () => {
             label: activePill.label,
             source: activePill.url ?? HUB_SKILLS,
           },
-        ]);
+        ])
+  ).map((g) => ({ ...g, cards: withSelectedTwins(g.cards, selection) }));
   const allCards = groups.flatMap((g) => g.cards);
   const selectable = allCards.filter((c) => c.status === undefined);
   const selectedCount = selectable.filter((c) => selection.has(c.key)).length;
+  const selectableCount = oneOfEachName(selectable).length;
   const loading = usePending(
     activeKey === undefined ? "" : loadingLabel(activeKey)
   );
@@ -344,7 +348,7 @@ export const SourcesScreen = () => {
   const selectAll = () => {
     setSelection((prev) => {
       const next = new Map(prev);
-      for (const card of selectable) {
+      for (const card of oneOfEachName(selectable, next.values())) {
         next.set(card.key, card);
       }
       return next;
@@ -495,7 +499,7 @@ export const SourcesScreen = () => {
       source.url,
       state.inventory?.library ?? noEntries
     ).filter((c) => c.status === undefined);
-    setSelection(new Map(cards.map((c) => [c.key, c])));
+    setSelection(new Map(oneOfEachName(cards).map((c) => [c.key, c])));
     setAllMode(true);
   };
 
@@ -585,7 +589,7 @@ export const SourcesScreen = () => {
             align="end"
             track="sources.select-all"
             selected={selectedCount}
-            total={selectable.length}
+            total={selectableCount}
             onSelectAll={selectAll}
             onClear={clear}
           />

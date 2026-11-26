@@ -521,6 +521,33 @@ func TestSkillAddSkipsTwoSkillsOfOneName(t *testing.T) {
 	equal(t, "stderr of the install by name", again.stderr, "")
 }
 
+// TestSkillAddNamesASkillByItsDirectory installs the later of two skills of
+// one name by its directory in the source, with --name, or by leaving the
+// first out with --except, and the run skips nothing.
+func TestSkillAddNamesASkillByItsDirectory(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{
+		{"--name", "skills/second"},
+		{"--name", "./skills/second/"},
+		{"--all", "--except", "skills/first"},
+	} {
+		h := newHarness(t)
+		h.build(t, fixture{dirs: []string{".claude"}})
+		s := h.newSourceRepo("twins", true)
+		s.skill("skills/first", "twin", "The first of the two", nil)
+		s.skill("skills/second", "twin", "The second of the two", nil)
+		s.commit("two skills of one name")
+		out := h.run(append([]string{"skill", "add", s.url}, args...)...)
+		equal(t, "exit of "+strings.Join(args, " "), out.exit, 0)
+		equal(t, "stderr of "+strings.Join(args, " "), out.stderr, "")
+		md, err := os.ReadFile(filepath.Join(h.library, "twin", "SKILL.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		contains(t, "the twin installed by "+strings.Join(args, " "), string(md), "The second of the two")
+	}
+}
+
 // TestSkillAddSignalsNothingWhenNothingInstalls leaves the version file,
 // which is the change signal agentx home carries, where it was when every
 // skill of a run was refused: nothing changed, so nothing watching the home
