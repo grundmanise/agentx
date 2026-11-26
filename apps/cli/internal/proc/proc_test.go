@@ -2,8 +2,14 @@ package proc
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -103,5 +109,47 @@ func TestRunKillsAfterTheGracePeriodOnADeadline(t *testing.T) {
 	}
 	if !res.TimedOut || res.Cancelled || res.ExitCode != nil {
 		t.Fatalf("result = %+v (exit %d), want timed out and killed by a signal", res, code(res))
+	}
+}
+
+// A command's output reaches line whole, however slowly line takes it and
+// whatever the command left running with its output open: the lines in
+// the pipe when the grace period ends are read before Run returns, and Run
+// does not wait for the process left running.
+func TestRunHandsOverAllTheCommandWroteWhenLineIsSlow(t *testing.T) {
+	t.Parallel()
+	left := filepath.Join(t.TempDir(), "left")
+	t.Cleanup(func() {
+		if b, err := os.ReadFile(left); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	var got []string
+	slow := true
+	begun := time.Now()
+	res, err := Run(context.Background(), Command{
+		Path:  "/bin/sh",
+		Args:  []string{"-c", `i=0; while [ $i -lt 100 ]; do printf '%0500d\n' $i; i=$((i+1)); done; sleep 60 & echo $! > ` + left},
+		Grace: 100 * time.Millisecond,
+	}, func(_ string, text []byte) {
+		if slow {
+			slow = false
+			time.Sleep(300 * time.Millisecond)
+		}
+		got = append(got, string(text))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code(res) != 0 {
+		t.Fatalf("result = %+v (exit %d), want exit 0", res, code(res))
+	}
+	if len(got) != 100 || got[99] != fmt.Sprintf("%0500d", 99) {
+		t.Fatalf("got %d lines, want 100", len(got))
+	}
+	if took := time.Since(begun); took > 5*time.Second {
+		t.Fatalf("the run took %v: it waited for the sleep the command left running", took)
 	}
 }
