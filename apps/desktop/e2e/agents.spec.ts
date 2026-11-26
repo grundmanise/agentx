@@ -1,5 +1,5 @@
 // The Agents page: every configuration the scan detected, with its counts from the inventory's
-// edges, the Enabled switch, which runs `config enable|disable <id>` and offers Place all, the
+// edges, the Enabled switch, which runs `config enable|disable <id>`, the
 // Placement control, which runs `config placement <id> symlink|copy` and offers Convert, and Remove in the menu of a card and of a Universal column, which confirms and runs
 // `config remove <id> --yes`.
 import type { Locator, Page } from "@playwright/test";
@@ -115,7 +115,7 @@ test("the Universal card wraps many agents into rows and stacks five logos", asy
   expect(last?.y).toBeGreaterThan(first?.y ?? 0);
 });
 
-test("turning an agent on runs config enable, and Place all places the library there", async ({
+test("turning an agent on runs config enable, with no action on the toast", async ({
   cli,
   page,
 }) => {
@@ -135,7 +135,11 @@ test("turning an agent on runs config enable, and Place all places the library t
   // The switch shows the inventory's state until the next inventory arrives.
   await expect(toggle).not.toBeChecked();
   enable.release();
-  await expect(toasts(page).getByText("Devin enabled")).toBeVisible();
+  const toast = toasts(page)
+    .getByRole("listitem")
+    .filter({ hasText: "Devin enabled" });
+  await expect(toast).toBeVisible();
+  await expect(toast.getByRole("button")).toHaveCount(0);
   await expect.poll(() => cli.serveRequests.length).toBe(1);
   await expect(toggle).toHaveAttribute("aria-busy", "true");
   await cli.serveEmit([
@@ -156,30 +160,7 @@ test("turning an agent on runs config enable, and Place all places the library t
   await expect(toggle).toBeChecked();
   await expect(toggle).not.toHaveAttribute("aria-busy");
 
-  // Seven library skills, none placed in Devin.
-  const warning =
-    "devin: /home/me/.config/devin/skills/scratch is not a placement agentx made and was left as it is";
-  cli.register(["config", "enable", "devin", "--place-all"], {
-    events: [
-      { type: "settings" },
-      {
-        ok: true,
-        summary: "devin is now enabled, 6 skills placed, 1 placement skipped",
-        type: "result",
-      },
-    ],
-    logs: [{ level: "warn", message: warning }],
-  });
-  await toasts(page).getByRole("button", { name: "Place all 7" }).click();
-  const toast = toasts(page)
-    .getByRole("listitem")
-    .filter({ hasText: "Placed 6 skills in Devin, 1 skipped" });
-  await expect(toast).toBeVisible();
-  await expect(toast).toContainText(warning);
-  expect(later(cli)).toEqual([
-    ["config", "enable", "devin", "--json"],
-    ["config", "enable", "devin", "--place-all", "--json"],
-  ]);
+  expect(later(cli)).toEqual([["config", "enable", "devin", "--json"]]);
 });
 
 test("turning an agent off runs config disable", async ({ cli, page }) => {
