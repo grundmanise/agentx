@@ -2,9 +2,9 @@
 // `version` and `doctor` at the same time, then starts the serve child and waits for its first
 // inventory, or for a problem it reports. Both commands run through serve, so the first of them
 // starts its child; serve's own events count from the serve step on. The layer shows only when a
-// check fails, when a command exits with code 8, and in manual mode. Until the checks pass, the
-// panel shows the kept inventory under a frosted pane (src/store/launch-cache.ts), or, on a launch
-// with none, that it loads. The only commands it runs are `version`, `doctor` and `serve`: it
+// check fails and when a command exits with code 8; manual mode shows the checks in a dialog
+// instead (src/app/checks-dialog.tsx). Until the checks pass, the panel shows the kept inventory
+// under a frosted pane (src/store/launch-cache.ts), or, on a launch with none, that it loads. The only commands it runs are `version`, `doctor` and `serve`: it
 // changes nothing on disk.
 import { create } from "zustand";
 
@@ -44,7 +44,10 @@ export interface StartupState {
    * runs until they do.
    */
   cached: boolean;
-  /** "launch" closes the layer once the checks pass; "manual" waits for Open agentx. */
+  /**
+   * "launch" shows the layer, which closes once the checks pass; "manual" shows the Run checks
+   * dialog, which stays until Done.
+   */
   mode: "launch" | "manual";
   running: boolean;
   /** What the running sequence waits for. */
@@ -314,7 +317,7 @@ const sequence = async () => {
     if (mine === generation) {
       const { passed } = readChecks(findings, false);
       update({
-        // A failure shows the layer; a pass closes it at once, except in manual mode.
+        // A failure shows the layer, or the dialog in manual mode; a pass closes the layer at once.
         open: !passed || useStartup.getState().mode === "manual",
         ready: useStartup.getState().ready || passed,
         retrying: false,
@@ -415,13 +418,13 @@ export const retry = () => {
   void sequence();
 };
 
-/** Opens the layer in manual mode and runs the checks, as Settings › Run checks does. */
+/** Opens the Run checks dialog and runs the checks, as Settings › Run checks does. */
 export const runChecks = () => {
   update({ mode: "manual", open: true });
   void sequence();
 };
 
-/** Closes the layer: Open agentx in manual mode. */
+/** Closes the Run checks dialog: a check that fails later shows the layer. */
 export const closeChecks = () => {
-  update({ open: false });
+  update({ mode: "launch", open: false });
 };

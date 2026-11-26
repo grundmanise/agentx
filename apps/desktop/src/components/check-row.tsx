@@ -135,3 +135,15 @@ export const CheckRow = ({ check }: { check: Check }) => {
     </li>
   );
 };
+
+/** The startup checks in order, as the startup layer and the Run checks dialog list them. */
+export const CheckList = ({ checks }: { checks: Check[] }) => (
+  <ul
+    aria-label="Checks"
+    className="gap-check-row m-0 flex list-none flex-col p-0"
+  >
+    {checks.map((check) => (
+      <CheckRow key={check.label} check={check} />
+    ))}
+  </ul>
+);

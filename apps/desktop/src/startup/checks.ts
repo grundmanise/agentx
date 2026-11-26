@@ -243,6 +243,14 @@ export const readChecks = (found: Findings, running: boolean): Checks => {
   };
 };
 
+/** The title over the checks: what runs, the first failure, or that every check passed. */
+export const checksTitle = ({ failure }: Checks, running: boolean): string => {
+  if (running) {
+    return "Checking this machine";
+  }
+  return failure ?? "You're all set";
+};
+
 const glyphs: Record<DoctorStatus, string> = {
   fail: "✗",
   info: "•",
