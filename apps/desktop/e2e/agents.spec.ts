@@ -52,7 +52,7 @@ test("lists the Universal card first, then the direct agents, with their counts"
     - article "Claude Code":
       - switch "Enabled" [checked]
       - heading "Claude Code" [level=2]
-      - text: /home/me/.claude-code
+      - link "/home/me/.claude-code"
       - paragraph: 5 skills · 1 server · 1 plugin
       - radiogroup "Placement":
         - radio "Symlink" [checked]
@@ -466,6 +466,30 @@ test("a click on cards selects them, and the bar enables, disables or removes th
     ["config", "disable", "cursor", "--json"],
     ["config", "remove", "codex", "github-copilot", "--yes", "--json"],
   ]);
+});
+
+test("an agent's path shows it in Finder without selecting it, and a column's divider is outside its selection", async ({
+  cli,
+  page,
+}) => {
+  await openAgents(cli, page);
+  const cursor = card(page, "Cursor");
+  await cursor.getByRole("link", { name: "/home/me/.cursor" }).click();
+  await expect.poll(() => cli.reveals).toEqual([["/home/me/.cursor"]]);
+  await expect(
+    cursor.getByRole("button", { name: "Select Cursor" })
+  ).toHaveAttribute("aria-pressed", "false");
+
+  const codex = card(page, "Universal").getByRole("region", { name: "Codex" });
+  const toggle = codex.getByRole("button", { name: "Select Codex" });
+  const box = await codex.boundingBox();
+  if (box === null) {
+    throw new Error("not visible");
+  }
+  await page.mouse.click(box.x, box.y + box.height / 2);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
 });
 
 test("an agent whose skills folder links to the library: a direct agent whose placement is fixed", async ({
