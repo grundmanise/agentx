@@ -303,14 +303,19 @@ func TestServeFetchesSourcesSettingsNameWithoutAStore(t *testing.T) {
 	p.passInventories = true
 	p.next("inventory")
 	h.awaitWrite(t, before)
-	want := []string{two.url + " gamma gamma"}
+	// The two fetches publish their refs one after the other, and a rebuild
+	// can fall between them, so the searches wait for an index that holds both.
+	want := map[string][]string{"alpha": {one.url + " skills/alpha alpha"}, "gamma": {two.url + " gamma gamma"}}
 	searches := 0
-	awaitTrue(t, fmt.Sprintf("a search finds %q", want), func() bool {
-		searches++
-		return reflect.DeepEqual(p.search(fmt.Sprintf("s%d", searches), "gamma"), want)
+	awaitTrue(t, fmt.Sprintf("searches find %q", want), func() bool {
+		for query, found := range want {
+			searches++
+			if !reflect.DeepEqual(p.search(fmt.Sprintf("s%d", searches), query), found) {
+				return false
+			}
+		}
+		return true
 	})
-	searches++
-	equal(t, "a search for one's skill", strings.Join(p.search(fmt.Sprintf("s%d", searches), "alpha"), "\n"), one.url+" skills/alpha alpha")
 	equal(t, "exit", p.close(), 0)
 	if warned := warnings(h, p.stderr.String()); len(warned) != 0 {
 		t.Errorf("the warnings = %q, want none", warned)
