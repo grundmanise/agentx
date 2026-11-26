@@ -208,6 +208,7 @@
   --color-checkbox-ring: var(--gray-700);
   --color-checkbox-checked-bg: var(--color-accent-primary);
   --color-checkbox-check: var(--color-on-accent);
+  --color-checkbox-disabled-bg: rgb(237 237 239 / 0.04);
 
   /* Segmented control */
   --color-segmented-track-bg: var(--gray-950);
@@ -739,6 +740,7 @@
   --max-height-confirm-list: 200px;
   --max-height-agent-picker-list: 320px;
   --max-height-add-skill-list: 264px;
+  --width-add-skill-search: 224px;
   --max-height-update-skills-list: 400px;
   --width-filter-tags: 264px;
   --max-height-filter-tags: 112px;
