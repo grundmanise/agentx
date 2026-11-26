@@ -1,12 +1,14 @@
-// Updates: the app's version and when it last checked, Check for updates and Release notes, then
+// Updates: the app's version with its Release notes, when it last checked and Check for updates, then
 // the Automatic update checks and Include nightly builds switches, app preferences (ADR 0013,
 // ADR 0019). Check for updates
 // checks at once; once a check finds an update, the button follows it as the title bar does
 // (`src/app/app-update-status.tsx`): Update to, Installing, Restart to update. Release notes opens
-// this version's release on GitHub; a build that is no release, version 0.0.0, has none. A
+// this version's release on GitHub, and What's new the release of the update a check found; a
+// build that is no release, version 0.0.0, has no Release notes. A
 // browser has no app to update, so there the card is left out.
 import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useId, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   checkAppUpdateNow,
@@ -101,7 +103,29 @@ const UpdateButton = () => {
   );
 };
 
-/** The version, when the app last checked or the update it found, and the buttons. */
+/** A link to a version's release on GitHub. */
+const ReleaseLink = ({
+  version,
+  track,
+  label,
+}: {
+  version: string;
+  track: string;
+  label: string;
+}) => (
+  <Button
+    variant="link"
+    size="inline"
+    track={track}
+    onClick={() => {
+      void openInBrowser(`${RELEASES}/v${version}`);
+    }}
+  >
+    {label}
+  </Button>
+);
+
+/** The version with its Release notes, when the app last checked or the update it found, and the button. */
 const VersionRow = () => {
   const [version, setVersion] = useState<string>();
   const update = useAppUpdate();
@@ -122,33 +146,39 @@ const VersionRow = () => {
   if (version === undefined) {
     return null;
   }
-  let line = "Not checked yet";
+  let line: ReactNode = "Not checked yet";
   if (update?.phase === "available") {
-    line = `agentx ${update.version} is available`;
+    line = (
+      <>
+        agentx {update.version} is available.{" "}
+        <ReleaseLink
+          version={update.version}
+          track="settings.whats-new"
+          label="What's new"
+        />
+      </>
+    );
   } else if (checkedAt !== undefined) {
     line = `Checked ${formatAgo(new Date(checkedAt).toISOString(), now) ?? "just now"}`;
   }
   return (
     <SettingsRow
-      name={`agentx ${version}`}
-      line={line}
-      control={
-        <>
-          <UpdateButton />
-          {version !== NO_RELEASE && (
-            <Button
-              variant="ghost"
-              size="sm"
+      name={
+        version === NO_RELEASE ? (
+          `agentx ${version}`
+        ) : (
+          <span className="flex items-baseline gap-2">
+            agentx {version}
+            <ReleaseLink
+              version={version}
               track="settings.release-notes"
-              onClick={() => {
-                void openInBrowser(`${RELEASES}/v${version}`);
-              }}
-            >
-              Release notes
-            </Button>
-          )}
-        </>
+              label="Release notes"
+            />
+          </span>
+        )
       }
+      line={line}
+      control={<UpdateButton />}
     />
   );
 };

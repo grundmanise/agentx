@@ -99,7 +99,7 @@ Keep the terminal open: serve stops when you press Ctrl-C or its stdin closes, a
 
 ## One serve per home
 
-Only one serve runs for each agentx home (`~/.agentx`). A second `agentx serve --once` exits with code 6 and names the lock file, `~/.agentx/serve.lock`. A second `agentx serve` prints the same error and keeps running without scanning, so that the app can still run commands through it. It exits with code 6 once its stdin closes. Stop the running serve first.
+Only one serve runs for each agentx home (`~/.agentx`). A second `agentx serve --once` exits with code 6 and names the lock file, `~/.agentx/serve.lock`. A second `agentx serve` prints the same error and keeps running without scanning, so that the app can still run commands through it. Each `refresh` request tries the lock again. Once the other serve stops, the next `refresh`, or Retry in the app, makes this serve start scanning. If its stdin closes before then, it exits with code 6.
 
 ## When watching is not possible
 
