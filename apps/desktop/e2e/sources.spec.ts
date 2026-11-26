@@ -1169,6 +1169,43 @@ test("search asks serve once per settled query and shows only the latest answer"
   await expect(page.getByText("No skills match")).toHaveCount(0);
 });
 
+test("an add from two sources runs one skill add each and ends with one toast for them all", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit([
+    {
+      query: "pdf",
+      request_id: lastSearch(cli).request_id,
+      results: docResults,
+      type: "search",
+    },
+  ]);
+  await check(page, "docx").click();
+  await check(page, "docgen").click();
+  const warning =
+    "/home/me/.agents/skills/notes is in the way of notes's library symlink";
+  const acme = cli.register(["skill", "add", ACME, "--name", "docx"], {
+    events: [{ name: "docx", type: "library_skill" }],
+    logs: [{ level: "warn", message: warning }],
+  });
+  const zeta = cli.register(["skill", "add", ZETA, "--name", "docgen"], {
+    events: [{ name: "docgen", type: "library_skill" }],
+    logs: [{ level: "warn", message: warning }],
+  });
+  await bar(page).getByRole("button", { name: "Add 2" }).click();
+  await acme.started;
+  await zeta.started;
+  const toast = toasts(page)
+    .getByRole("listitem")
+    .filter({ hasText: "Added 2 skills" });
+  await expect(toast).toBeVisible();
+  await expect(toast.getByText(warning)).toHaveCount(1);
+});
+
 test("Add source closes at once and shows the source loading, then opens it fully preselected", async ({
   cli,
   page,
