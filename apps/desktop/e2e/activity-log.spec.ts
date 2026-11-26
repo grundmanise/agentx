@@ -3,6 +3,7 @@
 // words. The palette and Settings open it.
 import type { Page } from "@playwright/test";
 
+import { settled } from "./harness/animations.ts";
 import { expect, serveLogPath, test } from "./harness/cli.ts";
 
 const log = (page: Page) => page.getByRole("dialog", { name: "Activity log" });
@@ -27,6 +28,7 @@ const openFromPalette = async (page: Page) => {
     .filter({ hasText: "Show activity log" })
     .click();
   await expect(log(page)).toBeVisible();
+  await settled(log(page));
 };
 
 test("a check that succeeds is one line, and one that fails keeps its last lines, which Copy copies", async ({

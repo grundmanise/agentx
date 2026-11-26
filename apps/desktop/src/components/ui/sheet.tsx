@@ -1,7 +1,8 @@
 // shadcn/ui Sheet (`pnpm dlx shadcn@latest add sheet`), on our tokens: DESIGN.md §6 "Sheet".
-// The design has one sheet, at the right edge, so there is no `side`. Its parts keep shadcn's
-// names and `data-slot` attributes and take no `className`; the close is our ghost Button, in the
-// header. Every sheet has a handle on its left edge that drags its width, which each sheet keeps.
+// The design has one sheet, at the right edge, so there is no `side`: the content keeps the right
+// side's classes, which slide it in and out. Its parts keep shadcn's names and `data-slot`
+// attributes and take no `className`; the close is our ghost Button, in the header. Every sheet has
+// a handle on its left edge that drags its width, which each sheet keeps.
 import { cva } from "class-variance-authority";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import { useLayoutEffect, useRef } from "react";
@@ -49,14 +50,17 @@ const layerVariants = cva("", {
   },
 });
 
-/** `shell.scrim` behind the sheet. */
+/** `shell.scrim` behind the sheet, which fades in and out with it. */
 const SheetOverlay = ({
   over,
   ...props
 }: OwnProps<typeof SheetPrimitive.Overlay> & { over?: SheetLayer }) => (
   <SheetPrimitive.Overlay
     data-slot="sheet-overlay"
-    className={cn("bg-shell-scrim fixed inset-0", layerVariants({ over }))}
+    className={cn(
+      "bg-shell-scrim data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 data-[state=closed]:pointer-events-none!",
+      layerVariants({ over })
+    )}
     {...props}
   />
 );
@@ -64,10 +68,11 @@ const SheetOverlay = ({
 /**
  * `sheet.width`, which the user drags between `sheet.min-width` and `sheet.max-width`, inset
  * `sheet.inset` from the top, right and bottom, `sheet.bg` with `sheet.border`, `sheet.radius`,
- * `overlay.shadow` and `sheet.padding`.
+ * `overlay.shadow` and `sheet.padding`. It slides in from past the window's right edge, and back
+ * out, with shadcn's own classes (DESIGN.md §8), and takes no clicks while it closes.
  */
 const SHEET_CONTENT =
-  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet w-sheet-dragged min-w-sheet max-w-sheet fixed flex flex-col gap-6 overflow-hidden border outline-none";
+  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet w-sheet-dragged min-w-sheet max-w-sheet data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right-sheet data-[state=open]:slide-in-from-right-sheet fixed flex flex-col gap-6 overflow-hidden border transition ease-in-out outline-none data-[state=closed]:pointer-events-none! data-[state=closed]:duration-300 data-[state=open]:duration-500";
 
 /** The CSS variable that `w-sheet-dragged` reads, set on the sheet. */
 const DRAGGED_WIDTH = "--sheet-dragged-width";
