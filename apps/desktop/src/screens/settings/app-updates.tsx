@@ -137,7 +137,7 @@ const VersionRow = () => {
           <UpdateButton />
           {version !== NO_RELEASE && (
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               track="settings.release-notes"
               onClick={() => {
