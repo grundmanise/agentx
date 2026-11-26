@@ -8,10 +8,11 @@ import type { Tracked } from "#/lib/track.ts";
 
 /**
  * Its look: `caption` as the origin beside a skill's name, `muted` under a source's name,
- * `secondary` as a value of Details.
+ * `secondary` as a value of Details, `inherit` in the colours of the text round it.
  */
 const TONES = {
   caption: "text-text-caption hover:text-text-secondary hover:underline",
+  inherit: "hover:underline",
   muted: "text-text-muted hover:underline",
   secondary: "text-text-secondary hover:text-text-primary hover:underline",
 } as const;
