@@ -96,7 +96,7 @@ func entryEvent(entry home.Source) sourceEvent {
 func entrySource(entry home.Source) scan.Source {
 	return scan.Source{ID: source.ID(entry.URL), URL: entry.URL, Alias: entry.Alias,
 		Hub: entry.Hub, Pin: entry.Pin, Access: entry.AccessName(), AccessChecked: entry.AccessChecked,
-		DefaultBranch: entry.DefaultBranch, LastFetched: entry.LastFetched}
+		DefaultBranch: entry.DefaultBranch, LastFetched: entry.LastFetched, Added: entry.Added}
 }
 
 // accessPhrase ends the confirmation of a source that was just checked with

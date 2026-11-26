@@ -227,8 +227,7 @@ test.describe("Import skills in the Hub card of Settings", () => {
     const adopt = open.getByRole("button", { exact: true, name: "Import" });
     await expect(adopt).toBeDisabled();
     await expect(adopt).toHaveAttribute("aria-busy", "true");
-    await expect(open.getByRole("button", { name: "Cancel" })).toBeDisabled();
-    // It cannot be dismissed while it runs.
+    // Only Cancel, which stops the run, closes it while it runs.
     await page.keyboard.press("Escape");
     await expect(open).toBeVisible();
     // The button behind it, hidden by the dialog, waits too.
@@ -266,6 +265,26 @@ test.describe("Import skills in the Hub card of Settings", () => {
     expect(ran(cli)).toEqual([
       ["skill", "import", "--from", "skills-cli", "--all", "--json"],
     ]);
+  });
+
+  test("Cancel stops the import that runs and closes the dialog", async ({
+    cli,
+    page,
+  }) => {
+    await openSettings(cli, page);
+    const run = cli.register(
+      ["skill", "import", "--from", "skills-cli", "--all"],
+      { events: skillsCliRun, holdAfter: 3 }
+    );
+    await settingsSection(page)
+      .getByRole("button", { name: "Import from Skills CLI" })
+      .click();
+    const open = dialog(page);
+    await open.getByRole("button", { exact: true, name: "Import" }).click();
+    await run.started;
+    await open.getByRole("button", { name: "Cancel" }).click();
+    await expect(open).toHaveCount(0);
+    expect(cli.cancels).toHaveLength(1);
   });
 
   test("a tool's button goes once its skills are adopted", async ({

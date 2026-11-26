@@ -833,6 +833,30 @@ test.describe("the Update skills dialog", () => {
       nav.getByRole("button", { exact: true, name: "1 update" })
     ).toBeVisible();
   });
+  test("Cancel stops the update that runs and closes the dialog", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf");
+    await page
+      .getByRole("navigation", { name: "Main" })
+      .getByRole("button", { exact: true, name: "4 updates" })
+      .click();
+    const dialog = updateDialog(page);
+    await dialog.getByText("pdf", { exact: true }).click();
+    await dialog.getByText("release-notes", { exact: true }).click();
+    const run = cli.register(["skill", "update", "pdf-letters", "review"], {
+      events: [],
+      holdAfter: 0,
+    });
+    await dialog
+      .getByRole("button", { exact: true, name: "Update 2 skills" })
+      .click();
+    await run.started;
+    await dialog.getByRole("button", { exact: true, name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(cli.cancels).toHaveLength(1);
+  });
 });
 
 /** The banner of draft's pending merge. */
