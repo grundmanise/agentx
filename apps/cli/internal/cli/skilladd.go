@@ -77,9 +77,9 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 			return inv.skillAdd(cmd.Context(), args[0], sel, to, asCopy, fetch)
 		},
 	}
-	cmd.Flags().StringArrayVar(&sel.names, "name", nil, "the skill to install, by its name in the source or on the hub; give it again for each")
+	cmd.Flags().StringArrayVar(&sel.names, "name", nil, "the skill to install, by its name in the source or on the hub, or by its directory in the source; give it again for each")
 	cmd.Flags().BoolVar(&sel.all, "all", false, "install every skill the source holds, or with no source every hub skill this machine lacks")
-	cmd.Flags().StringArrayVar(&sel.except, "except", nil, "with --all, a skill to leave out; give it again for each")
+	cmd.Flags().StringArrayVar(&sel.except, "except", nil, "with --all, a skill to leave out, by its name or its directory; give it again for each")
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place them in, instead of every enabled one")
 	cmd.Flags().BoolVar(&asCopy, "copy", false, "place copies instead of symlinks")
 	cmd.Flags().BoolVar(&fetch, "fetch", false, "fetch an added source again before installing")
@@ -899,18 +899,23 @@ func selectSkills(listing source.Listing, sel selection, src source.Source) ([]s
 // keeping the listing's order. A name matches a skill's frontmatter name, or
 // its directory name when the frontmatter has none, case-insensitively. A name
 // given twice installs one skill, and a name two directories of the source
-// share resolves to the first of them, which is what naming a skill has
-// always meant here.
+// share resolves to the first of them. A value with a slash names one skill by
+// its directory in the source instead, such as skills/pdf, so the later skill
+// of a shared name can be installed too.
 func namedSkills(listing source.Listing, names []string, src source.Source) ([]source.Skill, error) {
 	wanted := map[string]bool{}
 	for _, name := range names {
-		wanted[strings.ToLower(name)] = true
+		wanted[selector(name)] = true
 	}
 	found := map[string]bool{}
 	var skills []source.Skill
 	for _, sk := range listing.Skills {
 		key := strings.ToLower(sk.Name)
-		if wanted[key] && !found[key] {
+		switch {
+		case wanted[sk.Subpath] && sk.Subpath != "":
+			found[sk.Subpath] = true
+			skills = append(skills, sk)
+		case wanted[key] && !found[key]:
 			found[key] = true
 			skills = append(skills, sk)
 		}
@@ -922,17 +927,22 @@ func namedSkills(listing source.Listing, names []string, src source.Source) ([]s
 }
 
 // everySkillBut is --all: every skill of the listing, less those --except
-// names, matched as namedSkills matches them. An --except that names no
-// skill of the source is a mistake worth saying so about, since the run
-// would otherwise install more than asked.
+// names, matched as namedSkills matches them, though a name leaves out every
+// skill of that name. An --except that names no skill of the source is a
+// mistake worth saying so about, since the run would otherwise install more
+// than asked.
 func everySkillBut(listing source.Listing, except []string, src source.Source) ([]source.Skill, error) {
 	unwanted := map[string]bool{}
 	for _, name := range except {
-		unwanted[strings.ToLower(name)] = true
+		unwanted[selector(name)] = true
 	}
 	found := map[string]bool{}
 	var skills []source.Skill
 	for _, sk := range listing.Skills {
+		if unwanted[sk.Subpath] && sk.Subpath != "" {
+			found[sk.Subpath] = true
+			continue
+		}
 		if key := strings.ToLower(sk.Name); unwanted[key] {
 			found[key] = true // every skill of that name, not the first
 			continue
@@ -948,14 +958,24 @@ func everySkillBut(listing source.Listing, except []string, src source.Source) (
 	return skills, nil
 }
 
+// selector is the key a --name or --except value is matched by: a value with
+// a slash is a directory of the source, without a leading "./" or a trailing
+// slash, and any other value a name, lowercased.
+func selector(value string) string {
+	if strings.Contains(value, "/") {
+		return strings.TrimSuffix(strings.TrimPrefix(value, "./"), "/")
+	}
+	return strings.ToLower(value)
+}
+
 // notFound keeps the names the listing did not hold, in the order they were
 // given on the command line and without repeating one given twice in any
-// case. found is keyed by the lowercased name.
+// case. found is keyed by selector.
 func notFound(given []string, found map[string]bool) []string {
 	var names []string
 	seen := map[string]bool{}
 	for _, name := range given {
-		if key := strings.ToLower(name); !found[key] && !seen[key] {
+		if key := selector(name); !found[key] && !seen[key] {
 			seen[key] = true
 			names = append(names, name)
 		}
