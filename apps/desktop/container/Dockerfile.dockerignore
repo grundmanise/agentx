@@ -1,0 +1,7 @@
+**/node_modules
+**/dist
+**/target
+.git
+apps/cli/agentx
+apps/desktop/src-tauri/gen
+.browser

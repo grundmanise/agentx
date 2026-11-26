@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Runs the app in a browser against the real agentx serve inside a container, one per worktree,
+# and drives it with agent-browser. Needs only Docker on this machine.
+#
+#   browser up [preset]      build the image from this worktree and start the app on a new home
+#                            built from the preset (default: typical)
+#   browser ab <args>...     run agent-browser in the container; the app is at http://localhost:1431
+#   browser shot <file>      save a screenshot of the page at twice its pixel density to /tmp/out
+#   browser pull             copy the container's /tmp/out to .browser/ in this worktree
+#   browser shell            open a shell in the container
+#   browser logs             show the output of the preset and of serve
+#   browser down             stop and remove the container
+#
+# The container has no network, no host folder and no published port, so it touches nothing on
+# this machine and several worktrees run side by side. Files agent-browser writes under /tmp/out
+# come out with `browser pull`.
+set -euo pipefail
+
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+slug=$(basename "$root" | tr -c 'a-zA-Z0-9\n' '-' | tr 'A-Z' 'a-z')
+id="$slug-$(printf '%s' "$root" | cksum | cut -d ' ' -f 1)"
+name="agentx-browser-$id"
+image="agentx-browser:$id"
+
+usage() {
+  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+  exit 2
+}
+
+running() {
+  [ "$(docker container inspect --format '{{.State.Running}}' "$name" 2>/dev/null)" = true ]
+}
+
+need_running() {
+  running || {
+    echo "browser: no container for this worktree; run: $0 up" >&2
+    exit 1
+  }
+}
+
+build() {
+  local args=(
+    --file "$root/apps/desktop/container/Dockerfile"
+    --tag "$image"
+    --build-arg "GO_VERSION=$(awk '$1 == "go" { print $2; exit }' "$root/apps/cli/go.mod")"
+    --build-arg "NODE_VERSION=$(cat "$root/.node-version")"
+  )
+  # Behind a proxy, the build reaches it through this machine's network and trusts its CA bundle.
+  local proxy=${HTTPS_PROXY:-${https_proxy:-}}
+  if [ -n "$proxy" ]; then
+    args+=(--network host --build-arg "HTTPS_PROXY=$proxy" --build-arg "https_proxy=$proxy")
+    args+=(--build-arg "NO_PROXY=${NO_PROXY:-${no_proxy:-}}" --build-arg "no_proxy=${NO_PROXY:-${no_proxy:-}}")
+    if [ -n "${SSL_CERT_FILE:-}" ]; then
+      args+=(--secret "id=ca,src=$SSL_CERT_FILE")
+    fi
+  fi
+  docker build "${args[@]}" "$root"
+}
+
+up() {
+  local preset=${1:-typical}
+  build
+  docker rm --force "$name" >/dev/null 2>&1 || true
+  docker run --detach --init --name "$name" --network none --env "PRESET=$preset" "$image" >/dev/null
+  printf 'browser: building the %s home and starting the app' "$preset"
+  for _ in $(seq 1 240); do
+    if ! running; then
+      echo
+      docker logs "$name" >&2
+      echo "browser: the container stopped" >&2
+      exit 1
+    fi
+    if docker exec "$name" curl --silent --fail --output /dev/null http://localhost:1431/agentx-serve.json; then
+      echo
+      echo "browser: ready; the app is at http://localhost:1431 inside the container"
+      return
+    fi
+    printf .
+    sleep 1
+  done
+  echo
+  docker logs "$name" >&2
+  echo "browser: the app did not start within 4 minutes" >&2
+  exit 1
+}
+
+pull() {
+  need_running
+  mkdir -p "$root/.browser"
+  docker exec "$name" mkdir -p /tmp/out
+  docker cp "$name:/tmp/out/." "$root/.browser/"
+  echo "browser: copied to $root/.browser"
+}
+
+# agent-browser places clicks at the wrong point while the page's pixel density is 2, so the page
+# stays at 1 and goes to 2 only for the screenshot.
+shot() {
+  need_running
+  local size
+  size=$(docker exec "$name" agent-browser eval '`${innerWidth} ${innerHeight}`' | tr -d '"')
+  docker exec "$name" agent-browser set viewport $size 2 >/dev/null
+  docker exec "$name" agent-browser screenshot "/tmp/out/$1"
+  docker exec "$name" agent-browser set viewport $size 1 >/dev/null
+}
+
+command=${1:-}
+[ -n "$command" ] || usage
+shift
+case "$command" in
+  up) up "$@" ;;
+  ab) need_running && docker exec "$name" agent-browser "$@" ;;
+  shot) [ $# -eq 1 ] || usage; shot "$1" ;;
+  pull) pull ;;
+  shell) need_running && docker exec --interactive --tty "$name" bash ;;
+  logs) docker logs "$name" ;;
+  down) docker rm --force "$name" >/dev/null && echo "browser: removed $name" ;;
+  *) usage ;;
+esac
