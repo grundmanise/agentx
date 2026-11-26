@@ -12,6 +12,7 @@ import type { AdoptionEvent, CliEvent } from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import { plural } from "#/lib/plural.ts";
 import { toolName } from "#/screens/skills/projection.ts";
+import { cancelCommand } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
@@ -147,6 +148,17 @@ const update = (change: (run: AdoptRun) => AdoptRun) => {
   }));
 };
 
+/** The label of the run of `skill import --from <tool> --all`. */
+const adoptAllLabel = (tool: ToolArg) => `adopt all ${tool}`;
+
+/** Stops the run of the dialog, if one runs: the tool it is on, and the ones after it. */
+export const stopAdoptRun = () => {
+  const { run } = useAdoptRun.getState();
+  if (run?.phase === "running") {
+    void cancelCommand(...run.tools.map((t) => adoptAllLabel(t.arg)));
+  }
+};
+
 /** Forgets the run once its dialog closes. A run still going is never forgotten. */
 export const dismissAdoptRun = () => {
   if (useAdoptRun.getState().run?.phase !== "running") {
@@ -260,7 +272,7 @@ const answeredByRunner = (outcome: Outcome) =>
 
 /**
  * Runs one tool's `skill import --from <tool> --all` and settles its rows. Returns false when the
- * run did not report its skills, and the runs after it should not start.
+ * run did not report its skills or was stopped, and the runs after it should not start.
  */
 const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
   const offered = new Set(
@@ -271,7 +283,7 @@ const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
   const outcome = await runUntilSettled(
     ["skill", "import", "--from", tool, "--all"],
     {
-      label: `adopt all ${tool}`,
+      label: adoptAllLabel(tool),
       onProgress: (progress) => {
         const { phase, subject } = progress;
         update((run) => ({
@@ -294,7 +306,7 @@ const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
       rows: run.rows.map((row) => settled(row, tool, adoption)),
       warnings: [...run.warnings, ...otherWarnings(outcome)],
     }));
-    return true;
+    return !outcome.cancelled;
   }
   if (outcome.exitCode === EXIT_CODES.ok) {
     return true;

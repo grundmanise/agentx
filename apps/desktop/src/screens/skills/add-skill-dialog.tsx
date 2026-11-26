@@ -34,7 +34,7 @@ import { shortSource } from "#/screens/skills/projection.ts";
 import {
   addSourceHintRules,
   linkProblem,
-} from "#/screens/sources/add-source-dialog.tsx";
+} from "#/screens/sources/add-source.ts";
 import {
   AgentTargets,
   useAgentTargets,
@@ -50,7 +50,7 @@ import {
 import type { SkillCard } from "#/screens/sources/projection.ts";
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillRows } from "#/screens/sources/skill-rows.tsx";
-import { agentx, usePending } from "#/store/runner.ts";
+import { agentx, stopOnClose, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { afterSettled } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
@@ -397,7 +397,13 @@ export const AddSkillDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
+  <Dialog
+    open={open}
+    onOpenChange={stopOnClose(
+      [FIND_SKILLS_LABEL, ADD_SKILL_LABEL],
+      onOpenChange
+    )}
+  >
     <DialogContent>
       <DialogHeader>
         <DialogTitle>Add skill</DialogTitle>

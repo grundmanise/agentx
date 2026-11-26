@@ -57,7 +57,7 @@ To get the skill back, add it again from its source.
 5. Under **Add to**, choose the agents to install them in. The enabled agents are chosen to start with. Universal agents, marked with a lock, always get the skills.
 6. Select **Install**.
 
-agentx adds the source to **Sources** only when you install a skill from it. Select **Cancel** to close the dialog without changing anything. Once the skills are installed, the first one is selected in the list.
+agentx adds the source to **Sources** only when you install a skill from it. Select **Cancel** to close the dialog. While Find skills or Install runs, **Cancel** stops it. Once the skills are installed, the first one is selected in the list.
 
 ## Add a source
 
@@ -65,7 +65,7 @@ agentx adds the source to **Sources** only when you install a skill from it. Sel
 2. Paste the repository's URL, or `owner/name` for GitHub. Add `#branch` or `#tag` to pin it.
 3. Select **Add**.
 
-The new source opens with every skill selected.
+The dialog closes, and the source shows with a spinner in the sources row while agentx fetches it. Once it is added, the new source opens with every skill selected. To stop the add, select the source while it shows the spinner.
 
 ## Refresh a source
 

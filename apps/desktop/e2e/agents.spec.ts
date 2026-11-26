@@ -10,7 +10,7 @@ import {
   manyAgentsInventory,
   manyConfigurations,
 } from "./fixtures/agents.ts";
-import { adoption } from "./fixtures/skills.ts";
+import { adoption, fileReads, history } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -53,7 +53,15 @@ test("lists the Universal card first, then the direct agents, with their counts"
       - switch "Enabled" [checked]
       - heading "Claude Code" [level=2]
       - link "/home/me/.claude-code"
-      - paragraph: 5 skills · 1 server · 1 plugin
+      - paragraph:
+        - link "5 skills":
+          - /url: "#/skills"
+        - text: ·
+        - link "1 server":
+          - /url: "#/servers"
+        - text: ·
+        - link "1 plugin":
+          - /url: "#/plugins"
       - radiogroup "Placement":
         - radio "Symlink" [checked]
         - radio "Copy"
@@ -490,6 +498,63 @@ test("an agent's path shows it in Finder without selecting it, and a column's di
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a count opens its screen filtered to that agent, without selecting the card", async ({
+  cli,
+  page,
+}) => {
+  // The Skills screen selects its first skill and reads its files and history.
+  cli.register(["skill", "history", "pdf-letters"], { events: history });
+  cli.register(["skill", "history", "draft"], { events: [] });
+  for (const read of fileReads) {
+    cli.register(["skill", "files", ...read.args], { events: read.events });
+  }
+  await openAgents(cli, page);
+  const sidebar = page.getByRole("navigation", { name: "Main" });
+  const agentsChip = page
+    .getByRole("button", { name: "Clear agents" })
+    .locator("..");
+  const claude = card(page, "Claude Code");
+
+  await claude.getByRole("link", { name: "5 skills" }).click();
+  await expect(page).toHaveURL(/#\/skills$/u);
+  await expect(agentsChip).toContainText("Claude Code");
+
+  await sidebar.getByRole("link", { name: "Agents" }).click();
+  await expect(
+    claude.getByRole("button", { name: "Select Claude Code" })
+  ).toHaveAttribute("aria-pressed", "false");
+  await claude.getByRole("link", { name: "1 server" }).click();
+  await expect(page).toHaveURL(/#\/servers$/u);
+  await expect(agentsChip).toContainText("Claude Code");
+  const servers = page.getByRole("table", { name: "MCP servers" });
+  await expect(servers.getByRole("row")).toHaveCount(2);
+  await expect(servers.getByRole("row", { name: "filesystem" })).toBeVisible();
+
+  await sidebar.getByRole("link", { name: "Agents" }).click();
+  await claude.getByRole("link", { name: "1 plugin" }).click();
+  await expect(page).toHaveURL(/#\/plugins$/u);
+  await expect(agentsChip).toContainText("Claude Code");
+
+  // A count of 0 opens nothing.
+  await sidebar.getByRole("link", { name: "Agents" }).click();
+  await expect(
+    card(page, "Cursor").getByRole("link", { name: "0 plugins" })
+  ).toHaveCount(0);
+
+  // A Universal column: its skills are the library's, its servers its own.
+  const codex = card(page, "Universal").getByRole("region", { name: "Codex" });
+  await codex.getByRole("link", { name: "7 skills" }).click();
+  await expect(page).toHaveURL(/#\/skills$/u);
+  await expect(agentsChip).toContainText("Universal");
+
+  await sidebar.getByRole("link", { name: "Agents" }).click();
+  await codex.getByRole("link", { name: "1 server" }).click();
+  await expect(page).toHaveURL(/#\/servers$/u);
+  await expect(agentsChip).toContainText("Codex");
+  await expect(servers.getByRole("row")).toHaveCount(2);
+  await expect(servers.getByRole("row", { name: "github" })).toBeVisible();
 });
 
 test("an agent whose skills folder links to the library: a direct agent whose placement is fixed", async ({

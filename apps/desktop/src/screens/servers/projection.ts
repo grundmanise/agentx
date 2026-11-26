@@ -42,6 +42,8 @@ export interface ServerRow {
   signatureAt: string | undefined;
   /** The configurations that declare it and have it on, in inventory order. */
   agents: string[];
+  /** The configurations that declare it, on or off, in inventory order. */
+  declaredBy: string[];
   /** Every declaration of the server is one its client turned off: no agent has it on. */
   turnedOff: boolean;
   /** The plugins that declare it, distinct. */
@@ -144,6 +146,9 @@ const rowOf = (
         occurrences[0]
     ),
     agents: agentsOf(occurrences, order),
+    declaredBy: order.filter((id) =>
+      occurrences.some((o) => o.configuration === id)
+    ),
     failures: failuresOf(logicalId, input.handshakeFailures),
     key: logicalId,
     name: nodes[0]?.name ?? "",
@@ -175,6 +180,12 @@ export const projectServers = (input: ProjectionInput): ServerRow[] => {
   rows.sort(compareRows);
   return rows;
 };
+
+/** The rows declared by any of `agents`, configuration ids; none keeps every row. */
+export const filterServers = (rows: ServerRow[], agents: string[]) =>
+  agents.length === 0
+    ? rows
+    : rows.filter((r) => r.declaredBy.some((id) => agents.includes(id)));
 
 /** When the last check was, over every row: the latest `signature_at`, or undefined when none. */
 export const latestCheck = (rows: ServerRow[]): string | undefined => {

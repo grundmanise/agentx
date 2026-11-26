@@ -38,9 +38,33 @@ export interface SourcePill {
 const compareLabels = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "base" });
 
+/** A pill of the sources row: a source's, or a link being added with its short form. */
+export type RowPill =
+  | { kind: "source"; pill: SourcePill }
+  | { kind: "adding"; link: string; label: string };
+
 /**
- * One pill per shared source, A to Z by short form, then Hub when a hub is
- * set. A shared source's skill count is the length of its listing, once read: `source list`
+ * The sources row: the source pills, then each link being added in the order it was, the place
+ * its source's pill will take, so nothing moves once it is added.
+ */
+export const rowPills = (
+  pills: readonly SourcePill[],
+  adding: readonly string[]
+): RowPill[] => [
+  ...pills.map((pill): RowPill => ({ kind: "source", pill })),
+  ...adding.map((link): RowPill => ({
+    kind: "adding",
+    label: shortSource(link),
+    link,
+  })),
+];
+
+/** In the order the sources were added. */
+const compareAdded = (a: SourcePill, b: SourcePill) =>
+  (a.source.added ?? "").localeCompare(b.source.added ?? "");
+
+/**
+ * Hub when a hub is set, then one pill per shared source in the order they were added. A shared source's skill count is the length of its listing, once read: `source list`
  * reports none for a shared source.
  */
 export const sourcePills = (
@@ -65,9 +89,7 @@ export const sourcePills = (
       }
       return pill;
     });
-  shared.sort(
-    (a, b) => compareLabels(a.label, b.label) || a.key.localeCompare(b.key)
-  );
+  shared.sort(compareAdded);
   const hub = sources.find((s) => s.hub === true);
   if (hub === undefined) {
     return shared;
@@ -83,7 +105,7 @@ export const sourcePills = (
   if (hub.skills !== undefined) {
     hubPill.skills = hub.skills;
   }
-  return [...shared, hubPill];
+  return [hubPill, ...shared];
 };
 
 /** "1 skill", "2 skills". */

@@ -51,7 +51,7 @@ import {
 import type { ForkFields } from "#/screens/skills/fork.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
-import { usePending } from "#/store/runner.ts";
+import { stopOnClose, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
@@ -199,7 +199,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       return;
     }
     // Another command holds the lock: the runner's toast says so, with Retry.
-    if (outcome.exitCode === EXIT_CODES.locked) {
+    if (outcome.exitCode === EXIT_CODES.locked || outcome.cancelled) {
       return;
     }
     setRefusal(
@@ -273,7 +273,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       </div>
       <DialogFooter>
         <DialogClose asChild>
-          <Button track="fork-dialog.cancel" variant="ghost" disabled={pending}>
+          <Button track="fork-dialog.cancel" variant="ghost">
             Cancel
           </Button>
         </DialogClose>
@@ -293,28 +293,24 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
 };
 
 /** "Fork {skill}?": what the fork does for this kind of skill, Use a different name, Cancel · Fork. */
-const ForkDialog = ({ row, open }: { row: SkillRow; open: boolean }) => {
-  const pending = usePending(forkLabel(row));
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        // The dialog stays while its command runs: a refusal comes back to it.
-        if (!next && !pending) {
-          closeFork();
-        }
-      }}
-    >
-      <DialogContent>
-        <DialogHeader showCloseButton={false}>
-          <DialogTitle>{`Fork ${row.name}?`}</DialogTitle>
-          <DialogDescription>{forkText(row)}</DialogDescription>
-        </DialogHeader>
-        <ForkForm row={row} />
-      </DialogContent>
-    </Dialog>
-  );
-};
+const ForkDialog = ({ row, open }: { row: SkillRow; open: boolean }) => (
+  <Dialog
+    open={open}
+    onOpenChange={stopOnClose([forkLabel(row)], (next) => {
+      if (!next) {
+        closeFork();
+      }
+    })}
+  >
+    <DialogContent>
+      <DialogHeader showCloseButton={false}>
+        <DialogTitle>{`Fork ${row.name}?`}</DialogTitle>
+        <DialogDescription>{forkText(row)}</DialogDescription>
+      </DialogHeader>
+      <ForkForm row={row} />
+    </DialogContent>
+  </Dialog>
+);
 
 /** The Fork dialog while one is open, and while it closes. */
 export const ForkDialogs = () => {

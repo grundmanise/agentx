@@ -22,6 +22,11 @@ import { problemSentence, skillNamesOf } from "#/lib/problem-text.ts";
 import { FloatingActionBar } from "#/screens/sources/action-bar.tsx";
 import { addProblem } from "#/screens/sources/add-problem.ts";
 import { AddSourceDialog } from "#/screens/sources/add-source-dialog.tsx";
+import {
+  addSource,
+  stopAddingSource,
+  useAddingSources,
+} from "#/screens/sources/add-source.ts";
 import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import { OpenSource } from "#/screens/sources/open-source.tsx";
 import {
@@ -84,7 +89,8 @@ const isGone = (open: string | undefined, pills: SourcePill[]) =>
   open !== undefined && !pills.some((p) => p.key === open);
 
 /**
- * The open pill: the one the user opened, or the first one, also once the one opened was removed.
+ * The open pill: the one the user opened, or else the first shared source, Hub when there is none,
+ * also once the one opened was removed.
  * `onGone` runs when the pill open at the last render is gone, its source removed.
  */
 const useOpenPill = (
@@ -93,7 +99,10 @@ const useOpenPill = (
   onGone: () => void
 ) => {
   const [lastOpen, setLastOpen] = useState<string | undefined>();
-  const pill = pills.find((p) => p.key === active) ?? pills[0];
+  const pill =
+    pills.find((p) => p.key === active) ??
+    pills.find((p) => p.key !== HUB_SKILLS) ??
+    pills[0];
   if (isGone(lastOpen, pills)) {
     onGone();
   }
@@ -176,6 +185,7 @@ export const SourcesScreen = () => {
   const installable = useAppStore((s) => s.installable);
   const library = useAppStore((s) => s.inventory?.library) ?? noEntries;
   const adding = usePending(ADD_LABEL);
+  const addingLinks = useAddingSources((s) => s.links);
   // Pending from the fetch until your skills are read again.
   const [refreshing, setRefreshing] = useState(false);
 
@@ -490,9 +500,20 @@ export const SourcesScreen = () => {
     await install(plans);
   };
 
-  /** A source just added opens with every selectable card selected, once its listing arrives. */
-  const onSourceAdded = async (source: Source) => {
+  /**
+   * Adds the source of `typed` while the user goes on. Once added, it opens with every selectable
+   * card selected, unless the user opened another pill meanwhile.
+   */
+  const addAndOpen = async (typed: string) => {
+    const before = opened.current;
+    const source = await addSource(typed);
+    if (source === undefined) {
+      return;
+    }
     setJustAdded(source);
+    if (opened.current !== before) {
+      return;
+    }
     select(source.id);
     await loadPill(source.id);
     if (opened.current !== source.id) {
@@ -577,7 +598,14 @@ export const SourcesScreen = () => {
             }}
           />
         </InputGroup>
-        <SourceRow pills={pills} active={activeKey} now={now} onOpen={open} />
+        <SourceRow
+          pills={pills}
+          adding={addingLinks}
+          active={activeKey}
+          now={now}
+          onOpen={open}
+          onStop={stopAddingSource}
+        />
         {/* The card of the open source; it stays while a search looks across every source. */}
         {activePill !== undefined && (
           <OpenSource
@@ -638,8 +666,8 @@ export const SourcesScreen = () => {
       <AddSourceDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        onAdded={(source) => {
-          void onSourceAdded(source);
+        onAdd={(typed) => {
+          void addAndOpen(typed);
         }}
       />
     </div>

@@ -8,7 +8,7 @@ export const setNavigate = (fn: NavigateFunction) => {
   navigate = fn;
 };
 
-/** Goes to `path`, once the app shell has mounted. */
-export const navigateTo = (path: string) => {
-  void navigate?.(path);
+/** Goes to `path`, with the route's `state` when given, once the app shell has mounted. */
+export const navigateTo = (path: string, state?: unknown) => {
+  void navigate?.(path, state === undefined ? undefined : { state });
 };

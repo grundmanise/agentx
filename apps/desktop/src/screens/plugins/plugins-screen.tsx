@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
+import { useRouteAgent } from "#/lib/agent-route.ts";
 import { PluginDetail } from "#/screens/plugins/plugin-detail.tsx";
 import { PluginList } from "#/screens/plugins/plugin-list.tsx";
 import {
@@ -34,6 +35,9 @@ export const PluginsScreen = () => {
     rows.some((r) => r.configuration === c.id)
   );
   const [filters, setFilters] = useState<PluginFilters>(noPluginFilters);
+  useRouteAgent((agent) => {
+    setFilters({ ...noPluginFilters, agents: [agent] });
+  });
   const [order, setOrder] = useState<PluginOrder>("asc");
   const [selectedKey, setSelectedKey] = useState<string | undefined>();
   // The agent configurations whose groups are collapsed; every group is open at first.
