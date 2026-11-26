@@ -1,5 +1,6 @@
 import { cva } from "class-variance-authority";
 
+import { reservedLines } from "#/startup/checks.ts";
 import type { Check, CheckStatus } from "#/startup/checks.ts";
 
 const statusNames: Record<CheckStatus, string> = {
@@ -77,6 +78,17 @@ const StatusMark = ({ status }: { status: CheckStatus }) => (
   </svg>
 );
 
+// The room a check keeps under its label: one or two detail lines (`type.check-detail`, 2px apart).
+const detailsVariants = cva("flex flex-col", {
+  variants: {
+    reserved: {
+      0: "",
+      1: "min-h-check-details-1",
+      2: "min-h-check-details-2",
+    },
+  },
+});
+
 const hintVariants = cva(
   "rounded-check-hint type-check-hint text-text-secondary mt-1.5 border px-3 py-2 wrap-break-word",
   {
@@ -97,8 +109,17 @@ const Hint = ({ hint, status }: { hint: string; status: "fail" | "warn" }) => (
   </p>
 );
 
-/** One startup check: its status circle, label, detail lines and the CLI's fix for each. */
-export const CheckRow = ({ check }: { check: Check }) => {
+/**
+ * One startup check: its status circle, label, detail lines and the CLI's fix for each, with room
+ * for `reserved` detail lines however many it has yet.
+ */
+export const CheckRow = ({
+  check,
+  reserved,
+}: {
+  check: Check;
+  reserved: 0 | 1 | 2;
+}) => {
   const settled = check.status !== "waiting" && check.status !== "running";
   return (
     <li className="gap-check-mark flex">
@@ -114,24 +135,42 @@ export const CheckRow = ({ check }: { check: Check }) => {
           <span className="sr-only">{statusNames[check.status]}: </span>
           {check.label}
         </span>
-        {check.lines.map((line) => (
-          <div key={line.text} className="mt-0.5 flex flex-col">
-            <span
-              className={
-                check.status === "warn"
-                  ? "type-check-detail text-tone-attention-fg wrap-break-word"
-                  : "type-check-detail text-check-detail wrap-break-word"
-              }
-            >
-              {line.text}
-            </span>
-            {line.hint !== undefined &&
-              (check.status === "fail" || check.status === "warn") && (
-                <Hint hint={line.hint} status={check.status} />
-              )}
-          </div>
-        ))}
+        <div className={detailsVariants({ reserved })}>
+          {check.lines.map((line) => (
+            <div key={line.text} className="mt-0.5 flex flex-col">
+              <span
+                className={
+                  check.status === "warn"
+                    ? "type-check-detail text-tone-attention-fg wrap-break-word"
+                    : "type-check-detail text-check-detail wrap-break-word"
+                }
+              >
+                {line.text}
+              </span>
+              {line.hint !== undefined &&
+                (check.status === "fail" || check.status === "warn") && (
+                  <Hint hint={line.hint} status={check.status} />
+                )}
+            </div>
+          ))}
+        </div>
       </div>
     </li>
   );
 };
+
+/** The startup checks in order, as the startup layer and the Run checks dialog list them. */
+export const CheckList = ({ checks }: { checks: Check[] }) => (
+  <ul
+    aria-label="Checks"
+    className="gap-check-row m-0 flex list-none flex-col p-0"
+  >
+    {checks.map((check, i) => (
+      <CheckRow
+        key={check.label}
+        check={check}
+        reserved={reservedLines[i] ?? 0}
+      />
+    ))}
+  </ul>
+);

@@ -158,10 +158,25 @@ test.describe("states", () => {
     launch(cli);
     await page.goto("/");
     await expect(status(page)).toHaveText("3 to publish");
-    await page.addScriptTag({
-      type: "module",
-      url: "/e2e/harness/run-checks.ts",
+    // A store error after launch runs the checks again, and a failed one shows the layer.
+    cli.register(["doctor"], {
+      events: [
+        {
+          check: "store",
+          detail: "/home/me/.agentx/store.git: not a git repository",
+          status: "fail",
+          type: "doctor",
+        },
+      ],
+      exitCode: 8,
     });
+    await cli.serveEmit([
+      {
+        code: "store",
+        message: "the store is not a git repository",
+        type: "error",
+      },
+    ]);
     await expect(
       page.getByRole("region", { name: "Startup checks" })
     ).toBeVisible();
