@@ -2,6 +2,7 @@ import { useWindowEvent } from "@mantine/hooks";
 import { useEffect, useEffectEvent, useRef } from "react";
 import { useNavigate } from "react-router";
 
+import { useRouteAgent } from "#/lib/agent-route.ts";
 import { useRouteKey } from "#/lib/route-key.ts";
 import { AdoptReplaceConfirm } from "#/screens/skills/actions.tsx";
 import { ForkDialogs } from "#/screens/skills/fork-dialog.tsx";
@@ -12,6 +13,7 @@ import {
   groupRows,
   GROUP_PLUGINS,
   inCollapsed,
+  noFilters,
   projectRows,
   subgroupKey,
 } from "#/screens/skills/projection.ts";
@@ -84,6 +86,9 @@ export const SkillsScreen = () => {
     toggleCollapsed,
     toggleExpanded,
   } = useSkillsView();
+  useRouteAgent((agent) => {
+    setFilters({ ...noFilters, agents: [agent] });
+  });
   const sections = { collapsed, expanded };
 
   const rows =

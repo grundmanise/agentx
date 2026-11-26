@@ -1,15 +1,25 @@
+import { useState } from "react";
+
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
+import { useRouteAgent } from "#/lib/agent-route.ts";
 import { formatDate } from "#/lib/dates.ts";
 import { useRouteKey } from "#/lib/route-key.ts";
+import { AgentFilterPopover } from "#/screens/plugins/filter-popover.tsx";
 import { checkTools, useChecking } from "#/screens/servers/check-tools.ts";
-import { latestCheck, projectServers } from "#/screens/servers/projection.ts";
+import {
+  filterServers,
+  latestCheck,
+  projectServers,
+} from "#/screens/servers/projection.ts";
 import type { ServerRow } from "#/screens/servers/projection.ts";
 import { ServerRowItem } from "#/screens/servers/server-row.tsx";
+import { AgentFilterChip } from "#/screens/skills/skill-list.tsx";
 import { useAppStore } from "#/store/store.ts";
 
 const none: ServerRow[] = [];
+const noAgents: string[] = [];
 
 const columns = ["SERVER", "TRANSPORT", "TOOLS", "AGENTS"];
 
@@ -46,7 +56,8 @@ const CheckTools = ({ rows }: { rows: ServerRow[] }) => {
  * the agents that declare it. Read-only: Check tools runs a scan with a handshake, and is there
  * only while a server is declared; nothing here edits, starts or stops a server. No environment
  * or header value is ever shown. The route may name a server (`/servers/<logical id>`), as
- * the Plugins screen does when a server is clicked: that row scrolls into view.
+ * the Plugins screen does when a server is clicked: that row scrolls into view. The Filter shows
+ * the servers the checked agents declare, on or off; the Agents page opens it filtered to one.
  */
 export const ServersScreen = () => {
   const routeKey = useRouteKey();
@@ -57,6 +68,15 @@ export const ServersScreen = () => {
       ? none
       : projectServers({ handshakeFailures, inventory });
   const configurations = inventory?.configurations ?? [];
+  // Only the agent configurations that declare a server are filter choices.
+  const declaring = configurations.filter((c) =>
+    rows.some((r) => r.declaredBy.includes(c.id))
+  );
+  const [agents, setAgents] = useState(noAgents);
+  useRouteAgent((agent) => {
+    setAgents([agent]);
+  });
+  const shown = filterServers(rows, agents);
   return (
     <div className="px-page pb-page gap-page-title flex h-full flex-col overflow-auto">
       <header className="pt-page-top flex items-end justify-between gap-3">
@@ -66,9 +86,33 @@ export const ServersScreen = () => {
         </div>
         {rows.length > 0 && <CheckTools rows={rows} />}
       </header>
-      {rows.length === 0 ? (
+      {rows.length > 0 && (
+        <div className="gap-split-filter flex min-w-0 items-center">
+          <AgentFilterPopover
+            configurations={declaring}
+            agents={agents}
+            onChange={setAgents}
+            track="servers"
+          />
+          {agents.length > 0 && (
+            <AgentFilterChip
+              agents={agents}
+              configurations={declaring}
+              onClear={() => {
+                setAgents(noAgents);
+              }}
+              onRemove={(agent) => {
+                setAgents(agents.filter((a) => a !== agent));
+              }}
+            />
+          )}
+        </div>
+      )}
+      {shown.length === 0 ? (
         <p className="type-secondary text-text-hint m-0">
-          No MCP servers found in your agents.
+          {rows.length === 0
+            ? "No MCP servers found in your agents."
+            : "No servers match"}
         </p>
       ) : (
         <table
@@ -89,7 +133,7 @@ export const ServersScreen = () => {
             </tr>
           </thead>
           <tbody className="flex flex-col pt-1">
-            {rows.map((row) => (
+            {shown.map((row) => (
               <ServerRowItem
                 key={row.key}
                 row={row}
