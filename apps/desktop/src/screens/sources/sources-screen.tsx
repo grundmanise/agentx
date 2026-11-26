@@ -270,6 +270,17 @@ const isListed = (
   );
 };
 
+const noAll: ReadonlyMap<string, SkillCard[]> = new Map();
+
+/** The source a pill's cards carry: its URL, or Hub's key. */
+const sourceOf = (pill: SourcePill) => pill.url ?? HUB_SKILLS;
+
+/** The listings of `allOf` whose source `keep` keeps. */
+const only = (
+  allOf: ReadonlyMap<string, SkillCard[]>,
+  keep: (source: string) => boolean
+) => new Map([...allOf].filter(([source]) => keep(source)));
+
 /** The selection without the cards `drop` names. */
 const without = (selection: Selection, drop: (card: SkillCard) => boolean) => {
   const next = new Map(selection);
@@ -301,9 +312,11 @@ export const SourcesScreen = () => {
   const [active, setActive] = useState<string | undefined>();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<SearchResult[] | undefined>();
+  // The selection spans sources: opening another pill keeps it.
   const [selection, setSelection] = useState<Selection>(noSelection);
-  // The user started from Select all or the preselection: the listing's source takes `--all`.
-  const [allMode, setAllMode] = useState(false);
+  // The listings the user started from with Select all or the preselection, by source: each of
+  // those sources takes `--all`.
+  const [allOf, setAllOf] = useState<ReadonlyMap<string, SkillCard[]>>(noAll);
   // The install the bar's rim shows; it stays until the rim has faded.
   const [rim, setRim] = useState<RimRun | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -332,8 +345,9 @@ export const SourcesScreen = () => {
     // A late preselection of a source just added must not land on the next one.
     opened.current = "";
     setActive(undefined);
-    setSelection(noSelection);
-    setAllMode(false);
+    const kept = new Set(pills.map(sourceOf));
+    setSelection((prev) => without(prev, (c) => !kept.has(c.source)));
+    setAllOf((prev) => only(prev, (source) => kept.has(source)));
   });
 
   useOpenListing(activePill?.key, active);
@@ -346,12 +360,10 @@ export const SourcesScreen = () => {
     }
   };
 
-  /** Makes `key` the open pill, with nothing selected; a search stays. */
+  /** Makes `key` the open pill; the selection and a search stay. */
   const select = (key: string) => {
     opened.current = key;
     setActive(key);
-    setSelection(noSelection);
-    setAllMode(false);
     setPreselect(undefined);
     setNow(Date.now());
   };
@@ -421,17 +433,6 @@ export const SourcesScreen = () => {
   const selectableCount = oneOfEachName(selectable).length;
   const loading = usePending(activeKey === HUB_SKILLS ? HUB_LOADING : "");
 
-  /** Whether the list shows the listing of the source to preselect. */
-  const showsPreselect = () =>
-    preselect === activeKey &&
-    results === undefined &&
-    isListed(sources, listings, preselect);
-  if (showsPreselect()) {
-    setPreselect(undefined);
-    setSelection(new Map(oneOfEachName(selectable).map((c) => [c.key, c])));
-    setAllMode(true);
-  }
-
   // Each settled query asks serve once; the answer to the latest request replaces the listing.
   useEffect(() => {
     const text = query.trim();
@@ -488,13 +489,28 @@ export const SourcesScreen = () => {
       }
       return next;
     });
-    if (results === undefined) {
-      setAllMode(true);
+    if (results === undefined && activePill !== undefined) {
+      const source = sourceOf(activePill);
+      setAllOf((prev) => new Map(prev).set(source, shown));
     }
   };
+  /** Whether the list shows the listing of the source to preselect. */
+  const showsPreselect = () =>
+    preselect === activeKey &&
+    results === undefined &&
+    isListed(sources, listings, preselect);
+  if (showsPreselect()) {
+    setPreselect(undefined);
+    selectAll();
+  }
+  /** Deselects the cards the list shows; the ones selected in other sources stay. */
   const clear = () => {
-    setSelection(noSelection);
-    setAllMode(false);
+    const showing = new Set(shown.map((c) => c.key));
+    setSelection((prev) => without(prev, (c) => showing.has(c.key)));
+    if (results === undefined && activePill !== undefined) {
+      const source = sourceOf(activePill);
+      setAllOf((prev) => only(prev, (s) => s !== source));
+    }
   };
 
   const {
@@ -557,7 +573,7 @@ export const SourcesScreen = () => {
     }
     if (outcome.exitCode === 0) {
       setSelection((prev) => without(prev, (c) => c.source === plan.source));
-      setAllMode(false);
+      setAllOf((prev) => only(prev, (s) => s !== plan.source));
     } else {
       const error = outcome.events.find((e) => e.type === "error");
       if (installed.length > 0 && error !== undefined) {
@@ -609,10 +625,7 @@ export const SourcesScreen = () => {
 
   const add = async () => {
     const plans = planAdds({
-      allOf:
-        allMode && activePill !== undefined && results === undefined
-          ? { cards: shown, source: activePill.url ?? HUB_SKILLS }
-          : undefined,
+      allOf,
       enabled,
       selected: [...selection.values()],
       targets: chosen,
