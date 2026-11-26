@@ -1250,6 +1250,8 @@ test("Add source runs source add, then opens the new source fully preselected", 
   // A search stays while the dialog is open, and ends once the source is added.
   const field = page.getByRole("searchbox", { name: "Search all sources" });
   await field.fill("doc");
+  // The search reads your skills on the hub, so that Hub counts its matches.
+  await expect.poll(() => commandLines(cli)).toContain("skill list --remote");
   await page.getByRole("button", { name: "Add source" }).click();
   await expect(dialog(page)).toBeVisible();
   await expect(dialog(page)).toContainText("Add #branch or #tag to pin it");
@@ -1276,6 +1278,7 @@ test("Add source runs source add, then opens the new source fully preselected", 
   ).toBeVisible();
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
+    "skill list --remote",
     "source add acme/more",
     `source skills ${newId}`,
   ]);
@@ -1416,14 +1419,15 @@ test("Refresh all fetches every source in one run, then reads your skills, pendi
     events: [{ id: ACME_ID, type: "source", url: ACME }],
     holdAfter: 0,
   });
-  const read = cli.register(["skill", "list", "--remote"], {
-    events: installable,
-    holdAfter: 0,
-  });
   const refreshAll = page.getByRole("button", { name: "Refresh all" });
   // Refresh all ends a search.
   const field = page.getByRole("searchbox", { name: "Search all sources" });
   await field.fill("doc");
+  await expect.poll(() => commandLines(cli)).toContain("skill list --remote");
+  const read = cli.register(["skill", "list", "--remote"], {
+    events: installable,
+    holdAfter: 0,
+  });
   await refreshAll.click();
   await expect(field).toHaveValue("");
   await fetch.started;
@@ -1448,13 +1452,14 @@ test("Refresh all fetches every source in one run, then reads your skills, pendi
   ]);
   await expect(fact(page, "Fetched")).toHaveText("just now");
   // After the fetch, the listing and your skills are read in either order.
-  await expect.poll(() => commandLines(cli).length).toBe(4);
+  await expect.poll(() => commandLines(cli).length).toBe(5);
   const lines = commandLines(cli);
-  expect(lines.slice(0, 2)).toEqual([
+  expect(lines.slice(0, 3)).toEqual([
     `source skills ${ACME_ID}`,
+    "skill list --remote",
     "source fetch --all",
   ]);
-  expect(lines.slice(2)).toEqual(
+  expect(lines.slice(3)).toEqual(
     expect.arrayContaining([`source skills ${ACME_ID}`, "skill list --remote"])
   );
 });
