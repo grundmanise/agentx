@@ -1567,6 +1567,7 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 	p := h.serve(t, "--json")
 	p.next("inventory")
 	p.nextEntry("alpha", candidateAt(second))
+	p.nextMatching("the update_check", func(e jsonEvent) bool { return e["type"] == "update_check" })
 	p.until("alive")
 	equal(t, "exit", p.close(), 0)
 
