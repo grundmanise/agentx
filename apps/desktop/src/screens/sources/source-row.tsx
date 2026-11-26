@@ -1,5 +1,7 @@
+import { StopPill } from "#/components/stop-pill.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import { cn } from "#/lib/utils.ts";
+import { shortSource } from "#/screens/skills/projection.ts";
 import { staleTitle } from "#/screens/sources/projection.ts";
 import type { SourcePill } from "#/screens/sources/projection.ts";
 
@@ -19,20 +21,27 @@ const StaleDot = ({ title }: { title: string }) => (
 
 /**
  * The sources row of the Sources screen: one pill per shared source and Hub, the active one
- * lit, each with its skill count once it is known and the attention dot when it is stale.
+ * lit, each with its skill count once it is known and the attention dot when it is stale, then a
+ * pill for each source being added.
  */
 export const SourceRow = ({
   pills,
+  adding,
   active,
   now,
   onOpen,
+  onStop,
 }: {
   pills: SourcePill[];
+  /** The links being added. */
+  adding: readonly string[];
   /** The key of the active pill. */
   active: string | undefined;
   /** Date.now(), for the stale dots. */
   now: number;
   onOpen: (key: string) => void;
+  /** Stops the add of a link. */
+  onStop: (link: string) => void;
 }) => (
   <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">
     <legend className="sr-only">Sources</legend>
@@ -67,5 +76,16 @@ export const SourceRow = ({
         </Toggle>
       );
     })}
+    {adding.map((link) => (
+      <StopPill
+        key={link}
+        label={shortSource(link)}
+        stopLabel={`Stop adding ${shortSource(link)}`}
+        track="sources.adding-stop"
+        onStop={() => {
+          onStop(link);
+        }}
+      />
+    ))}
   </fieldset>
 );

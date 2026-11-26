@@ -2,7 +2,8 @@
 // covers by name, the ones the preview refuses folded under the list with the CLI's reason, then
 // Cancel · Import. Import runs in the dialog (`adopt.ts`): each row shows its state, then its result,
 // with the reason of a skill the CLI did not adopt; one line counts the skills started, then says
-// how many were adopted. The dialog cannot be dismissed while the run goes, and Done closes it.
+// how many were adopted. While the run goes, only Cancel closes the dialog, and it stops the run;
+// Done closes it after.
 import { useState } from "react";
 
 import { CheckIcon } from "#/components/icons/check.tsx";
@@ -31,6 +32,7 @@ import { problemSentence } from "#/lib/problem-text.ts";
 import {
   adoptAll,
   dismissAdoptRun,
+  stopAdoptRun,
   progressText,
   rowsOf,
   summariesOf,
@@ -269,7 +271,9 @@ export const AdoptDialog = ({
       open={open}
       onOpenChange={(next) => {
         if (!next) {
-          close();
+          stopAdoptRun();
+          dismissAdoptRun();
+          onOpenChange(false);
         }
       }}
     >
@@ -308,11 +312,7 @@ export const AdoptDialog = ({
           {run === undefined || running ? (
             <>
               <DialogClose asChild>
-                <Button
-                  track="adopt-dialog.cancel"
-                  variant="ghost"
-                  disabled={running}
-                >
+                <Button track="adopt-dialog.cancel" variant="ghost">
                   Cancel
                 </Button>
               </DialogClose>
