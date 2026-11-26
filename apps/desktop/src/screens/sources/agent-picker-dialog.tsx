@@ -180,6 +180,7 @@ export const AgentPickerDialog = ({
             <SearchIcon size="xs" />
           </InputGroupAddon>
           <InputGroupInput
+            autoFocus
             kind="list-search"
             type="search"
             aria-label="Search agents"

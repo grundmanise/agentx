@@ -196,6 +196,7 @@ const CreateSkillForm = ({ onClose }: { onClose: () => void }) => {
         </label>
         <Input
           id={nameId}
+          autoFocus
           kind="mono"
           placeholder="my-skill"
           aria-describedby={nameHintId}

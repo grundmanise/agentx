@@ -266,6 +266,7 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
       <div className="gap-input-label flex flex-col">
         <div className="flex items-center gap-2">
           <Input
+            autoFocus
             kind="mono"
             aria-label="Link to skills"
             placeholder="Link to skills"

@@ -66,31 +66,8 @@ const dialogContentVariants = cva(
   }
 );
 
-const FIRST_FIELD =
-  "input:not([type=hidden],[type=checkbox],[type=radio],:disabled),textarea:not(:disabled)";
-
-/**
- * As a dialog opens, its first field takes the focus, unless the dialog's own `onOpenAutoFocus`
- * prevents it. With no field, Radix focuses the first focusable element.
- */
-const focusFirstField = (
-  event: Event,
-  onOpenAutoFocus: ((event: Event) => void) | undefined
-) => {
-  onOpenAutoFocus?.(event);
-  if (event.defaultPrevented || !(event.currentTarget instanceof HTMLElement)) {
-    return;
-  }
-  const field = event.currentTarget.querySelector<HTMLElement>(FIRST_FIELD);
-  if (field !== null) {
-    event.preventDefault();
-    field.focus();
-  }
-};
-
 const DialogContent = ({
   kind,
-  onOpenAutoFocus,
   children,
   ...props
 }: OwnProps<typeof DialogPrimitive.Content> &
@@ -100,9 +77,6 @@ const DialogContent = ({
     <DialogPrimitive.Content
       data-slot="dialog-content"
       className={dialogContentVariants({ kind })}
-      onOpenAutoFocus={(event) => {
-        focusFirstField(event, onOpenAutoFocus);
-      }}
       {...props}
     >
       {children}
@@ -187,5 +161,4 @@ export {
   DialogTitle,
   DialogTrigger,
   dialogContentVariants,
-  focusFirstField,
 };
