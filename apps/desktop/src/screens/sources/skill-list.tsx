@@ -530,21 +530,32 @@ const useOffsetIn = (
       setOffset((previous) => (previous === next ? previous : next));
     };
     const sizes = new ResizeObserver(measure);
-    // Only what comes before the list moves where it starts.
-    const observeSiblings = () => {
+    // Only what comes before the list, in the scroller, moves where it starts.
+    const ancestors: Element[] = [];
+    for (
+      let node = element?.parentElement ?? null;
+      node !== null && parent?.contains(node) === true;
+      node = node.parentElement
+    ) {
+      ancestors.push(node);
+    }
+    const observeBefore = () => {
       sizes.disconnect();
-      for (const child of parent?.children ?? []) {
-        if (element !== null && child.contains(element)) {
-          break;
+      for (const node of [element, ...ancestors]) {
+        for (
+          let before = node?.previousElementSibling ?? null;
+          before !== null;
+          before = before.previousElementSibling
+        ) {
+          sizes.observe(before);
         }
-        sizes.observe(child);
       }
       measure();
     };
-    observeSiblings();
-    const children = new MutationObserver(observeSiblings);
-    if (parent !== null) {
-      children.observe(parent, { childList: true });
+    observeBefore();
+    const children = new MutationObserver(observeBefore);
+    for (const node of ancestors) {
+      children.observe(node, { childList: true });
     }
     return () => {
       sizes.disconnect();

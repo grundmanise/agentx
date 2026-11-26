@@ -215,9 +215,9 @@ const matchedCards = (
 };
 
 /**
- * The card of the open source, which a search's results replace: folded, it fades out whole, then
- * its room closes, so the results move up into its place and the card is never seen cut; unfolded,
- * its room opens, then it fades in.
+ * The card of the open source, which a search's results replace: folded, it fades out while its
+ * room closes, and the results move up over it, so the card is never seen cut; unfolded, its room
+ * opens while it fades in.
  */
 const FoldingCard = ({
   folded,
@@ -230,14 +230,14 @@ const FoldingCard = ({
     className={cn(
       "grid transition-all duration-300 ease-in-out motion-reduce:transition-none",
       folded
-        ? "grid-rows-source-card-folded -mt-page-title invisible delay-200"
+        ? "grid-rows-source-card-folded -mt-page-title invisible"
         : "grid-rows-source-card"
     )}
   >
     <div
       className={cn(
-        "min-h-0 overflow-hidden transition-opacity duration-200 ease-in-out motion-reduce:transition-none",
-        folded ? "opacity-0" : "delay-300"
+        "min-h-0 transition-opacity motion-reduce:transition-none",
+        folded ? "opacity-0 duration-150" : "duration-300"
       )}
     >
       {children}
@@ -694,21 +694,18 @@ export const SourcesScreen = () => {
             />
           </FoldingCard>
         )}
-        {allCards.length > 0 && (
-          <SelectAllRow
-            align="end"
-            track="sources.select-all"
-            selected={selectedCount}
-            total={selectable.length}
-            onSelectAll={selectAll}
-            onClear={clear}
-          />
-        )}
-        {/* The results and the listing fade in as they take each other's place. */}
-        <div
-          key={results === undefined ? "listing" : "results"}
-          className="animate-fade-in flex-none motion-reduce:animate-none"
-        >
+        {/* Over the card, so the results cover it as they move up into its place. */}
+        <div className="bg-shell-content-bg gap-page-title relative z-10 flex flex-none flex-col">
+          {allCards.length > 0 && (
+            <SelectAllRow
+              align="end"
+              track="sources.select-all"
+              selected={selectedCount}
+              total={selectable.length}
+              onSelectAll={selectAll}
+              onClear={clear}
+            />
+          )}
           {emptyText === undefined ? (
             <SkillList
               groups={groups.filter((g) => g.cards.length > 0)}
