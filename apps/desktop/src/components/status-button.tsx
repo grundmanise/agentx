@@ -64,7 +64,7 @@ export const StatusButton = ({
         type="button"
         {...trackAttribute(track)}
         aria-busy={busy ? true : undefined}
-        className="rounded-shell-status type-status text-shell-topbar-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-secondary h-status relative flex flex-none items-center gap-2 px-3"
+        className="rounded-shell-status type-status text-shell-topbar-text bg-button-ghost-bg hover:bg-button-ghost-hover hover:text-text-secondary h-status relative flex flex-none items-center gap-2 px-3 tabular-nums"
         {...props}
       >
         <span className="text-shell-topbar-text flex size-4 items-center justify-center">
