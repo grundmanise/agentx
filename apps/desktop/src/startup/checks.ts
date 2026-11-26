@@ -131,10 +131,10 @@ const doctorCheck = (
   };
 };
 
-/** A check not settled yet. Check 5 says what it waits for. */
+/** A check not settled yet: its label alone. */
 const pending = (index: number): Check => ({
   label: labels[index] ?? "",
-  lines: index === 4 ? [{ text: "Waiting for checks" }] : [],
+  lines: [],
   status: "waiting",
 });
 
