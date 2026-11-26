@@ -1,7 +1,7 @@
 // The Agents page (DESIGN.md §6 "Agent client card" and "Universal card"): every agent
 // configuration the scan detected, with its counts. A card's switch decides only where later
 // installs and creations go when no agent is named: `config enable <id>` and `config disable
-// <id>`, with Place all (`config enable <id> --place-all`) offered on the toast. The clients that
+// <id>`. The clients that
 // read the library share the Universal card and have no switch: they see the library whatever
 // their setting. A card's Placement control decides how later placements there are made, as a
 // symlink to the library or as a copy (`config placement <id> symlink|copy`); skills already placed
@@ -16,6 +16,7 @@ import type { Configuration, InventoryEvent } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { Segmented } from "#/components/filter-controls.tsx";
 import { MoreIcon } from "#/components/icons/more.tsx";
+import { SelectableLink } from "#/components/selectable-link.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -27,16 +28,16 @@ import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import { plural } from "#/lib/plural.ts";
+import { revealInFinder } from "#/lib/reveal.ts";
 import { BulkBar } from "#/screens/agents/bulk-bar.tsx";
 import {
   countsOf,
   libraryPathOf,
   placedAsCount,
-  unplacedCount,
 } from "#/screens/agents/counts.ts";
 import { removedText, removeFailure } from "#/screens/agents/remove.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
-import { convertedText, placedAllText } from "#/screens/skills/placements.ts";
+import { convertedText } from "#/screens/skills/placements.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -50,13 +51,6 @@ const Count = ({ n, noun }: { n: number; noun: string }) => (
 
 /** The label of a configuration's switch: the runner's name for it. */
 const switchLabel = (c: Configuration) => `enable ${c.id}`;
-
-const placeAll = (c: Configuration) => {
-  void runUntilSettled(["config", "enable", c.id, "--place-all"], {
-    label: switchLabel(c),
-    success: (events) => placedAllText(events, c.name),
-  });
-};
 
 /** The label of a configuration's Placement control: the runner's name for it. */
 const placementLabel = (c: Configuration) => `placement ${c.id}`;
@@ -217,6 +211,23 @@ interface Selectable {
   onToggleSelect: () => void;
 }
 
+/** An agent's directory, a link over the card's selection that shows it in Finder. */
+const AgentPath = ({ path }: { path: string }) => (
+  <span className="type-technical relative max-w-full self-start truncate">
+    <SelectableLink
+      track="agents.path-reveal"
+      href={`file://${path}`}
+      title={path}
+      tone="caption"
+      onOpen={() => {
+        void revealInFinder(path);
+      }}
+    >
+      {path}
+    </SelectableLink>
+  </span>
+);
+
 const AgentCard = ({
   c,
   inventory,
@@ -229,18 +240,7 @@ const AgentCard = ({
   const pending = useSettling(switchLabel(c));
   const onToggle = (checked: boolean) => {
     if (checked) {
-      const n = unplacedCount(inventory, c.id);
       void runUntilSettled(["config", "enable", c.id], {
-        action:
-          n > 0
-            ? {
-                label: `Place all ${n}`,
-                onClick: () => {
-                  placeAll(c);
-                },
-                track: "enable-toast.place-all",
-              }
-            : undefined,
         label: switchLabel(c),
         success: `${c.name} enabled`,
       });
@@ -294,12 +294,7 @@ const AgentCard = ({
       </div>
       <div className="flex min-w-0 flex-col gap-1">
         <h2 className="type-agent-card-name text-card-title m-0">{c.name}</h2>
-        <span
-          className="type-technical text-text-caption relative truncate"
-          title={c.path}
-        >
-          {c.path}
-        </span>
+        <AgentPath path={c.path} />
       </div>
       <p className="type-secondary text-card-text m-0">
         <Count n={counts.skills} noun="skill" />
@@ -385,12 +380,7 @@ const UniversalCard = ({
                   <AgentMenu c={c} />
                 </span>
               </div>
-              <span
-                className="type-technical text-text-caption relative truncate"
-                title={c.path}
-              >
-                {c.path}
-              </span>
+              <AgentPath path={c.path} />
               <p className="type-secondary text-card-text m-0 pt-1">
                 <Count n={inventory.library.length} noun="skill" />
                 {" · "}
