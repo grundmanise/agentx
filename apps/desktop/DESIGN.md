@@ -780,7 +780,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `shell.status-dot-radius` | 50% | The publish status dot (`rounded-shell-status-dot`) |
 | `shell.command-radius` | 9999 | Command field |
 | `shell.panel-radius` | 14 | Main panel |
-| `input.radius` | 12 | Inputs, textareas |
+| `input.radius` | 9999 | Inputs and search fields |
 | `row.radius` | 12 | Split list rows |
 | `table.row-radius` | 14 | Server rows |
 | `popover.row-radius` | 10 | Popover rows, Reset button |

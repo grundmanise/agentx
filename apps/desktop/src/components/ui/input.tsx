@@ -15,13 +15,13 @@ const inputVariants = cva(
       kind: {
         // `input.height`, `input.radius`, `input.padding-x`.
         default: "rounded-input h-input px-input type-input",
-        // The search field at the top of a list: `input.search-height`, `input.radius`, in
+        // The search field at the top of a list: a pill of `input.search-height` in
         // `type.secondary`, with room at its left for the magnifier of its `InputGroupAddon`.
         "list-search":
           "rounded-input h-input-search pr-input-search-right pl-input-search-left type-secondary py-0",
         // The default, in the mono face: a URL or a command.
         mono: "rounded-input h-input px-input type-input-mono",
-        // The Sources search: `add-search.height`, `input.radius`, with room at its left for the
+        // The Sources search: a pill of `add-search.height` with room at its left for the
         // magnifier of its `InputGroupAddon`.
         search:
           "rounded-input h-add-search pr-input-search-right pl-input-search-left type-input py-0",
