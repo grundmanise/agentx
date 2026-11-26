@@ -122,8 +122,9 @@ func TestServeOnceEmitsInitialInventory(t *testing.T) {
 
 // A second serve of one home cannot serve, says so in an error event of
 // its own and stays up to run commands until its stdin ends: it refuses a
-// refresh and finds nothing on a search. A one-shot serve is refused at
-// once.
+// refresh and finds nothing on a search. Once the first has ended, a
+// refresh takes the lock and the second serves. A one-shot serve is
+// refused at once.
 func TestServeStaysUpBesideASecondChild(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
@@ -147,8 +148,6 @@ func TestServeStaysUpBesideASecondChild(t *testing.T) {
 	contains(t, "refresh error.message", rpcError["message"].(string), "another agentx serve is running")
 	second.request("s1", "search", map[string]any{"query": "commit"})
 	alike(t, "search results", second.answered("s1")["results"], []any{})
-	equal(t, "exit", second.close(), 6)
-	equal(t, "result.ok", second.next("result")["ok"], false)
 
 	out := h.run("serve", "--once")
 	equal(t, "exit", out.exit, 6)
@@ -157,7 +156,16 @@ func TestServeStaysUpBesideASecondChild(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 	p.next("result")
 
-	// The lock is released with the child.
+	// The lock is released with the child, and a refresh of the second
+	// takes it: the second then serves as the first did.
+	second.refresh("r1")
+	equal(t, "scan_counter", second.next("inventory")["scan_counter"], float64(1))
+	equal(t, "scan_counter", second.answered("r1")["scan_counter"], float64(1))
+	second.request("s2", "search", map[string]any{"query": "commit"})
+	second.answered("s2")
+	equal(t, "exit", second.close(), 0)
+	equal(t, "result.ok", second.next("result")["ok"], true)
+
 	out = h.serveOnce("--json")
 	equal(t, "exit", out.exit, 0)
 }
