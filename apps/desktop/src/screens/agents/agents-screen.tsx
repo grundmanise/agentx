@@ -16,6 +16,7 @@ import type { Configuration, InventoryEvent } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { Segmented } from "#/components/filter-controls.tsx";
 import { MoreIcon } from "#/components/icons/more.tsx";
+import { SelectableLink } from "#/components/selectable-link.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -27,6 +28,7 @@ import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { Toggle } from "#/components/ui/toggle.tsx";
 import { plural } from "#/lib/plural.ts";
+import { revealInFinder } from "#/lib/reveal.ts";
 import { BulkBar } from "#/screens/agents/bulk-bar.tsx";
 import {
   countsOf,
@@ -209,6 +211,23 @@ interface Selectable {
   onToggleSelect: () => void;
 }
 
+/** An agent's directory, a link over the card's selection that shows it in Finder. */
+const AgentPath = ({ path }: { path: string }) => (
+  <span className="type-technical relative max-w-full self-start truncate">
+    <SelectableLink
+      track="agents.path-reveal"
+      href={`file://${path}`}
+      title={path}
+      tone="caption"
+      onOpen={() => {
+        void revealInFinder(path);
+      }}
+    >
+      {path}
+    </SelectableLink>
+  </span>
+);
+
 const AgentCard = ({
   c,
   inventory,
@@ -275,12 +294,7 @@ const AgentCard = ({
       </div>
       <div className="flex min-w-0 flex-col gap-1">
         <h2 className="type-agent-card-name text-card-title m-0">{c.name}</h2>
-        <span
-          className="type-technical text-text-caption relative truncate"
-          title={c.path}
-        >
-          {c.path}
-        </span>
+        <AgentPath path={c.path} />
       </div>
       <p className="type-secondary text-card-text m-0">
         <Count n={counts.skills} noun="skill" />
@@ -366,12 +380,7 @@ const UniversalCard = ({
                   <AgentMenu c={c} />
                 </span>
               </div>
-              <span
-                className="type-technical text-text-caption relative truncate"
-                title={c.path}
-              >
-                {c.path}
-              </span>
+              <AgentPath path={c.path} />
               <p className="type-secondary text-card-text m-0 pt-1">
                 <Count n={inventory.library.length} noun="skill" />
                 {" · "}
