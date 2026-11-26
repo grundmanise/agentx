@@ -31,6 +31,7 @@ import {
 import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { renameArgs, renameHint } from "#/screens/skills/rename.ts";
+import { stopOnClose } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
@@ -125,7 +126,7 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
       return;
     }
     // Another command holds the lock: the runner's toast says so, with Retry.
-    if (outcome.exitCode === EXIT_CODES.locked) {
+    if (outcome.exitCode === EXIT_CODES.locked || outcome.cancelled) {
       return;
     }
     setRefusal(refusalOf(outcome));
@@ -173,11 +174,7 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
       </div>
       <DialogFooter>
         <DialogClose asChild>
-          <Button
-            track="rename-dialog.cancel"
-            variant="ghost"
-            disabled={pending}
-          >
+          <Button track="rename-dialog.cancel" variant="ghost">
             Cancel
           </Button>
         </DialogClose>
@@ -197,30 +194,26 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
 };
 
 /** "Rename {skill}?": the Name field, Cancel · Rename. */
-const RenameDialog = ({ row, open }: { row: SkillRow; open: boolean }) => {
-  const pending = useSettling(renameLabel(row));
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        // The dialog stays while its command runs: a refusal comes back to it.
-        if (!next && !pending) {
-          closeRename();
-        }
-      }}
-    >
-      <DialogContent>
-        <DialogHeader showCloseButton={false}>
-          <DialogTitle>{`Rename ${row.name}?`}</DialogTitle>
-          <DialogDescription>
-            Your agents will see it under the new name.
-          </DialogDescription>
-        </DialogHeader>
-        <RenameForm row={row} />
-      </DialogContent>
-    </Dialog>
-  );
-};
+const RenameDialog = ({ row, open }: { row: SkillRow; open: boolean }) => (
+  <Dialog
+    open={open}
+    onOpenChange={stopOnClose([renameLabel(row)], (next) => {
+      if (!next) {
+        closeRename();
+      }
+    })}
+  >
+    <DialogContent>
+      <DialogHeader showCloseButton={false}>
+        <DialogTitle>{`Rename ${row.name}?`}</DialogTitle>
+        <DialogDescription>
+          Your agents will see it under the new name.
+        </DialogDescription>
+      </DialogHeader>
+      <RenameForm row={row} />
+    </DialogContent>
+  </Dialog>
+);
 
 /** The Rename dialog while one is open, and while it closes. */
 export const RenameDialogs = () => {

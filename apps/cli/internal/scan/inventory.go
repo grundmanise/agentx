@@ -73,6 +73,7 @@ type Source struct {
 	AccessChecked string `json:"access_checked,omitempty"` // when access was last checked
 	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
 	LastFetched   string `json:"last_fetched,omitempty"`
+	Added         string `json:"added,omitempty"`  // when the source was first added
 	Commit        string `json:"commit,omitempty"` // the fetched commit; absent when the store holds no ref
 	Skills        *int   `json:"skills,omitempty"` // how many skills the listing found, only after a listing; for the hub, its skill branches as its last fetch found them, absent before a fetch
 }

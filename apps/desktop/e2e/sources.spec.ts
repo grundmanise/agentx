@@ -132,10 +132,11 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
   page,
 }) => {
   await openSources(cli, page);
+  // Hub first, then the shared sources.
   expect(await names(sourcesRow(page))).toEqual([
+    "Hub",
     "acme/skills",
     "zeta/tools",
-    "Hub",
   ]);
   await expect(pill(page, "acme/skills")).toHaveAttribute(
     "aria-pressed",
@@ -175,6 +176,7 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
       sources: [
         ...sources,
         {
+          added: new Date().toISOString(),
           id: moreId,
           last_fetched: new Date().toISOString(),
           url: "https://github.com/acme/more",
@@ -183,11 +185,12 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
     },
   ]);
   await expect(pill(page, "acme/more")).toHaveText("acme/more1");
+  // The shared sources in the order they were added.
   expect(await names(sourcesRow(page))).toEqual([
-    "acme/more",
+    "Hub",
     "acme/skills",
     "zeta/tools",
-    "Hub",
+    "acme/more",
   ]);
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
@@ -1157,16 +1160,17 @@ test("search asks serve once per settled query and shows only the latest answer"
   await expect(page.getByText("No skills match")).toHaveCount(0);
 });
 
-test("Add source runs source add, then opens the new source fully preselected", async ({
+test("Add source closes at once and shows the source loading, then opens it fully preselected", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
   const newId = "9f8e7d6c5b4a3210";
   const newUrl = "https://github.com/acme/more";
-  cli.register(["source", "add", "acme/more"], {
+  const adding = cli.register(["source", "add", "acme/more"], {
     events: [
       {
+        added: new Date().toISOString(),
         id: newId,
         last_fetched: new Date().toISOString(),
         skills: 2,
@@ -1174,6 +1178,7 @@ test("Add source runs source add, then opens the new source fully preselected", 
         url: newUrl,
       },
     ],
+    holdAfter: 0,
   });
   cli.register(["source", "skills", newId], {
     events: [
@@ -1202,10 +1207,29 @@ test("Add source runs source add, then opens the new source fully preselected", 
   await urlField(page).fill("acme/more");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   await expect(dialog(page)).toHaveCount(0);
+  await adding.started;
+  const loading = pill(page, "Stop adding acme/more");
+  await expect(loading).toHaveAttribute("aria-busy", "true");
+  await expect(loading).toHaveText("acme/more");
+  // It takes the place the source's own pill will take, so nothing moves once it is added.
+  expect(await names(sourcesRow(page))).toEqual([
+    "Hub",
+    "acme/skills",
+    "zeta/tools",
+    "Stop adding acme/more",
+  ]);
+  adding.release();
   await expect(
     toasts(page).getByText(`Added ${newUrl}: 2 skills`)
   ).toBeVisible();
+  await expect(loading).toHaveCount(0);
   await expect(pill(page, "acme/more")).toHaveAttribute("aria-pressed", "true");
+  expect(await names(sourcesRow(page))).toEqual([
+    "Hub",
+    "acme/skills",
+    "zeta/tools",
+    "acme/more",
+  ]);
   await expect(check(page, "review")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "triage")).toHaveAttribute("aria-pressed", "true");
   await expect(
@@ -1229,7 +1253,28 @@ test("Add source runs source add, then opens the new source fully preselected", 
   await expect(toasts(page).getByText("Added 2 skills")).toBeVisible();
 });
 
-test("Add source shows a source git cannot reach, and the CLI's refusals, under the field", async ({
+test("the pill of a source being added stops the add", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  const adding = cli.register(["source", "add", "acme/slow"], {
+    events: [],
+    holdAfter: 0,
+  });
+  await page.getByRole("button", { name: "Add source" }).click();
+  await urlField(page).fill("acme/slow");
+  await dialog(page).getByRole("button", { name: "Add" }).click();
+  await adding.started;
+  await pill(page, "Stop adding acme/slow").click();
+  await expect(
+    toasts(page).getByText("Stopped", { exact: true })
+  ).toBeVisible();
+  expect(cli.cancels).toHaveLength(1);
+  await expect(pill(page, "Stop adding acme/slow")).toHaveCount(0);
+});
+
+test("Add source shows a source git cannot reach, and the CLI's refusals, in a toast", async ({
   cli,
   page,
 }) => {
@@ -1261,19 +1306,24 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
   await page.getByRole("button", { name: "Add source" }).click();
   await urlField(page).fill("bad/repo");
   await dialog(page).getByRole("button", { name: "Add" }).click();
-  const alert = dialog(page).getByRole("alert");
   // The message and the CLI's hint, as one sentence-cased paragraph.
-  await expect(alert).toHaveText(
-    "Couldn't reach bad/repo. Check that the repository exists and that you can read it."
-  );
+  await expect(
+    toasts(page).getByText(
+      "Couldn't reach bad/repo. Check that the repository exists and that you can read it.",
+      { exact: true }
+    )
+  ).toBeVisible();
 
+  await page.getByRole("button", { name: "Add source" }).click();
   await urlField(page).fill("me/hub");
   await dialog(page).getByRole("button", { name: "Add" }).click();
-  // The CLI's hint names commands: the dialog names the place in the app instead.
-  await expect(alert).toHaveText(
-    "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub."
-  );
-  await expect(dialog(page)).toBeVisible();
+  // The CLI's hint names commands: the toast names the place in the app instead.
+  await expect(
+    toasts(page).getByText(
+      "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub.",
+      { exact: true }
+    )
+  ).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([
     "source add bad/repo",
     "source add me/hub",

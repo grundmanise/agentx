@@ -47,6 +47,7 @@ import type { UpdateOffer } from "#/screens/skills/projection.ts";
 import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
 import {
   dismissUpdateRun,
+  stopUpdateRun,
   runProgressText,
   runSummaryText,
   updateSkills,
@@ -639,11 +640,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
           {run === undefined || running ? (
             <>
               <DialogClose asChild>
-                <Button
-                  track="update-dialog.cancel"
-                  variant="ghost"
-                  disabled={running}
-                >
+                <Button track="update-dialog.cancel" variant="ghost">
                   Cancel
                 </Button>
               </DialogClose>
@@ -698,7 +695,7 @@ const UpdateForm = ({ onClose }: { onClose: () => void }) => {
 
 /**
  * The Update skills dialog. The sidebar's update pill opens it, and so does a check by hand that
- * found an update; while its run goes it cannot be dismissed, and Done closes it.
+ * found an update; while its run goes, Cancel stops it, and Done closes it after.
  */
 const closeDialog = () => {
   dismissUpdateRun();
@@ -707,12 +704,12 @@ const closeDialog = () => {
 
 export const UpdateSkillsDialog = () => {
   const open = useUpdateDialog((s) => s.open);
-  const running = useUpdateRun((s) => s.run?.phase === "running");
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next && !running) {
+        if (!next) {
+          stopUpdateRun();
           closeDialog();
         }
       }}
