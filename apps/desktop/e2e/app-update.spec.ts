@@ -42,6 +42,57 @@ test("an update the check finds installs from the title bar, then restarts the a
   await expect.poll(() => cli.restarts).toBe(1);
 });
 
+test("the rim stays drawn while the pill changes size", async ({
+  cli,
+  page,
+}) => {
+  launch(cli, "synced");
+  cli.offerAppUpdate("0.4.0");
+  cli.holdAppUpdateInstall();
+  await page.goto("/#/skills");
+
+  await updateButton(page).click();
+  await cli.appUpdateProgress(5, 100);
+  await expect(updateButton(page)).toHaveAccessibleName("Installing 5%");
+  const canvas = updateButton(page).locator("canvas[data-progress]");
+  await expect
+    .poll(async () => Number(await canvas.getAttribute("data-progress")))
+    .toBeGreaterThan(0.1);
+  // Counts the rim's lit pixels each time the pill resizes, before the pill is painted.
+  await canvas.evaluate((element: HTMLCanvasElement) => {
+    const gl = element.getContext("webgl");
+    const counts: number[] = [];
+    element.dataset.lit = "";
+    const pill = element.parentElement;
+    if (gl === null || pill === null) {
+      return;
+    }
+    new ResizeObserver(() => {
+      const pixels = new Uint8Array(element.width * element.height * 4);
+      gl.readPixels(
+        0,
+        0,
+        element.width,
+        element.height,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        pixels
+      );
+      let lit = 0;
+      for (let i = 3; i < pixels.length; i += 4) {
+        lit += pixels[i] === 0 ? 0 : 1;
+      }
+      counts.push(lit);
+      element.dataset.lit = counts.join(" ");
+    }).observe(pill);
+  });
+
+  await cli.appUpdateProgress(42, 100);
+  await expect(updateButton(page)).toHaveAccessibleName("Installing 42%");
+  // The first count is the observer's own first call; the second, the resize the new label brings.
+  await expect(canvas).toHaveAttribute("data-lit", /^[1-9]\d* [1-9]\d*$/u);
+});
+
 test("a failed install says so and offers the update again", async ({
   cli,
   page,

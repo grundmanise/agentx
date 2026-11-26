@@ -118,13 +118,15 @@ export const ProgressRim = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const programRef = useRef<Program | null>(null);
   const sizeRef = useRef({ dpr: 1, h: 0, w: 0 });
+  const paintRef = useRef<(() => void) | null>(null);
   // Read once a frame, outside React's renders.
   const currentRun = useEffectEvent(() => run);
   const settled = useEffectEvent(() => {
     onSettled();
   });
 
-  // The pill's size, border included; the canvas sits `pad` outside it.
+  // The pill's size, border included; the canvas sits `pad` outside it. A new size clears the
+  // canvas, so the frame is painted again before the pill is.
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     const bar = canvas?.parentElement ?? null;
@@ -144,6 +146,7 @@ export const ProgressRim = ({
     const observer = new ResizeObserver(() => {
       if (canvas !== null && bar !== null) {
         measure(canvas, bar);
+        paintRef.current?.();
       }
     });
     if (canvas !== null && bar !== null) {
@@ -178,6 +181,37 @@ export const ProgressRim = ({
       let frame: RimFrame = RIM_START;
       let lastState: RimRun["state"] = "running";
       let last = performance.now();
+      const paint = () => {
+        if (program === null) {
+          return;
+        }
+        const { gl, uniform } = program;
+        const { dpr, h, w } = sizeRef.current;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.uniform2f(uniform("uRes"), canvas.width, canvas.height);
+        gl.uniform1f(uniform("uDpr"), dpr);
+        // Reduced motion keeps the light still; the progress itself still grows.
+        gl.uniform1f(uniform("uTime"), still ? 0 : frame.elapsed);
+        gl.uniform1f(uniform("uProg"), frame.progress);
+        gl.uniform1f(uniform("uAlpha"), frame.alpha);
+        gl.uniform1f(uniform("uPad"), pad);
+        gl.uniform1f(uniform("uSettle"), frame.settle);
+        gl.uniform1f(uniform("uScale"), scale);
+        gl.uniform1f(uniform("uStrength"), strength);
+        gl.uniform1f(uniform("uSweep"), frame.sweep);
+        gl.uniform1f(uniform("uSweepAt"), frame.sweepAt);
+        // Reduced motion: the sweep brightens the whole rim instead of running.
+        gl.uniform1f(uniform("uStill"), still ? 1 : 0);
+        gl.uniform1f(uniform("uFullGlow"), fullGlow);
+        gl.uniform1f(uniform("uFullLine"), fullLine);
+        gl.uniform1f(uniform("uFullWidth"), fullWidth);
+        gl.uniform2f(uniform("uBar"), w, h);
+        gl.uniform3f(uniform("uLight"), ...light);
+        gl.uniform3f(uniform("uFlow"), ...flow);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      };
       const draw = (now: number) => {
         const current = currentRun();
         if (current === undefined) {
@@ -192,44 +226,19 @@ export const ProgressRim = ({
         last = now;
         canvas.dataset.progress = frame.progress.toFixed(3);
         canvas.dataset.sweep = frame.sweep.toFixed(3);
-        if (program !== null) {
-          const { gl, uniform } = program;
-          const { dpr, h, w } = sizeRef.current;
-          gl.viewport(0, 0, canvas.width, canvas.height);
-          gl.clearColor(0, 0, 0, 0);
-          gl.clear(gl.COLOR_BUFFER_BIT);
-          gl.uniform2f(uniform("uRes"), canvas.width, canvas.height);
-          gl.uniform1f(uniform("uDpr"), dpr);
-          // Reduced motion keeps the light still; the progress itself still grows.
-          gl.uniform1f(uniform("uTime"), still ? 0 : frame.elapsed);
-          gl.uniform1f(uniform("uProg"), frame.progress);
-          gl.uniform1f(uniform("uAlpha"), frame.alpha);
-          gl.uniform1f(uniform("uPad"), pad);
-          gl.uniform1f(uniform("uSettle"), frame.settle);
-          gl.uniform1f(uniform("uScale"), scale);
-          gl.uniform1f(uniform("uStrength"), strength);
-          gl.uniform1f(uniform("uSweep"), frame.sweep);
-          gl.uniform1f(uniform("uSweepAt"), frame.sweepAt);
-          // Reduced motion: the sweep brightens the whole rim instead of running.
-          gl.uniform1f(uniform("uStill"), still ? 1 : 0);
-          gl.uniform1f(uniform("uFullGlow"), fullGlow);
-          gl.uniform1f(uniform("uFullLine"), fullLine);
-          gl.uniform1f(uniform("uFullWidth"), fullWidth);
-          gl.uniform2f(uniform("uBar"), w, h);
-          gl.uniform3f(uniform("uLight"), ...light);
-          gl.uniform3f(uniform("uFlow"), ...flow);
-          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        }
+        paint();
         if (frame.finished) {
           settled();
           return;
         }
         handle = requestAnimationFrame(draw);
       };
+      paintRef.current = paint;
       handle = requestAnimationFrame(draw);
     }
     return () => {
       cancelAnimationFrame(handle);
+      paintRef.current = null;
       if (canvas !== null) {
         delete canvas.dataset.progress;
         delete canvas.dataset.sweep;
