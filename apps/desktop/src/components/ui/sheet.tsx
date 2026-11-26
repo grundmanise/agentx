@@ -72,7 +72,7 @@ const SheetOverlay = ({
  * out, with shadcn's own classes (DESIGN.md §8), and takes no clicks while it closes.
  */
 const SHEET_CONTENT =
-  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet w-sheet-dragged min-w-sheet max-w-sheet data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right-sheet data-[state=open]:slide-in-from-right-sheet fixed flex flex-col gap-6 overflow-hidden border transition ease-in-out outline-none data-[state=closed]:pointer-events-none! data-[state=closed]:duration-200 data-[state=open]:duration-300";
+  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet w-sheet-dragged min-w-sheet max-w-sheet data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right-sheet data-[state=open]:slide-in-from-right-sheet fixed flex flex-col gap-6 overflow-hidden border transition ease-in-out outline-none data-[state=closed]:pointer-events-none! data-[state=closed]:duration-300 data-[state=open]:duration-500";
 
 /** The CSS variable that `w-sheet-dragged` reads, set on the sheet. */
 const DRAGGED_WIDTH = "--sheet-dragged-width";
