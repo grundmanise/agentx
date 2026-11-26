@@ -299,5 +299,9 @@ func TestServeSearchesTheHubsForks(t *testing.T) {
 	if got, want := p.search("s1", "alpha"), []string{hub + "  alpha"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("results = %q, want %q", got, want)
 	}
+	// By its description too, read from the SKILL.md in the fork's skill directory.
+	if got, want := p.search("s2", "first skill"), []string{hub + "  alpha"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("results = %q, want %q", got, want)
+	}
 	equal(t, "exit", p.close(), 0)
 }
